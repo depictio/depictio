@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -15,6 +16,22 @@ from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from .clustering import get_clustering_function
 from .definitions import get_visualization_definition
 from .models import ComponentConfig
+
+
+def stringify_id(id_dict):
+    """Convert dictionary ID to string format exactly as Dash does internally.
+
+    This matches Dash's internal stringify_id function for target_components.
+    Keys are sorted alphabetically, values are JSON-encoded.
+    """
+    if not isinstance(id_dict, dict):
+        return id_dict
+
+    def stringify_val(v):
+        return v.get("wild") if isinstance(v, dict) and v.get("wild") else json.dumps(v)
+
+    parts = [json.dumps(k) + ":" + stringify_val(id_dict[k]) for k in sorted(id_dict)]
+    return "{" + ",".join(parts) + "}"
 
 
 def _get_theme_template(theme: str) -> str:
@@ -517,6 +534,12 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     logger.info(f"Visualization type: {visu_type}")
     logger.info(f"Theme: {theme}")
 
+    # Log the exact format that will be used for target_components
+    if not stepper and build_frame:
+        target_id_format = f'{{"index":"{index}","type":"graph"}}'
+        logger.info(f"🎯 target_components will use: {target_id_format}")
+        logger.info(f'📍 Graph component ID will be: {{"type":"graph","index":"{index}"}}')
+
     # Clean the component index
     store_index = index.replace("-tmp", "") if index else "unknown"
 
@@ -641,13 +664,19 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
                 create_skeleton_component,
             )
 
+            # Use Dash's stringify_id function to generate exact target format
+            graph_id_dict = {"type": "graph", "index": index}
+            target_id = stringify_id(graph_id_dict)
+
+            logger.info(f"🎯 Using stringify_id for target_components: {target_id}")
+
             return dcc.Loading(
                 children=figure_component,
                 custom_spinner=create_skeleton_component("figure"),
-                target_components={f'{{"index":"{index}","type":"graph"}}': "figure"},
-                # delay_show=50,  # Minimal delay to prevent flashing
-                # delay_hide=100,  # Quick dismissal
-                id={"index": index},  # Move the id to the loading component
+                target_components={target_id: "figure"},
+                delay_show=50,  # Minimal delay to prevent flashing
+                delay_hide=300,  # Extended delay for complex operations
+                id={"type": "figure-loading", "index": index},
             )
         else:
             return figure_div  # Return content directly for stepper mode

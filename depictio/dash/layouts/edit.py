@@ -32,18 +32,31 @@ def enable_box_edit_mode(
     component_data=dict(),
     TOKEN=None,
 ):
-    # logger.info(box)
-    # logger.info(box["props"])
+    # Extract component ID from native Dash component or JSON
+    def extract_component_id(component):
+        """Extract component ID from native Dash component or JSON representation."""
+        # Handle native Dash components
+        if hasattr(component, "id") and component.id:
+            if isinstance(component.id, dict) and "index" in component.id:
+                return component.id["index"]
+            elif isinstance(component.id, str):
+                return component.id
 
-    # Handle cases where component doesn't have an id in props
-    try:
-        btn_index = box["props"]["id"]["index"]
-    except (KeyError, TypeError):
-        # Fallback: generate a unique index if component doesn't have one
+        # Handle JSON representation (legacy)
+        if isinstance(component, dict) and "props" in component:
+            try:
+                return component["props"]["id"]["index"]
+            except (KeyError, TypeError):
+                pass
+
+        # Fallback: generate a unique index
         import uuid
 
-        btn_index = str(uuid.uuid4())
-        logger.warning(f"Component missing id in props, generated fallback: {btn_index}")
+        fallback_id = str(uuid.uuid4())
+        logger.warning(f"Component missing id, generated fallback: {fallback_id}")
+        return fallback_id
+
+    btn_index = extract_component_id(box)
 
     logger.debug(f"ENABLE BOX EDIT MODE - index: {btn_index}")
 
@@ -183,11 +196,22 @@ def enable_box_edit_mode(
             )
         # if fresh:
         #     buttons = dmc.Group([remove_button], grow=False, gap="xl", style={"margin-left": "12px"})
-        # Remove buttons from content - will be added separately to DraggableWrapper
-        box_components_list = box
+        # Handle native Dash component - wrap in list for consistent processing
+        if hasattr(box, "children") or hasattr(box, "figure") or hasattr(box, "id"):
+            # Native Dash component
+            box_components_list = box
+        else:
+            # JSON representation (legacy)
+            box_components_list = box
 
     else:
-        box_components_list = [box]
+        # Non-edit mode: handle both native components and JSON
+        if hasattr(box, "children") or hasattr(box, "figure") or hasattr(box, "id"):
+            # Native Dash component
+            box_components_list = box
+        else:
+            # JSON representation (legacy)
+            box_components_list = [box]
 
     # Create a DraggableWrapper for dash-dynamic-grid-layout
     # This preserves the UUID and makes the component draggable
@@ -202,10 +226,19 @@ def enable_box_edit_mode(
         # NUCLEAR: Remove intermediate wrapper div that breaks flex chain
         content_children = []
 
-        # Add component content directly without wrapper div
-        if isinstance(box_components_list, list):
+        # Add component content - handle both native components and lists
+        if (
+            hasattr(box_components_list, "children")
+            or hasattr(box_components_list, "figure")
+            or hasattr(box_components_list, "id")
+        ):
+            # Native Dash component
+            content_children.append(box_components_list)
+        elif isinstance(box_components_list, list):
+            # List of components
             content_children.extend(box_components_list)
         else:
+            # Single component or JSON
             content_children.append(box_components_list)
 
         # Add buttons positioned absolutely
@@ -249,8 +282,24 @@ def enable_box_edit_mode(
         )
     else:
         # Non-edit mode: simple content div without buttons
+        # Handle both native components and JSON
+        content_children = []
+        if (
+            hasattr(box_components_list, "children")
+            or hasattr(box_components_list, "figure")
+            or hasattr(box_components_list, "id")
+        ):
+            # Native Dash component
+            content_children.append(box_components_list)
+        elif isinstance(box_components_list, list):
+            # List of components
+            content_children.extend(box_components_list)
+        else:
+            # Single component or JSON
+            content_children.append(box_components_list)
+
         content_div = html.Div(
-            box_components_list,
+            content_children,
             id=f"content-{box_uuid}",
             className="dashboard-component-hover responsive-content",
             style={

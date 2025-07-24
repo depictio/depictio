@@ -233,34 +233,14 @@ def render_raw_children(
         # Return empty results if there's an error during build
         return [], []
 
-    # Enable edit mode on the component with circular reference protection for text components
+    # Enable edit mode on the native component (no JSON conversion needed)
     try:
-        if comp_type == "text":
-            # For text components, try to_plotly_json() with circular reference protection
-            logger.info("Processing text component with circular reference protection")
-            try:
-                child_json = child.to_plotly_json()
-            except (ValueError, TypeError) as e:
-                if "circular" in str(e).lower() or "json" in str(e).lower():
-                    logger.warning(
-                        f"Circular reference detected in text component during interactive update, using fallback: {e}"
-                    )
-                    # Create a minimal JSON structure to avoid circular references
-                    child_json = {
-                        "type": "Div",
-                        "props": {
-                            "id": {"index": component.get("index", "unknown")},
-                            "children": "Text Component (Circular Reference Protected)",
-                        },
-                    }
-                else:
-                    raise  # Re-raise if it's not a circular reference issue
-        else:
-            # For other components, use standard approach
-            child_json = child.to_plotly_json()
+        logger.info(f"Processing {comp_type} component as native Dash component")
 
+        # Pass the native component directly to enable_box_edit_mode
+        # This preserves dcc.Loading wrappers and eliminates JSON conversion overhead
         child = enable_box_edit_mode(
-            child_json,
+            child,  # Native Dash component
             switch_state=switch_state,
             dashboard_id=dashboard_id,
             component_data=component,
@@ -456,39 +436,36 @@ def update_interactive_component(
                 # logger.info(f"GRAPH COMPONENT - {component}")
 
             child = helpers_mapping[component["component_type"]](**component)
-            # if component["component_type"] == "card":
-            #     logger.debug(f"Card CHILD - {child}")
 
-            # Apply circular reference protection for text components
-            try:
-                if component["component_type"] == "text":
-                    # For text components, try to_plotly_json() with circular reference protection
+            # Debug: Log component type for verification
+            if component["component_type"] == "figure":
+                logger.info(f"Figure component child type: {type(child)}")
+                # Check if Loading component is preserved (native component check)
+                if hasattr(child, "type") and child.type == "Loading":
                     logger.info(
-                        "Processing text component with circular reference protection (line 460 path)"
+                        "✅ Loading component preserved in figure during interactive update"
                     )
-                    try:
-                        child_json = child.to_plotly_json()
-                    except (ValueError, TypeError) as e:
-                        if "circular" in str(e).lower() or "json" in str(e).lower():
-                            logger.warning(
-                                f"Circular reference detected in text component (line 460 path), using fallback: {e}"
-                            )
-                            # Create a minimal JSON structure to avoid circular references
-                            child_json = {
-                                "type": "Div",
-                                "props": {
-                                    "id": {"index": component.get("index", "unknown")},
-                                    "children": "Text Component (Circular Reference Protected - Line 460)",
-                                },
-                            }
-                        else:
-                            raise  # Re-raise if it's not a circular reference issue
+                elif hasattr(child, "__class__") and "Loading" in str(child.__class__):
+                    logger.info(
+                        "✅ Loading component preserved in figure during interactive update"
+                    )
                 else:
-                    # For other components, use standard approach
-                    child_json = child.to_plotly_json()
+                    logger.info(
+                        f"ℹ️ Figure component type: {getattr(child, 'type', 'Unknown')} (may still have loading)"
+                    )
+            # Debug: Log card component info if needed
+            # if component["component_type"] == "card":
+            #     logger.debug(f"Card component type: {type(child)}")
 
+            # Process component as native Dash component (no JSON conversion)
+            try:
+                logger.info(
+                    f"Processing {component['component_type']} component as native Dash component"
+                )
+
+                # Pass the native component directly - preserves Loading wrappers and improves performance
                 child = enable_box_edit_mode(
-                    child_json,
+                    child,  # Native Dash component
                     switch_state=switch_state,
                     dashboard_id=dashboard_id,
                     TOKEN=TOKEN,
@@ -527,8 +504,9 @@ def update_interactive_component(
 
             logger.debug(f"JBROWSE CHILD - {child}")
 
+            # Process jbrowse component as native Dash component
             child = enable_box_edit_mode(
-                child.to_plotly_json(),
+                child,  # Native Dash component (no JSON conversion needed)
                 switch_state=switch_state,
                 dashboard_id=dashboard_id,
                 TOKEN=TOKEN,

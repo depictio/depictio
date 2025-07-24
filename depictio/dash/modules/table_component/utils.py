@@ -7,6 +7,7 @@ from dash import dcc, html
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
+from depictio.dash.modules.figure_component.utils import stringify_id
 
 
 def build_table_frame(index, children=None):
@@ -257,12 +258,19 @@ def build_table(**kwargs):
                 create_skeleton_component,
             )
 
+            graph_id_dict = {"type": "table-aggrid", "index": str(index)}
+            target_id = stringify_id(graph_id_dict)
+            logger.debug(f"Target ID for loading: {target_id}")
+
             return dcc.Loading(
                 children=table_component,
                 custom_spinner=create_skeleton_component("table"),
-                target_components={f'{{"index":"{index}","type":"table-aggrid"}}': "rowData"},
+                # target_components={f'{{"index":"{index}","type":"table-aggrid"}}': "rowData"},
+                target_components={target_id: "rowData"},
                 # delay_show=50,  # Minimal delay to prevent flashing
                 # delay_hide=100,  # Quick dismissal
+                delay_show=50,  # Minimal delay to prevent flashing
+                delay_hide=300,  #
                 id={"index": index},  # Move the id to the loading component
             )
 
