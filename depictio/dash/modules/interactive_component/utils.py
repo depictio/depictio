@@ -616,7 +616,7 @@ def build_interactive(**kwargs):
         # Prepare kwargs for all component types to preserve value
         component_kwargs = {"data": data, "id": {"type": value_div_type, "index": str(index)}}
 
-        # CRITICAL: Preserve value for ALL interactive component types, not just MultiSelect
+        # CRITICAL: Preserve value for ALL interactive component types, but handle SegmentedControl specially
         if value is not None:
             # For Select: only set value if it's still valid (in data options)
             if interactive_component_type == "Select":
@@ -629,11 +629,29 @@ def build_interactive(**kwargs):
                     logger.warning(
                         f"Select component {index}: Value '{value}' no longer available in options {data}"
                     )
-            # For MultiSelect and SegmentedControl: preserve value even if partially invalid
-            else:
+            # For SegmentedControl: only set value if it's valid and not empty
+            elif interactive_component_type == "SegmentedControl":
+                if value in data:
+                    component_kwargs["value"] = value
+                    logger.debug(
+                        f"SegmentedControl component {index}: Preserved value '{value}' (available in options)"
+                    )
+                else:
+                    logger.warning(
+                        f"SegmentedControl component {index}: Value '{value}' no longer available in options {data}, defaulting to no selection"
+                    )
+                    # Don't set value - let it default to None (no selection)
+            # For MultiSelect: preserve value even if partially invalid
+            elif interactive_component_type == "MultiSelect":
                 component_kwargs["value"] = value
+                logger.debug(f"MultiSelect component {index}: Preserved value '{value}'")
+        else:
+            # Explicit handling for no initial value
+            if interactive_component_type == "SegmentedControl":
+                # For SegmentedControl, explicitly set value to None for no selection
+                component_kwargs["value"] = None
                 logger.debug(
-                    f"{interactive_component_type} component {index}: Preserved value '{value}'"
+                    f"SegmentedControl component {index}: No initial selection (value=None)"
                 )
 
         # Apply custom color to DMC components if specified
