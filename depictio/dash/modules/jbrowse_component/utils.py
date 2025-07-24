@@ -245,14 +245,13 @@ def build_jbrowse(**kwargs):
                 create_skeleton_component,
             )
 
-            return html.Div(
-                dcc.Loading(
-                    children=jbrowse_component,
-                    custom_spinner=create_skeleton_component("jbrowse"),
-                    delay_show=50,  # Minimal delay to prevent flashing
-                    delay_hide=100,  # Quick dismissal
-                ),
-                id={"index": index},  # Preserve the expected id structure
+            return dcc.Loading(
+                children=jbrowse_component,
+                custom_spinner=create_skeleton_component("jbrowse"),
+                target_components={f'{{"index":"{index}","type":"iframe-jbrowse"}}': "src"},
+                # delay_show=50,  # Minimal delay to prevent flashing
+                # delay_hide=100,  # Quick dismissal
+                id={"index": index},  # Move the id to the loading component
             )
         else:
             return jbrowse_component

@@ -1141,20 +1141,15 @@ def build_interactive(**kwargs):
                 create_skeleton_component,
             )
 
-            return html.Div(
-                dcc.Loading(
-                    children=interactive_component,
-                    # custom_spinner=dmc.Loader(color="red", size="sm"),
-                    custom_spinner=create_skeleton_component("interactive"),
-                    delay_show=50,  # Minimal delay to prevent flashing
-                    delay_hide=100,  # Quick dismissal
-                ),
-                id={"index": index},  # Preserve the expected id structure
-                style={
-                    "position": "relative",  # Create positioning context for absolute skeleton
-                    "width": "100%",
-                    "height": "100%",
+            return dcc.Loading(
+                children=interactive_component,
+                custom_spinner=create_skeleton_component("interactive"),
+                target_components={
+                    f'{{"index":"{index}","type":"interactive-component-value"}}': "value"
                 },
+                # delay_show=50,  # Minimal delay to prevent flashing
+                # delay_hide=100,  # Quick dismissal
+                id={"index": index},  # Move the id to the loading component
             )
         else:
             return interactive_component

@@ -12,23 +12,18 @@ from depictio.api.v1.deltatables_utils import load_deltatable_lite
 def build_table_frame(index, children=None):
     if not children:
         return dbc.Card(
-            dcc.Loading(
-                children=dbc.CardBody(
-                    id={
-                        "type": "table-body",
-                        "index": index,
-                    },
-                    style={
-                        "padding": "5px",  # Reduce padding inside the card body
-                        "display": "flex",
-                        "flexDirection": "column",
-                        "justifyContent": "center",
-                        "height": "100%",  # Make sure it fills the parent container
-                    },
-                ),
-                type="default",  # Use default Dash spinner
-                delay_show=500,  # Longer delay to avoid showing during initial load
-                delay_hide=100,  # Quick dismissal
+            dbc.CardBody(
+                id={
+                    "type": "table-body",
+                    "index": index,
+                },
+                style={
+                    "padding": "5px",  # Reduce padding inside the card body
+                    "display": "flex",
+                    "flexDirection": "column",
+                    "justifyContent": "center",
+                    "height": "100%",  # Make sure it fills the parent container
+                },
             ),
             style={
                 "width": "100%",
@@ -47,24 +42,19 @@ def build_table_frame(index, children=None):
         )
     else:
         return dbc.Card(
-            dcc.Loading(
-                children=dbc.CardBody(
-                    children=children,
-                    id={
-                        "type": "table-body",
-                        "index": index,
-                    },
-                    style={
-                        "padding": "5px",  # Reduce padding inside the card body
-                        "display": "flex",
-                        "flexDirection": "column",
-                        "justifyContent": "center",
-                        "height": "100%",  # Make sure it fills the parent container
-                    },
-                ),
-                type="default",  # Use default Dash spinner
-                delay_show=500,  # Longer delay to avoid showing during initial load
-                delay_hide=100,  # Quick dismissal
+            dbc.CardBody(
+                children=children,
+                id={
+                    "type": "table-body",
+                    "index": index,
+                },
+                style={
+                    "padding": "5px",  # Reduce padding inside the card body
+                    "display": "flex",
+                    "flexDirection": "column",
+                    "justifyContent": "center",
+                    "height": "100%",  # Make sure it fills the parent container
+                },
             ),
             style={
                 "width": "100%",
@@ -262,10 +252,18 @@ def build_table(**kwargs):
         table_component = build_table_frame(index=index, children=new_card_body)
 
         if not stepper:
-            # Return table_component directly - loading is now handled at the table-body level
-            return html.Div(
-                table_component,
-                id={"index": index},  # Preserve the expected id structure
+            # Add targeted loading for the AG Grid component specifically
+            from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
+                create_skeleton_component,
+            )
+
+            return dcc.Loading(
+                children=table_component,
+                custom_spinner=create_skeleton_component("table"),
+                target_components={f'{{"index":"{index}","type":"table-aggrid"}}': "rowData"},
+                # delay_show=50,  # Minimal delay to prevent flashing
+                # delay_hide=100,  # Quick dismissal
+                id={"index": index},  # Move the id to the loading component
             )
 
         else:

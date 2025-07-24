@@ -135,7 +135,7 @@ def create_inline_svg_logo():
 
 
 def create_loading_progress_display(dashboard_id: str):
-    """Create a loading display with animated Depictio logo and fade transitions."""
+    """Create a loading display with animated Depictio logo, real-time loading status and fade transitions."""
     # CSS for fade animations
     fade_css = """
     @keyframes fadeIn {
@@ -164,42 +164,27 @@ def create_loading_progress_display(dashboard_id: str):
                 rel="stylesheet",
                 href="data:text/css;base64," + base64.b64encode(fade_css.encode()).decode(),
             ),
-            dmc.Stack(
+            # Just the animated Depictio logo
+            html.Div(
                 [
-                    dmc.Text(
-                        "Loading dashboard components...",
-                        size="md",
-                        c="gray",
-                        style={
-                            "textAlign": "center",
-                            "fontWeight": 500,
-                            "color": "var(--app-text-color, gray)",
-                        },
-                    ),
-                    # Animated Depictio logo
                     html.Div(
                         [
-                            html.Div(
-                                [
-                                    # Animated Depictio logo with pulsing effect
-                                    dmc.Center(create_inline_svg_logo()),
-                                ],
-                                style={
-                                    "display": "flex",
-                                    "alignItems": "center",
-                                    "justifyContent": "center",
-                                    "width": "100%",
-                                    "height": "120px",
-                                },
-                            ),
+                            # Animated Depictio logo with pulsing effect
+                            dmc.Center(create_inline_svg_logo()),
                         ],
                         style={
-                            "position": "relative",
+                            "display": "flex",
+                            "alignItems": "center",
+                            "justifyContent": "center",
                             "width": "100%",
+                            "height": "120px",
                         },
                     ),
                 ],
-                gap="md",
+                style={
+                    "position": "relative",
+                    "width": "100%",
+                },
             ),
         ],
         id={"type": "loading-progress-container", "dashboard": dashboard_id},
@@ -368,7 +353,7 @@ def register_progressive_loading_callbacks(app):
         prevent_initial_call=True,
     )
 
-    # Simple callback to hide the loading progress overlay after dashboard loads
+    # Smart callback to hide loading progress when components are actually loaded
     app.clientside_callback(
         """
         function(pathname) {
@@ -377,12 +362,46 @@ def register_progressive_loading_callbacks(app):
                 return window.dash_clientside.no_update;
             }
 
-            // Wait for components to start loading, then hide the progress overlay
-            setTimeout(() => {
-                console.log('🔍 Looking for loading progress containers to hide...');
+            console.log('🚀 Starting dashboard loading monitor...');
 
+            // Function to check if all components are loaded
+            function checkComponentsLoaded() {
+                // Look for Dash loading spinners - these are the main indicators
+                const dashLoadingSpinners = document.querySelectorAll('._dash-loading');
+
+                // Look for our custom skeleton components (but exclude the progress display itself)
+                const allSkeletons = document.querySelectorAll('[style*="z-index: 9999"]');
                 const progressContainers = document.querySelectorAll('[id*="loading-progress-container"]');
-                console.log('Found', progressContainers.length, 'progress containers');
+
+                // Filter out progress containers from skeleton count
+                const customSkeletons = Array.from(allSkeletons).filter(skeleton => {
+                    return !Array.from(progressContainers).some(container =>
+                        container.contains(skeleton) || skeleton.contains(container)
+                    );
+                });
+
+                const totalLoading = dashLoadingSpinners.length + customSkeletons.length;
+
+                console.log('🔍 Loading status:', {
+                    dashSpinners: dashLoadingSpinners.length,
+                    customSkeletons: customSkeletons.length,
+                    totalLoading: totalLoading
+                });
+
+                // If no loading components are found, components are ready
+                if (totalLoading === 0) {
+                    console.log('✅ All components loaded, hiding progress display');
+                    hideProgressDisplay();
+                    return true;
+                }
+
+                return false;
+            }
+
+            // Function to hide progress display with animation
+            function hideProgressDisplay() {
+                const progressContainers = document.querySelectorAll('[id*="loading-progress-container"]');
+                console.log('Found', progressContainers.length, 'progress containers to hide');
 
                 progressContainers.forEach(container => {
                     // Remove fade-in class and add fade-out class to trigger animation
@@ -395,7 +414,32 @@ def register_progressive_loading_callbacks(app):
                         console.log('✅ Progress container hidden');
                     }, 300); // Match the CSS animation duration
                 });
-            }, 2000); // Wait 2 seconds for dashboard to start loading
+            }
+
+            // Start monitoring with initial delay to let Dash initialize
+            setTimeout(() => {
+                console.log('🔍 Starting component load monitoring...');
+
+                // Check immediately first
+                if (checkComponentsLoaded()) {
+                    return;
+                }
+
+                // Set up polling to check loading status
+                const checkInterval = setInterval(() => {
+                    if (checkComponentsLoaded()) {
+                        clearInterval(checkInterval);
+                    }
+                }, 200); // Check every 200ms (less frequent)
+
+                // Shorter fallback timeout - hide after 5 seconds maximum
+                setTimeout(() => {
+                    console.log('⏰ Fallback timeout reached, hiding progress display');
+                    clearInterval(checkInterval);
+                    hideProgressDisplay();
+                }, 5000); // 5 second fallback (reduced from 10)
+
+            }, 300); // Shorter initial delay (reduced from 500ms)
 
             return window.dash_clientside.no_update;
         }

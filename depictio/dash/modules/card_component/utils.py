@@ -482,8 +482,8 @@ def build_card(**kwargs):
             return dcc.Loading(
                 children=card_component,
                 custom_spinner=create_skeleton_component("card"),
-                delay_show=50,  # Minimal delay to prevent flashing
-                delay_hide=100,  # Quick dismissal
+                # delay_show=50,  # Minimal delay to prevent flashing
+                # delay_hide=100,  # Quick dismissal
                 id={"index": index},  # Move the id to the loading component
             )
         else:
