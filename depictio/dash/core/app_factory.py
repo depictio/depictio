@@ -47,7 +47,7 @@ def create_dash_app():
         suppress_callback_exceptions=True,
         title="Depictio",
         assets_folder=assets_folder,
-        # assets_url_path="/assets",  # Explicitly set the assets URL path
+        assets_url_path="/assets",  # Explicitly set the assets URL path
     )
 
     # Configure Flask's logger to use custom logging settings
@@ -57,8 +57,8 @@ def create_dash_app():
 
     # Configure static folder for Flask server
     # This is separate from Dash's assets folder
-    # static_folder = os.path.join(dash_root_path, "static")
-    # server.static_folder = static_folder  # type: ignore[invalid-assignment]
-    # server.static_url_path = "/static"  # type: ignore[invalid-assignment]
+    static_folder = os.path.join(dash_root_path, "static")
+    server.static_folder = static_folder  # type: ignore[invalid-assignment]
+    server.static_url_path = "/static"  # type: ignore[invalid-assignment]
 
     return app, dev_mode
