@@ -644,17 +644,20 @@ def register_callbacks_draggable(app):
                 child_index = child_metadata["index"]
                 child_type = child_metadata["component_type"]
 
-                children, indexes = render_raw_children(
+                child, index_returned = render_raw_children(
                     tmp_stored_metadata[0],
                     switch_state=unified_edit_mode_button,
                     dashboard_id=dashboard_id,
                     TOKEN=TOKEN,
                     theme=theme,
                 )
-                child = children
 
                 draggable_children.append(child)
-                child_id = f"box-{str(indexes)}"
+                # Use the clean child_index from metadata instead of the potentially corrupted return value
+                child_id = f"box-{str(child_index)}"
+                logger.info(f"🔍 DRAG DEBUG - child_index: {child_index}")
+                logger.info(f"🔍 DRAG DEBUG - index_returned: {index_returned}")
+                logger.info(f"🔍 DRAG DEBUG - child_id: {child_id}")
                 logger.info(f"Child type: {child_type}")
                 new_layout_item = calculate_new_layout_position(
                     child_type, draggable_layouts, child_id, len(draggable_children)
