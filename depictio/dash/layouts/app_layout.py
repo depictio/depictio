@@ -478,8 +478,8 @@ def create_app_layout():
             ),
             dcc.Store(
                 id="sidebar-collapsed",
-                storage_type="memory",
-                data=False,  # Start with sidebar expanded
+                storage_type="local",  # Changed to local storage to persist user preference
+                data=False,  # Default to expanded if no preference saved
             ),
             # Consolidated user cache to reduce API calls
             dcc.Store(
