@@ -52,6 +52,22 @@ def register_sidebar_callbacks(app):
     #     prevent_initial_call=True,
     # )
 
+    # Combined callback to handle sidebar icon based on both initialization and clicks
+    @app.callback(
+        Output("sidebar-icon", "icon"),
+        [Input("sidebar-collapsed", "data"), Input("url", "pathname")],
+        prevent_initial_call=False,  # Allow initial call to set correct icon
+    )
+    def update_sidebar_icon(is_collapsed, pathname):
+        # Don't update if on auth page (sidebar doesn't exist)
+        if pathname == "/auth":
+            return dash.no_update
+
+        # Set icon based on current collapsed state
+        # When collapsed -> show right arrow (points to expand)
+        # When expanded -> show left arrow (points to collapse)
+        return "ep:d-arrow-right" if is_collapsed else "ep:d-arrow-left"
+
     # Callback to show/hide the header favicon based on sidebar collapsed state
     @app.callback(
         Output("header-favicon", "style"),
@@ -73,6 +89,30 @@ def register_sidebar_callbacks(app):
             base_style["display"] = "none"
 
         return base_style
+
+    # Callback to handle URL changes and navbar visibility
+    @app.callback(
+        Output("app-shell", "navbar"),
+        Input("url", "pathname"),
+        State("sidebar-collapsed", "data"),
+        prevent_initial_call=True,
+    )
+    def handle_navbar_url_changes(pathname, is_collapsed):
+        # Check if we're on the auth page - if so, hide the navbar completely
+        if pathname == "/auth":
+            return None
+
+        # For other pages, show the navbar with current collapsed state
+        navbar_config = {
+            "width": 220,
+            "breakpoint": "sm",
+            "collapsed": {
+                "mobile": True,
+                "desktop": is_collapsed if is_collapsed is not None else False,
+            },
+        }
+
+        return navbar_config
 
     # Callback to handle sidebar button clicks (conditional to avoid auth page error)
     @app.callback(
@@ -97,20 +137,19 @@ def register_sidebar_callbacks(app):
         logger.info(f"Toggling sidebar state from {is_collapsed} to {not is_collapsed}")
         return not is_collapsed
 
-    # Combined callback to handle navbar config and sidebar icon updates
+    # Update navbar when sidebar collapsed state changes
     @app.callback(
-        [Output("app-shell", "navbar"), Output("sidebar-icon", "icon")],
-        [Input("url", "pathname"), Input("sidebar-collapsed", "data")],
-        prevent_initial_call=False,  # Allow initial call to set navbar and icon on app start
+        Output("app-shell", "navbar", allow_duplicate=True),
+        Input("sidebar-collapsed", "data"),
+        State("url", "pathname"),
+        prevent_initial_call=True,
     )
-    def update_navbar_and_sidebar_icon(pathname, is_collapsed):
-        logger.info(f"Updating navbar for pathname: {pathname}, Collapsed: {is_collapsed}")
-
-        # Check if we're on the auth page - if so, hide the navbar completely
+    def update_navbar_from_collapsed_state(is_collapsed, pathname):
+        # Don't update on auth page
         if pathname == "/auth":
-            return None, dash.no_update
+            return dash.no_update
 
-        # For other pages, show the navbar with current collapsed state
+        # Return new navbar configuration
         navbar_config = {
             "width": 220,
             "breakpoint": "sm",
@@ -120,12 +159,7 @@ def register_sidebar_callbacks(app):
             },
         }
 
-        # Set icon based on current collapsed state
-        # When collapsed -> show right arrow (points to expand)
-        # When expanded -> show left arrow (points to collapse)
-        sidebar_icon = "ep:d-arrow-right" if is_collapsed else "ep:d-arrow-left"
-
-        return navbar_config, sidebar_icon
+        return navbar_config
 
     # Callback to update sidebar-link active state
     @app.callback(

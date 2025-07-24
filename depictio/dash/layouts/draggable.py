@@ -171,6 +171,53 @@ def normalize_layout_data(layouts):
     return normalized_layouts
 
 
+def fix_responsive_scaling(layout_data, metadata_list):
+    """Fix responsive scaling by restoring proper dimensions based on component metadata."""
+    if not layout_data or not metadata_list:
+        return layout_data
+
+    # Create a mapping of component IDs to their expected dimensions
+    expected_dimensions = {}
+    for meta in metadata_list:
+        if meta.get("index") and meta.get("component_type"):
+            comp_id = f"box-{meta['index']}"
+            comp_type = meta["component_type"]
+            expected_dims = component_dimensions.get(comp_type, {"w": 6, "h": 8})
+            expected_dimensions[comp_id] = expected_dims
+
+    fixed_layouts = []
+    for layout in layout_data:
+        if not isinstance(layout, dict):
+            continue
+
+        layout_copy = dict(layout)
+        layout_id = layout.get("i", "")
+
+        if layout_id in expected_dimensions:
+            expected = expected_dimensions[layout_id]
+            current_w = layout.get("w", 0)
+            current_h = layout.get("h", 0)
+
+            # Check if dimensions are halved (responsive scaling)
+            if current_w == expected["w"] // 2 and current_h == expected["h"] // 2:
+                logger.warning(
+                    f"🔧 FIXING RESPONSIVE SCALING - {layout_id}: {current_w}x{current_h} → {expected['w']}x{expected['h']}"
+                )
+                layout_copy["w"] = expected["w"]
+                layout_copy["h"] = expected["h"]
+            # Check for other scaling ratios (md: 10/12, sm: 6/12, xs: 4/12)
+            elif current_w * 12 // 10 == expected["w"] and current_h * 12 // 10 == expected["h"]:
+                logger.warning(
+                    f"🔧 FIXING MD SCALING - {layout_id}: {current_w}x{current_h} → {expected['w']}x{expected['h']}"
+                )
+                layout_copy["w"] = expected["w"]
+                layout_copy["h"] = expected["h"]
+
+        fixed_layouts.append(layout_copy)
+
+    return fixed_layouts
+
+
 def clean_layout_data(layouts):
     """Clean corrupted layout data by filtering out entries with invalid IDs, dimensions, or positions."""
     if not layouts:
@@ -821,11 +868,62 @@ def register_callbacks_draggable(app):
                 # logger.info(f"State stored draggable layouts: {state_stored_draggable_layouts}")
 
                 if "draggable.currentLayout" in ctx_triggered_props_id:
+                    logger.info("🔄 LAYOUT UPDATE - DashGridLayout currentLayout changed")
+                    logger.info(
+                        f"🔄 LAYOUT UPDATE - New layout received: {input_draggable_layouts}"
+                    )
+
+                    # Check if any dimensions were changed by responsive grid
+                    if dashboard_id in state_stored_draggable_layouts:
+                        stored_layouts = state_stored_draggable_layouts[dashboard_id]
+                        for new_layout in input_draggable_layouts:
+                            for stored_layout in stored_layouts:
+                                if new_layout.get("i") == stored_layout.get("i"):
+                                    if new_layout.get("w") != stored_layout.get(
+                                        "w"
+                                    ) or new_layout.get("h") != stored_layout.get("h"):
+                                        logger.info(
+                                            f"📏 DIMENSIONS CHANGED - {new_layout.get('i')}: {stored_layout.get('w')}x{stored_layout.get('h')} → {new_layout.get('w')}x{new_layout.get('h')}"
+                                        )
+                                        # Check if this looks like responsive scaling (halving)
+                                        if new_layout.get("w", 0) * 2 == stored_layout.get(
+                                            "w", 0
+                                        ) and new_layout.get("h", 0) * 2 == stored_layout.get(
+                                            "h", 0
+                                        ):
+                                            logger.warning(
+                                                "⚠️ RESPONSIVE SCALING DETECTED - Dimensions halved (likely xs breakpoint)"
+                                            )
+                                        elif (
+                                            new_layout.get("w", 0) * 3
+                                            == stored_layout.get("w", 0) * 2
+                                        ):
+                                            logger.warning(
+                                                "⚠️ RESPONSIVE SCALING DETECTED - Dimensions scaled by 2/3 (likely md breakpoint)"
+                                            )
+                                        logger.info(
+                                            f"📱 SCALE DEBUG - Width ratio: {new_layout.get('w', 0) / max(stored_layout.get('w', 1), 1):.2f}"
+                                        )
+                                        logger.info(
+                                            f"📱 SCALE DEBUG - Height ratio: {new_layout.get('h', 0) / max(stored_layout.get('h', 1), 1):.2f}"
+                                        )
+
                     # dash-dynamic-grid-layout returns a single layout array - normalize and store it
                     state_stored_draggable_children[dashboard_id] = draggable_children
+                    # Fix responsive scaling issues before normalizing
+                    logger.info(
+                        "🔧 RESPONSIVE FIX - Applying fixes to currentLayout before storing"
+                    )
+                    fixed_layouts = fix_responsive_scaling(input_draggable_layouts, stored_metadata)
                     # Normalize layout data to ensure consistent moved/static properties
-                    normalized_layouts = normalize_layout_data(input_draggable_layouts)
+                    normalized_layouts = normalize_layout_data(fixed_layouts)
                     state_stored_draggable_layouts[dashboard_id] = normalized_layouts
+
+                    logger.info("🔄 LAYOUT UPDATE - Final stored layouts:")
+                    for i, layout in enumerate(normalized_layouts):
+                        logger.info(
+                            f"  Stored Layout {i}: {layout.get('i')} -> {layout.get('w')}x{layout.get('h')} at ({layout.get('x')},{layout.get('y')})"
+                        )
 
                     return (
                         draggable_children,
@@ -1095,17 +1193,36 @@ def register_callbacks_draggable(app):
             elif triggered_input == "remove-box-button":
                 logger.info("Remove box button clicked")
                 input_id = ctx.triggered_id["index"]
+                component_id_to_remove = f"box-{input_id}"
 
+                logger.info(f"🗑️ REMOVE DEBUG - Removing component: {component_id_to_remove}")
+                logger.info(f"🗑️ REMOVE DEBUG - Current children count: {len(draggable_children)}")
+                logger.info(f"🗑️ REMOVE DEBUG - Current layouts count: {len(draggable_layouts)}")
+
+                # Remove the component from children
                 updated_children = [
                     child
                     for child in draggable_children
-                    if get_component_id(child) != f"box-{input_id}"
+                    if get_component_id(child) != component_id_to_remove
                 ]
-                state_stored_draggable_layouts[dashboard_id] = draggable_layouts
+
+                # Remove the corresponding layout entry
+                updated_layouts = [
+                    layout
+                    for layout in draggable_layouts
+                    if layout.get("i") != component_id_to_remove
+                ]
+
+                logger.info(
+                    f"🗑️ REMOVE DEBUG - After removal - children: {len(updated_children)}, layouts: {len(updated_layouts)}"
+                )
+
+                # Update the stored layouts
+                state_stored_draggable_layouts[dashboard_id] = updated_layouts
 
                 return (
                     updated_children,
-                    draggable_layouts,
+                    updated_layouts,
                     dash.no_update,
                     state_stored_draggable_layouts,
                     dash.no_update,
@@ -1416,19 +1533,51 @@ def register_callbacks_draggable(app):
                 # 'child_type' corresponds to the 'type' in the component's ID
                 # Clean existing layouts to remove any corrupted entries
                 existing_layouts = clean_layout_data(draggable_layouts)
+
+                # Fix any responsive scaling issues in existing layouts
+                logger.info(
+                    "🔧 RESPONSIVE FIX - Applying responsive scaling corrections to existing layouts"
+                )
+                existing_layouts = fix_responsive_scaling(existing_layouts, stored_metadata)
+
+                # DEBUG: Check for responsive scaling in existing layouts
+                logger.info("🔍 RESPONSIVE DEBUG - Checking existing layouts after fixes:")
+                expected_dims = component_dimensions.get(
+                    metadata["component_type"], {"w": 6, "h": 8}
+                )
+                logger.info(
+                    f"🔍 RESPONSIVE DEBUG - Expected dimensions for {metadata['component_type']}: {expected_dims}"
+                )
+
+                for i, layout in enumerate(existing_layouts):
+                    actual_w = layout.get("w", 0)
+                    actual_h = layout.get("h", 0)
+                    if actual_w == expected_dims["w"] // 2 and actual_h == expected_dims["h"] // 2:
+                        logger.warning(
+                            f"⚠️ RESPONSIVE SCALING STILL DETECTED in layout {i}: {layout.get('i')} has w:{actual_w}, h:{actual_h} (expected w:{expected_dims['w']}, h:{expected_dims['h']})"
+                        )
+                    logger.info(
+                        f"🔍 RESPONSIVE DEBUG - Layout {i}: {layout.get('i')} -> w:{actual_w}, h:{actual_h}"
+                    )
+
                 n = len(updated_children)  # Position based on the number of components
 
                 new_layout = calculate_new_layout_position(
-                    f"{metadata['component_type']}-component",
+                    metadata["component_type"],
                     existing_layouts,
                     child_id,
                     n,
                 )
 
+                logger.info(f"🔍 DUPLICATE DEBUG - Component type: {metadata['component_type']}")
+                logger.info(f"🔍 DUPLICATE DEBUG - New layout created: {new_layout}")
+                logger.info(
+                    f"🔍 DUPLICATE DEBUG - Expected dimensions for {metadata['component_type']}: {component_dimensions.get(metadata['component_type'], {'w': 6, 'h': 8})}"
+                )
+
                 # Add new layout item to the cleaned list
                 existing_layouts.append(new_layout)
                 draggable_layouts = existing_layouts  # Use cleaned layouts
-                # logger.info(f"New layout: {new_layout}")
 
                 logger.info(
                     f"Duplicated component with new id 'box-{new_index}' and assigned layout {new_layout}"
@@ -1442,6 +1591,11 @@ def register_callbacks_draggable(app):
                 logger.info(f"🔍 DUPLICATE DEBUG - Final children count: {len(updated_children)}")
                 logger.info(f"🔍 DUPLICATE DEBUG - Final layouts count: {len(draggable_layouts)}")
                 logger.info(f"🔍 DUPLICATE DEBUG - New component created: {child_id}")
+                logger.info("🔍 DUPLICATE DEBUG - Final layout data being returned:")
+                for i, layout in enumerate(draggable_layouts):
+                    logger.info(
+                        f"  Layout {i}: {layout.get('i')} -> {layout.get('w')}x{layout.get('h')} at ({layout.get('x')},{layout.get('y')})"
+                    )
                 logger.info("=" * 80)
 
                 return (
@@ -1454,10 +1608,17 @@ def register_callbacks_draggable(app):
 
             elif triggered_input == "remove-all-components-button":
                 logger.info("Remove all components button clicked")
-                state_stored_draggable_layouts[dashboard_id] = {}
+                logger.info("🗑️ REMOVE ALL - Clearing all components and layouts")
+
+                # Clear all layouts - use empty list format (not dict)
+                empty_layouts = []
+                state_stored_draggable_layouts[dashboard_id] = empty_layouts
+
+                logger.info(f"🗑️ REMOVE ALL - Cleared layouts for dashboard {dashboard_id}")
+
                 return (
-                    [],
-                    {},
+                    [],  # Empty children
+                    empty_layouts,  # Empty layouts (list format)
                     dash.no_update,
                     state_stored_draggable_layouts,
                     dash.no_update,
@@ -1792,6 +1953,17 @@ def design_draggable(
     if not current_layout:
         current_layout = []
 
+    # Debug logging for grid configuration
+    logger.info("🔍 GRID DEBUG - Creating DashGridLayout with configuration:")
+    logger.info("🔍 GRID DEBUG - rowHeight: 50")
+    logger.info("🔍 GRID DEBUG - cols: {'lg': 12, 'md': 12, 'sm': 12, 'xs': 12, 'xxs': 12}")
+    logger.info(
+        f"🔍 GRID DEBUG - current_layout items: {len(current_layout) if current_layout else 0}"
+    )
+    if current_layout:
+        for i, layout_item in enumerate(current_layout):
+            logger.info(f"🔍 GRID DEBUG - layout item {i}: {layout_item}")
+
     draggable = dgl.DashGridLayout(
         id="draggable",
         items=draggable_items,
@@ -1802,6 +1974,8 @@ def design_draggable(
         showResizeHandles=True,  # Enable resize functionality for vertical growing behavior
         className="draggable-grid-container",  # CSS class for styling
         allowOverlap=False,
+        # Additional parameters to try to disable responsive scaling
+        autoSize=True,  # Let grid auto-size instead of using responsive breakpoints
         style={
             "display": display_style,
             "flex-grow": 1,

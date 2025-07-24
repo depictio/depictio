@@ -55,7 +55,7 @@ COMPONENT_METADATA = {
         "supports_reset": False,
         "enabled": True,  # Enable by default
         "build_function": build_card,
-        "default_dimensions": {"w": 4, "h": 6},  # Adjusted for 12-column grid - cards are smaller
+        "default_dimensions": {"w": 2, "h": 2},  # Adjusted for 12-column grid - cards are smaller
     },
     "interactive": {
         "icon": "bx:slider-alt",

@@ -12,6 +12,63 @@ from depictio.dash.api_calls import (
 )
 
 
+def validate_and_clean_orphaned_layouts(stored_layout_data, stored_metadata):
+    """
+    Validate and clean orphaned layout entries that don't have corresponding metadata entries.
+
+    Args:
+        stored_layout_data (list): List of layout entries with 'i' field containing 'box-{index}'
+        stored_metadata (list): List of metadata entries with 'index' field
+
+    Returns:
+        list: Cleaned layout data with orphaned entries removed
+    """
+    if not stored_layout_data or not stored_metadata:
+        return stored_layout_data or []
+
+    # Extract valid component IDs from metadata
+    valid_component_ids = {
+        str(meta.get("index")) for meta in stored_metadata if meta.get("index") is not None
+    }
+    logger.info(f"🔍 LAYOUT VALIDATION - Valid component IDs from metadata: {valid_component_ids}")
+
+    cleaned_layout_data = []
+    orphaned_layouts = []
+
+    for layout_entry in stored_layout_data:
+        layout_id = layout_entry.get("i", "")
+
+        # Extract component ID from layout ID (format: 'box-{index}')
+        if layout_id.startswith("box-"):
+            component_id = layout_id[4:]  # Remove 'box-' prefix
+
+            if component_id in valid_component_ids:
+                cleaned_layout_data.append(layout_entry)
+            else:
+                orphaned_layouts.append(layout_entry)
+                logger.info(
+                    f"🗑️ SAVE - Removing orphaned layout: {layout_id} (no matching metadata)"
+                )
+        else:
+            # Keep entries that don't follow the 'box-{index}' pattern for safety
+            cleaned_layout_data.append(layout_entry)
+            logger.warning(
+                f"⚠️ LAYOUT VALIDATION - Layout entry with unexpected ID format: {layout_id}"
+            )
+
+    if orphaned_layouts:
+        logger.info(
+            f"🧹 LAYOUT VALIDATION - Removed {len(orphaned_layouts)} orphaned layout entries"
+        )
+        logger.info(f"🧹 LAYOUT VALIDATION - Kept {len(cleaned_layout_data)} valid layout entries")
+    else:
+        logger.info(
+            f"✅ LAYOUT VALIDATION - No orphaned layouts found, all {len(cleaned_layout_data)} entries are valid"
+        )
+
+    return cleaned_layout_data
+
+
 def register_callbacks_save(app):
     @app.callback(
         Output("dummy-output", "children"),
@@ -272,10 +329,45 @@ def register_callbacks_save(app):
             unique_metadata = dashboard_data.get("stored_metadata", unique_metadata)
             # logger.info(f"Unique metadata after using draggable layout metadata: {unique_metadata}")
 
-        # Debug logging for layout data
+        # Debug logging for layout data - COMPREHENSIVE TRACKING
+        logger.info("=" * 80)
+        logger.info("🔍 SAVE DEBUG - LAYOUT DATA PROCESSING START")
+        logger.info("=" * 80)
         logger.info(f"🔍 SAVE DEBUG - stored_layout_data received: {stored_layout_data}")
         logger.info(f"🔍 SAVE DEBUG - type: {type(stored_layout_data)}")
         logger.info(f"🔍 SAVE DEBUG - triggered_id: {triggered_id}")
+
+        # Log the complete callback context for debugging
+        from dash import ctx
+
+        logger.info(f"🔍 SAVE DEBUG - callback context triggered: {ctx.triggered}")
+        logger.info(f"🔍 SAVE DEBUG - callback inputs_list: {ctx.inputs_list}")
+
+        # Identify which callback triggered this save
+        if "duplicate-box-button" in triggered_id:
+            logger.info("🎯 SAVE DEBUG - TRIGGERED BY: DUPLICATE CALLBACK")
+        elif "draggable" in triggered_id:
+            logger.info("🎯 SAVE DEBUG - TRIGGERED BY: DRAGGABLE/GRID LAYOUT CALLBACK")
+        elif "save-button-dashboard" in triggered_id:
+            logger.info("🎯 SAVE DEBUG - TRIGGERED BY: SAVE BUTTON")
+        else:
+            logger.info(f"🎯 SAVE DEBUG - TRIGGERED BY: OTHER ({triggered_id})")
+
+        # Log current layout data details
+        if stored_layout_data:
+            logger.info(f"🔍 SAVE DEBUG - layout data length: {len(stored_layout_data)}")
+            for i, layout_item in enumerate(stored_layout_data):
+                logger.info(f"🔍 SAVE DEBUG - layout item {i}: {layout_item}")
+        else:
+            logger.info("🔍 SAVE DEBUG - stored_layout_data is empty or None")
+
+        # Log existing dashboard layout data for comparison
+        existing_dashboard_layout = dashboard_data.get("stored_layout_data", [])
+        logger.info(f"🔍 SAVE DEBUG - existing dashboard layout: {existing_dashboard_layout}")
+        if existing_dashboard_layout:
+            logger.info(f"🔍 SAVE DEBUG - existing layout length: {len(existing_dashboard_layout)}")
+            for i, layout_item in enumerate(existing_dashboard_layout):
+                logger.info(f"🔍 SAVE DEBUG - existing layout item {i}: {layout_item}")
 
         # Ensure layout data is in list format - no backward compatibility
         if stored_layout_data is None:
@@ -288,10 +380,31 @@ def register_callbacks_save(app):
             if isinstance(existing_layout, list):
                 stored_layout_data = existing_layout
                 logger.info(f"🔄 SAVE DEBUG - preserved existing layout: {stored_layout_data}")
+                logger.info(f"🔄 SAVE DEBUG - preserved layout length: {len(stored_layout_data)}")
+                for i, layout_item in enumerate(stored_layout_data):
+                    logger.info(f"🔄 SAVE DEBUG - preserved layout item {i}: {layout_item}")
             else:
                 logger.warning(
                     f"⚠️ SAVE DEBUG - existing layout is not a list: {type(existing_layout)}"
                 )
+
+        # Validate and clean orphaned layouts before saving
+        logger.info("=" * 80)
+        logger.info("🧹 LAYOUT VALIDATION - CLEANING ORPHANED LAYOUTS")
+        logger.info("=" * 80)
+        logger.info(
+            f"🔍 LAYOUT VALIDATION - Before cleaning: {len(stored_layout_data) if stored_layout_data else 0} layout entries"
+        )
+        logger.info(f"🔍 LAYOUT VALIDATION - Available metadata: {len(unique_metadata)} entries")
+
+        stored_layout_data = validate_and_clean_orphaned_layouts(
+            stored_layout_data, unique_metadata
+        )
+
+        logger.info(
+            f"🔍 LAYOUT VALIDATION - After cleaning: {len(stored_layout_data) if stored_layout_data else 0} layout entries"
+        )
+        logger.info("=" * 80)
 
         updated_dashboard_data = {
             "stored_metadata": unique_metadata,
@@ -305,16 +418,95 @@ def register_callbacks_save(app):
             "notes_content": notes_data if notes_data else "",
             "last_saved_ts": str(datetime.now()),
         }
-        # logger.info(f"Updated dashboard data: {updated_dashboard_data}")
+
+        # Log final layout data being prepared for database
+        logger.info("=" * 80)
+        logger.info("🔍 SAVE DEBUG - FINAL DATA PREPARATION")
+        logger.info("=" * 80)
+        final_layout_data = updated_dashboard_data["stored_layout_data"]
+        logger.info(f"🔍 SAVE DEBUG - final layout data to save: {final_layout_data}")
+        logger.info(f"🔍 SAVE DEBUG - final layout data type: {type(final_layout_data)}")
+        if final_layout_data:
+            logger.info(f"🔍 SAVE DEBUG - final layout data length: {len(final_layout_data)}")
+            for i, layout_item in enumerate(final_layout_data):
+                logger.info(f"🔍 SAVE DEBUG - final layout item {i}: {layout_item}")
+        else:
+            logger.info("🔍 SAVE DEBUG - final layout data is empty")
+
+        final_metadata = updated_dashboard_data["stored_metadata"]
+        logger.info(f"🔍 SAVE DEBUG - final metadata count: {len(final_metadata)}")
+        for i, meta_item in enumerate(final_metadata):
+            logger.info(
+                f"🔍 SAVE DEBUG - final metadata item {i}: index={meta_item.get('index')}, type={meta_item.get('component_type')}, title={meta_item.get('title')}"
+            )
 
         # Update dashboard data
         dashboard_data.update(updated_dashboard_data)
-        # logger.info(f"Updated dashboard data: {dashboard_data}")
+
+        # Log the complete dashboard data being sent to API
+        logger.info("=" * 80)
+        logger.info("🔍 SAVE DEBUG - DATABASE SAVE PREPARATION")
+        logger.info("=" * 80)
+        db_layout_data = dashboard_data.get("stored_layout_data", [])
+        logger.info(f"🔍 SAVE DEBUG - database layout data: {db_layout_data}")
+        logger.info(
+            f"🔍 SAVE DEBUG - database layout data length: {len(db_layout_data) if db_layout_data else 0}"
+        )
+        if db_layout_data:
+            for i, layout_item in enumerate(db_layout_data):
+                logger.info(f"🔍 SAVE DEBUG - database layout item {i}: {layout_item}")
+
+        db_metadata = dashboard_data.get("stored_metadata", [])
+        logger.info(f"🔍 SAVE DEBUG - database metadata count: {len(db_metadata)}")
+        for i, meta_item in enumerate(db_metadata):
+            logger.info(
+                f"🔍 SAVE DEBUG - database metadata item {i}: index={meta_item.get('index')}, type={meta_item.get('component_type')}, title={meta_item.get('title')}"
+            )
+
+        logger.info("=" * 80)
+        logger.info("🔍 SAVE DEBUG - CALLING API TO SAVE DASHBOARD")
+        logger.info("=" * 80)
 
         # Save dashboard data using API call with proper timeout
         save_success = api_call_save_dashboard(dashboard_id, dashboard_data, TOKEN)
-        if not save_success:
+
+        # Log save result and verify what was actually saved
+        logger.info("=" * 80)
+        logger.info("🔍 SAVE DEBUG - SAVE OPERATION RESULT")
+        logger.info("=" * 80)
+        logger.info(f"🔍 SAVE DEBUG - save_success: {save_success}")
+
+        if save_success:
+            # Fetch the dashboard again to verify what was actually saved
+            logger.info("🔍 SAVE DEBUG - Fetching saved dashboard to verify data...")
+            verified_data = api_call_get_dashboard(dashboard_id, TOKEN)
+            if verified_data:
+                verified_layout = verified_data.get("stored_layout_data", [])
+                verified_metadata = verified_data.get("stored_metadata", [])
+
+                logger.info(
+                    f"🔍 SAVE DEBUG - verified layout data from database: {verified_layout}"
+                )
+                logger.info(
+                    f"🔍 SAVE DEBUG - verified layout count: {len(verified_layout) if verified_layout else 0}"
+                )
+                if verified_layout:
+                    for i, layout_item in enumerate(verified_layout):
+                        logger.info(f"🔍 SAVE DEBUG - verified layout item {i}: {layout_item}")
+
+                logger.info(f"🔍 SAVE DEBUG - verified metadata count: {len(verified_metadata)}")
+                for i, meta_item in enumerate(verified_metadata):
+                    logger.info(
+                        f"🔍 SAVE DEBUG - verified metadata item {i}: index={meta_item.get('index')}, type={meta_item.get('component_type')}, title={meta_item.get('title')}"
+                    )
+            else:
+                logger.error("🔍 SAVE DEBUG - Failed to fetch dashboard for verification")
+        else:
             logger.error(f"Failed to save dashboard data for {dashboard_id}")
+
+        logger.info("=" * 80)
+        logger.info("🔍 SAVE DEBUG - LAYOUT DATA PROCESSING END")
+        logger.info("=" * 80)
 
         # Screenshot the dashboard if save button was clicked
         if n_clicks and save_success:
