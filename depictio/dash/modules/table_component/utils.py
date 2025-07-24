@@ -171,25 +171,28 @@ def build_table(**kwargs):
         if build_frame:
             style_partial_data_displayed = {"display": "block", "paddingBottom": "5px"}
 
-    partial_data_badge = dmc.Tooltip(
-        children=dmc.Badge(
-            "Partial data displayed",
-            id={"type": "graph-partial-data-displayed", "index": index},
-            style=style_partial_data_displayed,
-            leftSection=DashIconify(
-                icon="mdi:alert-circle",
-                width=20,
+    partial_data_badge = html.Div(
+        dmc.Tooltip(
+            children=dmc.Badge(
+                "Partial data displayed",
+                id={"type": "graph-partial-data-displayed", "index": index},
+                style=style_partial_data_displayed,
+                leftSection=DashIconify(
+                    icon="mdi:alert-circle",
+                    width=20,
+                ),
+                # sx={"paddingLeft": 0},
+                size="lg",
+                radius="xl",
+                color="red",
+                fullWidth=False,
             ),
-            # sx={"paddingLeft": 0},
-            size="lg",
-            radius="xl",
-            color="red",
-            fullWidth=False,
+            label=f"Tables are currently loaded with a maximum of {cutoff} rows.",
+            position="top",
+            openDelay=500,
+            withinPortal=False,
         ),
-        label=f"Tables are currently loaded with a maximum of {cutoff} rows.",
-        position="top",
-        openDelay=500,
-        withinPortal=False,
+        style={"width": "fit-content"},  # Badge should not affect layout
     )
     # Prepare ag grid table
     table_aggrid = dag.AgGrid(
@@ -200,7 +203,7 @@ def build_table(**kwargs):
         dashGridOptions={
             "tooltipShowDelay": 500,
             "pagination": True,
-            "paginationAutoPageSize": False,
+            "paginationAutoPageSize": False,  # Keep default pagination behavior
             "animateRows": False,
             # The number of rows rendered outside the viewable area the grid renders.
             # "rowBuffer": 0,
@@ -216,6 +219,11 @@ def build_table(**kwargs):
         },
         # columnSize="sizeToFit",
         defaultColDef={"resizable": True, "sortable": True, "filter": True},
+        # Remove height, let CSS handle it dynamically
+        style={
+            "width": "100%",
+        },
+        className="ag-theme-alpine",
         # use the parameters above
     )
 
@@ -239,7 +247,7 @@ def build_table(**kwargs):
 
     # Create the card body - default title is the aggregation value on the selected column
 
-    # Create the card body
+    # Create the card body - simple structure
     new_card_body = html.Div(
         [
             partial_data_badge,

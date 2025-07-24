@@ -1,0 +1,14 @@
+/* Make the container div behave like figure components */
+.react-grid-item:has(.ag-theme-alpine) div:has(.ag-theme-alpine) {
+    width: 100% !important;
+    height: 100% !important;
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+/* AG Grid needs explicit height - use flex-basis instead of height */
+.react-grid-item:has(.ag-theme-alpine) .ag-theme-alpine {
+    flex: 1 1 200px !important;
+    min-height: 200px !important;
+}
