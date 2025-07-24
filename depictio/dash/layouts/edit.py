@@ -354,6 +354,7 @@ def enable_box_edit_mode(
     # Return with responsive-wrapper class to match working prototype pattern
     return html.Div(
         draggable_wrapper,
+        id=box_uuid,  # CRITICAL: Add the ID to the outer wrapper so it can be found for duplication
         className="responsive-wrapper",  # Critical: This class makes it work!
         style={
             "position": "relative",

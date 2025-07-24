@@ -44,7 +44,7 @@ COMPONENT_METADATA = {
         "supports_reset": True,  # For scatter plots
         "enabled": True,  # Enable by default
         "build_function": build_figure,
-        "default_dimensions": {"w": 14, "h": 14},  # Standard size for figures
+        "default_dimensions": {"w": 6, "h": 8},  # Adjusted for 12-column grid with rowHeight=50
     },
     "card": {
         "icon": "formkit:number",
@@ -55,7 +55,7 @@ COMPONENT_METADATA = {
         "supports_reset": False,
         "enabled": True,  # Enable by default
         "build_function": build_card,
-        "default_dimensions": {"w": 14, "h": 14},  # Standard size for cards
+        "default_dimensions": {"w": 4, "h": 6},  # Adjusted for 12-column grid - cards are smaller
     },
     "interactive": {
         "icon": "bx:slider-alt",
@@ -66,7 +66,10 @@ COMPONENT_METADATA = {
         "supports_reset": False,
         "enabled": True,  # Enable by default
         "build_function": build_interactive,
-        "default_dimensions": {"w": 14, "h": 14},  # Standard size for interactive controls
+        "default_dimensions": {
+            "w": 5,
+            "h": 6,
+        },  # Adjusted for 12-column grid - interactive controls are medium
     },
     "table": {
         "icon": "octicon:table-24",
@@ -77,7 +80,10 @@ COMPONENT_METADATA = {
         "supports_reset": False,
         "enabled": True,  # Enable by default
         "build_function": build_table,
-        "default_dimensions": {"w": 14, "h": 14},  # Standard size for tables
+        "default_dimensions": {
+            "w": 8,
+            "h": 10,
+        },  # Adjusted for 12-column grid - tables need more space
     },
     "jbrowse": {
         "icon": "material-symbols:table-rows-narrow-rounded",
@@ -88,7 +94,10 @@ COMPONENT_METADATA = {
         "supports_reset": False,
         "enabled": False,  # Disable by default
         "build_function": build_jbrowse,
-        "default_dimensions": {"w": 14, "h": 14},  # Standard size for genome browser
+        "default_dimensions": {
+            "w": 12,
+            "h": 8,
+        },  # Adjusted for 12-column grid - genome browser needs full width
     },
     "text": {
         "icon": "mdi:text-box-edit",
@@ -99,7 +108,10 @@ COMPONENT_METADATA = {
         "supports_reset": True,  # Can clear/reset text content
         "enabled": True,  # Enable by default
         "build_function": build_text,
-        "default_dimensions": {"w": 14, "h": 10},  # Shorter height for text content
+        "default_dimensions": {
+            "w": 8,
+            "h": 6,
+        },  # Adjusted for 12-column grid - text content is medium width
     },
 }
 
@@ -209,7 +221,7 @@ def get_component_dimensions_dict() -> dict:
         dict: Dictionary with component types as keys and dimension dicts as values
     """
     return {
-        component_type: metadata.get("default_dimensions", {"w": 14, "h": 14})
+        component_type: metadata.get("default_dimensions", {"w": 6, "h": 8})
         for component_type, metadata in COMPONENT_METADATA.items()
     }
 

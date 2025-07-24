@@ -34,7 +34,7 @@ from depictio.dash.utils import (
 )
 
 # Get component dimensions from centralized metadata
-# Adjusted for 96-column grid with rowHeight=10 - default 14x14 for all components
+# Adjusted for 12-column grid with rowHeight=50 - optimized dimensions per component type
 component_dimensions = get_component_dimensions_dict()
 # No longer using breakpoints - working with direct list format
 
@@ -46,12 +46,12 @@ def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
         f"🔄 CALCULATE_NEW_LAYOUT_POSITION CALLED: {child_type} with {n} existing components"
     )
     dimensions = component_dimensions.get(
-        child_type, {"w": 14, "h": 14}
-    )  # Default 14x14 for 96-column grid
+        child_type, {"w": 6, "h": 8}
+    )  # Default 6x8 for 12-column grid with rowHeight=50
     logger.info(f"📐 Selected dimensions: {dimensions} for {child_type}")
     logger.info(f"📋 Existing layouts: {existing_layouts}")
 
-    columns_per_row = 96
+    columns_per_row = 12  # Updated for 12-column grid
     components_per_row = columns_per_row // dimensions["w"]
     if components_per_row == 0:
         components_per_row = 1
@@ -88,8 +88,8 @@ def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
                     if isinstance(layout, dict):
                         existing_x = layout.get("x", 0)
                         existing_y = layout.get("y", 0)
-                        existing_w = layout.get("w", 14)
-                        existing_h = layout.get("h", 14)
+                        existing_w = layout.get("w", 6)  # Use 12-column grid compatible default
+                        existing_h = layout.get("h", 8)  # Use rowHeight=50 compatible default
 
                         existing_x_range = set(range(existing_x, existing_x + existing_w))
                         existing_y_range = set(range(existing_y, existing_y + existing_h))
@@ -128,6 +128,8 @@ def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
         "w": dimensions["w"],
         "h": dimensions["h"],
         "i": child_id,
+        "moved": False,
+        "static": False,
     }
 
 
@@ -146,6 +148,96 @@ def update_nested_ids(component, old_index, new_index):
     elif isinstance(component, list):
         for item in component:
             update_nested_ids(item, old_index, new_index)
+
+
+def normalize_layout_data(layouts):
+    """Ensure all layout entries have consistent moved and static properties."""
+    if not layouts:
+        return []
+
+    normalized_layouts = []
+    for layout in layouts:
+        if isinstance(layout, dict):
+            # Ensure all required properties exist
+            normalized_layout = layout.copy()
+            if "moved" not in normalized_layout:
+                normalized_layout["moved"] = False
+            if "static" not in normalized_layout:
+                normalized_layout["static"] = False
+            normalized_layouts.append(normalized_layout)
+        else:
+            normalized_layouts.append(layout)
+
+    return normalized_layouts
+
+
+def clean_layout_data(layouts):
+    """Clean corrupted layout data by filtering out entries with invalid IDs, dimensions, or positions."""
+    if not layouts:
+        return []
+
+    cleaned_layouts = []
+    for layout in layouts:
+        if isinstance(layout, dict) and "i" in layout:
+            layout_id = layout["i"]
+
+            # Check if this is a corrupted path-like ID
+            if isinstance(layout_id, str) and (
+                "props,children" in layout_id or len(layout_id.split(",")) > 3
+            ):
+                logger.warning(f"Filtering out corrupted layout entry (path-like ID): {layout_id}")
+                continue
+
+            # Check for invalid dimensions or positions (outside 12-column grid)
+            x = layout.get("x", 0)
+            w = layout.get("w", 0)
+
+            # Filter out layouts that:
+            # 1. Have x position >= 12 (outside grid)
+            # 2. Have width > 12 (too wide for grid)
+            # 3. Have x + width > 12 (extend beyond grid)
+            if x >= 12 or w > 12 or (x + w > 12 and x > 0):
+                logger.warning(
+                    f"Filtering out layout entry with invalid position/size: ID={layout_id}, x={x}, w={w}"
+                )
+                continue
+
+            cleaned_layouts.append(layout)
+        else:
+            # Keep non-dict entries or entries without 'i' key as they might be valid
+            cleaned_layouts.append(layout)
+
+    logger.info(f"Layout cleaning: {len(layouts)} -> {len(cleaned_layouts)} entries")
+    return cleaned_layouts
+
+
+def get_component_id(component):
+    """Safely extract component ID from native Dash component or JSON representation."""
+    try:
+        # Check for direct id attribute
+        if hasattr(component, "id") and component.id is not None:
+            # Native Dash component
+            return component.id
+
+        # Check for JSON representation
+        elif isinstance(component, dict) and "props" in component:
+            # JSON representation
+            return component["props"].get("id")
+
+        # Check for DraggableWrapper or other wrapper components
+        elif hasattr(component, "_namespace") and hasattr(component, "id"):
+            # Component with namespace (like dash-dynamic-grid-layout)
+            return component.id
+
+        # Check if it's a more complex component structure
+        elif hasattr(component, "__dict__"):
+            comp_dict = component.__dict__
+            if "id" in comp_dict:
+                return comp_dict["id"]
+
+        return None
+    except (KeyError, AttributeError, TypeError):
+        return None
 
 
 def remove_duplicates_by_index(components):
@@ -330,9 +422,9 @@ def register_callbacks_draggable(app):
                             TOKEN=TOKEN,
                         )
                         dc_id_value = component_data.get("dc_id", dc_id_value)
-                        logger.info(
-                            f"Component data retrieved for '{trigger_index}': {component_data}"
-                        )
+                        # logger.info(
+                        #     f"Component data retrieved for '{trigger_index}': {component_data}"
+                        # )
                         logger.info(f"Updated dc_id_value for '{trigger_index}': {dc_id_value}")
                 dc_tag = return_dc_tag_from_id(data_collection_id=dc_id_value, TOKEN=TOKEN)
                 components_store[trigger_index]["dc_tag"] = dc_tag
@@ -345,7 +437,7 @@ def register_callbacks_draggable(app):
                 )
                 components_store[trigger_index]["dc_tag"] = ""
 
-        logger.debug(f"Components store data after update: {components_store}")
+        # logger.debug(f"Components store data after update: {components_store}")
         return components_store
 
     @app.callback(
@@ -563,9 +655,42 @@ def register_callbacks_draggable(app):
                 stored_layouts = state_stored_draggable_layouts[dashboard_id]
                 # Ensure stored layouts are also in list format
                 if isinstance(stored_layouts, dict):
-                    draggable_layouts = stored_layouts.get("lg", [])
+                    raw_layouts = stored_layouts.get("lg", [])
                 else:
-                    draggable_layouts = stored_layouts
+                    raw_layouts = stored_layouts
+
+                # Clean any corrupted layouts and normalize properties
+                cleaned_layouts = clean_layout_data(raw_layouts)
+                normalized_layouts = normalize_layout_data(cleaned_layouts)
+
+                # CRITICAL: Remove orphaned layouts that don't have corresponding components
+                if draggable_children:
+                    component_ids = set()
+                    for child in draggable_children:
+                        child_id = get_component_id(child)
+                        if child_id:
+                            component_ids.add(child_id)
+
+                    # Filter layouts to only include those with matching components
+                    matched_layouts = []
+                    for layout in normalized_layouts:
+                        layout_id = layout.get("i", "")
+                        if layout_id in component_ids:
+                            matched_layouts.append(layout)
+                        else:
+                            logger.warning(
+                                f"🗑️ Removing orphaned layout: {layout_id} (no matching component)"
+                            )
+
+                    draggable_layouts = matched_layouts
+                    logger.info(
+                        f"Layout validation: {len(raw_layouts)} raw -> {len(cleaned_layouts)} cleaned -> {len(normalized_layouts)} normalized -> {len(draggable_layouts)} matched"
+                    )
+                else:
+                    draggable_layouts = normalized_layouts
+                    logger.info(
+                        f"Cleaned and normalized layouts loaded from storage: {len(raw_layouts)} -> {len(draggable_layouts)}"
+                    )
                 # logger.info(f"Updated draggable layouts: {draggable_layouts}")
 
         if isinstance(ctx.triggered_id, dict):
@@ -579,7 +704,11 @@ def register_callbacks_draggable(app):
             triggered_input = None
             triggered_input_dict = None
 
+        # Add comprehensive callback tracking
+        callback_id = id(ctx) if ctx else "NO_CTX"
+        logger.info(f"🚀 CALLBACK START - ID: {callback_id}")
         logger.info(f"Triggered input: {triggered_input}")
+        logger.info(f"🚀 CALLBACK DEBUG - ctx.triggered: {ctx.triggered if ctx else 'NO_CTX'}")
         # logger.info(f"Theme store: {theme_store}")
 
         # Extract theme safely from theme store with improved fallback handling
@@ -659,12 +788,15 @@ def register_callbacks_draggable(app):
                 logger.info(f"🔍 DRAG DEBUG - index_returned: {index_returned}")
                 logger.info(f"🔍 DRAG DEBUG - child_id: {child_id}")
                 logger.info(f"Child type: {child_type}")
+                # Clean existing layouts before calculating new position
+                clean_draggable_layouts = clean_layout_data(draggable_layouts)
                 new_layout_item = calculate_new_layout_position(
-                    child_type, draggable_layouts, child_id, len(draggable_children)
+                    child_type, clean_draggable_layouts, child_id, len(draggable_children)
                 )
 
-                # Add new layout item to the list (no more breakpoint logic)
-                draggable_layouts.append(new_layout_item)
+                # Add new layout item to the cleaned list
+                clean_draggable_layouts.append(new_layout_item)
+                draggable_layouts = clean_draggable_layouts  # Use cleaned layouts
                 # logger.info(f"New layout item: {new_layout_item}")
                 # logger.info(f"New draggable layouts: {draggable_layouts}")
                 state_stored_draggable_layouts[dashboard_id] = draggable_layouts
@@ -689,13 +821,15 @@ def register_callbacks_draggable(app):
                 # logger.info(f"State stored draggable layouts: {state_stored_draggable_layouts}")
 
                 if "draggable.currentLayout" in ctx_triggered_props_id:
-                    # dash-dynamic-grid-layout returns a single layout array - store it directly
+                    # dash-dynamic-grid-layout returns a single layout array - normalize and store it
                     state_stored_draggable_children[dashboard_id] = draggable_children
-                    state_stored_draggable_layouts[dashboard_id] = input_draggable_layouts
+                    # Normalize layout data to ensure consistent moved/static properties
+                    normalized_layouts = normalize_layout_data(input_draggable_layouts)
+                    state_stored_draggable_layouts[dashboard_id] = normalized_layouts
 
                     return (
                         draggable_children,
-                        input_draggable_layouts,  # Return the raw layout array
+                        normalized_layouts,  # Return the normalized layout array
                         dash.no_update,
                         state_stored_draggable_layouts,
                         dash.no_update,
@@ -965,7 +1099,7 @@ def register_callbacks_draggable(app):
                 updated_children = [
                     child
                     for child in draggable_children
-                    if child["props"]["id"] != f"box-{input_id}"
+                    if get_component_id(child) != f"box-{input_id}"
                 ]
                 state_stored_draggable_layouts[dashboard_id] = draggable_layouts
 
@@ -1005,9 +1139,16 @@ def register_callbacks_draggable(app):
                 updated_children = []
                 # logger.info(f"Draggable children: {draggable_children}")
                 for child in draggable_children:
-                    logger.info(f"Child props id: {child['props']['id']}")
-                    if child["props"]["id"] == f"box-{input_id}":
-                        child["props"]["children"] = edited_modal
+                    child_id = get_component_id(child)
+                    logger.info(f"Child ID: {child_id}")
+                    if child_id == f"box-{input_id}":
+                        # Handle both native Dash components and JSON representations
+                        if hasattr(child, "children") and hasattr(child, "id"):
+                            # Native Dash component - create new component with updated children
+                            child = type(child)(id=child.id, children=edited_modal)
+                        elif isinstance(child, dict) and "props" in child:
+                            # JSON representation
+                            child["props"]["children"] = edited_modal
 
                     updated_children.append(child)
 
@@ -1033,7 +1174,27 @@ def register_callbacks_draggable(app):
                         parent_index = metadata["parent_index"]
                         parent_metadata = metadata
                 for child, metadata in zip(test_container, stored_metadata):
-                    child_index = str(child["props"]["id"]["index"])
+                    # Extract child index safely
+                    child_index = None
+                    try:
+                        if hasattr(child, "id") and isinstance(child.id, dict):
+                            # Native Dash component with dict ID
+                            child_index = str(child.id.get("index", ""))
+                        elif isinstance(child, dict) and "props" in child:
+                            # JSON representation
+                            child_id = child["props"].get("id")
+                            if isinstance(child_id, dict):
+                                child_index = str(child_id.get("index", ""))
+                            else:
+                                child_index = str(child_id) if child_id else ""
+
+                        if not child_index:
+                            continue
+
+                    except (KeyError, AttributeError, TypeError) as e:
+                        logger.warning(f"Error extracting child index: {e}")
+                        continue
+
                     if str(child_index) == str(index):
                         logger.info(f"Found child with index: {child_index}")
                         logger.info(f"Index: {index}")
@@ -1050,7 +1211,8 @@ def register_callbacks_draggable(app):
                 if parent_index:
                     updated_children = list()
                     for child in draggable_children:
-                        if child["props"]["id"] == f"box-{parent_index}":
+                        child_id = get_component_id(child)
+                        if child_id == f"box-{parent_index}":
                             updated_children.append(edited_child)  # Replace the entire child
                         else:
                             updated_children.append(child)
@@ -1079,12 +1241,109 @@ def register_callbacks_draggable(app):
                 )
 
             elif triggered_input == "duplicate-box-button":
-                logger.info("Duplicate box button clicked")
+                logger.info("=" * 80)
+                logger.info("🚨 DUPLICATE CALLBACK EXECUTION START")
+                logger.info("=" * 80)
+                logger.info(f"🔍 DUPLICATE DEBUG - ctx.triggered: {ctx.triggered}")
+                logger.info(f"🔍 DUPLICATE DEBUG - ctx.triggered_id: {ctx.triggered_id}")
+                logger.info(f"🔍 DUPLICATE DEBUG - Total triggered items: {len(ctx.triggered)}")
+
+                # Check ALL triggered inputs to understand multiple triggers
+                for i, triggered_item in enumerate(ctx.triggered):
+                    logger.info(f"🔍 DUPLICATE DEBUG - Triggered item {i}: {triggered_item}")
+
+                # Log current dashboard state before duplication
+                logger.info(
+                    f"🔍 DUPLICATE DEBUG - Current draggable_children count: {len(draggable_children) if draggable_children else 0}"
+                )
+                logger.info(
+                    f"🔍 DUPLICATE DEBUG - Current draggable_layouts count: {len(draggable_layouts) if draggable_layouts else 0}"
+                )
+                if draggable_layouts:
+                    for i, layout in enumerate(draggable_layouts):
+                        logger.info(
+                            f"🔍 DUPLICATE DEBUG - Existing layout {i}: {layout.get('i', 'NO_ID')} at ({layout.get('x', '?')},{layout.get('y', '?')})"
+                        )
+
+                # Check if this is actually a triggered button (non-zero clicks)
+                triggered_button_clicks = ctx.triggered[0]["value"]
+                if not triggered_button_clicks or triggered_button_clicks == 0:
+                    logger.info(
+                        "🔍 DUPLICATE DEBUG - Button not actually clicked (0 clicks), skipping"
+                    )
+                    return (
+                        dash.no_update,
+                        dash.no_update,
+                        dash.no_update,
+                        dash.no_update,
+                        dash.no_update,
+                    )
+
+                # CRITICAL: Check if there are multiple triggers and only process the first one
+                if len(ctx.triggered) > 1:
+                    logger.warning(
+                        f"🔍 DUPLICATE DEBUG - Multiple triggers detected ({len(ctx.triggered)}), processing only the first one"
+                    )
+                    # Only process if this is the first trigger or they're all the same
+                    first_trigger_id = ctx.triggered[0]["prop_id"]
+                    current_trigger_id = f'{{"index":"{ctx.triggered_id["index"]}","type":"duplicate-box-button"}}.n_clicks'
+                    if first_trigger_id != current_trigger_id:
+                        logger.info(
+                            f"🔍 DUPLICATE DEBUG - Skipping duplicate trigger: {current_trigger_id}"
+                        )
+                        return (
+                            dash.no_update,
+                            dash.no_update,
+                            dash.no_update,
+                            dash.no_update,
+                            dash.no_update,
+                        )
+
                 triggered_index = ctx.triggered_id["index"]
+
+                logger.info(f"🔍 DUPLICATE DEBUG - Looking for component: box-{triggered_index}")
+                logger.info(
+                    f"🔍 DUPLICATE DEBUG - Number of draggable_children: {len(draggable_children)}"
+                )
+                logger.info(f"🔍 DUPLICATE DEBUG - Current draggable_layouts: {draggable_layouts}")
+
+                # Check if we're already processing a duplication for this component
+                duplicate_target_id = f"box-{triggered_index}"
+                existing_duplicates = [
+                    layout
+                    for layout in draggable_layouts
+                    if layout.get("i", "").startswith("box-") and layout["i"] != duplicate_target_id
+                ]
+                logger.info(
+                    f"🔍 DUPLICATE DEBUG - Existing components count: {len(existing_duplicates) + 1}"
+                )  # +1 for original
+
+                # Debug: log all component IDs and structures
+                for i, child in enumerate(draggable_children):
+                    child_id = get_component_id(child)
+                    logger.info(f"🔍 DUPLICATE DEBUG - Child {i}: ID = {child_id}")
+                    logger.info(f"🔍 DUPLICATE DEBUG - Child {i}: type = {type(child)}")
+                    logger.info(
+                        f"🔍 DUPLICATE DEBUG - Child {i}: hasattr(child, 'id') = {hasattr(child, 'id')}"
+                    )
+                    if hasattr(child, "id"):
+                        logger.info(f"🔍 DUPLICATE DEBUG - Child {i}: child.id = {child.id}")
+                    if isinstance(child, dict):
+                        logger.info(
+                            f"🔍 DUPLICATE DEBUG - Child {i}: dict keys = {list(child.keys())}"
+                        )
+                        if "props" in child:
+                            logger.info(
+                                f"🔍 DUPLICATE DEBUG - Child {i}: props keys = {list(child['props'].keys())}"
+                            )
+                    # Show first 200 chars of the component structure
+                    child_str = str(child)[:200] + "..." if len(str(child)) > 200 else str(child)
+                    logger.info(f"🔍 DUPLICATE DEBUG - Child {i}: structure = {child_str}")
 
                 component_to_duplicate = None
                 for child in draggable_children:
-                    if child["props"]["id"] == f"box-{triggered_index}":
+                    child_id = get_component_id(child)
+                    if child_id == f"box-{triggered_index}":
                         component_to_duplicate = child
                         break
 
@@ -1103,6 +1362,10 @@ def register_callbacks_draggable(app):
                 # Generate a new unique ID for the duplicated component
                 new_index = generate_unique_index()
                 child_id = f"box-{new_index}"
+                logger.info(f"🔍 DUPLICATE DEBUG - Generated new component ID: {child_id}")
+                logger.info(
+                    f"🔍 DUPLICATE DEBUG - About to create duplicate of: {duplicate_target_id}"
+                )
 
                 # Create a deep copy of the component to duplicate
                 duplicated_component = copy.deepcopy(component_to_duplicate)
@@ -1151,7 +1414,8 @@ def register_callbacks_draggable(app):
 
                 # Calculate the new layout position
                 # 'child_type' corresponds to the 'type' in the component's ID
-                existing_layouts = draggable_layouts  # Current layouts before adding the new one
+                # Clean existing layouts to remove any corrupted entries
+                existing_layouts = clean_layout_data(draggable_layouts)
                 n = len(updated_children)  # Position based on the number of components
 
                 new_layout = calculate_new_layout_position(
@@ -1161,8 +1425,9 @@ def register_callbacks_draggable(app):
                     n,
                 )
 
-                # Add new layout item to the list (no more breakpoint logic)
-                draggable_layouts.append(new_layout)
+                # Add new layout item to the cleaned list
+                existing_layouts.append(new_layout)
+                draggable_layouts = existing_layouts  # Use cleaned layouts
                 # logger.info(f"New layout: {new_layout}")
 
                 logger.info(
@@ -1171,6 +1436,13 @@ def register_callbacks_draggable(app):
 
                 # state_stored_draggable_children[dashboard_id] = updated_children
                 state_stored_draggable_layouts[dashboard_id] = draggable_layouts
+
+                logger.info("=" * 80)
+                logger.info("🔚 DUPLICATE CALLBACK EXECUTION END")
+                logger.info(f"🔍 DUPLICATE DEBUG - Final children count: {len(updated_children)}")
+                logger.info(f"🔍 DUPLICATE DEBUG - Final layouts count: {len(draggable_layouts)}")
+                logger.info(f"🔍 DUPLICATE DEBUG - New component created: {child_id}")
+                logger.info("=" * 80)
 
                 return (
                     updated_children,
