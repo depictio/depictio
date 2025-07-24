@@ -1,14 +1,10 @@
 import dash
 import dash.dependencies as dd
 import dash_mantine_components as dmc
-import httpx
 from dash import ALL, Input, Output, State, dcc, html
 from dash.exceptions import PreventUpdate
 from dash_iconify import DashIconify
 
-from depictio.api.v1.configs.config import API_BASE_URL, settings
-from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.api_calls import api_call_fetch_user_from_token
 from depictio.dash.theme_utils import create_theme_controls
 
 
@@ -178,19 +174,19 @@ def register_sidebar_callbacks(app):
 
     @app.callback(
         Output("avatar-container", "children"),
-        Input("url", "pathname"),
-        State("local-store", "data"),
+        Input("user-cache-store", "data"),
         prevent_initial_call=True,
     )
-    def update_avatar(pathname, local_store):
-        if pathname == "/auth":
-            return []
+    def update_avatar(user_cache):
+        from depictio.dash.layouts.consolidated_api import UserContext
 
-        current_user = api_call_fetch_user_from_token(local_store["access_token"])
+        # Get user from consolidated cache
+        current_user = UserContext.from_cache(user_cache)
         if not current_user or not current_user.email:
             return []
+
         email = current_user.email
-        name = email.split("@")[0]
+        name = current_user.name
         avatar = dcc.Link(
             dmc.Avatar(
                 id="avatar",
@@ -200,67 +196,34 @@ def register_sidebar_callbacks(app):
             ),
             href="/profile",
         )
-        name = dmc.Text(name, size="lg", style={"fontSize": "16px", "marginLeft": "10px"})
-        return [avatar, name]
+        name_text = dmc.Text(name, size="lg", style={"fontSize": "16px", "marginLeft": "10px"})
+        return [avatar, name_text]
 
     @app.callback(
         Output("sidebar-footer-server-status", "children"),
-        Input("url", "pathname"),
-        State("local-store", "data"),
+        Input("server-status-cache", "data"),
         prevent_initial_call=True,
     )
-    def update_server_status(pathname, local_store):
-        if pathname == "/auth":
+    def update_server_status(server_cache):
+        from depictio.dash.layouts.consolidated_api import get_cached_server_status
+
+        # Get server status from consolidated cache
+        server_status = get_cached_server_status(server_cache)
+        if not server_status:
             return []
 
-        try:
-            response = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/utils/status",
-                headers={"Authorization": f"Bearer {local_store['access_token']}"},
-                timeout=settings.performance.api_request_timeout,
+        if server_status["status"] == "online":
+            server_status_badge = dmc.GridCol(
+                dmc.Badge(
+                    f"Server online - {server_status['version']}",
+                    variant="dot",
+                    color="green",
+                    size="sm",
+                ),
+                span="content",
             )
-            if response.status_code != 200:
-                server_status_badge = dmc.GridCol(
-                    dmc.Badge(
-                        "Server offline",
-                        variant="dot",
-                        color="red",
-                        size="sm",
-                        style={"padding": "5px 5px"},
-                    ),
-                    span="content",
-                )
-                return [server_status_badge]
-            else:
-                logger.info(f"Server status: {response.json()}")
-                server_status = response.json()["status"]
-                if server_status == "online":
-                    server_status_badge = dmc.GridCol(
-                        dmc.Badge(
-                            f"Server online - {response.json()['version']}",
-                            variant="dot",
-                            color="green",
-                            size="sm",
-                        ),
-                        span="content",
-                    )
-
-                    return [dmc.Group([server_status_badge], justify="space-between")]
-                else:
-                    server_status_badge = dmc.GridCol(
-                        dmc.Badge(
-                            "Server offline",
-                            variant="outline",
-                            color="red",
-                            size="sm",
-                            style={"padding": "5px 5px"},
-                        ),
-                        span="content",
-                    )
-                    return [server_status_badge]
-
-        except Exception as e:
-            logger.error(f"Error fetching server status: {e}")
+            return [dmc.Group([server_status_badge], justify="space-between")]
+        else:
             server_status_badge = dmc.GridCol(
                 dmc.Badge(
                     "Server offline",
@@ -275,16 +238,17 @@ def register_sidebar_callbacks(app):
 
     @app.callback(
         Output({"type": "sidebar-link", "index": "administration"}, "style"),
-        Input("url", "pathname"),
-        State("local-store", "data"),
+        Input("user-cache-store", "data"),
         prevent_initial_call=True,
     )
-    def show_admin_link(pathname, local_store):
-        if pathname == "/auth":
-            return dash.no_update
-        if not local_store or "access_token" not in local_store:
+    def show_admin_link(user_cache):
+        from depictio.dash.layouts.consolidated_api import UserContext
+
+        # Get user from consolidated cache
+        current_user = UserContext.from_cache(user_cache)
+        if not current_user:
             return {"padding": "20px", "display": "none"}
-        current_user = api_call_fetch_user_from_token(local_store["access_token"])
+
         if current_user.is_admin:
             return {"padding": "20px"}
         else:

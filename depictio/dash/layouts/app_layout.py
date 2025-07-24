@@ -481,6 +481,18 @@ def create_app_layout():
                 storage_type="memory",
                 data=False,  # Start with sidebar expanded
             ),
+            # Consolidated user cache to reduce API calls
+            dcc.Store(
+                id="user-cache-store",
+                storage_type="memory",
+                data=None,  # Will be populated by consolidated callback
+            ),
+            # Server status cache
+            dcc.Store(
+                id="server-status-cache",
+                storage_type="memory",
+                data=None,  # Will be populated by consolidated callback
+            ),
             dcc.Store(
                 id="local-store-components-metadata",
                 data={},

@@ -30,9 +30,10 @@ def register_callbacks_header(app):
         Input("unified-edit-mode-button", "checked"),
         State("local-store", "data"),
         State("url", "pathname"),
+        State("user-cache-store", "data"),
         # prevent_initial_call=True,
     )
-    def toggle_buttons(switch_state, local_store, pathname):
+    def toggle_buttons(switch_state, local_store, pathname, user_cache):
         # logger.info("\n\n\n")
         # logger.info("toggle_buttons")
         # logger.info(switch_state)
@@ -40,7 +41,13 @@ def register_callbacks_header(app):
 
         len_output = 9
 
-        current_user = api_call_fetch_user_from_token(local_store["access_token"])
+        # Use consolidated user cache instead of individual API call
+        from depictio.dash.layouts.consolidated_api import UserContext
+
+        current_user = UserContext.from_cache(user_cache)
+        if not current_user:
+            # Fallback to direct API call if cache not available
+            current_user = api_call_fetch_user_from_token(local_store["access_token"])
 
         if not local_store["access_token"]:
             switch_state = False
@@ -195,6 +202,7 @@ def design_header(data, local_store):
         if "stored_edit_dashboard_mode_button" not in data:
             data["stored_edit_dashboard_mode_button"] = [int(0)]
 
+    # TODO: Optimize this with consolidated cache when design_header is refactored
     current_user = api_call_fetch_user_from_token(local_store["access_token"])
     # logger.info(f"current_user: {current_user}")
 

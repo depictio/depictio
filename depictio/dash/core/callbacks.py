@@ -101,6 +101,7 @@ def register_layout_callbacks(app):
     Args:
         app (dash.Dash): The Dash application instance
     """
+    from depictio.dash.layouts.consolidated_api import register_consolidated_api_callbacks
     from depictio.dash.layouts.draggable import register_callbacks_draggable
     from depictio.dash.layouts.header import register_callbacks_header
     from depictio.dash.layouts.notes_footer import register_callbacks_notes_footer
@@ -112,6 +113,9 @@ def register_layout_callbacks(app):
     # from depictio.dash.layouts.stepper_parts.part_three import register_callbacks_stepper_part_three
     # from depictio.dash.layouts.stepper_parts.part_two import register_callbacks_stepper_part_two
     from depictio.dash.theme_utils import register_theme_callbacks
+
+    # Register consolidated API callbacks first (highest priority)
+    register_consolidated_api_callbacks(app)
 
     # Register layout callbacks
     register_callbacks_stepper(app)
