@@ -24,10 +24,11 @@ def register_callbacks_jbrowse_component(app):
             Input({"type": "btn-jbrowse", "index": MATCH}, "id"),
             State("local-store", "data"),
             State("url", "pathname"),
+            State("user-cache-store", "data"),
         ],
         prevent_initial_call=True,
     )
-    def update_jbrowse(wf_id, dc_id, n_clicks, id, data, pathname):
+    def update_jbrowse(wf_id, dc_id, n_clicks, id, data, pathname, user_cache):
         if not data:
             return None
 
@@ -70,6 +71,7 @@ def register_callbacks_jbrowse_component(app):
             "dc_config": dc_specs["config"],
             "access_token": TOKEN,
             "dashboard_id": dashboard_id,
+            "user_cache": user_cache,
         }
 
         jbrowse_body = build_jbrowse(**jbrowse_kwargs)

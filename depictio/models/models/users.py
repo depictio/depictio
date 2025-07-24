@@ -161,6 +161,60 @@ class UserBase(MongoModel):
     expiration_time: datetime | None = None
 
 
+class UserContext:
+    """
+    User context helper class for consolidated API cache system.
+
+    This class provides compatibility with existing UserBase/User classes
+    while optimizing API calls through caching.
+    """
+
+    def __init__(self, id: str, email: str, is_admin: bool, is_anonymous: bool):
+        self.id = PyObjectId(id) if isinstance(id, str) else id
+        self.email = email
+        self.is_admin = is_admin
+        self.is_anonymous = is_anonymous
+        self.is_temporary = False  # Default for cached users
+        self.expiration_time = None  # Default for cached users
+
+    @property
+    def name(self) -> str:
+        """Get user display name from email."""
+        return self.email.split("@")[0] if self.email else "Unknown"
+
+    def turn_to_userbase(self) -> UserBase:
+        """Convert to UserBase for compatibility with existing code."""
+        return UserBase(
+            id=self.id,
+            email=self.email,
+            is_admin=self.is_admin,
+            is_anonymous=self.is_anonymous,
+            is_temporary=self.is_temporary,
+            expiration_time=self.expiration_time,
+        )
+
+    @staticmethod
+    def from_cache(user_cache_data: dict | None) -> "UserContext | None":
+        """Create UserContext from consolidated cache data."""
+        if not user_cache_data or not user_cache_data.get("user"):
+            return None
+
+        # Check if cache is still valid (5 minute timeout)
+        import time
+
+        current_time = time.time()
+        if (current_time - user_cache_data.get("timestamp", 0)) > 300:
+            return None
+
+        user_data = user_cache_data["user"]
+        return UserContext(
+            id=user_data["id"],
+            email=user_data["email"],
+            is_admin=user_data["is_admin"],
+            is_anonymous=user_data["is_anonymous"],
+        )
+
+
 class GroupUI(Group):
     users: list[UserBase] = []
 

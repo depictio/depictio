@@ -178,7 +178,7 @@ def register_sidebar_callbacks(app):
         prevent_initial_call=True,
     )
     def update_avatar(user_cache):
-        from depictio.dash.layouts.consolidated_api import UserContext
+        from depictio.models.models.users import UserContext
 
         # Get user from consolidated cache
         current_user = UserContext.from_cache(user_cache)
@@ -242,7 +242,7 @@ def register_sidebar_callbacks(app):
         prevent_initial_call=True,
     )
     def show_admin_link(user_cache):
-        from depictio.dash.layouts.consolidated_api import UserContext
+        from depictio.models.models.users import UserContext
 
         # Get user from consolidated cache
         current_user = UserContext.from_cache(user_cache)

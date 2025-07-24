@@ -172,36 +172,3 @@ def get_cached_server_status(server_cache: Optional[Dict[str, Any]]) -> Optional
         "status": server_cache.get("status", "offline"),
         "version": server_cache.get("version", "unknown"),
     }
-
-
-class UserContext:
-    """
-    User context helper class for easy access to cached user data.
-
-    This replaces the need for individual api_call_fetch_user_from_token() calls
-    in components by providing cached user data.
-    """
-
-    @staticmethod
-    def from_cache(user_cache: Optional[Dict[str, Any]]):
-        """Create UserContext from cached data."""
-        user_data = get_cached_user_data(user_cache)
-        if user_data:
-            return UserContext(
-                id=user_data["id"],
-                email=user_data["email"],
-                is_admin=user_data["is_admin"],
-                is_anonymous=user_data["is_anonymous"],
-            )
-        return None
-
-    def __init__(self, id: str, email: str, is_admin: bool, is_anonymous: bool):
-        self.id = id
-        self.email = email
-        self.is_admin = is_admin
-        self.is_anonymous = is_anonymous
-
-    @property
-    def name(self) -> str:
-        """Get user display name from email."""
-        return self.email.split("@")[0] if self.email else "Unknown"

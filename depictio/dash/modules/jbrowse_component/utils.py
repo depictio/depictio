@@ -99,6 +99,7 @@ def build_jbrowse(**kwargs):
     stepper = kwargs.get("stepper", False)
     access_token = kwargs.get("access_token")
     dashboard_id = kwargs.get("dashboard_id")
+    user_cache = kwargs.get("user_cache")
 
     # logger.info(f"build_jbrowse access_token {access_token}")
     logger.info(f"build_jbrowse dc_config {dc_config}")
@@ -110,8 +111,18 @@ def build_jbrowse(**kwargs):
     logger.info(f"build_jbrowse dashboard_id {dashboard_id}")
     logger.info(f"build_jbrowse build_frame {build_frame}")
 
-    user = api_call_fetch_user_from_token(access_token)
-    logger.info(f"user {user}")
+    # Use consolidated user cache instead of individual API call
+    from depictio.models.models.users import UserContext
+
+    user_context = UserContext.from_cache(user_cache)
+    if user_context:
+        logger.info("✅ JBrowse: Using consolidated cache for user data")
+        user = user_context  # Use UserContext directly
+    else:
+        # Fallback to direct API call if cache not available
+        logger.info("🔄 JBrowse: Using fallback API call for user data")
+        user = api_call_fetch_user_from_token(access_token)
+        logger.info(f"user {user}")
 
     # response = httpx.get(
     #     f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token",

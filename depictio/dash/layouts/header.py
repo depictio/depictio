@@ -42,7 +42,7 @@ def register_callbacks_header(app):
         len_output = 9
 
         # Use consolidated user cache instead of individual API call
-        from depictio.dash.layouts.consolidated_api import UserContext
+        from depictio.models.models.users import UserContext
 
         current_user = UserContext.from_cache(user_cache)
         if not current_user:

@@ -32,6 +32,7 @@ def register_callbacks_save(app):
         Input("notes-editor-store", "data"),
         State("url", "pathname"),
         State("local-store", "data"),
+        State("user-cache-store", "data"),
         Input(
             {
                 "type": "btn-done",
@@ -72,6 +73,7 @@ def register_callbacks_save(app):
         notes_data,
         pathname,
         local_store,
+        user_cache,
         n_clicks_done,
         n_clicks_done_edit,
         n_clicks_duplicate,
@@ -85,12 +87,27 @@ def register_callbacks_save(app):
             logger.warning("User not logged in.")
             return dash.no_update
 
-        # Validate user authentication
+        # Validate user authentication using consolidated cache
+        from depictio.models.models.users import UserContext
+
         TOKEN = local_store["access_token"]
-        current_user = api_call_fetch_user_from_token(TOKEN)
+        current_user = UserContext.from_cache(user_cache)
         if not current_user:
-            logger.warning("User not found.")
-            return dash.no_update
+            # Fallback to direct API call if cache not available
+            logger.info("🔄 Save: Using fallback API call for user authentication")
+            current_user_api = api_call_fetch_user_from_token(TOKEN)
+            if not current_user_api:
+                logger.warning("User not found.")
+                return dash.no_update
+            # Create UserContext from API response for consistency
+            current_user = UserContext(
+                id=str(current_user_api.id),
+                email=current_user_api.email,
+                is_admin=current_user_api.is_admin,
+                is_anonymous=getattr(current_user_api, "is_anonymous", False),
+            )
+        else:
+            logger.info("✅ Save: Using consolidated cache for user authentication")
 
         # Extract dashboard ID from pathname
         dashboard_id = pathname.split("/")[-1]
