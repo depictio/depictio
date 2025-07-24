@@ -39,20 +39,25 @@ def build_figure_frame(index, children=None):
     if not children:
         return dbc.Card(
             [
-                dbc.CardBody(
-                    id={
-                        "type": "figure-body",
-                        "index": index,
-                    },
-                    style={
-                        "padding": "5px",  # Reduce padding inside the card body
-                        "display": "flex",
-                        "flexDirection": "column",
-                        "flex": "1",  # Allow growth to fill container
-                        "height": "100%",  # Make sure it fills the parent container
-                        "minHeight": "150px",  # Reduce from 400px for better flexibility
-                        "backgroundColor": "transparent",  # Fix white background
-                    },
+                dcc.Loading(
+                    children=dbc.CardBody(
+                        id={
+                            "type": "figure-body",
+                            "index": index,
+                        },
+                        style={
+                            "padding": "5px",  # Reduce padding inside the card body
+                            "display": "flex",
+                            "flexDirection": "column",
+                            "flex": "1",  # Allow growth to fill container
+                            "height": "100%",  # Make sure it fills the parent container
+                            "minHeight": "150px",  # Reduce from 400px for better flexibility
+                            "backgroundColor": "transparent",  # Fix white background
+                        },
+                    ),
+                    type="default",  # Use default Dash spinner
+                    delay_show=500,  # Longer delay to avoid showing during initial load
+                    delay_hide=100,  # Quick dismissal
                 ),
                 html.Div(
                     id={
@@ -95,21 +100,26 @@ def build_figure_frame(index, children=None):
     else:
         return dbc.Card(
             [
-                dbc.CardBody(
-                    children=children,
-                    id={
-                        "type": "figure-body",
-                        "index": index,
-                    },
-                    style={
-                        "padding": "5px",  # Reduce padding inside the card body
-                        "display": "flex",
-                        "flexDirection": "column",
-                        "flex": "1",  # Allow growth to fill container
-                        "height": "100%",  # Make sure it fills the parent container
-                        "minHeight": "150px",  # Reduce from 400px for better flexibility
-                        "backgroundColor": "transparent",  # Fix white background
-                    },
+                dcc.Loading(
+                    children=dbc.CardBody(
+                        children=children,
+                        id={
+                            "type": "figure-body",
+                            "index": index,
+                        },
+                        style={
+                            "padding": "5px",  # Reduce padding inside the card body
+                            "display": "flex",
+                            "flexDirection": "column",
+                            "flex": "1",  # Allow growth to fill container
+                            "height": "100%",  # Make sure it fills the parent container
+                            "minHeight": "150px",  # Reduce from 400px for better flexibility
+                            "backgroundColor": "transparent",  # Fix white background
+                        },
+                    ),
+                    type="default",  # Use default Dash spinner
+                    delay_show=500,  # Longer delay to avoid showing during initial load
+                    delay_hide=100,  # Quick dismissal
                 ),
                 html.Div(
                     id={
@@ -633,18 +643,9 @@ def build_figure(**kwargs) -> html.Div:
 
         # For stepper mode with loading
         if not stepper:
-            # Use skeleton system for consistent loading experience
-            from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
-                create_skeleton_component,
-            )
-
+            # Return figure_div directly - loading is now handled at the figure-body level
             return html.Div(
-                dcc.Loading(
-                    children=figure_div,  # Return content directly, not wrapped in new frame
-                    custom_spinner=create_skeleton_component("figure"),
-                    delay_show=100,  # Small delay to prevent flashing
-                    delay_hide=2000,  # 2s delay for debugging visibility
-                ),
+                figure_div,
                 id={"index": index},  # Preserve the expected id structure
             )
         else:

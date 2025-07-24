@@ -209,7 +209,7 @@ def create_loading_progress_display(dashboard_id: str):
             "top": "50%",
             "left": "50%",
             "transform": "translate(-50%, -50%)",
-            "zIndex": 1000,
+            "zIndex": 9999,  # Higher z-index to ensure it's above everything
             "backgroundColor": "var(--app-surface-color, rgba(255, 255, 255, 0.98))",
             "padding": "40px 50px",
             "borderRadius": "12px",
@@ -217,84 +217,7 @@ def create_loading_progress_display(dashboard_id: str):
             "minWidth": "500px",
             "display": "block",
             "border": "1px solid var(--app-border-color, #ddd)",
-        },
-    )
-
-
-def create_fade_out_progress_display(dashboard_id: str):
-    """Create a fade-out version of the loading progress display."""
-    # CSS for fade animations
-    fade_css = """
-    @keyframes fadeOut {
-        from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-        to { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
-    }
-
-    .loading-progress-fade-out {
-        animation: fadeOut 0.3s ease-in forwards;
-    }
-    """
-
-    return html.Div(
-        [
-            # CSS for fade animations using html.Link with data URI
-            html.Link(
-                rel="stylesheet",
-                href="data:text/css;base64," + base64.b64encode(fade_css.encode()).decode(),
-            ),
-            dmc.Stack(
-                [
-                    dmc.Text(
-                        "Loading dashboard components...",
-                        size="md",
-                        c="gray",
-                        style={
-                            "textAlign": "center",
-                            "fontWeight": 500,
-                            "color": "var(--app-text-color, gray)",
-                        },
-                    ),
-                    # Animated Depictio logo
-                    html.Div(
-                        [
-                            html.Div(
-                                [
-                                    # Animated Depictio logo with pulsing effect
-                                    dmc.Center(create_inline_svg_logo()),
-                                ],
-                                style={
-                                    "display": "flex",
-                                    "alignItems": "center",
-                                    "justifyContent": "center",
-                                    "width": "100%",
-                                    "height": "120px",
-                                },
-                            ),
-                        ],
-                        style={
-                            "position": "relative",
-                            "width": "100%",
-                        },
-                    ),
-                ],
-                gap="md",
-            ),
-        ],
-        id={"type": "loading-progress-container", "dashboard": dashboard_id},
-        className="loading-progress-fade-out",  # Fade-out animation
-        style={
-            "position": "fixed",
-            "top": "50%",
-            "left": "50%",
-            "transform": "translate(-50%, -50%)",
-            "zIndex": 1000,
-            "backgroundColor": "var(--app-surface-color, rgba(255, 255, 255, 0.98))",
-            "padding": "40px 50px",
-            "borderRadius": "12px",
-            "boxShadow": "0 8px 25px rgba(0,0,0,0.15)",
-            "minWidth": "500px",
-            "display": "block",
-            "border": "1px solid var(--app-border-color, #ddd)",
+            "opacity": "1 !important",  # Always visible initially
         },
     )
 

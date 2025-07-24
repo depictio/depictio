@@ -90,7 +90,7 @@ def register_callbacks_notes_footer(app):
     # Simple callback to adjust footer positioning based on sidebar state
     app.clientside_callback(
         """
-        function(is_collapsed) {
+        function(user_preference) {\n            // Extract collapsed state from user preference object\n            const is_collapsed = user_preference && user_preference.collapsed ? user_preference.collapsed : false;
             console.log('Footer adjusting to sidebar collapse state:', is_collapsed);
 
             const footer = document.querySelector('#notes-footer-content');
@@ -107,7 +107,7 @@ def register_callbacks_notes_footer(app):
         }
         """,
         Output("notes-footer-content", "data-collapse-response"),
-        Input("sidebar-collapsed", "data"),
+        Input("sidebar-user-preference", "data"),
         prevent_initial_call=False,
     )
 

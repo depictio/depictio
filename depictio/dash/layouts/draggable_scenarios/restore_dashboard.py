@@ -218,16 +218,17 @@ def render_dashboard_with_skeletons(
 def get_loading_delay_for_component(component_type, index_in_list):
     """Get the loading delay for a component based on its type and position."""
     base_delays = {
-        "card": 0.5,  # Fastest - simple components
-        "interactive": 1.0,  # Medium - interactive components
-        "figure": 1.5,  # Slower - complex visualizations
-        "table": 2.0,  # Slowest - data-heavy components
-        "jbrowse": 2.5,  # Slowest - genome browser
+        "card": 0.1,  # Fastest - simple components
+        "interactive": 0.2,  # Medium - interactive components
+        "figure": 0.3,  # Slower - complex visualizations
+        "table": 0.4,  # Slowest - data-heavy components
+        "jbrowse": 0.5,  # Slowest - genome browser
+        "text": 0.1,  # Text components load fast
     }
 
-    base_delay = base_delays.get(component_type, 1.0)
-    # Add small incremental delay based on position to stagger loading
-    positional_delay = index_in_list * 0.2
+    base_delay = base_delays.get(component_type, 0.2)
+    # Add minimal incremental delay based on position to stagger loading
+    positional_delay = index_in_list * 0.05
 
     return base_delay + positional_delay
 

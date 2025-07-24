@@ -1146,8 +1146,8 @@ def build_interactive(**kwargs):
                     children=interactive_component,
                     # custom_spinner=dmc.Loader(color="red", size="sm"),
                     custom_spinner=create_skeleton_component("interactive"),
-                    delay_show=100,  # Small delay to prevent flashing
-                    delay_hide=2000,  # 2s delay for debugging visibility
+                    delay_show=50,  # Minimal delay to prevent flashing
+                    delay_hide=100,  # Quick dismissal
                 ),
                 id={"index": index},  # Preserve the expected id structure
                 style={

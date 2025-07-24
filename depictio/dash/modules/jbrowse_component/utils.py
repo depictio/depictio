@@ -238,8 +238,8 @@ def build_jbrowse(**kwargs):
                 dcc.Loading(
                     children=jbrowse_component,
                     custom_spinner=create_skeleton_component("jbrowse"),
-                    delay_show=100,  # Small delay to prevent flashing
-                    delay_hide=2000,  # 2s delay for debugging visibility
+                    delay_show=50,  # Minimal delay to prevent flashing
+                    delay_hide=100,  # Quick dismissal
                 ),
                 id={"index": index},  # Preserve the expected id structure
             )
