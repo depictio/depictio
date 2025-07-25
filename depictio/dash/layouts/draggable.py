@@ -1819,6 +1819,8 @@ def register_callbacks_draggable(app):
             Input({"type": "interactive-component-value", "index": ALL}, "value"),
             Input({"type": "graph", "index": ALL}, "clickData"),
             Input({"type": "graph", "index": ALL}, "selectedData"),
+            Input({"type": "reset-selection-graph-button", "index": ALL}, "n_clicks"),
+            Input("reset-all-filters-button", "n_clicks"),
         ],
         [
             State({"type": "interactive-component-value", "index": ALL}, "id"),
@@ -1834,6 +1836,8 @@ def register_callbacks_draggable(app):
         interactive_values,
         graph_click_data,
         graph_selected_data,
+        reset_button_clicks,
+        reset_all_clicks,
         ids,
         stored_metadata,
         graph_ids,
@@ -1875,10 +1879,136 @@ def register_callbacks_draggable(app):
         interactive_triggered = any(
             "interactive-component-value" in prop_id for prop_id in triggered_prop_ids
         )
+        reset_triggered = any(
+            "reset-selection-graph-button" in prop_id or "reset-all-filters-button" in prop_id
+            for prop_id in triggered_prop_ids
+        )
 
         logger.info(
-            f"🎯 Trigger analysis: graph={graph_triggered}, interactive={interactive_triggered}"
+            f"🎯 Trigger analysis: graph={graph_triggered}, interactive={interactive_triggered}, reset={reset_triggered}"
         )
+
+        # Handle reset buttons first (they take priority)
+        if reset_triggered:
+            logger.info("🔄 Reset button detected in main store callback")
+
+            # Check if this is actually a button click (not initialization)
+            triggered_value = ctx.triggered[0]["value"]
+            if not triggered_value or triggered_value == 0:
+                logger.info(
+                    f"🔄 Skipping reset - no actual button click (value: {triggered_value})"
+                )
+            else:
+                triggered_prop_id = ctx.triggered[0]["prop_id"]
+                logger.info(f"🔄 Processing reset: {triggered_prop_id}")
+
+                # Start with current store data
+                if not current_store_data:
+                    current_store_data = {"interactive_components_values": []}
+
+                current_components = current_store_data.get("interactive_components_values", [])
+
+                if "reset-all-filters-button" in triggered_prop_id:
+                    logger.info("🔄 Reset all filters in main callback")
+                    # Remove all scatter plot filters and reset interactive components to defaults
+                    filtered_components = []
+                    for component in current_components:
+                        component_id = component.get("index", "")
+                        if component_id.startswith("filter_"):
+                            logger.info(f"🔄 Removed scatter plot filter: {component_id}")
+                        else:
+                            # Reset interactive component to default
+                            component_metadata = component.get("metadata", {})
+                            default_state = component_metadata.get("default_state", {})
+
+                            reset_component = component.copy()
+                            if "default_range" in default_state:
+                                reset_component["value"] = default_state["default_range"]
+                            elif "default_value" in default_state:
+                                reset_component["value"] = default_state["default_value"]
+                            else:
+                                reset_component["value"] = None
+
+                            filtered_components.append(reset_component)
+                            logger.info(f"🔄 Reset interactive component {component_id} to default")
+
+                    output_data = {"interactive_components_values": filtered_components}
+                    logger.info(f"🔄 Reset all completed: {len(filtered_components)} components")
+                    return output_data
+
+                elif "reset-selection-graph-button" in triggered_prop_id:
+                    logger.info("🔄 Individual reset in main callback")
+                    try:
+                        component_index = eval(triggered_prop_id.split(".")[0])["index"]
+                        logger.info(f"🔄 Resetting component: {component_index}")
+
+                        # Find component metadata
+                        component_metadata = None
+                        for meta in stored_metadata:
+                            if meta and meta.get("index") == component_index:
+                                component_metadata = meta
+                                break
+
+                        if component_metadata:
+                            component_type = component_metadata.get("component_type")
+
+                            if (
+                                component_type == "figure"
+                                and component_metadata.get("visu_type", "").lower() == "scatter"
+                            ):
+                                # Remove scatter plot filters
+                                filtered_components = [
+                                    c
+                                    for c in current_components
+                                    if not (
+                                        c.get("index", "").startswith("filter_")
+                                        and component_index in c.get("index", "")
+                                    )
+                                ]
+                                logger.info(
+                                    f"🔄 Removed scatter plot filters for {component_index}"
+                                )
+                            elif component_type == "interactive":
+                                # Reset interactive component
+                                filtered_components = []
+                                for component in current_components:
+                                    if component.get("index") == component_index:
+                                        default_state = component.get("metadata", {}).get(
+                                            "default_state", {}
+                                        )
+                                        reset_component = component.copy()
+
+                                        if "default_range" in default_state:
+                                            reset_component["value"] = default_state[
+                                                "default_range"
+                                            ]
+                                        elif "default_value" in default_state:
+                                            reset_component["value"] = default_state[
+                                                "default_value"
+                                            ]
+                                        else:
+                                            reset_component["value"] = None
+
+                                        filtered_components.append(reset_component)
+                                        logger.info(
+                                            f"🔄 Reset interactive component {component_index}"
+                                        )
+                                    else:
+                                        filtered_components.append(component)
+                            else:
+                                filtered_components = current_components
+
+                            output_data = {"interactive_components_values": filtered_components}
+                            logger.info(
+                                f"🔄 Individual reset completed: {len(filtered_components)} components"
+                            )
+                            return output_data
+
+                    except Exception as e:
+                        logger.error(f"Error processing individual reset: {e}")
+
+            # If reset didn't process, continue with normal logic
+            logger.info("🔄 Reset trigger detected but not processed, continuing with normal logic")
         logger.info(
             f"🎯 Current store has {len(current_store_data.get('interactive_components_values', [])) if current_store_data else 0} existing components"
         )
@@ -2129,97 +2259,6 @@ def register_callbacks_draggable(app):
         output_data = {"interactive_components_values": components}
         logger.info(f"🎯 Store updated with {len(components)} total components")
         logger.info(f"🎯 Final scatter filter count: {scatter_filters_after}")
-        return output_data
-
-    # Add callback to handle reset button interactions and update the interactive-values-store
-    @app.callback(
-        Output("interactive-values-store", "data", allow_duplicate=True),
-        [
-            Input({"type": "reset-selection-graph-button", "index": ALL}, "n_clicks"),
-            Input("reset-all-filters-button", "n_clicks"),
-        ],
-        [
-            State("interactive-values-store", "data"),
-            State({"type": "stored-metadata-component", "index": ALL}, "data"),
-            State("url", "pathname"),
-        ],
-        prevent_initial_call=True,
-    )
-    def handle_reset_buttons_for_store(
-        reset_button_clicks, reset_all_clicks, current_store_data, stored_metadata, pathname
-    ):
-        """Handle reset button clicks and update the interactive-values-store to remove scatter plot filters."""
-
-        logger.info("🔄 Reset button callback triggered for store update")
-
-        ctx = dash.callback_context
-        if not ctx.triggered:
-            raise dash.exceptions.PreventUpdate
-
-        triggered_prop_id = ctx.triggered[0]["prop_id"]
-        logger.info(f"🔄 Reset triggered by: {triggered_prop_id}")
-
-        # Start with current store data
-        if not current_store_data:
-            current_store_data = {"interactive_components_values": []}
-
-        current_components = current_store_data.get("interactive_components_values", [])
-        logger.info(f"🔄 Current store has {len(current_components)} components")
-
-        # Handle individual component reset
-        if "reset-selection-graph-button" in triggered_prop_id:
-            try:
-                # Extract the component index from the triggered prop_id
-                component_index = eval(triggered_prop_id.split(".")[0])["index"]
-                logger.info(f"🔄 Resetting individual component: {component_index}")
-
-                # Find the component metadata to check if it's a scatter plot
-                is_scatter_plot = False
-                for meta in stored_metadata:
-                    if (
-                        meta
-                        and meta.get("index") == component_index
-                        and meta.get("component_type") == "figure"
-                        and meta.get("visu_type", "").lower() == "scatter"
-                    ):
-                        is_scatter_plot = True
-                        break
-
-                if is_scatter_plot:
-                    # Remove all scatter plot filters generated by this component
-                    filtered_components = []
-                    for component in current_components:
-                        component_id = component.get("index", "")
-                        # Keep component if it's not a filter from this scatter plot
-                        if not (
-                            component_id.startswith("filter_") and component_index in component_id
-                        ):
-                            filtered_components.append(component)
-                        else:
-                            logger.info(f"🔄 Removed scatter plot filter: {component_id}")
-
-                    current_components = filtered_components
-
-            except Exception as e:
-                logger.error(f"Error processing individual reset: {e}")
-
-        # Handle reset all filters
-        elif "reset-all-filters-button" in triggered_prop_id:
-            logger.info("🔄 Resetting all filters")
-            # Remove all scatter plot generated filters (those starting with "filter_")
-            filtered_components = []
-            for component in current_components:
-                component_id = component.get("index", "")
-                if not component_id.startswith("filter_"):
-                    filtered_components.append(component)
-                else:
-                    logger.info(f"🔄 Removed scatter plot filter: {component_id}")
-
-            current_components = filtered_components
-
-        # Return updated store data
-        output_data = {"interactive_components_values": current_components}
-        logger.info(f"🔄 Reset callback updated store with {len(current_components)} components")
         return output_data
 
     # Add callback to control grid edit mode like in the prototype
