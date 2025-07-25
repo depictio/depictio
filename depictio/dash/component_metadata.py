@@ -44,7 +44,7 @@ COMPONENT_METADATA = {
         "supports_reset": True,  # For scatter plots
         "enabled": True,  # Enable by default
         "build_function": build_figure,
-        "default_dimensions": {"w": 6, "h": 8},  # Adjusted for 12-column grid with rowHeight=50
+        "default_dimensions": {"w": 4, "h": 4},  # Adjusted for 12-column grid with rowHeight=50
     },
     "card": {
         "icon": "formkit:number",
@@ -67,8 +67,8 @@ COMPONENT_METADATA = {
         "enabled": True,  # Enable by default
         "build_function": build_interactive,
         "default_dimensions": {
-            "w": 5,
-            "h": 6,
+            "w": 3,
+            "h": 2,
         },  # Adjusted for 12-column grid - interactive controls are medium
     },
     "table": {
@@ -81,8 +81,8 @@ COMPONENT_METADATA = {
         "enabled": True,  # Enable by default
         "build_function": build_table,
         "default_dimensions": {
-            "w": 8,
-            "h": 10,
+            "w": 6,
+            "h": 4,
         },  # Adjusted for 12-column grid - tables need more space
     },
     "jbrowse": {
@@ -109,8 +109,8 @@ COMPONENT_METADATA = {
         "enabled": True,  # Enable by default
         "build_function": build_text,
         "default_dimensions": {
-            "w": 8,
-            "h": 6,
+            "w": 2,
+            "h": 2,
         },  # Adjusted for 12-column grid - text content is medium width
     },
 }

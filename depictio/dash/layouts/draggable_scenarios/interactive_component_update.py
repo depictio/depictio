@@ -189,11 +189,16 @@ def render_raw_children(
     if comp_type == "interactive":
         component.pop("value", None)
 
-    # Generate a unique index for the component
-    # component["parent_index"] = str(component["index"])
-    # component["index"] = generate_unique_index()
-    component["index"] = component["index"].replace("-tmp", "")
-    index = component["index"]
+    # Handle component index based on component type
+    # Text components need special handling for temporary IDs during creation
+    if comp_type == "text":
+        # For text components, preserve the original index (including -tmp if present)
+        # The text component will handle -tmp removal internally when appropriate
+        index = component["index"]
+    else:
+        # For other components, remove -tmp suffix to get the final ID
+        component["index"] = component["index"].replace("-tmp", "")
+        index = component["index"]
 
     # Set flags and tokens
     component.update(

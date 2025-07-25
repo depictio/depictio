@@ -250,8 +250,26 @@ def register_callbacks_text_component(app):
         """
         # Handle case where component is in edit mode with temporary ID
         if id and str(id["index"]).endswith("-tmp"):
-            logger.debug(f"Ignoring callback for temporary component ID: {id['index']}")
-            raise dash.exceptions.PreventUpdate
+            logger.debug(f"Processing temporary component ID in stepper mode: {id['index']}")
+            # For temporary components in stepper mode, create a basic text component
+            try:
+                text_kwargs = {
+                    "index": id["index"],
+                    "title": None,
+                    "content": "# Section Title",  # Default content for new text components
+                    "stepper": True,  # Important: this is stepper mode
+                    "build_frame": True,
+                    "show_toolbar": True,
+                    "show_title": False,
+                    "wf_id": wf_id,  # These might be None but that's ok for stepper
+                    "dc_id": dc_id,
+                }
+                new_text = build_text(**text_kwargs)
+                return new_text
+            except Exception as e:
+                logger.error(f"Error creating stepper text component: {e}")
+                # Fallback to basic frame if creation fails
+                return build_text_frame(index=id["index"])
 
         if not data or not n_clicks or n_clicks == 0:
             return build_text_frame(index=id["index"])
