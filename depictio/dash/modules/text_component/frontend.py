@@ -46,7 +46,12 @@ def register_callbacks_text_component(app):
 
         # Initialize store_data if None
         if not store_data:
-            store_data = {"text": "# Section Title", "order": 1, "editing": False}
+            store_data = {
+                "text": "# Section Title",
+                "order": 1,
+                "editing": False,
+                "alignment": "left",
+            }
 
         # Base styles
         title_style = {
@@ -93,7 +98,12 @@ def register_callbacks_text_component(app):
 
         # Initialize store_data if None
         if not store_data:
-            store_data = {"text": "# Section Title", "order": 1, "editing": False}
+            store_data = {
+                "text": "# Section Title",
+                "order": 1,
+                "editing": False,
+                "alignment": "left",
+            }
 
         logger.info("Starting edit mode via double-click")
 
@@ -171,6 +181,81 @@ def register_callbacks_text_component(app):
         else:
             return text, 6  # Use order 6 for regular text (smaller than h5)
 
+    # Text alignment callbacks
+    @app.callback(
+        [
+            Output({"type": "editable-title", "index": MATCH}, "style", allow_duplicate=True),
+            Output({"type": "text-store", "index": MATCH}, "data", allow_duplicate=True),
+            Output({"type": "alignment-menu-btn", "index": MATCH}, "children"),
+        ],
+        [
+            Input({"type": "align-left-btn", "index": MATCH}, "n_clicks"),
+            Input({"type": "align-center-btn", "index": MATCH}, "n_clicks"),
+            Input({"type": "align-right-btn", "index": MATCH}, "n_clicks"),
+        ],
+        [
+            State({"type": "text-store", "index": MATCH}, "data"),
+            State({"type": "editable-title", "index": MATCH}, "style"),
+        ],
+        prevent_initial_call=True,
+    )
+    def update_text_alignment(left_clicks, center_clicks, right_clicks, store_data, current_style):
+        """Update text alignment when alignment buttons are clicked."""
+        from dash import callback_context
+
+        ctx = callback_context
+        if not ctx.triggered:
+            return dash.no_update, dash.no_update, dash.no_update
+
+        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+
+        # Initialize store_data if None
+        if not store_data:
+            store_data = {
+                "text": "# Section Title",
+                "order": 1,
+                "editing": False,
+                "alignment": "left",
+            }
+
+        # Initialize current_style if None
+        if not current_style:
+            current_style = {
+                "cursor": "text",
+                "padding": "4px 8px",
+                "borderRadius": "4px",
+                "transition": "background-color 0.2s",
+                "margin": "8px 0",
+                "minHeight": "24px",
+                "border": "1px dashed transparent",
+                "textAlign": "left",
+            }
+
+        # Determine alignment and icon based on trigger
+        if "align-left-btn" in trigger_id:
+            alignment = "left"
+            icon = DashIconify(icon="tabler:align-left", width=16)
+        elif "align-center-btn" in trigger_id:
+            alignment = "center"
+            icon = DashIconify(icon="tabler:align-center", width=16)
+        elif "align-right-btn" in trigger_id:
+            alignment = "right"
+            icon = DashIconify(icon="tabler:align-right", width=16)
+        else:
+            return dash.no_update, dash.no_update, dash.no_update
+
+        # Update style with new alignment
+        new_style = current_style.copy()
+        new_style["textAlign"] = alignment
+
+        # Update store data with new alignment
+        new_store_data = store_data.copy()
+        new_store_data["alignment"] = alignment
+
+        logger.info(f"Text alignment changed to: {alignment}")
+
+        return new_style, new_store_data, icon
+
     # Client-side hover effects and double-click functionality for inline editable text
     app.clientside_callback(
         """
@@ -185,17 +270,30 @@ def register_callbacks_text_component(app):
                     if (container.hasAttribute('data-interactions-processed')) return;
                     container.setAttribute('data-interactions-processed', 'true');
 
+                    // Find the alignment menu button within this container
+                    const alignmentBtn = container.querySelector('[id*="alignment-menu-btn"]');
+
                     // Hover effects
                     container.addEventListener('mouseenter', function() {
                         this.style.border = '1px dashed #ddd';
                         this.style.backgroundColor = 'var(--app-surface-color, #f9f9f9)';
                         this.style.cursor = 'pointer';
+
+                        // Show alignment menu button on hover
+                        if (alignmentBtn) {
+                            alignmentBtn.style.opacity = '1';
+                        }
                     });
 
                     container.addEventListener('mouseleave', function() {
                         this.style.border = '1px solid transparent';
                         this.style.backgroundColor = 'transparent';
                         this.style.cursor = 'default';
+
+                        // Hide alignment menu button when not hovering
+                        if (alignmentBtn) {
+                            alignmentBtn.style.opacity = '0';
+                        }
                     });
 
                     // Find the editable title and edit button within this container
@@ -237,14 +335,12 @@ def register_callbacks_text_component(app):
         [
             Input({"type": "btn-apply-text-settings", "index": MATCH}, "n_clicks"),
             State({"type": "btn-apply-text-settings", "index": MATCH}, "id"),
-            Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
-            Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             State("local-store", "data"),
             State("url", "pathname"),
         ],
         prevent_initial_call=True,
     )
-    def update_text_component(n_clicks, id, wf_id, dc_id, data, pathname):
+    def update_text_component(n_clicks, id, data, pathname):
         """
         Callback to update text component based on configuration settings
         """
@@ -261,8 +357,8 @@ def register_callbacks_text_component(app):
                     "build_frame": True,
                     "show_toolbar": True,
                     "show_title": False,
-                    "wf_id": wf_id,  # These might be None but that's ok for stepper
-                    "dc_id": dc_id,
+                    "wf_id": None,  # Text components don't need wf_id
+                    "dc_id": None,  # Text components don't need dc_id
                 }
                 new_text = build_text(**text_kwargs)
                 return new_text
@@ -274,8 +370,12 @@ def register_callbacks_text_component(app):
         if not data or not n_clicks or n_clicks == 0:
             return build_text_frame(index=id["index"])
 
-        logger.info(f"wf_id: {wf_id}")
-        logger.info(f"dc_id: {dc_id}")
+        # For text components, wf_id and dc_id are optional since they don't depend on data collections
+        wf_id = None
+        dc_id = None
+
+        logger.info(f"wf_id: {wf_id} (optional for text components)")
+        logger.info(f"dc_id: {dc_id} (optional for text components)")
 
         try:
             # Build the text component with configuration options
@@ -287,8 +387,8 @@ def register_callbacks_text_component(app):
                 "build_frame": True,  # Use frame for editing with loading
                 "show_toolbar": True,  # Legacy parameter, not used
                 "show_title": False,  # No title needed for inline editable text components
-                "wf_id": wf_id,
-                "dc_id": dc_id,
+                "wf_id": None,  # Text components don't need wf_id
+                "dc_id": None,  # Text components don't need dc_id
             }
             new_text = build_text(**text_kwargs)
             return new_text

@@ -85,6 +85,14 @@ def _check_filter_activity(interactive_values):
     return False
 
 
+def _is_empty_selection(value):
+    """
+    Check if a value represents an empty selection.
+    Handles both empty arrays [] and null/None values.
+    """
+    return value is None or (isinstance(value, list) and len(value) == 0)
+
+
 def _is_different_from_default(current_value, default_state):
     """
     Simple comparison of current value with default state.
@@ -105,6 +113,12 @@ def _is_different_from_default(current_value, default_state):
         # For all other components, compare with default_value
         elif "default_value" in default_state:
             default_value = default_state["default_value"]
+
+            # Special handling for MultiSelect components:
+            # Both empty array [] and null should be considered equivalent (no selection)
+            if _is_empty_selection(current_value) and _is_empty_selection(default_value):
+                return False  # Both are empty, so no difference
+
             return current_value != default_value
 
         # If no recognizable default state structure, assume not filtered

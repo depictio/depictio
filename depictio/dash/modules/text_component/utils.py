@@ -6,7 +6,9 @@ from dash_iconify import DashIconify
 from depictio.api.v1.configs.logging_init import logger
 
 
-def create_inline_editable_text(component_id, initial_text="# Section Title", initial_order=1):
+def create_inline_editable_text(
+    component_id, initial_text="# Section Title", initial_order=1, initial_alignment="left"
+):
     """Create an inline editable text component for dashboard section delimiters."""
 
     return html.Div(
@@ -24,8 +26,54 @@ def create_inline_editable_text(component_id, initial_text="# Section Title", in
                     "margin": "8px 0",
                     "minHeight": "24px",
                     "border": "1px dashed transparent",
+                    "textAlign": initial_alignment,  # Add text alignment
                 },
                 c="dark",
+            ),
+            # Text alignment menu (visible on hover)
+            dmc.Menu(
+                [
+                    dmc.MenuTarget(
+                        dmc.ActionIcon(
+                            DashIconify(icon="tabler:align-left", width=16),
+                            id={"type": "alignment-menu-btn", "index": component_id},
+                            size="sm",
+                            variant="subtle",
+                            color="gray",
+                            style={
+                                "position": "absolute",
+                                "top": "4px",
+                                "right": "4px",
+                                "opacity": "0",
+                                "transition": "opacity 0.2s ease",
+                                "zIndex": "10",
+                            },
+                        )
+                    ),
+                    dmc.MenuDropdown(
+                        [
+                            dmc.MenuItem(
+                                "Align Left",
+                                id={"type": "align-left-btn", "index": component_id},
+                                leftSection=DashIconify(icon="tabler:align-left", width=16),
+                                n_clicks=0,
+                            ),
+                            dmc.MenuItem(
+                                "Align Center",
+                                id={"type": "align-center-btn", "index": component_id},
+                                leftSection=DashIconify(icon="tabler:align-center", width=16),
+                                n_clicks=0,
+                            ),
+                            dmc.MenuItem(
+                                "Align Right",
+                                id={"type": "align-right-btn", "index": component_id},
+                                leftSection=DashIconify(icon="tabler:align-right", width=16),
+                                n_clicks=0,
+                            ),
+                        ]
+                    ),
+                ],
+                id={"type": "alignment-menu", "index": component_id},
             ),
             # Hidden input for editing
             dmc.TextInput(
@@ -45,7 +93,12 @@ def create_inline_editable_text(component_id, initial_text="# Section Title", in
             # Store for component state
             dcc.Store(
                 id={"type": "text-store", "index": component_id},
-                data={"text": initial_text, "order": initial_order, "editing": False},
+                data={
+                    "text": initial_text,
+                    "order": initial_order,
+                    "editing": False,
+                    "alignment": initial_alignment,
+                },
             ),
         ],
         style={
@@ -56,6 +109,7 @@ def create_inline_editable_text(component_id, initial_text="# Section Title", in
             "position": "relative",
         },
         id={"type": "text-container", "index": component_id},
+        className="text-container-hoverable",  # Add class for hover styling
     )
 
 
@@ -236,7 +290,10 @@ def build_text(**kwargs):
 
     # Create the inline editable text component
     inline_editable_text = create_inline_editable_text(
-        component_id=store_index, initial_text=clean_content, initial_order=initial_order
+        component_id=store_index,
+        initial_text=clean_content,
+        initial_order=initial_order,
+        initial_alignment="left",
     )
 
     # Create the main content container

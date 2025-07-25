@@ -98,6 +98,14 @@ def register_reset_button_callbacks(app):
                             if (defaultState.default_range) {
                                 return JSON.stringify(currentValue) !== JSON.stringify(defaultState.default_range);
                             } else if (defaultState.default_value !== undefined) {
+                                // Special handling for MultiSelect: both empty array [] and null should be considered equivalent
+                                const isCurrentEmpty = currentValue === null || currentValue === undefined || (Array.isArray(currentValue) && currentValue.length === 0);
+                                const isDefaultEmpty = defaultState.default_value === null || defaultState.default_value === undefined || (Array.isArray(defaultState.default_value) && defaultState.default_value.length === 0);
+
+                                if (isCurrentEmpty && isDefaultEmpty) {
+                                    return false; // Both are empty, so no difference
+                                }
+
                                 return currentValue !== defaultState.default_value;
                             }
 
