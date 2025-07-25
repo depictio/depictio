@@ -1,3 +1,10 @@
+"""
+Dashboard Header Component
+
+This module provides the main dashboard header with navigation, controls, and interactive elements.
+Includes modular components for buttons, badges, modals, and responsive layout management.
+"""
+
 import datetime
 
 import dash
@@ -10,9 +17,313 @@ from dash_iconify import DashIconify
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, api_call_get_dashboard
-from depictio.dash.colors import colors  # Import Depictio color palette
+from depictio.dash.colors import colors
 
-current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+# Constants
+BUTTON_STYLE = {"margin": "0 0px", "fontFamily": "Virgil", "marginTop": "5px"}
+
+
+# =============================================================================
+# UTILITY FUNCTIONS
+# =============================================================================
+
+
+def _check_filter_activity(interactive_values):
+    """Check if any interactive components have active filters by comparing current values with default states."""
+    logger.info(f"🔍 _check_filter_activity called with: {interactive_values}")
+
+    if not interactive_values:
+        logger.info("📭 No interactive_values provided")
+        return False
+
+    # Handle different possible structures in interactive_values
+    interactive_values_data = []
+
+    if "interactive_components_values" in interactive_values:
+        interactive_values_data = interactive_values["interactive_components_values"]
+        logger.info(f"📦 Found interactive_components_values: {len(interactive_values_data)} items")
+    elif isinstance(interactive_values, dict):
+        # Look for any values that might be interactive components
+        for key, value in interactive_values.items():
+            if isinstance(value, dict) and "value" in value:
+                interactive_values_data.append(value)
+        logger.info(f"📦 Extracted from dict structure: {len(interactive_values_data)} items")
+
+    if not interactive_values_data:
+        logger.info("📭 No interactive component data found")
+        return False
+
+    logger.info(f"🔍 Checking {len(interactive_values_data)} components for filter activity")
+
+    for i, component_data in enumerate(interactive_values_data):
+        if isinstance(component_data, dict):
+            component_value = component_data.get("value")
+            component_metadata = component_data.get("metadata", {})
+            default_state = component_metadata.get("default_state", {})
+
+            logger.info(f"🎛️ Component {i}: value={component_value}")
+            logger.info(f"  🎯 Default state: {default_state}")
+
+            # Skip None values
+            if component_value is None:
+                logger.info("  ⏭️ Skipping None value")
+                continue
+
+            # Skip if no default_state available
+            if not default_state:
+                logger.info("  ⚠️ No default_state available, skipping")
+                continue
+
+            # Compare current value with default state
+            if _is_different_from_default(component_value, default_state):
+                logger.info("  ✅ Component differs from default state - filter active!")
+                return True
+            else:
+                logger.info("  ⏭️ Component matches default state")
+
+    logger.info("📭 No active filters detected")
+    return False
+
+
+def _is_different_from_default(current_value, default_state):
+    """
+    Simple comparison of current value with default state.
+
+    Args:
+        current_value: The current value of the component
+        default_state (dict): The default state configuration for the component
+
+    Returns:
+        bool: True if the component differs from its default state
+    """
+    try:
+        # For range sliders, compare with default_range
+        if "default_range" in default_state:
+            default_range = default_state["default_range"]
+            return current_value != default_range
+
+        # For all other components, compare with default_value
+        elif "default_value" in default_state:
+            default_value = default_state["default_value"]
+            return current_value != default_value
+
+        # If no recognizable default state structure, assume not filtered
+        else:
+            logger.debug(f"Unknown default_state structure: {default_state}")
+            return False
+
+    except Exception as e:
+        logger.warning(f"Error comparing with default state: {e}")
+        return False
+
+
+def _get_user_permissions(current_user, data):
+    """Extract user permissions for the dashboard."""
+    owner = str(current_user.id) in [str(e["id"]) for e in data["permissions"]["owners"]]
+
+    viewer_ids = [str(e["id"]) for e in data["permissions"]["viewers"] if e != "*"]
+    is_viewer = str(current_user.id) in viewer_ids
+    has_wildcard = "*" in data["permissions"]["viewers"]
+    is_public = data.get("is_public", False)
+    viewer = is_viewer or has_wildcard or is_public
+
+    return owner, viewer
+
+
+# =============================================================================
+# COMPONENT BUILDERS
+# =============================================================================
+
+
+def _create_action_icon(icon, button_id, disabled=False, n_clicks=0, **kwargs):
+    """Create a standardized action icon button."""
+    return dmc.ActionIcon(
+        DashIconify(icon=icon, width=35, color="gray"),
+        id=button_id,
+        size="xl",
+        radius="xl",
+        variant="subtle",
+        style=BUTTON_STYLE,
+        disabled=disabled,
+        n_clicks=n_clicks,
+        **kwargs,
+    )
+
+
+def _create_reset_filters_button():
+    """Create the reset all filters button with consistent styling."""
+    return dmc.ActionIcon(
+        DashIconify(icon="bx:reset", width=35, color="gray"),
+        id="reset-all-filters-button",
+        size="xl",
+        radius="xl",
+        variant="subtle",  # Use subtle variant like other buttons when no filters
+        color="gray",
+        style=BUTTON_STYLE,
+        disabled=False,
+        n_clicks=0,
+    )
+
+
+def _create_info_badges(data, project_name):
+    """Create the informational badges for project, owner, and last saved."""
+    return dmc.Stack(
+        [
+            dmc.Badge(
+                f"Project: {project_name}",
+                color=colors["teal"],
+                leftSection=DashIconify(icon="mdi:jira", width=16, color="white"),
+            ),
+            dmc.Badge(
+                f"Owner: {data['permissions']['owners'][0]['email']}",
+                color=colors["blue"],
+                leftSection=DashIconify(icon="mdi:account", width=16, color="white"),
+            ),
+            dmc.Badge(
+                _format_last_saved(data["last_saved_ts"]),
+                color=colors["purple"],
+                leftSection=DashIconify(
+                    icon="mdi:clock-time-four-outline", width=16, color="white"
+                ),
+            ),
+        ],
+        justify="center",
+        align="flex-start",
+        gap=5,
+    )
+
+
+def _format_last_saved(timestamp):
+    """Format the last saved timestamp."""
+    if timestamp == "":
+        return "Last saved: Never"
+    else:
+        formatted_ts = datetime.datetime.strptime(timestamp.split(".")[0], "%Y-%m-%d %H:%M:%S")
+        return f"Last saved: {formatted_ts}"
+
+
+def _create_title_section(data):
+    """Create the title section with logo and edit status."""
+    return html.Div(
+        [
+            html.Div(
+                [
+                    dmc.Group(
+                        [
+                            # Depictio favicon
+                            html.Img(
+                                id="header-favicon",
+                                src=dash.get_asset_url("images/icons/favicon.ico"),
+                                style={
+                                    "height": "24px",
+                                    "width": "24px",
+                                    "display": "none",
+                                },
+                            ),
+                            html.Div(
+                                [
+                                    dmc.Title(
+                                        f"{data['title']}",
+                                        order=1,
+                                        id="dashboard-title",
+                                        style={
+                                            "fontWeight": "bold",
+                                            "fontSize": "24px",
+                                            "margin": "0",
+                                        },
+                                    ),
+                                    # Edit status badge
+                                    dmc.Badge(
+                                        "Edit OFF",
+                                        id="edit-status-badge",
+                                        size="xs",
+                                        color="gray",
+                                        leftSection=DashIconify(
+                                            icon="mdi:pencil-off", width=8, color="white"
+                                        ),
+                                        style={
+                                            "marginTop": "1px",
+                                            "fontSize": "8px",
+                                            "height": "14px",
+                                            "padding": "2px 6px",
+                                        },
+                                    ),
+                                ],
+                                style={
+                                    "display": "flex",
+                                    "flexDirection": "column",
+                                    "alignItems": "center",
+                                },
+                            ),
+                        ],
+                        gap="md",
+                        align="center",
+                        style={"display": "inline-flex", "alignItems": "center"},
+                    ),
+                ],
+                style={"textAlign": "center"},
+            )
+        ],
+        style={
+            "flex": "1",
+            "display": "flex",
+            "justifyContent": "center",
+            "alignItems": "center",
+            "minWidth": 0,
+        },
+    )
+
+
+def _create_backend_components():
+    """Create backend components (stores, modals, etc.)."""
+    modal_save_button = dbc.Modal(
+        [
+            dbc.ModalHeader(
+                html.H1("Success!", className="text-success"),
+            ),
+            dbc.ModalBody(
+                html.H5(
+                    "Your amazing dashboard was successfully saved!",
+                    className="text-success",
+                ),
+                style={"background-color": "#F0FFF0"},
+            ),
+            dbc.ModalFooter(
+                dbc.Button(
+                    "Close",
+                    id="success-modal-close",
+                    className="ml-auto",
+                    color="success",
+                )
+            ),
+        ],
+        id="success-modal-dashboard",
+        centered=True,
+    )
+
+    backend_stores = html.Div(
+        [
+            dcc.Store(id="stored-draggable-children", storage_type="session", data={}),
+            dcc.Store(id="stored-edit-component", data=None, storage_type="memory"),
+            dcc.Store(id="stored-draggable-layouts", storage_type="session", data={}),
+            dcc.Store(id="interactive-values-store", storage_type="session", data={}),
+        ]
+    )
+
+    return html.Div(
+        [
+            backend_stores,
+            modal_save_button,
+            html.Div(id="dummy-output", style={"display": "none"}),
+            html.Div(id="dummy-output2", style={"display": "none"}),
+            html.Div(id="stepper-output", style={"display": "none"}),
+        ]
+    )
+
+
+# =============================================================================
+# CALLBACKS
+# =============================================================================
 
 
 def register_callbacks_header(app):
@@ -21,7 +332,6 @@ def register_callbacks_header(app):
         Output("save-button-dashboard", "disabled"),
         Output("remove-all-components-button", "disabled"),
         Output("toggle-interactivity-button", "disabled"),
-        # Output("reset-all-filters-button", "disabled"),
         Output("dashboard-version", "disabled"),
         Output("share-button", "disabled"),
         Output("toggle-notes-button", "disabled"),
@@ -34,67 +344,32 @@ def register_callbacks_header(app):
         # prevent_initial_call=True,
     )
     def toggle_buttons(switch_state, local_store, pathname, user_cache):
-        # logger.info("\n\n\n")
-        # logger.info("toggle_buttons")
-        # logger.info(switch_state)
-        # logger.info("API_BASE_URL: " + str(API_BASE_URL))
-
+        """Handle button states based on edit mode and user permissions."""
         len_output = 9
 
-        # Use consolidated user cache instead of individual API call
+        # Use consolidated user cache
         from depictio.models.models.users import UserContext
 
         current_user = UserContext.from_cache(user_cache)
         if not current_user:
-            # Fallback to direct API call if cache not available
             current_user = api_call_fetch_user_from_token(local_store["access_token"])
 
         if not local_store["access_token"]:
-            switch_state = False
             return [True] * len_output
 
-        TOKEN = local_store["access_token"]
-
         dashboard_id = pathname.split("/")[-1]
-
-        data = api_call_get_dashboard(dashboard_id, TOKEN)
+        data = api_call_get_dashboard(dashboard_id, local_store["access_token"])
         if not data:
             return [True] * len_output
 
-        # Check if data is available, if not set the buttons to disabled
-        owner = (
-            True
-            if str(current_user.id) in [str(e["id"]) for e in data["permissions"]["owners"]]
-            else False
-        )
+        # Get user permissions
+        owner, viewer = _get_user_permissions(current_user, data)
 
-        logger.debug(f"{data['permissions']['viewers']}")
-
-        viewer_ids = [str(e["id"]) for e in data["permissions"]["viewers"] if e != "*"]
-        is_viewer = str(current_user.id) in viewer_ids
-        has_wildcard = "*" in data["permissions"]["viewers"]
-        is_public = data.get("is_public", False)
-        viewer = is_viewer or has_wildcard or is_public
-
-        logger.debug(f"owner: {owner}, viewer: {viewer}, is_public: {is_public}")
-        logger.debug(f"switch_state: {switch_state}")
-        logger.debug(f"current_user: {current_user}")
-        logger.debug(f"viewer_ids: {viewer_ids}")
-        logger.debug(f"has_wildcard: {has_wildcard}")
-        logger.debug(f"is_viewer: {is_viewer}")
+        logger.debug(f"owner: {owner}, viewer: {viewer}, switch_state: {switch_state}")
 
         # If not owner (but has viewing access), disable all editing controls
         if not owner and viewer:
-            # Disable all editing buttons + disable draggable/resizable
             return [True] * (len_output - 2) + [False] * 2
-
-        # workflows = httpx.get(
-        #     f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows",
-        #     headers={"Authorization": f"Bearer {TOKEN}"},
-        # ).json()
-        # if not workflows:
-        #     switch_state = False
-        #     return [True] * len_output
 
         return [not switch_state] * (len_output - 2) + [switch_state] * 2
 
@@ -158,6 +433,35 @@ def register_callbacks_header(app):
         else:
             return ("Edit OFF", "gray", DashIconify(icon="mdi:pencil-off", width=8, color="white"))
 
+    @app.callback(
+        [
+            Output("reset-all-filters-button", "color"),
+            Output("reset-all-filters-button", "variant"),
+            Output("reset-all-filters-button", "children"),
+        ],
+        Input("interactive-values-store", "data"),
+        prevent_initial_call=False,
+    )
+    def update_reset_button_style(interactive_values):
+        """Update reset button style and icon color based on filter activity."""
+        # Use INFO level logging so it's visible by default
+        logger.info(f"🔍 Reset button style check - interactive_values: {interactive_values}")
+
+        has_active_filters = _check_filter_activity(interactive_values)
+
+        logger.info(f"🎯 Filter activity detected: {has_active_filters}")
+
+        if has_active_filters:
+            # Orange filled variant with white icon when filters are active
+            logger.info("🟠 Setting reset button to orange with white icon (filters active)")
+            icon = DashIconify(icon="bx:reset", width=35, color="white")
+            return colors["orange"], "filled", icon
+        else:
+            # Gray subtle variant with gray icon when no filters
+            logger.info("⚪ Setting reset button to gray with gray icon (no filters)")
+            icon = DashIconify(icon="bx:reset", width=35, color="gray")
+            return "gray", "subtle", icon
+
     # @app.callback(
     #     Output("stored_metadata", "data"),
     #     Input("url", "pathname"),  # Assuming you have a URL component triggering on page load
@@ -190,51 +494,30 @@ def register_callbacks_header(app):
     #         return dash.no_update
 
 
-def design_header(data, local_store):
-    """
-    Design the header of the dashboard
-    """
-    # logger.info(f"depictio dashboard data: {data}")
+# =============================================================================
+# MAIN LAYOUT FUNCTION
+# =============================================================================
 
+
+def design_header(data, local_store):
+    """Design the main dashboard header with modular components."""
+    # Ensure data structure exists
     if data:
         if "stored_add_button" not in data:
             data["stored_add_button"] = {"count": 0}
         if "stored_edit_dashboard_mode_button" not in data:
             data["stored_edit_dashboard_mode_button"] = [int(0)]
 
-    # TODO: Optimize this with consolidated cache when design_header is refactored
+    # Get user and permissions
     current_user = api_call_fetch_user_from_token(local_store["access_token"])
-    # logger.info(f"current_user: {current_user}")
+    owner, viewer = _get_user_permissions(current_user, data)
 
-    init_nclicks_add_button = (
-        data["stored_add_button"] if data else {"count": 0, "initialized": False, "_id": ""}
-    )
-    init_nclicks_edit_dashboard_mode_button = (
-        data["stored_edit_dashboard_mode_button"] if data else [int(0)]
-    )
-
-    # Check if data is available, if not set the buttons to disabled
-    owner = (
-        True
-        if str(current_user.id) in [str(e["id"]) for e in data["permissions"]["owners"]]
-        else False
-    )
-
-    # logger.info(f"{data['permissions']['viewers']}")
-
-    viewer_ids = [str(e["id"]) for e in data["permissions"]["viewers"] if e != "*"]
-    is_viewer = str(current_user.id) in viewer_ids
-    has_wildcard = "*" in data["permissions"]["viewers"]
-    is_public = data.get("is_public", False)
-    viewer = is_viewer or has_wildcard or is_public
-
-    # If not owner (including public dashboard viewers), disable editing controls
+    # Determine button states
     if not owner and viewer:
         disabled = True
         unified_edit_mode_checked = False
     else:
         disabled = False
-        # Try unified edit mode first, fallback to old keys for backward compatibility
         unified_edit_mode_checked = data["buttons_data"].get(
             "unified_edit_mode",
             data["buttons_data"].get(
@@ -243,173 +526,7 @@ def design_header(data, local_store):
             ),
         )
 
-    # logger.info(f"owner: {owner}, viewer: {viewer}")
-    # logger.info(f"edit_dashboard_mode_button_checked: {edit_dashboard_mode_button_checked}")
-    # logger.info(f"edit_components_button_checked: {edit_components_button_checked}")
-    # logger.info(f"disabled: {disabled}")
-
-    # if not data:
-    #     disabled = True
-
-    # Backend components - dcc.Store for storing children and layout - memory storage
-    # https://dash.plotly.com/dash-core-components/store
-    backend_components = html.Div(
-        [
-            dcc.Store(
-                id="stored-draggable-children",
-                storage_type="session",
-                data={},
-            ),
-            dcc.Store(id="stored-edit-component", data=None, storage_type="memory"),
-            # dcc.Store(id="stored_metadata", data=None, storage_type="memory"),
-            dcc.Store(id="stored-draggable-layouts", storage_type="session", data={}),
-            dcc.Store(id="interactive-values-store", storage_type="session", data={}),
-        ]
-    )
-
-    # Modal for success message when clicking the save button
-    modal_save_button = dbc.Modal(
-        [
-            dbc.ModalHeader(
-                html.H1(
-                    "Success!",
-                    className="text-success",
-                )
-            ),
-            dbc.ModalBody(
-                html.H5(
-                    "Your amazing dashboard was successfully saved!",
-                    className="text-success",
-                ),
-                style={"background-color": "#F0FFF0"},
-            ),
-            dbc.ModalFooter(
-                dbc.Button(
-                    "Close",
-                    id="success-modal-close",
-                    className="ml-auto",
-                    color="success",
-                )
-            ),
-        ],
-        id="success-modal-dashboard",
-        centered=True,
-    )
-    from dash_iconify import DashIconify
-
-    # modal_share_dashboard = dbc.Modal(
-    #     [
-    #         dbc.ModalHeader(
-    #             html.H1(
-    #                 "Share dashboard",
-    #                 className="text-primary",
-    #             )
-    #         ),
-    #         dbc.ModalBody(
-    #             [
-    #                 html.H5(
-    #                     "Share this dashboard by copying the link below:",
-    #                     className="text-primary",
-    #                 ),
-    #                 dmc.TextInput(
-    #                     type="text",
-    #                     value="https://depict.io/dashboard/1",
-    #                     style={"width": "100%"},
-    #                     icon=DashIconify(icon="mdi:link", width=16, color="gray"),
-    #                 ),
-    #             ],
-    #             style={"background-color": "#F0F8FF"},
-    #         ),
-    #         dbc.ModalFooter(
-    #             dbc.Button(
-    #                 "Close",
-    #                 id="share-modal-close",
-    #                 className="ml-auto",
-    #                 color="primary",
-    #             )
-    #         ),
-    #     ],
-    #     id="share-modal-dashboard",
-    #     centered=True,
-    # )
-    # APP Header
-    # header_style = {
-    #     "display": "flex",
-    #     "alignItems": "center",
-    #     "justifyContent": "space-between",
-    #     "padding": "10px 20px",
-    #     "backgroundColor": "#FCFCFC",
-    #     "borderBottom": "1px solid #eaeaea",
-    #     "fontFamily": "'Open Sans', sans-serif",
-    # }
-    # title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
-    button_style = {"margin": "0 0px", "fontFamily": "Virgil", "marginTop": "5px"}
-
-    # Right side of the header - Edit dashboard mode button
-    # if data:
-
-    add_new_component_button = dmc.ActionIcon(
-        DashIconify(icon="material-symbols:add", width=35, color="gray"),
-        # DashIconify(icon="ic:round-add-circle", width=35, color="#627bf2"),
-        # dmc.Button(
-        # "Add",
-        id="add-button",
-        size="xl",
-        radius="xl",
-        variant="subtle",
-        n_clicks=init_nclicks_add_button["count"],
-        # color="blue",
-        # style={"width": "120px", "fontFamily": "Virgil", "marginRight": "10px"},
-        style=button_style,
-        disabled=disabled,
-        # leftIcon=DashIconify(icon="mdi:plus", width=16, color="white"),
-        # FIXME: Add sx for hover effect
-        # sx=sx,
-    )
-
-    save_button = dmc.ActionIcon(
-        DashIconify(icon="ic:baseline-save", width=35, color="gray"),
-        # dmc.Button(
-        # "Save",
-        id="save-button-dashboard",
-        size="xl",
-        radius="xl",
-        variant="subtle",
-        # variant="filled",
-        # color="teal",
-        # gradient={"from": "teal", "to": "lime", "deg": 105},
-        n_clicks=0,
-        disabled=disabled,
-        style=button_style,
-        # FIXME: Add sx for hover effect
-        # sx=sx,
-        # leftIcon=DashIconify(icon="mdi:content-save", width=16, color="white"),
-        # width of the button
-        # style={"width": "120px", "fontFamily": "Virgil"},
-    )
-
-    remove_all_components_button = dmc.Button(
-        "Remove all components",
-        id="remove-all-components-button",
-        leftSection=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
-        size="md",
-        radius="xl",
-        variant="gradient",
-        gradient={"from": "red", "to": "pink", "deg": 105},
-        # style=button_style,
-        # Hide
-        # style={"display": "none"},
-        disabled=disabled,
-        fullWidth=True,
-    )
-
-    if data["last_saved_ts"] == "":
-        formated_ts = "Never"
-    else:
-        formated_ts = datetime.datetime.strptime(
-            data["last_saved_ts"].split(".")[0], "%Y-%m-%d %H:%M:%S"
-        )
-
+    # Get project name
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id",
         params={"project_id": data["project_id"]},
@@ -420,37 +537,48 @@ def design_header(data, local_store):
         raise Exception("Failed to fetch project data.")
     project_name = response.json()["name"]
 
-    card_section = dbc.Row(
-        [
-            dmc.Stack(
-                [
-                    # dmc.CardSection(
-                    # [
-                    dmc.Badge(
-                        f"Project: {project_name}",
-                        color=colors["teal"],  # Use Depictio teal
-                        leftSection=DashIconify(icon="mdi:jira", width=16, color="white"),
-                    ),
-                    dmc.Badge(
-                        f"Owner: {data['permissions']['owners'][0]['email']}",
-                        color=colors["blue"],  # Use Depictio blue
-                        leftSection=DashIconify(icon="mdi:account", width=16, color="white"),
-                    ),
-                    dmc.Badge(
-                        f"Last saved: {formated_ts}",
-                        color=colors["purple"],  # Use Depictio purple
-                        leftSection=DashIconify(
-                            icon="mdi:clock-time-four-outline", width=16, color="white"
-                        ),
-                    ),
-                    # ]
-                    # ),
-                ],
-                justify="center",
-                align="flex-start",
-                gap=5,
-            ),
-        ],
+    # Initialize click counts
+    init_nclicks_add_button = (
+        data["stored_add_button"] if data else {"count": 0, "initialized": False, "_id": ""}
+    )
+    init_nclicks_edit_dashboard_mode_button = (
+        data["stored_edit_dashboard_mode_button"] if data else [int(0)]
+    )
+
+    # Create header components
+    card_section = dbc.Row([_create_info_badges(data, project_name)])
+
+    # Create action buttons
+    add_new_component_button = _create_action_icon(
+        "material-symbols:add",
+        "add-button",
+        disabled=disabled,
+        n_clicks=init_nclicks_add_button["count"],
+    )
+
+    save_button = _create_action_icon(
+        "ic:baseline-save", "save-button-dashboard", disabled=disabled
+    )
+
+    notes_button = _create_action_icon("material-symbols:edit-note", "toggle-notes-button")
+
+    open_offcanvas_parameters_button = _create_action_icon(
+        "ic:baseline-settings", "open-offcanvas-parameters-button"
+    )
+
+    reset_filters_button = _create_reset_filters_button()
+
+    # Create remove all components button for offcanvas
+    remove_all_components_button = dmc.Button(
+        "Remove all components",
+        id="remove-all-components-button",
+        leftSection=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
+        size="md",
+        radius="xl",
+        variant="gradient",
+        gradient={"from": "red", "to": "pink", "deg": 105},
+        disabled=disabled,
+        fullWidth=True,
     )
 
     toggle_switches_group = html.Div(
@@ -512,24 +640,6 @@ def design_header(data, local_store):
             ),
             dmc.Group(
                 [
-                    dmc.Button(
-                        "Reset all filters",
-                        id="reset-all-filters-button",
-                        leftSection=DashIconify(icon="bx:reset", width=16, color="white"),
-                        size="md",
-                        radius="xl",
-                        variant="gradient",
-                        gradient={"from": "orange", "to": "yellow", "deg": 105},
-                        # style=button_style,
-                        # Hide
-                        # style={"display": "none"},
-                        disabled=False,
-                        fullWidth=True,
-                    )
-                ]
-            ),
-            dmc.Group(
-                [
                     # dmc.Button(
                     dmc.ActionIcon(
                         DashIconify(icon="mdi:share-variant", width=20, color="white"),
@@ -563,7 +673,7 @@ def design_header(data, local_store):
         size="xl",
         radius="xl",
         variant="subtle",
-        style=button_style,
+        style=BUTTON_STYLE,
         n_clicks=0,
     )
 
@@ -575,14 +685,15 @@ def design_header(data, local_store):
         # color="gray",
         # variant="filled",
         variant="subtle",
-        style=button_style,
+        style=BUTTON_STYLE,
         # FIXME: Add sx for hover effect
         # sx=sx,
     )
 
-    dummy_output = html.Div(id="dummy-output", style={"display": "none"})
-    dummy_output2 = html.Div(id="dummy-output2", style={"display": "none"})
-    stepper_output = html.Div(id="stepper-output", style={"display": "none"})
+    # These dummy outputs are created in _create_backend_components
+    # dummy_output = html.Div(id="dummy-output", style={"display": "none"})
+    # dummy_output2 = html.Div(id="dummy-output2", style={"display": "none"})
+    # stepper_output = html.Div(id="stepper-output", style={"display": "none"})
 
     # Store the number of clicks for the add button and edit dashboard mode button
     stores_add_edit = [
@@ -659,7 +770,8 @@ def design_header(data, local_store):
                                         style={
                                             "height": "24px",
                                             "width": "24px",
-                                            "display": "none",  # Initially hidden, shown when sidebar is collapsed
+                                            # Initially hidden, shown when sidebar is collapsed
+                                            "display": "none",
                                         },
                                     ),
                                     html.Div(
@@ -718,12 +830,13 @@ def design_header(data, local_store):
             dmc.Group(
                 [
                     add_new_component_button,
+                    reset_filters_button,
                     save_button,
                     notes_button,
                     open_offcanvas_parameters_button,
                 ],
                 gap="xs",
-                style={"minWidth": "fit-content", "flexShrink": 0},  # Prevent shrinking
+                style={"minWidth": "fit-content", "flexShrink": 0},
             ),
         ],
         justify="space-between",
@@ -737,15 +850,33 @@ def design_header(data, local_store):
         },
     )
 
-    # Backend components that need to be in the layout but not in header
+    # Store components for button states
+    stores_add_edit = [
+        dcc.Store(
+            id="stored-add-button",
+            storage_type="local",
+            data=init_nclicks_add_button,
+        ),
+        dcc.Store(
+            id="initialized-add-button",
+            storage_type="memory",
+            data=False,
+        ),
+        dcc.Store(
+            id="stored-edit-dashboard-mode-button",
+            storage_type="session",
+            data=init_nclicks_edit_dashboard_mode_button,
+        ),
+    ]
+
+    # Backend components
+    backend_components = _create_backend_components()
+
+    # Extended backend components that need to be in the layout
     backend_components_extended = html.Div(
         [
             backend_components,
             offcanvas_parameters,
-            modal_save_button,
-            dummy_output,
-            dummy_output2,
-            stepper_output,
             html.Div(children=stores_add_edit),
         ]
     )
