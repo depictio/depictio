@@ -12,3 +12,57 @@
     flex: 1 1 200px !important;
     min-height: 200px !important;
 }
+
+/* =============================================================================
+   AG GRID POPUP/MENU FIX
+   ============================================================================= */
+
+/* Fix for AG Grid column menu popup causing table content to disappear
+   Issue: ag-theme-alpine ag-popup (column menu) interferes with table visibility
+   Root Cause: Column menu popup on hover creates z-index/visibility conflicts
+   Solution: Ensure popup doesn't interfere with table content visibility */
+
+/* Ensure AG Grid popup menus don't interfere with table content or layout */
+.ag-theme-alpine.ag-popup {
+    z-index: 2000 !important; /* Higher than any draggable grid elements */
+    position: fixed !important; /* Remove from document flow to prevent pushing */
+}
+
+/* Ensure the popup is properly positioned and doesn't affect table layout */
+.ag-theme-alpine .ag-menu {
+    z-index: 2001 !important;
+    position: absolute !important; /* Absolute positioning within fixed parent */
+}
+
+/* Prevent popup from hiding table content and interfering with layout */
+.ag-theme-alpine .ag-popup-child {
+    z-index: 2002 !important;
+    position: relative !important; /* Maintain positioning within absolute parent */
+}
+
+/* Critical: Prevent popup from affecting the main table's flex layout */
+.ag-theme-alpine.ag-popup,
+.ag-theme-alpine .ag-menu,
+.ag-theme-alpine .ag-popup-child {
+    /* Remove from layout flow completely */
+    pointer-events: auto !important; /* Keep interactive */
+    display: block !important; /* Ensure visible */
+}
+
+/* Ensure table content remains visible when popup is shown - without affecting layout */
+.react-grid-item:has(.ag-theme-alpine) .ag-theme-alpine:not(.ag-popup) {
+    /* Remove z-index override that was affecting layout */
+    width: 100% !important;
+    height: 100% !important;
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;}
+
+/* Force table body to stay visible regardless of popup state - preserve flex layout */
+.react-grid-item .ag-theme-alpine .ag-body-viewport {
+    width: 100% !important;
+    height: 100% !important;
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
