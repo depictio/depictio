@@ -171,63 +171,55 @@ def build_table(**kwargs):
             )
     logger.info(f"Columns definitions for table {index}: {columnDefs}")
 
-    # INFINITE ROW MODEL: No data cutoff needed - data is loaded on demand
-    # Badge removed as requested
+    # INFINITE ROW MODEL: Always use infinite scroll with interactive component support
+    # The infinite scroll callback handles:
+    # - Interactive component filtering via iterative_join
+    # - AG Grid server-side filtering and sorting
+    # - Efficient pagination for all table sizes
 
-    logger.info(
-        f"♾️ Table {index}: No data cutoff applied - infinite scrolling + pagination will handle {df.shape[0]} rows"
-    )
-    # INFINITE ROW MODEL: Enable infinite scrolling for large datasets
-    logger.info(
-        f"📊 Table {index}: Configuring infinite row model for dataset with {df.shape[0]} rows"
-    )
+    logger.info(f"📊 Table {index}: Using INFINITE row model with interactive component support")
+    logger.info("🔄 Interactive filters and pagination handled by infinite scroll callback")
 
-    # Prepare ag grid table with infinite row model
+    # Always use infinite scroll configuration
     table_aggrid = dag.AgGrid(
         id={"type": value_div_type, "index": str(index)},
         # CRITICAL: Don't set rowData for infinite model - data comes from getRowsResponse
-        rowModelType="infinite",  # Enable infinite scrolling
+        rowModelType="infinite",
         columnDefs=columnDefs,
         dashGridOptions={
             "tooltipShowDelay": 500,
-            # INFINITE MODEL CONFIGURATION (optimized for spinner loading)
-            # The number of rows rendered outside the viewable area the grid renders.
+            # INFINITE MODEL CONFIGURATION (optimized for interactive + pagination)
             "rowBuffer": 0,  # Match documentation example
-            # How many blocks to keep in the store. Default is no limit, so every requested block is kept.
-            "maxBlocksInCache": 10,  # Increased for better caching with spinner
+            "maxBlocksInCache": 10,  # Reasonable cache size
             "cacheBlockSize": 100,  # Each block contains 100 rows
             "cacheOverflowSize": 2,  # Allow 2 extra blocks beyond maxBlocksInCache
-            # "maxConcurrentDatasourceRequests": 1,  # Limit to 1 for spinner demo
-            "infiniteInitialRowCount": 1000,  # Higher initial count to show spinner effect
+            "infiniteInitialRowCount": 1000,  # Initial estimate
             # OTHER OPTIONS
             "rowSelection": "multiple",
             "enableCellTextSelection": True,
             "ensureDomOrder": True,
-            # ENABLE PAGINATION with infinite model (as per documentation example)
             "pagination": True,
+            # CRITICAL: Cache management for interactive components
+            "purgeClosedRowNodes": True,  # Clean up when filters change
+            "resetRowDataOnUpdate": True,  # Force refresh when interactive values change
+            # CRITICAL: Ensure AG Grid makes new requests after cache invalidation
+            "maxConcurrentDatasourceRequests": 1,  # Prevent racing conditions
+            "blockLoadDebounceMillis": 0,  # Immediate loading after cache reset
         },
-        # CRITICAL: getRowId is needed for SpinnerCellRenderer to work properly
         getRowId="params.data.ID",
-        # columnSize="sizeToFit",
         defaultColDef={
             "flex": 1,
             "minWidth": 150,
             "sortable": True,
             "resizable": True,
-            "floatingFilter": True,  # Enable floating filters by default
+            "floatingFilter": True,
             "filter": True,
         },
-        # Remove height, let CSS handle it dynamically
-        style={
-            "width": "100%",
-        },
+        style={"width": "100%"},
         className="ag-theme-alpine",
-        # use the parameters above
     )
 
-    logger.info(
-        f"🚀 Table {index}: Infinite row model configured - blocks of {100} rows, max {10} cached blocks, pagination + spinner enabled"
-    )
+    logger.info(f"✅ Table {index}: Infinite row model configured with interactive support")
 
     # Metadata management - Create a store component to store the metadata of the card
     store_index = index.replace("-tmp", "")  # type: ignore[possibly-unbound-attribute]

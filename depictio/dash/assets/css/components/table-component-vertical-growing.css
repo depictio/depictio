@@ -58,11 +58,15 @@
     display: flex !important;
     flex-direction: column !important;}
 
-/* Force table body to stay visible regardless of popup state - preserve flex layout */
+/* Force table body to stay visible regardless of popup state - CRITICAL: Don't override AG Grid's internal scrolling */
 .react-grid-item .ag-theme-alpine .ag-body-viewport {
     width: 100% !important;
-    height: 100% !important;
-    flex: 1 !important;
-    display: flex !important;
-    flex-direction: column !important;
+    /* REMOVE: height: 100% !important; - Let AG Grid manage viewport height for infinite scroll */
+    /* REMOVE: flex: 1 !important; - AG Grid viewport needs block layout, not flex */
+    /* REMOVE: display: flex !important; - AG Grid manages its own display mode */
+    /* REMOVE: flex-direction: column !important; - Interferes with infinite scroll */
+
+    /* Let AG Grid handle its own scrolling and viewport management */
+    overflow: auto !important; /* Ensure scrolling is enabled */
+    position: relative !important; /* Required for infinite scroll positioning */
 }

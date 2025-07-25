@@ -134,25 +134,42 @@ def register_callbacks_table_component(app):
             State("local-store", "data"),
             State("url", "pathname"),
         ],
-        prevent_initial_call=True,
+        prevent_initial_call=False,
     )
     def infinite_scroll_component(
         request, interactive_values, stored_metadata, local_store, pathname
     ):
         """
-        INFINITE ROW MODEL CALLBACK WITH PAGINATION
-        Handles lazy loading of table data based on scroll position and user interactions.
-        This implements the dash-ag-grid infinite row model pattern with pagination enabled
-        as shown in the documentation example.
+        INFINITE SCROLL CALLBACK WITH INTERACTIVE COMPONENT SUPPORT
+
+        This callback handles ALL tables using infinite row model and includes:
+        - Interactive component filtering via iterative_join
+        - AG Grid server-side filtering and sorting
+        - Efficient pagination for all dataset sizes
+        - Cache invalidation when interactive values change
         """
         from bson import ObjectId
-        from dash import no_update
+        from dash import ctx, no_update
 
-        from depictio.api.v1.deltatables_utils import load_deltatable_lite
+        from depictio.api.v1.deltatables_utils import (
+            iterative_join,
+            load_deltatable_lite,
+            return_joins_dict,
+        )
 
-        # LOGGING: Track infinite scroll requests
-        logger.info("🔄 INFINITE SCROLL REQUEST RECEIVED")
+        # CACHE INVALIDATION: Detect if triggered by interactive component changes
+        triggered_by_interactive = ctx.triggered and any(
+            "interactive-values-store" in str(trigger["prop_id"]) for trigger in ctx.triggered
+        )
+
+        # LOGGING: Track infinite scroll requests and trigger source
+        logger.info("🔄 INFINITE SCROLL + INTERACTIVE REQUEST RECEIVED")
         logger.info(f"📊 Request details: {request}")
+        logger.info(f"🎯 Triggered by: {ctx.triggered_id if ctx.triggered else 'Unknown'}")
+        logger.info(f"🎛️ Interactive trigger: {triggered_by_interactive}")
+        logger.info(f"📦 Interactive values: {interactive_values}")
+        logger.info(f"🗃️ Stored metadata: {stored_metadata}")
+        logger.info(f"🏪 Local store exists: {bool(local_store)}")
 
         # Validate inputs
         if not local_store or not stored_metadata:
@@ -161,8 +178,21 @@ def register_callbacks_table_component(app):
             )
             return no_update
 
-        if request is None:
-            logger.info("⏸️ No data request - skipping infinite scroll callback")
+        # ENHANCED APPROACH: Process interactive changes immediately
+        if request is None and triggered_by_interactive:
+            logger.info(
+                "🔄 IMMEDIATE PROCESSING: Interactive values changed - processing data immediately"
+            )
+            # Create a synthetic request for the first page to start the refresh process
+            request = {
+                "startRow": 0,
+                "endRow": 100,  # Standard first page size
+                "filterModel": {},
+                "sortModel": [],
+            }
+            logger.info("🔄 Created synthetic request to trigger immediate data loading")
+        elif request is None:
+            logger.info("⏸️ No data request and not interactive trigger - skipping callback")
             return no_update
 
         # Extract authentication token
@@ -190,39 +220,112 @@ def register_callbacks_table_component(app):
             f"🔤 Active sorts: {len(sort_model)} sort(s) - {[(s['colId'], s['sort']) for s in sort_model] if sort_model else 'none'}"
         )
 
-        # Handle dashboard-specific interactive values
+        # ITERATIVE JOIN PATTERN: Process interactive components properly
         dashboard_id = pathname.split("/")[-1]
-        interactive_values_data = None
+        interactive_components_dict = {}
 
-        if interactive_values and dashboard_id in interactive_values:
-            if "interactive_components_values" in interactive_values[dashboard_id]:
+        # CRITICAL FIX: Extract interactive components from store data correctly
+        logger.info(f"🔍 Raw interactive_values structure: {interactive_values}")
+
+        if interactive_values:
+            # Check multiple possible structures in interactive_values store
+            if "interactive_components_values" in interactive_values:
+                # Direct structure: interactive_values["interactive_components_values"]
+                interactive_values_data = interactive_values["interactive_components_values"]
+                logger.info(
+                    f"📦 Found direct interactive_components_values: {len(interactive_values_data)} items"
+                )
+
+            elif (
+                dashboard_id in interactive_values
+                and "interactive_components_values" in interactive_values[dashboard_id]
+            ):
+                # Dashboard-specific structure: interactive_values[dashboard_id]["interactive_components_values"]
                 interactive_values_data = interactive_values[dashboard_id][
                     "interactive_components_values"
                 ]
-                # Filter for interactive components only
-                interactive_values_data = [
-                    e
-                    for e in interactive_values_data
-                    if e["metadata"]["component_type"] == "interactive"
-                ]
                 logger.info(
-                    f"🎛️ Table {table_index}: {len(interactive_values_data)} interactive filters applied"
+                    f"📦 Found dashboard-specific interactive_components_values: {len(interactive_values_data)} items"
                 )
 
-        # Prepare metadata for server-side filtering (interactive components only)
-        metadata = []
+            elif dashboard_id in interactive_values and isinstance(
+                interactive_values[dashboard_id], dict
+            ):
+                # Try to find interactive components in dashboard data
+                interactive_values_data = []
+                for key, value in interactive_values[dashboard_id].items():
+                    if (
+                        isinstance(value, dict)
+                        and value.get("metadata", {}).get("component_type") == "interactive"
+                    ):
+                        interactive_values_data.append(value)
+                logger.info(
+                    f"📦 Extracted interactive components from dashboard structure: {len(interactive_values_data)} items"
+                )
 
-        # Note: AG Grid filters will be applied after data loading
-        # This is more efficient than converting to depictio metadata format
-        if filter_model:
+            else:
+                # Fallback: try to extract from any nested structure
+                interactive_values_data = []
+                logger.warning(
+                    f"⚠️ Unknown interactive_values structure, attempting extraction from: {list(interactive_values.keys())}"
+                )
+
+            # Convert to dictionary format expected by iterative_join
+            for component_data in interactive_values_data:
+                if isinstance(component_data, dict):
+                    component_type = component_data.get("metadata", {}).get("component_type")
+                    component_index = component_data.get("index")
+                    component_value = component_data.get("value")
+
+                    if component_type == "interactive" and component_index:
+                        interactive_components_dict[component_index] = component_data
+                        logger.info(
+                            f"🎛️ Added interactive component {component_index}: {component_type} = {component_value}"
+                        )
+
             logger.info(
-                f"🔍 AG Grid filters will be applied server-side: {list(filter_model.keys())}"
+                f"🎯 Table {table_index}: Processed {len(interactive_components_dict)} interactive components"
             )
+            logger.info(
+                f"🔍 Interactive component indexes: {list(interactive_components_dict.keys())}"
+            )
+        else:
+            logger.info("📭 No interactive_values provided - using unfiltered data")
 
-        # Add interactive component filters to metadata for initial data loading
-        if interactive_values_data:
-            metadata.extend(interactive_values_data)
-            logger.info(f"✅ Combined metadata: {len(metadata)} interactive filters total")
+        # CRITICAL FIX: Prepare metadata for iterative join INCLUDING all interactive components
+        # When interactive components exist, we need to include their metadata for proper joining
+        stored_metadata_for_join = []
+
+        # Always include the table metadata
+        table_metadata = dict(stored_metadata)  # Convert to regular dict
+        table_metadata["component_type"] = "table"  # Ensure component type is set
+        stored_metadata_for_join.append(table_metadata)
+
+        # CRITICAL: Include metadata from all interactive components for join calculation
+        if interactive_components_dict:
+            for component_index, component_data in interactive_components_dict.items():
+                if component_data.get("metadata"):
+                    interactive_meta = dict(component_data["metadata"])
+                    interactive_meta["component_type"] = "interactive"
+                    stored_metadata_for_join.append(interactive_meta)
+                    logger.info(
+                        f"🔗 Added interactive metadata for join: dc_id={interactive_meta.get('dc_id')}"
+                    )
+
+        logger.info(
+            f"🔗 Total metadata for join calculation: {len(stored_metadata_for_join)} components"
+        )
+        logger.info(
+            f"🔗 Data collections involved: {[meta.get('dc_id') for meta in stored_metadata_for_join]}"
+        )
+
+        logger.info(f"🔗 Table {table_index}: Preparing iterative join for workflow {workflow_id}")
+        logger.debug(f"📋 Interactive components dict: {interactive_components_dict}")
+        logger.debug(f"📋 Table metadata: {table_metadata}")
+        logger.debug(f"📋 Workflow ID type: {type(workflow_id)} -> {workflow_id}")
+        logger.debug(
+            f"📋 Table wf_id type: {type(table_metadata.get('wf_id'))} -> {table_metadata.get('wf_id')}"
+        )
 
         # # SIMULATE SLOW LOADING: Add delay to demonstrate infinite scrolling with pagination
         # # Following documentation example pattern
@@ -231,14 +334,126 @@ def register_callbacks_table_component(app):
         # time.sleep(1.0)  # Increased delay to better demonstrate spinner loading behavior
 
         try:
-            # LOAD DATA: Server-side data loading with filters
-            logger.info(f"💾 Loading delta table data for {workflow_id}:{data_collection_id}")
-            df = load_deltatable_lite(
-                ObjectId(workflow_id),
-                ObjectId(data_collection_id),
-                metadata=metadata if metadata else None,
-                TOKEN=TOKEN,
-            )
+            # ENHANCED INTERACTIVE FILTERING: Always check for interactive components first
+            if interactive_components_dict:
+                logger.info(
+                    f"🔗 INFINITE SCROLL + INTERACTIVE: Processing {len(interactive_components_dict)} interactive components"
+                )
+                logger.info(
+                    f"🎯 Interactive components: {[(k, v.get('value')) for k, v in interactive_components_dict.items()]}"
+                )
+
+                # Get joins configuration for this workflow and table
+                try:
+                    logger.debug(
+                        f"🔗 Calling return_joins_dict with wf={workflow_id}, metadata={stored_metadata_for_join}"
+                    )
+                    # CRITICAL FIX: Pass workflow_id as string, not ObjectId
+                    joins_dict = return_joins_dict(workflow_id, stored_metadata_for_join, TOKEN)
+                    logger.info(f"🔗 Joins dict result: {joins_dict}")
+                    logger.debug(f"🔗 Joins dict type: {type(joins_dict)}")
+                except Exception as joins_error:
+                    logger.error(f"❌ Error getting joins dict: {str(joins_error)}")
+                    logger.error(f"❌ Error traceback: {joins_error.__class__.__name__}")
+                    import traceback
+
+                    logger.error(f"❌ Full traceback: {traceback.format_exc()}")
+                    logger.error("🔧 Falling back to empty joins dict")
+                    joins_dict = {}
+
+                # CRITICAL: Always use iterative_join for interactive component filtering
+                try:
+                    # ALWAYS use iterative_join when interactive components exist
+                    # iterative_join handles both join scenarios AND direct filtering
+                    logger.info(
+                        f"🔗 Using iterative_join for interactive component filtering (joins: {bool(joins_dict)})"
+                    )
+
+                    df = iterative_join(workflow_id, joins_dict, interactive_components_dict, TOKEN)
+                    logger.info(
+                        f"✅ Successfully loaded FILTERED data via iterative_join (shape: {df.shape})"
+                    )
+
+                    # Verify that filtering actually occurred
+                    if df.shape[0] > 0:
+                        logger.info(
+                            f"🎯 Filtered dataset contains {df.shape[0]} rows after applying interactive filters"
+                        )
+                    else:
+                        logger.warning(
+                            "⚠️ Filtered dataset is empty - interactive filters excluded all data"
+                        )
+
+                except Exception as interactive_error:
+                    # Handle column mismatch or other interactive filter errors gracefully
+                    logger.error(f"❌ Interactive filtering failed: {str(interactive_error)}")
+                    logger.error(f"❌ Error type: {type(interactive_error)}")
+                    logger.error(f"❌ Error details: {interactive_error}")
+
+                    if "unable to find column" in str(interactive_error):
+                        logger.warning(
+                            "💥 Column mismatch: Interactive components use different columns than table"
+                        )
+                        logger.warning(
+                            "🔧 This indicates a configuration issue - interactive components should target same data collection"
+                        )
+
+                    # Fallback: Load without interactive filters
+                    logger.warning("🔧 Falling back to unfiltered data loading")
+                    df = load_deltatable_lite(
+                        ObjectId(workflow_id),
+                        ObjectId(data_collection_id),
+                        metadata=None,
+                        TOKEN=TOKEN,
+                    )
+                    logger.info("✅ Fallback: Loaded unfiltered data successfully")
+            else:
+                # No interactive components - check if table needs joins anyway
+                logger.info(
+                    f"💾 Loading delta table data (no interactive components): {workflow_id}:{data_collection_id}"
+                )
+
+                # CRITICAL: Even without interactive components, check if table requires joins
+                try:
+                    logger.debug(
+                        f"🔗 Checking for table joins with metadata: {stored_metadata_for_join}"
+                    )
+                    # CRITICAL FIX: Pass workflow_id as string, not ObjectId
+                    joins_dict = return_joins_dict(workflow_id, stored_metadata_for_join, TOKEN)
+                    logger.info(f"🔗 Table joins result: {joins_dict}")
+
+                    if joins_dict:
+                        # Table requires joins - use iterative_join even without interactive components
+                        logger.info(
+                            "🔗 Table requires joins - using iterative_join for joined data"
+                        )
+                        df = iterative_join(
+                            workflow_id, joins_dict, {}, TOKEN
+                        )  # Empty interactive dict
+                        logger.info(f"✅ Successfully loaded joined table data (shape: {df.shape})")
+                    else:
+                        # No joins needed - direct loading
+                        df = load_deltatable_lite(
+                            ObjectId(workflow_id),
+                            ObjectId(data_collection_id),
+                            metadata=None,
+                            TOKEN=TOKEN,
+                        )
+                        logger.info(f"✅ Successfully loaded single table data (shape: {df.shape})")
+
+                except Exception as join_error:
+                    logger.warning(f"⚠️ Error checking table joins: {str(join_error)}")
+                    import traceback
+
+                    logger.warning(f"⚠️ Join error traceback: {traceback.format_exc()}")
+                    # Fallback to direct loading
+                    df = load_deltatable_lite(
+                        ObjectId(workflow_id),
+                        ObjectId(data_collection_id),
+                        metadata=None,
+                        TOKEN=TOKEN,
+                    )
+                    logger.info(f"✅ Fallback: Loaded single table data (shape: {df.shape})")
 
             logger.info(f"📊 Loaded initial dataset: {df.shape[0]} rows, {df.shape[1]} columns")
 
@@ -306,11 +521,45 @@ def register_callbacks_table_component(app):
             logger.info(
                 f"🚀 INFINITE SCROLL + PAGINATION RESPONSE SENT - {actual_rows_returned}/{total_rows} rows"
             )
+
+            # HYBRID SUCCESS: Log successful integration of interactive + infinite scroll
+            if interactive_components_dict:
+                # Check if filtering actually reduced the dataset
+                active_filters = [
+                    (k, v.get("value"))
+                    for k, v in interactive_components_dict.items()
+                    if v.get("value") is not None
+                ]
+                logger.info(
+                    f"🎯 HYBRID SUCCESS: Interactive + infinite scroll delivered {actual_rows_returned}/{total_rows} rows"
+                )
+                logger.info(f"🎛️ Active interactive filters: {active_filters}")
+                logger.info(
+                    f"📊 Dataset after filtering: {total_rows} total rows available for pagination"
+                )
+
+                if active_filters:
+                    logger.info(
+                        f"✅ FILTERING CONFIRMED: {len(active_filters)} active filters reduced dataset"
+                    )
+                else:
+                    logger.info(
+                        "📭 NO ACTIVE FILTERS: Interactive components exist but no values set"
+                    )
+            else:
+                logger.info(
+                    f"📊 INFINITE SCROLL: Standard pagination delivered {actual_rows_returned}/{total_rows} rows"
+                )
+
             return response
 
         except Exception as e:
-            logger.error(f"❌ Error in infinite scroll callback for table {table_index}: {str(e)}")
+            error_msg = str(e)
+            logger.error(
+                f"❌ Error in infinite scroll callback for table {table_index}: {error_msg}"
+            )
             logger.error(f"🔧 Error details - wf_id: {workflow_id}, dc_id: {data_collection_id}")
+
             # Return empty response on error
             return {"rowData": [], "rowCount": 0}
 
