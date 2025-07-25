@@ -2,6 +2,7 @@
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import httpx
+import polars as pl
 from dash import MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
@@ -17,6 +18,108 @@ from depictio.dash.modules.table_component.utils import build_table, build_table
 from depictio.dash.utils import UNSELECTED_STYLE, get_columns_from_data_collection
 
 # TODO: interactivity when selecting table rows
+
+# AG Grid filter operators mapping to Polars operations
+OPERATORS = {
+    "greaterThanOrEqual": "ge",
+    "lessThanOrEqual": "le",
+    "lessThan": "lt",
+    "greaterThan": "gt",
+    "notEqual": "ne",
+    "equals": "eq",
+}
+
+
+def apply_ag_grid_filter(df: pl.DataFrame, filter_model: dict, col: str) -> pl.DataFrame:
+    """
+    Apply AG Grid filter to a Polars DataFrame.
+    Based on dash-ag-grid documentation examples.
+    """
+    try:
+        if "filter" in filter_model:
+            if filter_model["filterType"] == "date":
+                crit1 = filter_model["dateFrom"]
+                if "dateTo" in filter_model:
+                    crit2 = filter_model["dateTo"]
+            else:
+                crit1 = filter_model["filter"]
+                if "filterTo" in filter_model:
+                    crit2 = filter_model["filterTo"]
+
+        if "type" in filter_model:
+            filter_type = filter_model["type"]
+
+            if filter_type == "contains":
+                df = df.filter(pl.col(col).str.contains(crit1, literal=False))
+            elif filter_type == "notContains":
+                df = df.filter(~pl.col(col).str.contains(crit1, literal=False))
+            elif filter_type == "startsWith":
+                df = df.filter(pl.col(col).str.starts_with(crit1))
+            elif filter_type == "notStartsWith":
+                df = df.filter(~pl.col(col).str.starts_with(crit1))
+            elif filter_type == "endsWith":
+                df = df.filter(pl.col(col).str.ends_with(crit1))
+            elif filter_type == "notEndsWith":
+                df = df.filter(~pl.col(col).str.ends_with(crit1))
+            elif filter_type == "inRange":
+                if filter_model["filterType"] == "date":
+                    # Handle date range filtering
+                    df = df.filter(pl.col(col).is_between(crit1, crit2))
+                else:
+                    df = df.filter(pl.col(col).is_between(crit1, crit2))
+            elif filter_type == "blank":
+                df = df.filter(pl.col(col).is_null())
+            elif filter_type == "notBlank":
+                df = df.filter(pl.col(col).is_not_null())
+            else:
+                # Handle numeric comparisons
+                if filter_type in OPERATORS:
+                    op = OPERATORS[filter_type]
+                    if op == "eq":
+                        df = df.filter(pl.col(col) == crit1)
+                    elif op == "ne":
+                        df = df.filter(pl.col(col) != crit1)
+                    elif op == "lt":
+                        df = df.filter(pl.col(col) < crit1)
+                    elif op == "le":
+                        df = df.filter(pl.col(col) <= crit1)
+                    elif op == "gt":
+                        df = df.filter(pl.col(col) > crit1)
+                    elif op == "ge":
+                        df = df.filter(pl.col(col) >= crit1)
+
+        elif filter_model["filterType"] == "set":
+            # Handle set filter (multi-select)
+            df = df.filter(pl.col(col).cast(pl.Utf8).is_in(filter_model["values"]))
+
+    except Exception as e:
+        logger.warning(f"Failed to apply filter for column {col}: {e}")
+        # Return original dataframe if filter fails
+        pass
+
+    return df
+
+
+def apply_ag_grid_sorting(df: pl.DataFrame, sort_model: list) -> pl.DataFrame:
+    """
+    Apply AG Grid sorting to a Polars DataFrame.
+    """
+    if not sort_model:
+        return df
+
+    try:
+        # Apply sorting - Polars uses descending parameter differently
+        df = df.sort(
+            [sort["colId"] for sort in sort_model],
+            descending=[sort["sort"] == "desc" for sort in sort_model],
+        )
+
+        logger.debug(f"Applied sorting: {[(s['colId'], s['sort']) for s in sort_model]}")
+
+    except Exception as e:
+        logger.warning(f"Failed to apply sorting: {e}")
+
+    return df
 
 
 def register_callbacks_table_component(app):
@@ -80,8 +183,12 @@ def register_callbacks_table_component(app):
         logger.info(
             f"📈 Table {table_index}: Loading rows {start_row}-{end_row} ({requested_rows} rows)"
         )
-        logger.info(f"🔍 Active filters: {len(filter_model)} filter(s)")
-        logger.info(f"🔤 Active sorts: {len(sort_model)} sort(s)")
+        logger.info(
+            f"🔍 Active filters: {len(filter_model)} filter(s) - {list(filter_model.keys()) if filter_model else 'none'}"
+        )
+        logger.info(
+            f"🔤 Active sorts: {len(sort_model)} sort(s) - {[(s['colId'], s['sort']) for s in sort_model] if sort_model else 'none'}"
+        )
 
         # Handle dashboard-specific interactive values
         dashboard_id = pathname.split("/")[-1]
@@ -102,25 +209,26 @@ def register_callbacks_table_component(app):
                     f"🎛️ Table {table_index}: {len(interactive_values_data)} interactive filters applied"
                 )
 
-        # Prepare metadata for server-side filtering
+        # Prepare metadata for server-side filtering (interactive components only)
         metadata = []
 
-        # Convert AG Grid filterModel to depictio metadata format
+        # Note: AG Grid filters will be applied after data loading
+        # This is more efficient than converting to depictio metadata format
         if filter_model:
-            logger.info(f"🔍 Converting {len(filter_model)} AG Grid filters to metadata format")
-            # Note: This would need a proper conversion function
-            # For now, we'll use the interactive values
+            logger.info(
+                f"🔍 AG Grid filters will be applied server-side: {list(filter_model.keys())}"
+            )
 
-        # Add interactive component filters to metadata
+        # Add interactive component filters to metadata for initial data loading
         if interactive_values_data:
             metadata.extend(interactive_values_data)
-            logger.info(f"✅ Combined metadata: {len(metadata)} filters total")
+            logger.info(f"✅ Combined metadata: {len(metadata)} interactive filters total")
 
-        # SIMULATE SLOW LOADING: Add delay to demonstrate infinite scrolling with pagination
-        # Following documentation example pattern
-        import time
+        # # SIMULATE SLOW LOADING: Add delay to demonstrate infinite scrolling with pagination
+        # # Following documentation example pattern
+        # import time
 
-        time.sleep(0.2)  # Simulate network delay to show loading behavior
+        # time.sleep(1.0)  # Increased delay to better demonstrate spinner loading behavior
 
         try:
             # LOAD DATA: Server-side data loading with filters
@@ -132,15 +240,56 @@ def register_callbacks_table_component(app):
                 TOKEN=TOKEN,
             )
 
+            logger.info(f"📊 Loaded initial dataset: {df.shape[0]} rows, {df.shape[1]} columns")
+
+            # APPLY AG GRID FILTERS: Server-side filtering
+            if filter_model:
+                logger.info(f"🔍 Applying {len(filter_model)} AG Grid filters")
+                for col, filter_def in filter_model.items():
+                    try:
+                        if "operator" in filter_def:
+                            # Handle complex filters with AND/OR operators
+                            if filter_def["operator"] == "AND":
+                                df = apply_ag_grid_filter(df, filter_def["condition1"], col)
+                                df = apply_ag_grid_filter(df, filter_def["condition2"], col)
+                                logger.debug(f"Applied AND filter to column {col}")
+                            else:  # OR operator
+                                df1 = apply_ag_grid_filter(df, filter_def["condition1"], col)
+                                df2 = apply_ag_grid_filter(df, filter_def["condition2"], col)
+                                # Combine results using union (concatenate and remove duplicates)
+                                df = pl.concat([df1, df2]).unique()
+                                logger.debug(f"Applied OR filter to column {col}")
+                        else:
+                            # Handle simple filters
+                            df = apply_ag_grid_filter(df, filter_def, col)
+                            logger.debug(f"Applied simple filter to column {col}")
+                    except Exception as e:
+                        logger.warning(f"Failed to apply filter for column {col}: {e}")
+                        continue
+
+                logger.info(f"📊 After filtering: {df.shape[0]} rows remaining")
+
+            # APPLY AG GRID SORTING: Server-side sorting
+            if sort_model:
+                logger.info(f"🔤 Applying sorting: {[(s['colId'], s['sort']) for s in sort_model]}")
+                df = apply_ag_grid_sorting(df, sort_model)
+                logger.info("✅ Sorting applied successfully")
+
             total_rows = df.shape[0]
-            logger.info(f"📊 Loaded complete dataset: {total_rows} rows, {df.shape[1]} columns")
+            logger.info(
+                f"📊 Final dataset after filters/sorting: {total_rows} rows, {df.shape[1]} columns"
+            )
 
             # SLICE DATA: Extract the requested row range
             partial_df = df[start_row:end_row]
             actual_rows_returned = partial_df.shape[0]
 
             # Convert to format expected by AG Grid
-            row_data = partial_df.to_pandas().to_dict("records")
+            pandas_df = partial_df.to_pandas()
+            # Add ID field for SpinnerCellRenderer (following documentation example)
+            pandas_df.reset_index(drop=True, inplace=True)
+            pandas_df["ID"] = range(start_row, start_row + len(pandas_df))
+            row_data = pandas_df.to_dict("records")
 
             # LOGGING: Track successful data delivery
             logger.info(

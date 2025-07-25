@@ -116,33 +116,53 @@ def build_table(**kwargs):
     else:
         logger.debug(f"Table component {index}: Using pre-loaded DataFrame (shape: {df.shape})")
 
-    # Add dah aggrid filters to the columns
+    # Add dash aggrid filters to the columns with enhanced filter configuration
     if cols:
         for c in cols:
             if c in cols and "type" in cols[c]:
-                print(c, cols[c]["type"])
+                logger.debug(f"Configuring column {c} with type {cols[c]['type']}")
                 if cols[c]["type"] == "object":
                     cols[c]["filter"] = "agTextColumnFilter"
+                    # Enable floating filters for better UX
+                    cols[c]["floatingFilter"] = True
                 elif cols[c]["type"] in ["int64", "float64"]:
                     cols[c]["filter"] = "agNumberColumnFilter"
+                    cols[c]["floatingFilter"] = True
+                    # Add filter parameters for number columns
+                    cols[c]["filterParams"] = {
+                        "filterOptions": ["equals", "lessThan", "greaterThan", "inRange"],
+                        "maxNumConditions": 2,
+                    }
                 # FIXME: use properly this: https://dash.plotly.com/dash-ag-grid/date-filters
                 elif cols[c]["type"] == "datetime":
                     cols[c]["filter"] = "agDateColumnFilter"
+                    cols[c]["floatingFilter"] = True
 
-    # print(cols)
-    columnDefs = [
-        {
-            "field": c,
-            "headerTooltip": f"Column type: {e['type']}",
-            "filter": e["filter"],
-        }
-        for c, e in cols.items()  # type: ignore[possibly-unbound-attribute]
-    ]
+    # Add ID column for SpinnerCellRenderer (following documentation example exactly)
+    columnDefs = [{"field": "ID", "maxWidth": 100, "cellRenderer": "SpinnerCellRenderer"}]
+
+    # Add data columns with enhanced filtering and sorting support
+    if cols:
+        data_columns = [
+            {
+                "field": c,
+                "headerTooltip": f"Column type: {e['type']}",
+                "filter": e["filter"],
+                "floatingFilter": e.get("floatingFilter", False),
+                "filterParams": e.get("filterParams", {}),
+                "sortable": True,  # Enable sorting for all columns
+                "resizable": True,  # Enable column resizing
+                "minWidth": 150,  # Ensure readable column width
+            }
+            for c, e in cols.items()  # type: ignore[possibly-unbound-attribute]
+        ]
+        columnDefs.extend(data_columns)
 
     # if description in col sub dict, update headerTooltip
     for col in columnDefs:
         if (
             cols
+            and "field" in col  # Check if field exists in column definition
             and col["field"] in cols
             and "description" in cols[col["field"]]
             and cols[col["field"]]["description"] is not None
@@ -150,6 +170,7 @@ def build_table(**kwargs):
             col["headerTooltip"] = (
                 f"{col['headerTooltip']} | Description: {cols[col['field']]['description']}"
             )
+    logger.info(f"Columns definitions for table {index}: {columnDefs}")
 
     # INFINITE ROW MODEL: No cutoff needed - data is loaded on demand
     from dash_iconify import DashIconify
@@ -158,7 +179,7 @@ def build_table(**kwargs):
     infinite_scroll_badge = html.Div(
         dmc.Tooltip(
             children=dmc.Badge(
-                "Infinite + Pagination",
+                "Infinite + Spinner",
                 id={"type": "table-infinite-scroll-badge", "index": index},
                 style={"display": "block", "paddingBottom": "5px"}
                 if build_frame
@@ -172,7 +193,7 @@ def build_table(**kwargs):
                 color="blue",
                 fullWidth=False,
             ),
-            label=f"Table uses infinite scrolling with pagination - data loads in blocks as you navigate through {df.shape[0]} total rows.",
+            label=f"Table uses infinite scrolling with loading spinners - data loads in blocks as you navigate through {df.shape[0]} total rows.",
             position="top",
             openDelay=500,
             withinPortal=False,
@@ -196,15 +217,15 @@ def build_table(**kwargs):
         columnDefs=columnDefs,
         dashGridOptions={
             "tooltipShowDelay": 500,
-            # INFINITE MODEL CONFIGURATION (following documentation example)
+            # INFINITE MODEL CONFIGURATION (optimized for spinner loading)
             # The number of rows rendered outside the viewable area the grid renders.
             "rowBuffer": 0,  # Match documentation example
             # How many blocks to keep in the store. Default is no limit, so every requested block is kept.
-            "maxBlocksInCache": 2,  # Match documentation example
+            "maxBlocksInCache": 10,  # Increased for better caching with spinner
             "cacheBlockSize": 100,  # Each block contains 100 rows
             "cacheOverflowSize": 2,  # Allow 2 extra blocks beyond maxBlocksInCache
-            "maxConcurrentDatasourceRequests": 2,  # Limit concurrent data requests
-            "infiniteInitialRowCount": 1,  # Match documentation example
+            # "maxConcurrentDatasourceRequests": 1,  # Limit to 1 for spinner demo
+            "infiniteInitialRowCount": 1000,  # Higher initial count to show spinner effect
             # OTHER OPTIONS
             "rowSelection": "multiple",
             "enableCellTextSelection": True,
@@ -212,8 +233,17 @@ def build_table(**kwargs):
             # ENABLE PAGINATION with infinite model (as per documentation example)
             "pagination": True,
         },
+        # CRITICAL: getRowId is needed for SpinnerCellRenderer to work properly
+        getRowId="params.data.ID",
         # columnSize="sizeToFit",
-        defaultColDef={"resizable": True, "sortable": True, "filter": True},
+        defaultColDef={
+            "flex": 1,
+            "minWidth": 150,
+            "sortable": True,
+            "resizable": True,
+            "floatingFilter": True,  # Enable floating filters by default
+            "filter": True,
+        },
         # Remove height, let CSS handle it dynamically
         style={
             "width": "100%",
@@ -223,7 +253,7 @@ def build_table(**kwargs):
     )
 
     logger.info(
-        f"🚀 Table {index}: Infinite row model configured - blocks of {100} rows, max {2} cached blocks, pagination enabled"
+        f"🚀 Table {index}: Infinite row model configured - blocks of {100} rows, max {10} cached blocks, pagination + spinner enabled"
     )
 
     # Metadata management - Create a store component to store the metadata of the card
