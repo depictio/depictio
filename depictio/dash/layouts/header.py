@@ -316,6 +316,7 @@ def _create_backend_components():
             modal_save_button,
             html.Div(id="dummy-output", style={"display": "none"}),
             html.Div(id="dummy-output2", style={"display": "none"}),
+            html.Div(id="reset-button-dummy-output", style={"display": "none"}),
             html.Div(id="stepper-output", style={"display": "none"}),
         ]
     )

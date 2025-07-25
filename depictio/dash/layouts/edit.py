@@ -1,10 +1,185 @@
 import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
-from dash import html
+from dash import Input, Output, html
+from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.layouts.header import _is_different_from_default
 from depictio.dash.layouts.stepper import create_stepper_output_edit
 from depictio.dash.utils import get_component_data
+
+
+def register_reset_button_callbacks(app):
+    """Register callbacks to update reset button colors based on filter activity."""
+
+    # Use clientside callback for better performance and direct DOM manipulation
+    app.clientside_callback(
+        """
+        function(interactive_values, pathname) {
+            console.log('🔄 Clientside callback triggered with:', interactive_values);
+
+            if (!interactive_values) {
+                console.log('No interactive values, skipping update');
+                return '';
+            }
+
+            // Find all reset buttons
+            const resetButtons = document.querySelectorAll('[id*="reset-selection-graph-button"]');
+            console.log('Found reset buttons:', resetButtons.length);
+
+            resetButtons.forEach(button => {
+                try {
+                    // Extract component index from button ID
+                    const buttonId = button.id;
+                    console.log('Processing button:', buttonId);
+
+                    // Parse the component index from the ID
+                    let componentIndex = null;
+                    const match = buttonId.match(/index":"([^"]+)"/);
+                    if (match) {
+                        componentIndex = match[1];
+                        console.log('Found component index:', componentIndex);
+
+                        // Check if this component has active filters
+                        const hasFilter = checkComponentFilter(interactive_values, componentIndex);
+                        console.log('Component', componentIndex, 'has filter:', hasFilter);
+
+                        if (hasFilter) {
+                            // Make button orange and always visible
+                            button.setAttribute('data-color', 'orange');
+                            button.classList.add('reset-button-filtered');
+                            button.style.opacity = '1';
+                            button.style.pointerEvents = 'auto';
+                            button.style.display = 'flex';
+                            button.style.visibility = 'visible';
+                            console.log('Set button to orange/visible for component', componentIndex);
+                        } else {
+                            // Make button gray and follow normal hover behavior
+                            button.setAttribute('data-color', 'gray');
+                            button.classList.remove('reset-button-filtered');
+                            console.log('Set button to gray/normal for component', componentIndex);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error processing button:', error);
+                }
+            });
+
+            return 'updated';
+
+            function checkComponentFilter(interactive_values, componentIndex) {
+                try {
+                    let interactive_data = [];
+
+                    if (interactive_values.interactive_components_values) {
+                        interactive_data = interactive_values.interactive_components_values;
+                    } else if (typeof interactive_values === 'object') {
+                        for (const [key, value] of Object.entries(interactive_values)) {
+                            if (value && typeof value === 'object' && value.value !== undefined) {
+                                interactive_data.push(value);
+                            }
+                        }
+                    }
+
+                    console.log('Checking', interactive_data.length, 'components for index', componentIndex);
+
+                    for (const component of interactive_data) {
+                        if (component.metadata && component.metadata.index === componentIndex) {
+                            const currentValue = component.value;
+                            const defaultState = component.metadata.default_state;
+
+                            console.log('Found component', componentIndex, 'value:', currentValue, 'default:', defaultState);
+
+                            if (!defaultState || currentValue === null || currentValue === undefined) {
+                                return false;
+                            }
+
+                            // Check if different from default
+                            if (defaultState.default_range) {
+                                return JSON.stringify(currentValue) !== JSON.stringify(defaultState.default_range);
+                            } else if (defaultState.default_value !== undefined) {
+                                return currentValue !== defaultState.default_value;
+                            }
+
+                            return false;
+                        }
+                    }
+
+                    console.log('Component', componentIndex, 'not found in interactive data');
+                    return false;
+                } catch (error) {
+                    console.error('Error checking component filter:', error);
+                    return false;
+                }
+            }
+        }
+        """,
+        Output("reset-button-dummy-output", "children"),
+        [
+            Input("interactive-values-store", "data"),
+            Input("url", "pathname"),  # Also trigger when page changes
+        ],
+        prevent_initial_call=True,
+    )
+
+
+def _check_component_filter_activity(interactive_values, component_index):
+    """Check if a specific component has active filters."""
+    logger.info(f"🔍 _check_component_filter_activity for component {component_index}")
+
+    if not interactive_values:
+        logger.info("📭 No interactive_values provided")
+        return False
+
+    # Handle different possible structures in interactive_values
+    interactive_values_data = []
+
+    if "interactive_components_values" in interactive_values:
+        interactive_values_data = interactive_values["interactive_components_values"]
+        logger.info(f"📦 Found interactive_components_values: {len(interactive_values_data)} items")
+    elif isinstance(interactive_values, dict):
+        # Look for any values that might be interactive components
+        for key, value in interactive_values.items():
+            if isinstance(value, dict) and "value" in value:
+                interactive_values_data.append(value)
+        logger.info(f"📦 Extracted from dict structure: {len(interactive_values_data)} items")
+
+    if not interactive_values_data:
+        logger.info("📭 No interactive component data found")
+        return False
+
+    logger.info(
+        f"🔍 Searching for component {component_index} among {len(interactive_values_data)} components"
+    )
+
+    # Find the specific component by index
+    for i, component_data in enumerate(interactive_values_data):
+        if isinstance(component_data, dict):
+            component_metadata = component_data.get("metadata", {})
+            component_id = component_metadata.get("index")
+
+            logger.info(f"  Component {i}: ID={component_id}, looking for {component_index}")
+
+            # Check if this is the component we're looking for
+            if str(component_id) == str(component_index):
+                component_value = component_data.get("value")
+                default_state = component_metadata.get("default_state", {})
+
+                logger.info(f"  ✅ Found target component {component_index}")
+                logger.info(f"    Current value: {component_value}")
+                logger.info(f"    Default state: {default_state}")
+
+                if component_value is None or not default_state:
+                    logger.info("  ❌ No value or default_state, returning False")
+                    return False
+
+                # Use the same logic as the header reset button
+                is_different = _is_different_from_default(component_value, default_state)
+                logger.info(f"  🎯 Is different from default: {is_different}")
+                return is_different
+
+    logger.info(f"❌ Component {component_index} not found in interactive values")
+    return False
 
 
 def _create_component_buttons(
@@ -150,8 +325,6 @@ def enable_box_edit_mode(
                 component_type = component_data.get("component_type", None)
     else:
         component_type = component_data.get("component_type", None)
-
-    from dash_iconify import DashIconify
 
     def create_drag_handle():
         return dmc.ActionIcon(

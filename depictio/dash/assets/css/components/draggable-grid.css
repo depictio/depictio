@@ -134,6 +134,37 @@
     opacity: 1 !important;
 }
 
+/* ALWAYS show orange reset buttons (when filters are active) - override hover-only behavior */
+/* Try multiple attribute selectors to catch different DMC implementations */
+.react-grid-item .mantine-ActionIcon-root[id*="reset-selection-graph-button"][data-color="orange"],
+.react-grid-item .mantine-ActionIcon-root[id*="reset-selection-graph-button"][color="orange"],
+.react-grid-item .mantine-ActionIcon-root[id*="reset-selection-graph-button"].mantine-ActionIcon-filled,
+.drag-handles-hidden .mantine-ActionIcon-root[id*="reset-selection-graph-button"][data-color="orange"],
+.drag-handles-hidden .mantine-ActionIcon-root[id*="reset-selection-graph-button"][color="orange"],
+.drag-handles-hidden .mantine-ActionIcon-root[id*="reset-selection-graph-button"].mantine-ActionIcon-filled {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    display: flex !important;
+    visibility: visible !important;
+}
+
+/* Ensure orange reset buttons stay visible in edit mode too */
+.react-grid-item .mantine-ActionIcon-root[id*="reset-selection-graph-button"][data-color="orange"],
+.react-grid-item .mantine-ActionIcon-root[id*="reset-selection-graph-button"][color="orange"],
+.react-grid-item .mantine-ActionIcon-root[id*="reset-selection-graph-button"].mantine-ActionIcon-filled {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
+
+/* Class-based approach for more reliable targeting */
+.react-grid-item .reset-button-filtered,
+.drag-handles-hidden .reset-button-filtered {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    display: flex !important;
+    visibility: visible !important;
+}
+
 /* Reset button container in non-edit mode - transparent by default (for scatter plots and interactive components) */
 .drag-handles-hidden .reset-button-container-non-edit {
     background: transparent !important;

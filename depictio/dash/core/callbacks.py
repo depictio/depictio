@@ -88,10 +88,12 @@ def register_all_callbacks(app):
     from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
         register_progressive_loading_callbacks,
     )
+    from depictio.dash.layouts.edit import register_reset_button_callbacks
     from depictio.dash.theme_utils import register_theme_bridge_callback
 
     register_theme_bridge_callback(app)
     register_progressive_loading_callbacks(app)
+    register_reset_button_callbacks(app)
 
 
 def register_layout_callbacks(app):
