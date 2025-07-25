@@ -340,6 +340,80 @@ def generate_log_marks(min_val, max_val, data_min, data_max, tolerance=0.5):
         return {}
 
 
+def get_default_state(interactive_component_type, column_name, cols_json, unique_values=None):
+    """
+    Generate default state for interactive components based on their type and column data.
+
+    Args:
+        interactive_component_type (str): Type of interactive component (RangeSlider, Select, etc.)
+        column_name (str): Name of the column
+        cols_json (dict): Column specifications with statistical data
+        unique_values (list, optional): Unique values for select-type components
+
+    Returns:
+        dict: Default state information for the component
+    """
+    logger.debug(
+        f"Generating default state for {interactive_component_type} on column {column_name}"
+    )
+
+    if interactive_component_type == "RangeSlider":
+        # For range sliders, default state is [min_value, max_value]
+        if cols_json and column_name in cols_json:
+            column_specs = cols_json[column_name].get("specs", {})
+            min_val = column_specs.get("min")
+            max_val = column_specs.get("max")
+
+            if min_val is not None and max_val is not None:
+                default_range = [min_val, max_val]
+                logger.debug(f"Range slider default state: {default_range}")
+                return {
+                    "type": "range",
+                    "min_value": min_val,
+                    "max_value": max_val,
+                    "default_range": default_range,
+                }
+
+        # Fallback if no column specs available
+        logger.warning(f"No min/max specs found for {column_name}, using fallback range")
+        return {
+            "type": "range",
+            "min_value": 0,
+            "max_value": 100,
+            "default_range": [0, 100],
+        }
+
+    elif interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
+        # For select-type components, default state is usually "All" or first option
+        default_options = unique_values if unique_values else []
+        default_value = None  # None means "All" / no selection
+
+        logger.debug(
+            f"Select component default state: {default_value} (options: {len(default_options)})"
+        )
+        return {
+            "type": "select",
+            "options": default_options,
+            "default_value": default_value,
+        }
+
+    elif interactive_component_type == "Switch":
+        # For switches, default is typically False
+        logger.debug("Switch default state: False")
+        return {
+            "type": "boolean",
+            "default_value": False,
+        }
+
+    else:
+        # Generic fallback for unknown component types
+        logger.warning(f"Unknown interactive component type: {interactive_component_type}")
+        return {
+            "type": "unknown",
+            "default_value": None,
+        }
+
+
 def get_valid_min_max(df, column_name, cols_json):
     """
     Retrieves valid min and max values for a given column.
@@ -1136,6 +1210,44 @@ def build_interactive(**kwargs):
         logger.info(f"Applied custom color: {color}")
 
     card_title_h5 = html.H5(card_title, style=title_style)
+
+    # Generate default state information for the component
+    # For select-type components, pass unique values if available
+    unique_values = None
+    if (
+        interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]
+        and df is not None
+    ):
+        try:
+            # Get unique values from the dataframe
+            unique_vals = df[column_name].unique()
+            # Handle both pandas and polars dataframes
+            if hasattr(unique_vals, "to_list") and callable(getattr(unique_vals, "to_list", None)):
+                # Polars DataFrame
+                unique_vals_list = unique_vals.to_list()  # type: ignore
+            elif hasattr(unique_vals, "tolist") and callable(getattr(unique_vals, "tolist", None)):
+                # Pandas DataFrame
+                unique_vals_list = unique_vals.tolist()  # type: ignore
+            else:
+                # Fallback to list conversion
+                unique_vals_list = list(unique_vals)
+            # Clean and limit the unique values
+            unique_values = [str(val) for val in unique_vals_list if val is not None][
+                :100
+            ]  # Limit to 100 options
+            logger.debug(
+                f"Generated {len(unique_values)} unique values for {interactive_component_type}"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to extract unique values for {column_name}: {e}")
+            unique_values = []
+
+    # Generate and add default state to store_data
+    default_state = get_default_state(
+        interactive_component_type, column_name, cols_json, unique_values
+    )
+    store_data["default_state"] = default_state
+    logger.debug(f"Added default_state to {interactive_component_type}: {default_state}")
 
     store_component = dcc.Store(
         id={"type": "stored-metadata-component", "index": str(store_index)},

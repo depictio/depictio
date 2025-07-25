@@ -360,6 +360,7 @@ def register_callbacks_card_component(app):
             "stepper": True,  # Show border during editing
             "build_frame": True,  # Use card frame for editing
             "color": color_value,
+            "cols_json": cols_json,  # Pass cols_json for reference values
         }
 
         if relevant_metadata:

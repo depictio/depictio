@@ -7,6 +7,60 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
 
+
+def get_reference_value_from_cols_json(cols_json, column_name, aggregation):
+    """
+    Get reference value from cols_json statistical data instead of recomputing from full dataframe.
+
+    Args:
+        cols_json (dict): Column specifications with statistical data
+        column_name (str): Name of the column
+        aggregation (str): Aggregation type (count, sum, average, etc.)
+
+    Returns:
+        float or None: Reference value if available in cols_json, None otherwise
+    """
+    if not cols_json or column_name not in cols_json:
+        logger.debug(f"Column '{column_name}' not found in cols_json")
+        return None
+
+    column_specs = cols_json[column_name].get("specs", {})
+    if not column_specs:
+        logger.debug(f"No specs found for column '{column_name}' in cols_json")
+        return None
+
+    # Map aggregation names to cols_json field names
+    aggregation_mapping = {
+        "count": "count",
+        "sum": "sum",
+        "average": "average",
+        "median": "median",
+        "min": "min",
+        "max": "max",
+        "nunique": "nunique",
+        "unique": "unique",
+        "variance": "variance",
+        "std_dev": "std_dev",
+        "range": "range",
+        "percentile": "percentile",
+    }
+
+    # Get the corresponding field name in cols_json
+    cols_json_field = aggregation_mapping.get(aggregation)
+    if not cols_json_field:
+        logger.debug(f"Aggregation '{aggregation}' not available in cols_json mapping")
+        return None
+
+    # Extract the value
+    reference_value = column_specs.get(cols_json_field)
+    if reference_value is not None:
+        logger.debug(f"Found reference value for {column_name}.{aggregation}: {reference_value}")
+        return reference_value
+    else:
+        logger.debug(f"Field '{cols_json_field}' not found in column specs for '{column_name}'")
+        return None
+
+
 # Mapping from custom aggregation names to pandas functions
 AGGREGATION_MAPPING = {
     "count": "count",
@@ -190,6 +244,7 @@ def build_card(**kwargs):
     stepper = kwargs.get("stepper", False)
     filter_applied = kwargs.get("filter_applied", False)
     color = kwargs.get("color", None)  # Custom color from user
+    cols_json = kwargs.get("cols_json", {})  # Column specifications for reference values
 
     if stepper:
         index = f"{index}-tmp"
@@ -281,12 +336,24 @@ def build_card(**kwargs):
 
                 # Only compute reference value if data is actually filtered
                 if is_filtered_data:
-                    reference_value = compute_value(full_data, column_name, aggregation)
+                    # Try to get reference value from cols_json first (more efficient)
+                    reference_value = get_reference_value_from_cols_json(
+                        cols_json, column_name, aggregation
+                    )
+
+                    if reference_value is None:
+                        # Fallback to computing from full data if not available in cols_json
+                        reference_value = compute_value(full_data, column_name, aggregation)
+                        logger.debug(
+                            f"Card component {index}: Used fallback computation (cols_json unavailable)"
+                        )
+                    else:
+                        logger.debug(
+                            f"Card component {index}: Used cols_json reference value: {reference_value}"
+                        )
+
                     logger.debug(
                         f"Card component {index}: Detected filtered data (current: {data.shape}, full: {full_data.shape})"
-                    )
-                    logger.debug(
-                        f"Card component {index}: Computed reference value: {reference_value}"
                     )
                 else:
                     logger.debug(
@@ -373,16 +440,16 @@ def build_card(**kwargs):
             if ref_val != 0:
                 change_pct = ((current_val - ref_val) / ref_val) * 100
                 if change_pct > 0:
-                    comparison_text = f"↗️ +{change_pct:.1f}% vs unfiltered ({ref_val})"
+                    comparison_text = f"+{change_pct:.1f}% vs unfiltered ({ref_val})"
                     comparison_color = "green"
                     comparison_icon = "mdi:trending-up"
                 elif change_pct < 0:
-                    comparison_text = f"↘️ {change_pct:.1f}% vs unfiltered ({ref_val})"
+                    comparison_text = f"{change_pct:.1f}% vs unfiltered ({ref_val})"
                     comparison_color = "red"
                     comparison_icon = "mdi:trending-down"
                 else:
-                    comparison_text = f"→ Same as unfiltered ({ref_val})"
-                    comparison_color = "gray"
+                    comparison_text = f"Same as unfiltered ({ref_val})"
+                    comparison_color = "black"  # Changed from gray to black for horizontal trend
                     comparison_icon = "mdi:trending-neutral"
             else:
                 comparison_text = f"Reference: {ref_val}"
@@ -423,7 +490,7 @@ def build_card(**kwargs):
                     DashIconify(icon=comparison_icon, width=14, color=comparison_color)
                     if comparison_icon
                     else None,
-                    dmc.Text(comparison_text, size="xs", c=comparison_color, fw="normal"),
+                    dmc.Text(comparison_text, size="xs", c=comparison_color, fw="normal"),  # type: ignore
                 ],
                 gap="xs",
                 align="center",
