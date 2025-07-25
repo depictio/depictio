@@ -1,4 +1,5 @@
 import dash
+import dash_mantine_components as dmc
 from dash import ALL, MATCH, Input, Output, State, html
 
 from depictio.api.v1.configs.logging_init import logger
@@ -33,7 +34,45 @@ def return_design_component(component_selected, id, df, btn_component):
         from depictio.dash.modules.text_component.frontend import design_text
 
         component_content = design_text(id)
-        return html.Div(component_content, style={"width": "100%"}), btn_component
+
+        # Extract the preview from component_content (it's the last item)
+        left_content = component_content.children[:-1]  # All items except the preview
+        preview_content = component_content.children[-1]  # The preview section
+
+        # Create vertical layout with left and right sections for text component
+        text_layout = html.Div(
+            [
+                # Left section - Instructions/Help (without preview)
+                html.Div(
+                    dmc.Stack(left_content),
+                    style={
+                        "width": "45%",
+                        "padding": "20px",
+                        "borderRight": "1px solid var(--app-border-color, #ddd)",
+                    },
+                ),
+                # Right section - Move the good preview here
+                html.Div(
+                    preview_content,
+                    style={
+                        "width": "45%",
+                        "padding": "20px",
+                    },
+                ),
+            ],
+            style={
+                "display": "flex",
+                "flexDirection": "row",
+                "width": "100%",
+                "minHeight": "300px",
+                "border": "1px solid var(--app-border-color, #ddd)",
+                "borderRadius": "8px",
+                "backgroundColor": "var(--app-surface-color, #ffffff)",
+                "gap": "10px",
+            },
+        )
+
+        return text_layout, btn_component
     elif component_selected == "JBrowse2":
         return dash.no_update, btn_component
         # return design_jbrowse(id), btn_component

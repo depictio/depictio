@@ -157,9 +157,7 @@ def register_callbacks_notes_footer(app):
 def create_notes_footer(dashboard_data=None):
     """Create the notes footer component with RichTextEditor."""
     # Load existing notes content if available
-    initial_notes_content = (
-        "<p>Start writing your notes, documentation, or analysis here...\n\n\n</p>"
-    )
+    initial_notes_content = "<p>Start writing your notes, documentation, or analysis here...</p><p><br></p><p><br></p><p><br></p>"
     if dashboard_data and dashboard_data.get("notes_content"):
         initial_notes_content = dashboard_data["notes_content"]
 
