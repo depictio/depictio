@@ -1,6 +1,5 @@
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
-import dash_mantine_components as dmc
 import polars as pl
 from bson import ObjectId
 from dash import dcc, html
@@ -172,34 +171,8 @@ def build_table(**kwargs):
             )
     logger.info(f"Columns definitions for table {index}: {columnDefs}")
 
-    # INFINITE ROW MODEL: No cutoff needed - data is loaded on demand
-    from dash_iconify import DashIconify
-
-    # Show infinite scroll + pagination badge instead of partial data badge
-    infinite_scroll_badge = html.Div(
-        dmc.Tooltip(
-            children=dmc.Badge(
-                "Infinite + Spinner",
-                id={"type": "table-infinite-scroll-badge", "index": index},
-                style={"display": "block", "paddingBottom": "5px"}
-                if build_frame
-                else {"display": "none"},
-                leftSection=DashIconify(
-                    icon="mdi:infinity",
-                    width=20,
-                ),
-                size="lg",
-                radius="xl",
-                color="blue",
-                fullWidth=False,
-            ),
-            label=f"Table uses infinite scrolling with loading spinners - data loads in blocks as you navigate through {df.shape[0]} total rows.",
-            position="top",
-            openDelay=500,
-            withinPortal=False,
-        ),
-        style={"width": "fit-content"},  # Badge should not affect layout
-    )
+    # INFINITE ROW MODEL: No data cutoff needed - data is loaded on demand
+    # Badge removed as requested
 
     logger.info(
         f"♾️ Table {index}: No data cutoff applied - infinite scrolling + pagination will handle {df.shape[0]} rows"
@@ -279,7 +252,7 @@ def build_table(**kwargs):
     # Create the card body - simple structure
     new_card_body = html.Div(
         [
-            infinite_scroll_badge,
+            # infinite_scroll_badge,  # Removed as requested
             table_aggrid,
             store_component,
         ]
