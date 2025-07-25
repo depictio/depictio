@@ -162,6 +162,22 @@ def register_callbacks_table_component(app):
             "interactive-values-store" in str(trigger["prop_id"]) for trigger in ctx.triggered
         )
 
+        logger.info(f"🔄 INFINITE SCROLL CALLBACK TRIGGERED - {ctx.triggered}")
+
+        # Detailed analysis of interactive values
+        if interactive_values and "interactive_components_values" in interactive_values:
+            components_count = len(interactive_values["interactive_components_values"])
+            scatter_filters = [
+                c.get("index", "")
+                for c in interactive_values["interactive_components_values"]
+                if c.get("index", "").startswith("filter_")
+            ]
+            logger.info(
+                f"🎯 TABLE: {components_count} total components, {len(scatter_filters)} scatter filters: {scatter_filters}"
+            )
+        else:
+            logger.info("🎯 TABLE: No interactive values or malformed data")
+
         # LOGGING: Track infinite scroll requests and trigger source
         logger.info("🔄 INFINITE SCROLL + INTERACTIVE REQUEST RECEIVED")
         logger.info(f"📊 Request details: {request}")

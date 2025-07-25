@@ -285,7 +285,7 @@ def update_interactive_component(
 ):
     children = list()
 
-    # logger.info(f"interactive_components_dict - {interactive_components_dict}")
+    logger.info(f"interactive_components_dict - {interactive_components_dict}")
 
     if not interactive_components_dict:
         for metadata in stored_metadata_raw:
@@ -332,7 +332,11 @@ def update_interactive_component(
             logger.info(
                 f"Performing batch join for workflow {wf} with {len(joins_dict)} join combinations"
             )
+
+            logger.info(f"Interactive components dict: {interactive_components_dict}")
             merged_df = iterative_join(wf, joins_dict, interactive_components_dict, TOKEN)
+
+            logger.info(f"Batch join completed for workflow {wf} (shape: {merged_df.shape})")
 
             # Store the same merged dataframe for all join combinations
             # since iterative_join already handles all the joins internally
