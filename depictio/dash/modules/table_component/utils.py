@@ -151,62 +151,66 @@ def build_table(**kwargs):
                 f"{col['headerTooltip']} | Description: {cols[col['field']]['description']}"
             )
 
-    style_partial_data_displayed = {"display": "none"}
-
+    # INFINITE ROW MODEL: No cutoff needed - data is loaded on demand
     from dash_iconify import DashIconify
 
-    cutoff = 1000
-
-    if df.to_pandas().shape[0] > cutoff:
-        df = df.head(cutoff)
-        if build_frame:
-            style_partial_data_displayed = {"display": "block", "paddingBottom": "5px"}
-
-    partial_data_badge = html.Div(
+    # Show infinite scroll + pagination badge instead of partial data badge
+    infinite_scroll_badge = html.Div(
         dmc.Tooltip(
             children=dmc.Badge(
-                "Partial data displayed",
-                id={"type": "graph-partial-data-displayed", "index": index},
-                style=style_partial_data_displayed,
+                "Infinite + Pagination",
+                id={"type": "table-infinite-scroll-badge", "index": index},
+                style={"display": "block", "paddingBottom": "5px"}
+                if build_frame
+                else {"display": "none"},
                 leftSection=DashIconify(
-                    icon="mdi:alert-circle",
+                    icon="mdi:infinity",
                     width=20,
                 ),
-                # sx={"paddingLeft": 0},
                 size="lg",
                 radius="xl",
-                color="red",
+                color="blue",
                 fullWidth=False,
             ),
-            label=f"Tables are currently loaded with a maximum of {cutoff} rows.",
+            label=f"Table uses infinite scrolling with pagination - data loads in blocks as you navigate through {df.shape[0]} total rows.",
             position="top",
             openDelay=500,
             withinPortal=False,
         ),
         style={"width": "fit-content"},  # Badge should not affect layout
     )
-    # Prepare ag grid table
+
+    logger.info(
+        f"♾️ Table {index}: No data cutoff applied - infinite scrolling + pagination will handle {df.shape[0]} rows"
+    )
+    # INFINITE ROW MODEL: Enable infinite scrolling for large datasets
+    logger.info(
+        f"📊 Table {index}: Configuring infinite row model for dataset with {df.shape[0]} rows"
+    )
+
+    # Prepare ag grid table with infinite row model
     table_aggrid = dag.AgGrid(
         id={"type": value_div_type, "index": str(index)},
-        rowData=df.to_pandas().to_dict("records"),
-        # rowModelType="infinite",
+        # CRITICAL: Don't set rowData for infinite model - data comes from getRowsResponse
+        rowModelType="infinite",  # Enable infinite scrolling
         columnDefs=columnDefs,
         dashGridOptions={
             "tooltipShowDelay": 500,
-            "pagination": True,
-            "paginationAutoPageSize": False,  # Keep default pagination behavior
-            "animateRows": False,
+            # INFINITE MODEL CONFIGURATION (following documentation example)
             # The number of rows rendered outside the viewable area the grid renders.
-            # "rowBuffer": 0,
-            # # How many blocks to keep in the store. Default is no limit, so every requested block is kept.
-            # "maxBlocksInCache": 2,
-            # "cacheBlockSize": 100,
-            # "cacheOverflowSize": 2,
-            # "maxConcurrentDatasourceRequests": 2,
-            # "infiniteInitialRowCount": 1,
+            "rowBuffer": 0,  # Match documentation example
+            # How many blocks to keep in the store. Default is no limit, so every requested block is kept.
+            "maxBlocksInCache": 2,  # Match documentation example
+            "cacheBlockSize": 100,  # Each block contains 100 rows
+            "cacheOverflowSize": 2,  # Allow 2 extra blocks beyond maxBlocksInCache
+            "maxConcurrentDatasourceRequests": 2,  # Limit concurrent data requests
+            "infiniteInitialRowCount": 1,  # Match documentation example
+            # OTHER OPTIONS
             "rowSelection": "multiple",
             "enableCellTextSelection": True,
             "ensureDomOrder": True,
+            # ENABLE PAGINATION with infinite model (as per documentation example)
+            "pagination": True,
         },
         # columnSize="sizeToFit",
         defaultColDef={"resizable": True, "sortable": True, "filter": True},
@@ -216,6 +220,10 @@ def build_table(**kwargs):
         },
         className="ag-theme-alpine",
         # use the parameters above
+    )
+
+    logger.info(
+        f"🚀 Table {index}: Infinite row model configured - blocks of {100} rows, max {2} cached blocks, pagination enabled"
     )
 
     # Metadata management - Create a store component to store the metadata of the card
@@ -241,7 +249,7 @@ def build_table(**kwargs):
     # Create the card body - simple structure
     new_card_body = html.Div(
         [
-            partial_data_badge,
+            infinite_scroll_badge,
             table_aggrid,
             store_component,
         ]
