@@ -24,20 +24,22 @@ def register_callbacks_notes_footer(app):
                 var style = document.createElement('style');
                 style.id = 'notes-footer-styles';
                 style.innerHTML = `
-                    /* Footer starts hidden and adjusts based on AppShell state - High specificity */
+                    /* Footer starts COMPLETELY HIDDEN and adjusts based on AppShell state - High specificity */
                     body #notes-footer-content, html #notes-footer-content {
-                        height: 0px;
-                        overflow: hidden;
+                        height: 0px !important;
+                        overflow: hidden !important;
                         transition: height 0.3s ease, opacity 0.3s ease !important;
                         opacity: 0 !important;
-                        position: fixed;
-                        bottom: 0;
-                        left: 220px;  /* Default sidebar width */
-                        right: 0;
-                        z-index: 1000;
-                        background: var(--app-bg-secondary, rgba(0, 0, 0, 0.02));
-                        backdrop-filter: blur(10px);
-                        border-top: 1px solid var(--app-border-color, #e9ecef);
+                        position: fixed !important;
+                        bottom: 0 !important;
+                        left: 220px !important;  /* Default sidebar width */
+                        right: 0 !important;
+                        z-index: 1000 !important;
+                        background: var(--app-bg-secondary, rgba(0, 0, 0, 0.02)) !important;
+                        backdrop-filter: blur(10px) !important;
+                        border-top: 1px solid var(--app-border-color, #e9ecef) !important;
+                        display: block !important;  /* Ensure it exists but is invisible */
+                        visibility: hidden !important;  /* Additional layer of hiding */
                     }
 
                     /* When sidebar is collapsed (AppShell adds data-navbar-collapsed) */
@@ -52,12 +54,42 @@ def register_callbacks_notes_footer(app):
                         left: 0px !important;
                     }
 
-                    /* Expanded state when toggled - High specificity */
+                    /* Expanded state when toggled - High specificity - Override hidden state */
                     body #notes-footer-content.footer-visible, html #notes-footer-content.footer-visible {
                         height: 300px !important;
                         opacity: 1 !important;
                         overflow: visible !important;
-                        transition: height 0.3s ease, opacity 0.3s ease !important;
+                        visibility: visible !important;  /* Override hidden visibility */
+                        transition: height 0.3s ease, opacity 0.3s ease, visibility 0s ease !important;
+                    }
+
+                    /* Full screen mode - covers entire page-content area - ONLY when explicitly toggled */
+                    body #notes-footer-content.footer-fullscreen, html #notes-footer-content.footer-fullscreen {
+                        position: fixed !important;
+                        top: 60px !important; /* Account for header */
+                        left: 0px !important;
+                        right: 0px !important;
+                        bottom: 0px !important;
+                        height: auto !important;
+                        width: 100vw !important;
+                        z-index: 9999 !important;
+                        opacity: 1 !important;
+                        overflow: visible !important;
+                        visibility: visible !important;  /* Override hidden visibility */
+                        background: var(--app-bg-color, #ffffff) !important;
+                        border: none !important;
+                        transition: all 0.3s ease !important;
+                    }
+
+                    /* Hide page content when notes is in full screen - ONLY when body has notes-fullscreen class */
+                    body.notes-fullscreen #page-content > *:not(#notes-footer-content) {
+                        display: none !important;
+                    }
+
+                    /* Adjust editor height for full screen - ONLY when footer has fullscreen class */
+                    #notes-footer-content.footer-fullscreen .mantine-RichTextEditor-root {
+                        height: calc(100vh - 160px) !important;
+                        max-height: none !important;
                     }
 
                     /* Override any conflicting transitions - High specificity */
@@ -111,21 +143,84 @@ def register_callbacks_notes_footer(app):
         prevent_initial_call=False,
     )
 
-    # Toggle notes footer visibility
+    # Toggle notes footer visibility and fullscreen mode
     @app.callback(
-        Output("notes-footer-content", "className"),
-        Input("toggle-notes-button", "n_clicks"),
-        State("notes-footer-content", "className"),
+        [
+            Output("notes-footer-content", "className"),
+            Output("page-content", "className", allow_duplicate=True),
+        ],
+        [
+            Input("toggle-notes-button", "n_clicks"),
+            Input("fullscreen-notes-button", "n_clicks"),
+        ],
+        [
+            State("notes-footer-content", "className"),
+            State("page-content", "className"),
+        ],
         prevent_initial_call=True,
     )
-    def toggle_notes_footer(n_clicks, current_class):
-        """Toggle footer visibility when toggle button is clicked."""
-        if n_clicks:
-            if current_class and "footer-visible" in current_class:
-                return ""  # Hide footer
+    def toggle_notes_footer(
+        toggle_clicks, fullscreen_clicks, current_footer_class, current_page_class
+    ):
+        """Toggle footer visibility and fullscreen mode when buttons are clicked."""
+        from dash import callback_context
+
+        ctx = callback_context
+        if not ctx.triggered:
+            return current_footer_class or "", current_page_class or ""
+
+        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+        logger.info(f"Notes footer triggered by: {trigger_id}")
+        logger.info(f"Toggle clicks: {toggle_clicks}, Fullscreen clicks: {fullscreen_clicks}")
+
+        current_footer_class = current_footer_class or ""
+        current_page_class = current_page_class or ""
+
+        logger.info(
+            f"Current footer class: '{current_footer_class}', page class: '{current_page_class}'"
+        )
+
+        if trigger_id == "toggle-notes-button":
+            if (
+                "footer-visible" in current_footer_class
+                or "footer-fullscreen" in current_footer_class
+            ):
+                # Hide footer completely
+                new_page_class = current_page_class.replace("notes-fullscreen", "").strip()
+                logger.info(f"Hiding footer. New classes: footer='', page='{new_page_class}'")
+                return "", new_page_class
             else:
-                return "footer-visible"  # Show footer
-        return current_class or ""
+                # Show footer in normal mode
+                logger.info(
+                    f"Showing footer in normal mode. New classes: footer='footer-visible', page='{current_page_class}'"
+                )
+                return "footer-visible", current_page_class
+
+        elif trigger_id == "fullscreen-notes-button" and fullscreen_clicks:
+            if "footer-fullscreen" in current_footer_class:
+                # Exit fullscreen, go to normal footer mode
+                new_page_class = current_page_class.replace("notes-fullscreen", "").strip()
+                logger.info(
+                    f"Exiting fullscreen. New classes: footer='footer-visible', page='{new_page_class}'"
+                )
+                return "footer-visible", new_page_class
+            else:
+                # Enter fullscreen mode (only if footer is currently visible)
+                if "footer-visible" in current_footer_class:
+                    new_page_class = f"{current_page_class} notes-fullscreen".strip()
+                    logger.info(
+                        f"Entering fullscreen. New classes: footer='footer-fullscreen', page='{new_page_class}'"
+                    )
+                    return "footer-fullscreen", new_page_class
+                else:
+                    # If footer is not visible, show it first in normal mode
+                    logger.info("Footer not visible, showing in normal mode first")
+                    return "footer-visible", current_page_class
+
+        logger.info(
+            f"No action taken. Returning current classes: footer='{current_footer_class}', page='{current_page_class}'"
+        )
+        return current_footer_class, current_page_class
 
     # Handle editor content storage
     @app.callback(
@@ -138,20 +233,36 @@ def register_callbacks_notes_footer(app):
         logger.info(f"Storing notes content: {editor_html[:100] if editor_html else ''}...")
         return editor_html
 
-    # Update toggle button text based on footer state
+    # Update button icons based on footer state
     @app.callback(
-        Output("toggle-notes-button", "children"),
+        [
+            Output("toggle-notes-button", "children"),
+            Output("fullscreen-notes-button", "children"),
+        ],
         Input("notes-footer-content", "className"),
         prevent_initial_call=True,
     )
-    def update_toggle_button_text(footer_class):
-        """Update button text based on footer visibility."""
-        is_visible = footer_class and "footer-visible" in footer_class
+    def update_button_icons(footer_class):
+        """Update button icons based on footer visibility and fullscreen state."""
+        footer_class = footer_class or ""
 
-        if is_visible:
-            return DashIconify(icon="material-symbols:expand-less", width=35, color="gray")
+        # Toggle button icon
+        if "footer-visible" in footer_class or "footer-fullscreen" in footer_class:
+            toggle_icon = DashIconify(icon="material-symbols:expand-less", width=35, color="gray")
         else:
-            return DashIconify(icon="material-symbols:edit-note", width=35, color="gray")
+            toggle_icon = DashIconify(icon="material-symbols:edit-note", width=35, color="gray")
+
+        # Fullscreen button icon
+        if "footer-fullscreen" in footer_class:
+            fullscreen_icon = DashIconify(
+                icon="material-symbols:close-fullscreen", width=20, color="gray"
+            )
+        else:
+            fullscreen_icon = DashIconify(
+                icon="material-symbols:fullscreen", width=20, color="gray"
+            )
+
+        return toggle_icon, fullscreen_icon
 
 
 def create_notes_footer(dashboard_data=None):
@@ -163,25 +274,43 @@ def create_notes_footer(dashboard_data=None):
 
     return html.Div(
         [
-            # Simple header
+            # Simple header with fullscreen button
             html.Div(
                 [
                     dmc.Group(
                         [
-                            DashIconify(
-                                icon="material-symbols:edit-note",
-                                width=20,
-                                style={"color": "var(--app-text-color, #000000)"},
+                            # Left side - Title
+                            dmc.Group(
+                                [
+                                    DashIconify(
+                                        icon="material-symbols:edit-note",
+                                        width=20,
+                                        style={"color": "var(--app-text-color, #000000)"},
+                                    ),
+                                    dmc.Text(
+                                        "Notes & Documentation",
+                                        fw="bold",
+                                        style={"color": "var(--app-text-color, #000000)"},
+                                    ),
+                                ],
+                                gap="xs",
+                                align="center",
                             ),
-                            dmc.Text(
-                                "Notes & Documentation",
-                                fw="bold",
-                                style={"color": "var(--app-text-color, #000000)"},
+                            # Right side - Fullscreen button
+                            dmc.ActionIcon(
+                                DashIconify(
+                                    icon="material-symbols:fullscreen", width=20, color="gray"
+                                ),
+                                id="fullscreen-notes-button",
+                                variant="subtle",
+                                color="gray",
+                                size="sm",
+                                # n_clicks=0,
                             ),
                         ],
-                        gap="xs",
-                        justify="center",
+                        justify="space-between",
                         align="center",
+                        style={"width": "100%"},
                     )
                 ],
                 id="notes-footer-header",
@@ -239,4 +368,5 @@ def create_notes_footer(dashboard_data=None):
             ),
         ],
         id="notes-footer-content",
+        className="",  # Explicitly start with empty className to ensure it's hidden
     )
