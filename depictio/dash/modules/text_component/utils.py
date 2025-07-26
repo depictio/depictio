@@ -36,42 +36,6 @@ def create_inline_editable_text(
                 value=initial_text,
                 style={"display": "none"},
             ),
-            # Text alignment menu - positioned properly on hover
-            dmc.Menu(
-                [
-                    dmc.MenuTarget(
-                        dmc.ActionIcon(
-                            DashIconify(icon="tabler:align-left", width=16),
-                            id={"type": "alignment-menu-btn", "index": component_id},
-                            size="sm",
-                            style={"opacity": "0", "transition": "opacity 0.2s"},
-                        )
-                    ),
-                    dmc.MenuDropdown(
-                        [
-                            dmc.MenuItem(
-                                "Align Left",
-                                id={"type": "align-left-btn", "index": component_id},
-                                leftSection=DashIconify(icon="tabler:align-left", width=16),
-                                n_clicks=0,
-                            ),
-                            dmc.MenuItem(
-                                "Align Center",
-                                id={"type": "align-center-btn", "index": component_id},
-                                leftSection=DashIconify(icon="tabler:align-center", width=16),
-                                n_clicks=0,
-                            ),
-                            dmc.MenuItem(
-                                "Align Right",
-                                id={"type": "align-right-btn", "index": component_id},
-                                leftSection=DashIconify(icon="tabler:align-right", width=16),
-                                n_clicks=0,
-                            ),
-                        ]
-                    ),
-                ],
-                id={"type": "alignment-menu", "index": component_id},
-            ),
             # Hidden edit button (needed for callback infrastructure)
             dmc.ActionIcon(
                 DashIconify(icon="material-symbols:edit", width=12),

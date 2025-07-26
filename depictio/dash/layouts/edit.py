@@ -199,6 +199,7 @@ def _create_component_buttons(
     create_edit_button,
     create_duplicate_button,
     create_reset_button,
+    create_alignment_button=None,
 ):
     """Create action buttons based on component type and configuration.
 
@@ -230,6 +231,10 @@ def _create_component_buttons(
         },
         "table": {"orientation": "horizontal", "buttons": ["drag", "remove", "duplicate"]},
         "jbrowse": {"orientation": "horizontal", "buttons": ["drag", "remove", "duplicate"]},
+        "text": {
+            "orientation": "horizontal",
+            "buttons": ["drag", "remove", "edit", "duplicate", "alignment"],
+        },  # Text components get alignment button
         "default": {
             "orientation": "horizontal",
             "buttons": ["drag", "remove", "edit", "duplicate"],
@@ -257,6 +262,10 @@ def _create_component_buttons(
         "duplicate": create_duplicate_button,
         "reset": create_reset_button,
     }
+
+    # Add alignment button only if the function is provided
+    if create_alignment_button is not None:
+        button_functions["alignment"] = create_alignment_button
 
     # Create the actual button components
     button_components = [button_functions[btn]() for btn in button_list]
@@ -397,6 +406,46 @@ def enable_box_edit_mode(
             children=DashIconify(icon="bx:reset", width=16, color="white"),
         )
 
+    def create_alignment_button():
+        from depictio.dash.component_metadata import get_dmc_button_color
+
+        return dmc.Menu(
+            [
+                dmc.MenuTarget(
+                    dmc.ActionIcon(
+                        DashIconify(icon="tabler:align-left", width=16),
+                        id={"type": "alignment-menu-btn", "index": f"{btn_index}"},
+                        color=get_dmc_button_color("text"),
+                        variant="filled",
+                        size="sm",
+                    )
+                ),
+                dmc.MenuDropdown(
+                    [
+                        dmc.MenuItem(
+                            "Align Left",
+                            id={"type": "align-left-btn", "index": f"{btn_index}"},
+                            leftSection=DashIconify(icon="tabler:align-left", width=16),
+                            n_clicks=0,
+                        ),
+                        dmc.MenuItem(
+                            "Align Center",
+                            id={"type": "align-center-btn", "index": f"{btn_index}"},
+                            leftSection=DashIconify(icon="tabler:align-center", width=16),
+                            n_clicks=0,
+                        ),
+                        dmc.MenuItem(
+                            "Align Right",
+                            id={"type": "align-right-btn", "index": f"{btn_index}"},
+                            leftSection=DashIconify(icon="tabler:align-right", width=16),
+                            n_clicks=0,
+                        ),
+                    ]
+                ),
+            ],
+            id={"type": "alignment-menu", "index": f"{btn_index}"},
+        )
+
     if switch_state:
         # Create buttons based on component type and configuration
         buttons = _create_component_buttons(
@@ -408,6 +457,7 @@ def enable_box_edit_mode(
             create_edit_button,
             create_duplicate_button,
             create_reset_button,
+            create_alignment_button,
         )
         # if fresh:
         #     buttons = dmc.Group([remove_button], grow=False, gap="xl", style={"margin-left": "12px"})

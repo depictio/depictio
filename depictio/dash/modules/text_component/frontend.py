@@ -270,30 +270,17 @@ def register_callbacks_text_component(app):
                     if (container.hasAttribute('data-interactions-processed')) return;
                     container.setAttribute('data-interactions-processed', 'true');
 
-                    // Find the alignment menu button within this container
-                    const alignmentBtn = container.querySelector('[id*="alignment-menu-btn"]');
-
-                    // Hover effects
+                    // Hover effects for text containers
                     container.addEventListener('mouseenter', function() {
                         this.style.border = '1px dashed #ddd';
                         this.style.backgroundColor = 'var(--app-surface-color, #f9f9f9)';
                         this.style.cursor = 'pointer';
-
-                        // Show alignment menu button on hover
-                        if (alignmentBtn) {
-                            alignmentBtn.style.opacity = '1';
-                        }
                     });
 
                     container.addEventListener('mouseleave', function() {
                         this.style.border = '1px solid transparent';
                         this.style.backgroundColor = 'transparent';
                         this.style.cursor = 'default';
-
-                        // Hide alignment menu button when not hovering
-                        if (alignmentBtn) {
-                            alignmentBtn.style.opacity = '0';
-                        }
                     });
 
                     // Find the editable title and edit button within this container
