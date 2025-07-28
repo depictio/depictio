@@ -27,7 +27,8 @@ dependencies:
   - mypy-boto3-s3
   - numpy==2.2.3
   - pandas==2.2.3
-  - playwright==1.50.1
+  - playwright
+  # - playwright==1.50.1
   - plotly_express
   # - plotly_express=0.4.1
   - polars==1.22.0
@@ -35,7 +36,8 @@ dependencies:
   - pydantic-settings==2.7.1
   - pyjwt==2.10.1
   - pymongo==4.11
-  - pytest-playwright==0.7.0
+  - pytest-playwright
+  # - pytest-playwright==0.7.0
   - python==3.12.9
   - python-dotenv
   - python-jose==3.3.0

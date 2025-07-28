@@ -3,7 +3,6 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from bson import ObjectId
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from depictio.api.v1.configs.config import settings
@@ -547,7 +546,7 @@ async def navigate_with_hybrid_strategy(page, url: str, max_retries: int = 2) ->
 @utils_endpoint_router.get("/screenshot-dash-fixed/{dashboard_id}")
 async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
     """
-    Fixed screenshot endpoint with proper authentication handling, retries, and service readiness checks
+    Minimal screenshot endpoint - just take a full page screenshot
     """
     from playwright.async_api import async_playwright
 
@@ -556,26 +555,10 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
     Path(output_folder).mkdir(parents=True, exist_ok=True)
 
     try:
-        # Get authentication data
+        # Get auth token
         current_user = await UserBeanie.find_one({"email": "admin@example.com"})
         if not current_user:
             raise HTTPException(status_code=404, detail="Admin user not found")
-
-        logger.info(f"🔑 Current user: {current_user.email} ; {current_user.id}")
-
-        # Fetch all  tokens for the current user
-        logger.info("🔑 Fetching all tokens for the current user...")
-        tokens = await TokenBeanie.find({"user_id": ObjectId(current_user.id)}).to_list()
-        logger.info(f"🔑 Found {len(tokens)} tokens for user {current_user.email}")
-        for token in tokens:
-            logger.info(f"🔑 Token: {token.access_token} ; Expire: {token.expire_datetime}")
-
-        # Show current datetime for debugging
-        logger.info(f"🔑 Current datetime: {datetime.now()}")
-
-        logger.info(
-            f"🔑 Current datetime strftime : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        )
 
         token = await TokenBeanie.find_one(
             {
@@ -583,18 +566,15 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
                 "refresh_expire_datetime": {"$gt": datetime.now()},
             }
         )
-
-        logger.info(f"🔑 Selected token: {token.access_token if token else 'None'}")
         if not token:
             raise HTTPException(status_code=404, detail="Valid token not found")
 
-        # Prepare token data for localStorage
+        # Prepare token data
         token_data = token.model_dump(exclude_none=True)
         token_data["_id"] = str(token_data.pop("id", None))
         token_data["user_id"] = str(token_data["user_id"])
         token_data["logged_in"] = True
 
-        # Convert datetime objects to strings
         if isinstance(token_data.get("expire_datetime"), datetime):
             token_data["expire_datetime"] = token_data["expire_datetime"].strftime(
                 "%Y-%m-%d %H:%M:%S"
@@ -603,248 +583,48 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
             token_data["created_at"] = token_data["created_at"].strftime("%Y-%m-%d %H:%M:%S")
 
         token_data_json = json.dumps(token_data)
-        logger.info(f"🔑 Token data prepared: {token_data}")
 
-        # Use the exact same pattern as the working dashboard endpoint
+        # Simple browser screenshot
         async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                args=[
-                    "--no-sandbox",
-                    "--disable-setuid-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-web-security",
-                    "--disable-features=VizDisplayCompositor",
-                ],
-            )
-            context = await browser.new_context(viewport={"width": 1920, "height": 1080})
-            page = await context.new_page()
+            browser = await p.chromium.launch(headless=True)
+            page = await browser.new_page(viewport={"width": 1920, "height": 1080})
 
-            # Set up console and error logging
-            def log_console(msg):
-                logger.info(f"🖥️ Browser Console [{msg.type}]: {msg.text}")
+            dashboard_url = f"{settings.dash.internal_url}/dashboard/{dashboard_id}"
+            logger.info(f"📸 Taking screenshot of: {dashboard_url}")
 
-            def log_page_error(error):
-                logger.error(f"❌ Browser Error: {error}")
+            # Set auth and navigate
+            await page.goto(settings.dash.internal_url)
+            await page.evaluate(f"localStorage.setItem('local-store', '{token_data_json}')")
+            await page.goto(dashboard_url, timeout=30000)
 
-            page.on("console", log_console)
-            page.on("pageerror", log_page_error)
+            # Simple wait and screenshot - target Mantine AppShell main
+            await page.wait_for_timeout(5000)
 
-            working_base_url = settings.dash.internal_url
-            # working_base_url = "http://depictio-frontend:5080"
-            dashboard_url = f"{working_base_url}/dashboard/{dashboard_id}"
-
-            # Step 0: Check service readiness before attempting screenshot (environment-aware)
-            logger.info("🔍 Step 0: Checking service readiness...")
-            if not await check_service_readiness(working_base_url):
-                raise HTTPException(
-                    status_code=503, detail=f"Frontend service not ready: {working_base_url}"
-                )
-
-            logger.info("🚀 Step 1: Navigate to root page first")
-            # First, go to the root page to establish session with screenshot-optimized navigation
-            root_success, root_method = await navigate_for_screenshot(page, working_base_url)
-            if not root_success:
-                raise HTTPException(
-                    status_code=503,
-                    detail=f"Failed to navigate to frontend service: {working_base_url}",
-                )
-            logger.info(f"📊 Root navigation successful with: {root_method}")
-            await asyncio.sleep(2)
-
-            logger.info("🔑 Step 2: Set authentication in localStorage")
-            # Set the authentication token
-            await page.evaluate(f"""
-                () => {{
-                    localStorage.setItem('local-store', '{token_data_json}');
-                    console.log('Token set in localStorage:', localStorage.getItem('local-store'));
-                }}
-            """)
-
-            logger.info("🔄 Step 3: Navigate to dashboard with auth")
-            # Now navigate to the dashboard with screenshot-optimized navigation
-            dashboard_success, dashboard_method = await navigate_for_screenshot(page, dashboard_url)
-            if not dashboard_success:
-                logger.warning("⚠️ Failed to navigate to dashboard, attempting fallback methods...")
-                # Fallback: try basic navigation without retries
-                try:
-                    await page.goto(
-                        dashboard_url, timeout=120000, wait_until="domcontentloaded"
-                    )  # Longer timeout
-                    dashboard_method = "fallback_basic_navigation_120s_timeout"
-                    logger.info(
-                        f"📊 Dashboard navigation successful with fallback: {dashboard_method}"
-                    )
-                except Exception as e:
-                    logger.error(f"❌ Dashboard navigation failed completely: {e}")
-                    raise HTTPException(
-                        status_code=503, detail=f"Failed to navigate to dashboard: {dashboard_url}"
-                    )
-            else:
-                logger.info(f"📊 Dashboard navigation successful with: {dashboard_method}")
-            await asyncio.sleep(3)
-
-            # Check if we're still on the auth page
-            current_url = page.url
-            logger.info(f"📍 Current URL after navigation: {current_url}")
-
-            if "/auth" in current_url:
-                logger.warning("⚠️ Still on auth page, trying additional auth methods...")
-
-                # Try setting additional auth data
-                await page.evaluate(f"""
-                    () => {{
-                        // Try different localStorage keys that might be used
-                        localStorage.setItem('auth-token', '{token.access_token}');
-                        localStorage.setItem('user-data', '{json.dumps(current_user.model_dump(exclude_none=True))}');
-                        localStorage.setItem('authenticated', 'true');
-
-                        // Also try sessionStorage
-                        sessionStorage.setItem('local-store', '{token_data_json}');
-                        sessionStorage.setItem('auth-token', '{token.access_token}');
-
-                        console.log('Additional auth data set');
-                    }}
-                """)
-
-                # Try reloading the page
-                await page.reload(wait_until="domcontentloaded")
-                await asyncio.sleep(3)
-
-                # Try navigating to dashboard again with hybrid strategy
-                retry_success, retry_method = await navigate_with_hybrid_strategy(
-                    page, dashboard_url, max_retries=1
-                )
-                if not retry_success:
-                    logger.warning("⚠️ Retry navigation to dashboard failed")
-                else:
-                    logger.info(f"📊 Retry navigation successful with: {retry_method}")
-                    dashboard_method = f"auth_retry_{retry_method}"
-                await asyncio.sleep(3)
-
-                current_url = page.url
-                logger.info(f"📍 URL after auth retry: {current_url}")
-
-                # If still on auth page, try a different approach
-                if "/auth" in current_url:
-                    logger.warning("⚠️ Auth page persistent, trying direct dashboard access...")
-
-                    # Try setting the URL directly and forcing navigation
-                    await page.evaluate(f"""
-                        () => {{
-                            window.history.pushState(null, '', '{dashboard_url}');
-                            window.location.href = '{dashboard_url}';
-                        }}
-                    """)
-                    await asyncio.sleep(5)
-
-            # Wait for dashboard content to load with environment-specific timeouts
-            logger.info("⏳ Waiting for dashboard content...")
-            element_timeout = settings.performance.browser_element_timeout
-            stabilization_wait = (
-                settings.performance.screenshot_stabilization_wait / 1000
-            )  # Convert ms to seconds
-
+            # Try to screenshot Mantine AppShell main content
             try:
-                # Wait for dashboard-specific content with environment-specific timeout
-                await page.wait_for_selector("div#page-content", timeout=element_timeout)
-                logger.info("✅ Found page-content div")
-            except Exception:
-                logger.warning("⚠️ page-content div not found, trying alternative selectors...")
-                # Try waiting for other common dashboard elements
-                alternative_selectors = ["div#app", "div[data-dash-app]", "body"]
-                for selector in alternative_selectors:
-                    try:
-                        await page.wait_for_selector(
-                            selector, timeout=element_timeout // 3
-                        )  # Shorter timeout for alternatives
-                        logger.info(f"✅ Found alternative selector: {selector}")
-                        break
-                    except Exception:
-                        continue
+                main_element = await page.query_selector(".mantine-AppShell-main")
+                if main_element:
+                    await main_element.screenshot(path=output_file)
+                    logger.info("📸 AppShell main screenshot taken")
                 else:
-                    logger.warning("⚠️ No dashboard elements found, continuing anyway...")
-
-            # Give extra time for any dynamic content to load (environment-specific)
-            logger.info("⏳ Waiting for dynamic content to stabilize...")
-            await asyncio.sleep(
-                stabilization_wait * 2
-            )  # Double stabilization wait for final content
-
-            # Remove debug elements
-            await page.evaluate("""
-                () => {
-                    const debugMenus = document.querySelectorAll('.dash-debug-menu, .dash-debug-menu__outer');
-                    debugMenus.forEach(menu => menu.remove());
-                }
-            """)
-
-            # Take screenshot with environment-specific timeout
-            logger.info("📸 Taking screenshot...")
-            final_url = page.url
-
-            # Use dedicated screenshot capture timeout (production needs longer due to rendering complexity)
-            screenshot_capture_timeout = settings.performance.screenshot_capture_timeout
-            logger.info(
-                f"🎯 Screenshot capture timeout set to {screenshot_capture_timeout}ms for production robustness"
-            )
-
-            try:
-                # Try to screenshot the main content area with timeout
-                element = await page.query_selector("div#page-content")
-                if element and await element.is_visible():
-                    await element.screenshot(
-                        path=output_file, type="png", timeout=screenshot_capture_timeout
-                    )
-                    logger.info("📸 Screenshot of page-content taken")
-                else:
-                    # Fallback to full page with timeout
-                    await page.screenshot(
-                        path=output_file,
-                        full_page=True,
-                        type="png",
-                        timeout=screenshot_capture_timeout,
-                    )
+                    # Fallback to full page
+                    await page.screenshot(path=output_file, full_page=True)
                     logger.info("📸 Full page screenshot taken (fallback)")
             except Exception as e:
-                logger.warning(f"⚠️ Screenshot error: {e}")
-                try:
-                    # Final fallback with even longer timeout
-                    await page.screenshot(
-                        path=output_file,
-                        full_page=True,
-                        type="png",
-                        timeout=screenshot_capture_timeout * 2,
-                    )
-                    logger.info("📸 Basic screenshot taken with extended timeout")
-                except Exception as final_e:
-                    logger.error(f"❌ Final screenshot attempt failed: {final_e}")
-                    raise final_e
+                logger.warning(f"AppShell main screenshot failed: {e}, using full page")
+                await page.screenshot(path=output_file, full_page=True)
 
             await browser.close()
+            logger.info("📸 Screenshot taken")
 
-            # Verify screenshot was created
-            if not Path(output_file).exists():
-                raise HTTPException(status_code=500, detail="Screenshot file was not created")
-
-            return {
-                "success": True,
-                "message": "Screenshot taken with improved resilience and retry logic",
-                "dashboard_url": dashboard_url,
-                "final_url": final_url,
-                "redirected_to_auth": "/auth" in final_url,
-                "screenshot_path": output_file,
-                "screenshot_size": Path(output_file).stat().st_size,
-                "auth_method": "localStorage with fallbacks",
-                "navigation_methods": {
-                    "root_navigation": root_method,
-                    "dashboard_navigation": dashboard_method,
-                },
-                "timestamp": datetime.now().isoformat(),
-            }
+        return {
+            "success": True,
+            "message": f"Screenshot saved to {output_file}",
+            "screenshot_path": output_file,
+        }
 
     except Exception as e:
-        logger.error(f"❌ Screenshot failed: {str(e)}")
+        logger.error(f"❌ Screenshot error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Screenshot failed: {str(e)}")
 
 

@@ -518,30 +518,30 @@ def register_callbacks_save(app):
 
     @app.callback(
         Output("success-modal-dashboard", "is_open"),
-        [
-            Input("save-button-dashboard", "n_clicks"),
-            Input("success-modal-close", "n_clicks"),
-        ],
-        [State("success-modal-dashboard", "is_open")],
+        Input("save-button-dashboard", "n_clicks"),
+        prevent_initial_call=True,
     )
-    def toggle_success_modal_dashboard(n_save, n_close, is_open):
-        ctx = dash.callback_context
+    def toggle_success_modal_dashboard(n_save):
+        if n_save:
+            return True
+        raise dash.exceptions.PreventUpdate
 
-        if not ctx.triggered:
-            raise dash.exceptions.PreventUpdate
-
-        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
-
-        if trigger_id == "save-button-dashboard":
-            if n_save is None or n_save == 0:
-                raise dash.exceptions.PreventUpdate
-            else:
-                return True
-
-        elif trigger_id == "success-modal-close":
-            if n_close is None or n_close == 0:
-                raise dash.exceptions.PreventUpdate
-            else:
-                return False
-
-        return is_open
+    # Auto-dismiss modal after 3 seconds
+    app.clientside_callback(
+        """
+        function(is_open) {
+            if (is_open) {
+                setTimeout(function() {
+                    // Find and click outside to close modal
+                    const backdrop = document.querySelector('.modal-backdrop');
+                    if (backdrop) {
+                        backdrop.click();
+                    }
+                }, 3000);
+            }
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("success-modal-dashboard", "id"),
+        Input("success-modal-dashboard", "is_open"),
+    )

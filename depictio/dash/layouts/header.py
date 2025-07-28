@@ -302,17 +302,12 @@ def _create_backend_components():
                 ),
                 style={"background-color": "#F0FFF0"},
             ),
-            dbc.ModalFooter(
-                dbc.Button(
-                    "Close",
-                    id="success-modal-close",
-                    className="ml-auto",
-                    color="success",
-                )
-            ),
         ],
         id="success-modal-dashboard",
+        is_open=False,
         centered=True,
+        backdrop=True,  # Allow clicking outside to close
+        keyboard=True,  # Allow Escape key to close
     )
 
     backend_stores = html.Div(
