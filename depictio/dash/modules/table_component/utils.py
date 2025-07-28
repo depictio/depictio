@@ -143,9 +143,12 @@ def build_table(**kwargs):
 
     # Add data columns with enhanced filtering and sorting support
     if cols:
-        data_columns = [
-            {
-                "field": " ".join(c.split(".")),
+        data_columns = []
+        for c, e in cols.items():  # type: ignore[possibly-unbound-attribute]
+            column_def = {
+                "headerName": " ".join(
+                    word.capitalize() for word in c.split(".")
+                ),  # Transform display name
                 "headerTooltip": f"Column type: {e['type']}",
                 "filter": e["filter"],
                 "floatingFilter": e.get("floatingFilter", False),
@@ -154,8 +157,21 @@ def build_table(**kwargs):
                 "resizable": True,  # Enable column resizing
                 "minWidth": 150,  # Ensure readable column width
             }
-            for c, e in cols.items()  # type: ignore[possibly-unbound-attribute]
-        ]
+
+            # Handle field names with dots - replace dots with underscores
+            if "." in c:
+                logger.debug(
+                    f"🔍 DEBUG: Found column with dot: '{c}', replacing dots with underscores"
+                )
+                # Create a safe field name by replacing dots with underscores
+                safe_field_name = c.replace(".", "_")
+                column_def["field"] = safe_field_name
+                logger.debug(f"🔍 DEBUG: Column def for '{c}': field='{safe_field_name}'")
+            else:
+                logger.debug(f"🔍 DEBUG: Regular column: '{c}', using field")
+                column_def["field"] = c  # Use field for simple names
+
+            data_columns.append(column_def)
         columnDefs.extend(data_columns)
 
     # if description in col sub dict, update headerTooltip

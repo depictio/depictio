@@ -517,6 +517,19 @@ def register_callbacks_table_component(app):
 
             # Convert to format expected by AG Grid
             pandas_df = partial_df.to_pandas()
+
+            # Transform column names to replace dots with underscores for AgGrid compatibility
+            column_mapping = {}
+            for col in pandas_df.columns:
+                if "." in col:
+                    new_col = col.replace(".", "_")
+                    column_mapping[col] = new_col
+                    logger.debug(f"🔍 DEBUG: Renaming column '{col}' to '{new_col}' for AgGrid")
+
+            if column_mapping:
+                pandas_df = pandas_df.rename(columns=column_mapping)
+                logger.debug(f"🔍 DEBUG: Transformed columns: {list(pandas_df.columns)}")
+
             # Add ID field for SpinnerCellRenderer (following documentation example)
             pandas_df.reset_index(drop=True, inplace=True)
             pandas_df["ID"] = range(start_row, start_row + len(pandas_df))
