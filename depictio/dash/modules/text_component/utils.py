@@ -1,9 +1,53 @@
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
+import httpx
 from dash import dcc, html
 from dash_iconify import DashIconify
 
+from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
+
+
+def get_first_available_wf_dc_for_text(dashboard_id, token):
+    """
+    Get the first available workflow ID and data collection ID that supports text components.
+
+    Text components are mapped to 'table' data collection type, so this function finds
+    the first workflow that has a 'table' type data collection.
+
+    Args:
+        dashboard_id (str): Dashboard ID to get project context
+        token (str): Authentication token
+
+    Returns:
+        tuple: (wf_id, dc_id) or (None, None) if no suitable workflow found
+    """
+    try:
+        # Get project from dashboard ID
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/projects/get/from_dashboard_id/{dashboard_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        response.raise_for_status()
+        project = response.json()
+
+        all_wf_dc = project["workflows"]
+
+        # Find first workflow that has a 'table' type data collection (which supports text components)
+        for wf in all_wf_dc:
+            for dc in wf["data_collections"]:
+                if dc["config"]["type"] == "table":
+                    logger.info(
+                        f"Found suitable workflow for text component: wf_id={wf['id']}, dc_id={dc['id']}"
+                    )
+                    return wf["id"], dc["id"]
+
+        logger.warning("No suitable workflow/data collection found for text component")
+        return None, None
+
+    except Exception as e:
+        logger.error(f"Error getting first available wf/dc for text component: {e}")
+        return None, None
 
 
 def create_inline_editable_text(
@@ -187,7 +231,37 @@ def build_text(**kwargs):
     wf_id = kwargs.get("wf_id", None)
     dc_id = kwargs.get("dc_id", None)
 
-    logger.info(f"Building text component with index: {index}, stepper: {stepper}")
+    # CRITICAL FIX: Instead of using None, get first available wf_id and dc_id for text components
+    # This makes text components compatible with the existing data processing pipeline
+    if wf_id is None or dc_id is None:
+        # Try to get dashboard context from kwargs
+        access_token = kwargs.get("access_token")
+        dashboard_id = kwargs.get("dashboard_id")
+
+        # If we have the necessary context, get first available wf_id and dc_id
+        if access_token and dashboard_id:
+            try:
+                first_wf_id, first_dc_id = get_first_available_wf_dc_for_text(
+                    dashboard_id, access_token
+                )
+                if first_wf_id and first_dc_id:
+                    wf_id = wf_id or first_wf_id
+                    dc_id = dc_id or first_dc_id
+                    logger.info(
+                        f"Using first available wf_id={wf_id}, dc_id={dc_id} for text component"
+                    )
+                else:
+                    logger.warning(
+                        "Could not find suitable wf_id/dc_id for text component, keeping as None"
+                    )
+            except Exception as e:
+                logger.error(f"Error getting first available wf_id/dc_id for text component: {e}")
+        else:
+            logger.info("No dashboard context available, keeping wf_id/dc_id as None")
+
+    logger.info(
+        f"Building text component with index: {index}, stepper: {stepper}, wf_id: {wf_id}, dc_id: {dc_id}"
+    )
 
     if stepper:
         # Check if index already has -tmp to avoid double suffixes
@@ -214,7 +288,6 @@ def build_text(**kwargs):
         data={
             "index": data_index,  # Store the clean index without -tmp
             "component_type": "text",
-            "title": str(title) if title else None,
             "content": str(content) if content else "# Section Title",
             "parent_index": str(parent_index) if parent_index else None,
             "show_toolbar": bool(show_toolbar),

@@ -38,6 +38,7 @@ def register_callbacks_text_component(app):
     def toggle_edit_mode(input_submit, input_blur, input_value, store_data):
         """Toggle between display and edit modes."""
         ctx = callback_context
+        logger.info(f"Toggle edit mode triggered by: {ctx.triggered}")
         if not ctx.triggered:
             return dash.no_update, dash.no_update, dash.no_update
 
@@ -256,6 +257,107 @@ def register_callbacks_text_component(app):
 
         return new_style, new_store_data, icon
 
+    # Sync text-store updates with stored-metadata-component for save functionality
+    @app.callback(
+        Output({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        Input({"type": "text-store", "index": MATCH}, "data"),
+        State({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        prevent_initial_call=False,  # Allow initial calls to create missing stores
+    )
+    def sync_text_content_for_save(text_store_data, stored_metadata):
+        """
+        Sync text-store updates with stored-metadata-component to ensure
+        text changes trigger dashboard saves properly.
+
+        CRITICAL: This callback creates stored-metadata-component stores if they don't exist,
+        ensuring text components are included in the save architecture.
+
+        IMPORTANT: During dashboard restore, this callback should preserve existing database
+        metadata and only create new metadata for genuinely new text components.
+        """
+        if not text_store_data:
+            return dash.no_update
+
+        # Get the updated text from text-store
+        updated_text = text_store_data.get("text", "")
+
+        # Extract component index from callback context
+        from dash import callback_context
+
+        ctx = callback_context
+        if not ctx.triggered:
+            return dash.no_update
+
+        # Get the component index from the triggered input
+        triggered_input = ctx.triggered[0]["prop_id"]
+        try:
+            import json
+
+            component_id_dict = json.loads(triggered_input.split(".")[0])
+            component_index = component_id_dict.get("index", "unknown")
+        except (json.JSONDecodeError, KeyError, IndexError):
+            component_index = "unknown"
+
+        # If stored_metadata doesn't exist, create it
+        if not stored_metadata:
+            logger.warning(
+                f"🔧 CREATING stored-metadata-component for text component {component_index}"
+            )
+
+            # CRITICAL FIX: Use first available wf_id and dc_id instead of None
+            # This makes text components compatible with the data processing pipeline
+
+            # Try to get dashboard context to determine wf_id and dc_id
+            # Note: In callback context, we need to extract dashboard_id from URL or other context
+            # For now, we'll set to None but this could be enhanced with proper context extraction
+            wf_id = None
+            dc_id = None
+
+            # TODO: Enhance this to get dashboard context from callback if available
+            # This would require extracting dashboard_id from URL context or other means
+
+            # Create new metadata store for this text component
+            new_metadata = {
+                "index": component_index,
+                "component_type": "text",
+                "content": updated_text,
+                "title": None,
+                "parent_index": None,
+                "show_toolbar": True,
+                "show_title": False,
+                "wf_id": wf_id,  # Will be None for now, but could be enhanced
+                "dc_id": dc_id,  # Will be None for now, but could be enhanced
+            }
+            logger.warning(f"✅ CREATED text component metadata: {new_metadata}")
+            return new_metadata
+
+        # If stored_metadata exists, check if it needs updating
+        # CRITICAL FIX: During dashboard restore, preserve existing metadata unless there's a real change
+        existing_content = stored_metadata.get("content", "")
+
+        # If text hasn't changed from what's already stored, don't update
+        if existing_content == updated_text:
+            logger.debug(
+                f"📋 No content change for text component {component_index}, preserving existing metadata"
+            )
+            return dash.no_update
+
+        # Only update if there's a real content change (user edited the text)
+        # This prevents overwriting database metadata during restore
+        logger.info(
+            f"📝 CONTENT CHANGED for text component {component_index}: '{existing_content}' -> '{updated_text}'"
+        )
+
+        # Update the stored metadata with new content, preserving other fields
+        updated_metadata = stored_metadata.copy()
+        updated_metadata["content"] = updated_text
+
+        logger.info(
+            f"📝 UPDATED text metadata for component {stored_metadata.get('index')}: '{updated_text}'"
+        )
+
+        return updated_metadata
+
     # Client-side hover effects and double-click functionality for inline editable text
     app.clientside_callback(
         """
@@ -336,6 +438,10 @@ def register_callbacks_text_component(app):
             logger.debug(f"Processing temporary component ID in stepper mode: {id['index']}")
             # For temporary components in stepper mode, create a basic text component
             try:
+                # Extract dashboard_id from pathname for context
+                dashboard_id = pathname.split("/")[-1] if pathname else None
+                access_token = data.get("access_token") if data else None
+
                 text_kwargs = {
                     "index": id["index"],
                     "title": None,
@@ -344,8 +450,10 @@ def register_callbacks_text_component(app):
                     "build_frame": True,
                     "show_toolbar": True,
                     "show_title": False,
-                    "wf_id": None,  # Text components don't need wf_id
-                    "dc_id": None,  # Text components don't need dc_id
+                    "wf_id": None,  # Will be auto-filled by build_text if context available
+                    "dc_id": None,  # Will be auto-filled by build_text if context available
+                    "dashboard_id": dashboard_id,  # Pass dashboard context for wf_id/dc_id lookup
+                    "access_token": access_token,  # Pass token for API calls
                 }
                 new_text = build_text(**text_kwargs)
                 return new_text
@@ -365,6 +473,10 @@ def register_callbacks_text_component(app):
         logger.info(f"dc_id: {dc_id} (optional for text components)")
 
         try:
+            # Extract dashboard_id from pathname for context
+            dashboard_id = pathname.split("/")[-1] if pathname else None
+            access_token = data.get("access_token") if data else None
+
             # Build the text component with configuration options
             text_kwargs = {
                 "index": id["index"],
@@ -374,8 +486,10 @@ def register_callbacks_text_component(app):
                 "build_frame": True,  # Use frame for editing with loading
                 "show_toolbar": True,  # Legacy parameter, not used
                 "show_title": False,  # No title needed for inline editable text components
-                "wf_id": None,  # Text components don't need wf_id
-                "dc_id": None,  # Text components don't need dc_id
+                "wf_id": None,  # Will be auto-filled by build_text if context available
+                "dc_id": None,  # Will be auto-filled by build_text if context available
+                "dashboard_id": dashboard_id,  # Pass dashboard context for wf_id/dc_id lookup
+                "access_token": access_token,  # Pass token for API calls
             }
             new_text = build_text(**text_kwargs)
             return new_text

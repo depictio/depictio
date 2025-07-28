@@ -128,8 +128,8 @@ def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
         "w": dimensions["w"],
         "h": dimensions["h"],
         "i": child_id,
-        "moved": False,
-        "static": False,
+        # "moved": False,
+        # "static": False,
     }
 
 
@@ -148,27 +148,6 @@ def update_nested_ids(component, old_index, new_index):
     elif isinstance(component, list):
         for item in component:
             update_nested_ids(item, old_index, new_index)
-
-
-def normalize_layout_data(layouts):
-    """Ensure all layout entries have consistent moved and static properties."""
-    if not layouts:
-        return []
-
-    normalized_layouts = []
-    for layout in layouts:
-        if isinstance(layout, dict):
-            # Ensure all required properties exist
-            normalized_layout = layout.copy()
-            if "moved" not in normalized_layout:
-                normalized_layout["moved"] = False
-            if "static" not in normalized_layout:
-                normalized_layout["static"] = False
-            normalized_layouts.append(normalized_layout)
-        else:
-            normalized_layouts.append(layout)
-
-    return normalized_layouts
 
 
 def fix_responsive_scaling(layout_data, metadata_list):
@@ -708,19 +687,20 @@ def register_callbacks_draggable(app):
 
                 # Clean any corrupted layouts and normalize properties
                 cleaned_layouts = clean_layout_data(raw_layouts)
-                normalized_layouts = normalize_layout_data(cleaned_layouts)
+                logger.info(f"Cleaned layouts: {cleaned_layouts}")
 
                 # CRITICAL: Remove orphaned layouts that don't have corresponding components
                 if draggable_children:
                     component_ids = set()
                     for child in draggable_children:
+                        logger.info(f"Processing child: {child}")
                         child_id = get_component_id(child)
                         if child_id:
                             component_ids.add(child_id)
 
                     # Filter layouts to only include those with matching components
                     matched_layouts = []
-                    for layout in normalized_layouts:
+                    for layout in cleaned_layouts:
                         layout_id = layout.get("i", "")
                         if layout_id in component_ids:
                             matched_layouts.append(layout)
@@ -730,11 +710,12 @@ def register_callbacks_draggable(app):
                             )
 
                     draggable_layouts = matched_layouts
+
                     logger.info(
-                        f"Layout validation: {len(raw_layouts)} raw -> {len(cleaned_layouts)} cleaned -> {len(normalized_layouts)} normalized -> {len(draggable_layouts)} matched"
+                        f"Matched layouts after cleaning: {len(matched_layouts)} from {len(cleaned_layouts)}"
                     )
                 else:
-                    draggable_layouts = normalized_layouts
+                    draggable_layouts = cleaned_layouts
                     logger.info(
                         f"Cleaned and normalized layouts loaded from storage: {len(raw_layouts)} -> {len(draggable_layouts)}"
                     )
@@ -916,18 +897,17 @@ def register_callbacks_draggable(app):
                     )
                     fixed_layouts = fix_responsive_scaling(input_draggable_layouts, stored_metadata)
                     # Normalize layout data to ensure consistent moved/static properties
-                    normalized_layouts = normalize_layout_data(fixed_layouts)
-                    state_stored_draggable_layouts[dashboard_id] = normalized_layouts
+                    state_stored_draggable_layouts[dashboard_id] = fixed_layouts
 
                     logger.info("🔄 LAYOUT UPDATE - Final stored layouts:")
-                    for i, layout in enumerate(normalized_layouts):
+                    for i, layout in enumerate(fixed_layouts):
                         logger.info(
                             f"  Stored Layout {i}: {layout.get('i')} -> {layout.get('w')}x{layout.get('h')} at ({layout.get('x')},{layout.get('y')})"
                         )
 
                     return (
                         draggable_children,
-                        normalized_layouts,  # Return the normalized layout array
+                        fixed_layouts,  # Return the normalized layout array
                         dash.no_update,
                         state_stored_draggable_layouts,
                         dash.no_update,

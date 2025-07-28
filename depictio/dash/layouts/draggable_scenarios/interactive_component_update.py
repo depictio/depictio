@@ -415,6 +415,8 @@ def update_interactive_component(
 
     # Add or update the non-interactive components
     for component in stored_metadata:
+        logger.info(f"DEBUG - interactive_component_update - Processing component: {component}")
+
         if component["component_type"] not in ["jbrowse"]:
             # retrieve the key from df_dict_processed based on the wf_id and dc_id, checking which join encompasses the dc_id
             for key, df in df_dict_processed[component["wf_id"]].items():
@@ -467,36 +469,40 @@ def update_interactive_component(
             #     logger.debug(f"Card component type: {type(child)}")
 
             # Process component as native Dash component (no JSON conversion)
-            try:
-                logger.info(
-                    f"Processing {component['component_type']} component as native Dash component"
-                )
+            # try:
+            logger.info(
+                f"DEBUG update_interacteive - {component['component_type']} component as native Dash component"
+            )
 
-                # Pass the native component directly - preserves Loading wrappers and improves performance
-                child = enable_box_edit_mode(
-                    child,  # Native Dash component
-                    switch_state=switch_state,
-                    dashboard_id=dashboard_id,
-                    TOKEN=TOKEN,
-                )
-            except Exception as e:
-                logger.error(
-                    f"Error processing {component['component_type']} component (line 460 path): {e}"
-                )
-                # Fallback to prevent dashboard failure
-                fallback_child = {
-                    "type": "Div",
-                    "props": {
-                        "id": {"index": component.get("index", "unknown")},
-                        "children": f"Error loading {component['component_type']} component",
-                    },
-                }
-                child = enable_box_edit_mode(
-                    fallback_child,
-                    switch_state=switch_state,
-                    dashboard_id=dashboard_id,
-                    TOKEN=TOKEN,
-                )
+            # Pass the native component directly - preserves Loading wrappers and improves performance
+            child = enable_box_edit_mode(
+                child,  # Native Dash component
+                switch_state=switch_state,
+                dashboard_id=dashboard_id,
+                TOKEN=TOKEN,
+            )
+
+            if component["component_type"] == "text":
+                logger.info(f"DEBUG text component {child.id} with content: {child}")
+
+            # except Exception as e:
+            #     logger.error(
+            #         f"Error processing {component['component_type']} component (line 460 path): {e}"
+            #     )
+            #     # Fallback to prevent dashboard failure
+            #     fallback_child = {
+            #         "type": "Div",
+            #         "props": {
+            #             "id": {"index": component.get("index", "unknown")},
+            #             "children": f"Error loading {component['component_type']} component",
+            #         },
+            #     }
+            #     child = enable_box_edit_mode(
+            #         fallback_child,
+            #         switch_state=switch_state,
+            #         dashboard_id=dashboard_id,
+            #         TOKEN=TOKEN,
+            #     )
             children.append(child)
 
         elif component["component_type"] == "jbrowse":
@@ -520,6 +526,7 @@ def update_interactive_component(
                 dashboard_id=dashboard_id,
                 TOKEN=TOKEN,
             )
+
             children.append(child)
         # logger.info(f"ITERATIVE - len(children) - {len(children)}")
 

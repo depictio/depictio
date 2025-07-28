@@ -325,9 +325,9 @@ def register_callbacks_save(app):
             logger.info("=== BTN-DONE-EDIT PROCESSING COMPLETE ===")
 
         # Use draggable layout metadata if triggered by draggable
-        if "draggable" in triggered_id:
-            unique_metadata = dashboard_data.get("stored_metadata", unique_metadata)
-            # logger.info(f"Unique metadata after using draggable layout metadata: {unique_metadata}")
+        # if "draggable" in triggered_id:
+        #     unique_metadata = dashboard_data.get("stored_metadata", unique_metadata)
+        # logger.info(f"Unique metadata after using draggable layout metadata: {unique_metadata}")
 
         # Debug logging for layout data - COMPREHENSIVE TRACKING
         logger.info("=" * 80)

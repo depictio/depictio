@@ -90,67 +90,73 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
     # Process children with special handling for text components to avoid circular JSON
     processed_children = []
     for child, component_type in children:
-        try:
-            if component_type == "text":
-                # For text components, try to_plotly_json() first, but catch circular reference errors
-                logger.info(
-                    "Attempting to_plotly_json() for text component with circular reference protection"
-                )
-                try:
-                    child_json = child.to_plotly_json()
-                except (ValueError, TypeError) as e:
-                    if "circular" in str(e).lower() or "json" in str(e).lower():
-                        logger.warning(
-                            f"Circular reference detected in text component, using fallback approach: {e}"
-                        )
-                        # Create a minimal JSON structure for the text component
-                        # Extract the essential information without the problematic RichTextEditor
-                        child_json = {
-                            "type": "Div",
-                            "props": {
-                                "id": {
-                                    "index": child.id.get("index")
-                                    if hasattr(child, "id") and child.id
-                                    else "unknown"
-                                },
-                                "children": "Text Component (Circular Reference Avoided)",
-                            },
-                        }
-                    else:
-                        raise  # Re-raise if it's not a circular reference issue
+        logger.info(f"Processing child component: {child.id} of type {component_type}")
+        # try:
+        # if component_type == "text":
+        #     # For text components, try to_plotly_json() first, but catch circular reference errors
+        #     logger.info(
+        #         "Attempting to_plotly_json() for text component with circular reference protection"
+        #     )
+        #     try:
+        #         child_json = child.to_plotly_json()
+        #     except (ValueError, TypeError) as e:
+        #         if "circular" in str(e).lower() or "json" in str(e).lower():
+        #             logger.warning(
+        #                 f"Circular reference detected in text component, using fallback approach: {e}"
+        #             )
+        #             # Create a minimal JSON structure for the text component
+        #             # Extract the essential information without the problematic RichTextEditor
+        #             child_json = {
+        #                 "type": "Div",
+        #                 "props": {
+        #                     "id": {
+        #                         "index": child.id.get("index")
+        #                         if hasattr(child, "id") and child.id
+        #                         else "unknown"
+        #                     },
+        #                     "children": "Text Component (Circular Reference Avoided)",
+        #                 },
+        #             }
+        #         else:
+        #             raise  # Re-raise if it's not a circular reference issue
 
-                processed_child = enable_box_edit_mode(
-                    child_json,
-                    switch_state=edit_components_button,
-                    dashboard_id=dashboard_id,
-                    TOKEN=TOKEN,
-                )
-            else:
-                # For other components, use the standard to_plotly_json() approach
-                processed_child = enable_box_edit_mode(
-                    child.to_plotly_json(),
-                    switch_state=edit_components_button,
-                    dashboard_id=dashboard_id,
-                    TOKEN=TOKEN,
-                )
-            processed_children.append(processed_child)
-        except Exception as e:
-            logger.error(f"Error processing {component_type} component: {e}")
-            # Add a fallback component to prevent the entire dashboard from failing
-            fallback_child = {
-                "type": "Div",
-                "props": {
-                    "id": {"index": f"error-{component_type}"},
-                    "children": f"Error loading {component_type} component",
-                },
-            }
-            processed_child = enable_box_edit_mode(
-                fallback_child,
-                switch_state=edit_components_button,
-                dashboard_id=dashboard_id,
-                TOKEN=TOKEN,
+        #     processed_child = enable_box_edit_mode(
+        #         child_json,
+        #         switch_state=edit_components_button,
+        #         dashboard_id=dashboard_id,
+        #         TOKEN=TOKEN,
+        #     )
+        # else:
+        # For other components, use the standard to_plotly_json() approach
+        processed_child = enable_box_edit_mode(
+            child.to_plotly_json(),
+            switch_state=edit_components_button,
+            dashboard_id=dashboard_id,
+            TOKEN=TOKEN,
+        )
+        if component_type == "text":
+            logger.info(
+                f"Processed text component {processed_child.id} with content: {processed_child}"
             )
-            processed_children.append(processed_child)
+            logger.info(f"Processed child: {processed_child}")
+        processed_children.append(processed_child)
+        # except Exception as e:
+        #     logger.error(f"Error processing {component_type} component: {e}")
+        #     # Add a fallback component to prevent the entire dashboard from failing
+        #     fallback_child = {
+        #         "type": "Div",
+        #         "props": {
+        #             "id": {"index": f"error-{component_type}"},
+        #             "children": f"Error loading {component_type} component",
+        #         },
+        #     }
+        #     processed_child = enable_box_edit_mode(
+        #         fallback_child,
+        #         switch_state=edit_components_button,
+        #         dashboard_id=dashboard_id,
+        #         TOKEN=TOKEN,
+        #     )
+        #     processed_children.append(processed_child)
 
     children = processed_children
     # logger.info(f"Children: {children}")
@@ -164,7 +170,8 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
         dashboard_id=dashboard_id,
         theme=theme,  # Pass theme to interactive component updates
     )
-    # logger.info(f"Children: {children}")
+    logger.info(f"Updated children after interactive component processing: {children}")
+
     return children
 
 
