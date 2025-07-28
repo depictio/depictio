@@ -446,6 +446,10 @@ def update_interactive_component(
                 component["theme"] = theme
                 # logger.info(f"GRAPH COMPONENT - {component}")
 
+            # Debug: Log component data for text components before calling helper
+            if component["component_type"] == "text":
+                logger.info(f"DEBUG - Calling build_text with component data: {component}")
+
             child = helpers_mapping[component["component_type"]](**component)
 
             # Debug: Log component type for verification

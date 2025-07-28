@@ -253,40 +253,61 @@ def register_callbacks_text_component(app):
         new_store_data = store_data.copy()
         new_store_data["alignment"] = alignment
 
-        logger.info(f"Text alignment changed to: {alignment}")
+        logger.info(f"Text alignment changed to: {alignment} - this should trigger dashboard save")
 
         return new_style, new_store_data, icon
 
     # Sync text-store updates with stored-metadata-component for save functionality
     @app.callback(
         Output({"type": "stored-metadata-component", "index": MATCH}, "data"),
-        Input({"type": "text-store", "index": MATCH}, "data"),
+        [
+            Input({"type": "text-store", "index": MATCH}, "data"),
+            Input({"type": "align-left-btn", "index": MATCH}, "n_clicks"),
+            Input({"type": "align-center-btn", "index": MATCH}, "n_clicks"),
+            Input({"type": "align-right-btn", "index": MATCH}, "n_clicks"),
+        ],
         State({"type": "stored-metadata-component", "index": MATCH}, "data"),
-        prevent_initial_call=False,  # Allow initial calls to create missing stores
+        prevent_initial_call=False,  # Allow initial call to sync alignment from restored text-store
     )
-    def sync_text_content_for_save(text_store_data, stored_metadata):
+    def sync_text_content_for_save(
+        text_store_data, left_clicks, center_clicks, right_clicks, stored_metadata
+    ):
         """
-        Sync text-store updates with stored-metadata-component to ensure
-        text changes trigger dashboard saves properly.
+        Sync text-store updates and alignment button clicks with stored-metadata-component
+        to ensure text/alignment changes trigger dashboard saves properly.
 
-        CRITICAL: This callback creates stored-metadata-component stores if they don't exist,
-        ensuring text components are included in the save architecture.
+        CRITICAL: This callback only updates existing stored-metadata-component stores.
+        Store creation is handled by build_text() to prevent duplicate store conflicts.
 
-        IMPORTANT: During dashboard restore, this callback should preserve existing database
-        metadata and only create new metadata for genuinely new text components.
+        IMPORTANT: During dashboard restore, this callback preserves existing database
+        metadata and only updates when there are genuine content or alignment changes.
         """
-        if not text_store_data:
-            return dash.no_update
-
-        # Get the updated text from text-store
-        updated_text = text_store_data.get("text", "")
-
-        # Extract component index from callback context
+        # Extract component index and trigger information from callback context
         from dash import callback_context
 
         ctx = callback_context
         if not ctx.triggered:
             return dash.no_update
+
+        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+        logger.info(f"sync_text_content_for_save triggered by: {trigger_id}")
+
+        if not text_store_data:
+            return dash.no_update
+
+        # Get the updated text and alignment from text-store
+        updated_text = text_store_data.get("text", "")
+        updated_alignment = text_store_data.get("alignment", "left")
+
+        # If triggered by alignment button, ensure we capture the current alignment
+        if "align-" in trigger_id:
+            if "align-left-btn" in trigger_id:
+                updated_alignment = "left"
+            elif "align-center-btn" in trigger_id:
+                updated_alignment = "center"
+            elif "align-right-btn" in trigger_id:
+                updated_alignment = "right"
+            logger.info(f"Alignment button clicked, setting alignment to: {updated_alignment}")
 
         # Get the component index from the triggered input
         triggered_input = ctx.triggered[0]["prop_id"]
@@ -298,63 +319,38 @@ def register_callbacks_text_component(app):
         except (json.JSONDecodeError, KeyError, IndexError):
             component_index = "unknown"
 
-        # If stored_metadata doesn't exist, create it
+        # If stored_metadata doesn't exist yet, wait for build_text() to create it
+        # This prevents duplicate store creation but allows initial sync once store exists
         if not stored_metadata:
-            logger.warning(
-                f"🔧 CREATING stored-metadata-component for text component {component_index}"
+            logger.debug(
+                f"stored-metadata-component not ready yet for text component {component_index} - waiting for build_text()"
             )
-
-            # CRITICAL FIX: Use first available wf_id and dc_id instead of None
-            # This makes text components compatible with the data processing pipeline
-
-            # Try to get dashboard context to determine wf_id and dc_id
-            # Note: In callback context, we need to extract dashboard_id from URL or other context
-            # For now, we'll set to None but this could be enhanced with proper context extraction
-            wf_id = None
-            dc_id = None
-
-            # TODO: Enhance this to get dashboard context from callback if available
-            # This would require extracting dashboard_id from URL context or other means
-
-            # Create new metadata store for this text component
-            new_metadata = {
-                "index": component_index,
-                "component_type": "text",
-                "content": updated_text,
-                "title": None,
-                "parent_index": None,
-                "show_toolbar": True,
-                "show_title": False,
-                "wf_id": wf_id,  # Will be None for now, but could be enhanced
-                "dc_id": dc_id,  # Will be None for now, but could be enhanced
-            }
-            logger.warning(f"✅ CREATED text component metadata: {new_metadata}")
-            return new_metadata
+            # Return no_update to prevent creating duplicate stores
+            # The build_text() function should handle store creation
+            return dash.no_update
 
         # If stored_metadata exists, check if it needs updating
         # CRITICAL FIX: During dashboard restore, preserve existing metadata unless there's a real change
         existing_content = stored_metadata.get("content", "")
+        existing_alignment = stored_metadata.get("alignment", "left")
 
-        # If text hasn't changed from what's already stored, don't update
-        if existing_content == updated_text:
+        # If text and alignment haven't changed from what's already stored, don't update
+        if existing_content == updated_text and existing_alignment == updated_alignment:
             logger.debug(
-                f"📋 No content change for text component {component_index}, preserving existing metadata"
+                f"No content/alignment change for text component {component_index}, preserving existing metadata"
             )
             return dash.no_update
 
-        # Only update if there's a real content change (user edited the text)
+        # Only update if there's a real content or alignment change (user edited the text or changed alignment)
         # This prevents overwriting database metadata during restore
         logger.info(
-            f"📝 CONTENT CHANGED for text component {component_index}: '{existing_content}' -> '{updated_text}'"
+            f"Text alignment/content changed for component {component_index}: alignment '{existing_alignment}' -> '{updated_alignment}'"
         )
 
-        # Update the stored metadata with new content, preserving other fields
+        # Update the stored metadata with new content and alignment, preserving other fields
         updated_metadata = stored_metadata.copy()
         updated_metadata["content"] = updated_text
-
-        logger.info(
-            f"📝 UPDATED text metadata for component {stored_metadata.get('index')}: '{updated_text}'"
-        )
+        updated_metadata["alignment"] = updated_alignment
 
         return updated_metadata
 
@@ -450,6 +446,7 @@ def register_callbacks_text_component(app):
                     "build_frame": True,
                     "show_toolbar": True,
                     "show_title": False,
+                    "alignment": "left",  # Default text alignment
                     "wf_id": None,  # Will be auto-filled by build_text if context available
                     "dc_id": None,  # Will be auto-filled by build_text if context available
                     "dashboard_id": dashboard_id,  # Pass dashboard context for wf_id/dc_id lookup
@@ -486,6 +483,7 @@ def register_callbacks_text_component(app):
                 "build_frame": True,  # Use frame for editing with loading
                 "show_toolbar": True,  # Legacy parameter, not used
                 "show_title": False,  # No title needed for inline editable text components
+                "alignment": "left",  # Default text alignment
                 "wf_id": None,  # Will be auto-filled by build_text if context available
                 "dc_id": None,  # Will be auto-filled by build_text if context available
                 "dashboard_id": dashboard_id,  # Pass dashboard context for wf_id/dc_id lookup

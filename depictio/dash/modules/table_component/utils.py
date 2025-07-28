@@ -118,6 +118,7 @@ def build_table(**kwargs):
     # Add dash aggrid filters to the columns with enhanced filter configuration
     if cols:
         for c in cols:
+            logger.debug(f"Configuring column {c} with type {cols[c]['type']}")
             if c in cols and "type" in cols[c]:
                 logger.debug(f"Configuring column {c} with type {cols[c]['type']}")
                 if cols[c]["type"] == "object":
@@ -144,7 +145,7 @@ def build_table(**kwargs):
     if cols:
         data_columns = [
             {
-                "field": c,
+                "field": " ".join(c.split(".")),
                 "headerTooltip": f"Column type: {e['type']}",
                 "filter": e["filter"],
                 "floatingFilter": e.get("floatingFilter", False),

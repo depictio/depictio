@@ -228,6 +228,7 @@ def build_text(**kwargs):
     parent_index = kwargs.get("parent_index", None)
     show_toolbar = kwargs.get("show_toolbar", True)  # Legacy parameter
     show_title = kwargs.get("show_title", True)
+    alignment = kwargs.get("alignment", "left")  # Text alignment (fallback to left if missing)
     wf_id = kwargs.get("wf_id", None)
     dc_id = kwargs.get("dc_id", None)
 
@@ -260,8 +261,9 @@ def build_text(**kwargs):
             logger.info("No dashboard context available, keeping wf_id/dc_id as None")
 
     logger.info(
-        f"Building text component with index: {index}, stepper: {stepper}, wf_id: {wf_id}, dc_id: {dc_id}"
+        f"Building text component with index: {index}, stepper: {stepper}, wf_id: {wf_id}, dc_id: {dc_id}, alignment: {alignment}"
     )
+    logger.info(f"All kwargs passed to build_text: {list(kwargs.keys())}")
 
     if stepper:
         # Check if index already has -tmp to avoid double suffixes
@@ -292,6 +294,7 @@ def build_text(**kwargs):
             "parent_index": str(parent_index) if parent_index else None,
             "show_toolbar": bool(show_toolbar),
             "show_title": bool(show_title),
+            "alignment": str(alignment) if alignment else "left",  # Store text alignment
             "wf_id": wf_id,
             "dc_id": dc_id,
         },
@@ -321,7 +324,7 @@ def build_text(**kwargs):
         component_id=store_index,
         initial_text=clean_content,
         initial_order=initial_order,
-        initial_alignment="left",
+        initial_alignment=alignment,  # Use the alignment from kwargs or metadata
     )
 
     # Create the main content container
