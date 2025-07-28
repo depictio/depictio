@@ -597,22 +597,111 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
             await page.evaluate(f"localStorage.setItem('local-store', '{token_data_json}')")
             await page.goto(dashboard_url, timeout=30000)
 
-            # Simple wait and screenshot - target Mantine AppShell main
+            # Wait for dashboard content to render
             await page.wait_for_timeout(5000)
 
-            # Try to screenshot Mantine AppShell main content
+            # Wait for dashboard components to render with proper dimensions
             try:
-                main_element = await page.query_selector(".mantine-AppShell-main")
-                if main_element:
-                    await main_element.screenshot(path=output_file)
-                    logger.info("📸 AppShell main screenshot taken")
-                else:
-                    # Fallback to full page
-                    await page.screenshot(path=output_file, full_page=True)
-                    logger.info("📸 Full page screenshot taken (fallback)")
+                await page.wait_for_function(
+                    """
+                    () => {
+                        const components = document.querySelectorAll('.react-grid-item');
+                        if (components.length === 0) return false;
+
+                        // Check if at least one component has meaningful dimensions
+                        for (let component of components) {
+                            const rect = component.getBoundingClientRect();
+                            if (rect.width > 0 && rect.height > 0) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
+                """,
+                    timeout=10000,
+                )
+                logger.info("✅ Dashboard components rendered with proper dimensions")
             except Exception as e:
-                logger.warning(f"AppShell main screenshot failed: {e}, using full page")
-                await page.screenshot(path=output_file, full_page=True)
+                logger.warning(f"⚠️ Timeout waiting for components to render: {e}")
+
+            # Component-based screenshot targeting (from working prototype)
+            try:
+                components = await page.query_selector_all(".react-grid-item")
+                logger.info(f"📸 Found {len(components)} dashboard components")
+
+                if components and len(components) > 0:
+                    # Create composite view of all components (strategy from prototype)
+                    composite_element = await page.evaluate("""
+                        () => {
+                            const components = document.querySelectorAll('.react-grid-item');
+                            if (components.length === 0) return null;
+
+                            // Get bounding box of all components
+                            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+                            components.forEach(component => {
+                                const rect = component.getBoundingClientRect();
+                                minX = Math.min(minX, rect.left);
+                                minY = Math.min(minY, rect.top);
+                                maxX = Math.max(maxX, rect.right);
+                                maxY = Math.max(maxY, rect.bottom);
+                            });
+
+                            // Create an invisible div that encompasses all components
+                            const container = document.createElement('div');
+                            container.id = 'temp-screenshot-container';
+                            container.style.position = 'absolute';
+                            container.style.left = minX + 'px';
+                            container.style.top = minY + 'px';
+                            container.style.width = (maxX - minX) + 'px';
+                            container.style.height = (maxY - minY) + 'px';
+                            container.style.pointerEvents = 'none';
+                            container.style.border = '2px solid transparent';
+                            container.style.zIndex = '-1';
+
+                            document.body.appendChild(container);
+
+                            return {
+                                width: maxX - minX,
+                                height: maxY - minY,
+                                componentCount: components.length
+                            };
+                        }
+                    """)
+
+                    if composite_element:
+                        # Screenshot the composite area
+                        temp_container = await page.query_selector("#temp-screenshot-container")
+                        if temp_container:
+                            await temp_container.screenshot(path=output_file)
+                            logger.info(
+                                f"📸 Component composite screenshot taken ({composite_element['width']:.0f}x{composite_element['height']:.0f})"
+                            )
+
+                        # Clean up the temporary element
+                        await page.evaluate(
+                            "document.getElementById('temp-screenshot-container')?.remove()"
+                        )
+                    else:
+                        raise Exception("Failed to create composite element")
+                else:
+                    raise Exception("No dashboard components found")
+
+            except Exception as e:
+                logger.warning(f"Component-based screenshot failed: {e}, trying fallback")
+                # Fallback to AppShell main
+                try:
+                    main_element = await page.query_selector(".mantine-AppShell-main")
+                    if main_element:
+                        await main_element.screenshot(path=output_file)
+                        logger.info("📸 AppShell main screenshot taken (fallback)")
+                    else:
+                        # Final fallback to full page
+                        await page.screenshot(path=output_file, full_page=True)
+                        logger.info("📸 Full page screenshot taken (final fallback)")
+                except Exception as fallback_e:
+                    logger.warning(f"All screenshot methods failed: {fallback_e}")
+                    await page.screenshot(path=output_file, full_page=True)
 
             await browser.close()
             logger.info("📸 Screenshot taken")
