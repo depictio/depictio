@@ -1,2 +1,5 @@
 notebooks/** linguist-vendored
 dev/** linguist-vendored
+docs/images/favicon.svg filter=lfs diff=lfs merge=lfs -text
+docs/images/logo_hd_white.svg filter=lfs diff=lfs merge=lfs -text
+docs/images/logo_hd.svg filter=lfs diff=lfs merge=lfs -text
