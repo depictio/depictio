@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 import pytest
 from beanie import PydanticObjectId, init_beanie
 from mongomock_motor import AsyncMongoMockClient
+from motor.core import AgnosticDatabase
 from pydantic import ValidationError
 
 from depictio.models.models.base import PyObjectId
@@ -170,7 +171,8 @@ class TestTokenBeanie:
         """Test creating and inserting a TokenBeanie document with refresh token support."""
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[TokenBeanie])
+        database: AgnosticDatabase = client.test_db
+        await init_beanie(database=database, document_models=[TokenBeanie])
 
         user_id = PydanticObjectId()
         access_expire = datetime.now() + timedelta(hours=1)
@@ -210,7 +212,8 @@ class TestTokenBeanie:
         """Test creating and retrieving multiple tokens with refresh support."""
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[TokenBeanie])
+        database: AgnosticDatabase = client.test_db
+        await init_beanie(database=database, document_models=[TokenBeanie])
 
         user_id1 = PydanticObjectId()
         user_id2 = PydanticObjectId()
@@ -264,7 +267,8 @@ class TestTokenBeanie:
         """Test the to_response_dict method with refresh token fields."""
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[TokenBeanie])
+        database: AgnosticDatabase = client.test_db
+        await init_beanie(database=database, document_models=[TokenBeanie])
 
         user_id = PydanticObjectId()
         access_expire = datetime.now() + timedelta(hours=1)
@@ -321,7 +325,8 @@ class TestTokenBeanie:
         """Test querying tokens based on access and refresh token expiration."""
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[TokenBeanie])
+        database: AgnosticDatabase = client.test_db
+        await init_beanie(database=database, document_models=[TokenBeanie])
 
         user_id = PydanticObjectId()
         current_time = datetime.now()
@@ -613,7 +618,8 @@ class TestUserBeanie:
         """Test creating and inserting a UserBeanie document."""
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[UserBeanie])
+        database: AgnosticDatabase = client.test_db
+        await init_beanie(database=database, document_models=[UserBeanie])
         # await init_beanie(database=client.test_db, document_models=[UserBeanie, GroupBeanie])
 
         # Create a user instance
@@ -641,7 +647,8 @@ class TestUserBeanie:
         """Test creating and retrieving multiple users."""
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[UserBeanie])
+        database: AgnosticDatabase = client.test_db
+        await init_beanie(database=database, document_models=[UserBeanie])
 
         # Create two users
         user1 = UserBeanie(
@@ -677,7 +684,8 @@ class TestUserBeanie:
         """Test the conversion methods from UserBeanie."""
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[UserBeanie])
+        database: AgnosticDatabase = client.test_db
+        await init_beanie(database=database, document_models=[UserBeanie])
 
         # Create a user instance
         user = UserBeanie(
@@ -719,7 +727,8 @@ class TestGroupBeanie:
         """Test creating and inserting a GroupBeanie document."""
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[GroupBeanie])
+        database: AgnosticDatabase = client.test_db
+        await init_beanie(database=database, document_models=[GroupBeanie])
 
         # Create a group instance
         group = GroupBeanie(name="Test Group")
@@ -737,7 +746,8 @@ class TestGroupBeanie:
         """Test creating and retrieving multiple groups."""
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[GroupBeanie])
+        database: AgnosticDatabase = client.test_db
+        await init_beanie(database=database, document_models=[GroupBeanie])
 
         # Create multiple groups
         group1 = GroupBeanie(name="Group 1")
@@ -768,7 +778,8 @@ class TestGroupBeanie:
         """Test updating a GroupBeanie document."""
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[GroupBeanie])
+        database: AgnosticDatabase = client.test_db
+        await init_beanie(database=database, document_models=[GroupBeanie])
 
         # Create a group
         group = GroupBeanie(name="Original Name")

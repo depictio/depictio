@@ -15,7 +15,7 @@ dependencies:
   - dash-extensions==1.0.1
   - dash-iconify==0.1.2
   - dash-mantine-components==2.1.0
-  - dash>=3.0.0
+  - dash==3.1.1
   - deltalake==0.24.0
   - devtools
   - fastapi==0.115.8
@@ -50,7 +50,7 @@ dependencies:
   - umap-learn
   - uvicorn==0.34.0
   - pip:
-    - dash-draggable==0.1.2
+    # - dash-draggable==0.1.2
     - dash-ag-grid==31.3.1
     - dash-ace
     - dash-dynamic-grid-layout

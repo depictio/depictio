@@ -10,6 +10,7 @@ import pytest_asyncio
 from beanie import init_beanie
 from fastapi import HTTPException
 from mongomock_motor import AsyncMongoMockClient
+from motor.core import AgnosticDatabase
 
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _hash_password
 from depictio.api.v1.endpoints.user_endpoints.routes import get_all_users
@@ -31,7 +32,8 @@ async def mock_mongodb_async():
     db = client.test_db
 
     # Initialize Beanie with the mock database
-    await init_beanie(database=db, document_models=[UserBeanie, GroupBeanie, TokenBeanie])
+    database: AgnosticDatabase = db
+    await init_beanie(database=database, document_models=[UserBeanie, GroupBeanie, TokenBeanie])
 
     # Create test users directly in the mock database
     test_users = [
@@ -147,7 +149,8 @@ class TestGetAllUsersEndpoint:
         # Create a fresh database without any users
         client = AsyncMongoMockClient()
         db = client.empty_test_db
-        await init_beanie(database=db, document_models=[UserBeanie, GroupBeanie, TokenBeanie])
+        database: AgnosticDatabase = db
+        await init_beanie(database=database, document_models=[UserBeanie, GroupBeanie, TokenBeanie])
 
         # Create admin user directly for this test
         admin_user = UserBeanie(

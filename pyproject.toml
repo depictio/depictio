@@ -14,6 +14,7 @@ dependencies = [
   "cryptography",
   "colorlog",
   # "curl",
+  "dash-ace==0.4.0",
   "dash-bootstrap-components==1.7.1",
   "dash-extensions==1.0.1",
   "dash-iconify==0.1.2",

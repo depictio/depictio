@@ -43,7 +43,7 @@ def sanitize_for_json(obj):
 @deltatables_endpoint_router.post("/upsert")
 async def upsert_deltatable(
     payload: UpsertDeltaTableAggregated,
-    current_user: str = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Upsert a DeltaTableAggregated object.
@@ -296,7 +296,7 @@ async def specs(
 @deltatables_endpoint_router.delete("/delete/{deltatable_id}")
 async def delete_deltatable(
     deltatable_id: str,
-    current_user: str = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Delete all files from GridFS.

@@ -1,7 +1,7 @@
 import asyncio
 import os
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import pymongo
@@ -14,6 +14,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from motor.core import AgnosticDatabase
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from depictio.api.v1.configs.config import MONGODB_URL, settings
@@ -34,8 +35,9 @@ DEPICTIO_CONTEXT = get_depictio_context()
 # Database initialization
 async def init_motor_beanie():
     client = AsyncIOMotorClient(MONGODB_URL)
+    database: AgnosticDatabase = client[settings.mongodb.db_name]
     await init_beanie(
-        database=client[settings.mongodb.db_name],
+        database=database,
         document_models=[TokenBeanie, GroupBeanie, UserBeanie, ProjectBeanie],
     )
 
@@ -61,7 +63,7 @@ async def check_and_set_initialization():
                 "initialization_complete": False,
                 "initialization_in_progress": True,
                 "worker_id": os.getpid(),  # Track which worker is doing init
-                "started_at": datetime.utcnow(),
+                "started_at": datetime.now(timezone.utc),
             }
         )
         print(f"Worker {os.getpid()}: Acquired initialization lock")
@@ -87,7 +89,7 @@ async def mark_initialization_complete():
             "$set": {
                 "initialization_complete": True,
                 "initialization_in_progress": False,
-                "completed_at": datetime.utcnow(),
+                "completed_at": datetime.now(timezone.utc),
             }
         },
     )
