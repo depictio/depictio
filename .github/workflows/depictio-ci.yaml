@@ -21,12 +21,12 @@ jobs:
       - name: "Set up Python"
         uses: actions/setup-python@v5
         with:
-          python-version-file: "3.12.9"
+          python-version-file: "pyproject.toml"
           cache-dependency-path: "pyproject.toml"
 
       - name: Install Dependencies with LTS Fallback
         run: |
-          uv venv --python 3.12 venv
+          uv venv --python 3.12.9 venv
           source venv/bin/activate
           uv pip install --upgrade pip
 
