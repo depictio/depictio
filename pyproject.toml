@@ -40,7 +40,7 @@ dependencies = [
   "psutil",
   "pytest-playwright",
   # "pytest-playwright==0.7.0",
-  "python==3.12.9",
+  # "python==3.12.9",
   "python-dotenv",
   "python-jose==3.3.0",
   "python-multipart",
