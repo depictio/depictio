@@ -14,7 +14,6 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from motor.core import AgnosticDatabase
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from depictio.api.v1.configs.config import MONGODB_URL, settings
@@ -35,9 +34,8 @@ DEPICTIO_CONTEXT = get_depictio_context()
 # Database initialization
 async def init_motor_beanie():
     client = AsyncIOMotorClient(MONGODB_URL)
-    database: AgnosticDatabase = client[settings.mongodb.db_name]
     await init_beanie(
-        database=database,
+        database=client[settings.mongodb.db_name],
         document_models=[TokenBeanie, GroupBeanie, UserBeanie, ProjectBeanie],
     )
 
