@@ -1,7 +1,6 @@
-import os
-import sys
-from pathlib import Path
 import json
+import os
+from pathlib import Path
 
 # Django setup - first configure settings
 import django
@@ -61,24 +60,24 @@ if not settings.configured:
 django.setup()
 
 # Now import Django modules that require settings
-from django.core.wsgi import get_wsgi_application
-from django.contrib.auth.models import User
-from django.urls import path
-from django.shortcuts import render, redirect
-from django.contrib.auth.decorators import login_required
-from django.contrib.auth import authenticate, login, logout
-from django.http import HttpResponse, JsonResponse
-from django.views.decorators.csrf import csrf_exempt
+import threading
 
 # Dash setup
 import dash
-from dash import dcc, html
-from dash.dependencies import Input, Output, State
-import plotly.express as px
-import pandas as pd
-import threading
 import flask
-from flask import Flask, request, session
+import pandas as pd
+import plotly.express as px
+from dash import dcc, html
+from dash.dependencies import Input, Output
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
+from django.core.wsgi import get_wsgi_application
+from django.http import JsonResponse
+from django.shortcuts import redirect, render
+from django.urls import path
+from django.views.decorators.csrf import csrf_exempt
+from flask import Flask
 
 # Create a Flask server for Dash
 server = Flask(__name__)

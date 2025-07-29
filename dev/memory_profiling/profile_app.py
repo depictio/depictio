@@ -1,8 +1,9 @@
-from memory_profiler import profile, memory_usage
-import app  # Ensure app.py is in the same directory as profile_app.py
 import logging
 import threading
 import time
+
+import app  # Ensure app.py is in the same directory as profile_app.py
+from memory_profiler import memory_usage, profile
 
 logging.basicConfig(level=logging.INFO)
 

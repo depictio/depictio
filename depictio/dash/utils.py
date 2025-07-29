@@ -285,7 +285,9 @@ def get_columns_from_data_collection(
         logger.debug(f"Using cached specs for data_collection_id: {data_collection_id}")
         return _data_collection_specs_cache[cache_key]
 
-    logger.debug(f"Fetching specs for data_collection_id: {data_collection_id}")
+    logger.info(
+        f"Fetching specs for data_collection_id: {data_collection_id} from workflow_id: {workflow_id}"
+    )
 
     if workflow_id is not None and data_collection_id is not None:
         response = httpx.get(

@@ -142,6 +142,7 @@ def render_welcome_section(email, is_anonymous=False):
                             size="lg",
                             radius="xl",
                         ),
+                        withinPortal=False,
                         label=email,
                         position="bottom",
                     ),
@@ -585,7 +586,7 @@ def register_callbacks_dashboards_management(app):
             if not os.path.exists(thumbnail_fs_path):
                 logger.warning(f"Thumbnail not found at path: {thumbnail_fs_path}")
                 # Use the default thumbnail from static/
-                default_thumbnail_url = "/assets/default_thumbnail.png"
+                default_thumbnail_url = "/assets/images/backgrounds/default_thumbnail.png"
 
                 thumbnail = html.Div(
                     [
@@ -870,6 +871,7 @@ def register_callbacks_dashboards_management(app):
             State({"type": "new-name-dashboard", "index": ALL}, "value"),
             State({"type": "new-name-dashboard", "index": ALL}, "id"),
             State("local-store", "data"),
+            State("user-cache-store", "data"),
             Input("dashboard-modal-store", "data"),
         ],
     )
@@ -887,11 +889,31 @@ def register_callbacks_dashboards_management(app):
         new_name_list_values,
         new_name_list_ids,
         user_data,
+        user_cache,
         modal_data,
     ):
         # log_context_info()
 
-        current_user = api_call_fetch_user_from_token(user_data["access_token"])
+        # Use consolidated user cache instead of individual API call
+        from depictio.models.models.users import UserContext
+
+        current_user = UserContext.from_cache(user_cache)
+        if not current_user:
+            # Fallback to direct API call if cache not available
+            logger.info("🔄 Dashboards: Using fallback API call for user data")
+            current_user_api = api_call_fetch_user_from_token(user_data["access_token"])
+            if not current_user_api:
+                logger.warning("User not found in dashboards management.")
+                return dash.no_update
+            # Create UserContext from API response for consistency
+            current_user = UserContext(
+                id=str(current_user_api.id),
+                email=current_user_api.email,
+                is_admin=current_user_api.is_admin,
+                is_anonymous=getattr(current_user_api, "is_anonymous", False),
+            )
+        else:
+            logger.info("✅ Dashboards: Using consolidated cache for user data")
         # current_userbase = UserBase(
         #     convert_model_to_dict(current_user, exclude_none=True).dict(
         #         exclude={
@@ -1194,6 +1216,7 @@ def register_callbacks_dashboards_management(app):
             State("dashboard-title-input", "value"),
             State("dashboard-modal", "opened"),
             State("local-store", "data"),
+            State("user-cache-store", "data"),
             State("init-create-dashboard-button", "data"),
             State("dashboard-projects", "value"),
         ],
@@ -1206,6 +1229,7 @@ def register_callbacks_dashboards_management(app):
         title,
         opened,
         user_data,
+        user_cache,
         init_create_dashboard_button,
         project,
     ):
@@ -1231,8 +1255,26 @@ def register_callbacks_dashboards_management(app):
         if triggered_id == "create-dashboard-button":
             logger.info("Create button clicked")
 
-            # Check if user is anonymous and redirect to profile page
-            current_user = api_call_fetch_user_from_token(user_data["access_token"])
+            # Check if user is anonymous and redirect to profile page - use consolidated cache
+            from depictio.models.models.users import UserContext
+
+            current_user = UserContext.from_cache(user_cache)
+            if not current_user:
+                # Fallback to direct API call if cache not available
+                logger.info("🔄 Dashboard Create: Using fallback API call for user data")
+                current_user_api = api_call_fetch_user_from_token(user_data["access_token"])
+                if not current_user_api:
+                    logger.warning("User not found in dashboard creation.")
+                    return data, opened, True, dash.no_update, dash.no_update, dash.no_update
+                # Create UserContext from API response for consistency
+                current_user = UserContext(
+                    id=str(current_user_api.id),
+                    email=current_user_api.email,
+                    is_admin=current_user_api.is_admin,
+                    is_anonymous=getattr(current_user_api, "is_anonymous", False),
+                )
+            else:
+                logger.info("✅ Dashboard Create: Using consolidated cache for user data")
             if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
                 logger.info(
                     "Anonymous user clicked 'Login to Create Dashboards' - redirecting to profile"
@@ -1353,13 +1395,25 @@ def register_callbacks_dashboards_management(app):
         [
             Input("url", "pathname"),
             Input("local-store", "data"),
+            State("user-cache-store", "data"),
         ],
     )
     def update_landing_page(
         pathname,
         data,
+        user_cache,
     ):
-        user = api_call_fetch_user_from_token(data["access_token"])
+        # Use consolidated user cache instead of individual API call
+        from depictio.models.models.users import UserContext
+
+        user_context = UserContext.from_cache(user_cache)
+        if user_context:
+            logger.info("✅ Landing Page: Using consolidated cache for user data")
+            user = user_context
+        else:
+            # Fallback to direct API call if cache not available
+            logger.info("🔄 Landing Page: Using fallback API call for user data")
+            user = api_call_fetch_user_from_token(data["access_token"])
 
         def render_landing_page(data):
             return html.Div(

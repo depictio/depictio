@@ -1,7 +1,7 @@
 import asyncio
 import os
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import pymongo
@@ -61,7 +61,7 @@ async def check_and_set_initialization():
                 "initialization_complete": False,
                 "initialization_in_progress": True,
                 "worker_id": os.getpid(),  # Track which worker is doing init
-                "started_at": datetime.utcnow(),
+                "started_at": datetime.now(timezone.utc),
             }
         )
         print(f"Worker {os.getpid()}: Acquired initialization lock")
@@ -87,7 +87,7 @@ async def mark_initialization_complete():
             "$set": {
                 "initialization_complete": True,
                 "initialization_in_progress": False,
-                "completed_at": datetime.utcnow(),
+                "completed_at": datetime.now(timezone.utc),
             }
         },
     )

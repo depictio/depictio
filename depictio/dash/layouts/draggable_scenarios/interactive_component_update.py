@@ -9,15 +9,11 @@ from depictio.api.v1.deltatables_utils import (
     join_deltatables_dev,
     return_joins_dict,
 )
+from depictio.dash.component_metadata import get_build_functions
 from depictio.dash.layouts.edit import enable_box_edit_mode
-from depictio.dash.modules.card_component.utils import build_card
-from depictio.dash.modules.figure_component.utils import build_figure
-from depictio.dash.modules.interactive_component.utils import build_interactive
 from depictio.dash.modules.jbrowse_component.utils import (
-    build_jbrowse,
     build_jbrowse_df_mapping_dict,
 )
-from depictio.dash.modules.table_component.utils import build_table
 
 
 def apply_dropdowns(df, n_dict):
@@ -65,6 +61,18 @@ def apply_sliders(df, n_dict):
     return df
 
 
+def apply_boolean(df, n_dict):
+    # if the interactive component is a Checkbox or Switch
+    if n_dict["metadata"]["interactive_component_type"] in ["Checkbox", "Switch"]:
+        # filter the df based on the boolean value
+        value = n_dict["value"]
+        if isinstance(value, str):
+            # Convert string to boolean
+            value = value.lower() in ["true", "1", "yes", "on"]
+        df = df[df[n_dict["metadata"]["column_name"]] == value]
+    return df
+
+
 def filter_data(new_df, n_dict):
     """
     Filter the data based on the interactive component type and the selected value
@@ -96,6 +104,16 @@ def filter_data(new_df, n_dict):
             "Slider",
         ]:
             new_df = apply_sliders(new_df, n_dict)
+
+    # Handles the case of the bool type
+    elif n_dict["metadata"]["column_type"] == "bool":
+        # if the interactive component is a Checkbox or Switch
+        if n_dict["metadata"]["interactive_component_type"] in [
+            "Checkbox",
+            "Switch",
+        ]:
+            new_df = apply_boolean(new_df, n_dict)
+
     return new_df
 
 
@@ -120,13 +138,8 @@ def group_interactive_components(interactive_components_dict):
     return grouped
 
 
-helpers_mapping = {
-    "card": build_card,
-    "figure": build_figure,
-    "interactive": build_interactive,
-    "table": build_table,
-    "jbrowse": build_jbrowse,
-}
+# Get helpers mapping from centralized metadata
+helpers_mapping = get_build_functions()
 
 
 def render_raw_children(
@@ -176,11 +189,16 @@ def render_raw_children(
     if comp_type == "interactive":
         component.pop("value", None)
 
-    # Generate a unique index for the component
-    # component["parent_index"] = str(component["index"])
-    # component["index"] = generate_unique_index()
-    component["index"] = component["index"].replace("-tmp", "")
-    index = component["index"]
+    # Handle component index based on component type
+    # Text components need special handling for temporary IDs during creation
+    if comp_type == "text":
+        # For text components, preserve the original index (including -tmp if present)
+        # The text component will handle -tmp removal internally when appropriate
+        index = component["index"]
+    else:
+        # For other components, remove -tmp suffix to get the final ID
+        component["index"] = component["index"].replace("-tmp", "")
+        index = component["index"]
 
     # Set flags and tokens
     component.update(
@@ -213,15 +231,43 @@ def render_raw_children(
         child = helpers_mapping[comp_type](**component)
     except KeyError as e:
         logger.error(f"No helper found for component type '{comp_type}': {e}")
+        # Return empty results if no helper is found
+        return [], []
+    except Exception as e:
+        logger.error(f"Error building component of type '{comp_type}': {e}")
+        # Return empty results if there's an error during build
+        return [], []
 
-    # Enable edit mode on the component
-    child = enable_box_edit_mode(
-        child.to_plotly_json(),
-        switch_state=switch_state,
-        dashboard_id=dashboard_id,
-        component_data=component,
-        TOKEN=TOKEN,
-    )
+    # Enable edit mode on the native component (no JSON conversion needed)
+    try:
+        logger.info(f"Processing {comp_type} component as native Dash component")
+
+        # Pass the native component directly to enable_box_edit_mode
+        # This preserves dcc.Loading wrappers and eliminates JSON conversion overhead
+        child = enable_box_edit_mode(
+            child,  # Native Dash component
+            switch_state=switch_state,
+            dashboard_id=dashboard_id,
+            component_data=component,
+            TOKEN=TOKEN,
+        )
+    except Exception as e:
+        logger.error(f"Error processing {comp_type} component in interactive update: {e}")
+        # Fallback to prevent dashboard failure
+        fallback_child = {
+            "type": "Div",
+            "props": {
+                "id": {"index": component.get("index", "unknown")},
+                "children": f"Error loading {comp_type} component",
+            },
+        }
+        child = enable_box_edit_mode(
+            fallback_child,
+            switch_state=switch_state,
+            dashboard_id=dashboard_id,
+            component_data=component,
+            TOKEN=TOKEN,
+        )
 
     # Append the processed child
     children.append(child)
@@ -244,7 +290,7 @@ def update_interactive_component(
 ):
     children = list()
 
-    # logger.info(f"interactive_components_dict - {interactive_components_dict}")
+    logger.info(f"interactive_components_dict - {interactive_components_dict}")
 
     if not interactive_components_dict:
         for metadata in stored_metadata_raw:
@@ -252,6 +298,7 @@ def update_interactive_component(
                 metadata, switch_state, dashboard_id, TOKEN, theme=theme
             )
             children.append(child)
+            logger.info(f"Metadata processed: {metadata}")
         return children
 
     workflow_ids = list(
@@ -290,7 +337,11 @@ def update_interactive_component(
             logger.info(
                 f"Performing batch join for workflow {wf} with {len(joins_dict)} join combinations"
             )
+
+            logger.info(f"Interactive components dict: {interactive_components_dict}")
             merged_df = iterative_join(wf, joins_dict, interactive_components_dict, TOKEN)
+
+            logger.info(f"Batch join completed for workflow {wf} (shape: {merged_df.shape})")
 
             # Store the same merged dataframe for all join combinations
             # since iterative_join already handles all the joins internally
@@ -364,6 +415,8 @@ def update_interactive_component(
 
     # Add or update the non-interactive components
     for component in stored_metadata:
+        logger.info(f"DEBUG - interactive_component_update - Processing component: {component}")
+
         if component["component_type"] not in ["jbrowse"]:
             # retrieve the key from df_dict_processed based on the wf_id and dc_id, checking which join encompasses the dc_id
             for key, df in df_dict_processed[component["wf_id"]].items():
@@ -393,15 +446,67 @@ def update_interactive_component(
                 component["theme"] = theme
                 # logger.info(f"GRAPH COMPONENT - {component}")
 
+            # Debug: Log component data for text components before calling helper
+            if component["component_type"] == "text":
+                logger.info(f"DEBUG - Calling build_text with component data: {component}")
+
             child = helpers_mapping[component["component_type"]](**component)
+
+            # Debug: Log component type for verification
+            if component["component_type"] == "figure":
+                logger.info(f"Figure component child type: {type(child)}")
+                # Check if Loading component is preserved (native component check)
+                if hasattr(child, "type") and child.type == "Loading":
+                    logger.info(
+                        "✅ Loading component preserved in figure during interactive update"
+                    )
+                elif hasattr(child, "__class__") and "Loading" in str(child.__class__):
+                    logger.info(
+                        "✅ Loading component preserved in figure during interactive update"
+                    )
+                else:
+                    logger.info(
+                        f"ℹ️ Figure component type: {getattr(child, 'type', 'Unknown')} (may still have loading)"
+                    )
+            # Debug: Log card component info if needed
             # if component["component_type"] == "card":
-            #     logger.debug(f"Card CHILD - {child}")
+            #     logger.debug(f"Card component type: {type(child)}")
+
+            # Process component as native Dash component (no JSON conversion)
+            # try:
+            logger.info(
+                f"DEBUG update_interacteive - {component['component_type']} component as native Dash component"
+            )
+
+            # Pass the native component directly - preserves Loading wrappers and improves performance
             child = enable_box_edit_mode(
-                child.to_plotly_json(),
+                child,  # Native Dash component
                 switch_state=switch_state,
                 dashboard_id=dashboard_id,
                 TOKEN=TOKEN,
             )
+
+            if component["component_type"] == "text":
+                logger.info(f"DEBUG text component {child.id} with content: {child}")
+
+            # except Exception as e:
+            #     logger.error(
+            #         f"Error processing {component['component_type']} component (line 460 path): {e}"
+            #     )
+            #     # Fallback to prevent dashboard failure
+            #     fallback_child = {
+            #         "type": "Div",
+            #         "props": {
+            #             "id": {"index": component.get("index", "unknown")},
+            #             "children": f"Error loading {component['component_type']} component",
+            #         },
+            #     }
+            #     child = enable_box_edit_mode(
+            #         fallback_child,
+            #         switch_state=switch_state,
+            #         dashboard_id=dashboard_id,
+            #         TOKEN=TOKEN,
+            #     )
             children.append(child)
 
         elif component["component_type"] == "jbrowse":
@@ -418,12 +523,14 @@ def update_interactive_component(
 
             logger.debug(f"JBROWSE CHILD - {child}")
 
+            # Process jbrowse component as native Dash component
             child = enable_box_edit_mode(
-                child.to_plotly_json(),
+                child,  # Native Dash component (no JSON conversion needed)
                 switch_state=switch_state,
                 dashboard_id=dashboard_id,
                 TOKEN=TOKEN,
             )
+
             children.append(child)
         # logger.info(f"ITERATIVE - len(children) - {len(children)}")
 

@@ -1,8 +1,8 @@
 import logging
-from rich.logging import RichHandler
-from rich import print
-from pydantic import BaseModel
 
+from pydantic import BaseModel
+from rich import print
+from rich.logging import RichHandler
 
 FORMAT = "%(message)s"
 logging.basicConfig(level="NOTSET", format=FORMAT, datefmt="[%X]", handlers=[RichHandler()])

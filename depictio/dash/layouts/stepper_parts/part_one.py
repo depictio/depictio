@@ -6,9 +6,38 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.component_metadata import get_component_metadata_by_display_name
 
 
 def register_callbacks_stepper_part_one(app):
+    @app.callback(
+        Output({"type": "component-selected", "index": MATCH}, "children", allow_duplicate=True),
+        Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
+        State({"type": "last-button", "index": MATCH}, "data"),
+        prevent_initial_call=True,
+    )
+    def update_component_selected_display(n_clicks, component_selected):
+        """Update component-selected display for components that don't need data selection like Text."""
+        if ctx.triggered_id and isinstance(ctx.triggered_id, dict):
+            if ctx.triggered_id["type"] == "btn-option":
+                selected_component = ctx.triggered_id["value"]
+                if selected_component == "Text":
+                    # For Text components, show selection immediately since no data selection is needed
+                    component_metadata = get_component_metadata_by_display_name(selected_component)
+                    return dmc.Badge(
+                        selected_component,
+                        size="xl",
+                        radius="xl",
+                        style={"fontFamily": "Virgil"},
+                        color=component_metadata["color"],
+                        leftSection=DashIconify(
+                            icon=component_metadata["icon"],
+                            width=15,
+                            color="white",
+                        ),
+                    )
+        return dash.no_update
+
     @app.callback(
         Output({"type": "dropdown-output", "index": MATCH}, "children"),
         Output({"type": "component-selected", "index": MATCH}, "children"),
@@ -47,17 +76,7 @@ def register_callbacks_stepper_part_one(app):
         #     # component_selected = "None"
         #     component_selected = input_last_component
 
-        component_metadata_dict = {
-            "Card": {"color": "violet", "icon": "formkit:number"},
-            "Figure": {"color": "grape", "icon": "mdi:graph-box"},
-            "Interactive": {"color": "indigo", "icon": "bx:slider-alt"},
-            "Table": {"color": "green", "icon": "octicon:table-24"},
-            "JBrowse2": {
-                "color": "yellow",
-                "icon": "material-symbols:table-rows-narrow-rounded",
-            },
-            "None": {"color": "gray", "icon": "ph:circle"},
-        }
+        # Component metadata is now handled by centralized functions
 
         # Determine the index of the most recently modified (clicked) button
         # latest_index = store_btn_ts.index(max(store_btn_ts))
@@ -124,10 +143,17 @@ def register_callbacks_stepper_part_one(app):
                                 style={
                                     "font-weight": "bold",
                                     "text-align": "left",
-                                    "width": "20%",
+                                    "width": "25%",
                                 },
                             ),
-                            html.Td(workflow_id, style={"text-align": "left"}),
+                            html.Td(
+                                workflow_id,
+                                style={
+                                    "text-align": "left",
+                                    "word-break": "break-all",
+                                    "overflow-wrap": "break-word",
+                                },
+                            ),
                         ]
                     ),
                     html.Tr(
@@ -137,11 +163,10 @@ def register_callbacks_stepper_part_one(app):
                                 style={
                                     "font-weight": "bold",
                                     "text-align": "left",
-                                    "width": "20%",
+                                    "width": "25%",
                                 },
                             ),
                             html.Td(
-                                # camelcase
                                 dc_specs["config"]["type"].capitalize(),
                                 style={"text-align": "left"},
                             ),
@@ -154,11 +179,10 @@ def register_callbacks_stepper_part_one(app):
                                 style={
                                     "font-weight": "bold",
                                     "text-align": "left",
-                                    "width": "20%",
+                                    "width": "25%",
                                 },
                             ),
                             html.Td(
-                                # camelcase
                                 dc_specs["config"]["metatype"].capitalize(),
                                 style={"text-align": "left"},
                             ),
@@ -171,12 +195,16 @@ def register_callbacks_stepper_part_one(app):
                                 style={
                                     "font-weight": "bold",
                                     "text-align": "left",
-                                    "width": "20%",
+                                    "width": "25%",
                                 },
                             ),
                             html.Td(
                                 dc_specs["data_collection_tag"],
-                                style={"text-align": "left"},
+                                style={
+                                    "text-align": "left",
+                                    "word-break": "break-all",
+                                    "overflow-wrap": "break-word",
+                                },
                             ),
                         ]
                     ),
@@ -187,10 +215,17 @@ def register_callbacks_stepper_part_one(app):
                                 style={
                                     "font-weight": "bold",
                                     "text-align": "left",
-                                    "width": "20%",
+                                    "width": "25%",
                                 },
                             ),
-                            html.Td(dc_specs["description"], style={"text-align": "left"}),
+                            html.Td(
+                                dc_specs["description"],
+                                style={
+                                    "text-align": "left",
+                                    "word-break": "break-all",
+                                    "overflow-wrap": "break-word",
+                                },
+                            ),
                         ]
                     ),
                     html.Tr(
@@ -200,10 +235,19 @@ def register_callbacks_stepper_part_one(app):
                                 style={
                                     "font-weight": "bold",
                                     "text-align": "left",
-                                    "width": "20%",
+                                    "width": "25%",
                                 },
                             ),
-                            html.Td(dc_specs["_id"], style={"text-align": "left"}),
+                            html.Td(
+                                dc_specs["_id"],
+                                style={
+                                    "text-align": "left",
+                                    "word-break": "break-all",
+                                    "overflow-wrap": "break-word",
+                                    "font-family": "monospace",
+                                    "font-size": "0.9em",
+                                },
+                            ),
                         ]
                     ),
                     html.Tr(
@@ -213,14 +257,19 @@ def register_callbacks_stepper_part_one(app):
                                 style={
                                     "font-weight": "bold",
                                     "text-align": "left",
-                                    "width": "20%",
+                                    "width": "25%",
                                 },
                             ),
                             html.Td("v1", style={"text-align": "left"}),
                         ]
                     ),
                 ],
-                style={"width": "100%", "table-layout": "fixed"},
+                style={
+                    "width": "100%",
+                    "table-layout": "fixed",
+                    "overflow-wrap": "break-word",
+                    "word-break": "break-all",
+                },
             )
 
             # turn main_info into 4 rows with 2 columns
@@ -365,16 +414,19 @@ def register_callbacks_stepper_part_one(app):
         else:
             layout = html.Div("No data to display")
 
+        # Get metadata for the selected component
+        component_metadata = get_component_metadata_by_display_name(component_selected)
+
         return layout, dmc.Badge(
             component_selected,
             size="xl",
             radius="xl",
             style={"fontFamily": "Virgil"},
-            color=component_metadata_dict[component_selected]["color"],
+            color=component_metadata["color"],
             leftSection=DashIconify(
-                icon=component_metadata_dict[component_selected]["icon"],
+                icon=component_metadata["icon"],
                 width=15,
-                color=component_metadata_dict[component_selected]["color"],
+                color="white",
             ),
         )
 

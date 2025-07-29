@@ -1,7 +1,8 @@
-import numpy as np
-import random
 import hashlib
+import random
 from datetime import datetime, timedelta
+
+import numpy as np
 
 
 def generate_metadata(locations):

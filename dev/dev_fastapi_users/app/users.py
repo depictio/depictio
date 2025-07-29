@@ -1,5 +1,6 @@
 from typing import Optional
 
+from app.db import User, get_user_db
 from beanie import PydanticObjectId
 from fastapi import Depends, Request
 from fastapi_users import BaseUserManager, FastAPIUsers, models
@@ -8,11 +9,8 @@ from fastapi_users.authentication import (
     BearerTransport,
     JWTStrategy,
 )
-from httpx_oauth.clients.google import GoogleOAuth2
-
 from fastapi_users.db import BeanieUserDatabase, ObjectIDIDMixin
-
-from app.db import User, get_user_db
+from httpx_oauth.clients.google import GoogleOAuth2
 
 SECRET = "SECRET"
 

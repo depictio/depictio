@@ -18,5 +18,5 @@ app.enable_dev_tools(
 # Expose server for production runners
 server = app.server
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(debug=False)

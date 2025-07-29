@@ -1,6 +1,6 @@
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
-from fastapi.security import OAuth2AuthorizationCodeBearer
 from fastapi.responses import RedirectResponse
+from fastapi.security import OAuth2AuthorizationCodeBearer
 from fief_client import FiefAccessTokenInfo, FiefAsync, FiefUserInfo
 from fief_client.integrations.fastapi import FiefAuth
 
@@ -33,7 +33,7 @@ async def get_current_user(
     try:
         user_info = await fief.userinfo(access_token_info.access_token)
         return user_info
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",

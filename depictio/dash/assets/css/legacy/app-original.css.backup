@@ -1,0 +1,105 @@
+/* BACKUP OF ORIGINAL app.css - FOR REFERENCE ONLY */
+/* In assets/app.css */
+@font-face {
+    font-family: 'Virgil';
+    src: url('./Virgil.ttf') format('truetype'); /* Ensure the path is correct */
+}
+
+
+
+.mantine-Switch-label {
+    font-family: 'Virgil' !important; /* Override any existing font styles */
+    font-size: '20px' !important; /* Add font size */
+}
+
+/* Triangle particle animations for auth background */
+@keyframes triangleParticle0 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(20px, -30px) rotate(90deg); }
+    50% { transform: translate(-10px, -60px) rotate(180deg); }
+    75% { transform: translate(-30px, -30px) rotate(270deg); }
+    100% { transform: translate(0, 0) rotate(360deg); }
+}
+
+@keyframes triangleParticle1 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(-25px, 15px) rotate(-90deg); }
+    50% { transform: translate(10px, 40px) rotate(-180deg); }
+    75% { transform: translate(35px, 10px) rotate(-270deg); }
+    100% { transform: translate(0, 0) rotate(-360deg); }
+}
+
+@keyframes triangleParticle2 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(15px, 25px) rotate(45deg); }
+    50% { transform: translate(-20px, 50px) rotate(90deg); }
+    75% { transform: translate(-35px, 25px) rotate(135deg); }
+    100% { transform: translate(0, 0) rotate(180deg); }
+}
+
+@keyframes triangleParticle3 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(30px, -15px) rotate(-45deg); }
+    50% { transform: translate(60px, 10px) rotate(-90deg); }
+    75% { transform: translate(30px, 35px) rotate(-135deg); }
+    100% { transform: translate(0, 0) rotate(-180deg); }
+}
+
+@keyframes triangleParticle4 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(-15px, -25px) rotate(120deg); }
+    50% { transform: translate(5px, -50px) rotate(240deg); }
+    75% { transform: translate(25px, -25px) rotate(360deg); }
+    100% { transform: translate(0, 0) rotate(480deg); }
+}
+
+@keyframes triangleParticle5 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(-10px, 20px) rotate(-60deg); }
+    50% { transform: translate(-30px, -10px) rotate(-120deg); }
+    75% { transform: translate(-10px, -40px) rotate(-180deg); }
+    100% { transform: translate(0, 0) rotate(-240deg); }
+}
+
+.triangle-particle {
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+}
+
+
+
+/* Theme-aware titles */
+[data-mantine="Title"] {
+    transition: color 0.2s ease;
+    color: var(--app-text-color, var(--mantine-color-black)) !important;
+}
+
+
+
+
+/* Aggressive FOUC prevention - hide header/navbar by default on initial load */
+#header-content,
+#sidebar,
+.mantine-AppShell-navbar,
+.mantine-AppShell-header {
+    opacity: 0 !important;
+    transition: opacity 0.1s ease !important;
+}
+
+/* Show header/navbar only when page is fully loaded and NOT auth page */
+body.page-loaded:not(.auth-page) #header-content,
+body.page-loaded:not(.auth-page) #sidebar,
+body.page-loaded:not(.auth-page) .mantine-AppShell-navbar,
+body.page-loaded:not(.auth-page) .mantine-AppShell-header {
+    opacity: 1 !important;
+}
+
+/* Hide definitively on auth pages */
+body.auth-page #header-content,
+body.auth-page #sidebar,
+body.auth-page .mantine-AppShell-navbar,
+body.auth-page .mantine-AppShell-header {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+}

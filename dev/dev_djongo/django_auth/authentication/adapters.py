@@ -1,7 +1,8 @@
-from django.contrib.auth.models import User
-from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from allauth.account.adapter import DefaultAccountAdapter
-from .models import SocialAccount, EmailAddress
+from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
+from django.contrib.auth.models import User
+
+from .models import EmailAddress, SocialAccount
 
 
 class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
@@ -106,7 +107,6 @@ class CustomAccountAdapter(DefaultAccountAdapter):
         """
         Fills in a valid username, if required and missing.
         """
-        from django.contrib.auth.models import User
 
         username = user.username
         if not username:

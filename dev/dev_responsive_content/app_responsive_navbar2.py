@@ -1,5 +1,5 @@
-from dash import html, Dash, dcc
 import dash_mantine_components as dmc
+from dash import Dash, dcc, html
 
 app = Dash(
     __name__, external_stylesheets=["https://use.fontawesome.com/releases/v5.8.1/css/all.css"]

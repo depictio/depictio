@@ -30,6 +30,7 @@ def create_dash_app():
     dash_root_path = os.path.dirname(os.path.dirname(__file__))
 
     # Get the assets folder path
+    # assets_folder = os.path.join(dash_root_path, "assets/debug")
     assets_folder = os.path.join(dash_root_path, "assets")
 
     # Start the app

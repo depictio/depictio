@@ -1,0 +1,10 @@
+/* =============================================================================
+   BACKGROUNDS CSS - LEGACY COMPATIBILITY
+   This file now imports from the new modular CSS structure
+   ============================================================================= */
+
+/* Import the new modular CSS structure */
+@import url('./main.css');
+
+/* Note: This file is maintained for backward compatibility */
+/* The CSS has been restructured into modular files in the ./css/ directory */

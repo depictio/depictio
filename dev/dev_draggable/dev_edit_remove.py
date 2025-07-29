@@ -1,11 +1,10 @@
 import dash
-from dash import html, dcc
-import dash_draggable
 import dash_bootstrap_components as dbc
-from dash.dependencies import Input, Output, State
+import dash_draggable
 import numpy as np
 import plotly.express as px
-
+from dash import dcc, html
+from dash.dependencies import Input, Output, State
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 

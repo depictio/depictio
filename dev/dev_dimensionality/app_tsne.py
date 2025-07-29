@@ -1,7 +1,7 @@
 import dash
-from dash import html, dcc, Input, Output
-import plotly.express as px
 import pandas as pd
+import plotly.express as px
+from dash import Input, Output, dcc, html
 from sklearn.datasets import load_iris
 from sklearn.manifold import TSNE
 

@@ -2,7 +2,7 @@
 Callback registration for the Depictio Dash application.
 """
 
-from dash import Input, Output, ctx
+from dash import Input, Output, State, ctx
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.core.auth import process_authentication
@@ -21,10 +21,10 @@ def register_main_callback(app):
         Output("header-content", "children"),
         Output("url", "pathname"),
         Output("local-store", "data", allow_duplicate=True),
-        [Input("url", "pathname"), Input("local-store", "data")],
+        [Input("url", "pathname"), Input("local-store", "data"), State("theme-store", "data")],
         prevent_initial_call=True,
     )
-    def display_page(pathname, local_data):
+    def display_page(pathname, local_data, theme_store):
         """
         Main callback for handling page routing and authentication.
 
@@ -39,7 +39,29 @@ def register_main_callback(app):
         logger.debug(f"Trigger: {trigger}")
 
         # Process authentication and return appropriate content
-        return process_authentication(pathname, local_data)
+        return process_authentication(pathname, local_data, theme_store)
+
+    @app.callback(
+        Output("app-shell", "header"),
+        Input("url", "pathname"),
+        prevent_initial_call=True,
+    )
+    def toggle_appshell_header_visibility(pathname):
+        """
+        Control AppShell header visibility based on current route.
+
+        Args:
+            pathname (str): Current URL pathname
+
+        Returns:
+            dict or None: header_config - None value hides the component
+        """
+        if pathname == "/auth":
+            # Hide header on auth page
+            return None
+        else:
+            # Show header on all other pages
+            return {"height": 87}
 
 
 def register_all_callbacks(app):
@@ -62,9 +84,16 @@ def register_all_callbacks(app):
     register_feature_callbacks(app)
 
     # Register theme bridge callback
+    # Register progressive loading callbacks
+    from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
+        register_progressive_loading_callbacks,
+    )
+    from depictio.dash.layouts.edit import register_reset_button_callbacks
     from depictio.dash.theme_utils import register_theme_bridge_callback
 
     register_theme_bridge_callback(app)
+    register_progressive_loading_callbacks(app)
+    register_reset_button_callbacks(app)
 
 
 def register_layout_callbacks(app):
@@ -74,24 +103,31 @@ def register_layout_callbacks(app):
     Args:
         app (dash.Dash): The Dash application instance
     """
+    from depictio.dash.layouts.consolidated_api import register_consolidated_api_callbacks
     from depictio.dash.layouts.draggable import register_callbacks_draggable
     from depictio.dash.layouts.header import register_callbacks_header
+    from depictio.dash.layouts.notes_footer import register_callbacks_notes_footer
     from depictio.dash.layouts.save import register_callbacks_save
     from depictio.dash.layouts.sidebar import register_sidebar_callbacks
     from depictio.dash.layouts.stepper import register_callbacks_stepper
-    from depictio.dash.layouts.stepper_parts.part_one import register_callbacks_stepper_part_one
-    from depictio.dash.layouts.stepper_parts.part_three import register_callbacks_stepper_part_three
-    from depictio.dash.layouts.stepper_parts.part_two import register_callbacks_stepper_part_two
+
+    # from depictio.dash.layouts.stepper_parts.part_one import register_callbacks_stepper_part_one
+    # from depictio.dash.layouts.stepper_parts.part_three import register_callbacks_stepper_part_three
+    # from depictio.dash.layouts.stepper_parts.part_two import register_callbacks_stepper_part_two
     from depictio.dash.theme_utils import register_theme_callbacks
+
+    # Register consolidated API callbacks first (highest priority)
+    register_consolidated_api_callbacks(app)
 
     # Register layout callbacks
     register_callbacks_stepper(app)
-    register_callbacks_stepper_part_one(app)
-    register_callbacks_stepper_part_two(app)
-    register_callbacks_stepper_part_three(app)
+    # register_callbacks_stepper_part_one(app)
+    # register_callbacks_stepper_part_two(app)
+    # register_callbacks_stepper_part_three(app)
     register_callbacks_header(app)
     register_callbacks_draggable(app)
     register_sidebar_callbacks(app)
+    register_callbacks_notes_footer(app)
     register_callbacks_save(app)
     register_theme_callbacks(app)
 
@@ -112,6 +148,7 @@ def register_component_callbacks(app):
         register_callbacks_jbrowse_component,
     )
     from depictio.dash.modules.table_component.frontend import register_callbacks_table_component
+    from depictio.dash.modules.text_component.frontend import register_callbacks_text_component
 
     # Register component callbacks
     register_callbacks_card_component(app)
@@ -119,6 +156,7 @@ def register_component_callbacks(app):
     register_callbacks_figure_component(app)
     register_callbacks_jbrowse_component(app)
     register_callbacks_table_component(app)
+    register_callbacks_text_component(app)
 
 
 def register_feature_callbacks(app):
@@ -129,6 +167,7 @@ def register_feature_callbacks(app):
         app (dash.Dash): The Dash application instance
     """
     from depictio.dash.layouts.admin_management import register_admin_callbacks
+    from depictio.dash.layouts.admin_notifications import register_admin_notifications_callbacks
     from depictio.dash.layouts.dashboards_management import register_callbacks_dashboards_management
     from depictio.dash.layouts.profile import register_profile_callbacks
     from depictio.dash.layouts.projects import (
@@ -150,3 +189,4 @@ def register_feature_callbacks(app):
     register_projects_callbacks(app)
     register_admin_callbacks(app)
     register_projectwise_user_management_callbacks(app)
+    register_admin_notifications_callbacks(app)

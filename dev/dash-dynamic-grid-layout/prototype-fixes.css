@@ -1,0 +1,138 @@
+/* =============================================================================
+   PROTOTYPE-SPECIFIC CSS FIXES
+   Separate CSS file for testing vertical growing fixes without touching main CSS
+   ============================================================================= */
+
+/* TEST RULE - if this works, the CSS file is loading */
+body {
+    background-color: #f0f8ff !important;
+}
+
+/* CRITICAL: Make the react-grid-item itself a proper flex container */
+.react-grid-item.react-draggable.cssTransforms.react-resizable {
+    display: flex !important;
+    flex-direction: column !important;
+    box-sizing: border-box !important;
+}
+
+/* CRITICAL: Fix the specific transition from react-grid-item to box-{uuid} */
+.react-grid-item.react-draggable.cssTransforms.react-resizable > div[id^="box-"] {
+    height: 100% !important;
+    flex: 1 1 0% !important;
+    flex-grow: 1 !important;
+    flex-shrink: 1 !important;
+    flex-basis: 0% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
+}
+
+/* Ensure all wrapper divs inherit flex behavior - MAXIMUM SPECIFICITY */
+.react-grid-item div[id^="box-"],
+div.react-grid-item.react-draggable.cssTransforms.react-resizable div[id^="box-"],
+.react-grid-item.react-draggable div[id^="box-"] {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 1 0% !important;
+    flex-grow: 1 !important;
+    flex-shrink: 1 !important;
+    flex-basis: 0% !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
+}
+
+/* Responsive wrapper styles */
+.responsive-wrapper {
+    position: relative !important;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* Responsive content that grows vertically */
+.responsive-content {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    min-height: 150px !important;
+}
+
+/* Target ALL divs between responsive-content and card-component */
+.responsive-wrapper .responsive-content div {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+}
+
+/* Target the exact card component that's not expanding */
+.responsive-wrapper div[id*="card-component"].card,
+.responsive-wrapper .card[id*="card-component"],
+div[id*="card-component"].card {
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    flex: 1 1 0% !important;
+    flex-grow: 1 !important;
+    flex-shrink: 1 !important;
+    flex-basis: 0% !important;
+    align-self: stretch !important;
+    position: relative !important;
+    overflow: visible !important;
+}
+
+/* Fix card body */
+.responsive-wrapper .card-body {
+    height: 100% !important;
+    min-height: 0 !important;
+    flex: 1 !important;
+    justify-content: flex-start !important;
+}
+
+/* Override dashboard.css problematic rule */
+.react-grid-item .mantine-Card-root {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+}
+
+/* Grid layout modifications for vertical growing */
+.react-grid-layout {
+    min-height: 500px !important;
+}
+
+.react-grid-item {
+    transition: all 0.2s ease !important;
+}
+
+/* Hide ActionIconGroup by default */
+.react-grid-item .mantine-ActionIconGroup-root {
+    opacity: 0 !important;
+    transition: opacity 0.2s ease !important;
+    pointer-events: none !important;
+}
+
+/* Show ActionIconGroup on hover */
+.react-grid-item:hover .mantine-ActionIconGroup-root {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
+
+/* Resize handle visibility control */
+.react-resizable-handle {
+    opacity: 0 !important;
+    transition: opacity 0.2s ease !important;
+}
+
+.react-grid-item:hover .react-resizable-handle {
+    opacity: 0.7 !important;
+}
+
+/* Component hover effects */
+.dashboard-component-hover:hover {
+    transform: translateY(-2px);
+}

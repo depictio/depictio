@@ -1,15 +1,13 @@
-import dash
-from dash import dcc
-from dash import html
-from dash.dependencies import Input, Output
-import dash_draggable
-from dash.dependencies import Input, Output, State
 import json
-import os, sys
+import os
+
+import dash
+import dash_draggable
 import numpy as np
 import pandas as pd
 import plotly.express as px
-
+from dash import dcc, html
+from dash.dependencies import Input, Output
 
 external_stylesheets = ["https://codepen.io/chriddyp/pen/bWLwgP.css"]
 

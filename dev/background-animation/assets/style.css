@@ -1,0 +1,632 @@
+/* Updated Background-related CSS styles for Depictio - GPU Optimized */
+
+/* Theme-aware page content */
+#page-content {
+    transition: background-color 0.2s ease, color 0.2s ease;
+    background-color: var(--app-bg-color, var(--mantine-color-white)) !important;
+    color: var(--app-text-color, var(--mantine-color-black)) !important;
+}
+
+/* Theme support for main containers */
+.mantine-AppShell-main,
+.mantine-Container-root {
+    background-color: var(--app-bg-color, var(--mantine-color-white)) !important;
+    color: var(--app-text-color, var(--mantine-color-black)) !important;
+}
+
+/* Auth modal content background - theme aware */
+.auth-modal-content {
+    position: relative;
+    z-index: 10000;
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    color: var(--app-text-color, var(--depictio-text-light));
+    transition: background 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Dark theme modal content */
+@media (prefers-color-scheme: dark) {
+    .auth-modal-content {
+        background: rgba(37, 38, 43, 0.95);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+}
+
+/* Manual theme overrides for modal content */
+body.theme-manual-light .auth-modal-content {
+    background: rgba(255, 255, 255, 0.95) !important;
+    color: var(--depictio-text-light) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1) !important;
+}
+
+body.theme-manual-dark .auth-modal-content {
+    background: rgba(37, 38, 43, 0.95) !important;
+    color: var(--depictio-text-dark) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Auth background positioning - GPU optimized */
+#auth-background {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 9998 !important;
+    overflow: hidden;
+    /* Enable hardware acceleration */
+    transform: translateZ(0);
+    will-change: transform;
+}
+
+/* Auth page layout - when AppShell is hidden */
+#page-content:has(#auth-background) {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    z-index: 9997 !important;
+}
+
+/* Ensure auth page content takes full viewport */
+.auth-page-content {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    z-index: 9997 !important;
+}
+
+/* Triangle particles container - GPU optimized with background movement */
+#triangle-particles {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    /* Enable hardware acceleration */
+    transform: translateZ(0);
+    will-change: transform;
+    /* Add subtle background drift */
+    animation: backgroundDrift 60s infinite ease-in-out;
+}
+
+/* Base triangle particle styles */
+.triangle-particle {
+    position: absolute;
+    /* Enable hardware acceleration for smooth animations */
+    transform: translateZ(0);
+    will-change: transform, opacity;
+    /* Smooth transitions */
+    transition: none;
+    /* Base opacity */
+    opacity: 0.3;
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+
+/* Small triangles - 12x12px (2:1 ratio: equal sides ~24px, short side ~12px) */
+.triangle-small {
+    width: 12px;
+    height: 12px;
+}
+
+/* Medium triangles - 18x18px (2:1 ratio: equal sides ~36px, short side ~18px) */
+.triangle-medium {
+    width: 18px;
+    height: 18px;
+}
+
+/* Large triangles - 24x24px (2:1 ratio: equal sides ~48px, short side ~24px) */
+.triangle-large {
+    width: 24px;
+    height: 24px;
+}
+
+/* Extra large triangles - 32x32px (2:1 ratio: equal sides ~64px, short side ~32px) */
+.triangle-xlarge {
+    width: 32px;
+    height: 32px;
+    opacity: 0.25; /* Slightly more transparent for larger triangles */
+}
+
+/* GPU-optimized animations with smooth movement */
+@keyframes backgroundDrift {
+    0%, 100% {
+        transform: translate3d(0, 0, 0) rotate(0deg);
+    }
+    25% {
+        transform: translate3d(8px, -6px, 0) rotate(0.5deg);
+    }
+    50% {
+        transform: translate3d(-6px, 8px, 0) rotate(-0.5deg);
+    }
+    75% {
+        transform: translate3d(-8px, -3px, 0) rotate(0.25deg);
+    }
+}
+
+@keyframes triangleFloat {
+    0%, 100% {
+        transform: translate3d(0, 0, 0) rotate(var(--initial-rotation, 0deg));
+        opacity: 0.25;
+    }
+    25% {
+        transform: translate3d(12px, -8px, 0) rotate(calc(var(--initial-rotation, 0deg) + 45deg));
+        opacity: 0.4;
+    }
+    50% {
+        transform: translate3d(15px, 5px, 0) rotate(calc(var(--initial-rotation, 0deg) + 90deg));
+        opacity: 0.35;
+    }
+    75% {
+        transform: translate3d(8px, 12px, 0) rotate(calc(var(--initial-rotation, 0deg) + 135deg));
+        opacity: 0.3;
+    }
+}
+
+@keyframes triangleDrift {
+    0%, 100% {
+        transform: translate3d(0, 0, 0) rotate(var(--initial-rotation, 0deg)) scale(1);
+        opacity: 0.3;
+    }
+    33% {
+        transform: translate3d(18px, -12px, 0) rotate(calc(var(--initial-rotation, 0deg) + 60deg)) scale(1.05);
+        opacity: 0.4;
+    }
+    66% {
+        transform: translate3d(-15px, 10px, 0) rotate(calc(var(--initial-rotation, 0deg) + 120deg)) scale(0.95);
+        opacity: 0.35;
+    }
+}
+
+@keyframes trianglePulse {
+    0%, 100% {
+        opacity: 0.25;
+        transform: scale3d(1, 1, 1) rotate(var(--initial-rotation, 0deg)) translate3d(0, 0, 0);
+    }
+    50% {
+        opacity: 0.45;
+        transform: scale3d(1.1, 1.1, 1) rotate(calc(var(--initial-rotation, 0deg) + 90deg)) translate3d(8px, -6px, 0);
+    }
+}
+
+@keyframes triangleRotate {
+    0% {
+        transform: rotate(var(--initial-rotation, 0deg)) translate3d(0, 0, 0);
+        opacity: 0.25;
+    }
+    25% {
+        transform: rotate(calc(var(--initial-rotation, 0deg) + 90deg)) translate3d(10px, -8px, 0);
+        opacity: 0.35;
+    }
+    50% {
+        transform: rotate(calc(var(--initial-rotation, 0deg) + 180deg)) translate3d(0, 10px, 0);
+        opacity: 0.3;
+    }
+    75% {
+        transform: rotate(calc(var(--initial-rotation, 0deg) + 270deg)) translate3d(-10px, 0, 0);
+        opacity: 0.35;
+    }
+    100% {
+        transform: rotate(calc(var(--initial-rotation, 0deg) + 360deg)) translate3d(0, 0, 0);
+        opacity: 0.25;
+    }
+}
+
+@keyframes triangleOrbit {
+    0%, 100% {
+        transform: translate3d(0, 0, 0) rotate(var(--initial-rotation, 0deg));
+        opacity: 0.3;
+    }
+    25% {
+        transform: translate3d(20px, -15px, 0) rotate(calc(var(--initial-rotation, 0deg) + 22.5deg));
+        opacity: 0.4;
+    }
+    50% {
+        transform: translate3d(22px, 18px, 0) rotate(calc(var(--initial-rotation, 0deg) + 90deg));
+        opacity: 0.35;
+    }
+    75% {
+        transform: translate3d(-18px, 15px, 0) rotate(calc(var(--initial-rotation, 0deg) + 157.5deg));
+        opacity: 0.4;
+    }
+}
+
+@keyframes triangleWave {
+    0%, 100% {
+        transform: translate3d(0, 0, 0) rotate(var(--initial-rotation, 0deg)) scale(1);
+        opacity: 0.25;
+    }
+    20% {
+        transform: translate3d(8px, -12px, 0) rotate(calc(var(--initial-rotation, 0deg) + 36deg)) scale(1.02);
+        opacity: 0.35;
+    }
+    40% {
+        transform: translate3d(15px, 6px, 0) rotate(calc(var(--initial-rotation, 0deg) + 72deg)) scale(0.98);
+        opacity: 0.4;
+    }
+    60% {
+        transform: translate3d(-10px, 14px, 0) rotate(calc(var(--initial-rotation, 0deg) + 108deg)) scale(1.05);
+        opacity: 0.35;
+    }
+    80% {
+        transform: translate3d(-15px, -8px, 0) rotate(calc(var(--initial-rotation, 0deg) + 144deg)) scale(0.95);
+        opacity: 0.3;
+    }
+}
+
+/* Apply animations to different triangle types with smoother timing */
+.triangle-anim-1 {
+    animation: triangleFloat 8s infinite linear;
+}
+
+.triangle-anim-2 {
+    animation: triangleDrift 9s infinite linear;
+}
+
+.triangle-anim-3 {
+    animation: trianglePulse 7s infinite linear;
+}
+
+.triangle-anim-4 {
+    animation: triangleRotate 10s infinite linear;
+}
+
+.triangle-anim-5 {
+    animation: triangleOrbit 8.5s infinite linear;
+}
+
+.triangle-anim-6 {
+    animation: triangleWave 9.5s infinite linear;
+}
+
+/* CSS Custom Properties for Theme Variables */
+:root {
+    --depictio-bg-light: #ffffff;
+    --depictio-bg-dark: #1a1b1e;
+    --depictio-surface-light: #ffffff;
+    --depictio-surface-dark: #25262b;
+    --depictio-text-light: #000000;
+    --depictio-text-dark: #ffffff;
+    --depictio-border-light: #dee2e6;
+    --depictio-border-dark: #373A40;
+}
+
+/* =============================================================================
+   AUTOMATIC THEME DETECTION
+   Uses CSS media queries to detect system theme preference
+   ============================================================================= */
+
+/* Default light theme */
+:root {
+    --app-bg-color: var(--depictio-bg-light);
+    --app-text-color: var(--depictio-text-light);
+    --app-surface-color: var(--depictio-surface-light);
+    --app-border-color: var(--depictio-border-light);
+}
+
+/* Automatic dark theme detection via CSS media query */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --app-bg-color: var(--depictio-bg-dark);
+        --app-text-color: var(--depictio-text-dark);
+        --app-surface-color: var(--depictio-surface-dark);
+        --app-border-color: var(--depictio-border-dark);
+    }
+}
+
+/* Light theme (default) */
+.theme-light {
+    --app-bg-color: var(--depictio-bg-light);
+    --app-text-color: var(--depictio-text-light);
+    --app-surface-color: var(--depictio-surface-light);
+}
+
+/* Dark theme */
+.theme-dark {
+    --app-bg-color: var(--depictio-bg-dark);
+    --app-text-color: var(--depictio-text-dark);
+    --app-surface-color: var(--depictio-surface-dark);
+}
+
+/* Base page background */
+body {
+    background-color: var(--app-bg-color, var(--depictio-bg-light));
+    color: var(--app-text-color, var(--depictio-text-light));
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Headers and navigation background */
+#header-content,
+.mantine-AppShell-header {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    color: var(--app-text-color, var(--depictio-text-light)) !important;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+#sidebar,
+.mantine-AppShell-navbar {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    transition: background-color 0.2s ease;
+}
+
+/* Draggable components background */
+.react-grid-item,
+.react-grid-item .card,
+.react-grid-item [data-mantine="Card"],
+#draggable .react-grid-item,
+#draggable .react-grid-item > *,
+#draggable .react-grid-item [class*="Card"] {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    color: var(--app-text-color, var(--depictio-text-light)) !important;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Bootstrap card components in draggable items */
+.react-grid-item .card-body,
+.react-grid-item .card-header,
+#draggable .card,
+#draggable .card-body,
+#draggable .card-header {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    color: var(--app-text-color, var(--depictio-text-light)) !important;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Dashboard offcanvas background */
+#offcanvas-parameters,
+.dashboard-offcanvas,
+.offcanvas {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    color: var(--app-text-color, var(--depictio-text-light)) !important;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+#offcanvas-parameters .offcanvas-header,
+.dashboard-offcanvas .offcanvas-header,
+.offcanvas .offcanvas-header {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    color: var(--app-text-color, var(--depictio-text-light)) !important;
+    border-bottom: 1px solid var(--app-border-color, #dee2e6) !important;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+#offcanvas-parameters .offcanvas-body,
+.dashboard-offcanvas .offcanvas-body,
+.offcanvas .offcanvas-body {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    color: var(--app-text-color, var(--depictio-text-light)) !important;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Project management headers background */
+#permissions-manager-project-header {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    color: var(--app-text-color, var(--depictio-text-light)) !important;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* =============================================================================
+   REFINED DASHBOARD BACKGROUND EFFECTS
+   Smooth triangle animations based on existing auth page patterns
+   ============================================================================= */
+
+/* Dashboard-specific background effects */
+#dashboard-background-effects {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+/* Triangle particles container */
+.triangle-particles-container {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    transform: translateZ(0);
+    will-change: transform;
+}
+
+/* Base triangle particle styles */
+.triangle-particle {
+    position: absolute;
+    transform: translateZ(0);
+    will-change: transform, opacity;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+    animation-fill-mode: both;
+}
+
+/* Dashboard triangle animations - based on existing refined patterns */
+@keyframes dashboardTriangleAnim0 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(20px, -30px) rotate(90deg); }
+    50% { transform: translate(-10px, -60px) rotate(180deg); }
+    75% { transform: translate(-30px, -30px) rotate(270deg); }
+    100% { transform: translate(0, 0) rotate(360deg); }
+}
+
+@keyframes dashboardTriangleAnim1 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(-25px, 15px) rotate(-90deg); }
+    50% { transform: translate(10px, 40px) rotate(-180deg); }
+    75% { transform: translate(35px, 10px) rotate(-270deg); }
+    100% { transform: translate(0, 0) rotate(-360deg); }
+}
+
+@keyframes dashboardTriangleAnim2 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(15px, 25px) rotate(45deg); }
+    50% { transform: translate(-20px, 50px) rotate(90deg); }
+    75% { transform: translate(-35px, 25px) rotate(135deg); }
+    100% { transform: translate(0, 0) rotate(180deg); }
+}
+
+@keyframes dashboardTriangleAnim3 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(30px, -15px) rotate(-45deg); }
+    50% { transform: translate(60px, 10px) rotate(-90deg); }
+    75% { transform: translate(30px, 35px) rotate(-135deg); }
+    100% { transform: translate(0, 0) rotate(-180deg); }
+}
+
+@keyframes dashboardTriangleAnim4 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(-15px, -25px) rotate(120deg); }
+    50% { transform: translate(5px, -50px) rotate(240deg); }
+    75% { transform: translate(25px, -25px) rotate(360deg); }
+    100% { transform: translate(0, 0) rotate(480deg); }
+}
+
+@keyframes dashboardTriangleAnim5 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(-10px, 20px) rotate(-60deg); }
+    50% { transform: translate(-30px, -10px) rotate(-120deg); }
+    75% { transform: translate(-10px, -40px) rotate(-180deg); }
+    100% { transform: translate(0, 0) rotate(-240deg); }
+}
+
+/* Apply animations to triangle particles */
+.dashboard-triangle-anim-0 {
+    animation-name: dashboardTriangleAnim0;
+}
+
+.dashboard-triangle-anim-1 {
+    animation-name: dashboardTriangleAnim1;
+}
+
+.dashboard-triangle-anim-2 {
+    animation-name: dashboardTriangleAnim2;
+}
+
+.dashboard-triangle-anim-3 {
+    animation-name: dashboardTriangleAnim3;
+}
+
+.dashboard-triangle-anim-4 {
+    animation-name: dashboardTriangleAnim4;
+}
+
+.dashboard-triangle-anim-5 {
+    animation-name: dashboardTriangleAnim5;
+}
+
+/* Performance level optimizations */
+.performance-low .triangle-particle {
+    animation-duration: 25s !important;
+    opacity: 0.15 !important;
+}
+
+.performance-medium .triangle-particle {
+    animation-duration: 18s !important;
+    opacity: 0.25 !important;
+}
+
+.performance-high .triangle-particle {
+    animation-duration: 14s !important;
+    opacity: 0.35 !important;
+}
+
+/* Component interaction effects */
+.dashboard-component-hover {
+    position: relative;
+    transition: transform 0.2s ease;
+}
+
+.dashboard-component-hover:hover {
+    transform: translateY(-2px);
+}
+
+.dashboard-component-hover::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, transparent, rgba(99, 102, 241, 0.05), transparent);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    z-index: 1;
+    pointer-events: none;
+}
+
+.dashboard-component-hover:hover::before {
+    opacity: 1;
+}
+
+/* Draggable component background enhancement */
+.react-grid-item.dashboard-component-hover {
+    background: var(--app-surface-color);
+    border: 1px solid var(--app-border-color);
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.react-grid-item.dashboard-component-hover:hover {
+    border-color: var(--app-primary-color, #6366f1);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+}
+
+/* Responsive adjustments for dashboard effects */
+@media (max-width: 768px) {
+    .floating-orb {
+        animation-duration: 50s;
+        opacity: 0.1 !important;
+    }
+    
+    .gradient-overlay {
+        animation-duration: 80s;
+    }
+}
+
+@media (max-width: 480px) {
+    .floating-orb {
+        animation-duration: 70s;
+        opacity: 0.05 !important;
+        transform: scale(0.8);
+    }
+    
+    .gradient-overlay {
+        animation-duration: 100s;
+        opacity: 0.5;
+    }
+}
+
+/* Reduce motion for accessibility - dashboard effects */
+@media (prefers-reduced-motion: reduce) {
+    .floating-orb {
+        animation: none !important;
+    }
+    
+    .gradient-overlay {
+        animation: none !important;
+    }
+
+    .dashboard-component-hover {
+        transition: none !important;
+    }
+}
+
+/* Performance monitoring styles */
+.low-performance .floating-orb {
+    animation-duration: 90s;
+    opacity: 0.08 !important;
+}
+
+.low-performance .gradient-overlay {
+    animation: none;
+    opacity: 0.3;
+}

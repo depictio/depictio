@@ -207,7 +207,7 @@ async def delete_project(project_id: PyObjectId, current_user: User = Depends(ge
 @projects_endpoint_router.post("/update_project_permissions")
 async def add_or_update_permission(
     permission_request: ProjectPermissionRequest,
-    current_user: str = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
@@ -255,7 +255,7 @@ async def add_or_update_permission(
 
 @projects_endpoint_router.post("/toggle_public_private/{project_id}")
 async def toggle_public_private(
-    project_id: str, is_public: str, current_user: str = Depends(get_current_user)
+    project_id: str, is_public: str, current_user: User = Depends(get_current_user)
 ):
     logger.info(f"Toggle project with ID: {project_id}")
     logger.info(f"Is public: {is_public}")

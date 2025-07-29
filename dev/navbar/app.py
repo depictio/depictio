@@ -1,6 +1,6 @@
-import dash_mantine_components as dmc
 import dash
-from dash import Output, Input, State, html
+import dash_mantine_components as dmc
+from dash import Input, Output, State, html
 from dash_iconify import DashIconify
 
 

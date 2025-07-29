@@ -1,10 +1,11 @@
 # app/db.py
-import motor.motor_asyncio
-from beanie import Document, Link, PydanticObjectId
-from fastapi_users.db import BeanieBaseUser, BaseOAuthAccount
-from fastapi_users_db_beanie import BeanieUserDatabase
-from typing import List, Optional
 from datetime import datetime
+from typing import List, Optional
+
+import motor.motor_asyncio
+from beanie import Document, PydanticObjectId
+from fastapi_users.db import BaseOAuthAccount, BeanieBaseUser
+from fastapi_users_db_beanie import BeanieUserDatabase
 from pydantic import Field
 
 DATABASE_URL = "mongodb://localhost:27018"

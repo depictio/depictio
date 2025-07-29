@@ -465,7 +465,7 @@ def register_tokens_management_callbacks(app):
         # logger.info(f"local_store: {local_store}")
         delete_token_id = delete_token_id or {}
 
-        if triggered == "add-token-button" and add_clicks > 0:
+        if triggered == "add-token-button" and add_clicks:
             return (
                 True,
                 False,
@@ -504,7 +504,7 @@ def register_tokens_management_callbacks(app):
                 "",
             )
 
-        elif triggered == "save-token-name" and save_clicks > 0 and token_name:
+        elif triggered == "save-token-name" and save_clicks and token_name:
             logger.info(f"Token name: {token_name}")
 
             if not token_name or (tokens and token_name in [t["name"] for t in tokens]):
@@ -711,7 +711,7 @@ def register_tokens_management_callbacks(app):
 
         elif (
             triggered == "confirm-delete-button"
-            and confirm_delete_clicks > 0
+            and confirm_delete_clicks
             and delete_confirm_input == "delete"
         ):
             logger.info(f"Deleting config {delete_token_id}")

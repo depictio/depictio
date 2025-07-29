@@ -1,12 +1,9 @@
 import dash
-from dash.dependencies import Input, Output, State
-from dash import html, dcc
-
-
-import plotly.express as px
-import pandas as pd
-
 import dash_draggable
+import pandas as pd
+import plotly.express as px
+from dash import dcc, html
+from dash.dependencies import Input, Output, State
 
 external_stylesheets = ["https://codepen.io/chriddyp/pen/bWLwgP.css"]
 
@@ -144,7 +141,6 @@ def update_draggable_children(
 
     elif triggered_input == "year-slider":
         updated_draggable_children = []
-        from pprint import pprint
 
         # pprint(current_draggable_children)
 

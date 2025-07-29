@@ -1,4 +1,5 @@
 import dash
+import dash_mantine_components as dmc
 from dash import ALL, MATCH, Input, Output, State, html
 
 from depictio.api.v1.configs.logging_init import logger
@@ -14,14 +15,64 @@ from depictio.dash.modules.table_component.frontend import design_table
 
 
 def return_design_component(component_selected, id, df, btn_component):
+    # Wrap all components in full-width container, but give Figure extra width treatment
     if component_selected == "Figure":
-        return design_figure(id), btn_component
+        component_content = design_figure(id)
+        return html.Div(
+            component_content, style={"width": "100%", "maxWidth": "none"}
+        ), btn_component
     elif component_selected == "Card":
-        return design_card(id, df), btn_component
+        component_content = design_card(id, df)
+        return html.Div(component_content, style={"width": "100%"}), btn_component
     elif component_selected == "Interactive":
-        return design_interactive(id, df), btn_component
+        component_content = design_interactive(id, df)
+        return html.Div(component_content, style={"width": "100%"}), btn_component
     elif component_selected == "Table":
-        return design_table(id), btn_component
+        component_content = design_table(id)
+        return html.Div(component_content, style={"width": "100%"}), btn_component
+    elif component_selected == "Text":
+        from depictio.dash.modules.text_component.frontend import design_text
+
+        component_content = design_text(id)
+
+        # Extract the preview from component_content (it's the last item)
+        left_content = component_content.children[:-1]  # All items except the preview
+        preview_content = component_content.children[-1]  # The preview section
+
+        # Create vertical layout with left and right sections for text component
+        text_layout = html.Div(
+            [
+                # Left section - Instructions/Help (without preview)
+                html.Div(
+                    dmc.Stack(left_content),
+                    style={
+                        "width": "45%",
+                        "padding": "20px",
+                        "borderRight": "1px solid var(--app-border-color, #ddd)",
+                    },
+                ),
+                # Right section - Move the good preview here
+                html.Div(
+                    preview_content,
+                    style={
+                        "width": "45%",
+                        "padding": "20px",
+                    },
+                ),
+            ],
+            style={
+                "display": "flex",
+                "flexDirection": "row",
+                "width": "100%",
+                "minHeight": "300px",
+                "border": "1px solid var(--app-border-color, #ddd)",
+                "borderRadius": "8px",
+                "backgroundColor": "var(--app-surface-color, #ffffff)",
+                "gap": "10px",
+            },
+        )
+
+        return text_layout, btn_component
     elif component_selected == "JBrowse2":
         return dash.no_update, btn_component
         # return design_jbrowse(id), btn_component
@@ -31,7 +82,7 @@ def return_design_component(component_selected, id, df, btn_component):
     elif component_selected == "Map":
         return dash.no_update, btn_component
     else:
-        return html.Div("Not implemented yet"), btn_component
+        return html.Div("Not implemented yet", style={"width": "100%"}), btn_component
 
 
 def register_callbacks_stepper_part_three(app):
@@ -76,13 +127,17 @@ def register_callbacks_stepper_part_three(app):
             "Card",
             "Interactive",
             "Table",
+            "Text",
             "JBrowse2",
             "Graph",
             "Map",
         ]
 
         # Ensure workflow_selection and data_collection_selection are not None
-        if workflow_selection is None or data_collection_selection is None:
+        # Allow Text components to proceed without workflow/data collection selection
+        if last_button != "Text" and (
+            workflow_selection is None or data_collection_selection is None
+        ):
             raise dash.exceptions.PreventUpdate
 
         # Retrieve wf_id and dc_id
@@ -107,6 +162,7 @@ def register_callbacks_stepper_part_three(app):
                     "Card",
                     "Interactive",
                     "Table",
+                    "Text",
                 ]:
                     component_to_render = component_selected
                     component_id = ids[btn_index[0]]
@@ -122,7 +178,7 @@ def register_callbacks_stepper_part_three(app):
 
                 # Get id using components_list index, last_button and store_btn_component
                 if last_button != "None":
-                    if last_button in ["Figure", "Card", "Interactive", "Table"]:
+                    if last_button in ["Figure", "Card", "Interactive", "Table", "Text"]:
                         last_button_index = components_list.index(last_button)
                         component_to_render = last_button
                         component_id = ids[last_button_index]
@@ -132,10 +188,17 @@ def register_callbacks_stepper_part_three(app):
 
             # Load data once for whichever component needs to be rendered
             if component_to_render and component_id:
-                df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
-                logger.debug(
-                    f"Stepper: Loaded delta table for {wf_id}:{dc_id} (shape: {df.shape}) for {component_to_render}"
-                )
+                if component_to_render == "Text":
+                    # Text components don't need data collections
+                    df = None
+                else:
+                    df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
+                if df is not None:
+                    logger.debug(
+                        f"Stepper: Loaded delta table for {wf_id}:{dc_id} (shape: {df.shape}) for {component_to_render}"
+                    )
+                else:
+                    logger.debug(f"Stepper: No data required for {component_to_render} component")
                 return return_design_component(component_to_render, component_id, df, btn_component)
 
         return dash.no_update, btn_component if btn_component else dash.no_update

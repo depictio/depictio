@@ -1,0 +1,143 @@
+/* Auto Theme Detection CSS for Depictio */
+
+/* =============================================================================
+   SYSTEM THEME DETECTION UTILITIES
+   Provides CSS-only theme detection that works independently of JavaScript
+   ============================================================================= */
+
+/* CSS-only theme detection indicator
+   This creates invisible elements that JavaScript can query to detect system theme */
+body::before {
+    content: 'light';
+    display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+    body::before {
+        content: 'dark';
+    }
+}
+
+/* Theme transition animations */
+* {
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease !important;
+}
+
+/* Disable transitions during theme initialization to prevent flash */
+.theme-initializing * {
+    transition: none !important;
+}
+
+/* Theme override classes for manual control */
+body.theme-auto {
+    /* Let CSS media queries handle the theme */
+}
+
+body.theme-manual-light {
+    /* Force light theme regardless of system preference */
+}
+
+body.theme-manual-dark {
+    /* Force dark theme regardless of system preference */
+}
+
+/* System theme change detection helper */
+.system-theme-detector {
+    position: absolute;
+    left: -9999px;
+    top: -9999px;
+    visibility: hidden;
+    pointer-events: none;
+    opacity: 0;
+}
+
+.system-theme-detector::before {
+    content: 'light';
+}
+
+@media (prefers-color-scheme: dark) {
+    .system-theme-detector::before {
+        content: 'dark';
+    }
+}
+
+/* Smooth color transitions for theme switching */
+:root {
+    transition:
+        --app-bg-color 0.3s ease,
+        --app-text-color 0.3s ease,
+        --app-surface-color 0.3s ease,
+        --app-border-color 0.3s ease;
+}
+
+/* Enhanced theme override classes with CSS variables */
+body.theme-manual-light {
+    --app-bg-color: var(--depictio-bg-light) !important;
+    --app-text-color: var(--depictio-text-light) !important;
+    --app-surface-color: var(--depictio-surface-light) !important;
+    --app-border-color: var(--depictio-border-light) !important;
+}
+
+body.theme-manual-dark {
+    --app-bg-color: var(--depictio-bg-dark) !important;
+    --app-text-color: var(--depictio-text-dark) !important;
+    --app-surface-color: var(--depictio-surface-dark) !important;
+    --app-border-color: var(--depictio-border-dark) !important;
+}
+
+/* Auto theme detection status indicator (for debugging) */
+.theme-status-indicator {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    padding: 4px 8px;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: monospace;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.theme-status-indicator.show {
+    opacity: 1;
+}
+
+.theme-status-indicator.auto::before {
+    content: "🔄 AUTO: ";
+}
+
+.theme-status-indicator.manual::before {
+    content: "👤 MANUAL: ";
+}
+
+.theme-status-indicator.light::after {
+    content: "☀️ Light";
+}
+
+.theme-status-indicator.dark::after {
+    content: "🌙 Dark";
+}
+
+/* Reset button theming for non-edit mode - maintains orange color */
+.drag-handles-hidden .mantine-ActionIcon-root[id*="reset-selection-graph-button"] {
+    background-color: var(--mantine-color-orange-filled, #fd7e14) !important;
+    color: white !important;
+}
+
+/* Auto theme detection for reset button container on hover - light mode (for scatter plots and interactive components) */
+.drag-handles-hidden .react-grid-item:hover .reset-button-container-non-edit {
+    background: var(--app-surface-color, rgba(255, 255, 255, 0.9)) !important;
+    border-color: var(--app-border-color, #ddd) !important;
+}
+
+/* Auto theme detection for reset button container on hover - dark mode (for scatter plots and interactive components) */
+@media (prefers-color-scheme: dark) {
+    .drag-handles-hidden .react-grid-item:hover .reset-button-container-non-edit {
+        background: var(--app-surface-color, rgba(45, 45, 45, 0.9)) !important;
+        border-color: var(--app-border-color, #555) !important;
+        box-shadow: 0 2px 4px rgba(255, 255, 255, 0.1) !important;
+    }
+}

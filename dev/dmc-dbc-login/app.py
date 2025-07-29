@@ -1,5 +1,5 @@
-from dash import html, Dash, dcc
 import dash_mantine_components as dmc
+from dash import Dash, dcc, html
 
 app = Dash(
     __name__,

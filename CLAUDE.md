@@ -254,3 +254,215 @@ This ensures all code changes comply with project standards including:
 - Import sorting and other quality checks
 
 **No exceptions** - pre-commit compliance is mandatory for all code changes.
+
+## Frontend Development Guidelines
+
+### Component Framework Standards
+
+**CRITICAL REQUIREMENT**: All new frontend components and features MUST use **DMC 2.0+** (Dash Mantine Components) for UI consistency and maintainability.
+
+#### Component Library Priority
+
+1. **Primary**: DMC 2.0+ components (dash-mantine-components >= 2.0.0)
+   - All new UI components must use DMC 2.0+ unless technically impossible
+   - Provides consistent styling and theme integration
+   - Better accessibility and modern UI patterns
+
+2. **Secondary**: Custom HTML/CSS components (only when DMC is insufficient)
+   - Must follow the established theme system patterns
+   - Require justification for not using DMC
+
+3. **Deprecated**: Bootstrap components (dash-bootstrap-components)
+   - Only maintain existing usage, do not extend
+   - Gradually migrate to DMC when refactoring
+
+#### Theme Compatibility Requirements
+
+**MANDATORY**: All new components and modifications MUST be compatible with the dark/light theme switch system.
+
+##### Theme-Aware Development Checklist
+
+- [ ] **Use CSS Variables**: All styling must use theme-aware CSS variables:
+  - `var(--app-bg-color)` for background colors
+  - `var(--app-text-color)` for text colors
+  - `var(--app-surface-color)` for component surfaces
+  - `var(--app-border-color)` for borders
+
+- [ ] **Test Both Themes**: Manually test components in both light and dark themes
+  - Verify text readability and contrast
+  - Check background color inheritance
+  - Ensure icons and graphics are theme-appropriate
+
+- [ ] **Follow Theme Patterns**:
+  - Use DMC's built-in theme support when available
+  - Extend `theme_utils.py` for custom theme-aware styling
+  - Never hardcode colors (e.g., `#ffffff`, `#000000`)
+
+- [ ] **DataTable Styling**: For Dash DataTables, use the established pattern:
+  ```python
+  style_cell={
+      "backgroundColor": "var(--app-surface-color, #ffffff)",
+      "color": "var(--app-text-color, #000000)",
+      # ... other styling
+  }
+  ```
+
+##### Theme Integration Examples
+
+```python
+# ✅ GOOD: Theme-aware component
+dmc.Paper(
+    children=[...],
+    style={
+        "backgroundColor": "var(--app-surface-color, #ffffff)",
+        "color": "var(--app-text-color, #000000)",
+        "border": "1px solid var(--app-border-color, #ddd)",
+    }
+)
+
+# ❌ BAD: Hardcoded colors
+dmc.Paper(
+    children=[...],
+    style={
+        "backgroundColor": "#ffffff",
+        "color": "#000000",
+        "border": "1px solid #ddd",
+    }
+)
+```
+
+#### Component Testing Requirements
+
+- **Visual Testing**: All components must be visually tested in both themes
+- **Accessibility**: Ensure proper contrast ratios in both light and dark modes
+- **Responsive Design**: Components must work across different screen sizes
+- **State Management**: Theme changes should not break component state
+
+#### Migration Strategy
+
+When working with existing components:
+
+1. **Assess Current State**: Identify non-DMC components that need migration
+2. **Gradual Migration**: Replace components incrementally during feature work
+3. **Theme Compatibility**: Ensure all changes maintain theme switching functionality
+4. **Documentation**: Update component documentation with theme requirements
+
+## Screenshot System - Dash 3+ Component Targeting
+
+### Background
+
+With the migration to Dash 3+ and Mantine AppShell architecture, the traditional screenshot approach targeting `.mantine-AppShell-main` captured the full viewport (1920x1080) including navbar, header, and other UI elements. This was problematic for dashboard previews where only the dashboard content should be captured.
+
+### Problem Analysis
+
+**Root Cause**: In minimalistic dashboards, parent containers (`#page-content`, `#draggable`, `.react-grid-layout`) collapse to 0px height because they only contain absolutely positioned components (`.react-grid-item`). The actual dashboard content exists as individual positioned components.
+
+**Key Findings**:
+- `.mantine-AppShell-main` captures full viewport including unwanted UI elements
+- Parent containers have 0px dimensions with minimal dashboard content
+- `.react-grid-item` components contain the actual rendered dashboard elements
+
+### Solution: Component-Based Composite Screenshots
+
+#### Implementation Strategy
+
+**Primary Method**: Component-based composite targeting
+1. **Target Individual Components**: Use `.react-grid-item` selector to find all dashboard components
+2. **Create Composite Boundary**: Calculate bounding box encompassing all components
+3. **Generate Composite Screenshot**: Capture only the dashboard content area
+
+**Fallback Chain**:
+1. Component composite screenshot (preferred)
+2. AppShell main element (legacy compatibility)
+3. Full page screenshot (final fallback)
+
+#### Technical Implementation
+
+**Location**: `depictio/api/v1/endpoints/utils_endpoints/routes.py:screenshot_dash_fixed()`
+
+```python
+# Wait for dashboard components to render
+await page.wait_for_function("""
+    () => {
+        const components = document.querySelectorAll('.react-grid-item');
+        if (components.length === 0) return false;
+
+        // Check if at least one component has meaningful dimensions
+        for (let component of components) {
+            const rect = component.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+""", timeout=10000)
+
+# Create composite view of all components
+components = await page.query_selector_all('.react-grid-item')
+composite_element = await page.evaluate("""
+    () => {
+        const components = document.querySelectorAll('.react-grid-item');
+        // Calculate bounding box of all components
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+        components.forEach(component => {
+            const rect = component.getBoundingClientRect();
+            minX = Math.min(minX, rect.left);
+            minY = Math.min(minY, rect.top);
+            maxX = Math.max(maxX, rect.right);
+            maxY = Math.max(maxY, rect.bottom);
+        });
+
+        // Create invisible container encompassing all components
+        const container = document.createElement('div');
+        container.id = 'temp-screenshot-container';
+        container.style.position = 'absolute';
+        container.style.left = minX + 'px';
+        container.style.top = minY + 'px';
+        container.style.width = (maxX - minX) + 'px';
+        container.style.height = (maxY - minY) + 'px';
+        // ... container styling
+
+        document.body.appendChild(container);
+        return { width: maxX - minX, height: maxY - minY, componentCount: components.length };
+    }
+""")
+
+# Screenshot the composite area
+temp_container = await page.query_selector('#temp-screenshot-container')
+await temp_container.screenshot(path=output_file)
+```
+
+#### Validation and Testing
+
+**Development Environment**: `dev/playwright_debug/mantine_appshell_debug.py`
+- **Authentication**: Uses real credentials from `depictio/.depictio/admin_config.yaml`
+- **Component Detection**: Validates individual `.react-grid-item` targeting
+- **Composite Generation**: Creates both individual and composite screenshots
+
+**Test Results**:
+- Successfully captured 9 dashboard components individually
+- Generated composite view: 1648x890 (perfect dashboard content only)
+- Excluded navbar, header, and UI chrome elements
+
+#### Advantages
+
+1. **Precise Targeting**: Captures only dashboard content, excluding UI chrome
+2. **Responsive to Content**: Automatically adjusts to actual component dimensions
+3. **Future-Proof**: Works with any number/arrangement of dashboard components
+4. **Fallback Compatible**: Maintains backward compatibility with existing approaches
+
+#### Development Notes
+
+- **Browser Compatibility**: Uses Playwright's element selection and screenshot APIs
+- **Performance**: Minimal overhead - single DOM query + bounding box calculation
+- **Reliability**: Includes proper wait conditions for component rendering
+- **Debugging**: Comprehensive logging for troubleshooting screenshot failures
+
+#### Usage Considerations
+
+- **Component Requirements**: Requires `.react-grid-item` components to be present
+- **Timing**: Uses smart waiting for component rendering with proper dimensions
+- **Error Handling**: Graceful fallback to traditional methods if component targeting fails
+- **Cleanup**: Properly removes temporary DOM elements after screenshot

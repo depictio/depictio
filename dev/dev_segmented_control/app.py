@@ -1,6 +1,6 @@
 import dash
 import dash_mantine_components as dmc
-from dash import html, Input, Output, callback
+from dash import Input, Output, callback, html
 
 app = dash.Dash(__name__)
 

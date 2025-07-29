@@ -1,9 +1,65 @@
 import dash_bootstrap_components as dbc
+import dash_mantine_components as dmc
 import numpy as np
 import pandas as pd
 from dash import dcc, html
+from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
+
+
+def get_reference_value_from_cols_json(cols_json, column_name, aggregation):
+    """
+    Get reference value from cols_json statistical data instead of recomputing from full dataframe.
+
+    Args:
+        cols_json (dict): Column specifications with statistical data
+        column_name (str): Name of the column
+        aggregation (str): Aggregation type (count, sum, average, etc.)
+
+    Returns:
+        float or None: Reference value if available in cols_json, None otherwise
+    """
+    if not cols_json or column_name not in cols_json:
+        logger.debug(f"Column '{column_name}' not found in cols_json")
+        return None
+
+    column_specs = cols_json[column_name].get("specs", {})
+    if not column_specs:
+        logger.debug(f"No specs found for column '{column_name}' in cols_json")
+        return None
+
+    # Map aggregation names to cols_json field names
+    aggregation_mapping = {
+        "count": "count",
+        "sum": "sum",
+        "average": "average",
+        "median": "median",
+        "min": "min",
+        "max": "max",
+        "nunique": "nunique",
+        "unique": "unique",
+        "variance": "variance",
+        "std_dev": "std_dev",
+        "range": "range",
+        "percentile": "percentile",
+    }
+
+    # Get the corresponding field name in cols_json
+    cols_json_field = aggregation_mapping.get(aggregation)
+    if not cols_json_field:
+        logger.debug(f"Aggregation '{aggregation}' not available in cols_json mapping")
+        return None
+
+    # Extract the value
+    reference_value = column_specs.get(cols_json_field)
+    if reference_value is not None:
+        logger.debug(f"Found reference value for {column_name}.{aggregation}: {reference_value}")
+        return reference_value
+    else:
+        logger.debug(f"Field '{cols_json_field}' not found in column specs for '{column_name}'")
+        return None
+
 
 # Mapping from custom aggregation names to pandas functions
 AGGREGATION_MAPPING = {
@@ -85,31 +141,48 @@ def compute_value(data, column_name, aggregation):
     return new_value
 
 
-def build_card_frame(index, children=None):
+def build_card_frame(index, children=None, show_border=False):
     if not children:
         return dbc.Card(
             dbc.CardBody(
+                html.Div(
+                    "Configure your card using the edit menu",
+                    style={
+                        "textAlign": "center",
+                        "color": "#999",
+                        "fontSize": "14px",
+                        "fontStyle": "italic",
+                    },
+                ),
                 id={
                     "type": "card-body",
                     "index": index,
                 },
                 style={
-                    "padding": "5px",  # Reduce padding inside the card body
+                    "padding": "20px",
                     "display": "flex",
                     "flexDirection": "column",
                     "justifyContent": "center",
-                    # "height": "100%",  # Make sure it fills the parent container
+                    "alignItems": "center",
+                    "minHeight": "150px",  # Ensure minimum height
+                    "height": "100%",
+                    "minWidth": "150px",  # Ensure minimum width
+                    "flex": "1",  # Allow growth to fill container
                 },
             ),
             style={
                 "width": "100%",
-                "height": "100%",  # Ensure the card fills the container's height
-                "padding": "0",  # Remove default padding
-                "margin": "0",  # Remove default margin
-                "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
-                "border": "0px solid #ddd",  # Optional: Add a light border
-                # "borderRadius": "4px",  # Optional: Slightly round the corners
-                # "border": "0px",  # Optional: Remove border
+                "height": "100%",
+                "padding": "0",
+                "margin": "0",
+                "boxShadow": "none",
+                "border": "none",  # Remove conflicting border - parent handles styling
+                "borderRadius": "4px",
+                "backgroundColor": "transparent",  # Let parent handle theme colors
+                # Critical flexbox properties for vertical growing
+                "display": "flex",
+                "flexDirection": "column",
+                "flex": "1",
             },
             id={
                 "type": "card-component",
@@ -128,8 +201,9 @@ def build_card_frame(index, children=None):
                     "padding": "5px",  # Reduce padding inside the card body
                     "display": "flex",
                     "flexDirection": "column",
-                    "justifyContent": "center",
-                    # "height": "100%",  # Make sure it fills the parent container
+                    "height": "100%",  # Make sure it fills the parent container
+                    "flex": "1",  # Allow growth to fill container
+                    "minHeight": "0",  # Critical: Allow shrinking below content size
                 },
             ),
             style={
@@ -137,10 +211,14 @@ def build_card_frame(index, children=None):
                 "height": "100%",  # Ensure the card fills the container's height
                 "padding": "0",  # Remove default padding
                 "margin": "0",  # Remove default margin
-                "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
-                "border": "0px solid #ddd",  # Optional: Add a light border
-                # "borderRadius": "4px",  # Optional: Slightly round the corners
-                # "border-width": "0px",  # Optional: Remove border
+                "boxShadow": "none",  # Remove shadow for a cleaner look
+                "border": "none",  # Remove conflicting border - parent handles styling
+                "borderRadius": "4px",
+                "backgroundColor": "transparent",  # Let parent handle theme colors
+                # Critical flexbox properties for vertical growing
+                "display": "flex",
+                "flexDirection": "column",
+                "flex": "1",
             },
             id={
                 "type": "card-component",
@@ -151,6 +229,7 @@ def build_card_frame(index, children=None):
 
 def build_card(**kwargs):
     # def build_card(index, title, wf_id, dc_id, dc_config, column_name, column_type, aggregation, v, build_frame=False):
+
     index = kwargs.get("index")
     title = kwargs.get("title", "Default Title")  # Example of default parameter
     wf_id = kwargs.get("wf_id")
@@ -162,14 +241,21 @@ def build_card(**kwargs):
     v = kwargs.get("value")
     build_frame = kwargs.get("build_frame", False)
     refresh = kwargs.get("refresh", False)
-    # stepper = kwargs.get("stepper", False)
+    stepper = kwargs.get("stepper", False)
+    filter_applied = kwargs.get("filter_applied", False)
+    color = kwargs.get("color", None)  # Custom color from user
+    cols_json = kwargs.get("cols_json", {})  # Column specifications for reference values
 
-    # if stepper:
-    #     index = f"{index}-tmp"
-    # else:
-    index = index
+    if stepper:
+        index = f"{index}-tmp"
+    else:
+        index = index
 
     # logger.debug(f"Card kwargs: {kwargs}")
+
+    # Variables to track filtered vs unfiltered values for comparison
+    reference_value = None
+    is_filtered_data = False
 
     # CRITICAL FIX: Card components MUST always recalculate values when data is provided
     # even if refresh=False, because they need to compute aggregations on filtered data
@@ -202,35 +288,122 @@ def build_card(**kwargs):
                         data_collection_id=ObjectId(dc_id),
                         TOKEN=kwargs.get("access_token"),
                     )
+                    # When we load the full data from database (no pre-existing df), this is NOT filtered
+                    is_filtered_data = False
+                    logger.debug(
+                        f"Card component {index}: Loaded full dataset from database (shape: {data.shape})"
+                    )
             else:
                 # If refresh=False and data is empty, this means filters resulted in no data
                 # Keep the empty DataFrame and compute appropriate "no data" value
+                is_filtered_data = True  # Empty due to filtering
                 logger.info(
                     f"Card component {index}: Using empty DataFrame from filters (shape: {data.shape}) - filters exclude all data"
                 )
         else:
             logger.debug(
-                f"Card component {index}: Recalculating value with filtered DataFrame (shape: {data.shape})"
+                f"Card component {index}: Recalculating value with provided DataFrame (shape: {data.shape})"
             )
+
+        # Determine if current data is filtered (only if we have non-empty data and haven't already determined this)
+        if (
+            not data.is_empty()
+            and kwargs.get("df") is not None
+            and wf_id
+            and dc_id
+            and kwargs.get("access_token")
+        ):
+            # A DataFrame was explicitly provided - need to check if it's different from full dataset
+            try:
+                from bson import ObjectId
+
+                from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+                full_data = load_deltatable_lite(
+                    workflow_id=ObjectId(wf_id),
+                    data_collection_id=ObjectId(dc_id),
+                    TOKEN=kwargs.get("access_token"),
+                )
+
+                # Compare provided data with full dataset
+                data_differs = (
+                    data.shape[0] != full_data.shape[0]
+                    or data.shape[1] != full_data.shape[1]
+                    or set(data.columns) != set(full_data.columns)
+                )
+
+                is_filtered_data = filter_applied or data_differs
+
+                # Only compute reference value if data is actually filtered
+                if is_filtered_data:
+                    # Try to get reference value from cols_json first (more efficient)
+                    reference_value = get_reference_value_from_cols_json(
+                        cols_json, column_name, aggregation
+                    )
+
+                    if reference_value is None:
+                        # Fallback to computing from full data if not available in cols_json
+                        reference_value = compute_value(full_data, column_name, aggregation)
+                        logger.debug(
+                            f"Card component {index}: Used fallback computation (cols_json unavailable)"
+                        )
+                    else:
+                        logger.debug(
+                            f"Card component {index}: Used cols_json reference value: {reference_value}"
+                        )
+
+                    logger.debug(
+                        f"Card component {index}: Detected filtered data (current: {data.shape}, full: {full_data.shape})"
+                    )
+                else:
+                    logger.debug(
+                        f"Card component {index}: Provided data matches full dataset, no filtering detected"
+                    )
+
+            except Exception as e:
+                logger.warning(f"Failed to load full dataset for comparison: {e}")
+                # Fallback: assume filtered if filter flag is set
+                is_filtered_data = filter_applied
+        elif not data.is_empty() and filter_applied:
+            # filter_applied flag is set but no df provided - treat as filtered
+            is_filtered_data = True
 
         # Always recalculate value when we have data (filtered or unfiltered)
         v = compute_value(data, column_name, aggregation)
         logger.debug(f"Card component {index}: Computed new value: {v}")
 
     try:
-        v = round(float(v), 4)
-    except ValueError:
-        pass
+        if v is not None:
+            v = round(float(v), 4)
+        else:
+            v = "N/A"  # Default value when None - indicates no data
+    except (ValueError, TypeError):
+        v = "Error"  # Default value for invalid conversions
+
+    # Format reference value for comparison
+    if reference_value is not None:
+        try:
+            reference_value = round(float(reference_value), 4)
+        except (ValueError, TypeError):
+            reference_value = None
 
     # Metadata management - Create a store component to store the metadata of the card
-    store_index = index.replace("-tmp", "") if index else "unknown"
+    # For stepper mode, use the temporary index to avoid conflicts with existing components
+    # For normal mode, use the original index (remove -tmp suffix if present)
+    if stepper:
+        store_index = index  # Use the temporary index with -tmp suffix
+        data_index = index.replace("-tmp", "") if index else "unknown"  # Clean index for data
+    else:
+        store_index = index.replace("-tmp", "") if index else "unknown"
+        data_index = store_index
+
     store_component = dcc.Store(
         id={
             "type": "stored-metadata-component",
             "index": str(store_index),
         },
         data={
-            "index": str(store_index),
+            "index": str(data_index),
             "component_type": "card",
             "title": title,
             "wf_id": wf_id,
@@ -244,25 +417,114 @@ def build_card(**kwargs):
         },
     )
 
-    # Create the card body - default title is the aggregation value on the selected column
-    if not title:
-        card_title = html.H5(f"{aggregation} on {column_name}")
+    # Create improved card using DMC 2.0+ components
+    # Handle potential None aggregation value
+    if aggregation and hasattr(aggregation, "title"):
+        agg_display = aggregation.title()
     else:
-        card_title = html.H5(f"{title}")
+        agg_display = str(aggregation).title() if aggregation else "Unknown"
 
-    # Create the card body
-    new_card_body = html.Div(
-        [
-            card_title,
-            html.P(
-                f"{v}",
-                id={
-                    "type": "card-value",
-                    "index": str(index),
-                },
-            ),
-            store_component,
-        ],
+    card_title = title if title else f"{agg_display} of {column_name}"
+
+    # Create comparison text if reference value is available
+    comparison_text = None
+    comparison_icon = None
+    comparison_color = "gray"
+
+    if reference_value is not None and is_filtered_data and v != "N/A" and v != "Error":
+        try:
+            current_val = float(v)
+            ref_val = float(reference_value)
+
+            # Calculate percentage change
+            if ref_val != 0:
+                change_pct = ((current_val - ref_val) / ref_val) * 100
+                if change_pct > 0:
+                    comparison_text = f"+{change_pct:.1f}% vs unfiltered ({ref_val})"
+                    comparison_color = "green"
+                    comparison_icon = "mdi:trending-up"
+                elif change_pct < 0:
+                    comparison_text = f"{change_pct:.1f}% vs unfiltered ({ref_val})"
+                    comparison_color = "red"
+                    comparison_icon = "mdi:trending-down"
+                else:
+                    comparison_text = f"Same as unfiltered ({ref_val})"
+                    comparison_color = "black"  # Changed from gray to black for horizontal trend
+                    comparison_icon = "mdi:trending-neutral"
+            else:
+                comparison_text = f"Reference: {ref_val}"
+                comparison_color = "gray"
+                comparison_icon = "mdi:information-outline"
+        except (ValueError, TypeError):
+            comparison_text = f"Reference: {reference_value}"
+            comparison_color = "gray"
+            comparison_icon = "mdi:information-outline"
+
+    # Create card content using modern DMC components
+    title_color = color if color else "gray"
+    value_color = (
+        color
+        if color and v not in ["N/A", "Error"]
+        else ("dark" if v not in ["N/A", "Error"] else "red")
+    )
+
+    card_content = [
+        dmc.Text(card_title, size="sm", c=title_color, fw="normal"),
+        dmc.Text(
+            str(v),
+            size="xl",
+            fw="bold",
+            c=value_color,
+            id={
+                "type": "card-value",
+                "index": str(index),
+            },
+        ),
+    ]
+
+    # Add comparison text if available
+    if comparison_text:
+        card_content.append(
+            dmc.Group(
+                [
+                    DashIconify(icon=comparison_icon, width=14, color=comparison_color)
+                    if comparison_icon
+                    else None,
+                    dmc.Text(comparison_text, size="xs", c=comparison_color, fw="normal"),  # type: ignore
+                ],
+                gap="xs",
+                align="center",
+            )
+        )
+
+    # Add filter badge if data is filtered
+    if is_filtered_data:
+        card_content.append(
+            dmc.Badge(
+                "Filtered Data",
+                size="xs",
+                color="orange",
+                variant="light",
+                leftSection=DashIconify(icon="mdi:filter", width=12),
+                style={"marginTop": "8px"},
+            )
+        )
+
+    card_content.append(store_component)
+
+    # Create the modern card body using DMC Card component
+    new_card_body = dmc.Card(
+        children=card_content,
+        withBorder=True,
+        shadow="sm",
+        radius="md",
+        p="md",
+        style={
+            "height": "100%",
+            "minHeight": "120px",
+            "backgroundColor": "var(--app-surface-color, #ffffff)",
+            "borderColor": "var(--app-border-color, #ddd)",
+        },
         id={
             "type": "card",
             "index": str(index),
@@ -271,7 +533,32 @@ def build_card(**kwargs):
     if not build_frame:
         return new_card_body
     else:
-        return build_card_frame(index=index, children=new_card_body)
+        if not stepper:
+            # Show border only when in stepper mode (editing)
+            from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
+                create_skeleton_component,
+            )
+
+            # Build the card component
+            card_component = build_card_frame(
+                index=index, children=new_card_body, show_border=stepper
+            )
+
+            # NUCLEAR: Remove intermediate wrapper div that breaks flex chain
+            # Return card_component directly with loading wrapper only
+            return dcc.Loading(
+                children=card_component,
+                custom_spinner=create_skeleton_component("card"),
+                # delay_show=50,  # Minimal delay to prevent flashing
+                # delay_hide=100,  # Quick dismissal
+                id={"index": index},  # Move the id to the loading component
+            )
+        else:
+            # Build the card component for stepper mode
+            card_component = build_card_frame(
+                index=index, children=new_card_body, show_border=stepper
+            )
+            return card_component
 
 
 # List of all the possible aggregation methods for each data type
@@ -344,11 +631,6 @@ agg_functions = {
                 "pandas": "count",
                 "numpy": "count_nonzero",
                 "description": "Counts the number of non-NA cells",
-            },
-            "unique": {
-                "pandas": "nunique",
-                "numpy": None,
-                "description": "Number of distinct elements",
             },
             "sum": {
                 "pandas": "sum",

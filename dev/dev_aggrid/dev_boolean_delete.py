@@ -1,9 +1,9 @@
 import json
-import dash_ag_grid as dag
-from dash import Dash, html, dcc, Input, Output, callback
-import pandas as pd
-import dash_bootstrap_components as dbc
 
+import dash_ag_grid as dag
+import dash_bootstrap_components as dbc
+import pandas as pd
+from dash import Dash, Input, Output, callback, dcc, html
 
 data = {
     "ticker": ["AAPL", "MSFT", "AMZN", "GOOGL"],

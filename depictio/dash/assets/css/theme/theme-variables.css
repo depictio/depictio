@@ -1,0 +1,97 @@
+/* =============================================================================
+   THEME VARIABLES AND SYSTEM
+   Central theme management for light/dark mode
+   ============================================================================= */
+
+/* CSS Custom Properties for Theme Variables */
+:root {
+    --depictio-bg-light: #ffffff;
+    --depictio-bg-dark: #1a1b1e;
+    --depictio-surface-light: #ffffff;
+    --depictio-surface-dark: #25262b;
+    --depictio-text-light: #000000;
+    --depictio-text-dark: #ffffff;
+    --depictio-border-light: #dee2e6;
+    --depictio-border-dark: #373A40;
+    --app-primary-color: #6366f1;
+}
+
+/* =============================================================================
+   AUTOMATIC THEME DETECTION
+   Uses CSS media queries to detect system theme preference
+   ============================================================================= */
+
+/* Default light theme */
+:root {
+    --app-bg-color: var(--depictio-bg-light);
+    --app-text-color: var(--depictio-text-light);
+    --app-surface-color: var(--depictio-surface-light);
+    --app-border-color: var(--depictio-border-light);
+}
+
+/* Automatic dark theme detection via CSS media query */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --app-bg-color: var(--depictio-bg-dark);
+        --app-text-color: var(--depictio-text-dark);
+        --app-surface-color: var(--depictio-surface-dark);
+        --app-border-color: var(--depictio-border-dark);
+    }
+}
+
+/* Light theme (default) */
+.theme-light {
+    --app-bg-color: var(--depictio-bg-light);
+    --app-text-color: var(--depictio-text-light);
+    --app-surface-color: var(--depictio-surface-light);
+    --app-border-color: var(--depictio-border-light);
+}
+
+/* Dark theme */
+.theme-dark {
+    --app-bg-color: var(--depictio-bg-dark);
+    --app-text-color: var(--depictio-text-dark);
+    --app-surface-color: var(--depictio-surface-dark);
+    --app-border-color: var(--depictio-border-dark);
+}
+
+/* Base page background */
+body {
+    background-color: var(--app-bg-color, var(--depictio-bg-light));
+    color: var(--app-text-color, var(--depictio-text-light));
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Theme-aware page content */
+#page-content {
+    transition: background-color 0.2s ease, color 0.2s ease;
+    background-color: var(--app-bg-color, var(--mantine-color-white)) !important;
+    color: var(--app-text-color, var(--mantine-color-black)) !important;
+}
+
+/* Theme support for main containers */
+.mantine-AppShell-main,
+.mantine-Container-root {
+    background-color: var(--app-bg-color, var(--mantine-color-white)) !important;
+    color: var(--app-text-color, var(--mantine-color-black)) !important;
+}
+
+/* Theme-aware titles */
+[data-mantine="Title"] {
+    transition: color 0.2s ease;
+    color: var(--app-text-color, var(--mantine-color-black)) !important;
+}
+
+/* Headers and navigation background */
+#header-content,
+.mantine-AppShell-header {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    color: var(--app-text-color, var(--depictio-text-light)) !important;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+#sidebar,
+.mantine-AppShell-navbar {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    transition: background-color 0.2s ease;
+}

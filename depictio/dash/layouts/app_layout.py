@@ -13,6 +13,7 @@ from depictio.dash.layouts.draggable import design_draggable
 from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data
 from depictio.dash.layouts.header import design_header
 from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
+from depictio.dash.layouts.notes_footer import create_notes_footer
 from depictio.dash.layouts.palette import create_color_palette_page
 from depictio.dash.layouts.profile import layout as profile_layout
 from depictio.dash.layouts.projectwise_user_management import (
@@ -59,7 +60,7 @@ def handle_unauthenticated_user(pathname):
     )
 
 
-def handle_authenticated_user(pathname, local_data):
+def handle_authenticated_user(pathname, local_data, theme="light"):
     logger.info(f"User logged in: {local_data.get('email', 'Unknown')}")
     # logger.info(f"Local data: {local_data}")
 
@@ -68,7 +69,7 @@ def handle_authenticated_user(pathname, local_data):
     # Map the pathname to the appropriate content and header
     if pathname.startswith("/dashboard/"):
         dashboard_id = pathname.split("/")[-1]
-        depictio_dash_data = load_depictio_data(dashboard_id, local_data)
+        depictio_dash_data = load_depictio_data(dashboard_id, local_data, theme=theme)
         # logger.info(f"Depictio dash data: {depictio_dash_data}")
         header_content, backend_components = design_header(
             data=depictio_dash_data, local_store=local_data
@@ -80,6 +81,7 @@ def handle_authenticated_user(pathname, local_data):
                 dashboard_id=dashboard_id,
                 local_data=local_data,
                 backend_components=backend_components,
+                theme=theme,
             ),
             header_content,
             pathname,
@@ -367,7 +369,11 @@ def create_tokens_management_layout():
 
 
 def create_dashboard_layout(
-    depictio_dash_data=None, dashboard_id: str = "", local_data=None, backend_components=None
+    depictio_dash_data=None,
+    dashboard_id: str = "",
+    local_data=None,
+    backend_components=None,
+    theme="light",
 ):
     # Init layout and children if depictio_dash_data is available, else set to empty
     if depictio_dash_data and isinstance(depictio_dash_data, dict):
@@ -392,19 +398,41 @@ def create_dashboard_layout(
     local_data = local_data or {}
     core = design_draggable(init_layout, init_children, dashboard_id, local_data)
 
+    # Add progressive loading components if we have metadata
+    progressive_loading_components = []
+    if (
+        depictio_dash_data
+        and isinstance(depictio_dash_data, dict)
+        and "stored_metadata" in depictio_dash_data
+    ):
+        from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
+            create_loading_progress_display,
+        )
+
+        stored_metadata = depictio_dash_data["stored_metadata"]
+        if stored_metadata:
+            logger.info(f"Adding simple progressive loading for {len(stored_metadata)} components")
+
+            # Create simple loading progress display
+            progressive_loading_components.append(create_loading_progress_display(dashboard_id))
+
     return dmc.Container(
         [
             # Include backend components (Store components)
             backend_components if backend_components else html.Div(),
+            # Progressive loading components
+            html.Div(progressive_loading_components),
             html.Div(
                 [
                     # Draggable layout
                     core,
                 ],
             ),
-            html.Div(id="test-input"),
+            # Notes footer - positioned as overlay
+            create_notes_footer(dashboard_data=depictio_dash_data),
+            # html.Div(id="test-input"),
             html.Div(id="test-output", style={"display": "none"}),
-            html.Div(id="test-output-visible"),
+            # html.Div(id="test-output-visible"),
         ],
         fluid=True,
         style={
@@ -415,6 +443,7 @@ def create_dashboard_layout(
             "flexDirection": "column",
             "width": "100%",
             "height": "100%",
+            "position": "relative",  # Allow positioned children
         },
     )
 
@@ -438,8 +467,10 @@ def create_app_layout():
             dcc.Store(
                 id="theme-store",
                 storage_type="local",
-                data={},  # Start empty, will be populated by clientside callback
+                data="light",  # Start with light theme as fallback, will be updated by theme detection
             ),
+            # Hidden div to trigger theme detection on app load
+            html.Div(id="theme-detection-trigger", style={"display": "none"}),
             dcc.Store(
                 id="theme-relay-store",
                 storage_type="memory",
@@ -447,8 +478,20 @@ def create_app_layout():
             ),
             dcc.Store(
                 id="sidebar-collapsed",
+                storage_type="local",  # Changed to local storage to persist user preference
+                data=False,  # Default to expanded if no preference saved
+            ),
+            # Consolidated user cache to reduce API calls
+            dcc.Store(
+                id="user-cache-store",
                 storage_type="memory",
-                data=False,  # Start with sidebar expanded
+                data=None,  # Will be populated by consolidated callback
+            ),
+            # Server status cache
+            dcc.Store(
+                id="server-status-cache",
+                storage_type="memory",
+                data=None,  # Will be populated by consolidated callback
             ),
             dcc.Store(
                 id="local-store-components-metadata",
@@ -472,6 +515,8 @@ def create_app_layout():
                 overlayProps={"overlayOpacity": 0.1},
                 children=[],
             ),
+            dmc.NotificationContainer(id="notification-container"),
+            html.Div(id="admin-password-warning-trigger", style={"display": "none"}),
             dmc.AppShell(
                 id="app-shell",  # Add ID for callback targeting
                 navbar={

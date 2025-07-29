@@ -1,7 +1,7 @@
 import dash
-from dash import html, dcc, Input, Output, State
 import dash_bootstrap_components as dbc
 import dash_draggable
+from dash import Input, Output, State, dcc, html
 
 
 # Simulated function to load data (replace with your actual loading function)

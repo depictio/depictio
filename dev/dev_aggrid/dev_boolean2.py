@@ -1,8 +1,8 @@
-import dash_ag_grid as dag
-from dash import Dash, html, dcc, Input, Output, State, callback, ctx
-import dash_mantine_components as dmc
 import uuid
-import json
+
+import dash_ag_grid as dag
+import dash_mantine_components as dmc
+from dash import Dash, Input, Output, State, callback, ctx
 
 app = Dash(__name__)
 

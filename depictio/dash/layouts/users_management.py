@@ -29,7 +29,7 @@ def render_login_form():
             dmc.Center(
                 html.Img(
                     id="auth-modal-logo-login",
-                    src=dash.get_asset_url("logo_black.svg"),
+                    src=dash.get_asset_url("images/logos/logo_black.svg"),
                     height=60,
                     style={"margin-left": "0px"},
                 )
@@ -170,7 +170,7 @@ def render_register_form():
             dmc.Center(
                 html.Img(
                     id="auth-modal-logo-register",
-                    src=dash.get_asset_url("logo_black.svg"),
+                    src=dash.get_asset_url("images/logos/logo_black.svg"),
                     height=60,
                     style={"margin-left": "0px"},
                 )
@@ -452,12 +452,12 @@ def create_triangle_background():
                 "left": f"{x}%",
                 "top": f"{y}%",
                 "background": create_triangle_svg(chosen_size, color_hex),
-                # Random initial rotation for variety
+                # Set initial rotation as CSS custom property
+                "--initial-rotation": f"{(i * 73) % 360}deg",
+                # Initial transform with random rotation
                 "transform": f"rotate({(i * 73) % 360}deg) translateZ(0)",
                 # Staggered animation delays for dynamic feel
-                "animationDelay": f"{(i * 0.6) % 16}s",
-                # Varied duration for more organic movement
-                "animationDuration": f"{14 + (i * 1.5) % 12}s",
+                "animationDelay": f"{(i * 0.2) % 3}s",
             },
         )
 
@@ -560,13 +560,13 @@ layout = html.Div(
                     dmc.Paper(
                         id="modal-content",
                         className="auth-modal-content",
-                        shadow="xl",
-                        radius="lg",
-                        p="xl",
+                        # shadow="xl",
+                        # radius="lg",
+                        # p="xl",
                         style={
                             "position": "relative",
                             "zIndex": "10001",
-                            "backdropFilter": "blur(10px)",
+                            # "backdropFilter": "blur(10px)",
                         },
                     )
                 ],
@@ -575,11 +575,11 @@ layout = html.Div(
                 id="auth-modal-listener",
             ),
             withCloseButton=False,
-            closeOnEscape=False,
-            closeOnClickOutside=False,
+            closeOnEscape=True,
+            closeOnClickOutside=True,
             size="lg",
             overlayProps={
-                "opacity": 0,  # Make overlay transparent so we can see our custom background
+                "opacity": 0.03,  # Make overlay transparent so we can see our custom background
                 "blur": 0,
             },
             # Ensure modal content is visible above background

@@ -1,11 +1,10 @@
 # create_admin.py
 import asyncio
 import logging
-from motor.motor_asyncio import AsyncIOMotorClient
+
+from app.db import Group, User, db
 from beanie import init_beanie
 from fastapi_users.password import PasswordHelper
-
-from app.db import User, Group, db
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

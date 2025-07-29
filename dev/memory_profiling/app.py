@@ -1,8 +1,7 @@
+
 import dash_ag_grid as dag
-from dash import Dash, Input, Output, html, no_update, callback
-import pandas as pd
 import polars as pl
-import time
+from dash import Dash, Input, Output, callback, html, no_update
 
 app = Dash(__name__)
 

@@ -1,13 +1,12 @@
+
+from django.contrib.auth.models import User
+from django.shortcuts import redirect
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.contrib.auth.models import User
-from django.shortcuts import redirect
-from django.conf import settings
-from django.urls import reverse
-from .serializers import RegisterSerializer, UserSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
-import json
+
+from .serializers import RegisterSerializer, UserSerializer
 
 
 class RegisterView(generics.CreateAPIView):

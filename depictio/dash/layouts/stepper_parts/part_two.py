@@ -4,6 +4,7 @@ from dash import ALL, MATCH, Input, Output, State, ctx, dcc, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.component_metadata import is_enabled
 from depictio.dash.modules.card_component.frontend import create_stepper_card_button
 
 # Depictio components imports - button step
@@ -11,6 +12,7 @@ from depictio.dash.modules.figure_component.frontend import create_stepper_figur
 from depictio.dash.modules.interactive_component.frontend import create_stepper_interactive_button
 from depictio.dash.modules.jbrowse_component.frontend import create_stepper_jbrowse_button
 from depictio.dash.modules.table_component.frontend import create_stepper_table_button
+from depictio.dash.modules.text_component.frontend import create_stepper_text_button
 from depictio.dash.utils import UNSELECTED_STYLE
 
 
@@ -49,20 +51,23 @@ def register_callbacks_stepper_part_two(app):
         )
 
         figure_stepper_button, figure_stepper_button_store = create_stepper_figure_button(
-            n, disabled=False
+            n, disabled=not is_enabled("figure")
         )
         card_stepper_button, card_stepper_button_store = create_stepper_card_button(
-            n, disabled=False
+            n, disabled=not is_enabled("card")
         )
         (
             interactive_stepper_button,
             interactive_stepper_button_store,
-        ) = create_stepper_interactive_button(n, disabled=False)
+        ) = create_stepper_interactive_button(n, disabled=not is_enabled("interactive"))
         table_stepper_button, table_stepper_button_store = create_stepper_table_button(
-            n, disabled=False
+            n, disabled=not is_enabled("table")
         )
         jbrowse_stepper_button, jbrowse_stepper_button_store = create_stepper_jbrowse_button(
-            n, disabled=False
+            n, disabled=not is_enabled("jbrowse")
+        )
+        text_stepper_button, text_stepper_button_store = create_stepper_text_button(
+            n, disabled=not is_enabled("text")
         )
 
         standard_components = [
@@ -70,6 +75,7 @@ def register_callbacks_stepper_part_two(app):
             card_stepper_button,
             interactive_stepper_button,
             table_stepper_button,
+            text_stepper_button,
         ]
         special_components = [jbrowse_stepper_button]
         # FIXME: remove graph and map buttons
@@ -93,6 +99,7 @@ def register_callbacks_stepper_part_two(app):
             card_stepper_button_store,
             interactive_stepper_button_store,
             table_stepper_button_store,
+            text_stepper_button_store,
             jbrowse_stepper_button_store,
             dcc.Store(
                 id={"type": "last-button", "index": n},

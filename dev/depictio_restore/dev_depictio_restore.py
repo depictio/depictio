@@ -1,7 +1,7 @@
-from dash import html, dcc, Input, Output, State
 import dash
-import pymongo
 import dash_draggable
+import pymongo
+from dash import Input, Output, State, dcc, html
 
 # Load build_car from /Users/tweber/Gits/depictio/depictio/dash/modules/card_component/utils.py
 from depictio.dash.modules.card_component.utils import build_card

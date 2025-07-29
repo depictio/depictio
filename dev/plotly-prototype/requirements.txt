@@ -1,0 +1,13 @@
+# Core Dash requirements
+dash>=2.16.0
+dash-mantine-components>=0.12.0
+plotly>=5.17.0
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Code editor with syntax highlighting
+dash-ace>=0.4.0
+
+# Optional: Enhanced code editor alternatives
+# dash-codemirror>=0.0.1
+# dash-monaco-editor>=0.0.1

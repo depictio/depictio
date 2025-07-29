@@ -1,19 +1,18 @@
 # Import necessary libraries
-from dash import dcc, html
-from dash.dependencies import Input, Output, State
+import os
+
 import dash
 import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.express as px
-import inspect
+from dash import dcc, html
+from dash.dependencies import Input, Output, State
 from utils import (
-    load_data,
     get_common_params,
-    get_specific_params,
-    get_param_info,
     get_dropdown_options,
+    get_param_info,
+    get_specific_params,
 )
-import os, sys
 
 # Set up Dash app with Bootstrap CSS and additional CSS file
 app = dash.Dash(
@@ -449,7 +448,7 @@ def generate_callback(element_id):
 
 app.layout.children.insert(
     0,
-    dcc.Store(id=f"stored-visualization-type", storage_type="session", data="scatter"),
+    dcc.Store(id="stored-visualization-type", storage_type="session", data="scatter"),
 )
 
 save_value_callback, update_value_callback = generate_callback("visualization-type")
@@ -588,7 +587,8 @@ def save_data(
     figure,
 ):
     if n_clicks:
-        import hashlib, json
+        import hashlib
+        import json
 
         figure_hash = hashlib.md5(json.dumps(figure).encode("utf-8")).hexdigest()
         print(os.getcwd())

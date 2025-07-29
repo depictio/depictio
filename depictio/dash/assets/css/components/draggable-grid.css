@@ -1,0 +1,392 @@
+/* =============================================================================
+   DRAGGABLE GRID COMPONENTS - DEPICTIO CUSTOM STYLES
+   All styles related to the dash-dynamic-grid-layout system
+
+   PERFORMANCE NOTE: This file contains CSS rules that may impact drag performance.
+   Key areas of concern:
+   - CSS transitions during drag operations
+   - Z-index layering complexity
+   - Hover state transitions
+
+   Grid Configuration (applied in draggable.py):
+   - cols: {"lg": 12, "md": 10, "sm": 6, "xs": 4, "xxs": 2}
+   - rowHeight: 50px
+   - compactType: undefined (disabled for performance)
+   ============================================================================= */
+
+/* =============================================================================
+   1. THEME INTEGRATION & VISUAL CONSISTENCY
+   ============================================================================= */
+
+/* Bootstrap card theming within draggable grid items
+   Purpose: Ensures Bootstrap cards match app theme (light/dark mode)
+   Components: card, card-body, card-header elements
+   Variables: Uses CSS custom properties for dynamic theming
+   Performance Impact: 0.2s transitions may cause drag delays */
+.react-grid-item .card-body,
+.react-grid-item .card-header,
+#draggable .card,
+#draggable .card-body,
+#draggable .card-header {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    color: var(--app-text-color, var(--depictio-text-light)) !important;
+    transition: background-color 0.2s ease, color 0.2s ease; /* POTENTIAL PERFORMANCE ISSUE */
+}
+
+/* =============================================================================
+   2. RESIZE HANDLES STYLING & BEHAVIOR
+   ============================================================================= */
+
+/* Base resize handle styling
+   Purpose: Clean, minimal resize handles that appear on hover
+   Behavior: Hidden by default, visible on component hover
+   Z-index: 500 (below ActionIconGroup at 1001) */
+.react-resizable-handle {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    opacity: 0 !important;
+    transition: opacity 0.2s ease !important; /* POTENTIAL PERFORMANCE ISSUE */
+    z-index: 500 !important;
+}
+
+/* Show resize handles on component hover
+   Purpose: Provides visual feedback for resizable components */
+.react-grid-item:hover .react-resizable-handle {
+    opacity: 0.7 !important;
+}
+
+/* Hide resize handles when edit mode is disabled
+   Purpose: Clean read-only view without editing controls
+   Trigger: Applied via .drag-handles-hidden class */
+.drag-handles-hidden .react-resizable-handle {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* Dark mode resize handle adjustments
+   Purpose: Invert handle colors for dark theme visibility */
+[data-mantine-color-scheme="dark"] .react-grid-item:hover > .react-resizable-handle::before,
+[data-mantine-color-scheme="dark"] .react-grid-item:hover > .react-resizable-handle::after {
+    filter: invert(1) !important;
+}
+
+/* Complete handle hiding in dark mode
+   Purpose: Remove all handle backgrounds/borders in dark theme */
+[data-mantine-color-scheme="dark"] .react-grid-item:hover > .react-resizable-handle {
+    background: none !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+.react-grid-item:hover .mantine-ActionIcon-root[id*="remove-box-button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="edit-box-button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="duplicate-box-button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="reset-selection-graph-button"] {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
+
+/* Hide ActionIconGroup completely when edit mode is disabled (matching drag handle pattern) */
+.drag-handles-hidden .mantine-ActionIconGroup-root {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* Disable text editing when edit mode is off */
+.drag-handles-hidden [id*="editable-title"] {
+    pointer-events: none !important;
+    cursor: default !important;
+}
+
+.drag-handles-hidden [id*="text-container"] {
+    cursor: default !important;
+}
+
+.drag-handles-hidden [id*="text-container"]:hover {
+    border: 1px solid transparent !important;
+    background-color: transparent !important;
+}
+
+/* Hide all action buttons and drag handles completely when edit mode is disabled */
+.drag-handles-hidden .mantine-ActionIconGroup-root,
+.drag-handles-hidden .mantine-ActionIcon-root[id*="drag-handle"],
+.drag-handles-hidden .mantine-ActionIcon-root[id*="remove-box-button"],
+.drag-handles-hidden .mantine-ActionIcon-root[id*="edit-box-button"],
+.drag-handles-hidden .mantine-ActionIcon-root[id*="duplicate-box-button"],
+.drag-handles-hidden .mantine-ActionIcon-root[id*="alignment-menu-btn"] {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* Exception: Keep reset button visible in non-edit mode for scatter plots and interactive components */
+.drag-handles-hidden .mantine-ActionIcon-root[id*="reset-selection-graph-button"] {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 0 !important;
+    pointer-events: auto !important;
+    transition: opacity 0.2s ease !important;
+}
+
+/* Show reset button on component hover (consistent with edit mode behavior) */
+.drag-handles-hidden .react-grid-item:hover .mantine-ActionIcon-root[id*="reset-selection-graph-button"] {
+    opacity: 1 !important;
+}
+
+/* ALWAYS show orange reset buttons (when filters are active) - override hover-only behavior */
+/* Try multiple attribute selectors to catch different DMC implementations */
+.react-grid-item .mantine-ActionIcon-root[id*="reset-selection-graph-button"][data-color="orange"],
+.react-grid-item .mantine-ActionIcon-root[id*="reset-selection-graph-button"][color="orange"],
+.react-grid-item .mantine-ActionIcon-root[id*="reset-selection-graph-button"].mantine-ActionIcon-filled,
+.drag-handles-hidden .mantine-ActionIcon-root[id*="reset-selection-graph-button"][data-color="orange"],
+.drag-handles-hidden .mantine-ActionIcon-root[id*="reset-selection-graph-button"][color="orange"],
+.drag-handles-hidden .mantine-ActionIcon-root[id*="reset-selection-graph-button"].mantine-ActionIcon-filled {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    display: flex !important;
+    visibility: visible !important;
+}
+
+/* Ensure orange reset buttons stay visible in edit mode too */
+.react-grid-item .mantine-ActionIcon-root[id*="reset-selection-graph-button"][data-color="orange"],
+.react-grid-item .mantine-ActionIcon-root[id*="reset-selection-graph-button"][color="orange"],
+.react-grid-item .mantine-ActionIcon-root[id*="reset-selection-graph-button"].mantine-ActionIcon-filled {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
+
+/* Class-based approach for more reliable targeting */
+.react-grid-item .reset-button-filtered,
+.drag-handles-hidden .reset-button-filtered {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    display: flex !important;
+    visibility: visible !important;
+}
+
+/* Reset button container in non-edit mode - transparent by default (for scatter plots and interactive components) */
+.drag-handles-hidden .reset-button-container-non-edit {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    transition: all 0.2s ease !important;
+}
+
+/* Show container styling only on hover (for scatter plots and interactive components) */
+.drag-handles-hidden .react-grid-item:hover .reset-button-container-non-edit {
+    background: rgba(255, 255, 255, 0.9) !important;
+    border: 1px solid var(--app-border-color, #ddd) !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+    backdrop-filter: blur(2px) !important;
+}
+
+/* Dark mode adjustment for reset button container on hover (for scatter plots and interactive components) */
+[data-mantine-color-scheme="dark"] .drag-handles-hidden .react-grid-item:hover .reset-button-container-non-edit {
+    background: rgba(45, 45, 45, 0.9) !important;
+    border-color: var(--app-border-color, #555) !important;
+    box-shadow: 0 2px 4px rgba(255, 255, 255, 0.1) !important;
+}
+
+/* =============================================================================
+
+/* Hide drag handles when edit mode is disabled */
+.drag-handles-hidden .react-grid-dragHandle {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* Normalize wrapper div padding between edit and non-edit modes - minimize white space */
+.react-grid-item > div {
+    padding: 2px !important;
+    max-height: 100% !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    box-sizing: border-box !important;
+    /* Critical: Ensure grid layout wrapper also uses flexbox */
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+
+/* =============================================================================
+   3. ELEMENT HIDING & CLEANUP
+   ============================================================================= */
+
+/* Hide default remove button (×)
+   Purpose: Remove default grid layout remove buttons
+   Reason: Using custom ActionIcon buttons instead */
+.react-grid-item .remove,
+.react-grid-item span.remove {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* Hide default drag handles except Mantine ActionIcons
+   Purpose: Remove default handles while preserving ActionIcon functionality
+   Logic: Hide all .react-grid-dragHandle EXCEPT .mantine-ActionIcon-root */
+.react-grid-dragHandle:not(.mantine-ActionIcon-root) {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    min-height: 0 !important;
+}
+
+/* =============================================================================
+   4. CUSTOM DRAG HANDLES (Mantine ActionIcon Integration)
+   ============================================================================= */
+
+/* Base ActionIcon drag handle styling
+   Purpose: Custom drag handles using Mantine ActionIcon components
+   Behavior: Hidden by default, shown on component hover
+   Cursor: grab/grabbing states for UX feedback */
+.mantine-ActionIcon-root.react-grid-dragHandle {
+    cursor: grab !important;
+    opacity: 0 !important;
+    transition: opacity 0.2s ease !important; /* POTENTIAL PERFORMANCE ISSUE */
+    pointer-events: auto !important;
+}
+
+/* Drag handle hover state */
+.mantine-ActionIcon-root.react-grid-dragHandle:hover {
+    cursor: grabbing !important;
+}
+
+/* Drag handle active state (during drag)
+   Purpose: Maintain visibility and cursor during active drag */
+.mantine-ActionIcon-root.react-grid-dragHandle:active {
+    cursor: grabbing !important;
+    opacity: 1 !important;
+}
+
+/* Show drag handle on component hover */
+.react-grid-item:hover .mantine-ActionIcon-root.react-grid-dragHandle {
+    opacity: 1 !important;
+}
+
+/* Maintain drag handle visibility during drag operation
+   Purpose: Keep handle visible and properly layered during drag
+   Z-index: 10000 (highest priority during drag) */
+.react-grid-item.react-grid-item-dragging .mantine-ActionIcon-root.react-grid-dragHandle {
+    opacity: 1 !important;
+    cursor: grabbing !important;
+    z-index: 10000 !important;
+}
+
+/* Ensure ActionIcon children (DashIconify icons) display correctly */
+.mantine-ActionIcon-root.react-grid-dragHandle > * {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+/* =============================================================================
+   5. ACTION BUTTON GROUPS (Edit Controls)
+   ============================================================================= */
+
+/* Base ActionIconGroup styling
+   Purpose: Container for edit buttons (remove, edit, duplicate, reset)
+   Behavior: Hidden by default, shown on component hover
+   Z-index: 1001 (above resize handles at 500) */
+.react-grid-item .mantine-ActionIconGroup-root {
+    opacity: 0 !important;
+    transition: opacity 0.2s ease !important; /* POTENTIAL PERFORMANCE ISSUE */
+    pointer-events: none !important;
+    z-index: 1001 !important;
+}
+
+/* Individual action button base styling
+   Purpose: Hide specific action buttons by default
+   Targets: remove, edit, duplicate, reset buttons, alignment menu button */
+.react-grid-item .mantine-ActionIcon-root[id*="remove-box-button"],
+.react-grid-item .mantine-ActionIcon-root[id*="edit-box-button"],
+.react-grid-item .mantine-ActionIcon-root[id*="duplicate-box-button"],
+.react-grid-item .mantine-ActionIcon-root[id*="reset-selection-graph-button"],
+.react-grid-item .mantine-ActionIcon-root[id*="alignment-menu-btn"] {
+    opacity: 0 !important;
+    transition: opacity 0.2s ease !important; /* POTENTIAL PERFORMANCE ISSUE */
+    pointer-events: none !important;
+}
+
+/* Show ActionIconGroup on component hover */
+.react-grid-item:hover .mantine-ActionIconGroup-root {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    z-index: 1001 !important;
+}
+
+/* Show individual action buttons on component hover */
+.react-grid-item:hover .mantine-ActionIcon-root[id*="remove-box-button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="edit-box-button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="duplicate-box-button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="reset-selection-graph-button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="alignment-menu-btn"] {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
+
+/* =============================================================================
+   6. DRAG PERFORMANCE OPTIMIZATIONS
+   ============================================================================= */
+
+/* Disable drag handle transitions during active drag operations
+   Purpose: Prevent CSS transitions from interfering with drag performance
+   Trigger: Applied when any grid item has .react-grid-item-dragging class
+   Browser Support: Uses :has() selector (modern browsers only) */
+.react-grid-layout:has(.react-grid-item-dragging) .mantine-ActionIcon-root.react-grid-dragHandle {
+    transition: none !important;
+}
+
+/* =============================================================================
+   7. GRID PLACEHOLDER (Drop Preview)
+   ============================================================================= */
+
+/* Grid placeholder styling for drop preview
+   Purpose: Visual feedback showing where component will be placed
+   Appearance: Light red background with dashed border
+   Behavior: Appears during drag operations */
+.react-grid-layout .react-grid-placeholder {
+    transition-duration: 0s !important;
+    animation-duration: 0s !important;
+    transition-property: none !important;
+    background: rgba(0, 0, 0, 0.2) !important;
+    border: 2px dashed #737373 !important;
+    border-radius: 4px !important;
+    opacity: 1 !important;
+    z-index: 2 !important;
+}
+
+
+/* =============================================================================
+   PERFORMANCE NOTES & DEBUGGING
+   ============================================================================= */
+
+/*
+   IDENTIFIED PERFORMANCE ISSUES:
+
+   1. Multiple 0.2s transitions on hover/drag operations:
+      - Lines: Bootstrap cards, resize handles, drag handles, action buttons
+      - Impact: Can cause drag freezing when multiple elements transition
+      - Solution: Consider disabling during drag or reducing duration
+
+   2. Complex Z-index layering:
+      - Resize handles: 500
+      - Placeholder: 2
+      - ActionIconGroup: 1001
+      - Drag handle (active): 10000
+      - Impact: Browser compositing overhead
+
+   3. :has() selector usage:
+      - Modern browsers only
+      - May not work in older browsers
+      - Fallback needed for transition disabling
+
+   OPTIMIZATION OPPORTUNITIES:
+   - Disable all transitions during drag operations
+   - Simplify Z-index hierarchy
+   - Use CSS containment for drag performance
+   - Consider will-change property for dragged elements
+*/

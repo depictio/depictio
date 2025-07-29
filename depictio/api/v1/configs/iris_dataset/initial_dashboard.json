@@ -5,102 +5,129 @@
   "dashboard_id": {
     "$oid": "6824cb3b89d2b72169309737"
   },
-  "permissions": {
-    "owners": [
-      {
-        "_id": {
-          "$oid": "682b6428089d4949533a88a4"
-        },
-        "description": null,
-        "flexible_metadata": null,
-        "hash": null,
-        "email": "admin@example.com",
-        "is_admin": true
-      }
-    ],
-    "editors": [],
-    "viewers": []
-  },
   "buttons_data": {
-    "edit_components_button": true,
+    "unified_edit_mode": true,
     "add_components_button": {
       "count": 0,
-      "_id": "610ac726-cf06-445d-8ae5-ee7c773f60d4-tmp"
-    },
-    "edit_dashboard_mode_button": true
+      "_id": "713bcefb-1dba-4a1d-b584-a5a6a2215273-tmp"
+    }
   },
   "description": null,
   "flexible_metadata": null,
   "hash": null,
   "is_public": true,
-  "last_saved_ts": "2025-05-19 17:03:44.306412",
+  "last_saved_ts": "2025-07-28 21:06:27.013583",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8c9a"
   },
   "stored_add_button": {
     "count": 0,
-    "_id": "610ac726-cf06-445d-8ae5-ee7c773f60d4-tmp"
+    "_id": "713bcefb-1dba-4a1d-b584-a5a6a2215273-tmp"
   },
   "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "stored_layout_data": {
-    "lg": [
-      {
-        "w": 6,
-        "h": 14,
-        "x": 6,
-        "y": 0,
-        "i": "box-1eba4e1a-0db0-40e7-aa53-56f9fad4dd5d",
-        "moved": false,
-        "static": false
-      },
-      {
-        "w": 2,
-        "h": 5,
-        "x": 4,
-        "y": 0,
-        "i": "box-a00ec470-2f08-461b-9f29-fe1bfd24da94",
-        "moved": false,
-        "static": false
-      },
-      {
-        "w": 2,
-        "h": 5,
-        "x": 4,
-        "y": 5,
-        "i": "box-69ddd81e-badd-4025-9afe-a91d1a862ac8",
-        "moved": false,
-        "static": false
-      },
-      {
-        "w": 4,
-        "h": 5,
-        "x": 0,
-        "y": 7,
-        "i": "box-0a218dbe-ebab-40c7-bf7c-5a93030f9bb1",
-        "moved": false,
-        "static": false
-      },
-      {
-        "w": 4,
-        "h": 7,
-        "x": 0,
-        "y": 0,
-        "i": "box-16a60c79-7d21-4205-b719-f42cb5fd9d0b",
-        "moved": false,
-        "static": false
-      },
-      {
-        "w": 6,
-        "h": 15,
-        "x": 0,
-        "y": 12,
-        "i": "box-610ac726-cf06-445d-8ae5-ee7c773f60d4",
-        "moved": false,
-        "static": false
-      }
-    ]
-  },
+  "stored_layout_data": [
+    {
+      "w": 6,
+      "h": 6,
+      "x": 6,
+      "y": 0,
+      "i": "box-1eba4e1a-0db0-40e7-aa53-56f9fad4dd5d",
+      "moved": false,
+      "static": false
+    },
+    {
+      "w": 4,
+      "h": 2,
+      "x": 0,
+      "y": 4,
+      "i": "box-0a218dbe-ebab-40c7-bf7c-5a93030f9bb1",
+      "moved": false,
+      "static": false
+    },
+    {
+      "w": 4,
+      "h": 2,
+      "x": 0,
+      "y": 2,
+      "i": "box-16a60c79-7d21-4205-b719-f42cb5fd9d0b",
+      "moved": false,
+      "static": false
+    },
+    {
+      "w": 6,
+      "h": 9,
+      "x": 0,
+      "y": 6,
+      "i": "box-c8a5e9cc-07a7-4cd2-a90a-f6d741c57879",
+      "moved": false,
+      "static": false
+    },
+    {
+      "w": 2,
+      "h": 2,
+      "x": 4,
+      "y": 2,
+      "i": "box-a00ec470-2f08-461b-9f29-fe1bfd24da94",
+      "moved": false,
+      "static": false
+    },
+    {
+      "w": 2,
+      "h": 2,
+      "x": 4,
+      "y": 4,
+      "i": "box-69ddd81e-badd-4025-9afe-a91d1a862ac8",
+      "moved": false,
+      "static": false
+    },
+    {
+      "w": 4,
+      "h": 2,
+      "x": 0,
+      "y": 0,
+      "i": "box-4a5e0143-2e8c-43df-8b37-19acc4267e27",
+      "moved": false,
+      "static": false
+    },
+    {
+      "w": 2,
+      "h": 2,
+      "x": 4,
+      "y": 0,
+      "i": "box-85455900-e63a-413d-aca9-f6a96ffff378",
+      "moved": false,
+      "static": false
+    },
+    {
+      "w": 6,
+      "h": 9,
+      "x": 6,
+      "y": 6,
+      "i": "box-713bcefb-1dba-4a1d-b584-a5a6a2215273",
+      "moved": false,
+      "static": false
+    }
+  ],
   "stored_metadata": [
     {
       "index": "1eba4e1a-0db0-40e7-aa53-56f9fad4dd5d",
@@ -143,89 +170,8 @@
         }
       },
       "parent_index": null,
-      "filter_applied": false
-    },
-    {
-      "index": "a00ec470-2f08-461b-9f29-fe1bfd24da94",
-      "component_type": "card",
-      "title": "",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
-      },
-      "dc_config": {
-        "description": null,
-        "flexible_metadata": null,
-        "hash": null,
-        "type": "table",
-        "metatype": "Metadata",
-        "scan": {
-          "mode": "single",
-          "scan_parameters": {
-            "filename": "/app/depictio/api/v1/configs/iris_dataset/iris.csv"
-          }
-        },
-        "dc_specific_properties": {
-          "format": "csv",
-          "polars_kwargs": {
-            "separator": ","
-          },
-          "keep_columns": [],
-          "columns_description": {}
-        },
-        "join": null,
-        "_id": {
-          "$oid": "6824a67937826fa047f61e7f"
-        }
-      },
-      "aggregation": "median",
-      "column_type": "float64",
-      "column_name": "sepal.length",
-      "value": 5.8,
-      "parent_index": null
-    },
-    {
-      "index": "69ddd81e-badd-4025-9afe-a91d1a862ac8",
-      "component_type": "card",
-      "title": "",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
-      },
-      "dc_config": {
-        "description": null,
-        "flexible_metadata": null,
-        "hash": null,
-        "type": "table",
-        "metatype": "Metadata",
-        "scan": {
-          "mode": "single",
-          "scan_parameters": {
-            "filename": "/app/depictio/api/v1/configs/iris_dataset/iris.csv"
-          }
-        },
-        "dc_specific_properties": {
-          "format": "csv",
-          "polars_kwargs": {
-            "separator": ","
-          },
-          "keep_columns": [],
-          "columns_description": {}
-        },
-        "join": null,
-        "_id": {
-          "$oid": "6824a67937826fa047f61e7f"
-        }
-      },
-      "aggregation": "average",
-      "column_type": "float64",
-      "column_name": "sepal.width",
-      "value": 3.0573,
-      "parent_index": null
+      "filter_applied": false,
+      "last_updated": "2025-07-28T21:06:26.076808"
     },
     {
       "component_type": "interactive",
@@ -371,14 +317,26 @@
         }
       },
       "value": [
-        1,
-        6.9
+        1.51,
+        6.18
       ],
       "corrected_value": [
-        1,
-        6.9
+        1.51,
+        6.18
       ],
-      "parent_index": null
+      "parent_index": null,
+      "scale": "linear",
+      "original_value": 6.9,
+      "custom_color": "#000000",
+      "default_state": {
+        "type": "range",
+        "min_value": 1,
+        "max_value": 6.9,
+        "default_range": [
+          1,
+          6.9
+        ]
+      }
     },
     {
       "component_type": "interactive",
@@ -523,19 +481,29 @@
           }
         }
       },
-      "value": null,
-      "corrected_value": null,
-      "parent_index": null
+      "value": [
+        "Setosa",
+        "Versicolor"
+      ],
+      "corrected_value": [
+        "Setosa",
+        "Versicolor"
+      ],
+      "parent_index": null,
+      "custom_color": "#000000",
+      "default_state": {
+        "type": "select",
+        "options": [
+          "Versicolor",
+          "Virginica",
+          "Setosa"
+        ],
+        "default_value": null
+      }
     },
     {
-      "index": "610ac726-cf06-445d-8ae5-ee7c773f60d4",
-      "component_type": "figure",
-      "dict_kwargs": {
-        "x": "sepal.length",
-        "y": "sepal.width",
-        "color": "variety"
-      },
-      "visu_type": "Scatter",
+      "index": "c8a5e9cc-07a7-4cd2-a90a-f6d741c57879",
+      "component_type": "table",
       "wf_id": {
         "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
       },
@@ -572,14 +540,363 @@
         },
         "join": null,
         "_id": {
-          "$oid": "682b6428089d4949533a88a8"
+          "$oid": "686e39f88e0be2c11f956a43"
+        }
+      },
+      "cols_json": {
+        "sepal.length": {
+          "type": "float64",
+          "description": "Length of the sepal in cm",
+          "specs": {
+            "count": 150,
+            "unique": 35,
+            "sum": 876.5,
+            "average": 5.843333333333334,
+            "median": 5.8,
+            "min": 4.3,
+            "max": 7.9,
+            "range": 3.6000000000000005,
+            "variance": 0.6856935123042507,
+            "std_dev": 0.828066127977863,
+            "percentile": 5.8,
+            "skewness": 0.3149109566369728,
+            "kurtosis": -0.5520640413156395
+          },
+          "filter": "agNumberColumnFilter",
+          "floatingFilter": true,
+          "filterParams": {
+            "filterOptions": [
+              "equals",
+              "lessThan",
+              "greaterThan",
+              "inRange"
+            ],
+            "maxNumConditions": 2
+          }
+        },
+        "sepal.width": {
+          "type": "float64",
+          "description": "Width of the sepal in cm",
+          "specs": {
+            "count": 150,
+            "unique": 23,
+            "sum": 458.6,
+            "average": 3.0573333333333337,
+            "median": 3,
+            "min": 2,
+            "max": 4.4,
+            "range": 2.4000000000000004,
+            "variance": 0.189979418344519,
+            "std_dev": 0.4358662849366982,
+            "percentile": 3,
+            "skewness": 0.31896566471359966,
+            "kurtosis": 0.2282490424681929
+          },
+          "filter": "agNumberColumnFilter",
+          "floatingFilter": true,
+          "filterParams": {
+            "filterOptions": [
+              "equals",
+              "lessThan",
+              "greaterThan",
+              "inRange"
+            ],
+            "maxNumConditions": 2
+          }
+        },
+        "petal.length": {
+          "type": "float64",
+          "description": "Length of the petal in cm",
+          "specs": {
+            "count": 150,
+            "unique": 43,
+            "sum": 563.7,
+            "average": 3.7580000000000005,
+            "median": 4.35,
+            "min": 1,
+            "max": 6.9,
+            "range": 5.9,
+            "variance": 3.116277852348993,
+            "std_dev": 1.7652982332594662,
+            "percentile": 4.35,
+            "skewness": -0.27488417975101276,
+            "kurtosis": -1.4021034155217518
+          },
+          "filter": "agNumberColumnFilter",
+          "floatingFilter": true,
+          "filterParams": {
+            "filterOptions": [
+              "equals",
+              "lessThan",
+              "greaterThan",
+              "inRange"
+            ],
+            "maxNumConditions": 2
+          }
+        },
+        "petal.width": {
+          "type": "float64",
+          "description": "Width of the petal in cm",
+          "specs": {
+            "count": 150,
+            "unique": 22,
+            "sum": 179.90000000000003,
+            "average": 1.1993333333333336,
+            "median": 1.3,
+            "min": 0.1,
+            "max": 2.5,
+            "range": 2.4,
+            "variance": 0.5810062639821029,
+            "std_dev": 0.7622376689603465,
+            "percentile": 1.3,
+            "skewness": -0.10296674764898116,
+            "kurtosis": -1.340603996612646
+          },
+          "filter": "agNumberColumnFilter",
+          "floatingFilter": true,
+          "filterParams": {
+            "filterOptions": [
+              "equals",
+              "lessThan",
+              "greaterThan",
+              "inRange"
+            ],
+            "maxNumConditions": 2
+          }
+        },
+        "variety": {
+          "type": "object",
+          "description": "Species of the iris flower",
+          "specs": {
+            "count": 150,
+            "mode": "Setosa",
+            "nunique": 3
+          },
+          "filter": "agTextColumnFilter",
+          "floatingFilter": true
+        },
+        "depictio_run_id": {
+          "type": "object",
+          "description": "Unique identifier for the run",
+          "specs": {
+            "count": 150,
+            "mode": "iris_table-single-file-scan",
+            "nunique": 1
+          },
+          "filter": "agTextColumnFilter",
+          "floatingFilter": true
+        },
+        "aggregation_time": {
+          "type": "object",
+          "description": "Timestamp of the aggregation",
+          "specs": {
+            "count": 150,
+            "mode": "2025-07-09 09:44:30",
+            "nunique": 1
+          },
+          "filter": "agTextColumnFilter",
+          "floatingFilter": true
+        }
+      },
+      "parent_index": null
+    },
+    {
+      "index": "a00ec470-2f08-461b-9f29-fe1bfd24da94",
+      "component_type": "card",
+      "title": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+      },
+      "dc_config": {
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "type": "table",
+        "metatype": "Metadata",
+        "scan": {
+          "mode": "single",
+          "scan_parameters": {
+            "filename": "/app/depictio/api/v1/configs/iris_dataset/iris.csv"
+          }
+        },
+        "dc_specific_properties": {
+          "format": "csv",
+          "polars_kwargs": {
+            "separator": ","
+          },
+          "keep_columns": [],
+          "columns_description": {}
+        },
+        "join": null,
+        "_id": {
+          "$oid": "6824a67937826fa047f61e7f"
+        }
+      },
+      "aggregation": "median",
+      "column_type": "float64",
+      "column_name": "sepal.length",
+      "value": 5.7,
+      "parent_index": null
+    },
+    {
+      "index": "69ddd81e-badd-4025-9afe-a91d1a862ac8",
+      "component_type": "card",
+      "title": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+      },
+      "dc_config": {
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "type": "table",
+        "metatype": "Metadata",
+        "scan": {
+          "mode": "single",
+          "scan_parameters": {
+            "filename": "/app/depictio/api/v1/configs/iris_dataset/iris.csv"
+          }
+        },
+        "dc_specific_properties": {
+          "format": "csv",
+          "polars_kwargs": {
+            "separator": ","
+          },
+          "keep_columns": [],
+          "columns_description": {}
+        },
+        "join": null,
+        "_id": {
+          "$oid": "6824a67937826fa047f61e7f"
+        }
+      },
+      "aggregation": "average",
+      "column_type": "float64",
+      "column_name": "sepal.width",
+      "value": 2.9127,
+      "parent_index": null
+    },
+    {
+      "index": "4a5e0143-2e8c-43df-8b37-19acc4267e27",
+      "component_type": "text",
+      "content": "## Interactive components",
+      "parent_index": null,
+      "show_toolbar": true,
+      "show_title": false,
+      "alignment": "center",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+      }
+    },
+    {
+      "index": "85455900-e63a-413d-aca9-f6a96ffff378",
+      "component_type": "text",
+      "content": "## Metrics",
+      "parent_index": null,
+      "show_toolbar": true,
+      "show_title": false,
+      "alignment": "center",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+      }
+    },
+    {
+      "index": "713bcefb-1dba-4a1d-b584-a5a6a2215273",
+      "component_type": "figure",
+      "dict_kwargs": {
+        "x": "sepal.length",
+        "y": "sepal.width",
+        "color": "variety",
+        "labels": "",
+        "color_discrete_sequence": "",
+        "color_continuous_scale": "",
+        "title": "",
+        "template": "plotly",
+        "symbol": "variety",
+        "size": "petal.length",
+        "facet_row_spacing": "",
+        "facet_col_spacing": "",
+        "error_x": "",
+        "error_x_minus": "",
+        "error_y": "",
+        "error_y_minus": "",
+        "range_color": "",
+        "color_continuous_midpoint": "",
+        "symbol_sequence": "",
+        "symbol_map": "",
+        "marginal_x": "",
+        "marginal_y": "",
+        "trendline_options": "",
+        "trendline_color_override": "",
+        "trendline_scope": "trace",
+        "render_mode": "auto",
+        "subtitle": "",
+        "facet_col_wrap": "",
+        "category_orders": "",
+        "orientation": "v",
+        "color_discrete_map": "",
+        "range_x": "",
+        "range_y": ""
+      },
+      "visu_type": "scatter",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+      },
+      "dc_config": {
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "type": "table",
+        "metatype": "Metadata",
+        "scan": {
+          "mode": "single",
+          "scan_parameters": {
+            "filename": "/app/depictio/api/v1/configs/iris_dataset/iris.csv"
+          }
+        },
+        "dc_specific_properties": {
+          "format": "csv",
+          "polars_kwargs": {
+            "separator": ","
+          },
+          "keep_columns": [],
+          "columns_description": {
+            "sepal.length": "Length of the sepal in cm",
+            "sepal.width": "Width of the sepal in cm",
+            "petal.length": "Length of the petal in cm",
+            "petal.width": "Width of the petal in cm",
+            "variety": "Species of the iris flower",
+            "depictio_run_id": "Unique identifier for the run",
+            "aggregation_time": "Timestamp of the aggregation"
+          }
+        },
+        "join": null,
+        "_id": {
+          "$oid": "686e39f88e0be2c11f956a43"
         }
       },
       "parent_index": null,
-      "filter_applied": false
+      "filter_applied": false,
+      "last_updated": "2025-07-28T21:06:26.376371"
     }
   ],
   "title": "Iris Dashboard",
   "tmp_children_data": [],
-  "version": 1
+  "version": 1,
+  "notes_content": "<p>Start writing your notes, documentation, or analysis here...</p><p><br></p><p><br></p><p><br></p>"
 }

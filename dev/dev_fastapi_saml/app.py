@@ -1,21 +1,19 @@
 # app.py - EMBL SAML Integration with FastAPI and Beanie
-import os
 import json
 import logging
+import os
 import urllib.parse
-from typing import Optional, AsyncGenerator, Dict, Any
-import motor.motor_asyncio
-from pydantic import EmailStr
-from beanie import Document, init_beanie
-from fastapi import FastAPI, Request, Response, Depends
-from fastapi.responses import RedirectResponse, HTMLResponse
-from onelogin.saml2.auth import OneLogin_Saml2_Auth
-from onelogin.saml2.metadata import OneLogin_Saml2_Metadata
 from contextlib import asynccontextmanager
+from typing import AsyncGenerator, Optional
+
+import motor.motor_asyncio
+from beanie import Document, init_beanie
 from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, Request, Response
+from fastapi.responses import HTMLResponse
 
 # FastAPI-Users with Beanie
-from fastapi_users import FastAPIUsers, schemas, models
+from fastapi_users import FastAPIUsers, schemas
 from fastapi_users.authentication import (
     AuthenticationBackend,
     BearerTransport,
@@ -24,6 +22,8 @@ from fastapi_users.authentication import (
 from fastapi_users.db import BeanieUserDatabase
 from fastapi_users.exceptions import UserNotExists
 from fastapi_users.manager import BaseUserManager
+from onelogin.saml2.auth import OneLogin_Saml2_Auth
+from pydantic import EmailStr
 
 load_dotenv()
 
@@ -80,7 +80,7 @@ BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
 ACS_URL = f"{BASE_URL}/auth/saml/callback"
 
 # Log all config values to help debug
-logger.info(f"SAML Configuration:")
+logger.info("SAML Configuration:")
 logger.info(f"SP_ENTITY_ID: {SP_ENTITY_ID}")
 logger.info(f"IDP_SSO_URL: {IDP_SSO_URL}")
 logger.info(f"BASE_URL: {BASE_URL}")

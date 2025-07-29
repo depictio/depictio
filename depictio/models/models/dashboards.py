@@ -8,17 +8,17 @@ class DashboardData(MongoModel):
     dashboard_id: PyObjectId
     version: int = 1
     tmp_children_data: list | None = []
-    stored_layout_data: dict = {}
+    stored_layout_data: list = []
     stored_children_data: list = []
     stored_metadata: list = []
     stored_edit_dashboard_mode_button: list = []
     buttons_data: dict = {
-        "edit_components_button": True,
+        "unified_edit_mode": True,  # Unified edit mode replaces separate edit buttons
         "add_components_button": {"count": 0},
-        "edit_dashboard_mode_button": True,
     }
     stored_add_button: dict = {"count": 0}
     title: str
+    notes_content: str = ""
     permissions: Permission
     is_public: bool = False
     last_saved_ts: str = ""

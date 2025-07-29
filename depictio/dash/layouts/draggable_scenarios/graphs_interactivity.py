@@ -273,6 +273,9 @@ def refresh_children_based_on_click_data(
     logger.info(f"Graph ids: {graph_ids}")
     logger.info(f"Interactive components dict: {interactive_components_dict}")
 
+    # Initialize the variable
+    updated_interactive_components = {}
+
     # Iterate and find the clickData for the triggered graph
     clickData = [
         e
@@ -345,7 +348,7 @@ def refresh_children_based_on_click_data(
         )
         # state_stored_draggable_children[dashboard_id] = new_children
 
-        return new_children
+        return new_children, updated_interactive_components
 
 
 def refresh_children_based_on_selected_data(
@@ -366,6 +369,8 @@ def refresh_children_based_on_selected_data(
     ][0]
     logger.info(f"Selected data: {selectedData}")
     new_children = list()
+    updated_interactive_components = {}  # Initialize the variable
+
     if selectedData and "points" in selectedData and len(selectedData["points"]) > 0:
         selected_points = selectedData["points"]
         logger.info(f"Selected points data: {selected_points}")
@@ -413,4 +418,4 @@ def refresh_children_based_on_selected_data(
 
         logger.info(f"New children len : {len(new_children)}")
         # state_stored_draggable_children[dashboard_id] = new_children
-    return new_children
+    return new_children, updated_interactive_components

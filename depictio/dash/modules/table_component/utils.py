@@ -1,12 +1,12 @@
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
-import dash_mantine_components as dmc
 import polars as pl
 from bson import ObjectId
 from dash import dcc, html
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
+from depictio.dash.modules.figure_component.utils import stringify_id
 
 
 def build_table_frame(index, children=None):
@@ -33,7 +33,7 @@ def build_table_frame(index, children=None):
                 "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
                 # "border": "1px solid #ddd",  # Optional: Add a light border
                 # "borderRadius": "4px",  # Optional: Slightly round the corners
-                "border": "0px",  # Optional: Remove border
+                "border": "1px solid var(--app-border-color, #ddd)",  # Always show border for draggable delimitation  # Optional: Remove border
             },
             id={
                 "type": "table-component",
@@ -64,7 +64,7 @@ def build_table_frame(index, children=None):
                 "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
                 # "border": "1px solid #ddd",  # Optional: Add a light border
                 # "borderRadius": "4px",  # Optional: Slightly round the corners
-                "border": "0px",  # Optional: Remove border
+                "border": "1px solid var(--app-border-color, #ddd)",  # Always show border for draggable delimitation  # Optional: Remove border
             },
             id={
                 "type": "table-component",
@@ -85,7 +85,7 @@ def build_table(**kwargs):
 
     df = kwargs.get("df", pl.DataFrame())
     TOKEN = kwargs.get("access_token")
-    # stepper = kwargs.get("stepper", False)
+    stepper = kwargs.get("stepper", False)
 
     df = kwargs.get("df", pl.DataFrame())
 
@@ -115,33 +115,70 @@ def build_table(**kwargs):
     else:
         logger.debug(f"Table component {index}: Using pre-loaded DataFrame (shape: {df.shape})")
 
-    # Add dah aggrid filters to the columns
+    # Add dash aggrid filters to the columns with enhanced filter configuration
     if cols:
         for c in cols:
+            logger.debug(f"Configuring column {c} with type {cols[c]['type']}")
             if c in cols and "type" in cols[c]:
-                print(c, cols[c]["type"])
+                logger.debug(f"Configuring column {c} with type {cols[c]['type']}")
                 if cols[c]["type"] == "object":
                     cols[c]["filter"] = "agTextColumnFilter"
+                    # Enable floating filters for better UX
+                    cols[c]["floatingFilter"] = True
                 elif cols[c]["type"] in ["int64", "float64"]:
                     cols[c]["filter"] = "agNumberColumnFilter"
+                    cols[c]["floatingFilter"] = True
+                    # Add filter parameters for number columns
+                    cols[c]["filterParams"] = {
+                        "filterOptions": ["equals", "lessThan", "greaterThan", "inRange"],
+                        "maxNumConditions": 2,
+                    }
                 # FIXME: use properly this: https://dash.plotly.com/dash-ag-grid/date-filters
                 elif cols[c]["type"] == "datetime":
                     cols[c]["filter"] = "agDateColumnFilter"
+                    cols[c]["floatingFilter"] = True
 
-    # print(cols)
-    columnDefs = [
-        {
-            "field": c,
-            "headerTooltip": f"Column type: {e['type']}",
-            "filter": e["filter"],
-        }
-        for c, e in cols.items()  # type: ignore[possibly-unbound-attribute]
-    ]
+    # Add ID column for SpinnerCellRenderer (following documentation example exactly)
+    columnDefs = [{"field": "ID", "maxWidth": 100, "cellRenderer": "SpinnerCellRenderer"}]
+
+    # Add data columns with enhanced filtering and sorting support
+    if cols:
+        data_columns = []
+        for c, e in cols.items():  # type: ignore[possibly-unbound-attribute]
+            column_def = {
+                "headerName": " ".join(
+                    word.capitalize() for word in c.split(".")
+                ),  # Transform display name
+                "headerTooltip": f"Column type: {e['type']}",
+                "filter": e["filter"],
+                "floatingFilter": e.get("floatingFilter", False),
+                "filterParams": e.get("filterParams", {}),
+                "sortable": True,  # Enable sorting for all columns
+                "resizable": True,  # Enable column resizing
+                "minWidth": 150,  # Ensure readable column width
+            }
+
+            # Handle field names with dots - replace dots with underscores
+            if "." in c:
+                logger.debug(
+                    f"🔍 DEBUG: Found column with dot: '{c}', replacing dots with underscores"
+                )
+                # Create a safe field name by replacing dots with underscores
+                safe_field_name = c.replace(".", "_")
+                column_def["field"] = safe_field_name
+                logger.debug(f"🔍 DEBUG: Column def for '{c}': field='{safe_field_name}'")
+            else:
+                logger.debug(f"🔍 DEBUG: Regular column: '{c}', using field")
+                column_def["field"] = c  # Use field for simple names
+
+            data_columns.append(column_def)
+        columnDefs.extend(data_columns)
 
     # if description in col sub dict, update headerTooltip
     for col in columnDefs:
         if (
             cols
+            and "field" in col  # Check if field exists in column definition
             and col["field"] in cols
             and "description" in cols[col["field"]]
             and cols[col["field"]]["description"] is not None
@@ -149,64 +186,57 @@ def build_table(**kwargs):
             col["headerTooltip"] = (
                 f"{col['headerTooltip']} | Description: {cols[col['field']]['description']}"
             )
+    logger.info(f"Columns definitions for table {index}: {columnDefs}")
 
-    style_partial_data_displayed = {"display": "none"}
+    # INFINITE ROW MODEL: Always use infinite scroll with interactive component support
+    # The infinite scroll callback handles:
+    # - Interactive component filtering via iterative_join
+    # - AG Grid server-side filtering and sorting
+    # - Efficient pagination for all table sizes
 
-    from dash_iconify import DashIconify
+    logger.info(f"📊 Table {index}: Using INFINITE row model with interactive component support")
+    logger.info("🔄 Interactive filters and pagination handled by infinite scroll callback")
 
-    cutoff = 1000
-
-    if df.to_pandas().shape[0] > cutoff:
-        df = df.head(cutoff)
-        if build_frame:
-            style_partial_data_displayed = {"display": "block", "paddingBottom": "5px"}
-
-    partial_data_badge = dmc.Tooltip(
-        children=dmc.Badge(
-            "Partial data displayed",
-            id={"type": "graph-partial-data-displayed", "index": index},
-            style=style_partial_data_displayed,
-            leftSection=DashIconify(
-                icon="mdi:alert-circle",
-                width=20,
-            ),
-            # sx={"paddingLeft": 0},
-            size="lg",
-            radius="xl",
-            color="red",
-            fullWidth=False,
-        ),
-        label=f"Tables are currently loaded with a maximum of {cutoff} rows.",
-        position="top",
-        openDelay=500,
-    )
-    # Prepare ag grid table
+    # Always use infinite scroll configuration
     table_aggrid = dag.AgGrid(
         id={"type": value_div_type, "index": str(index)},
-        rowData=df.to_pandas().to_dict("records"),
-        # rowModelType="infinite",
+        # CRITICAL: Don't set rowData for infinite model - data comes from getRowsResponse
+        rowModelType="infinite",
         columnDefs=columnDefs,
         dashGridOptions={
             "tooltipShowDelay": 500,
-            "pagination": True,
-            "paginationAutoPageSize": False,
-            "animateRows": False,
-            # The number of rows rendered outside the viewable area the grid renders.
-            # "rowBuffer": 0,
-            # # How many blocks to keep in the store. Default is no limit, so every requested block is kept.
-            # "maxBlocksInCache": 2,
-            # "cacheBlockSize": 100,
-            # "cacheOverflowSize": 2,
-            # "maxConcurrentDatasourceRequests": 2,
-            # "infiniteInitialRowCount": 1,
+            # INFINITE MODEL CONFIGURATION (optimized for interactive + pagination)
+            "rowBuffer": 0,  # Match documentation example
+            "maxBlocksInCache": 10,  # Reasonable cache size
+            "cacheBlockSize": 100,  # Each block contains 100 rows
+            "cacheOverflowSize": 2,  # Allow 2 extra blocks beyond maxBlocksInCache
+            "infiniteInitialRowCount": 1000,  # Initial estimate
+            # OTHER OPTIONS
             "rowSelection": "multiple",
             "enableCellTextSelection": True,
             "ensureDomOrder": True,
+            "pagination": True,
+            # CRITICAL: Cache management for interactive components
+            "purgeClosedRowNodes": True,  # Clean up when filters change
+            "resetRowDataOnUpdate": True,  # Force refresh when interactive values change
+            # CRITICAL: Ensure AG Grid makes new requests after cache invalidation
+            "maxConcurrentDatasourceRequests": 1,  # Prevent racing conditions
+            "blockLoadDebounceMillis": 0,  # Immediate loading after cache reset
         },
-        # columnSize="sizeToFit",
-        defaultColDef={"resizable": True, "sortable": True, "filter": True},
-        # use the parameters above
+        getRowId="params.data.ID",
+        defaultColDef={
+            "flex": 1,
+            "minWidth": 150,
+            "sortable": True,
+            "resizable": True,
+            "floatingFilter": True,
+            "filter": True,
+        },
+        style={"width": "100%"},
+        className="ag-theme-alpine",
     )
+
+    logger.info(f"✅ Table {index}: Infinite row model configured with interactive support")
 
     # Metadata management - Create a store component to store the metadata of the card
     store_index = index.replace("-tmp", "")  # type: ignore[possibly-unbound-attribute]
@@ -228,10 +258,10 @@ def build_table(**kwargs):
 
     # Create the card body - default title is the aggregation value on the selected column
 
-    # Create the card body
+    # Create the card body - simple structure
     new_card_body = html.Div(
         [
-            partial_data_badge,
+            # infinite_scroll_badge,  # Removed as requested
             table_aggrid,
             store_component,
         ]
@@ -239,4 +269,31 @@ def build_table(**kwargs):
     if not build_frame:
         return new_card_body
     else:
-        return build_table_frame(index=index, children=new_card_body)
+        # Build the table component with frame
+        table_component = build_table_frame(index=index, children=new_card_body)
+
+        if not stepper:
+            # Add targeted loading for the AG Grid component specifically
+            from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
+                create_skeleton_component,
+            )
+
+            graph_id_dict = {"type": "table-aggrid", "index": str(index)}
+            target_id = stringify_id(graph_id_dict)
+            logger.debug(f"Target ID for loading: {target_id}")
+
+            return dcc.Loading(
+                children=table_component,
+                custom_spinner=create_skeleton_component("table"),
+                # target_components={f'{{"index":"{index}","type":"table-aggrid"}}': "rowData"},
+                target_components={target_id: "rowData"},
+                # delay_show=50,  # Minimal delay to prevent flashing
+                # delay_hide=100,  # Quick dismissal
+                delay_show=50,  # Minimal delay to prevent flashing
+                delay_hide=300,  #
+                id={"index": index},  # Move the id to the loading component
+            )
+
+        else:
+            # For stepper mode without loading
+            return table_component

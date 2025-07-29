@@ -1,0 +1,63 @@
+/* =============================================================================
+   PROJECTS PAGE COMPONENTS
+   Fixes for accordion layout issues on /projects page
+   ============================================================================= */
+
+/* Fix accordion panel height restrictions ONLY when expanded */
+.mantine-Accordion-panel[aria-hidden="false"] {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+/* Fix nested accordion panels specifically ONLY when expanded */
+.mantine-Accordion-root .mantine-Accordion-panel[aria-hidden="false"] {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+/* Fix accordion content area ONLY when visible */
+.mantine-Accordion-panel[aria-hidden="false"] .mantine-Accordion-content {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+/* Projects page specific accordion fixes ONLY when expanded */
+#projects-list .mantine-Accordion-panel[aria-hidden="false"],
+#projects-list .mantine-Accordion-panel[aria-hidden="false"] .mantine-Accordion-content {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    min-height: fit-content !important;
+}
+
+/* Fix for deeply nested accordions ONLY when expanded */
+.mantine-Accordion-root .mantine-Accordion-root .mantine-Accordion-panel[aria-hidden="false"] {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+/* Ensure Paper components inside accordions don't get height restrictions */
+.mantine-Accordion-panel .mantine-Paper-root {
+    height: auto !important;
+    min-height: fit-content !important;
+}
+
+/* Fix page-content container ONLY for projects page */
+body[data-pathname="/projects"] #page-content,
+#page-content:has(#projects-list) {
+    height: auto !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+}
+
+/* Ensure containers ONLY on projects page can expand */
+body[data-pathname="/projects"] .mantine-Container-root,
+#page-content:has(#projects-list) .mantine-Container-root {
+    height: auto !important;
+    max-height: none !important;
+    min-height: fit-content !important;
+}

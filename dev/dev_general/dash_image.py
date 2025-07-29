@@ -1,12 +1,13 @@
-import dash
-from dash.dependencies import Input, Output, State
-import dash_html_components as html
-import dash_core_components as dcc
-import dash_bootstrap_components as dbc
-import dash_table
-import plotly.express as px
 import re
 import time
+
+import dash
+import dash_bootstrap_components as dbc
+import dash_core_components as dcc
+import dash_html_components as html
+import dash_table
+import plotly.express as px
+from dash.dependencies import Input, Output, State
 from skimage import io
 
 DEBUG = True

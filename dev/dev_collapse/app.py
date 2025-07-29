@@ -13,8 +13,8 @@ documentation: https://dash.plot.ly/urls
 
 import dash
 import dash_bootstrap_components as dbc
-from dash import Input, Output, dcc, html, State
 import dash_mantine_components as dmc
+from dash import Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
 app = dash.Dash(external_stylesheets=[dbc.themes.BOOTSTRAP])

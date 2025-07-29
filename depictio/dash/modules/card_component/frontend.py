@@ -1,5 +1,4 @@
 # Import necessary libraries
-import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import httpx
 from dash import MATCH, Input, Output, State, dcc, html
@@ -7,6 +6,8 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.colors import colors
+from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
 from depictio.dash.modules.card_component.utils import agg_functions, build_card, build_card_frame
 
 # Depictio imports
@@ -27,45 +28,85 @@ def register_callbacks_card_component(app):
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             # State("local-store-components-metadata", "data"),
             State({"type": "card-dropdown-column", "index": MATCH}, "id"),
+            State("current-edit-parent-index", "data"),  # Add parent index for edit mode
             State("local-store", "data"),
             State("url", "pathname"),
         ],
         prevent_initial_call=True,
     )
     # def update_aggregation_options(column_name, wf_dc_store, component_id, local_data, pathname):
-    def update_aggregation_options(column_name, wf_tag, dc_tag, component_id, local_data, pathname):
+    def update_aggregation_options(
+        column_name, wf_tag, dc_tag, component_id, parent_index, local_data, pathname
+    ):
         """
         Callback to update aggregation dropdown options based on the selected column
         """
-
+        logger.info("=== CARD AGGREGATION OPTIONS CALLBACK START ===")
         logger.info(f"column_name: {column_name}")
+        logger.info(f"wf_tag: {wf_tag}")
+        logger.info(f"dc_tag: {dc_tag}")
         logger.info(f"component_id: {component_id}")
-        logger.info(f"local_data: {local_data}")
-        # logger.info(f"wf_dc_store: {wf_dc_store}")
+        logger.info(f"parent_index: {parent_index}")
+        logger.info(f"local_data available: {local_data is not None}")
+        logger.info(f"pathname: {pathname}")
 
         if not local_data:
+            logger.error("No local_data available!")
             return []
 
         TOKEN = local_data["access_token"]
 
-        # if not wf_dc_store:
-        #     return []
+        # In edit mode, we might need to get workflow/dc IDs from component data
+        if parent_index is not None and (not wf_tag or not dc_tag):
+            logger.info(
+                f"Edit mode detected - fetching component data for parent_index: {parent_index}"
+            )
+            dashboard_id = pathname.split("/")[-1]
+            component_data = get_component_data(
+                input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN
+            )
+            if component_data:
+                wf_tag = component_data.get("wf_id")
+                dc_tag = component_data.get("dc_id")
+                logger.info(f"Retrieved from component_data - wf_tag: {wf_tag}, dc_tag: {dc_tag}")
 
         index = str(component_id["index"])
-
-        # wf_tag = wf_dc_store[index]["wf_tag"]
-        # dc_tag = wf_dc_store[index]["dc_tag"]
-
         logger.info(f"index: {index}")
-        logger.info(f"wf_tag: {wf_tag}")
-        logger.info(f"dc_tag: {dc_tag}")
+        logger.info(f"Final wf_tag: {wf_tag}")
+        logger.info(f"Final dc_tag: {dc_tag}")
+
+        # If any essential parameters are None, return empty list
+        if not wf_tag or not dc_tag:
+            logger.error(
+                f"Missing essential workflow/dc parameters - wf_tag: {wf_tag}, dc_tag: {dc_tag}"
+            )
+            return []
+
+        # If column_name is None, return empty list (but still log the attempt)
+        if not column_name:
+            logger.info(
+                "Column name is None - returning empty list (this is normal on initial load)"
+            )
+            return []
 
         # Get the columns from the selected data collection
+        logger.info("Fetching columns from data collection...")
         cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
+        logger.info(f"cols_json keys: {list(cols_json.keys()) if cols_json else 'None'}")
 
-        logger.info(f"cols_json: {cols_json}")
+        # Check if cols_json is valid and contains the column
+        if not cols_json:
+            logger.error("cols_json is empty or None!")
+            return []
 
-        if column_name is None:
+        if column_name not in cols_json:
+            logger.error(f"column_name '{column_name}' not found in cols_json!")
+            logger.error(f"Available columns: {list(cols_json.keys())}")
+            return []
+
+        if "type" not in cols_json[column_name]:
+            logger.error(f"'type' field missing for column '{column_name}'")
+            logger.error(f"Available fields: {list(cols_json[column_name].keys())}")
             return []
 
         # Get the type of the selected column
@@ -73,11 +114,18 @@ def register_callbacks_card_component(app):
         logger.info(f"column_type: {column_type}")
 
         # Get the aggregation functions available for the selected column type
+        if str(column_type) not in agg_functions:
+            logger.error(f"Column type '{column_type}' not found in agg_functions!")
+            logger.error(f"Available types: {list(agg_functions.keys())}")
+            return []
+
         agg_functions_tmp_methods = agg_functions[str(column_type)]["card_methods"]
+        logger.info(f"agg_functions_tmp_methods: {agg_functions_tmp_methods}")
 
         # Create a list of options for the dropdown
         options = [{"label": k, "value": k} for k in agg_functions_tmp_methods.keys()]
-        logger.info(f"options: {options}")
+        logger.info(f"Final options to return: {options}")
+        logger.info("=== CARD AGGREGATION OPTIONS CALLBACK END ===")
 
         return options
 
@@ -108,10 +156,12 @@ def register_callbacks_card_component(app):
     @app.callback(
         Output({"type": "card-body", "index": MATCH}, "children"),
         Output({"type": "aggregation-description", "index": MATCH}, "children"),
+        Output({"type": "card-columns-description", "index": MATCH}, "children"),
         [
             Input({"type": "card-input", "index": MATCH}, "value"),
             Input({"type": "card-dropdown-column", "index": MATCH}, "value"),
             Input({"type": "card-dropdown-aggregation", "index": MATCH}, "value"),
+            Input({"type": "card-color-picker", "index": MATCH}, "value"),
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             # State("local-store-components-metadata", "data"),
@@ -127,6 +177,7 @@ def register_callbacks_card_component(app):
         input_value,
         column_name,
         aggregation_value,
+        color_value,
         wf_id,
         dc_id,
         parent_index,
@@ -181,10 +232,48 @@ def register_callbacks_card_component(app):
         cols_json = get_columns_from_data_collection(wf_id, dc_id, TOKEN)
         logger.info(f"cols_json: {cols_json}")
 
+        from dash import dash_table
+
+        data_columns_df = [
+            {"column": c, "description": cols_json[c]["description"]}
+            for c in cols_json
+            if cols_json[c]["description"] is not None
+        ]
+
+        columns_description_df = dash_table.DataTable(
+            columns=[
+                {"name": "Column", "id": "column"},
+                {"name": "Description", "id": "description"},
+            ],
+            data=data_columns_df,
+            # Small font size, helvetica, no border, center text
+            style_cell={
+                "fontSize": 11,
+                "fontFamily": "Helvetica",
+                "border": "0px",
+                "textAlign": "center",
+                "backgroundColor": "var(--app-surface-color, #ffffff)",
+                "color": "var(--app-text-color, #000000)",
+                "padding": "4px 8px",
+                "maxWidth": "150px",
+                "overflow": "hidden",
+                "textOverflow": "ellipsis",
+            },
+            style_header={
+                "fontWeight": "bold",
+                "backgroundColor": "var(--app-surface-color, #ffffff)",
+                "color": "var(--app-text-color, #000000)",
+            },
+            style_data={
+                "backgroundColor": "var(--app-surface-color, #ffffff)",
+                "color": "var(--app-text-color, #000000)",
+            },
+        )
+
         # If any of the input values are None, return an empty list
         if column_name is None or aggregation_value is None or wf_id is None or dc_id is None:
             if not component_data:
-                return ([], None)
+                return ([], None, columns_description_df)
             else:
                 column_name = component_data["column_name"]
                 aggregation_value = component_data["aggregation"]
@@ -203,7 +292,7 @@ def register_callbacks_card_component(app):
                 dmc.Tooltip(
                     children=dmc.Badge(
                         children="Aggregation description",
-                        leftSection=DashIconify(icon="mdi:information", color="gray", width=20),
+                        leftSection=DashIconify(icon="mdi:information", color="white", width=20),
                         color="gray",
                         radius="lg",
                     ),
@@ -218,7 +307,8 @@ def register_callbacks_card_component(app):
                         "name": "pop",
                         "duration": 300,
                     },
-                    justify="flex-end",
+                    withinPortal=False,
+                    # justify="flex-end",
                     withArrow=True,
                     openDelay=500,
                     closeDelay=500,
@@ -267,7 +357,10 @@ def register_callbacks_card_component(app):
             "aggregation": aggregation_value,
             # "value": v,
             "access_token": TOKEN,
-            "stepper": True,
+            "stepper": True,  # Show border during editing
+            "build_frame": True,  # Use card frame for editing
+            "color": color_value,
+            "cols_json": cols_json,  # Pass cols_json for reference values
         }
 
         if relevant_metadata:
@@ -280,99 +373,200 @@ def register_callbacks_card_component(app):
 
         new_card_body = build_card(**card_kwargs)
 
-        return new_card_body, aggregation_description
+        return new_card_body, aggregation_description, columns_description_df
 
 
 def design_card(id, df):
-    left_column = dbc.Col(
-        [
-            html.H5("Card edit menu"),
-            dbc.Card(
-                dbc.CardBody(
-                    [
-                        # Input for the card title
-                        dmc.TextInput(
-                            label="Card title",
-                            id={
-                                "type": "card-input",
-                                "index": id["index"],
-                            },
-                            value="",
+    left_column = dmc.GridCol(
+        dmc.Stack(
+            [
+                html.H5("Card edit menu", style={"textAlign": "center"}),
+                dmc.Card(
+                    dmc.CardSection(
+                        dmc.Stack(
+                            [
+                                # Input for the card title
+                                dmc.TextInput(
+                                    label="Card title",
+                                    id={
+                                        "type": "card-input",
+                                        "index": id["index"],
+                                    },
+                                    value="",
+                                ),
+                                # Dropdown for the column selection
+                                dmc.Select(
+                                    label="Select your column",
+                                    id={
+                                        "type": "card-dropdown-column",
+                                        "index": id["index"],
+                                    },
+                                    data=[{"label": e, "value": e} for e in df.columns],
+                                    value=None,
+                                ),
+                                # Dropdown for the aggregation method selection
+                                dmc.Select(
+                                    label="Select your aggregation method",
+                                    id={
+                                        "type": "card-dropdown-aggregation",
+                                        "index": id["index"],
+                                    },
+                                    value=None,
+                                ),
+                                dmc.Stack(
+                                    [
+                                        dmc.Text("Color customization", size="sm", fw="bold"),
+                                        dmc.ColorInput(
+                                            label="Pick any color from the page",
+                                            w=250,
+                                            id={
+                                                "type": "card-color-picker",
+                                                "index": id["index"],
+                                            },
+                                            value="var(--app-text-color, #000000)",
+                                            format="hex",
+                                            # leftSection=DashIconify(icon="cil:paint"),
+                                            swatches=[
+                                                colors["purple"],  # Depictio brand colors
+                                                colors["violet"],
+                                                colors["blue"],
+                                                colors["teal"],
+                                                colors["green"],
+                                                colors["yellow"],
+                                                colors["orange"],
+                                                colors["pink"],
+                                                colors["red"],
+                                                colors["black"],
+                                            ],
+                                        ),
+                                    ],
+                                    gap="xs",
+                                ),
+                                html.Div(
+                                    id={
+                                        "type": "aggregation-description",
+                                        "index": id["index"],
+                                    },
+                                ),
+                            ],
+                            gap="sm",
                         ),
-                        # Dropdown for the column selection
-                        dmc.Select(
-                            label="Select your column",
-                            id={
-                                "type": "card-dropdown-column",
-                                "index": id["index"],
-                            },
-                            data=[{"label": e, "value": e} for e in df.columns],
-                            value=None,
-                        ),
-                        # Dropdown for the aggregation method selection
-                        dmc.Select(
-                            label="Select your aggregation method",
-                            id={
-                                "type": "card-dropdown-aggregation",
-                                "index": id["index"],
-                            },
-                            value=None,
-                        ),
-                        html.Div(
-                            id={
-                                "type": "aggregation-description",
-                                "index": id["index"],
-                            },
-                        ),
-                    ],
+                        id={
+                            "type": "card",
+                            "index": id["index"],
+                        },
+                        style={"padding": "1rem"},
+                    ),
+                    withBorder=True,
+                    shadow="sm",
+                    style={"width": "100%"},
                 ),
-                id={
-                    "type": "card",
-                    "index": id["index"],
-                },
-                style={"width": "100%"},
-            ),
-        ],
-        width="auto",
+            ],
+            align="flex-end",  # Align to right (horizontal)
+            justify="center",  # Center vertically
+            gap="md",
+            style={"height": "100%"},
+        ),
+        span="auto",
+        style={
+            "display": "flex",
+            "alignItems": "center",
+            "justifyContent": "flex-end",
+        },  # Align to right
     )
-    right_column = dbc.Col(
-        [
-            html.H5("Resulting card"),
-            html.Div(
+    right_column = dmc.GridCol(
+        dmc.Stack(
+            [
+                html.H5("Resulting card", style={"textAlign": "center"}),
                 html.Div(
-                    build_card_frame(index=id["index"]),
-                    # dbc.Card(
-                    #     dbc.CardBody(
-                    #         id={
-                    #             "type": "card-body",
-                    #             "index": id["index"],
-                    #         }
-                    #     ),
-                    #     style={"width": "100%"},
-                    #     id={
-                    #         "type": "card-component",
-                    #         "index": id["index"],
-                    #     },
-                    # ),
+                    build_card_frame(index=id["index"], show_border=True),
                     id={
                         "type": "component-container",
                         "index": id["index"],
                     },
-                )
+                ),
+            ],
+            align="flex-start",  # Align to left (horizontal)
+            justify="center",  # Center vertically
+            gap="md",
+            style={"height": "100%"},
+        ),
+        span="auto",
+        style={
+            "display": "flex",
+            "alignItems": "center",
+            "justifyContent": "flex-start",
+        },  # Align to left
+    )
+    # Arrow between columns
+    arrow_column = dmc.GridCol(
+        dmc.Stack(
+            [
+                html.Div(style={"height": "50px"}),  # Spacer to align with content
+                dmc.Center(
+                    DashIconify(
+                        icon="mdi:arrow-right-bold",
+                        width=40,
+                        height=40,
+                        color="#666",
+                    ),
+                ),
+            ],
+            align="center",
+            justify="center",
+            style={"height": "100%"},
+        ),
+        span="content",
+        style={"display": "flex", "alignItems": "center", "justifyContent": "center"},
+    )
+
+    # Main layout with components
+    main_layout = dmc.Grid(
+        [left_column, arrow_column, right_column],
+        justify="center",
+        align="center",
+        gutter="md",
+        style={"height": "100%", "minHeight": "300px"},
+    )
+
+    # Bottom section with column descriptions
+    bottom_section = dmc.Stack(
+        [
+            dmc.Title("Data Collection - Columns description", order=5, ta="center"),
+            html.Div(
+                id={
+                    "type": "card-columns-description",
+                    "index": id["index"],
+                }
             ),
         ],
-        width="auto",
+        gap="md",
+        style={"marginTop": "2rem"},
     )
-    row = [
-        dmc.Center(dbc.Row([left_column, right_column])),
+
+    card_row = [
+        dmc.Stack(
+            [main_layout, html.Hr(), bottom_section],
+            gap="lg",
+        ),
     ]
-    return row
+    return card_row
 
 
-def create_stepper_card_button(n, disabled=False):
+def create_stepper_card_button(n, disabled=None):
     """
     Create the stepper card button
+
+    Args:
+        n (_type_): _description_
+        disabled (bool, optional): Override enabled state. If None, uses metadata.
     """
+
+    import dash_bootstrap_components as dbc
+
+    # Use metadata enabled field if disabled not explicitly provided
+    if disabled is None:
+        disabled = not is_enabled("card")
 
     # Create the card button
     button = dbc.Col(
@@ -386,7 +580,7 @@ def create_stepper_card_button(n, disabled=False):
             n_clicks=0,
             style=UNSELECTED_STYLE,
             size="xl",
-            color="violet",
+            color=get_dmc_button_color("card"),
             leftSection=DashIconify(icon="formkit:number", color="white"),
             disabled=disabled,
         )

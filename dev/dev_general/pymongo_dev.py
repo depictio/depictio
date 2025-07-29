@@ -1,5 +1,6 @@
-import pymongo
 from pprint import pprint
+
+import pymongo
 
 mongo_client = pymongo.MongoClient("mongodb://localhost:27018/")
 mongo_db = mongo_client["depictioDB"]

@@ -15,7 +15,7 @@ dependencies:
   - dash-extensions==1.0.1
   - dash-iconify==0.1.2
   - dash-mantine-components==2.1.0
-  - dash>=3.0.0
+  - dash==3.1.1
   - deltalake==0.24.0
   - devtools
   - fastapi==0.115.8
@@ -27,7 +27,8 @@ dependencies:
   - mypy-boto3-s3
   - numpy==2.2.3
   - pandas==2.2.3
-  - playwright==1.50.1
+  - playwright
+  # - playwright==1.50.1
   - plotly_express
   # - plotly_express=0.4.1
   - polars==1.22.0
@@ -35,7 +36,8 @@ dependencies:
   - pydantic-settings==2.7.1
   - pyjwt==2.10.1
   - pymongo==4.11
-  - pytest-playwright==0.7.0
+  - pytest-playwright
+  # - pytest-playwright==0.7.0
   - python==3.12.9
   - python-dotenv
   - python-jose==3.3.0
@@ -45,7 +47,10 @@ dependencies:
   - tomli
   - typer
   - typeguard
+  - umap-learn
   - uvicorn==0.34.0
   - pip:
-    - dash-draggable==0.1.2
+    # - dash-draggable==0.1.2
     - dash-ag-grid==31.3.1
+    - dash-ace==0.2.1
+    - dash-dynamic-grid-layout

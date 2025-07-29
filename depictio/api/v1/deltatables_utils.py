@@ -28,6 +28,12 @@ def add_filter(
 
     if interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
         if value:
+            # Ensure value is a list for is_in() function
+            if not isinstance(value, list):
+                value = [value]
+            logger.debug(
+                f"Creating filter: column='{column_name}', values={value}, type={interactive_component_type}"
+            )
             filter_list.append(pl.col(column_name).is_in(value))
 
     elif interactive_component_type == "TextInput":
@@ -177,6 +183,7 @@ def load_deltatable_lite(
     metadata: list[dict] | None = None,
     TOKEN: str | None = None,
     limit_rows: int | None = None,
+    load_for_options: bool = False,  # New parameter to load unfiltered data for component options
 ) -> pl.DataFrame:
     """
     Load a Delta table with optional filtering based on metadata.
@@ -233,8 +240,8 @@ def load_deltatable_lite(
     # Initialize the Delta table scan
     delta_scan = pl.scan_delta(file_id, storage_options=polars_s3_config)
 
-    # Apply filtering if metadata is provided
-    if metadata:
+    # Apply filtering if metadata is provided and not loading for options
+    if metadata and not load_for_options:
         filter_expressions = process_metadata_and_filter(metadata)
         logger.debug(f"Filter expressions: {filter_expressions}")
 
@@ -244,6 +251,8 @@ def load_deltatable_lite(
                 combined_filter &= filt
             delta_scan = delta_scan.filter(combined_filter)
             logger.debug("Applied filters based on metadata.")
+    elif load_for_options:
+        logger.debug("Skipping filters - loading unfiltered data for component options")
 
     if limit_rows:
         delta_scan = delta_scan.limit(limit_rows)

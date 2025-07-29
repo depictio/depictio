@@ -1,11 +1,11 @@
 import dash
-from dash import html, dcc
 import dash_bootstrap_components as dbc
+from auth_modals import auth_modals
+from dash import dcc, html
 from flask_cors import CORS
 
 # Import components
 from header import create_header
-from auth_modals import auth_modals
 
 # Initialize the Dash app with Bootstrap theme and Font Awesome
 app = dash.Dash(

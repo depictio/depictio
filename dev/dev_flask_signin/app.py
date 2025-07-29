@@ -1,23 +1,21 @@
-import os
-from flask import Flask, redirect, request, session, jsonify
-from flask_sqlalchemy import SQLAlchemy
+import json
+
+import dash
+import dash_bootstrap_components as dbc
+import pandas as pd
+import plotly.express as px
+from dash import ALL, Input, Output, State, dcc, html, no_update
+from flask import Flask, jsonify, request
 from flask_login import (
     LoginManager,
     UserMixin,
-    login_user,
-    logout_user,
     current_user,
     login_required,
+    login_user,
+    logout_user,
 )
-from werkzeug.security import generate_password_hash, check_password_hash
-import dash
-from dash import dcc, html, callback, Input, Output, State, ALL, MATCH, no_update
-import dash_bootstrap_components as dbc
-import plotly.express as px
-import pandas as pd
-from functools import wraps
-import json
-import uuid
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import check_password_hash, generate_password_hash
 
 # Initialize Flask app
 server = Flask(__name__)

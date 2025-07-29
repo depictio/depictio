@@ -1,15 +1,16 @@
+import os
+import sys
+
 import pytest
+from bson import ObjectId
 from fastapi.testclient import TestClient
 from pymongo import MongoClient
-from bson import ObjectId
-import sys
-import os
 
 # Add the project root to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import the main FastAPI app
-from main import app, users_collection, client as mongo_client, db
+from main import app
 
 # Create a test client
 client = TestClient(app)
