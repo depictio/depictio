@@ -51,25 +51,26 @@ jobs:
           source venv/bin/activate
           pip list
 
-      # - name: Run Ruff for formatting
-      #   run: |
-      #     source venv/bin/activate
-      #     ruff format depictio
-
-      # - name: Run Ruff for linting
-      #   run: |
-      #     source venv/bin/activate
-      #     ruff check depictio
-
-      # - name: Run ty type checker (must pass)
-      #   run: |
-      #     source venv/bin/activate
-      #     ty check depictio/models/ depictio/api/ depictio/dash/ depictio/cli/ depictio/tests/
-
-      - name: Run pre-commit hooks
+      - name: Run Ruff for formatting
         run: |
           source venv/bin/activate
-          pre-commit run --all-files
+          ruff format depictio
+
+      - name: Run Ruff for linting
+        run: |
+          source venv/bin/activate
+          ruff check depictio
+
+      - name: Run ty type checker (must pass)
+        run: |
+          source venv/bin/activate
+          ty version
+          ty check depictio/models/ depictio/api/ depictio/dash/ depictio/cli/ depictio/tests/
+
+      # - name: Run pre-commit hooks
+      #   run: |
+      #     source venv/bin/activate
+      #     pre-commit run --all-files
 
       - name: Run tests
         run: |
