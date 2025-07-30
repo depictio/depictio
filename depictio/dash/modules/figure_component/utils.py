@@ -286,8 +286,13 @@ def render_figure(
             return _create_umap_placeholder(df, dict_kwargs, theme)
 
     # Add theme-appropriate template using Mantine-compatible themes
-    if "template" not in dict_kwargs:
+    # Apply theme template if no template is specified, if template is None, or if template is empty
+    template_value = dict_kwargs.get("template")
+    if not template_value:  # This handles None, empty string, and missing key cases
         dict_kwargs["template"] = _get_theme_template(theme)
+        logger.info(f"Applied theme-based template: {dict_kwargs['template']} for theme: {theme}")
+    else:
+        logger.info(f"Using existing template: {template_value}")
 
     logger.info("=== FIGURE RENDER DEBUG ===")
     logger.info(f"Visualization: {visu_type}")
@@ -296,7 +301,10 @@ def render_figure(
     logger.info(f"Data shape: {df.shape if df is not None else 'None'}")
     logger.info(f"Selected point: {selected_point is not None}")
     logger.info(f"Parameters: {list(dict_kwargs.keys())}")
-    # logger.info(f"Full dict_kwargs: {dict_kwargs}")  # Reduced logging
+    logger.info(f"Full dict_kwargs: {dict_kwargs}")  # Show full parameters for debugging
+    logger.info(
+        f"Boolean parameters in dict_kwargs: {[(k, v, type(v)) for k, v in dict_kwargs.items() if isinstance(v, bool)]}"
+    )
     # logger.info(f"Available columns in df: {df.columns if df is not None else 'None'}")  # Reduced logging
 
     # Handle empty or invalid data
@@ -326,6 +334,13 @@ def render_figure(
                 or isinstance(v, bool)
             ):
                 cleaned_kwargs[k] = v
+
+    logger.info("=== CLEANED PARAMETERS DEBUG ===")
+    logger.info(f"Original dict_kwargs: {dict_kwargs}")
+    logger.info(f"Cleaned kwargs: {cleaned_kwargs}")
+    logger.info(
+        f"Boolean parameters in cleaned_kwargs: {[(k, v, type(v)) for k, v in cleaned_kwargs.items() if isinstance(v, bool)]}"
+    )
 
     # Check if required parameters are missing for the visualization type
     required_params = _get_required_parameters(visu_type.lower())
@@ -398,10 +413,22 @@ def render_figure(
                     sampled_df = _sampling_cache[cache_key]
                     logger.info(f"Using cached sampled data: {cutoff} points")
 
+                logger.info("=== CALLING PLOTLY FUNCTION ===")
+                logger.info(f"Function: {plot_function.__name__}")
+                logger.info(f"Parameters: {cleaned_kwargs}")
+                logger.info(
+                    f"Boolean params: {[(k, v) for k, v in cleaned_kwargs.items() if isinstance(v, bool)]}"
+                )
                 figure = plot_function(sampled_df, **cleaned_kwargs)
             else:
                 # Use full dataset
                 pandas_df = df.to_pandas()
+                logger.info("=== CALLING PLOTLY FUNCTION ===")
+                logger.info(f"Function: {plot_function.__name__}")
+                logger.info(f"Parameters: {cleaned_kwargs}")
+                logger.info(
+                    f"Boolean params: {[(k, v) for k, v in cleaned_kwargs.items() if isinstance(v, bool)]}"
+                )
                 figure = plot_function(pandas_df, **cleaned_kwargs)
 
         # Apply responsive sizing - FORCE for vertical growing
@@ -552,9 +579,25 @@ def validate_parameters(visu_type: str, parameters: Dict[str, Any]) -> Dict[str,
         logger.warning(f"Expected dict for parameters, got {type(parameters)}: {parameters}")
         return {}
 
+    # Essential parameters that should always be preserved regardless of visualization type
+    ESSENTIAL_PARAMETERS = {
+        "template",  # Theme-based template
+        "title",  # Figure title
+        "width",  # Figure width
+        "height",  # Figure height
+        "opacity",  # Marker opacity
+        "log_x",  # Log X scale
+        "log_y",  # Log Y scale
+        "range_x",  # X axis range
+        "range_y",  # Y axis range
+    }
+
     try:
         viz_def = get_visualization_definition(visu_type)
         valid_params = {p.name for p in viz_def.parameters}
+
+        # Include essential parameters even if not in visualization definition
+        valid_params.update(ESSENTIAL_PARAMETERS)
 
         # Filter to valid parameters only
         cleaned = {k: v for k, v in parameters.items() if k in valid_params and v is not None}

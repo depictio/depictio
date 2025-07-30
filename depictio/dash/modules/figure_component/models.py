@@ -228,7 +228,7 @@ COMMON_PARAMETERS = [
             "mantine_white",
             "mantine_dark",
         ],
-        default="plotly",
+        default=None,
     ),
     ParameterDefinition(
         name="opacity",
