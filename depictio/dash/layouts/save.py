@@ -74,7 +74,7 @@ def register_callbacks_save(app):
         Output("dummy-output", "children"),
         Input("save-button-dashboard", "n_clicks"),
         Input("draggable", "currentLayout"),
-        State(
+        Input(
             {
                 "type": "stored-metadata-component",
                 "index": ALL,

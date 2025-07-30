@@ -260,20 +260,13 @@ def register_callbacks_text_component(app):
     # Sync text-store updates with stored-metadata-component for save functionality
     @app.callback(
         Output({"type": "stored-metadata-component", "index": MATCH}, "data"),
-        [
-            Input({"type": "text-store", "index": MATCH}, "data"),
-            Input({"type": "align-left-btn", "index": MATCH}, "n_clicks"),
-            Input({"type": "align-center-btn", "index": MATCH}, "n_clicks"),
-            Input({"type": "align-right-btn", "index": MATCH}, "n_clicks"),
-        ],
+        Input({"type": "text-store", "index": MATCH}, "data"),
         State({"type": "stored-metadata-component", "index": MATCH}, "data"),
         prevent_initial_call=False,  # Allow initial call to sync alignment from restored text-store
     )
-    def sync_text_content_for_save(
-        text_store_data, left_clicks, center_clicks, right_clicks, stored_metadata
-    ):
+    def sync_text_content_for_save(text_store_data, stored_metadata):
         """
-        Sync text-store updates and alignment button clicks with stored-metadata-component
+        Sync text-store updates with stored-metadata-component
         to ensure text/alignment changes trigger dashboard saves properly.
 
         CRITICAL: This callback only updates existing stored-metadata-component stores.
@@ -299,15 +292,9 @@ def register_callbacks_text_component(app):
         updated_text = text_store_data.get("text", "")
         updated_alignment = text_store_data.get("alignment", "left")
 
-        # If triggered by alignment button, ensure we capture the current alignment
-        if "align-" in trigger_id:
-            if "align-left-btn" in trigger_id:
-                updated_alignment = "left"
-            elif "align-center-btn" in trigger_id:
-                updated_alignment = "center"
-            elif "align-right-btn" in trigger_id:
-                updated_alignment = "right"
-            logger.info(f"Alignment button clicked, setting alignment to: {updated_alignment}")
+        logger.info(
+            f"Text store updated - text: {updated_text[:50]}..., alignment: {updated_alignment}"
+        )
 
         # Get the component index from the triggered input
         triggered_input = ctx.triggered[0]["prop_id"]
