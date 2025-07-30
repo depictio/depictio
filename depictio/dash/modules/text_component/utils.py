@@ -71,8 +71,8 @@ def create_inline_editable_text(
                     "minHeight": "24px",
                     "border": "1px dashed transparent",
                     "textAlign": initial_alignment,  # Add text alignment
+                    "color": "var(--app-text-color, #000000)",  # Theme-aware text color
                 },
-                c="dark",
             ),
             # Hidden input for editing
             dmc.TextInput(
@@ -131,7 +131,7 @@ def build_text_frame(index, children=None, show_border=False):
                     "Configure your text component using the edit menu",
                     style={
                         "textAlign": "center",
-                        "color": "#999",
+                        "color": "var(--app-text-color, #999)",
                         "fontSize": "14px",
                         "fontStyle": "italic",
                     },
