@@ -12,7 +12,6 @@ from dash_iconify import DashIconify
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
-from depictio.dash.modules.figure_component.code_executor import SecureCodeExecutor
 from depictio.dash.modules.figure_component.code_mode import (
     convert_ui_params_to_code,
     create_code_mode_interface,
@@ -28,6 +27,7 @@ from depictio.dash.modules.figure_component.definitions import (
     get_available_visualizations,
     get_visualization_definition,
 )
+from depictio.dash.modules.figure_component.simple_code_executor import SimpleCodeExecutor
 
 # Removed get_common_visualizations import - now using all visualizations in dropdown
 from depictio.dash.modules.figure_component.state_manager import state_manager
@@ -1332,7 +1332,7 @@ def register_callbacks_figure_component(app):
                 )
 
             # Execute code securely
-            executor = SecureCodeExecutor()
+            executor = SimpleCodeExecutor()
             success, result, message = executor.execute_code(code, df)
 
             if success and result:

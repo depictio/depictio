@@ -6,79 +6,8 @@ from typing import Any, Dict
 
 import dash_ace
 import dash_mantine_components as dmc
-import pandas as pd
 from dash import html
 from dash_iconify import DashIconify
-
-
-def create_sample_datasets() -> Dict[str, pd.DataFrame]:
-    """Create multiple sample datasets for testing"""
-    datasets = {}
-
-    # Simple scatter data
-    datasets["scatter"] = pd.DataFrame(
-        {
-            "x": list(range(1, 21)),
-            "y": [2, 5, 3, 8, 7, 4, 9, 6, 1, 10, 12, 15, 11, 18, 16, 13, 19, 14, 17, 20],
-            "category": ["A", "B"] * 10,
-            "size": [
-                10,
-                20,
-                15,
-                25,
-                30,
-                12,
-                18,
-                22,
-                14,
-                28,
-                32,
-                35,
-                25,
-                40,
-                38,
-                28,
-                42,
-                30,
-                36,
-                45,
-            ],
-            "text": [f"Point {i}" for i in range(1, 21)],
-        }
-    )
-
-    # Time series data
-    from datetime import datetime, timedelta
-
-    import numpy as np
-
-    dates = [datetime(2023, 1, 1) + timedelta(days=i) for i in range(30)]
-    datasets["timeseries"] = pd.DataFrame(
-        {
-            "date": dates,
-            "value": np.random.normal(100, 10, 30).cumsum(),
-            "category": ["Series A", "Series B"] * 15,
-        }
-    )
-
-    # Bar chart data
-    datasets["bar"] = pd.DataFrame(
-        {
-            "category": ["A", "B", "C", "D", "E"],
-            "value": [23, 45, 56, 78, 32],
-            "subcategory": ["X", "Y", "X", "Y", "X"],
-        }
-    )
-
-    # Histogram data
-    datasets["histogram"] = pd.DataFrame(
-        {
-            "values": np.random.normal(50, 15, 200),
-            "group": np.random.choice(["Group 1", "Group 2"], 200),
-        }
-    )
-
-    return datasets
 
 
 def create_code_mode_interface(component_index: str) -> html.Div:
