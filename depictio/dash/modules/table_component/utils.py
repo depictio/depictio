@@ -233,7 +233,7 @@ def build_table(**kwargs):
             "filter": True,
         },
         style={"width": "100%"},
-        className="ag-theme-alpine",
+        className="ag-theme-alpine",  # Default theme, will be updated by callback
     )
 
     logger.info(f"✅ Table {index}: Infinite row model configured with interactive support")

@@ -133,6 +133,7 @@ def return_deltatable_for_view(workflow_id: str, dc: DataCollection, token: str)
         },
         columnSize="sizeToFit",
         defaultColDef={"resizable": True, "sortable": True, "filter": True},
+        className="ag-theme-alpine",  # Default theme, will be updated by callback
     )
     preview_panel = dmc.AccordionPanel(dmc.Paper(grid))
     preview_control = dmc.AccordionControl(
@@ -904,6 +905,19 @@ def register_projects_callbacks(app):
     Args:
         app: Dash application instance
     """
+
+    @app.callback(
+        Output({"type": "project-dc-table", "index": MATCH}, "className"),
+        Input("theme-store", "data"),
+        prevent_initial_call=False,
+    )
+    def update_project_dc_table_theme(theme_data):
+        """Update AG Grid theme class based on current theme."""
+        theme = theme_data or "light"
+        if theme == "dark":
+            return "ag-theme-alpine-dark"
+        else:
+            return "ag-theme-alpine"
 
     @app.callback(
         Output({"type": "project-dc-table", "index": MATCH}, "getRowsResponse"),
