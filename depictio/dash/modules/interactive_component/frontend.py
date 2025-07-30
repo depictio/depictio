@@ -6,7 +6,6 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.colors import colors
 
 # Depictio imports
 from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
@@ -190,7 +189,7 @@ def register_callbacks_interactive_component(app):
             Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
             Input({"type": "input-dropdown-method", "index": MATCH}, "value"),
             Input({"type": "input-dropdown-scale", "index": MATCH}, "value"),
-            Input({"type": "input-color-picker", "index": MATCH}, "value"),
+            # Input({"type": "input-color-picker", "index": MATCH}, "value"),  # Disabled color picker
             Input({"type": "input-number-marks", "index": MATCH}, "value"),
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
@@ -207,7 +206,7 @@ def register_callbacks_interactive_component(app):
         column_value,
         aggregation_value,
         scale_value,
-        color_value,
+        # color_value,  # Disabled color picker
         marks_number,
         workflow_id,
         data_collection_id,
@@ -225,7 +224,8 @@ def register_callbacks_interactive_component(app):
         logger.info(f"  column_value: {column_value}")
         logger.info(f"  aggregation_value: {aggregation_value}")
         logger.info(f"  scale_value: {scale_value}")
-        logger.info(f"  color_value: {color_value}")
+        # logger.info(f"  color_value: {color_value}")  # Disabled color picker
+        color_value = None  # Default value since color picker is disabled
         logger.info(f"  marks_number: {marks_number}")
         logger.info(f"  workflow_id: {workflow_id}")
         logger.info(f"  data_collection_id: {data_collection_id}")
@@ -521,7 +521,7 @@ def register_callbacks_interactive_component(app):
             "parent_index": parent_index,
             "build_frame": False,  # Don't build frame - return just the content for the input-body container
             "scale": scale_value,
-            "color": color_value,
+            "color": color_value,  # Re-enabled since we set default value
             "marks_number": marks_number,
         }
 
@@ -591,49 +591,49 @@ def design_interactive(id, df):
                                     clearable=False,
                                     style={"display": "none"},  # Initially hidden
                                 ),
-                                dmc.Stack(
-                                    [
-                                        dmc.Text("Color customization", size="sm", fw="bold"),
-                                        dmc.ColorInput(
-                                            label="Pick any color from the page",
-                                            w=250,
-                                            id={
-                                                "type": "input-color-picker",
-                                                "index": id["index"],
-                                            },
-                                            value="var(--app-text-color, #000000)",
-                                            format="hex",
-                                            # leftSection=DashIconify(icon="cil:paint"),
-                                            swatches=[
-                                                colors["purple"],  # Depictio brand colors first
-                                                colors["blue"],
-                                                colors["teal"],
-                                                colors["green"],
-                                                colors["yellow"],
-                                                colors["orange"],
-                                                colors["pink"],
-                                                colors["red"],
-                                                colors["violet"],
-                                                colors["black"],
-                                                # "#25262b",  # Additional neutral colors
-                                                # "#868e96",
-                                                # "#fa5252",
-                                                # "#e64980",
-                                                # "#be4bdb",
-                                                # "#7950f2",
-                                                # "#4c6ef5",
-                                                # "#228be6",
-                                                # "#15aabf",
-                                                # "#12b886",
-                                                # "#40c057",
-                                                # "#82c91e",
-                                                # "#fab005",
-                                                # "#fd7e14",
-                                            ],
-                                        ),
-                                    ],
-                                    gap="xs",
-                                ),
+                                # dmc.Stack(  # Disabled color picker
+                                #     [
+                                #         dmc.Text("Color customization", size="sm", fw="bold"),
+                                #         dmc.ColorInput(
+                                #             label="Pick any color from the page",
+                                #             w=250,
+                                #             id={
+                                #                 "type": "input-color-picker",
+                                #                 "index": id["index"],
+                                #             },
+                                #             value="var(--app-text-color, #000000)",
+                                #             format="hex",
+                                #             # leftSection=DashIconify(icon="cil:paint"),
+                                #             swatches=[
+                                #                 colors["purple"],  # Depictio brand colors first
+                                #                 colors["blue"],
+                                #                 colors["teal"],
+                                #                 colors["green"],
+                                #                 colors["yellow"],
+                                #                 colors["orange"],
+                                #                 colors["pink"],
+                                #                 colors["red"],
+                                #                 colors["violet"],
+                                #                 colors["black"],
+                                #                 # "#25262b",  # Additional neutral colors
+                                #                 # "#868e96",
+                                #                 # "#fa5252",
+                                #                 # "#e64980",
+                                #                 # "#be4bdb",
+                                #                 # "#7950f2",
+                                #                 # "#4c6ef5",
+                                #                 # "#228be6",
+                                #                 # "#15aabf",
+                                #                 # "#12b886",
+                                #                 # "#40c057",
+                                #                 # "#82c91e",
+                                #                 # "#fab005",
+                                #                 # "#fd7e14",
+                                #             ],
+                                #         ),
+                                #     ],
+                                #     gap="xs",
+                                # ),
                                 dmc.NumberInput(
                                     label="Number of marks (for sliders)",
                                     description="Choose how many marks to display on the slider",
