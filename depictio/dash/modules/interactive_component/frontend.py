@@ -301,6 +301,28 @@ def register_callbacks_interactive_component(app):
             else:
                 logger.info(f"Using input_value from form: {input_value}")
 
+            # Restore slider configuration from component_data if not provided in form
+            if scale_value is None:
+                scale_value = component_data.get("scale", "linear")
+                logger.info(f"Using scale_value from component_data: {scale_value}")
+            else:
+                logger.info(f"Using scale_value from form: {scale_value}")
+
+            if marks_number is None:
+                marks_number = component_data.get("marks_number", 5)
+                logger.info(f"Using marks_number from component_data: {marks_number}")
+            else:
+                logger.info(f"Using marks_number from form: {marks_number}")
+
+            # Restore color from component_data if it was saved (for components created before color picker was disabled)
+            if color_value is None:
+                saved_color = component_data.get("custom_color", None)
+                if saved_color:
+                    color_value = saved_color
+                    logger.info(f"Using saved color_value from component_data: {color_value}")
+                else:
+                    logger.info("No saved color found, keeping color_value as None")
+
         logger.info("Using final values:")
         logger.info(f"  column_value: {column_value}")
         logger.info(f"  aggregation_value: {aggregation_value}")
