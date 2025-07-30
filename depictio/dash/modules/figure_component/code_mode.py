@@ -9,6 +9,8 @@ import dash_mantine_components as dmc
 from dash import html
 from dash_iconify import DashIconify
 
+from .simple_code_executor import get_code_examples
+
 
 def create_code_mode_interface(component_index: str) -> html.Div:
     """Create the code mode interface for figure creation"""
@@ -204,6 +206,56 @@ def create_code_mode_interface(component_index: str) -> html.Div:
                             icon="mdi:database",
                             width=16,
                             style={"color": "var(--mantine-color-blue-6, #1e88e5)"},
+                        ),
+                    ),
+                    # Code examples section - separate from dataset info
+                    dmc.Alert(
+                        title="Code Examples",
+                        color="teal",
+                        children=[
+                            dmc.Button(
+                                "Show Code Examples",
+                                id={"type": "toggle-examples-btn", "index": component_index},
+                                variant="subtle",
+                                size="xs",
+                                leftSection=DashIconify(icon="mdi:code-braces", width=14),
+                                color="teal",
+                                style={"marginBottom": "8px"},
+                            ),
+                            dmc.Collapse(
+                                id={"type": "code-examples-collapse", "index": component_index},
+                                opened=False,
+                                children=[
+                                    dmc.Stack(
+                                        [
+                                            *[
+                                                dmc.Stack(
+                                                    [
+                                                        dmc.Text(
+                                                            title, fw="bold", size="sm", c="gray"
+                                                        ),
+                                                        dmc.CodeHighlight(
+                                                            language="python",
+                                                            code=code,
+                                                            withCopyButton=True,
+                                                            style={"fontSize": "12px"},
+                                                        ),
+                                                    ],
+                                                    gap="xs",
+                                                )
+                                                for title, code in get_code_examples().items()
+                                            ],
+                                        ],
+                                        gap="md",
+                                    )
+                                ],
+                            ),
+                        ],
+                        withCloseButton=False,
+                        icon=DashIconify(
+                            icon="mdi:code-tags",
+                            width=16,
+                            style={"color": "var(--mantine-color-teal-6, #1de9b6)"},
                         ),
                     ),
                 ],

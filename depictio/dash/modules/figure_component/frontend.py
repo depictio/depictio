@@ -1336,8 +1336,13 @@ def register_callbacks_figure_component(app):
             success, result, message = executor.execute_code(code, df)
 
             if success and result:
-                # Store the figure data for further processing
-                figure_data = result.to_dict()
+                # Store the figure data with metadata for further processing
+                figure_data = {
+                    "figure": result.to_dict(),
+                    "code": code,
+                    "workflow_id": workflow_id,
+                    "data_collection_id": data_collection_id,
+                }
                 return (figure_data, "Code executed successfully!", "green", "Success")
             else:
                 return (None, message, "red", "Error")
@@ -1358,8 +1363,65 @@ def register_callbacks_figure_component(app):
     def update_figure_from_code(figure_data):
         """Update the figure display when code execution succeeds"""
         if figure_data:
-            return dcc.Graph(figure=figure_data, style={"height": "100%"})
+            # Handle both old format (direct figure) and new format (with metadata)
+            if isinstance(figure_data, dict) and "figure" in figure_data:
+                return dcc.Graph(figure=figure_data["figure"], style={"height": "100%"})
+            else:
+                # Backward compatibility - direct figure data
+                return dcc.Graph(figure=figure_data, style={"height": "100%"})
         return dash.no_update
+
+    # Sync code-generated figure with stored-metadata-component for save functionality
+    @app.callback(
+        Output({"type": "stored-metadata-component", "index": MATCH}, "data", allow_duplicate=True),
+        [Input({"type": "code-generated-figure", "index": MATCH}, "data")],
+        [State({"type": "stored-metadata-component", "index": MATCH}, "data")],
+        prevent_initial_call=True,
+    )
+    def sync_code_figure_for_save(figure_data, stored_metadata):
+        """
+        Sync code-generated figure with stored-metadata-component
+        to ensure code-generated figures are saved properly to the dashboard.
+
+        This is the missing piece that allows code mode figures to persist.
+        """
+        if not figure_data or not stored_metadata:
+            return dash.no_update
+
+        from datetime import datetime
+
+        # Extract data from the figure_data structure
+        if isinstance(figure_data, dict) and "code" in figure_data:
+            code = figure_data.get("code")
+            workflow_id = figure_data.get("workflow_id")
+            data_collection_id = figure_data.get("data_collection_id")
+        else:
+            # Backward compatibility - no metadata available
+            code = None
+            workflow_id = None
+            data_collection_id = None
+
+        # Extract the code parameters for metadata
+        code_params = extract_params_from_code(code) if code else {}
+
+        # Update the stored metadata with code mode information
+        updated_metadata = stored_metadata.copy()
+        updated_metadata.update(
+            {
+                "dict_kwargs": code_params,
+                "visu_type": "code",  # Special type for code-generated figures
+                "wf_id": workflow_id,
+                "dc_id": data_collection_id,
+                "last_updated": datetime.now().isoformat(),
+                "mode": "code",  # Track that this was generated via code mode
+                "code_content": code,  # Store the code for potential future use
+            }
+        )
+
+        logger.info(
+            f"Code mode figure metadata updated for component {stored_metadata.get('index')}"
+        )
+        return updated_metadata
 
     # Populate DataFrame columns information in code mode
     @app.callback(
@@ -1485,6 +1547,37 @@ def register_callbacks_figure_component(app):
             info_text = f"Selected {selected_count} of {total_numeric} numeric columns: {', '.join(selected_features[:3])}{'...' if len(selected_features) > 3 else ''}"
             return selected_features, info_text
 
+        raise dash.exceptions.PreventUpdate
+
+    # Callback to update ace editor theme based on app theme
+    @app.callback(
+        Output({"type": "code-editor", "index": MATCH}, "theme"),
+        [Input("theme-store", "data")],
+        prevent_initial_call=True,
+    )
+    def update_ace_editor_theme(theme_data):
+        """Update ace editor theme based on the app theme."""
+        if theme_data and theme_data.get("colorScheme") == "dark":
+            return "monokai"  # Dark theme for ace editor
+        else:
+            return "github"  # Light theme for ace editor
+
+    # Callback for code examples toggle button
+    @app.callback(
+        [
+            Output({"type": "code-examples-collapse", "index": MATCH}, "opened"),
+            Output({"type": "toggle-examples-btn", "index": MATCH}, "children"),
+        ],
+        [Input({"type": "toggle-examples-btn", "index": MATCH}, "n_clicks")],
+        [State({"type": "code-examples-collapse", "index": MATCH}, "opened")],
+        prevent_initial_call=True,
+    )
+    def toggle_code_examples(n_clicks, is_opened):
+        """Toggle the code examples collapse section."""
+        if n_clicks:
+            new_is_opened = not is_opened
+            button_text = "Hide Code Examples" if new_is_opened else "Show Code Examples"
+            return new_is_opened, button_text
         raise dash.exceptions.PreventUpdate
 
 
