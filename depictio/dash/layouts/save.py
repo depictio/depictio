@@ -116,6 +116,7 @@ def register_callbacks_save(app):
             "n_clicks",
         ),
         Input("remove-all-components-button", "n_clicks"),
+        Input({"type": "interactive-component-value", "index": ALL}, "value"),
         prevent_initial_call=True,
     )
     def save_data_dashboard(
@@ -136,6 +137,7 @@ def register_callbacks_save(app):
         n_clicks_duplicate,
         n_clicks_remove,
         n_clicks_remove_all,
+        interactive_component_values_all,
     ):
         logger.info("Saving dashboard data...")
         logger.info(f"Stored metadata: {stored_metadata}")
@@ -199,6 +201,7 @@ def register_callbacks_save(app):
             "draggable",
             "text-store",
             "notes-editor-store",
+            "interactive-component-value",
         ]
 
         # Check if save should be triggered
