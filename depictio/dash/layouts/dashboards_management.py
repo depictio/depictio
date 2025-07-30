@@ -747,10 +747,16 @@ def register_callbacks_dashboards_management(app):
             for d in dashboards
             if str(user_id) in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
         ]
+        # Check if current user is anonymous
+        is_anonymous = hasattr(current_user, "is_anonymous") and current_user.is_anonymous
+
         accessed_dashboards = [
             d
             for d in dashboards
             if str(user_id) not in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
+            and (
+                not is_anonymous or d.get("is_public", False)
+            )  # Anonymous users only see public dashboards
         ]
 
         owned_dashboards_section_header = dmc.Title(
@@ -785,7 +791,6 @@ def register_callbacks_dashboards_management(app):
                 "base": 1,
                 "sm": 2,
                 "lg": 3,
-                "xl": 4,  # Back to original responsive sizing
             },  # Responsive columns: 1 on mobile, 2 on small, 3 on large, 4 on xl
             spacing="xl",
             verticalSpacing="xl",
