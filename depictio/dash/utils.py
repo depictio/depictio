@@ -277,8 +277,11 @@ def get_columns_from_data_collection(
     """
     Get columns from data collection with simple caching to avoid duplicate API calls.
     """
-    # Create cache key
-    cache_key = f"{data_collection_id}_{hash(TOKEN) % 10000 if TOKEN else 'none'}"
+    # Create cache key (include version for joined DCs to handle schema updates)
+    cache_version = (
+        "v2" if isinstance(data_collection_id, str) and "--" in data_collection_id else "v1"
+    )
+    cache_key = f"{data_collection_id}_{cache_version}_{hash(TOKEN) % 10000 if TOKEN else 'none'}"
 
     # Check cache first
     if cache_key in _data_collection_specs_cache:
@@ -290,6 +293,63 @@ def get_columns_from_data_collection(
     )
 
     if workflow_id is not None and data_collection_id is not None:
+        # Check if this is a joined data collection ID
+        if isinstance(data_collection_id, str) and "--" in data_collection_id:
+            logger.info(f"Handling joined data collection specs for: {data_collection_id}")
+            # For joined data collections, we need to get the combined column specs
+            # by loading the actual joined DataFrame and extracting its schema
+            try:
+                from bson import ObjectId
+
+                from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+                # Load the joined DataFrame to get its schema
+                df = load_deltatable_lite(
+                    workflow_id=ObjectId(workflow_id),
+                    data_collection_id=data_collection_id,
+                    TOKEN=TOKEN,
+                    limit_rows=1,  # Only need one row to get schema
+                    load_for_options=True,
+                )
+
+                # Build column specs from the DataFrame schema
+                reformat_cols: collections.defaultdict = collections.defaultdict(dict)
+                for col_name in df.columns:
+                    dtype = str(df[col_name].dtype)
+                    # Map Polars dtypes to pandas-compatible types for component compatibility
+                    if "Int" in dtype or "UInt" in dtype:
+                        col_type = "int64"
+                    elif "Float" in dtype:
+                        col_type = "float64"
+                    elif "Utf8" in dtype or "String" in dtype:
+                        col_type = "object"
+                    elif "Boolean" in dtype:
+                        col_type = "bool"
+                    elif "Date" in dtype or "Datetime" in dtype:
+                        col_type = "datetime"
+                    else:
+                        col_type = dtype.lower()
+
+                    reformat_cols[col_name]["type"] = col_type
+                    reformat_cols[col_name]["description"] = "Column from joined data collection"
+                    reformat_cols[col_name]["specs"] = {
+                        "nunique": df[col_name].n_unique(),
+                        "dtype": dtype,
+                    }
+
+                # Cache the result
+                _data_collection_specs_cache[cache_key] = reformat_cols
+                logger.info(
+                    f"Generated specs for joined DC {data_collection_id}: {len(reformat_cols)} columns"
+                )
+
+                return reformat_cols
+
+            except Exception as e:
+                logger.error(f"Error generating specs for joined DC {data_collection_id}: {str(e)}")
+                return collections.defaultdict(dict)
+
+        # Regular data collection - use existing API
         response = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/deltatables/specs/{data_collection_id}",
             headers={
