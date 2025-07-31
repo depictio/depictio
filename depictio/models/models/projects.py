@@ -1,6 +1,7 @@
 import os
 import re
 from datetime import datetime
+from typing import Literal
 
 from beanie import Document
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -26,6 +27,7 @@ class Project(MongoModel):
     is_public: bool = False
     hash: str | None = None
     registration_time: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    project_type: Literal["basic", "advanced"] = "basic"
 
     @field_validator("name")
     @classmethod

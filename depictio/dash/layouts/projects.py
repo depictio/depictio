@@ -665,6 +665,21 @@ def render_project_item(
                         ],
                         gap="xs",
                     ),
+                    dmc.Group(
+                        children=[
+                            dmc.Text("Project type:", fw="bold", className="label-text"),
+                            dmc.Badge(
+                                getattr(project, "project_type", "basic").title(),
+                                color="orange"
+                                if getattr(project, "project_type", "basic") == "advanced"
+                                else "cyan",
+                                variant="light",
+                                radius="xl",
+                                size="xs",
+                            ),
+                        ],
+                        gap="xs",
+                    ),
                 ],
                 className="project-details p-3",
             ),
@@ -711,7 +726,18 @@ def render_project_item(
     badge_ownership = dmc.Badge(
         children=role,
         color=color,
-        className="ml-2",
+        style={"width": "80px", "justifyContent": "center"},
+    )
+
+    # Create project type badge
+    project_type = getattr(
+        project, "project_type", "basic"
+    )  # Default to 'basic' for backward compatibility
+    badge_project_type = dmc.Badge(
+        children=project_type.title(),
+        color="orange" if project_type == "advanced" else "cyan",
+        variant="light",
+        style={"width": "100px", "justifyContent": "center"},
     )
 
     return dmc.AccordionItem(
@@ -720,9 +746,12 @@ def render_project_item(
                 dmc.Group(
                     [
                         badge_ownership,
-                        dmc.Text(f"{project.name}", fw="bold"),
+                        badge_project_type,
+                        dmc.Text(f"{project.name}", fw="bold", style={"flex": "1"}),
                         # dmc.Text(f" ({str(project.id)})", fw="medium"),
                     ],
+                    gap="md",
+                    style={"width": "100%", "alignItems": "center"},
                 ),
             ),
             dmc.AccordionPanel(
@@ -886,8 +915,42 @@ def render_projects_list(projects: list[Project], admin_UI: bool = False, token:
 
     sections = create_project_section("Projects:", projects, current_user)
 
+    # Create column headers with fixed widths
+    column_headers = dmc.Group(
+        [
+            dmc.Text(
+                "Ownership",
+                fw="bold",
+                size="sm",
+                c="gray",
+                style={"width": "80px", "textAlign": "left"},
+            ),
+            dmc.Text(
+                "Project Type",
+                fw="bold",
+                size="sm",
+                c="gray",
+                style={"width": "100px", "textAlign": "left"},
+            ),
+            dmc.Text(
+                "Project Name",
+                fw="bold",
+                size="sm",
+                c="gray",
+                style={"flex": "1", "textAlign": "left"},
+            ),
+        ],
+        gap="md",
+        style={
+            "paddingLeft": "12px",
+            "paddingRight": "12px",
+            "paddingTop": "8px",
+            "marginBottom": "10px",
+        },
+    )
+
     return dmc.Container(
-        children=sections,
+        children=[column_headers] + (sections if sections else []),
         fluid=True,
         style={"height": "auto", "minHeight": "400px"},
     )
