@@ -49,7 +49,7 @@ def _get_theme_template(theme: str) -> str:
 
     logger.info(f"Using theme: {theme} for Plotly template")
     # Use actual available Plotly templates
-    return "plotly_dark" if theme == "dark" else "plotly_white"
+    return "mantine_dark" if theme == "dark" else "mantine_light"
 
 
 def build_figure_frame(index, children=None):

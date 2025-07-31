@@ -59,6 +59,8 @@ class ParameterInspector:
         "template": {
             "type": ParameterType.SELECT,
             "options": [
+                "mantine_light",
+                "mantine_dark",
                 "plotly",
                 "plotly_white",
                 "plotly_dark",
@@ -1049,6 +1051,8 @@ def create_umap_visualization_definition() -> VisualizationDefinition:
             label="Template",
             description="Plotly template",
             options=[
+                "mantine_light",
+                "mantine_dark",
                 "plotly",
                 "plotly_white",
                 "plotly_dark",

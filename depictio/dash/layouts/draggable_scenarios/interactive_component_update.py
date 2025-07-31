@@ -202,7 +202,13 @@ def render_raw_children(
 
     # Set flags and tokens
     component.update(
-        {"build_frame": True, "refresh": True, "access_token": TOKEN, "no_store": True}
+        {
+            "build_frame": True,
+            "refresh": True,
+            "access_token": TOKEN,
+            "no_store": True,
+            "stepper": True,
+        }
     )
     logger.info(f"Component: {component}")
 
