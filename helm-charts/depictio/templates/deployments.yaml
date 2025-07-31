@@ -27,6 +27,8 @@ spec:
         - name: mongo
           image: "{{ .Values.mongo.image.repository }}:{{ .Values.mongo.image.tag }}"
           imagePullPolicy: {{ .Values.mongo.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.mongo.securityContext | nindent 12 }}
           args:
             - "mongod"
             - "--dbpath"
@@ -75,6 +77,8 @@ spec:
         - name: minio
           image: "{{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}"
           imagePullPolicy: {{ .Values.minio.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.minio.securityContext | nindent 12 }}
           env:
             - name: MINIO_ROOT_USER
               valueFrom:
@@ -129,7 +133,7 @@ spec:
         type: app
     spec:
       securityContext:
-        fsGroup: {{ .Values.backend.securityContext.fsGroup }}
+        {{- toYaml .Values.backend.podSecurityContext | nindent 8 }}
       initContainers:
         {{- if .Values.local_development }}
         - name: fix-permissions
@@ -157,6 +161,10 @@ spec:
         - name: copy-screenshot-file
           image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.backend.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
           command: ['sh', '-c']
           args:
             - |
@@ -172,15 +180,25 @@ spec:
         - name: wait-for-mongo
           image: busybox:1.35
           command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-mongo {{ .Values.mongo.service.port }}; do echo "Waiting for mongo..."; sleep 2; done']
+          securityContext:
+            {{- toYaml .Values.backend.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
         {{- if .Values.minio.enabled }}
         - name: wait-for-minio
           image: busybox:1.35
           command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-minio {{ .Values.minio.service.httpPort }}; do echo "Waiting for minio..."; sleep 2; done']
+          securityContext:
+            {{- toYaml .Values.backend.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
         {{- end }}
       containers:
         - name: depictio-backend
           image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.backend.securityContext | nindent 12 }}
           envFrom:
             - configMapRef:
                 name: {{ .Release.Name }}-backend-config
@@ -262,10 +280,18 @@ spec:
         - name: wait-for-backend
           image: busybox:1.35
           command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-depictio-backend {{ .Values.backend.service.httpPort }}; do echo "Waiting for backend service..."; sleep 2; done']
+          securityContext:
+            {{- toYaml .Values.frontend.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
 
         # STEP 2: Wait for backend to fully start and generate keys
         - name: wait-for-backend-startup
           image: curlimages/curl:8.5.0
+          securityContext:
+            {{- toYaml .Values.frontend.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
           command:
             - 'sh'
             - '-c'
@@ -298,6 +324,10 @@ spec:
         # STEP 3: Verify key files are actually available
         - name: wait-for-api-key
           image: busybox:1.35
+          securityContext:
+            {{- toYaml .Values.frontend.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
           command:
             - 'sh'
             - '-c'
@@ -330,6 +360,8 @@ spec:
         - name: depictio-frontend
           image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
           imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.frontend.securityContext | nindent 12 }}
           envFrom:
             - configMapRef:
                 name: {{ .Release.Name }}-frontend-config

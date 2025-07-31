@@ -50,6 +50,12 @@ mongo:
   service:
     type: ClusterIP
     port: 27018
+  securityContext:
+    runAsNonRoot: false # Default allows root for compatibility
+    allowPrivilegeEscalation: true
+    capabilities: {}
+    seccompProfile:
+      type: RuntimeDefault
 
 # MinIO settings
 minio:
@@ -69,6 +75,12 @@ minio:
     type: ClusterIP
     httpPort: 9000
     consolePort: 9001
+  securityContext:
+    runAsNonRoot: false # Default allows root for compatibility
+    allowPrivilegeEscalation: true
+    capabilities: {}
+    seccompProfile:
+      type: RuntimeDefault
 
 # Backend settings
 backend:
@@ -99,34 +111,21 @@ backend:
     # DEPICTIO_FASTAPI_PUBLIC_URL: "https://{{ .Release.Name }}-api.{{ .Values.global.domain }}"
     # DEPICTIO_MINIO_PUBLIC_URL: "https://{{ .Release.Name }}-minio.{{ .Values.global.domain }}"
 
-    # Production Performance Settings - adjust these for your environment
-    # HTTP client timeouts (in seconds)
-    DEPICTIO_PERFORMANCE_HTTP_CLIENT_TIMEOUT: "60"           # Increased for production latency
-    DEPICTIO_PERFORMANCE_API_REQUEST_TIMEOUT: "90"           # Longer API timeouts for prod
+    # Enable unauthenticated mode (allows anonymous access)
+    DEPICTIO_AUTH_UNAUTHENTICATED_MODE: "true"
 
-    # Browser/Playwright timeouts (in milliseconds) - production optimized
-    DEPICTIO_PERFORMANCE_BROWSER_NAVIGATION_TIMEOUT: "90000"  # 90s for navigation in prod
-    DEPICTIO_PERFORMANCE_BROWSER_PAGE_LOAD_TIMEOUT: "120000"  # 120s for full page load
-    DEPICTIO_PERFORMANCE_BROWSER_ELEMENT_TIMEOUT: "45000"     # 45s for element waits
+    # Anonymous user configuration
+    DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
+    DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "24"
 
-    # Screenshot-specific timeouts - addresses 4+ minute issue
-    DEPICTIO_PERFORMANCE_SCREENSHOT_NAVIGATION_TIMEOUT: "75000"  # 75s for screenshot navigation
-    DEPICTIO_PERFORMANCE_SCREENSHOT_CONTENT_WAIT: "30000"        # 30s for content loading
-    DEPICTIO_PERFORMANCE_SCREENSHOT_STABILIZATION_WAIT: "10000"  # 10s for UI stabilization
-    DEPICTIO_PERFORMANCE_SCREENSHOT_CAPTURE_TIMEOUT: "120000"    # 120s for actual screenshot capture
-    DEPICTIO_PERFORMANCE_SCREENSHOT_API_TIMEOUT: "360"          # 6 minutes for complete screenshot API call
-
-    # Service readiness checks - more robust for production
-    DEPICTIO_PERFORMANCE_SERVICE_READINESS_RETRIES: "8"      # More retries for prod infrastructure
-    DEPICTIO_PERFORMANCE_SERVICE_READINESS_DELAY: "5"        # Longer delay between retries
-    DEPICTIO_PERFORMANCE_SERVICE_READINESS_TIMEOUT: "15"     # Longer timeout per check
-
-    # Network performance optimizations for production
-    DEPICTIO_PERFORMANCE_DNS_CACHE_TTL: "600"                # 10 minutes DNS cache
-    DEPICTIO_PERFORMANCE_CONNECTION_POOL_SIZE: "20"          # Larger connection pool
-    DEPICTIO_PERFORMANCE_MAX_KEEPALIVE_CONNECTIONS: "10"     # More keepalive connections
-  securityContext:
+  podSecurityContext:
     fsGroup: 2000
+  securityContext:
+    runAsNonRoot: false # Default allows root for compatibility
+    allowPrivilegeEscalation: true
+    capabilities: {}
+    seccompProfile:
+      type: RuntimeDefault
 
 # Frontend settings
 frontend:
@@ -154,11 +153,12 @@ frontend:
     # DEPICTIO_FASTAPI_PUBLIC_URL: "https://{{ .Release.Name }}-api.{{ .Values.global.domain }}"
     # DEPICTIO_MINIO_PUBLIC_URL: "https://{{ .Release.Name }}-minio.{{ .Values.global.domain }}"
 
-    # Frontend inherits same performance settings as backend
-    DEPICTIO_PERFORMANCE_HTTP_CLIENT_TIMEOUT: "60"
-    DEPICTIO_PERFORMANCE_API_REQUEST_TIMEOUT: "90"
-    DEPICTIO_PERFORMANCE_CONNECTION_POOL_SIZE: "15"          # Slightly smaller pool for frontend
-    DEPICTIO_PERFORMANCE_MAX_KEEPALIVE_CONNECTIONS: "8"
+  securityContext:
+    runAsNonRoot: false # Default allows root for compatibility
+    allowPrivilegeEscalation: true
+    capabilities: {}
+    seccompProfile:
+      type: RuntimeDefault
 
 # Generic base ingress values
 ingress:
