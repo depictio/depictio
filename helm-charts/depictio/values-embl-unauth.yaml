@@ -1,0 +1,120 @@
+# EMBL specific values with no authentication (values-embl-unauth.yaml)
+## Storage
+storageClass: basic-csi
+persistence:
+  mongo:
+    size: 1Gi
+    accessMode: ReadWriteOnce
+  minio:
+    size: 1Gi
+    accessMode: ReadWriteOnce
+  screenshots:
+    size: 100Mi
+    accessMode: ReadWriteMany
+  keys:
+    size: 1Mi
+    accessMode: ReadWriteMany
+
+## Init Container Resources
+initContainerResources:
+  requests:
+    memory: "64Mi"
+    cpu: "10m"
+  limits:
+    memory: "128Mi"
+    cpu: "100m"
+
+## SecurityContext
+backend:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+  env:
+    # Enable unauthenticated mode (allows anonymous access)
+    DEPICTIO_AUTH_UNAUTHENTICATED_MODE: "true"
+
+    # Anonymous user configuration
+    DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
+    DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
+
+
+frontend:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+
+mongo:
+  image:
+    pullPolicy: Always
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+
+minio:
+  image:
+    pullPolicy: Always
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+
+## Ingress
+ingress:
+  enabled: true
+  ingressClassName: "internal-users"
+
+  # EMBL specific annotations
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls.certresolver: sectigo
+
+  # Host configuration for split frontend/backend setup
+  hosts:
+    - host: "demo.depictio.embl.org"
+      paths:
+        - path: /
+          pathType: Prefix
+          service:
+            name: depictio-frontend
+            portName: http
+    - host: "api.demo.depictio.embl.org"
+      paths:
+        - path: /
+          pathType: Prefix
+          service:
+            name: depictio-backend
+            portName: http
+
+  # TLS configuration
+  tls:
+    - hosts:
+        - "demo.depictio.embl.org"
+        - "api.demo.depictio.embl.org"
+
+# Example deployment command:
+# helm upgrade --install demo ./helm-charts/depictio \
+#   -f ./helm-charts/depictio/values.yaml \
+#   -f ./helm-charts/depictio/values-embl-unauth.yaml \
+#   -n datasci-depictio-project-demo

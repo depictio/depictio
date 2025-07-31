@@ -15,6 +15,10 @@ data:
   DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo" .Release.Name | quote }}
   DEPICTIO_MONGODB_WIPE: {{ .Values.backend.env.DEPICTIO_MONGODB_WIPE | quote }}
   DEPICTIO_MINIO_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
+  # Unauthenticated mode
+  DEPICTIO_AUTH_UNAUTHENTICATED_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_UNAUTHENTICATED_MODE | quote }}
+  DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.backend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | quote }}
+  DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.backend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | quote }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -30,3 +34,8 @@ data:
   DEPICTIO_MINIO_PUBLIC_URL: {{ printf "https://%s-minio.%s" .Release.Name .Values.global.domain | quote }}
   DEPICTIO_DASH_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_DASH_SERVICE_PORT | quote }}
   DEPICTIO_MINIO_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
+
+  # Unauthenticated mode
+  DEPICTIO_AUTH_UNAUTHENTICATED_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_UNAUTHENTICATED_MODE | quote }}
+  DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.backend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | quote }}
+  DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.backend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | quote }}
