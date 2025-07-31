@@ -184,3 +184,97 @@ body.auth-page .mantine-AppShell-header {
     transform: translateZ(0);
     will-change: transform;
 }
+
+/* =============================================================================
+   GOOGLE OAUTH BUTTON STYLING
+   Enhanced styling for Google sign-in button with theme compatibility
+   ============================================================================= */
+
+/* Google OAuth button base styling */
+#google-oauth-button {
+    background-color: var(--app-surface-color, #ffffff) !important;
+    border-color: var(--app-border-color, #dadce0) !important;
+    color: var(--app-text-color, #3c4043) !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.25px !important;
+    box-shadow: 0 1px 2px 0 rgba(60, 64, 67, 0.08), 0 1px 3px 1px rgba(60, 64, 67, 0.06) !important;
+    transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1) !important;
+}
+
+/* Google OAuth button hover state */
+#google-oauth-button:hover {
+    background-color: var(--app-surface-color, #f8f9fa) !important;
+    border-color: #4285f4 !important;
+    box-shadow: 0 1px 3px 0 rgba(60, 64, 67, 0.08), 0 4px 8px 3px rgba(60, 64, 67, 0.06) !important;
+    transform: translateY(-1px) !important;
+}
+
+/* Google OAuth button focus state */
+#google-oauth-button:focus {
+    outline: none !important;
+    border-color: #4285f4 !important;
+    box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.1) !important;
+}
+
+/* Google OAuth button active state */
+#google-oauth-button:active {
+    transform: translateY(0) !important;
+    box-shadow: 0 1px 2px 0 rgba(60, 64, 67, 0.08) !important;
+}
+
+/* Dark theme specific styling for Google button */
+@media (prefers-color-scheme: dark) {
+    #google-oauth-button {
+        background-color: var(--app-surface-color, #25262b) !important;
+        border-color: var(--app-border-color, #373A40) !important;
+        color: var(--app-text-color, #C1C2C5) !important;
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.3), 0 1px 3px 1px rgba(0, 0, 0, 0.15) !important;
+    }
+
+    #google-oauth-button:hover {
+        background-color: var(--app-surface-color, #2C2E33) !important;
+        border-color: #4285f4 !important;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 4px 8px 3px rgba(0, 0, 0, 0.15) !important;
+    }
+}
+
+/* Manual theme overrides for Google button */
+body.theme-dark #google-oauth-button {
+    background-color: var(--app-surface-color, #25262b) !important;
+    border-color: var(--app-border-color, #373A40) !important;
+    color: var(--app-text-color, #C1C2C5) !important;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.3), 0 1px 3px 1px rgba(0, 0, 0, 0.15) !important;
+}
+
+body.theme-dark #google-oauth-button:hover {
+    background-color: var(--app-surface-color, #2C2E33) !important;
+    border-color: #4285f4 !important;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 4px 8px 3px rgba(0, 0, 0, 0.15) !important;
+}
+
+body.theme-light #google-oauth-button {
+    background-color: var(--app-surface-color, #ffffff) !important;
+    border-color: var(--app-border-color, #dadce0) !important;
+    color: var(--app-text-color, #3c4043) !important;
+    box-shadow: 0 1px 2px 0 rgba(60, 64, 67, 0.08), 0 1px 3px 1px rgba(60, 64, 67, 0.06) !important;
+}
+
+body.theme-light #google-oauth-button:hover {
+    background-color: var(--app-surface-color, #f8f9fa) !important;
+    border-color: #4285f4 !important;
+    box-shadow: 0 1px 3px 0 rgba(60, 64, 67, 0.08), 0 4px 8px 3px rgba(60, 64, 67, 0.06) !important;
+}
+
+/* Google icon styling */
+#google-oauth-button .iconify {
+    opacity: 1 !important;
+    filter: none !important;
+}
+
+/* Ensure proper spacing and alignment */
+#google-oauth-button > div {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 10px !important;
+}
