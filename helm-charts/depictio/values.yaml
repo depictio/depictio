@@ -54,7 +54,8 @@ mongo:
     runAsNonRoot: false # Default allows root for compatibility
     allowPrivilegeEscalation: true
     capabilities: {}
-    seccompProfile: {}
+    seccompProfile:
+      type: RuntimeDefault
 
 # MinIO settings
 minio:
@@ -78,7 +79,8 @@ minio:
     runAsNonRoot: false # Default allows root for compatibility
     allowPrivilegeEscalation: true
     capabilities: {}
-    seccompProfile: {}
+    seccompProfile:
+      type: RuntimeDefault
 
 # Backend settings
 backend:
@@ -122,7 +124,8 @@ backend:
     runAsNonRoot: false # Default allows root for compatibility
     allowPrivilegeEscalation: true
     capabilities: {}
-    seccompProfile: {}
+    seccompProfile:
+      type: RuntimeDefault
 
 # Frontend settings
 frontend:
@@ -154,7 +157,8 @@ frontend:
     runAsNonRoot: false # Default allows root for compatibility
     allowPrivilegeEscalation: true
     capabilities: {}
-    seccompProfile: {}
+    seccompProfile:
+      type: RuntimeDefault
 
 # Generic base ingress values
 ingress:
