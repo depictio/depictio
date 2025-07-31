@@ -562,10 +562,10 @@ def build_interactive(**kwargs):
     stepper = kwargs.get("stepper", False)
     parent_index = kwargs.get("parent_index", None)
     scale = kwargs.get("scale", "linear")  # Default to linear scale
-    color = kwargs.get("color", "#000000")  # Default to black color
+    color = kwargs.get("color", None)  # Default to no custom color
     marks_number = kwargs.get("marks_number", 5)  # Default to 5 marks
 
-    logger.info(f"Interactive - kwargs: {kwargs}")
+    # logger.info(f"Interactive - kwargs: {kwargs}")
     logger.info(
         f"BUILD_INTERACTIVE: column_type={column_type}, interactive_component_type={interactive_component_type}"
     )
@@ -616,6 +616,8 @@ def build_interactive(**kwargs):
         "value": value,
         "corrected_value": value,
         "parent_index": parent_index,
+        "scale": scale,  # Save scale configuration for sliders
+        "marks_number": marks_number,  # Save marks number configuration for sliders
     }
 
     logger.debug(f"Interactive component {index}: store_data: {store_data}")
@@ -925,7 +927,7 @@ def build_interactive(**kwargs):
 
         # Convert Polars DataFrame to Pandas for processing
         df_pandas = df.to_pandas()
-        logger.info(f"df['{column_name}']: {df_pandas[column_name]}")
+        # logger.info(f"df['{column_name}']: {df_pandas[column_name]}")
 
         # Drop NaN, None, and invalid values
         df_pandas = df_pandas[~df_pandas[column_name].isin([None, "None", "nan", "NaN"])]
@@ -937,7 +939,7 @@ def build_interactive(**kwargs):
             lambda x: round(x, 2) if x not in [float("inf"), float("-inf")] else x
         )
         df_pandas = df_pandas.dropna(subset=[column_name])
-        logger.info(f"Cleaned df['{column_name}']: {df_pandas[column_name]}")
+        # logger.info(f"Cleaned df['{column_name}']: {df_pandas[column_name]}")
 
         # Always default to linear scale, only use log10 if explicitly selected
         use_log_scale = False

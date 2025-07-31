@@ -6,79 +6,10 @@ from typing import Any, Dict
 
 import dash_ace
 import dash_mantine_components as dmc
-import pandas as pd
 from dash import html
 from dash_iconify import DashIconify
 
-
-def create_sample_datasets() -> Dict[str, pd.DataFrame]:
-    """Create multiple sample datasets for testing"""
-    datasets = {}
-
-    # Simple scatter data
-    datasets["scatter"] = pd.DataFrame(
-        {
-            "x": list(range(1, 21)),
-            "y": [2, 5, 3, 8, 7, 4, 9, 6, 1, 10, 12, 15, 11, 18, 16, 13, 19, 14, 17, 20],
-            "category": ["A", "B"] * 10,
-            "size": [
-                10,
-                20,
-                15,
-                25,
-                30,
-                12,
-                18,
-                22,
-                14,
-                28,
-                32,
-                35,
-                25,
-                40,
-                38,
-                28,
-                42,
-                30,
-                36,
-                45,
-            ],
-            "text": [f"Point {i}" for i in range(1, 21)],
-        }
-    )
-
-    # Time series data
-    from datetime import datetime, timedelta
-
-    import numpy as np
-
-    dates = [datetime(2023, 1, 1) + timedelta(days=i) for i in range(30)]
-    datasets["timeseries"] = pd.DataFrame(
-        {
-            "date": dates,
-            "value": np.random.normal(100, 10, 30).cumsum(),
-            "category": ["Series A", "Series B"] * 15,
-        }
-    )
-
-    # Bar chart data
-    datasets["bar"] = pd.DataFrame(
-        {
-            "category": ["A", "B", "C", "D", "E"],
-            "value": [23, 45, 56, 78, 32],
-            "subcategory": ["X", "Y", "X", "Y", "X"],
-        }
-    )
-
-    # Histogram data
-    datasets["histogram"] = pd.DataFrame(
-        {
-            "values": np.random.normal(50, 15, 200),
-            "group": np.random.choice(["Group 1", "Group 2"], 200),
-        }
-    )
-
-    return datasets
+from .simple_code_executor import get_code_examples
 
 
 def create_code_mode_interface(component_index: str) -> html.Div:
@@ -277,6 +208,56 @@ def create_code_mode_interface(component_index: str) -> html.Div:
                             style={"color": "var(--mantine-color-blue-6, #1e88e5)"},
                         ),
                     ),
+                    # Code examples section - separate from dataset info
+                    dmc.Alert(
+                        title="Code Examples",
+                        color="teal",
+                        children=[
+                            dmc.Button(
+                                "Show Code Examples",
+                                id={"type": "toggle-examples-btn", "index": component_index},
+                                variant="subtle",
+                                size="xs",
+                                leftSection=DashIconify(icon="mdi:code-braces", width=14),
+                                color="teal",
+                                style={"marginBottom": "8px"},
+                            ),
+                            dmc.Collapse(
+                                id={"type": "code-examples-collapse", "index": component_index},
+                                opened=False,
+                                children=[
+                                    dmc.Stack(
+                                        [
+                                            *[
+                                                dmc.Stack(
+                                                    [
+                                                        dmc.Text(
+                                                            title, fw="bold", size="sm", c="gray"
+                                                        ),
+                                                        dmc.CodeHighlight(
+                                                            language="python",
+                                                            code=code,
+                                                            withCopyButton=True,
+                                                            style={"fontSize": "12px"},
+                                                        ),
+                                                    ],
+                                                    gap="xs",
+                                                )
+                                                for title, code in get_code_examples().items()
+                                            ],
+                                        ],
+                                        gap="md",
+                                    )
+                                ],
+                            ),
+                        ],
+                        withCloseButton=False,
+                        icon=DashIconify(
+                            icon="mdi:code-tags",
+                            width=16,
+                            style={"color": "var(--mantine-color-teal-6, #1de9b6)"},
+                        ),
+                    ),
                 ],
                 gap="sm",
             ),
@@ -368,6 +349,26 @@ def convert_ui_params_to_code(dict_kwargs: Dict[str, Any], visu_type: str) -> st
         code_lines.append(current_line + ")")
 
     return "\n".join(code_lines)
+
+
+def extract_visualization_type_from_code(code: str) -> str:
+    """Extract visualization type from Python code"""
+    import re
+
+    # Look for px.function_name patterns
+    px_pattern = r"px\.(\w+)\("
+    px_match = re.search(px_pattern, code)
+    if px_match:
+        return px_match.group(1).lower()  # e.g., "scatter", "box", "violin"
+
+    # Look for clustering functions
+    cluster_pattern = r"create_(\w+)_plot\("
+    cluster_match = re.search(cluster_pattern, code)
+    if cluster_match:
+        return cluster_match.group(1).lower()  # e.g., "umap"
+
+    # Default fallback
+    return "scatter"
 
 
 def extract_params_from_code(code: str) -> Dict[str, Any]:

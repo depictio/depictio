@@ -28,7 +28,7 @@ def register_callbacks_notes_footer(app):
                     body #notes-footer-content, html #notes-footer-content {
                         height: 0px !important;
                         overflow: hidden !important;
-                        transition: height 0.3s ease, opacity 0.3s ease !important;
+                        transition: height 0.3s ease, opacity 0.3s ease, left 0.3s ease !important;
                         opacity: 0 !important;
                         position: fixed !important;
                         bottom: 0 !important;
@@ -42,15 +42,12 @@ def register_callbacks_notes_footer(app):
                         visibility: hidden !important;  /* Additional layer of hiding */
                     }
 
-                    /* When sidebar is collapsed (AppShell adds data-navbar-collapsed) */
+                    /* When sidebar is collapsed - Multiple selectors for maximum compatibility */
                     [data-navbar-collapsed="true"] #notes-footer-content,
-                    .mantine-AppShell-root[data-navbar-collapsed="true"] #notes-footer-content {
-                        left: 0px !important;
-                    }
-
-                    /* Alternative approach using body classes if data attributes not available */
+                    .mantine-AppShell-root[data-navbar-collapsed="true"] #notes-footer-content,
                     body.sidebar-collapsed #notes-footer-content,
-                    .sidebar-collapsed #notes-footer-content {
+                    .sidebar-collapsed #notes-footer-content,
+                    #notes-footer-content.sidebar-collapsed {
                         left: 0px !important;
                     }
 
@@ -122,24 +119,37 @@ def register_callbacks_notes_footer(app):
     # Simple callback to adjust footer positioning based on sidebar state
     app.clientside_callback(
         """
-        function(user_preference) {\n            // Extract collapsed state from user preference object\n            const is_collapsed = user_preference && user_preference.collapsed ? user_preference.collapsed : false;
+        function(is_collapsed) {
             console.log('Footer adjusting to sidebar collapse state:', is_collapsed);
 
             const footer = document.querySelector('#notes-footer-content');
+            const appShell = document.querySelector('.mantine-AppShell-root');
+            const body = document.body;
+
             if (footer) {
                 if (is_collapsed) {
-                    footer.style.left = '0px';  // Full width when collapsed
+                    // When collapsed: set left to 0px for full width
+                    footer.style.setProperty('left', '0px', 'important');
+                    // Also add CSS classes for additional styling hooks
+                    footer.classList.add('sidebar-collapsed');
+                    if (appShell) appShell.setAttribute('data-navbar-collapsed', 'true');
+                    body.classList.add('sidebar-collapsed');
                 } else {
-                    footer.style.left = '220px';  // Offset by sidebar width when expanded
+                    // When expanded: set left to sidebar width
+                    footer.style.setProperty('left', '220px', 'important');
+                    footer.classList.remove('sidebar-collapsed');
+                    if (appShell) appShell.setAttribute('data-navbar-collapsed', 'false');
+                    body.classList.remove('sidebar-collapsed');
                 }
                 console.log('Footer left position set to:', footer.style.left);
+                console.log('Footer classes:', footer.className);
             }
 
             return window.dash_clientside.no_update;
         }
         """,
         Output("notes-footer-content", "data-collapse-response"),
-        Input("sidebar-user-preference", "data"),
+        Input("sidebar-collapsed", "data"),
         prevent_initial_call=False,
     )
 

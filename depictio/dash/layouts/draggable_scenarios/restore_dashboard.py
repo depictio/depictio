@@ -134,11 +134,11 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
             dashboard_id=dashboard_id,
             TOKEN=TOKEN,
         )
-        if component_type == "text":
-            logger.info(
-                f"Processed text component {processed_child.id} with content: {processed_child}"
-            )
-            logger.info(f"Processed child: {processed_child}")
+        # if component_type == "text":
+        #     logger.info(
+        #         f"Processed text component {processed_child.id} with content: {processed_child}"
+        #     )
+        #     logger.info(f"Processed child: {processed_child}")
         processed_children.append(processed_child)
         # except Exception as e:
         #     logger.error(f"Error processing {component_type} component: {e}")
@@ -170,7 +170,7 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
         dashboard_id=dashboard_id,
         theme=theme,  # Pass theme to interactive component updates
     )
-    logger.info(f"Updated children after interactive component processing: {children}")
+    # logger.info(f"Updated children after interactive component processing: {children}")
 
     return children
 

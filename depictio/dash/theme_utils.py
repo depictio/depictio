@@ -763,10 +763,15 @@ def register_theme_callbacks(app):
                         text-align: center !important;
                     }
 
-                    /* Modal footer theme styling - exclude auth modals */
-                    .mantine-Modal-content .mantine-Stack-root:last-child:not(.auth-modal-content .mantine-Stack-root:last-child) {
+                    /* Modal footer theme styling - DISABLED temporarily to fix Stack border issue */
+                    /* .mantine-Modal-root .mantine-Modal-content .mantine-Stack-root:last-child:not(.auth-modal-content .mantine-Stack-root:last-child) {
                         background-color: var(--app-surface-color, #f9f9f9) !important;
                         border-top: 1px solid var(--app-border-color, #e0e0e0) !important;
+                    } */
+
+                    /* Override: Remove unwanted borders from Stack components in design/edit modes */
+                    .mantine-Stack-root {
+                        border-top: none !important;
                     }
 
                     /* Figure component backgrounds */

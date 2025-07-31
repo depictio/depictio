@@ -202,7 +202,13 @@ def render_raw_children(
 
     # Set flags and tokens
     component.update(
-        {"build_frame": True, "refresh": True, "access_token": TOKEN, "no_store": True}
+        {
+            "build_frame": True,
+            "refresh": True,
+            "access_token": TOKEN,
+            "no_store": True,
+            # "stepper": True,
+        }
     )
     logger.info(f"Component: {component}")
 
@@ -290,8 +296,23 @@ def update_interactive_component(
 ):
     children = list()
 
-    logger.info(f"interactive_components_dict - {interactive_components_dict}")
-
+    # logger.info(f"interactive_components_dict - {interactive_components_dict}")
+    interactive_components_dict_for_logging = [
+        {
+            "index": k,
+            "value": v["value"],
+            "metadata": {
+                sub_k: sub_v
+                for sub_k, sub_v in v["metadata"].items()
+                if sub_k
+                in ["wf_id", "dc_id", "column_name", "column_type", "interactive_component_type"]
+            },
+        }
+        for k, v in interactive_components_dict.items()
+    ]
+    logger.info(
+        f"Interactive components dict for logging: {interactive_components_dict_for_logging}"
+    )
     if not interactive_components_dict:
         for metadata in stored_metadata_raw:
             child, index = render_raw_children(
@@ -338,7 +359,7 @@ def update_interactive_component(
                 f"Performing batch join for workflow {wf} with {len(joins_dict)} join combinations"
             )
 
-            logger.info(f"Interactive components dict: {interactive_components_dict}")
+            # logger.info(f"Interactive components dict: {interactive_components_dict}")
             merged_df = iterative_join(wf, joins_dict, interactive_components_dict, TOKEN)
 
             logger.info(f"Batch join completed for workflow {wf} (shape: {merged_df.shape})")

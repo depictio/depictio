@@ -6,7 +6,6 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.colors import colors
 
 # Depictio imports
 from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
@@ -190,7 +189,7 @@ def register_callbacks_interactive_component(app):
             Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
             Input({"type": "input-dropdown-method", "index": MATCH}, "value"),
             Input({"type": "input-dropdown-scale", "index": MATCH}, "value"),
-            Input({"type": "input-color-picker", "index": MATCH}, "value"),
+            # Input({"type": "input-color-picker", "index": MATCH}, "value"),  # Disabled color picker
             Input({"type": "input-number-marks", "index": MATCH}, "value"),
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
@@ -207,7 +206,7 @@ def register_callbacks_interactive_component(app):
         column_value,
         aggregation_value,
         scale_value,
-        color_value,
+        # color_value,  # Disabled color picker
         marks_number,
         workflow_id,
         data_collection_id,
@@ -225,16 +224,20 @@ def register_callbacks_interactive_component(app):
         logger.info(f"  column_value: {column_value}")
         logger.info(f"  aggregation_value: {aggregation_value}")
         logger.info(f"  scale_value: {scale_value}")
-        logger.info(f"  color_value: {color_value}")
+        # logger.info(f"  color_value: {color_value}")  # Disabled color picker
+        color_value = None  # Default value since color picker is disabled
         logger.info(f"  marks_number: {marks_number}")
         logger.info(f"  workflow_id: {workflow_id}")
         logger.info(f"  data_collection_id: {data_collection_id}")
         logger.info(f"  parent_index: {parent_index}")
         logger.info(f"  pathname: {pathname}")
 
+        # Initialize columns_description_df at the very beginning to avoid UnboundLocalError
+        columns_description_df = None
+
         if not local_data:
             logger.error("No local_data available!")
-            return [], None, None
+            return [], None, columns_description_df
 
         TOKEN = local_data["access_token"]
 
@@ -298,8 +301,101 @@ def register_callbacks_interactive_component(app):
             else:
                 logger.info(f"Using input_value from form: {input_value}")
 
+            # Restore slider configuration from component_data if not provided in form
+            if scale_value is None:
+                scale_value = component_data.get("scale", "linear")
+                logger.info(f"Using scale_value from component_data: {scale_value}")
+            else:
+                logger.info(f"Using scale_value from form: {scale_value}")
+
+            if marks_number is None:
+                marks_number = component_data.get("marks_number", 5)
+                logger.info(f"Using marks_number from component_data: {marks_number}")
+            else:
+                logger.info(f"Using marks_number from form: {marks_number}")
+
+            # Restore color from component_data if it was saved (for components created before color picker was disabled)
+            if color_value is None:
+                saved_color = component_data.get("custom_color", None)
+                if saved_color:
+                    color_value = saved_color
+                    logger.info(f"Using saved color_value from component_data: {color_value}")
+                else:
+                    logger.info("No saved color found, keeping color_value as None")
+
+        logger.info("Using final values:")
+        logger.info(f"  column_value: {column_value}")
+        logger.info(f"  aggregation_value: {aggregation_value}")
+        logger.info(f"  workflow_id: {workflow_id}")
+        logger.info(f"  data_collection_id: {data_collection_id}")
+
+        # Create columns description table early when we have workflow and data collection IDs
+        # This ensures it's always available even for early returns
+        if workflow_id and data_collection_id:
+            cols_json = get_columns_from_data_collection(workflow_id, data_collection_id, TOKEN)
+            logger.info(f"cols_json: {cols_json}")
+            logger.info(f"cols_json type: {type(cols_json)}")
+
+            if cols_json:
+                from dash import dash_table
+
+                logger.info("Creating data_columns_df...")
+                try:
+                    data_columns_df = [
+                        {"column": c, "description": cols_json[c]["description"]}
+                        for c in cols_json
+                        if cols_json[c]["description"] is not None
+                    ]
+                    logger.info(
+                        f"data_columns_df created successfully: {len(data_columns_df)} rows"
+                    )
+
+                    logger.info("Creating DataTable...")
+                    columns_description_df = dash_table.DataTable(
+                        columns=[
+                            {"name": "Column", "id": "column"},
+                            {"name": "Description", "id": "description"},
+                        ],
+                        data=data_columns_df,
+                        # Small font size, helvetica, no border, center text
+                        style_cell={
+                            "fontSize": 11,
+                            "fontFamily": "Helvetica",
+                            "border": "0px",
+                            "textAlign": "center",
+                            "backgroundColor": "var(--app-surface-color, #ffffff)",
+                            "color": "var(--app-text-color, #000000)",
+                            "padding": "4px 8px",
+                            "maxWidth": "150px",
+                            "overflow": "hidden",
+                            "textOverflow": "ellipsis",
+                        },
+                        style_header={
+                            "fontWeight": "bold",
+                            "backgroundColor": "var(--app-surface-color, #ffffff)",
+                            "color": "var(--app-text-color, #000000)",
+                        },
+                        style_data={
+                            "backgroundColor": "var(--app-surface-color, #ffffff)",
+                            "color": "var(--app-text-color, #000000)",
+                        },
+                    )
+                    logger.info("DataTable created successfully")
+                except Exception as e:
+                    logger.error(f"Error creating data_columns_df or DataTable: {e}")
+                    logger.error(
+                        f"cols_json structure: {list(cols_json.keys()) if cols_json else 'None'}"
+                    )
+                    columns_description_df = html.Div("Error creating columns description table")
+            else:
+                logger.error("cols_json is empty or None!")
+                cols_json = None
+        else:
+            logger.info("Missing workflow_id or data_collection_id for columns description")
+            cols_json = None
+
         # If not in edit mode, check if essential values are missing
-        elif not component_data or parent_index is None:
+        if not component_data or parent_index is None:
             logger.info("Not in edit mode - checking for missing values")
             if (
                 column_value is None
@@ -308,7 +404,7 @@ def register_callbacks_interactive_component(app):
                 or data_collection_id is None
             ):
                 logger.error("Missing essential values in non-edit mode")
-                return ([], None, None)
+                return ([], None, columns_description_df)
 
         # Check if we still have missing essential values
         if (
@@ -320,78 +416,7 @@ def register_callbacks_interactive_component(app):
             logger.error("Still missing essential values after fallback")
             logger.error(f"column_value: {column_value}, aggregation_value: {aggregation_value}")
             logger.error(f"workflow_id: {workflow_id}, data_collection_id: {data_collection_id}")
-            return ([], None, None)
-
-        logger.info("Using final values:")
-        logger.info(f"  column_value: {column_value}")
-        logger.info(f"  aggregation_value: {aggregation_value}")
-        logger.info(f"  workflow_id: {workflow_id}")
-        logger.info(f"  data_collection_id: {data_collection_id}")
-
-        # Get the columns from the selected data collection - NOW with valid workflow_id and data_collection_id
-        cols_json = get_columns_from_data_collection(workflow_id, data_collection_id, TOKEN)
-
-        logger.info(f"cols_json: {cols_json}")
-        logger.info(f"cols_json type: {type(cols_json)}")
-
-        if not cols_json:
-            logger.error("cols_json is empty or None!")
-            return [], None, None
-
-        from dash import dash_table
-
-        logger.info("Creating data_columns_df...")
-        try:
-            data_columns_df = [
-                {"column": c, "description": cols_json[c]["description"]}
-                for c in cols_json
-                if cols_json[c]["description"] is not None
-            ]
-            logger.info(f"data_columns_df created successfully: {len(data_columns_df)} rows")
-        except Exception as e:
-            logger.error(f"Error creating data_columns_df: {e}")
-            logger.error(f"cols_json structure: {list(cols_json.keys()) if cols_json else 'None'}")
-            return [], None, None
-
-        logger.info("Creating DataTable...")
-        try:
-            columns_description_df = dash_table.DataTable(
-                # id={
-                #     "type": "columns-description",
-                #     "index": input_id,
-                # },
-                columns=[
-                    {"name": "Column", "id": "column"},
-                    {"name": "Description", "id": "description"},
-                ],
-                data=data_columns_df,
-                # Small font size, helvetica, no border, center text
-                style_cell={
-                    "fontSize": 11,
-                    "fontFamily": "Helvetica",
-                    "border": "0px",
-                    "textAlign": "center",
-                    "backgroundColor": "var(--app-surface-color, #ffffff)",
-                    "color": "var(--app-text-color, #000000)",
-                    "padding": "4px 8px",
-                    "maxWidth": "150px",
-                    "overflow": "hidden",
-                    "textOverflow": "ellipsis",
-                },
-                style_header={
-                    "fontWeight": "bold",
-                    "backgroundColor": "var(--app-surface-color, #ffffff)",
-                    "color": "var(--app-text-color, #000000)",
-                },
-                style_data={
-                    "backgroundColor": "var(--app-surface-color, #ffffff)",
-                    "color": "var(--app-text-color, #000000)",
-                },
-            )
-            logger.info("DataTable created successfully")
-        except Exception as e:
-            logger.error(f"Error creating DataTable: {e}")
-            columns_description_df = html.Div("Error creating columns description table")
+            return ([], None, columns_description_df)
 
         # Early validation: Check if the aggregation_value is compatible with the column type
         if cols_json and column_value in cols_json:
@@ -420,7 +445,11 @@ def register_callbacks_interactive_component(app):
         logger.info(f"column_value: {column_value}")
         logger.info(f"cols_json keys: {list(cols_json.keys()) if cols_json else 'None'}")
 
-        # Check if column_value exists in cols_json
+        # Check if we have cols_json and column_value exists in it
+        if not cols_json:
+            logger.error("cols_json is None - cannot proceed with component creation")
+            return ([], None, columns_description_df)
+
         if column_value not in cols_json:
             logger.error(f"column_value '{column_value}' not found in cols_json!")
             return ([], None, columns_description_df)
@@ -521,7 +550,7 @@ def register_callbacks_interactive_component(app):
             "parent_index": parent_index,
             "build_frame": False,  # Don't build frame - return just the content for the input-body container
             "scale": scale_value,
-            "color": color_value,
+            "color": color_value,  # Re-enabled since we set default value
             "marks_number": marks_number,
         }
 
@@ -591,49 +620,49 @@ def design_interactive(id, df):
                                     clearable=False,
                                     style={"display": "none"},  # Initially hidden
                                 ),
-                                dmc.Stack(
-                                    [
-                                        dmc.Text("Color customization", size="sm", fw="bold"),
-                                        dmc.ColorInput(
-                                            label="Pick any color from the page",
-                                            w=250,
-                                            id={
-                                                "type": "input-color-picker",
-                                                "index": id["index"],
-                                            },
-                                            value="var(--app-text-color, #000000)",
-                                            format="hex",
-                                            # leftSection=DashIconify(icon="cil:paint"),
-                                            swatches=[
-                                                colors["purple"],  # Depictio brand colors first
-                                                colors["blue"],
-                                                colors["teal"],
-                                                colors["green"],
-                                                colors["yellow"],
-                                                colors["orange"],
-                                                colors["pink"],
-                                                colors["red"],
-                                                colors["violet"],
-                                                colors["black"],
-                                                # "#25262b",  # Additional neutral colors
-                                                # "#868e96",
-                                                # "#fa5252",
-                                                # "#e64980",
-                                                # "#be4bdb",
-                                                # "#7950f2",
-                                                # "#4c6ef5",
-                                                # "#228be6",
-                                                # "#15aabf",
-                                                # "#12b886",
-                                                # "#40c057",
-                                                # "#82c91e",
-                                                # "#fab005",
-                                                # "#fd7e14",
-                                            ],
-                                        ),
-                                    ],
-                                    gap="xs",
-                                ),
+                                # dmc.Stack(  # Disabled color picker
+                                #     [
+                                #         dmc.Text("Color customization", size="sm", fw="bold"),
+                                #         dmc.ColorInput(
+                                #             label="Pick any color from the page",
+                                #             w=250,
+                                #             id={
+                                #                 "type": "input-color-picker",
+                                #                 "index": id["index"],
+                                #             },
+                                #             value="var(--app-text-color, #000000)",
+                                #             format="hex",
+                                #             # leftSection=DashIconify(icon="cil:paint"),
+                                #             swatches=[
+                                #                 colors["purple"],  # Depictio brand colors first
+                                #                 colors["blue"],
+                                #                 colors["teal"],
+                                #                 colors["green"],
+                                #                 colors["yellow"],
+                                #                 colors["orange"],
+                                #                 colors["pink"],
+                                #                 colors["red"],
+                                #                 colors["violet"],
+                                #                 colors["black"],
+                                #                 # "#25262b",  # Additional neutral colors
+                                #                 # "#868e96",
+                                #                 # "#fa5252",
+                                #                 # "#e64980",
+                                #                 # "#be4bdb",
+                                #                 # "#7950f2",
+                                #                 # "#4c6ef5",
+                                #                 # "#228be6",
+                                #                 # "#15aabf",
+                                #                 # "#12b886",
+                                #                 # "#40c057",
+                                #                 # "#82c91e",
+                                #                 # "#fab005",
+                                #                 # "#fd7e14",
+                                #             ],
+                                #         ),
+                                #     ],
+                                #     gap="xs",
+                                # ),
                                 dmc.NumberInput(
                                     label="Number of marks (for sliders)",
                                     description="Choose how many marks to display on the slider",

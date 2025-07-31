@@ -34,7 +34,7 @@ def create_skeleton_component(component_type: str) -> html.Div:
     """
     logger.info(f"Creating skeleton for component type: {component_type}")
     component_metadata = get_component_metadata(component_type)
-    logger.info(f"Component metadata: {component_metadata}")
+    # logger.info(f"Component metadata: {component_metadata}")
 
     return html.Div(
         dmc.Center(

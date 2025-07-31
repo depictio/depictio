@@ -32,7 +32,7 @@ def create_umap_plot(
     title: Optional[str] = None,
     width: Optional[int] = None,
     height: Optional[int] = None,
-    template: str = "plotly",
+    template: str = "mantine_light",
     opacity: float = 0.7,
     # UMAP-specific parameters
     n_neighbors: int = 15,

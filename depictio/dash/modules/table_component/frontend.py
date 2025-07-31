@@ -124,6 +124,19 @@ def apply_ag_grid_sorting(df: pl.DataFrame, sort_model: list) -> pl.DataFrame:
 
 def register_callbacks_table_component(app):
     @app.callback(
+        Output({"type": "table-aggrid", "index": MATCH}, "className"),
+        Input("theme-store", "data"),
+        prevent_initial_call=False,
+    )
+    def update_table_ag_grid_theme(theme_data):
+        """Update AG Grid theme class based on current theme."""
+        theme = theme_data or "light"
+        if theme == "dark":
+            return "ag-theme-alpine-dark"
+        else:
+            return "ag-theme-alpine"
+
+    @app.callback(
         Output({"type": "table-aggrid", "index": MATCH}, "getRowsResponse"),
         [
             Input({"type": "table-aggrid", "index": MATCH}, "getRowsRequest"),

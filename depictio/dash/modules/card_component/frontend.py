@@ -6,7 +6,6 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.colors import colors
 from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
 from depictio.dash.modules.card_component.utils import agg_functions, build_card, build_card_frame
 
@@ -161,7 +160,7 @@ def register_callbacks_card_component(app):
             Input({"type": "card-input", "index": MATCH}, "value"),
             Input({"type": "card-dropdown-column", "index": MATCH}, "value"),
             Input({"type": "card-dropdown-aggregation", "index": MATCH}, "value"),
-            Input({"type": "card-color-picker", "index": MATCH}, "value"),
+            # Input({"type": "card-color-picker", "index": MATCH}, "value"),  # Disabled color picker
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             # State("local-store-components-metadata", "data"),
@@ -177,7 +176,7 @@ def register_callbacks_card_component(app):
         input_value,
         column_name,
         aggregation_value,
-        color_value,
+        # color_value,  # Disabled color picker
         wf_id,
         dc_id,
         parent_index,
@@ -197,6 +196,8 @@ def register_callbacks_card_component(app):
         logger.info(f"input_value: {input_value}")
         logger.info(f"column_name: {column_name}")
         logger.info(f"aggregation_value: {aggregation_value}")
+
+        color_value = None  # Default value since color picker is disabled
 
         if not local_data:
             return ([], None)
@@ -413,35 +414,35 @@ def design_card(id, df):
                                     },
                                     value=None,
                                 ),
-                                dmc.Stack(
-                                    [
-                                        dmc.Text("Color customization", size="sm", fw="bold"),
-                                        dmc.ColorInput(
-                                            label="Pick any color from the page",
-                                            w=250,
-                                            id={
-                                                "type": "card-color-picker",
-                                                "index": id["index"],
-                                            },
-                                            value="var(--app-text-color, #000000)",
-                                            format="hex",
-                                            # leftSection=DashIconify(icon="cil:paint"),
-                                            swatches=[
-                                                colors["purple"],  # Depictio brand colors
-                                                colors["violet"],
-                                                colors["blue"],
-                                                colors["teal"],
-                                                colors["green"],
-                                                colors["yellow"],
-                                                colors["orange"],
-                                                colors["pink"],
-                                                colors["red"],
-                                                colors["black"],
-                                            ],
-                                        ),
-                                    ],
-                                    gap="xs",
-                                ),
+                                # dmc.Stack(  # Disabled color picker
+                                #     [
+                                #         dmc.Text("Color customization", size="sm", fw="bold"),
+                                #         dmc.ColorInput(
+                                #             label="Pick any color from the page",
+                                #             w=250,
+                                #             id={
+                                #                 "type": "card-color-picker",
+                                #                 "index": id["index"],
+                                #             },
+                                #             value="var(--app-text-color, #000000)",
+                                #             format="hex",
+                                #             # leftSection=DashIconify(icon="cil:paint"),
+                                #             swatches=[
+                                #                 colors["purple"],  # Depictio brand colors
+                                #                 colors["violet"],
+                                #                 colors["blue"],
+                                #                 colors["teal"],
+                                #                 colors["green"],
+                                #                 colors["yellow"],
+                                #                 colors["orange"],
+                                #                 colors["pink"],
+                                #                 colors["red"],
+                                #                 colors["black"],
+                                #             ],
+                                #         ),
+                                #     ],
+                                #     gap="xs",
+                                # ),
                                 html.Div(
                                     id={
                                         "type": "aggregation-description",

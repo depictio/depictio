@@ -59,6 +59,8 @@ class ParameterInspector:
         "template": {
             "type": ParameterType.SELECT,
             "options": [
+                "mantine_light",
+                "mantine_dark",
                 "plotly",
                 "plotly_white",
                 "plotly_dark",
@@ -69,7 +71,7 @@ class ParameterInspector:
                 "none",
             ],
             "description": "Plotly template",
-            "default": "plotly",
+            "default": None,
         },
         "opacity": {
             "type": ParameterType.FLOAT,
@@ -1049,6 +1051,8 @@ def create_umap_visualization_definition() -> VisualizationDefinition:
             label="Template",
             description="Plotly template",
             options=[
+                "mantine_light",
+                "mantine_dark",
                 "plotly",
                 "plotly_white",
                 "plotly_dark",
@@ -1058,7 +1062,7 @@ def create_umap_visualization_definition() -> VisualizationDefinition:
                 "presentation",
                 "none",
             ],
-            default="plotly",
+            default=None,
             required=False,
         ),
         ParameterDefinition(

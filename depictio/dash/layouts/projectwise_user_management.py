@@ -1186,7 +1186,7 @@ def register_projectwise_user_management_callbacks(app):
     @app.callback(
         Output("permissions-manager-grid", "className"),
         Input("theme-store", "data"),
-        prevent_initial_call=True,
+        prevent_initial_call=False,
     )
     def update_ag_grid_theme(theme_data):
         """Update AG Grid theme class based on current theme."""

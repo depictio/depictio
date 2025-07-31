@@ -823,7 +823,7 @@
         "color_discrete_sequence": "",
         "color_continuous_scale": "",
         "title": "",
-        "template": "plotly",
+        "template": "mantine_light",
         "symbol": "variety",
         "size": "petal.length",
         "facet_row_spacing": "",

@@ -233,20 +233,27 @@ def build_table(**kwargs):
             "filter": True,
         },
         style={"width": "100%"},
-        className="ag-theme-alpine",
+        className="ag-theme-alpine",  # Default theme, will be updated by callback
     )
 
     logger.info(f"✅ Table {index}: Infinite row model configured with interactive support")
 
     # Metadata management - Create a store component to store the metadata of the card
-    store_index = index.replace("-tmp", "")  # type: ignore[possibly-unbound-attribute]
+    # CRITICAL: The stored-metadata-component index must match the table component index
+    # for MATCH patterns to work correctly in callbacks like infinite_scroll_component
+    #
+    # However, the draggable callback expects clean metadata index and appends -tmp
+    # Solution: Create with matching index, but store clean index in data
+    store_index = str(index)  # Keep same index as table component for MATCH patterns
+    clean_index = str(index).replace("-tmp", "")  # Clean index for data storage
+
     store_component = dcc.Store(
         id={
             "type": "stored-metadata-component",
-            "index": str(store_index),
+            "index": store_index,  # Same as table component index
         },
         data={
-            "index": str(store_index),
+            "index": clean_index,  # Clean index for draggable callback
             "component_type": "table",
             "wf_id": wf_id,
             "dc_id": dc_id,
