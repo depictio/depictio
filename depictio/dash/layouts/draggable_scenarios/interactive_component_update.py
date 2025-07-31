@@ -207,7 +207,7 @@ def render_raw_children(
             "refresh": True,
             "access_token": TOKEN,
             "no_store": True,
-            "stepper": True,
+            # "stepper": True,
         }
     )
     logger.info(f"Component: {component}")
