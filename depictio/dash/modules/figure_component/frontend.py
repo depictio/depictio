@@ -16,6 +16,7 @@ from depictio.dash.modules.figure_component.code_mode import (
     convert_ui_params_to_code,
     create_code_mode_interface,
     extract_params_from_code,
+    extract_visualization_type_from_code,
 )
 
 # Depictio imports - Updated to use new robust system
@@ -1454,6 +1455,9 @@ def register_callbacks_figure_component(app):
         # Extract the code parameters for metadata
         code_params = extract_params_from_code(code) if code else {}
 
+        # Extract the visualization type from the code
+        visu_type = extract_visualization_type_from_code(code) if code else "scatter"
+
         # Create metadata for code mode figure
         # For stepper mode, store with clean index (without -tmp) so Done button logic works
         # The Done button expects metadata.index + "-tmp" == triggered_index
@@ -1466,7 +1470,7 @@ def register_callbacks_figure_component(app):
             "index": clean_index,
             "component_type": "figure",
             "dict_kwargs": code_params,
-            "visu_type": "code",  # Special type for code-generated figures
+            "visu_type": visu_type,  # Use extracted visualization type from code
             "wf_id": workflow_id,
             "dc_id": data_collection_id,
             "last_updated": datetime.now().isoformat(),
@@ -1475,7 +1479,7 @@ def register_callbacks_figure_component(app):
         }
 
         logger.debug(
-            f"Created metadata for code mode figure with clean index {clean_index} (from {component_index}): {metadata}"
+            f"Created metadata for code mode {visu_type} figure with clean index {clean_index} (from {component_index}): {metadata}"
         )
         return metadata
 

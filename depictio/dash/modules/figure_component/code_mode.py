@@ -351,6 +351,26 @@ def convert_ui_params_to_code(dict_kwargs: Dict[str, Any], visu_type: str) -> st
     return "\n".join(code_lines)
 
 
+def extract_visualization_type_from_code(code: str) -> str:
+    """Extract visualization type from Python code"""
+    import re
+
+    # Look for px.function_name patterns
+    px_pattern = r"px\.(\w+)\("
+    px_match = re.search(px_pattern, code)
+    if px_match:
+        return px_match.group(1).lower()  # e.g., "scatter", "box", "violin"
+
+    # Look for clustering functions
+    cluster_pattern = r"create_(\w+)_plot\("
+    cluster_match = re.search(cluster_pattern, code)
+    if cluster_match:
+        return cluster_match.group(1).lower()  # e.g., "umap"
+
+    # Default fallback
+    return "scatter"
+
+
 def extract_params_from_code(code: str) -> Dict[str, Any]:
     """Extract parameter information from Python code (enhanced parsing)"""
     params = {}
