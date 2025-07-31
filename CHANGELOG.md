@@ -6,12 +6,24 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.2.0</summary>
+<summary>Click to expand the changelog for 0.2.1</summary>
 
 ### Changes 📜
 
 #### New Features ✨
 
+* feat: add EMBL specific values and security contexts for unauthenticated mode [db18d84f]
+* feat: update Plotly template to 'mantine_light' and 'mantine_dark' across components for improved theming [04e4069e]
+* feat: add visualization type extraction from code for improved metadata handling [c41e4e86]
+* feat: enhance stored-metadata-component handling for stepper mode and improve logging [f28fdb65]
+* feat: add code examples section and metadata handling for code-generated figures [028b80b0]
+* feat: implement SimpleCodeExecutor using RestrictedPython for secure code execution fix: update dependencies to include restrictedpython for enhanced security [b5c229b2]
+* feat: add theme-aware AG Grid class updates for improved UI consistency [97e6c0f5]
+* feat: update text component styles to use theme-aware color variables for improved consistency [d8cd55fb]
+* feat: enhance interactive component to restore slider configuration and color settings from saved data [892de076]
+* feat: disable color picker in card and interactive components for improved usability [03f3af37]
+* feat: add support for interactive component values in dashboard save functionality [08a6e311]
+* feat: enhance dashboard access control for anonymous users [b704449b]
 * feat: comment out ty type checker step in CI workflow [851e2176]
 * feat: downgrade dash-ace dependency to version 0.2.1 for compatibility [241c3789]
 * feat: update dependencies and improve screenshot handling for Dash 3+ components [aadec2f0]
@@ -192,6 +204,14 @@
 
 #### Bug Fixes 🐛
 
+* fix: update seccompProfile to RuntimeDefault for enhanced security settings [1b18d95a]
+* fix: enhance footer positioning logic for improved compatibility with sidebar states [f245982e]
+* fix: update logo images in README for improved visibility in light and dark modes [ca46ddc1]
+* fix: adjust default dimensions for various components to improve layout consistency [2e16fdb9]
+* fix: disable stepper option in render_raw_children for improved component behavior [573d8893]
+* fix: update default values for template parameters to None for better handling in figure rendering [2f8914f8]
+* fix: initialize columns_description_df to prevent UnboundLocalError and improve error handling in interactive component callbacks [e828952a]
+* fix: ensure metadata store index matches table component index for callback compatibility [5a550856]
 * fix: enable assets URL path and configure static folder for Flask server [e928837c]
 * fix: adjust transition timing for notes footer and update initial notes content [7b1e16ae]
 * fix: resolve circular reference issues in dashboard context by avoiding DOM state storage [2b9e64c9]
@@ -217,6 +237,72 @@
 * fix: resolve CLI configuration field name inconsistencies [ce91c581]
 * fix: update test assertions and mock configurations for consistency [80c548b6]
 * fix: enhance sleep call assertions in TestEnsureMongoDBConnection [8913f698]
+* fix: update mock CLI configuration for backup tests [58f27258]
+* fix: resolve CLI configuration field name inconsistencies [fa9481b1]
+
+#### Improvements 🚀
+
+* refactor: simplify input handling in save and text component callbacks [8937bea3]
+* style: enhance draggable grid and edit mode layout by minimizing padding and hiding unnecessary elements [37e2b7f8]
+* style: remove conflicting pseudo-elements from ActionIcon drag handles and ensure proper display of children [324861e8]
+* style: adjust button alignment and padding in draggable grid components [ed2d08c0]
+* refactor: update auth modal styles for improved appearance and consistency [7ed7c995]
+* refactor: update beforeEach hooks to use 'this.skip()' for unauthenticated mode checks [1e4119cf]
+* refactor: Refactor Dash components to use updated props and styling conventions [8ed8f068]
+* refactor: Refactor Dash components to use updated props and styling conventions [c231f280]
+* refactor: Update dependencies and refactor layout components to be compatible with dash v3 and dash mantine 2.0 [a7a0e3bb]
+* refactor: Refactor Dash components to use updated props and styling conventions [3faff78c]
+* refactor: Refactor Dash components to use updated props and styling conventions [6ff2fc5d]
+* refactor: Update dependencies and refactor layout components to be compatible with dash v3 and dash mantine 2.0 [76826003]
+* refactor: Refactor code structure for improved readability and maintainability [3ff3e54d]
+* refactor: Refactor Dash components to use updated props and styling conventions [dff749a1]
+* refactor: Refactor Dash components to use updated props and styling conventions [43272aa3]
+* refactor: Refactor Dash components to use updated props and styling conventions [40113600]
+* refactor: Refactor Dash components to use updated props and styling conventions [49ad3b19]
+* refactor: Refactor Dash components to use updated props and styling conventions [060a8cc7]
+* refactor: Update dependencies and refactor layout components to be compatible with dash v3 and dash mantine 2.0 [923de838]
+* refactor: update CLI and user models for improved configuration handling [519038ea]
+* refactor: Refactor code structure for improved readability and maintainability [89e62ec9]
+* refactor: Refactor Dash components to use updated props and styling conventions [6231ff4d]
+* refactor: Refactor Dash components to use updated props and styling conventions [1f40554d]
+* refactor: Refactor Dash components to use updated props and styling conventions [734241e7]
+* refactor: Update dependencies and refactor layout components to be compatible with dash v3 and dash mantine 2.0 [e8452447]
+
+#### Chores 🧹
+
+* chore: Refactor logging in various modules to reduce verbosity [322c80c1]
+* chore: add SVG format for logos ; disable E2E test for in unauth mode ; adjust logo in README according theme in GH [9a9ceb9f]
+* chore: rebase ongoing [d317ea1c]
+* chore: initial commit over pre-commit [75cb3058]
+* chore: initial commit over pre-commit [6918c128]
+
+#### Other Changes 📝
+
+* Bump version: 0.2.0 → 0.2.1 [8cd1e0e2]
+* Update CHANGELOG.md for v0.2.0 [9a9c2d06]
+* Bump version: 0.1.1 → 0.2.0 [f067e25c]
+* Update dependencies and package versions in pyproject.toml and uv.lock [57d4e602]
+* Add vertical growing CSS and refactor layout components [1cd9bfae]
+* Enhance draggable grid component styles and edit mode functionality [556d64f2]
+* Refactor inline editable text and simple markdown input components for improved structure and readability [72aefb10]
+* Add prototypes for text editing components and requirements [fe058f26]
+* Refactor component frames to always show borders for draggable delimitation; enhance loading experience with skeleton components in stepper mode across card, figure, interactive, jbrowse, table, and text components; update button colors based on metadata; implement text component with rich text editor and configuration options. [59c8fc80]
+* Refactor RangeSlider prototypes for improved readability and consistency [32e8f5dc]
+* Add tests and debug scripts for circular reference issues in DMC RichTextEditor [0917b0aa]
+* Refactor imports and clean up code across multiple files [c99be270]
+* Refactor code for improved readability and maintainability [9adb450d]
+* Update CHANGELOG.md for v0.1.1 [34c98dec]
+* Bump version: 0.1.0 → 0.1.1 [670fc233]
+* Update CHANGELOG.md for v0.1.0 [386b4423]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+ection [8913f698]
 * fix: update mock CLI configuration for backup tests [58f27258]
 * fix: resolve CLI configuration field name inconsistencies [fa9481b1]
 
