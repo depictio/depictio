@@ -44,7 +44,7 @@ COMPONENT_METADATA = {
         "supports_reset": True,  # For scatter plots
         "enabled": True,  # Enable by default
         "build_function": build_figure,
-        "default_dimensions": {"w": 4, "h": 4},  # Adjusted for 12-column grid with rowHeight=50
+        "default_dimensions": {"w": 2, "h": 2},  # Adjusted for 12-column grid with rowHeight=50
     },
     "card": {
         "icon": "formkit:number",
@@ -67,7 +67,7 @@ COMPONENT_METADATA = {
         "enabled": True,  # Enable by default
         "build_function": build_interactive,
         "default_dimensions": {
-            "w": 3,
+            "w": 2,
             "h": 2,
         },  # Adjusted for 12-column grid - interactive controls are medium
     },
@@ -81,8 +81,8 @@ COMPONENT_METADATA = {
         "enabled": True,  # Enable by default
         "build_function": build_table,
         "default_dimensions": {
-            "w": 6,
-            "h": 4,
+            "w": 2,
+            "h": 2,
         },  # Adjusted for 12-column grid - tables need more space
     },
     "jbrowse": {
@@ -95,8 +95,8 @@ COMPONENT_METADATA = {
         "enabled": False,  # Disable by default
         "build_function": build_jbrowse,
         "default_dimensions": {
-            "w": 12,
-            "h": 8,
+            "w": 2,
+            "h": 2,
         },  # Adjusted for 12-column grid - genome browser needs full width
     },
     "text": {
