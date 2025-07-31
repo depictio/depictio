@@ -1,7 +1,7 @@
 <!-- markdownlint-disable MD033 MD041 -->
 <p align="center">
-  <img src="docs/images/logo/logo_hd.svg#gh-light-mode-only" alt="Depictio logo" width="300">
-  <img src="docs/images/logo/logo_hd_dark.svg#gh-dark-mode-only" alt="Depictio logo" width="300">
+  <img src="docs/images/logo_hd.png#gh-light-mode-only" alt="Depictio logo" width="300">
+  <img src="docs/images/logo_hd_white.png#gh-dark-mode-only" alt="Depictio logo" width="300">
 </p>
 
 <div align="center">
