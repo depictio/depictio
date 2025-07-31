@@ -30,7 +30,7 @@ BUTTON_STYLE = {"margin": "0 0px", "fontFamily": "Virgil", "marginTop": "5px"}
 
 def _check_filter_activity(interactive_values):
     """Check if any interactive components have active filters by comparing current values with default states."""
-    logger.info(f"🔍 _check_filter_activity called with: {interactive_values}")
+    # logger.debug(f"🔍 _check_filter_activity called with: {interactive_values}")
 
     if not interactive_values:
         logger.info("📭 No interactive_values provided")
@@ -455,7 +455,7 @@ def register_callbacks_header(app):
     def update_reset_button_style(interactive_values):
         """Update reset button style and icon color based on filter activity."""
         # Use INFO level logging so it's visible by default
-        logger.info(f"🔍 Reset button style check - interactive_values: {interactive_values}")
+        # logger.debug(f"🔍 Reset button style check - interactive_values: {interactive_values}")
 
         has_active_filters = _check_filter_activity(interactive_values)
 

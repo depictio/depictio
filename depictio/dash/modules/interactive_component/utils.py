@@ -565,7 +565,7 @@ def build_interactive(**kwargs):
     color = kwargs.get("color", None)  # Default to no custom color
     marks_number = kwargs.get("marks_number", 5)  # Default to 5 marks
 
-    logger.info(f"Interactive - kwargs: {kwargs}")
+    # logger.info(f"Interactive - kwargs: {kwargs}")
     logger.info(
         f"BUILD_INTERACTIVE: column_type={column_type}, interactive_component_type={interactive_component_type}"
     )
@@ -927,7 +927,7 @@ def build_interactive(**kwargs):
 
         # Convert Polars DataFrame to Pandas for processing
         df_pandas = df.to_pandas()
-        logger.info(f"df['{column_name}']: {df_pandas[column_name]}")
+        # logger.info(f"df['{column_name}']: {df_pandas[column_name]}")
 
         # Drop NaN, None, and invalid values
         df_pandas = df_pandas[~df_pandas[column_name].isin([None, "None", "nan", "NaN"])]
@@ -939,7 +939,7 @@ def build_interactive(**kwargs):
             lambda x: round(x, 2) if x not in [float("inf"), float("-inf")] else x
         )
         df_pandas = df_pandas.dropna(subset=[column_name])
-        logger.info(f"Cleaned df['{column_name}']: {df_pandas[column_name]}")
+        # logger.info(f"Cleaned df['{column_name}']: {df_pandas[column_name]}")
 
         # Always default to linear scale, only use log10 if explicitly selected
         use_log_scale = False

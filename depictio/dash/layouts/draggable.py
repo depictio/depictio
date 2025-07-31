@@ -693,7 +693,7 @@ def register_callbacks_draggable(app):
                 if draggable_children:
                     component_ids = set()
                     for child in draggable_children:
-                        logger.info(f"Processing child: {child}")
+                        # logger.info(f"Processing child: {child}")
                         child_id = get_component_id(child)
                         if child_id:
                             component_ids.add(child_id)
@@ -736,7 +736,7 @@ def register_callbacks_draggable(app):
         callback_id = id(ctx) if ctx else "NO_CTX"
         logger.info(f"🚀 CALLBACK START - ID: {callback_id}")
         logger.info(f"Triggered input: {triggered_input}")
-        logger.info(f"🚀 CALLBACK DEBUG - ctx.triggered: {ctx.triggered if ctx else 'NO_CTX'}")
+        logger.debug(f"🚀 CALLBACK DEBUG - ctx.triggered: {ctx.triggered if ctx else 'NO_CTX'}")
         # logger.info(f"Theme store: {theme_store}")
 
         # Extract theme safely from theme store with improved fallback handling
@@ -812,9 +812,9 @@ def register_callbacks_draggable(app):
                 draggable_children.append(child)
                 # Use the clean child_index from metadata instead of the potentially corrupted return value
                 child_id = f"box-{str(child_index)}"
-                logger.info(f"🔍 DRAG DEBUG - child_index: {child_index}")
-                logger.info(f"🔍 DRAG DEBUG - index_returned: {index_returned}")
-                logger.info(f"🔍 DRAG DEBUG - child_id: {child_id}")
+                logger.debug(f"🔍 DRAG DEBUG - child_index: {child_index}")
+                logger.debug(f"🔍 DRAG DEBUG - index_returned: {index_returned}")
+                logger.debug(f"🔍 DRAG DEBUG - child_id: {child_id}")
                 logger.info(f"Child type: {child_type}")
                 # Clean existing layouts before calculating new position
                 clean_draggable_layouts = clean_layout_data(draggable_layouts)
@@ -882,10 +882,10 @@ def register_callbacks_draggable(app):
                                             logger.warning(
                                                 "⚠️ RESPONSIVE SCALING DETECTED - Dimensions scaled by 2/3 (likely md breakpoint)"
                                             )
-                                        logger.info(
+                                        logger.debug(
                                             f"📱 SCALE DEBUG - Width ratio: {new_layout.get('w', 0) / max(stored_layout.get('w', 1), 1):.2f}"
                                         )
-                                        logger.info(
+                                        logger.debug(
                                             f"📱 SCALE DEBUG - Height ratio: {new_layout.get('h', 0) / max(stored_layout.get('h', 1), 1):.2f}"
                                         )
 
@@ -1217,9 +1217,9 @@ def register_callbacks_draggable(app):
                 input_id = ctx.triggered_id["index"]
                 component_id_to_remove = f"box-{input_id}"
 
-                logger.info(f"🗑️ REMOVE DEBUG - Removing component: {component_id_to_remove}")
-                logger.info(f"🗑️ REMOVE DEBUG - Current children count: {len(draggable_children)}")
-                logger.info(f"🗑️ REMOVE DEBUG - Current layouts count: {len(draggable_layouts)}")
+                logger.debug(f"🗑️ REMOVE DEBUG - Removing component: {component_id_to_remove}")
+                logger.debug(f"🗑️ REMOVE DEBUG - Current children count: {len(draggable_children)}")
+                logger.debug(f"🗑️ REMOVE DEBUG - Current layouts count: {len(draggable_layouts)}")
 
                 # Remove the component from children
                 updated_children = [
@@ -1235,7 +1235,7 @@ def register_callbacks_draggable(app):
                     if layout.get("i") != component_id_to_remove
                 ]
 
-                logger.info(
+                logger.debug(
                     f"🗑️ REMOVE DEBUG - After removal - children: {len(updated_children)}, layouts: {len(updated_layouts)}"
                 )
 
@@ -1383,31 +1383,31 @@ def register_callbacks_draggable(app):
                 logger.info("=" * 80)
                 logger.info("🚨 DUPLICATE CALLBACK EXECUTION START")
                 logger.info("=" * 80)
-                logger.info(f"🔍 DUPLICATE DEBUG - ctx.triggered: {ctx.triggered}")
-                logger.info(f"🔍 DUPLICATE DEBUG - ctx.triggered_id: {ctx.triggered_id}")
-                logger.info(f"🔍 DUPLICATE DEBUG - Total triggered items: {len(ctx.triggered)}")
+                logger.debug(f"🔍 DUPLICATE DEBUG - ctx.triggered: {ctx.triggered}")
+                logger.debug(f"🔍 DUPLICATE DEBUG - ctx.triggered_id: {ctx.triggered_id}")
+                logger.debug(f"🔍 DUPLICATE DEBUG - Total triggered items: {len(ctx.triggered)}")
 
                 # Check ALL triggered inputs to understand multiple triggers
                 for i, triggered_item in enumerate(ctx.triggered):
-                    logger.info(f"🔍 DUPLICATE DEBUG - Triggered item {i}: {triggered_item}")
+                    logger.debug(f"🔍 DUPLICATE DEBUG - Triggered item {i}: {triggered_item}")
 
                 # Log current dashboard state before duplication
-                logger.info(
+                logger.debug(
                     f"🔍 DUPLICATE DEBUG - Current draggable_children count: {len(draggable_children) if draggable_children else 0}"
                 )
-                logger.info(
+                logger.debug(
                     f"🔍 DUPLICATE DEBUG - Current draggable_layouts count: {len(draggable_layouts) if draggable_layouts else 0}"
                 )
                 if draggable_layouts:
                     for i, layout in enumerate(draggable_layouts):
-                        logger.info(
+                        logger.debug(
                             f"🔍 DUPLICATE DEBUG - Existing layout {i}: {layout.get('i', 'NO_ID')} at ({layout.get('x', '?')},{layout.get('y', '?')})"
                         )
 
                 # Check if this is actually a triggered button (non-zero clicks)
                 triggered_button_clicks = ctx.triggered[0]["value"]
                 if not triggered_button_clicks or triggered_button_clicks == 0:
-                    logger.info(
+                    logger.debug(
                         "🔍 DUPLICATE DEBUG - Button not actually clicked (0 clicks), skipping"
                     )
                     return (
@@ -1420,14 +1420,14 @@ def register_callbacks_draggable(app):
 
                 # CRITICAL: Check if there are multiple triggers and only process the first one
                 if len(ctx.triggered) > 1:
-                    logger.warning(
+                    logger.debug(
                         f"🔍 DUPLICATE DEBUG - Multiple triggers detected ({len(ctx.triggered)}), processing only the first one"
                     )
                     # Only process if this is the first trigger or they're all the same
                     first_trigger_id = ctx.triggered[0]["prop_id"]
                     current_trigger_id = f'{{"index":"{ctx.triggered_id["index"]}","type":"duplicate-box-button"}}.n_clicks'
                     if first_trigger_id != current_trigger_id:
-                        logger.info(
+                        logger.debug(
                             f"🔍 DUPLICATE DEBUG - Skipping duplicate trigger: {current_trigger_id}"
                         )
                         return (
@@ -1440,11 +1440,11 @@ def register_callbacks_draggable(app):
 
                 triggered_index = ctx.triggered_id["index"]
 
-                logger.info(f"🔍 DUPLICATE DEBUG - Looking for component: box-{triggered_index}")
-                logger.info(
+                logger.debug(f"🔍 DUPLICATE DEBUG - Looking for component: box-{triggered_index}")
+                logger.debug(
                     f"🔍 DUPLICATE DEBUG - Number of draggable_children: {len(draggable_children)}"
                 )
-                logger.info(f"🔍 DUPLICATE DEBUG - Current draggable_layouts: {draggable_layouts}")
+                logger.debug(f"🔍 DUPLICATE DEBUG - Current draggable_layouts: {draggable_layouts}")
 
                 # Check if we're already processing a duplication for this component
                 duplicate_target_id = f"box-{triggered_index}"
@@ -1453,31 +1453,31 @@ def register_callbacks_draggable(app):
                     for layout in draggable_layouts
                     if layout.get("i", "").startswith("box-") and layout["i"] != duplicate_target_id
                 ]
-                logger.info(
+                logger.debug(
                     f"🔍 DUPLICATE DEBUG - Existing components count: {len(existing_duplicates) + 1}"
                 )  # +1 for original
 
                 # Debug: log all component IDs and structures
                 for i, child in enumerate(draggable_children):
                     child_id = get_component_id(child)
-                    logger.info(f"🔍 DUPLICATE DEBUG - Child {i}: ID = {child_id}")
-                    logger.info(f"🔍 DUPLICATE DEBUG - Child {i}: type = {type(child)}")
-                    logger.info(
+                    logger.debug(f"🔍 DUPLICATE DEBUG - Child {i}: ID = {child_id}")
+                    logger.debug(f"🔍 DUPLICATE DEBUG - Child {i}: type = {type(child)}")
+                    logger.debug(
                         f"🔍 DUPLICATE DEBUG - Child {i}: hasattr(child, 'id') = {hasattr(child, 'id')}"
                     )
                     if hasattr(child, "id"):
-                        logger.info(f"🔍 DUPLICATE DEBUG - Child {i}: child.id = {child.id}")
+                        logger.debug(f"🔍 DUPLICATE DEBUG - Child {i}: child.id = {child.id}")
                     if isinstance(child, dict):
-                        logger.info(
+                        logger.debug(
                             f"🔍 DUPLICATE DEBUG - Child {i}: dict keys = {list(child.keys())}"
                         )
                         if "props" in child:
-                            logger.info(
+                            logger.debug(
                                 f"🔍 DUPLICATE DEBUG - Child {i}: props keys = {list(child['props'].keys())}"
                             )
                     # Show first 200 chars of the component structure
                     child_str = str(child)[:200] + "..." if len(str(child)) > 200 else str(child)
-                    logger.info(f"🔍 DUPLICATE DEBUG - Child {i}: structure = {child_str}")
+                    logger.debug(f"🔍 DUPLICATE DEBUG - Child {i}: structure = {child_str}")
 
                 component_to_duplicate = None
                 for child in draggable_children:
@@ -1501,8 +1501,8 @@ def register_callbacks_draggable(app):
                 # Generate a new unique ID for the duplicated component
                 new_index = generate_unique_index()
                 child_id = f"box-{new_index}"
-                logger.info(f"🔍 DUPLICATE DEBUG - Generated new component ID: {child_id}")
-                logger.info(
+                logger.debug(f"🔍 DUPLICATE DEBUG - Generated new component ID: {child_id}")
+                logger.debug(
                     f"🔍 DUPLICATE DEBUG - About to create duplicate of: {duplicate_target_id}"
                 )
 
@@ -1563,11 +1563,11 @@ def register_callbacks_draggable(app):
                 existing_layouts = fix_responsive_scaling(existing_layouts, stored_metadata)
 
                 # DEBUG: Check for responsive scaling in existing layouts
-                logger.info("🔍 RESPONSIVE DEBUG - Checking existing layouts after fixes:")
+                logger.debug("🔍 RESPONSIVE DEBUG - Checking existing layouts after fixes:")
                 expected_dims = component_dimensions.get(
                     metadata["component_type"], {"w": 6, "h": 8}
                 )
-                logger.info(
+                logger.debug(
                     f"🔍 RESPONSIVE DEBUG - Expected dimensions for {metadata['component_type']}: {expected_dims}"
                 )
 
@@ -1578,7 +1578,7 @@ def register_callbacks_draggable(app):
                         logger.warning(
                             f"⚠️ RESPONSIVE SCALING STILL DETECTED in layout {i}: {layout.get('i')} has w:{actual_w}, h:{actual_h} (expected w:{expected_dims['w']}, h:{expected_dims['h']})"
                         )
-                    logger.info(
+                    logger.debug(
                         f"🔍 RESPONSIVE DEBUG - Layout {i}: {layout.get('i')} -> w:{actual_w}, h:{actual_h}"
                     )
 
@@ -1591,9 +1591,9 @@ def register_callbacks_draggable(app):
                     n,
                 )
 
-                logger.info(f"🔍 DUPLICATE DEBUG - Component type: {metadata['component_type']}")
-                logger.info(f"🔍 DUPLICATE DEBUG - New layout created: {new_layout}")
-                logger.info(
+                logger.debug(f"🔍 DUPLICATE DEBUG - Component type: {metadata['component_type']}")
+                logger.debug(f"🔍 DUPLICATE DEBUG - New layout created: {new_layout}")
+                logger.debug(
                     f"🔍 DUPLICATE DEBUG - Expected dimensions for {metadata['component_type']}: {component_dimensions.get(metadata['component_type'], {'w': 6, 'h': 8})}"
                 )
 
@@ -1610,12 +1610,12 @@ def register_callbacks_draggable(app):
 
                 logger.info("=" * 80)
                 logger.info("🔚 DUPLICATE CALLBACK EXECUTION END")
-                logger.info(f"🔍 DUPLICATE DEBUG - Final children count: {len(updated_children)}")
-                logger.info(f"🔍 DUPLICATE DEBUG - Final layouts count: {len(draggable_layouts)}")
-                logger.info(f"🔍 DUPLICATE DEBUG - New component created: {child_id}")
-                logger.info("🔍 DUPLICATE DEBUG - Final layout data being returned:")
+                logger.debug(f"🔍 DUPLICATE DEBUG - Final children count: {len(updated_children)}")
+                logger.debug(f"🔍 DUPLICATE DEBUG - Final layouts count: {len(draggable_layouts)}")
+                logger.debug(f"🔍 DUPLICATE DEBUG - New component created: {child_id}")
+                logger.debug("🔍 DUPLICATE DEBUG - Final layout data being returned:")
                 for i, layout in enumerate(draggable_layouts):
-                    logger.info(
+                    logger.debug(
                         f"  Layout {i}: {layout.get('i')} -> {layout.get('w')}x{layout.get('h')} at ({layout.get('x')},{layout.get('y')})"
                     )
                 logger.info("=" * 80)
@@ -2373,15 +2373,15 @@ def design_draggable(
         current_layout = []
 
     # Debug logging for grid configuration
-    logger.info("🔍 GRID DEBUG - Creating DashGridLayout with configuration:")
-    logger.info("🔍 GRID DEBUG - rowHeight: 50")
-    logger.info("🔍 GRID DEBUG - cols: {'lg': 12, 'md': 12, 'sm': 12, 'xs': 12, 'xxs': 12}")
-    logger.info(
+    logger.debug("🔍 GRID DEBUG - Creating DashGridLayout with configuration:")
+    logger.debug("🔍 GRID DEBUG - rowHeight: 50")
+    logger.debug("🔍 GRID DEBUG - cols: {'lg': 12, 'md': 12, 'sm': 12, 'xs': 12, 'xxs': 12}")
+    logger.debug(
         f"🔍 GRID DEBUG - current_layout items: {len(current_layout) if current_layout else 0}"
     )
     if current_layout:
         for i, layout_item in enumerate(current_layout):
-            logger.info(f"🔍 GRID DEBUG - layout item {i}: {layout_item}")
+            logger.debug(f"🔍 GRID DEBUG - layout item {i}: {layout_item}")
 
     draggable = dgl.DashGridLayout(
         id="draggable",

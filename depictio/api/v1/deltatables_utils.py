@@ -561,12 +561,12 @@ def iterative_join(
     cache_key = f"{workflow_id}_{hash(str(joins_dict))}_{hash(str(metadata_dict))}"
 
     if cache_key in _iterative_join_cache:
-        logger.debug(f"IterativeJoin: Using cached result for workflow {workflow_id}")
+        # logger.debug(f"IterativeJoin: Using cached result for workflow {workflow_id}")
         return _iterative_join_cache[cache_key]
 
-    logger.debug(
-        f"IterativeJoin: Processing workflow {workflow_id} with {len(joins_dict)} join groups"
-    )
+    # logger.debug(
+    #     f"IterativeJoin: Processing workflow {workflow_id} with {len(joins_dict)} join groups"
+    # )
 
     # Optimize: Pre-filter interactive components once
     interactive_components_list = [
@@ -590,7 +590,7 @@ def iterative_join(
     for join_key_tuple in joins_dict.keys():
         all_dc_ids.update(join_key_tuple)
 
-    logger.debug(f"IterativeJoin: Loading {len(all_dc_ids)} unique data collections")
+    # logger.debug(f"IterativeJoin: Loading {len(all_dc_ids)} unique data collections")
 
     # Initialize containers
     loaded_dfs = {}
@@ -611,8 +611,8 @@ def iterative_join(
             "component_type": metadata.get("component_type", "unknown"),
         }
 
-    logger.debug(f"IterativeJoin: Component values breakdown: {component_values}")
-    logger.debug(f"IterativeJoin: Metadata by dc_id: {list(metadata_by_dc_id.keys())}")
+    # logger.debug(f"IterativeJoin: Component values breakdown: {component_values}")
+    # logger.debug(f"IterativeJoin: Metadata by dc_id: {list(metadata_by_dc_id.keys())}")
 
     # Load all necessary dataframes concurrently (optimized)
 
@@ -624,9 +624,9 @@ def iterative_join(
         if dc_id not in loaded_dfs:
             relevant_metadata = metadata_by_dc_id.get(dc_id, [])
             loading_tasks.append((dc_id, relevant_metadata))
-            logger.debug(
-                f"IterativeJoin: Preparing to load DataFrame for dc_id {dc_id} with metadata: {relevant_metadata}"
-            )
+            # logger.debug(
+            #     f"IterativeJoin: Preparing to load DataFrame for dc_id {dc_id} with metadata: {relevant_metadata}"
+            # )
             dc_ids_to_load.append(dc_id)
 
     logger.debug(f"IterativeJoin: Loading {len(loading_tasks)} DataFrames concurrently")
@@ -663,21 +663,21 @@ def iterative_join(
     # Optimize join execution with improved strategy
     thread_id = threading.get_ident()
     process_id = os.getpid()
-    logger.debug(
-        f"IterativeJoin: [PID:{process_id}|TID:{thread_id}] Executing {sum(len(join_list) for join_list in joins_dict.values())} total joins"
-    )
+    # logger.debug(
+    #     f"IterativeJoin: [PID:{process_id}|TID:{thread_id}] Executing {sum(len(join_list) for join_list in joins_dict.values())} total joins"
+    # )
     # Initialize merged_df with the first dataframe in the first join
     initial_dc_id = next(iter(joins_dict.keys()))[0]
     merged_df = loaded_dfs[initial_dc_id]
     used_dcs.add(initial_dc_id)
-    logger.debug(f"IterativeJoin: Starting with {initial_dc_id} (shape: {merged_df.shape})")
+    # logger.debug(f"IterativeJoin: Starting with {initial_dc_id} (shape: {merged_df.shape})")
 
     join_count = 0
     # Iteratively join dataframes based on joins_dict
     for join_key_tuple, join_list in joins_dict.items():
-        logger.debug(
-            f"IterativeJoin: Processing {len(join_list)} joins for group: {join_key_tuple}"
-        )
+        # logger.debug(
+        #     f"IterativeJoin: Processing {len(join_list)} joins for group: {join_key_tuple}"
+        # )
 
         for join in join_list:
             join_id, join_details = list(join.items())[0]
@@ -686,27 +686,24 @@ def iterative_join(
 
             # Optimize: Skip already processed joins
             if dc_id1 in used_dcs and dc_id2 in used_dcs:
-                logger.debug(
-                    f"IterativeJoin: Skipping join {join_count}/{join_id} (both collections already used)"
-                )
+                # logger.debug(
+                #     f"IterativeJoin: Skipping join {join_count}/{join_id} (both collections already used)"
+                # )
                 continue
 
             # Determine which dataframe to join
             if dc_id1 in used_dcs:
                 right_df = loaded_dfs[dc_id2]
                 used_dcs.add(dc_id2)
-                join_dc_id = dc_id2
             elif dc_id2 in used_dcs:
                 right_df = loaded_dfs[dc_id1]
                 used_dcs.add(dc_id1)
-                join_dc_id = dc_id1
             else:
                 # Initial join case
                 right_df = loaded_dfs[dc_id2]
                 used_dcs.add(dc_id2)
                 merged_df = loaded_dfs[dc_id1]
                 used_dcs.add(dc_id1)
-                join_dc_id = f"{dc_id1}+{dc_id2}"
 
             # Optimize: Build join columns efficiently
             base_columns = join_details["on_columns"]
@@ -716,14 +713,14 @@ def iterative_join(
                 else base_columns
             )
 
-            logger.debug(
-                f"IterativeJoin: Join {join_count} - {join_dc_id} ({right_df.shape}) -> merged ({merged_df.shape})"
-            )
+            # logger.debug(
+            #     f"IterativeJoin: Join {join_count} - {join_dc_id} ({right_df.shape}) -> merged ({merged_df.shape})"
+            # )
 
             # Perform the join
             merged_df = merged_df.join(right_df, on=join_columns, how=join_details["how"])
 
-            logger.debug(f"IterativeJoin: Result shape: {merged_df.shape}")
+            # logger.debug(f"IterativeJoin: Result shape: {merged_df.shape}")
 
     logger.debug(f"IterativeJoin: Completed {join_count} joins, final shape: {merged_df.shape}")
 
@@ -1017,6 +1014,6 @@ def join_deltatables_dev(
     logger.info(f"Common columns: {common_columns}")
     logger.info(f"Used dataframes: {used_dfs}")
     logger.info(f"Loaded dataframes: {loaded_dfs.keys()}")
-    logger.info(f"Merged df: {merged_df}")
+    logger.info(f"Merged df shape: {merged_df.shape}")
 
     return merged_df
