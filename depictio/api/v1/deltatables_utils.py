@@ -177,9 +177,111 @@ def convert_filter_model_to_metadata(filter_model):
     return metadata
 
 
+def _load_joined_deltatable(
+    workflow_id: ObjectId,
+    joined_data_collection_id: str,
+    metadata: list[dict] | None = None,
+    TOKEN: str | None = None,
+    limit_rows: int | None = None,
+    load_for_options: bool = False,
+) -> pl.DataFrame:
+    """
+    Load and join data collections based on a joined data collection ID.
+
+    Args:
+        workflow_id (ObjectId): The ID of the workflow.
+        joined_data_collection_id (str): Joined ID in format "dc1--dc2".
+        metadata (Optional[list[dict]]): List of metadata dicts for filtering.
+        TOKEN (Optional[str]): Authorization token.
+        limit_rows (Optional[int]): Maximum number of rows to return.
+        load_for_options (bool): Whether loading for component options.
+
+    Returns:
+        pl.DataFrame: The joined DataFrame.
+    """
+    logger.info(f"Loading joined data collection: {joined_data_collection_id}")
+
+    # Parse the joined DC ID to get individual DC IDs
+    dc_ids = joined_data_collection_id.split("--")
+    if len(dc_ids) != 2:
+        raise ValueError(f"Invalid joined data collection ID format: {joined_data_collection_id}")
+
+    dc1_id, dc2_id = dc_ids
+
+    # Get join configuration from the API
+    try:
+        joins_response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/datacollections/get_dc_joined/{workflow_id}",
+            headers={"Authorization": f"Bearer {TOKEN}"} if TOKEN else {},
+        )
+        joins_response.raise_for_status()
+        joins_data = joins_response.json()
+
+        workflow_joins = joins_data.get(str(workflow_id), {})
+        join_config = workflow_joins.get(joined_data_collection_id)
+
+        if not join_config:
+            raise ValueError(f"No join configuration found for {joined_data_collection_id}")
+
+    except httpx.HTTPError as e:
+        logger.error(f"Failed to fetch join configuration: {e}")
+        raise Exception("Error fetching join configuration") from e
+
+    # Load individual DataFrames
+    logger.debug(f"Loading DataFrame for DC1: {dc1_id}")
+    df1 = load_deltatable_lite(
+        workflow_id=workflow_id,
+        data_collection_id=ObjectId(dc1_id),
+        metadata=metadata if not load_for_options else None,
+        TOKEN=TOKEN,
+        limit_rows=None,  # Don't limit individual DFs before join
+        load_for_options=load_for_options,
+    )
+
+    logger.debug(f"Loading DataFrame for DC2: {dc2_id}")
+    df2 = load_deltatable_lite(
+        workflow_id=workflow_id,
+        data_collection_id=ObjectId(dc2_id),
+        metadata=metadata if not load_for_options else None,
+        TOKEN=TOKEN,
+        limit_rows=None,  # Don't limit individual DFs before join
+        load_for_options=load_for_options,
+    )
+
+    # Perform the join
+    join_how = join_config.get("how", "inner")
+    join_columns = join_config.get("on_columns", [])
+
+    if not join_columns:
+        raise ValueError(f"No join columns specified for {joined_data_collection_id}")
+
+    logger.info(f"Joining DataFrames on columns {join_columns} using {join_how} join")
+    logger.debug(f"DF1 shape: {df1.shape}, columns: {df1.columns}")
+    logger.debug(f"DF2 shape: {df2.shape}, columns: {df2.columns}")
+
+    try:
+        # Perform the join using Polars
+        joined_df = df1.join(df2, on=join_columns, how=join_how)
+        logger.info(f"Successfully joined DataFrames. Result shape: {joined_df.shape}")
+
+        # Apply row limit if specified
+        if limit_rows:
+            joined_df = joined_df.limit(limit_rows)
+            logger.debug(f"Applied row limit: {limit_rows}")
+
+        return joined_df
+
+    except Exception as e:
+        logger.error(f"Error during join operation: {e}")
+        logger.error(f"DF1 columns: {df1.columns}")
+        logger.error(f"DF2 columns: {df2.columns}")
+        logger.error(f"Join columns: {join_columns}")
+        raise Exception(f"Join operation failed: {str(e)}") from e
+
+
 def load_deltatable_lite(
     workflow_id: ObjectId,
-    data_collection_id: ObjectId,
+    data_collection_id: ObjectId | str,  # Allow string for joined DC IDs like "dc1--dc2"
     metadata: list[dict] | None = None,
     TOKEN: str | None = None,
     limit_rows: int | None = None,
@@ -187,10 +289,11 @@ def load_deltatable_lite(
 ) -> pl.DataFrame:
     """
     Load a Delta table with optional filtering based on metadata.
+    Supports both regular data collection IDs and joined data collection IDs (format: "dc1--dc2").
 
     Args:
         workflow_id (ObjectId): The ID of the workflow.
-        data_collection_id (ObjectId): The ID of the data collection.
+        data_collection_id (ObjectId | str): The ID of the data collection or joined ID like "dc1--dc2".
         metadata (Optional[list[dict]], optional): List of metadata dicts for filtering the DataFrame. Defaults to None.
         TOKEN (Optional[str], optional): Authorization token. Defaults to None.
         limit_rows (Optional[int], optional): Maximum number of rows to return. Defaults to None.
@@ -201,7 +304,16 @@ def load_deltatable_lite(
     Raises:
         Exception: If the HTTP request to load the Delta table fails.
     """
-    # Convert ObjectId to string
+    # Check if this is a joined data collection ID
+    data_collection_id_str = str(data_collection_id)
+    if isinstance(data_collection_id, str) and "--" in data_collection_id:
+        # Handle joined data collection
+        logger.info(f"Loading joined data collection: {data_collection_id}")
+        return _load_joined_deltatable(
+            workflow_id, data_collection_id, metadata, TOKEN, limit_rows, load_for_options
+        )
+
+    # Convert ObjectId to string for regular data collections
     workflow_id_str = str(workflow_id)
     data_collection_id_str = str(data_collection_id)
 

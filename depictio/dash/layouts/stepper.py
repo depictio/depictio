@@ -154,6 +154,7 @@ def register_callbacks_stepper(app):
 
         logger.info(f"Component selected: {component_selected}")
 
+        # Get regular data collections
         valid_dcs = [
             {
                 "label": dc["data_collection_tag"],
@@ -163,7 +164,56 @@ def register_callbacks_stepper(app):
             if component_selected in mapping_component_data_collection[dc["config"]["type"]]
         ]
 
+        # Add joined data collection options for table-based components
+        if component_selected in mapping_component_data_collection.get("table", []):
+            try:
+                # Fetch available joins for this workflow
+                joins_response = httpx.get(
+                    f"{API_BASE_URL}/depictio/api/v1/datacollections/get_dc_joined/{selected_workflow}",
+                    headers={"Authorization": f"Bearer {TOKEN}"},
+                )
+
+                if joins_response.status_code == 200:
+                    joins_data = joins_response.json()
+                    workflow_joins = joins_data.get(selected_workflow, {})
+
+                    # Create a mapping from DC ID to DC tag for display names
+                    dc_id_to_tag = {
+                        dc["id"]: dc["data_collection_tag"]
+                        for dc in selected_wf_data["data_collections"]
+                    }
+
+                    # Add joined DC options
+                    for join_key, join_config in workflow_joins.items():
+                        # Extract DC IDs from join key (format: "dc_id1--dc_id2")
+                        dc_ids = join_key.split("--")
+                        if len(dc_ids) == 2:
+                            dc1_id, dc2_id = dc_ids
+                            dc1_tag = dc_id_to_tag.get(dc1_id, dc1_id)
+                            dc2_tag = dc_id_to_tag.get(dc2_id, dc2_id)
+
+                            # Create display name for joined DC
+                            joined_label = f"🔗 Joined: {dc1_tag} + {dc2_tag}"
+
+                            valid_dcs.append(
+                                {
+                                    "label": joined_label,
+                                    "value": join_key,  # Use join key as value (e.g., "dc_id1--dc_id2")
+                                }
+                            )
+
+                    logger.info(f"Added {len(workflow_joins)} joined data collection options")
+                else:
+                    logger.warning(
+                        f"Failed to fetch joins for workflow {selected_workflow}: {joins_response.status_code}"
+                    )
+
+            except Exception as e:
+                logger.error(f"Error fetching joined data collections: {str(e)}")
+
         logger.info(f"ID: {id}")
+        logger.info(f"Total valid DCs (including joins): {len(valid_dcs)}")
+
         if not selected_workflow:
             raise dash.exceptions.PreventUpdate
 
