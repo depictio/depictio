@@ -651,7 +651,19 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     filter_applied = kwargs.get("filter_applied", False)
     theme = kwargs.get("theme", "light")
 
+    # Handle stepper mode index properly for stored-metadata-component
+    # For stepper mode, use the temporary index to avoid conflicts with existing components
+    # For normal mode, use the original index (remove -tmp suffix if present)
+    if stepper:
+        store_index = index  # Use the temporary index with -tmp suffix
+        data_index = index.replace("-tmp", "") if index else "unknown"  # Clean index for data
+    else:
+        store_index = index.replace("-tmp", "") if index else "unknown"
+
     logger.info(f"Building figure component {index}")
+    logger.info(
+        f"Stepper mode: {stepper}, store_index: {store_index}, data_index: {data_index if stepper else store_index}"
+    )
     logger.info(f"Visualization type: {visu_type}")
     logger.info(f"Theme: {theme}")
 
@@ -754,7 +766,7 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
             ),
             dcc.Store(
                 data=store_component_data,
-                id={"type": "stored-metadata-component", "index": index},
+                id={"type": "stored-metadata-component", "index": store_index},
             ),
         ],
         # style={
