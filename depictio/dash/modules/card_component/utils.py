@@ -283,11 +283,21 @@ def build_card(**kwargs):
                     logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
                     data = pl.DataFrame()  # Return empty DataFrame if IDs are missing
                 else:
-                    data = load_deltatable_lite(
-                        workflow_id=ObjectId(wf_id),
-                        data_collection_id=ObjectId(dc_id),
-                        TOKEN=kwargs.get("access_token"),
-                    )
+                    # Handle joined data collection IDs - don't convert to ObjectId
+                    if isinstance(dc_id, str) and "--" in dc_id:
+                        # For joined data collections, pass the DC ID as string
+                        data = load_deltatable_lite(
+                            workflow_id=ObjectId(wf_id),
+                            data_collection_id=dc_id,  # Keep as string for joined DCs
+                            TOKEN=kwargs.get("access_token"),
+                        )
+                    else:
+                        # Regular data collection - convert to ObjectId
+                        data = load_deltatable_lite(
+                            workflow_id=ObjectId(wf_id),
+                            data_collection_id=ObjectId(dc_id),
+                            TOKEN=kwargs.get("access_token"),
+                        )
                     # When we load the full data from database (no pre-existing df), this is NOT filtered
                     is_filtered_data = False
                     logger.debug(
@@ -319,11 +329,21 @@ def build_card(**kwargs):
 
                 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
-                full_data = load_deltatable_lite(
-                    workflow_id=ObjectId(wf_id),
-                    data_collection_id=ObjectId(dc_id),
-                    TOKEN=kwargs.get("access_token"),
-                )
+                # Handle joined data collection IDs - don't convert to ObjectId
+                if isinstance(dc_id, str) and "--" in dc_id:
+                    # For joined data collections, pass the DC ID as string
+                    full_data = load_deltatable_lite(
+                        workflow_id=ObjectId(wf_id),
+                        data_collection_id=dc_id,  # Keep as string for joined DCs
+                        TOKEN=kwargs.get("access_token"),
+                    )
+                else:
+                    # Regular data collection - convert to ObjectId
+                    full_data = load_deltatable_lite(
+                        workflow_id=ObjectId(wf_id),
+                        data_collection_id=ObjectId(dc_id),
+                        TOKEN=kwargs.get("access_token"),
+                    )
 
                 # Compare provided data with full dataset
                 data_differs = (

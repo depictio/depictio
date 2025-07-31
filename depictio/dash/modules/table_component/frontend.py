@@ -635,10 +635,21 @@ def register_callbacks_table_component(app):
         # workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag, TOKEN=TOKEN)
 
         # Get the data collection specs
-        dc_specs = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
-            headers=headers,
-        ).json()
+        # Handle joined data collection IDs
+        if isinstance(data_collection_id, str) and "--" in data_collection_id:
+            # For joined data collections, create synthetic specs
+            dc_specs = {
+                "config": {"type": "table", "metatype": "joined"},
+                "data_collection_tag": f"Joined data collection ({data_collection_id})",
+                "description": "Virtual joined data collection",
+                "_id": data_collection_id,
+            }
+        else:
+            # Regular data collection - fetch from API
+            dc_specs = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
+                headers=headers,
+            ).json()
 
         cols_json = get_columns_from_data_collection(workflow_id, data_collection_id, TOKEN)
 

@@ -699,10 +699,21 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
             from depictio.api.v1.configs.config import API_BASE_URL
 
             headers = {"Authorization": f"Bearer {TOKEN}"} if TOKEN else {}
-            dc_specs = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_id}",
-                headers=headers,
-            ).json()
+            # Handle joined data collection IDs
+            if isinstance(dc_id, str) and "--" in dc_id:
+                # For joined data collections, create synthetic specs
+                dc_specs = {
+                    "config": {"type": "table", "metatype": "joined"},
+                    "data_collection_tag": f"Joined data collection ({dc_id})",
+                    "description": "Virtual joined data collection",
+                    "_id": dc_id,
+                }
+            else:
+                # Regular data collection - fetch from API
+                dc_specs = httpx.get(
+                    f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_id}",
+                    headers=headers,
+                ).json()
             dc_config = dc_specs.get("config", {})
             store_component_data["dc_config"] = dc_config
             logger.info(f"Successfully fetched dc_config for figure {index}")
@@ -718,7 +729,13 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         if wf_id and dc_id:
             logger.info(f"Loading data for {wf_id}:{dc_id}")
             try:
-                df = load_deltatable_lite(ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN)
+                # Handle joined data collection IDs - don't convert to ObjectId
+                if isinstance(dc_id, str) and "--" in dc_id:
+                    # For joined data collections, pass the DC ID as string
+                    df = load_deltatable_lite(ObjectId(wf_id), dc_id, TOKEN=TOKEN)
+                else:
+                    # Regular data collection - convert to ObjectId
+                    df = load_deltatable_lite(ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN)
             except Exception as e:
                 logger.error(f"Failed to load data: {e}")
                 df = pl.DataFrame()

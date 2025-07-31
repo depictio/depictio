@@ -640,9 +640,17 @@ def build_interactive(**kwargs):
             df_for_options = pl.DataFrame()
         else:
             # Always load unfiltered data for categorical component options
-            df_for_options = load_deltatable_lite(
-                ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN, load_for_options=True
-            )
+            # Handle joined data collection IDs - don't convert to ObjectId
+            if isinstance(dc_id, str) and "--" in dc_id:
+                # For joined data collections, pass the DC ID as string
+                df_for_options = load_deltatable_lite(
+                    ObjectId(wf_id), dc_id, TOKEN=TOKEN, load_for_options=True
+                )
+            else:
+                # Regular data collection - convert to ObjectId
+                df_for_options = load_deltatable_lite(
+                    ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN, load_for_options=True
+                )
 
         # Use the unfiltered data for generating options
         df = df_for_options
@@ -655,7 +663,13 @@ def build_interactive(**kwargs):
             logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
             df = pl.DataFrame()  # Return empty DataFrame if IDs are missing
         else:
-            df = load_deltatable_lite(ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN)
+            # Handle joined data collection IDs - don't convert to ObjectId
+            if isinstance(dc_id, str) and "--" in dc_id:
+                # For joined data collections, pass the DC ID as string
+                df = load_deltatable_lite(ObjectId(wf_id), dc_id, TOKEN=TOKEN)
+            else:
+                # Regular data collection - convert to ObjectId
+                df = load_deltatable_lite(ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN)
     else:
         logger.debug(
             f"Interactive component {index}: Using pre-loaded DataFrame (shape: {df.shape})"
