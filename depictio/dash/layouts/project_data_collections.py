@@ -275,15 +275,19 @@ def create_workflows_manager_section(workflows, selected_workflow_id=None):
     )
 
 
-def create_basic_project_data_collections_section(data_collections):
+def create_unified_data_collections_manager_section(
+    data_collections, project_type="basic", workflow_name=None
+):
     """
-    Create the data collections section for basic projects (no workflows).
+    Create a unified data collections manager section for both Basic and Advanced projects.
 
     Args:
         data_collections: List of data collection objects
+        project_type: "basic" or "advanced"
+        workflow_name: Name of selected workflow (for advanced projects only)
 
     Returns:
-        dmc.Stack: Data collections section for basic projects
+        dmc.Stack: Unified data collections manager section
     """
     # Overview cards
     overview_cards = dmc.SimpleGrid(
@@ -329,72 +333,83 @@ def create_basic_project_data_collections_section(data_collections):
             # Metatypes card
             dmc.Card(
                 [
-                    dmc.Group(
+                    dmc.Stack(
                         [
-                            DashIconify(
-                                icon="mdi:tag-multiple",
-                                width=20,
-                                color=colors["green"],
+                            dmc.Group(
+                                [
+                                    DashIconify(
+                                        icon="mdi:tag-multiple",
+                                        width=20,
+                                        color=colors["green"],
+                                    ),
+                                    dmc.Text("Collection Types", fw="bold", size="sm"),
+                                ],
+                                justify="center",
+                                align="center",
+                                gap="xs",
                             ),
-                            dmc.Text("Collection Types", fw="bold", size="sm"),
+                            dmc.Group(
+                                [
+                                    dmc.Stack(
+                                        [
+                                            dmc.Text(
+                                                str(
+                                                    sum(
+                                                        1
+                                                        for dc in data_collections
+                                                        if dc.config.metatype
+                                                        and dc.config.metatype.lower()
+                                                        == "aggregate"
+                                                    )
+                                                )
+                                                if data_collections
+                                                else "0",
+                                                size="lg",
+                                                fw="bold",
+                                                c=colors["green"],
+                                                ta="center",
+                                            ),
+                                            dmc.Text("Aggregate", size="xs", c="gray", ta="center"),
+                                        ],
+                                        gap="xs",
+                                        align="center",
+                                    ),
+                                    dmc.Divider(
+                                        orientation="vertical",
+                                        style={"height": "50px", "alignSelf": "center"},
+                                    ),
+                                    dmc.Stack(
+                                        [
+                                            dmc.Text(
+                                                str(
+                                                    sum(
+                                                        1
+                                                        for dc in data_collections
+                                                        if dc.config.metatype
+                                                        and dc.config.metatype.lower() == "metadata"
+                                                    )
+                                                )
+                                                if data_collections
+                                                else "0",
+                                                size="lg",
+                                                fw="bold",
+                                                c=colors["green"],
+                                                ta="center",
+                                            ),
+                                            dmc.Text("Metadata", size="xs", c="gray", ta="center"),
+                                        ],
+                                        gap="xs",
+                                        align="center",
+                                    ),
+                                ],
+                                justify="space-around",
+                                align="center",
+                                style={"flex": 1},  # Take up remaining space in the card
+                            ),
                         ],
+                        gap="md",  # Add space between title and content
                         justify="center",
-                        align="center",
-                        gap="xs",
-                    ),
-                    dmc.Group(
-                        [
-                            dmc.Stack(
-                                [
-                                    dmc.Text(
-                                        str(
-                                            sum(
-                                                1
-                                                for dc in data_collections
-                                                if dc.config.metatype
-                                                and dc.config.metatype.lower() == "aggregate"
-                                            )
-                                        )
-                                        if data_collections
-                                        else "0",
-                                        size="lg",
-                                        fw="bold",
-                                        c=colors["green"],
-                                        ta="center",
-                                    ),
-                                    dmc.Text("Aggregate", size="xs", c="gray", ta="center"),
-                                ],
-                                gap="xs",
-                                align="center",
-                            ),
-                            dmc.Divider(orientation="vertical", style={"height": "40px"}),
-                            dmc.Stack(
-                                [
-                                    dmc.Text(
-                                        str(
-                                            sum(
-                                                1
-                                                for dc in data_collections
-                                                if dc.config.metatype
-                                                and dc.config.metatype.lower() == "metadata"
-                                            )
-                                        )
-                                        if data_collections
-                                        else "0",
-                                        size="lg",
-                                        fw="bold",
-                                        c=colors["green"],
-                                        ta="center",
-                                    ),
-                                    dmc.Text("Metadata", size="xs", c="gray", ta="center"),
-                                ],
-                                gap="xs",
-                                align="center",
-                            ),
-                        ],
-                        justify="space-around",
-                        align="center",
-                    ),
+                    )
                 ],
                 withBorder=True,
                 shadow="sm",
@@ -503,18 +518,29 @@ def create_basic_project_data_collections_section(data_collections):
             p="xl",
         )
 
+    # Create project type badge and description
+    if project_type == "basic":
+        project_badge = dmc.Badge("Basic Project", color="cyan", variant="light")
+        description = "Managing data collections for this basic project"
+    else:
+        project_badge = dmc.Badge("Advanced Project", color="orange", variant="light")
+        if workflow_name:
+            description = f"Managing data collections for workflow: {workflow_name}"
+        else:
+            description = "Managing data collections for this advanced project"
+
     return dmc.Stack(
         [
             dmc.Group(
                 [
                     DashIconify(icon="mdi:database", width=24, color=colors["teal"]),
                     dmc.Text("Data Collections Manager", fw="bold", size="lg"),
-                    dmc.Badge("Basic Project", color="blue", variant="light"),
+                    project_badge,
                 ],
                 gap="sm",
             ),
             dmc.Text(
-                "Managing data collections for this basic project",
+                description,
                 size="sm",
                 c="gray",
             ),
@@ -565,6 +591,21 @@ def create_basic_project_data_collections_section(data_collections):
             ),
         ],
         gap="xl",
+    )
+
+
+def create_basic_project_data_collections_section(data_collections):
+    """
+    Legacy wrapper for basic projects - redirects to unified function.
+
+    Args:
+        data_collections: List of data collection objects
+
+    Returns:
+        dmc.Stack: Data collections section for basic projects
+    """
+    return create_unified_data_collections_manager_section(
+        data_collections=data_collections, project_type="basic"
     )
 
 
@@ -617,289 +658,12 @@ def create_data_collections_manager_section(workflow=None):
             p="lg",
         )
 
+    # Use the unified function for advanced projects with selected workflow
     data_collections = workflow.data_collections if workflow else []
+    workflow_name = getattr(workflow, "name", "Unknown Workflow")
 
-    # Overview cards
-    overview_cards = dmc.SimpleGrid(
-        cols=2,
-        children=[
-            # Total Collections card
-            dmc.Card(
-                [
-                    dmc.Stack(
-                        [
-                            dmc.Group(
-                                [
-                                    DashIconify(
-                                        icon="mdi:database-outline",
-                                        width=20,
-                                        color=colors["blue"],
-                                    ),
-                                    dmc.Text("Total Collections", fw="bold", size="sm"),
-                                ],
-                                justify="center",
-                                align="center",
-                                gap="xs",
-                            ),
-                            dmc.Center(
-                                dmc.Text(
-                                    str(len(data_collections)) if data_collections else "0",
-                                    size="xl",
-                                    fw="bold",
-                                    c=colors["blue"],
-                                )
-                            ),
-                            dmc.Center(dmc.Text("data collections", size="xs", c="gray")),
-                        ],
-                        gap="sm",
-                        align="center",
-                    )
-                ],
-                withBorder=True,
-                shadow="sm",
-                radius="md",
-                p="lg",
-            ),
-            # Collection Types card (Aggregate/Metadata split)
-            dmc.Card(
-                [
-                    dmc.Stack(
-                        [
-                            dmc.Group(
-                                [
-                                    DashIconify(
-                                        icon="mdi:tag-multiple",
-                                        width=20,
-                                        color=colors["green"],
-                                    ),
-                                    dmc.Text("Collection Types", fw="bold", size="sm"),
-                                ],
-                                justify="center",
-                                align="center",
-                                gap="xs",
-                            ),
-                            dmc.Group(
-                                [
-                                    dmc.Stack(
-                                        [
-                                            dmc.Text(
-                                                str(
-                                                    sum(
-                                                        1
-                                                        for dc in data_collections
-                                                        if dc.config.metatype
-                                                        and dc.config.metatype.lower()
-                                                        == "aggregate"
-                                                    )
-                                                )
-                                                if data_collections
-                                                else "0",
-                                                size="lg",
-                                                fw="bold",
-                                                c=colors["green"],
-                                                ta="center",
-                                            ),
-                                            dmc.Text("Aggregate", size="xs", c="gray", ta="center"),
-                                        ],
-                                        gap="xs",
-                                        align="center",
-                                    ),
-                                    dmc.Divider(orientation="vertical", style={"height": "40px"}),
-                                    dmc.Stack(
-                                        [
-                                            dmc.Text(
-                                                str(
-                                                    sum(
-                                                        1
-                                                        for dc in data_collections
-                                                        if dc.config.metatype
-                                                        and dc.config.metatype.lower() == "metadata"
-                                                    )
-                                                )
-                                                if data_collections
-                                                else "0",
-                                                size="lg",
-                                                fw="bold",
-                                                c=colors["green"],
-                                                ta="center",
-                                            ),
-                                            dmc.Text("Metadata", size="xs", c="gray", ta="center"),
-                                        ],
-                                        gap="xs",
-                                        align="center",
-                                    ),
-                                ],
-                                justify="space-around",
-                                align="center",
-                            ),
-                        ],
-                        gap="md",
-                        align="center",
-                    )
-                ],
-                withBorder=True,
-                shadow="sm",
-                radius="md",
-                p="lg",
-            ),
-            # # Total Size card - commented out as requested
-            # dmc.Card(
-            #     [
-            #         dmc.Group(
-            #             [
-            #                 DashIconify(
-            #                     icon="mdi:harddisk",
-            #                     width=24,
-            #                     color=colors["orange"],
-            #                 ),
-            #                 dmc.Text("Total Size", fw="bold"),
-            #             ],
-            #             justify="space-between",
-            #         ),
-            #         dmc.Text("Coming Soon", size="xl", fw="bold", c=colors["orange"]),
-            #         dmc.Text("storage calculation", size="sm", c="gray"),
-            #     ],
-            #     withBorder=True,
-            #     shadow="sm",
-            #     radius="md",
-            #     p="lg",
-            # ),
-        ],
-    )
-
-    # Data collections list
-    if data_collections:
-        dc_items = []
-        for dc in data_collections:
-            dc_card = html.Div(
-                [
-                    dmc.Card(
-                        [
-                            dmc.Group(
-                                [
-                                    DashIconify(
-                                        icon="mdi:table"
-                                        if dc.config.type.lower() == "table"
-                                        else "mdi:file-document",
-                                        width=20,
-                                        color=colors["teal"],
-                                    ),
-                                    dmc.Badge(dc.config.type, color="blue", size="xs"),
-                                    dmc.Badge(
-                                        dc.config.metatype or "Unknown",
-                                        color="gray",
-                                        size="xs",
-                                    ),
-                                    dmc.Text(dc.data_collection_tag, fw="bold", size="sm"),
-                                ],
-                                gap="sm",
-                                align="center",
-                            ),
-                        ],
-                        withBorder=True,
-                        shadow="xs",
-                        radius="md",
-                        p="sm",
-                        style={
-                            "cursor": "pointer",
-                            "transition": "box-shadow 0.2s ease",
-                        },
-                    )
-                ],
-                id={"type": "data-collection-card", "index": dc.data_collection_tag},
-                n_clicks=0,
-                style={"cursor": "pointer"},
-            )
-            dc_items.append(dc_card)
-
-        data_collections_list = dmc.Stack(dc_items, gap="sm")
-    else:
-        data_collections_list = dmc.Center(
-            [
-                dmc.Stack(
-                    [
-                        DashIconify(
-                            icon="mdi:database-off-outline",
-                            width=48,
-                            color="gray",
-                            style={"opacity": 0.5},
-                        ),
-                        dmc.Text(
-                            "No data collections in this workflow",
-                            size="lg",
-                            c="gray",
-                            ta="center",
-                        ),
-                    ],
-                    align="center",
-                    gap="sm",
-                )
-            ],
-            p="xl",
-        )
-
-    return dmc.Stack(
-        [
-            dmc.Group(
-                [
-                    DashIconify(icon="mdi:database", width=24, color=colors["teal"]),
-                    dmc.Text("Data Collections Manager", fw="bold", size="lg"),
-                    dmc.Badge(f"Workflow: {workflow.name}", color="blue", variant="light"),
-                ],
-                gap="sm",
-            ),
-            dmc.Text(
-                f"Managing data collections for the {workflow.name} workflow",
-                size="sm",
-                c="gray",
-            ),
-            overview_cards,
-            dmc.Card(
-                [
-                    dmc.Group(
-                        [
-                            dmc.Text("Data Collections", fw="bold", size="lg"),
-                            dmc.Badge(
-                                f"{len(data_collections)} collections",
-                                color="teal",
-                                variant="light",
-                            ),
-                        ],
-                        gap="md",
-                        align="center",
-                    ),
-                    dmc.Divider(my="md"),
-                    data_collections_list,
-                ],
-                withBorder=True,
-                shadow="sm",
-                radius="md",
-                p="lg",
-                mt="md",
-            ),
-            # Data Collection Viewer Section
-            dmc.Card(
-                [
-                    dmc.Group(
-                        [
-                            DashIconify(icon="mdi:eye", width=24, color=colors["blue"]),
-                            dmc.Text("Data Collection Viewer", fw="bold", size="lg"),
-                            dmc.Badge("Select a Data Collection", color="gray", variant="light"),
-                        ],
-                        gap="md",
-                        align="center",
-                    ),
-                    dmc.Divider(my="md"),
-                    html.Div(id="data-collection-viewer-content"),
-                ],
-                withBorder=True,
-                shadow="sm",
-                radius="md",
-                p="lg",
-                mt="xl",
-            ),
-        ],
-        gap="xl",
+    return create_unified_data_collections_manager_section(
+        data_collections=data_collections, project_type="advanced", workflow_name=workflow_name
     )
 
 
