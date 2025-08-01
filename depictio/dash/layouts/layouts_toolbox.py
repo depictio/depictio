@@ -908,3 +908,461 @@ def create_data_collection_modal(
     )
 
     return modal, modal_id
+
+
+def create_data_collection_overwrite_modal(
+    opened=False,
+    id_prefix="data-collection-overwrite",
+    data_collection_name="",
+    data_collection_id="",
+):
+    """
+    Creates a modal for overwriting data collection files with schema validation.
+
+    Parameters:
+    - opened: Whether the modal is initially open
+    - id_prefix: Prefix for all IDs in the modal
+    - data_collection_name: Name of the data collection being overwritten
+    - data_collection_id: ID of the data collection being overwritten
+
+    Returns:
+    - modal: The overwrite modal
+    - modal_id: The ID of the modal for callbacks
+    """
+    modal_id = f"{id_prefix}-modal"
+
+    modal = dmc.Modal(
+        opened=opened,
+        id=modal_id,
+        centered=True,
+        withCloseButton=True,
+        closeOnClickOutside=False,
+        closeOnEscape=False,
+        overlayProps={
+            "overlayBlur": 3,
+            "overlayOpacity": 0.55,
+        },
+        shadow="xl",
+        radius="md",
+        size="lg",
+        zIndex=10000,
+        styles={
+            "modal": {
+                "padding": "28px",
+            },
+        },
+        children=[
+            dmc.Stack(
+                gap="lg",
+                children=[
+                    # Header with icon and title
+                    dmc.Group(
+                        justify="center",
+                        gap="sm",
+                        children=[
+                            DashIconify(
+                                icon="mdi:database-refresh",
+                                width=40,
+                                height=40,
+                                color=colors["orange"],
+                            ),
+                            dmc.Title(
+                                "Overwrite Data Collection",
+                                order=2,
+                                c="orange",
+                                style={"margin": 0},
+                            ),
+                        ],
+                    ),
+                    # Divider
+                    dmc.Divider(style={"marginTop": 5, "marginBottom": 5}),
+                    # Info section
+                    dmc.Alert(
+                        f"You are about to overwrite the data in '{data_collection_name}'. The new file must match the existing schema (same column names and types).",
+                        color="yellow",
+                        icon=DashIconify(icon="mdi:information"),
+                        variant="light",
+                    ),
+                    # File upload section
+                    dmc.Stack(
+                        gap="sm",
+                        children=[
+                            dmc.Text(
+                                "Upload New File",
+                                size="sm",
+                                fw="bold",
+                                c="gray",
+                            ),
+                            dmc.Text(
+                                "Select a file to replace the existing data (maximum 5MB)",
+                                size="xs",
+                                c="gray",
+                            ),
+                            dcc.Loading(
+                                id=f"{id_prefix}-upload-loading",
+                                type="default",
+                                children=[
+                                    dcc.Upload(
+                                        id=f"{id_prefix}-file-upload",
+                                        children=dmc.Paper(
+                                            children=[
+                                                dmc.Stack(
+                                                    align="center",
+                                                    gap="sm",
+                                                    children=[
+                                                        DashIconify(
+                                                            icon="mdi:cloud-upload",
+                                                            width=48,
+                                                            height=48,
+                                                            color="gray",
+                                                        ),
+                                                        dmc.Text(
+                                                            "Drag and drop a file here, or click to select",
+                                                            ta="center",
+                                                            size="sm",
+                                                            c="gray",
+                                                        ),
+                                                        dmc.Text(
+                                                            "Maximum file size: 5MB",
+                                                            ta="center",
+                                                            size="xs",
+                                                            c="gray",
+                                                        ),
+                                                    ],
+                                                )
+                                            ],
+                                            withBorder=True,
+                                            radius="md",
+                                            p="xl",
+                                            style={
+                                                "borderStyle": "dashed",
+                                                "borderWidth": "2px",
+                                                "cursor": "pointer",
+                                                "minHeight": "120px",
+                                                "display": "flex",
+                                                "alignItems": "center",
+                                                "justifyContent": "center",
+                                            },
+                                        ),
+                                        style={
+                                            "width": "100%",
+                                            "minHeight": "120px",
+                                        },
+                                        multiple=False,
+                                        max_size=5 * 1024 * 1024,  # 5MB in bytes
+                                    ),
+                                ],
+                            ),
+                            # File info display
+                            html.Div(
+                                id=f"{id_prefix}-file-info",
+                                children=[],
+                            ),
+                            # Schema validation results
+                            html.Div(
+                                id=f"{id_prefix}-schema-validation",
+                                children=[],
+                            ),
+                        ],
+                    ),
+                    # Error message display (hidden by default)
+                    dmc.Alert(
+                        "",
+                        id=f"{id_prefix}-error-alert",
+                        color="red",
+                        icon=DashIconify(icon="mdi:alert"),
+                        style={"display": "none"},
+                        variant="filled",
+                    ),
+                    # Hidden inputs to store data collection info
+                    dcc.Store(id=f"{id_prefix}-dc-name", data=data_collection_name),
+                    dcc.Store(id=f"{id_prefix}-dc-id", data=data_collection_id),
+                    # Buttons
+                    dmc.Group(
+                        justify="flex-end",
+                        gap="md",
+                        mt="lg",
+                        children=[
+                            dmc.Button(
+                                "Cancel",
+                                variant="outline",
+                                color="gray",
+                                radius="md",
+                                id=f"cancel-{id_prefix}-button",
+                            ),
+                            dmc.Button(
+                                "Overwrite Data Collection",
+                                id=f"confirm-{id_prefix}-submit",
+                                color="orange",
+                                radius="md",
+                                leftSection=DashIconify(icon="mdi:database-refresh", width=16),
+                                disabled=True,  # Start disabled
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+        ],
+    )
+
+    return modal, modal_id
+
+
+def create_data_collection_edit_name_modal(
+    opened=False,
+    id_prefix="data-collection-edit-name",
+    current_name="",
+    data_collection_id="",
+):
+    """
+    Creates a modal for editing data collection names.
+
+    Parameters:
+    - opened: Whether the modal is initially open
+    - id_prefix: Prefix for all IDs in the modal
+    - current_name: Current name of the data collection
+    - data_collection_id: ID of the data collection being edited
+
+    Returns:
+    - modal: The edit name modal
+    - modal_id: The ID of the modal for callbacks
+    """
+    modal_id = f"{id_prefix}-modal"
+
+    modal = dmc.Modal(
+        opened=opened,
+        id=modal_id,
+        centered=True,
+        withCloseButton=True,
+        closeOnClickOutside=False,
+        closeOnEscape=False,
+        overlayProps={
+            "overlayBlur": 3,
+            "overlayOpacity": 0.55,
+        },
+        shadow="xl",
+        radius="md",
+        size="md",
+        zIndex=10000,
+        styles={
+            "modal": {
+                "padding": "28px",
+            },
+        },
+        children=[
+            dmc.Stack(
+                gap="lg",
+                children=[
+                    # Header with icon and title
+                    dmc.Group(
+                        justify="center",
+                        gap="sm",
+                        children=[
+                            DashIconify(
+                                icon="mdi:pencil",
+                                width=40,
+                                height=40,
+                                color=colors["blue"],
+                            ),
+                            dmc.Title(
+                                "Edit Data Collection Name",
+                                order=2,
+                                c="blue",
+                                style={"margin": 0},
+                            ),
+                        ],
+                    ),
+                    # Divider
+                    dmc.Divider(style={"marginTop": 5, "marginBottom": 5}),
+                    # Form field
+                    dmc.Stack(
+                        gap="md",
+                        children=[
+                            dmc.TextInput(
+                                label="Data Collection Name",
+                                description="Enter a new name for the data collection",
+                                placeholder="Enter new name",
+                                id=f"{id_prefix}-name-input",
+                                value=current_name,
+                                required=True,
+                                leftSection=DashIconify(icon="mdi:tag", width=16),
+                                style={"width": "100%"},
+                            ),
+                        ],
+                    ),
+                    # Error message display (hidden by default)
+                    dmc.Alert(
+                        "",
+                        id=f"{id_prefix}-error-alert",
+                        color="red",
+                        icon=DashIconify(icon="mdi:alert"),
+                        style={"display": "none"},
+                        variant="filled",
+                    ),
+                    # Hidden input to store data collection ID
+                    dcc.Store(id=f"{id_prefix}-dc-id", data=data_collection_id),
+                    # Buttons
+                    dmc.Group(
+                        justify="flex-end",
+                        gap="md",
+                        mt="lg",
+                        children=[
+                            dmc.Button(
+                                "Cancel",
+                                variant="outline",
+                                color="gray",
+                                radius="md",
+                                id=f"cancel-{id_prefix}-button",
+                            ),
+                            dmc.Button(
+                                "Save Changes",
+                                id=f"confirm-{id_prefix}-submit",
+                                color="blue",
+                                radius="md",
+                                leftSection=DashIconify(icon="mdi:content-save", width=16),
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+        ],
+    )
+
+    return modal, modal_id
+
+
+def create_data_collection_delete_modal(
+    opened=False,
+    id_prefix="data-collection-delete",
+    data_collection_name="",
+    data_collection_id="",
+):
+    """
+    Creates a modal for confirming data collection deletion.
+
+    Parameters:
+    - opened: Whether the modal is initially open
+    - id_prefix: Prefix for all IDs in the modal
+    - data_collection_name: Name of the data collection to delete
+    - data_collection_id: ID of the data collection to delete
+
+    Returns:
+    - modal: The delete confirmation modal
+    - modal_id: The ID of the modal for callbacks
+    """
+    modal_id = f"{id_prefix}-modal"
+
+    modal = dmc.Modal(
+        opened=opened,
+        id=modal_id,
+        centered=True,
+        withCloseButton=True,
+        closeOnClickOutside=False,
+        closeOnEscape=False,
+        overlayProps={
+            "overlayBlur": 3,
+            "overlayOpacity": 0.55,
+        },
+        shadow="xl",
+        radius="md",
+        size="md",
+        zIndex=10000,
+        styles={
+            "modal": {
+                "padding": "28px",
+            },
+        },
+        children=[
+            dmc.Stack(
+                gap="lg",
+                children=[
+                    # Header with icon and title
+                    dmc.Group(
+                        justify="center",
+                        gap="sm",
+                        children=[
+                            DashIconify(
+                                icon="mdi:delete-alert",
+                                width=40,
+                                height=40,
+                                color="red",
+                            ),
+                            dmc.Title(
+                                "Delete Data Collection",
+                                order=2,
+                                c="red",
+                                style={"margin": 0},
+                            ),
+                        ],
+                    ),
+                    # Divider
+                    dmc.Divider(style={"marginTop": 5, "marginBottom": 5}),
+                    # Warning message
+                    dmc.Alert(
+                        f"Are you sure you want to permanently delete the data collection '{data_collection_name}'? This action cannot be undone and will remove all associated data.",
+                        color="red",
+                        icon=DashIconify(icon="mdi:alert-circle"),
+                        variant="light",
+                    ),
+                    # Confirmation text
+                    dmc.Stack(
+                        gap="sm",
+                        children=[
+                            dmc.Text(
+                                "This will permanently remove:",
+                                size="sm",
+                                fw="bold",
+                                c="gray",
+                            ),
+                            dmc.List(
+                                [
+                                    dmc.ListItem("All data files and metadata"),
+                                    dmc.ListItem("Delta table information"),
+                                    dmc.ListItem("Any associated visualizations"),
+                                    dmc.ListItem("Join relationships with other collections"),
+                                ],
+                                size="sm",
+                                c="gray",
+                            ),
+                        ],
+                    ),
+                    # Error message display (hidden by default)
+                    dmc.Alert(
+                        "",
+                        id=f"{id_prefix}-error-alert",
+                        color="red",
+                        icon=DashIconify(icon="mdi:alert"),
+                        style={"display": "none"},
+                        variant="filled",
+                    ),
+                    # Hidden inputs to store data collection info
+                    dcc.Store(id=f"{id_prefix}-dc-name", data=data_collection_name),
+                    dcc.Store(id=f"{id_prefix}-dc-id", data=data_collection_id),
+                    # Buttons
+                    dmc.Group(
+                        justify="flex-end",
+                        gap="md",
+                        mt="lg",
+                        children=[
+                            dmc.Button(
+                                "Cancel",
+                                variant="outline",
+                                color="gray",
+                                radius="md",
+                                id=f"cancel-{id_prefix}-button",
+                            ),
+                            dmc.Button(
+                                "Delete Data Collection",
+                                id=f"confirm-{id_prefix}-submit",
+                                color="red",
+                                radius="md",
+                                leftSection=DashIconify(icon="mdi:delete", width=16),
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+        ],
+    )
+
+    return modal, modal_id

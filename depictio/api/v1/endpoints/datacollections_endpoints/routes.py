@@ -218,3 +218,86 @@ async def get_tag_from_id(
     dc_tag = result[0]["data_collection_tag"]
 
     return dc_tag
+
+
+@datacollections_endpoint_router.put("/{data_collection_id}/name")
+async def update_data_collection_name(
+    data_collection_id: str,
+    request_data: dict,
+    current_user: str = Depends(get_current_user),
+):
+    """Update the name of a data collection."""
+    try:
+        data_collection_oid = ObjectId(data_collection_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    new_name = request_data.get("new_name")
+    if not new_name:
+        raise HTTPException(status_code=400, detail="new_name is required")
+
+    # Find the project containing this data collection
+    project = projects_collection.find_one(
+        {
+            "workflows.data_collections._id": data_collection_oid,
+            "$or": [
+                {"permissions.owners._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
+                {"permissions.viewers._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
+            ],
+        }
+    )
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Data collection not found or access denied")
+
+    # Update the data collection name in the project
+    result = projects_collection.update_one(
+        {"_id": project["_id"], "workflows.data_collections._id": data_collection_oid},
+        {"$set": {"workflows.$[].data_collections.$[dc].data_collection_tag": new_name}},
+        array_filters=[{"dc._id": data_collection_oid}],
+    )
+
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Data collection not found")
+
+    return {"message": f"Data collection name updated to '{new_name}' successfully"}
+
+
+@datacollections_endpoint_router.delete("/{data_collection_id}")
+async def delete_data_collection_by_id(
+    data_collection_id: str,
+    current_user: str = Depends(get_current_user),
+):
+    """Delete a data collection by its ID."""
+    try:
+        data_collection_oid = ObjectId(data_collection_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Find the project containing this data collection
+    project = projects_collection.find_one(
+        {
+            "workflows.data_collections._id": data_collection_oid,
+            "$or": [
+                {"permissions.owners._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
+                {"permissions.viewers._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
+            ],
+        }
+    )
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Data collection not found or access denied")
+
+    # Remove the data collection from the project
+    result = projects_collection.update_one(
+        {"_id": project["_id"]},
+        {"$pull": {"workflows.$[].data_collections": {"_id": data_collection_oid}}},
+    )
+
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Data collection not found")
+
+    # TODO: Add cleanup of associated S3 data and delta tables
+    # This would require additional logic to remove files from S3/MinIO storage
+
+    return {"message": "Data collection deleted successfully"}

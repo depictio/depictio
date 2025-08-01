@@ -1130,10 +1130,26 @@ def api_call_create_data_collection(
                 locations=[temp_dir],
             )
 
+            # For Basic projects, create unique workflow tags to avoid duplicates
+            # For Advanced projects, use the standard naming convention
+            project_type = getattr(project, "project_type", "basic")
+
+            if project_type == "basic":
+                # Import time for unique timestamp
+                import time
+
+                timestamp = int(time.time() * 1000)  # milliseconds for uniqueness
+                workflow_name = f"{name}_workflow_{timestamp}"
+                workflow_tag = f"{name}_workflow_{timestamp}"
+            else:
+                # Advanced projects use standard naming
+                workflow_name = f"{name}_workflow"
+                workflow_tag = f"{name}_workflow"
+
             workflow = Workflow(
-                name=f"{name}_workflow",
+                name=workflow_name,
                 engine=WorkflowEngine(name="python", version="3.12"),
-                workflow_tag=f"{name}_workflow",
+                workflow_tag=workflow_tag,
                 config=workflow_config,
                 data_location=workflow_data_location,
                 data_collections=[data_collection],
@@ -1255,3 +1271,342 @@ def api_call_create_data_collection(
             "message": f"Internal error: {str(e)}",
             "status_code": 500,
         }
+
+
+@validate_call(validate_return=True)
+def api_call_edit_data_collection_name(
+    data_collection_id: str, new_name: str, token: str
+) -> dict[str, Any] | None:
+    """
+    Edit the name of a data collection.
+
+    Args:
+        data_collection_id: ID of the data collection to rename
+        new_name: New name for the data collection
+        token: Authorization token
+
+    Returns:
+        Dict with success status and message
+    """
+    try:
+        url = f"{settings.fastapi.url}/depictio/api/v1/datacollections/{data_collection_id}/name"
+        headers = {"Authorization": f"Bearer {token}"}
+        data = {"new_name": new_name}
+
+        logger.info(f"Updating data collection name: {data_collection_id} -> {new_name}")
+
+        response = httpx.put(url, headers=headers, json=data, timeout=30.0)
+        response.raise_for_status()
+
+        result = response.json()
+        logger.info(f"Data collection name updated successfully: {result}")
+        return {"success": True, "message": "Data collection name updated successfully"}
+
+    except httpx.HTTPStatusError as e:
+        logger.error(f"HTTP error updating data collection name: {e.response.status_code}")
+        try:
+            error_detail = e.response.json().get("detail", str(e))
+        except Exception:
+            error_detail = str(e)
+        return {"success": False, "message": f"API error: {error_detail}"}
+    except Exception as e:
+        logger.error(f"Error updating data collection name: {str(e)}")
+        return {"success": False, "message": f"Internal error: {str(e)}"}
+
+
+@validate_call(validate_return=True)
+def api_call_delete_data_collection(data_collection_id: str, token: str) -> dict[str, Any] | None:
+    """
+    Delete a data collection and all associated data.
+
+    Args:
+        data_collection_id: ID of the data collection to delete
+        token: Authorization token
+
+    Returns:
+        Dict with success status and message
+    """
+    try:
+        url = f"{settings.fastapi.url}/depictio/api/v1/datacollections/{data_collection_id}"
+        headers = {"Authorization": f"Bearer {token}"}
+
+        logger.info(f"Deleting data collection: {data_collection_id}")
+
+        response = httpx.delete(url, headers=headers, timeout=60.0)
+        response.raise_for_status()
+
+        result = response.json()
+        logger.info(f"Data collection deleted successfully: {result}")
+        return {"success": True, "message": "Data collection deleted successfully"}
+
+    except httpx.HTTPStatusError as e:
+        logger.error(f"HTTP error deleting data collection: {e.response.status_code}")
+        try:
+            error_detail = e.response.json().get("detail", str(e))
+        except Exception:
+            error_detail = str(e)
+        return {"success": False, "message": f"API error: {error_detail}"}
+    except Exception as e:
+        logger.error(f"Error deleting data collection: {str(e)}")
+        return {"success": False, "message": f"Internal error: {str(e)}"}
+
+
+@validate_call(validate_return=True)
+def api_call_overwrite_data_collection(
+    data_collection_id: str,
+    file_contents: str,
+    filename: str,
+    token: str,
+    file_format: str = "csv",
+    separator: str = ",",
+    compression: str = "none",
+    has_header: bool = True,
+) -> dict[str, Any] | None:
+    """
+    Overwrite a data collection with new file data after schema validation.
+
+    Args:
+        data_collection_id: ID of the data collection to overwrite
+        file_contents: Base64 encoded file contents
+        filename: Name of the uploaded file
+        token: Authorization token
+        file_format: Format of the file (csv, tsv, etc.)
+        separator: Field separator for delimited files
+        compression: Compression format
+        has_header: Whether file has header row
+
+    Returns:
+        Dict with success status and message
+    """
+    import base64
+    import shutil
+    import tempfile
+    from pathlib import Path
+
+    import polars as pl
+    import pymongo
+    from bson import ObjectId
+
+    from depictio.api.v1.configs.config import MONGODB_URL, settings
+    from depictio.cli.cli.utils.helpers import process_data_collection_helper
+    from depictio.models.models.cli import CLIConfig, UserBaseCLIConfig
+    from depictio.models.models.projects import Project
+    from depictio.models.models.workflows import WorkflowDataLocation
+
+    temp_dir = None
+    try:
+        # Create temporary directory for file processing
+        temp_dir = tempfile.mkdtemp()
+        logger.info(f"Created temporary directory: {temp_dir}")
+
+        # Decode and save the uploaded file
+        file_data = base64.b64decode(file_contents.split(",")[1])
+        temp_file_path = Path(temp_dir) / filename
+
+        with open(temp_file_path, "wb") as f:
+            f.write(file_data)
+
+        logger.info(f"Saved file to: {temp_file_path}")
+
+        # Get existing data collection schema for validation
+        client = pymongo.MongoClient(MONGODB_URL)
+        db = client[settings.mongodb.db_name]
+        projects_collection = db["projects"]
+
+        # Find project containing this data collection
+        project = projects_collection.find_one(
+            {"workflows.data_collections._id": ObjectId(data_collection_id)}
+        )
+        if not project:
+            return {"success": False, "message": "Data collection not found"}
+
+        # Find the specific data collection within the project
+        existing_dc = None
+        for workflow in project.get("workflows", []):
+            for dc in workflow.get("data_collections", []):
+                if str(dc.get("_id")) == data_collection_id:
+                    existing_dc = dc
+                    break
+            if existing_dc:
+                break
+
+        if not existing_dc:
+            return {"success": False, "message": "Data collection not found"}
+
+        # Get existing schema from delta table metadata if available
+        existing_schema = existing_dc.get("delta_table_schema")
+        if not existing_schema:
+            return {
+                "success": False,
+                "message": "Cannot validate schema: existing data collection has no schema information",
+            }
+
+        # Build polars kwargs for file reading
+        polars_kwargs = {"has_header": has_header}
+
+        if file_format in ["csv", "tsv"]:
+            polars_kwargs["separator"] = separator
+        if compression != "none":
+            polars_kwargs["compression"] = compression
+
+        # Read and validate new file schema
+        try:
+            if file_format == "csv" or file_format == "tsv":
+                df = pl.read_csv(temp_file_path, **polars_kwargs)
+            elif file_format == "parquet":
+                df = pl.read_parquet(temp_file_path)
+            elif file_format == "feather":
+                df = pl.read_ipc(temp_file_path)
+            elif file_format in ["xls", "xlsx"]:
+                df = pl.read_excel(temp_file_path, **polars_kwargs)
+            else:
+                return {"success": False, "message": f"Unsupported file format: {file_format}"}
+
+            logger.info(f"Read file with shape: {df.shape}")
+
+        except Exception as e:
+            return {"success": False, "message": f"Failed to read file: {str(e)}"}
+
+        # Validate schema matches existing data collection
+        new_columns = set(df.columns)
+        existing_columns = (
+            set(existing_schema.keys()) if isinstance(existing_schema, dict) else set()
+        )
+
+        if new_columns != existing_columns:
+            missing_cols = existing_columns - new_columns
+            extra_cols = new_columns - existing_columns
+            error_msg = "Schema mismatch: "
+            if missing_cols:
+                error_msg += f"Missing columns: {list(missing_cols)}. "
+            if extra_cols:
+                error_msg += f"Extra columns: {list(extra_cols)}. "
+            return {"success": False, "message": error_msg}
+
+        # Validate column types if possible
+        try:
+            for col in df.columns:
+                new_type = str(df[col].dtype)
+                existing_type = (
+                    existing_schema.get(col, {}).get("type")
+                    if isinstance(existing_schema, dict)
+                    else None
+                )
+
+                # Basic type compatibility check
+                if existing_type and not _are_types_compatible(new_type, existing_type):
+                    logger.warning(
+                        f"Type mismatch for column '{col}': new={new_type}, existing={existing_type}"
+                    )
+                    # Don't fail on type mismatch, just warn - polars can handle most conversions
+
+        except Exception as e:
+            logger.warning(f"Could not validate column types: {e}")
+
+        # Proceed with overwrite - reuse existing data collection processing logic
+        tokens_collection = db["tokens"]
+        users_collection = db["users"]
+
+        # Get admin user and token for CLI processing
+        admin_user = users_collection.find_one({"is_admin": True})
+        if not admin_user:
+            return {"success": False, "message": "No admin user found"}
+
+        token_doc = tokens_collection.find_one({"user_id": admin_user["_id"]})
+        if not token_doc:
+            return {"success": False, "message": "No admin token found"}
+
+        # Use the project we already found
+        project_obj = Project.from_mongo(project)
+
+        # Find the workflow containing this data collection
+        target_workflow = None
+        for workflow in project_obj.workflows:
+            for dc in workflow.data_collections:
+                if str(dc.id) == data_collection_id:
+                    target_workflow = workflow
+                    break
+            if target_workflow:
+                break
+
+        if not target_workflow:
+            return {"success": False, "message": "Parent workflow not found"}
+
+        # Create CLI config for processing
+        cli_config = CLIConfig(
+            user=UserBaseCLIConfig(
+                id=admin_user["_id"],
+                email=admin_user["email"],
+                is_admin=admin_user["is_admin"],
+                token=token_doc,
+            ),
+            api_base_url=settings.fastapi.url,
+            s3_storage=settings.minio,
+        )
+
+        # Update the data collection's file location
+        existing_dc_obj = None
+        for dc in target_workflow.data_collections:
+            if str(dc.id) == data_collection_id:
+                existing_dc_obj = dc
+                break
+
+        if existing_dc_obj:
+            # Update file location to point to new file
+            existing_dc_obj.data_location = WorkflowDataLocation(
+                structure="flat", locations=[str(temp_file_path)]
+            )
+
+        # Process the updated data collection
+        process_result = process_data_collection_helper(
+            CLI_config=cli_config,
+            wf=target_workflow,
+            dc_id=data_collection_id,
+            mode="process",
+            command_parameters={"overwrite": True},
+        )
+
+        if process_result.get("result") != "success":
+            error_msg = process_result.get("message", "Processing failed")
+            return {"success": False, "message": f"Failed to process data: {error_msg}"}
+
+        logger.info("Data collection overwrite completed successfully")
+        return {
+            "success": True,
+            "message": f"Data collection overwritten successfully with {df.shape[0]} rows",
+        }
+
+    except Exception as e:
+        logger.error(f"Error overwriting data collection: {str(e)}")
+        import traceback
+
+        traceback.print_exc()
+        return {"success": False, "message": f"Internal error: {str(e)}"}
+
+    finally:
+        # Always cleanup temp directory
+        if temp_dir:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            logger.info(f"Cleaned up temporary directory: {temp_dir}")
+
+
+def _are_types_compatible(new_type: str, existing_type: str) -> bool:
+    """Check if two data types are compatible for schema validation."""
+    # Basic type compatibility mapping
+    numeric_types = ["Int64", "Float64", "Int32", "Float32", "int", "float", "numeric"]
+    string_types = ["Utf8", "String", "str", "string", "text"]
+    boolean_types = ["Boolean", "bool", "boolean"]
+    date_types = ["Date", "Datetime", "date", "datetime", "timestamp"]
+
+    # Normalize type names
+    new_type_lower = new_type.lower()
+    existing_type_lower = existing_type.lower()
+
+    # Check if both are in the same type family
+    for type_family in [numeric_types, string_types, boolean_types, date_types]:
+        if new_type_lower in [t.lower() for t in type_family] and existing_type_lower in [
+            t.lower() for t in type_family
+        ]:
+            return True
+
+    return False

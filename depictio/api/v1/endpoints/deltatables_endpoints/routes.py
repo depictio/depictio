@@ -70,9 +70,9 @@ async def upsert_deltatable(
         )
     else:
         # Search for the correct data collection inside workflows
-        dc_config = None
+        dc_data = None
         for workflow in project.get("workflows", []):  # Iterate through workflows
-            dc_config = next(
+            dc_data = next(
                 (
                     dc
                     for dc in workflow.get("data_collections", [])
@@ -80,17 +80,22 @@ async def upsert_deltatable(
                 ),
                 None,
             )
-            if dc_config:  # Stop if found
+            if dc_data:  # Stop if found
                 break
-            else:
-                dc_config = dc_config.get("config", None)  # type: ignore[possibly-unbound-attribute]
+
+    # Validate that data collection was found
+    if not dc_data:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Data collection with ID {data_collection_oid} not found in any project workflow.",
+        )
 
     # read deltatable using polars
     df = pl.read_delta(payload.delta_table_location, storage_options=polars_s3_config)
     logger.info(f"DeltaTableAggregated read from MinIO at location: {payload.delta_table_location}")
 
     # Precompute columns specs
-    results = precompute_columns_specs(df, agg_functions, dc_config)  # type: ignore[invalid-argument-type]
+    results = precompute_columns_specs(df, agg_functions, dc_data)
 
     # 6. Compute hash
     # Compute hash rows (returns a Polars Series)

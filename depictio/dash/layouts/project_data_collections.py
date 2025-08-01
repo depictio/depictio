@@ -31,7 +31,12 @@ from depictio.dash.components.depictio_cytoscape_joins import (
     generate_sample_elements,
     register_joins_callbacks,
 )
-from depictio.dash.layouts.layouts_toolbox import create_data_collection_modal
+from depictio.dash.layouts.layouts_toolbox import (
+    create_data_collection_delete_modal,
+    create_data_collection_edit_name_modal,
+    create_data_collection_modal,
+    create_data_collection_overwrite_modal,
+)
 from depictio.models.models.projects import Project
 
 
@@ -458,22 +463,81 @@ def create_unified_data_collections_manager_section(
                         [
                             dmc.Group(
                                 [
-                                    DashIconify(
-                                        icon="mdi:table"
-                                        if dc.config.type.lower() == "table"
-                                        else "mdi:file-document",
-                                        width=20,
-                                        color=colors["teal"],
+                                    # Main data collection info
+                                    dmc.Group(
+                                        [
+                                            DashIconify(
+                                                icon="mdi:table"
+                                                if dc.config.type.lower() == "table"
+                                                else "mdi:file-document",
+                                                width=20,
+                                                color=colors["teal"],
+                                            ),
+                                            dmc.Badge(dc.config.type, color="blue", size="xs"),
+                                            dmc.Badge(
+                                                dc.config.metatype or "Unknown",
+                                                color="gray",
+                                                size="xs",
+                                            ),
+                                            dmc.Text(dc.data_collection_tag, fw="bold", size="sm"),
+                                        ],
+                                        gap="sm",
+                                        align="center",
+                                        style={"flex": 1},
                                     ),
-                                    dmc.Badge(dc.config.type, color="blue", size="xs"),
-                                    dmc.Badge(
-                                        dc.config.metatype or "Unknown",
-                                        color="gray",
-                                        size="xs",
+                                    # Action buttons
+                                    dmc.Group(
+                                        [
+                                            dmc.Tooltip(
+                                                dmc.ActionIcon(
+                                                    DashIconify(
+                                                        icon="mdi:database-refresh", width=16
+                                                    ),
+                                                    id={
+                                                        "type": "dc-overwrite-button",
+                                                        "index": dc.data_collection_tag,
+                                                    },
+                                                    variant="subtle",
+                                                    color="orange",
+                                                    size="sm",
+                                                ),
+                                                label="Overwrite data",
+                                                position="top",
+                                            ),
+                                            dmc.Tooltip(
+                                                dmc.ActionIcon(
+                                                    DashIconify(icon="mdi:pencil", width=16),
+                                                    id={
+                                                        "type": "dc-edit-name-button",
+                                                        "index": dc.data_collection_tag,
+                                                    },
+                                                    variant="subtle",
+                                                    color="blue",
+                                                    size="sm",
+                                                ),
+                                                label="Edit name",
+                                                position="top",
+                                            ),
+                                            dmc.Tooltip(
+                                                dmc.ActionIcon(
+                                                    DashIconify(icon="mdi:delete", width=16),
+                                                    id={
+                                                        "type": "dc-delete-button",
+                                                        "index": dc.data_collection_tag,
+                                                    },
+                                                    variant="subtle",
+                                                    color="red",
+                                                    size="sm",
+                                                ),
+                                                label="Delete",
+                                                position="top",
+                                            ),
+                                        ],
+                                        gap="xs",
+                                        align="center",
                                     ),
-                                    dmc.Text(dc.data_collection_tag, fw="bold", size="sm"),
                                 ],
-                                gap="sm",
+                                justify="space-between",
                                 align="center",
                             ),
                         ],
@@ -611,6 +675,8 @@ def create_unified_data_collections_manager_section(
                 p="lg",
                 mt="xl",
             ),
+            # Hidden modals for data collection actions
+            html.Div(id="dc-action-modals-container", children=[]),
         ],
         gap="xl",
     )
@@ -2201,6 +2267,507 @@ def register_project_data_collections_callbacks(app):
             import traceback
 
             traceback.print_exc()
+            return (
+                dash.no_update,
+                dash.no_update,
+                f"Unexpected error: {str(e)}",
+                {"display": "block"},
+            )
+
+    # Data collection action buttons callbacks
+    @app.callback(
+        Output("dc-action-modals-container", "children"),
+        [
+            Input({"type": "dc-overwrite-button", "index": dash.ALL}, "n_clicks"),
+            Input({"type": "dc-edit-name-button", "index": dash.ALL}, "n_clicks"),
+            Input({"type": "dc-delete-button", "index": dash.ALL}, "n_clicks"),
+        ],
+        [
+            dash.State("project-data-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def handle_dc_action_buttons(overwrite_clicks, edit_clicks, delete_clicks, project_data):
+        """Handle data collection action button clicks by creating appropriate modals."""
+        ctx_trigger = ctx.triggered_id
+
+        if not ctx_trigger or not any(
+            [any(overwrite_clicks), any(edit_clicks), any(delete_clicks)]
+        ):
+            return []
+
+        if not project_data:
+            return []
+
+        # Get the data collection tag from the clicked button
+        dc_tag = ctx_trigger["index"]
+
+        # Find the data collection info from project data
+        data_collections = project_data.get("data_collections", [])
+        dc_info = None
+        for dc in data_collections:
+            if dc.get("data_collection_tag") == dc_tag:
+                dc_info = dc
+                break
+
+        if not dc_info:
+            return []
+
+        dc_name = dc_info.get("data_collection_tag", "Unknown")
+        dc_id = str(dc_info.get("id", ""))
+
+        # Create the appropriate modal based on which button was clicked
+        if ctx_trigger["type"] == "dc-overwrite-button":
+            modal, modal_id = create_data_collection_overwrite_modal(
+                opened=True,
+                data_collection_name=dc_name,
+                data_collection_id=dc_id,
+            )
+            return [modal]
+        elif ctx_trigger["type"] == "dc-edit-name-button":
+            modal, modal_id = create_data_collection_edit_name_modal(
+                opened=True,
+                current_name=dc_name,
+                data_collection_id=dc_id,
+            )
+            return [modal]
+        elif ctx_trigger["type"] == "dc-delete-button":
+            modal, modal_id = create_data_collection_delete_modal(
+                opened=True,
+                data_collection_name=dc_name,
+                data_collection_id=dc_id,
+            )
+            return [modal]
+
+        return []
+
+    # Modal close callbacks
+    @app.callback(
+        Output("data-collection-overwrite-modal", "opened", allow_duplicate=True),
+        [Input("cancel-data-collection-overwrite-button", "n_clicks")],
+        prevent_initial_call=True,
+    )
+    def close_overwrite_modal(cancel_clicks):
+        """Close overwrite modal when cancel is clicked."""
+        if cancel_clicks:
+            return False
+        return dash.no_update
+
+    @app.callback(
+        Output("data-collection-edit-name-modal", "opened", allow_duplicate=True),
+        [Input("cancel-data-collection-edit-name-button", "n_clicks")],
+        prevent_initial_call=True,
+    )
+    def close_edit_name_modal(cancel_clicks):
+        """Close edit name modal when cancel is clicked."""
+        if cancel_clicks:
+            return False
+        return dash.no_update
+
+    @app.callback(
+        Output("data-collection-delete-modal", "opened", allow_duplicate=True),
+        [Input("cancel-data-collection-delete-button", "n_clicks")],
+        prevent_initial_call=True,
+    )
+    def close_delete_modal(cancel_clicks):
+        """Close delete modal when cancel is clicked."""
+        if cancel_clicks:
+            return False
+        return dash.no_update
+
+    # Edit name functionality callbacks
+    @app.callback(
+        [
+            Output("data-collection-edit-name-modal", "opened", allow_duplicate=True),
+            Output("project-data-store", "data", allow_duplicate=True),
+            Output("data-collection-edit-name-error-alert", "children", allow_duplicate=True),
+            Output("data-collection-edit-name-error-alert", "style", allow_duplicate=True),
+        ],
+        [Input("confirm-data-collection-edit-name-submit", "n_clicks")],
+        [
+            dash.State("data-collection-edit-name-name-input", "value"),
+            dash.State("data-collection-edit-name-dc-id", "data"),
+            dash.State("project-data-store", "data"),
+            dash.State("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def handle_edit_name_submit(submit_clicks, new_name, dc_id, project_data, local_data):
+        """Handle edit name modal submission."""
+        if not submit_clicks or not new_name or not dc_id:
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+        try:
+            from datetime import datetime
+
+            from depictio.dash.api_calls import api_call_edit_data_collection_name
+
+            logger.info(f"Editing data collection name: {dc_id} -> {new_name}")
+
+            if not local_data or not local_data.get("access_token"):
+                return (
+                    dash.no_update,
+                    dash.no_update,
+                    "Authentication required",
+                    {"display": "block"},
+                )
+
+            result = api_call_edit_data_collection_name(dc_id, new_name, local_data["access_token"])
+
+            if result and result.get("success"):
+                logger.info(f"Data collection name updated successfully: {result.get('message')}")
+                # Update project data store to trigger refresh
+                updated_project_data = project_data.copy()
+                updated_project_data["refresh_timestamp"] = datetime.now().isoformat()
+                # Close modal and refresh project data (hide error alert)
+                return False, updated_project_data, "", {"display": "none"}
+            else:
+                error_msg = result.get("message", "Unknown error") if result else "API call failed"
+                logger.error(f"Failed to update data collection name: {error_msg}")
+                return (
+                    dash.no_update,
+                    dash.no_update,
+                    f"Failed to update name: {error_msg}",
+                    {"display": "block"},
+                )
+
+        except Exception as e:
+            logger.error(f"Error updating data collection name: {str(e)}")
+            return (
+                dash.no_update,
+                dash.no_update,
+                f"Unexpected error: {str(e)}",
+                {"display": "block"},
+            )
+
+    # Delete functionality callbacks
+    @app.callback(
+        [
+            Output("data-collection-delete-modal", "opened", allow_duplicate=True),
+            Output("project-data-store", "data", allow_duplicate=True),
+            Output("data-collection-delete-error-alert", "children", allow_duplicate=True),
+            Output("data-collection-delete-error-alert", "style", allow_duplicate=True),
+        ],
+        [Input("confirm-data-collection-delete-submit", "n_clicks")],
+        [
+            dash.State("data-collection-delete-dc-id", "data"),
+            dash.State("project-data-store", "data"),
+            dash.State("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def handle_delete_submit(submit_clicks, dc_id, project_data, local_data):
+        """Handle delete modal submission."""
+        if not submit_clicks or not dc_id:
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+        try:
+            from datetime import datetime
+
+            from depictio.dash.api_calls import api_call_delete_data_collection
+
+            logger.info(f"Deleting data collection: {dc_id}")
+
+            if not local_data or not local_data.get("access_token"):
+                return (
+                    dash.no_update,
+                    dash.no_update,
+                    "Authentication required",
+                    {"display": "block"},
+                )
+
+            result = api_call_delete_data_collection(dc_id, local_data["access_token"])
+
+            if result and result.get("success"):
+                logger.info(f"Data collection deleted successfully: {result.get('message')}")
+                # Update project data store to trigger refresh
+                updated_project_data = project_data.copy()
+                updated_project_data["refresh_timestamp"] = datetime.now().isoformat()
+                # Close modal and refresh project data (hide error alert)
+                return False, updated_project_data, "", {"display": "none"}
+            else:
+                error_msg = result.get("message", "Unknown error") if result else "API call failed"
+                logger.error(f"Failed to delete data collection: {error_msg}")
+                return (
+                    dash.no_update,
+                    dash.no_update,
+                    f"Failed to delete: {error_msg}",
+                    {"display": "block"},
+                )
+
+        except Exception as e:
+            logger.error(f"Error deleting data collection: {str(e)}")
+            return (
+                dash.no_update,
+                dash.no_update,
+                f"Unexpected error: {str(e)}",
+                {"display": "block"},
+            )
+
+    # Overwrite functionality callbacks
+    @app.callback(
+        Output("confirm-data-collection-overwrite-submit", "disabled"),
+        [
+            Input("data-collection-overwrite-file-upload", "contents"),
+            Input("data-collection-overwrite-schema-validation", "children"),
+        ],
+    )
+    def update_overwrite_submit_button_state(file_contents, validation_result):
+        """Enable/disable overwrite submit button based on file upload and validation."""
+        if not file_contents:
+            return True
+
+        # Check if validation was successful
+        if isinstance(validation_result, list) and len(validation_result) > 0:
+            # Look for a successful validation indicator
+            for child in validation_result:
+                if hasattr(child, "props") and hasattr(child.props, "color"):
+                    if child.props.color == "green":  # Success validation
+                        return False
+
+        return True
+
+    @app.callback(
+        [
+            Output("data-collection-overwrite-file-info", "children"),
+            Output("data-collection-overwrite-schema-validation", "children"),
+        ],
+        [Input("data-collection-overwrite-file-upload", "contents")],
+        [
+            dash.State("data-collection-overwrite-file-upload", "filename"),
+            dash.State("data-collection-overwrite-dc-id", "data"),
+            dash.State("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def handle_overwrite_file_upload(file_contents, filename, dc_id, local_data):
+        """Handle file upload for overwrite modal with schema validation."""
+        if not file_contents or not filename or not dc_id:
+            return [], []
+
+        try:
+            import base64
+            import tempfile
+            from pathlib import Path
+
+            import polars as pl
+            import pymongo
+            from bson import ObjectId
+
+            from depictio.api.v1.configs.config import MONGODB_URL, settings
+
+            # Decode and save the uploaded file temporarily for validation
+            file_data = base64.b64decode(file_contents.split(",")[1])
+            temp_file_path = Path(tempfile.gettempdir()) / filename
+
+            with open(temp_file_path, "wb") as f:
+                f.write(file_data)
+
+            # Get file size
+            file_size = len(file_data)
+            file_size_mb = file_size / (1024 * 1024)
+
+            file_info = dmc.Alert(
+                f"File uploaded: {filename} ({file_size_mb:.2f} MB)",
+                color="blue",
+                icon=DashIconify(icon="mdi:file-check"),
+                variant="light",
+            )
+
+            # Get existing data collection schema for validation
+            client = pymongo.MongoClient(MONGODB_URL)
+            db = client[settings.mongodb.db_name]
+            projects_collection = db["projects"]
+
+            # Find project containing this data collection
+            project = projects_collection.find_one(
+                {"workflows.data_collections._id": ObjectId(dc_id)}
+            )
+            if not project:
+                return [file_info], [dmc.Alert("Data collection not found", color="red")]
+
+            # Find the specific data collection within the project
+            existing_dc = None
+            for workflow in project.get("workflows", []):
+                for dc in workflow.get("data_collections", []):
+                    if str(dc.get("_id")) == dc_id:
+                        existing_dc = dc
+                        break
+                if existing_dc:
+                    break
+
+            if not existing_dc:
+                return [file_info], [dmc.Alert("Data collection not found", color="red")]
+
+            existing_schema = existing_dc.get("delta_table_schema")
+            if not existing_schema:
+                return [file_info], [
+                    dmc.Alert(
+                        "Cannot validate schema: existing data collection has no schema information",
+                        color="yellow",
+                    )
+                ]
+
+            # Try to read the new file
+            try:
+                # Determine file format from extension
+                file_ext = Path(filename).suffix.lower()
+                if file_ext == ".csv":
+                    df = pl.read_csv(temp_file_path)
+                elif file_ext == ".tsv":
+                    df = pl.read_csv(temp_file_path, separator="\t")
+                elif file_ext == ".parquet":
+                    df = pl.read_parquet(temp_file_path)
+                elif file_ext == ".feather":
+                    df = pl.read_ipc(temp_file_path)
+                elif file_ext in [".xls", ".xlsx"]:
+                    df = pl.read_excel(temp_file_path)
+                else:
+                    return [file_info], [
+                        dmc.Alert(f"Unsupported file format: {file_ext}", color="red")
+                    ]
+
+                # Validate schema
+                new_columns = set(df.columns)
+                existing_columns = (
+                    set(existing_schema.keys()) if isinstance(existing_schema, dict) else set()
+                )
+
+                if new_columns == existing_columns:
+                    validation_result = [
+                        dmc.Alert(
+                            f"✓ Schema validation passed! File contains {df.shape[0]} rows and {df.shape[1]} columns with matching schema.",
+                            color="green",
+                            icon=DashIconify(icon="mdi:check-circle"),
+                            variant="light",
+                        )
+                    ]
+                else:
+                    missing_cols = existing_columns - new_columns
+                    extra_cols = new_columns - existing_columns
+                    error_msg = "Schema mismatch: "
+                    if missing_cols:
+                        error_msg += f"Missing columns: {list(missing_cols)}. "
+                    if extra_cols:
+                        error_msg += f"Extra columns: {list(extra_cols)}. "
+
+                    validation_result = [
+                        dmc.Alert(
+                            error_msg,
+                            color="red",
+                            icon=DashIconify(icon="mdi:alert-circle"),
+                            variant="light",
+                        )
+                    ]
+
+            except Exception as e:
+                validation_result = [
+                    dmc.Alert(
+                        f"Failed to read file: {str(e)}",
+                        color="red",
+                        icon=DashIconify(icon="mdi:alert"),
+                    )
+                ]
+
+            # Cleanup temp file
+            temp_file_path.unlink(missing_ok=True)
+
+            return [file_info], validation_result
+
+        except Exception as e:
+            return [
+                dmc.Alert(
+                    f"File processing error: {str(e)}",
+                    color="red",
+                    icon=DashIconify(icon="mdi:alert"),
+                )
+            ], []
+
+    @app.callback(
+        [
+            Output("data-collection-overwrite-modal", "opened", allow_duplicate=True),
+            Output("project-data-store", "data", allow_duplicate=True),
+            Output("data-collection-overwrite-error-alert", "children", allow_duplicate=True),
+            Output("data-collection-overwrite-error-alert", "style", allow_duplicate=True),
+        ],
+        [Input("confirm-data-collection-overwrite-submit", "n_clicks")],
+        [
+            dash.State("data-collection-overwrite-file-upload", "contents"),
+            dash.State("data-collection-overwrite-file-upload", "filename"),
+            dash.State("data-collection-overwrite-dc-id", "data"),
+            dash.State("project-data-store", "data"),
+            dash.State("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def handle_overwrite_submit(
+        submit_clicks, file_contents, filename, dc_id, project_data, local_data
+    ):
+        """Handle overwrite modal submission."""
+        if not submit_clicks or not file_contents or not filename or not dc_id:
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+        try:
+            from datetime import datetime
+
+            from depictio.dash.api_calls import api_call_overwrite_data_collection
+
+            logger.info(f"Overwriting data collection: {dc_id} with file: {filename}")
+
+            if not local_data or not local_data.get("access_token"):
+                return (
+                    dash.no_update,
+                    dash.no_update,
+                    "Authentication required",
+                    {"display": "block"},
+                )
+
+            # Determine file format and parameters from filename
+            from pathlib import Path
+
+            file_ext = Path(filename).suffix.lower()
+            file_format = "csv"
+            separator = ","
+            if file_ext == ".tsv":
+                file_format = "tsv"
+                separator = "\t"
+            elif file_ext == ".parquet":
+                file_format = "parquet"
+            elif file_ext == ".feather":
+                file_format = "feather"
+            elif file_ext in [".xls", ".xlsx"]:
+                file_format = file_ext[1:]  # Remove the dot
+
+            result = api_call_overwrite_data_collection(
+                data_collection_id=dc_id,
+                file_contents=file_contents,
+                filename=filename,
+                token=local_data["access_token"],
+                file_format=file_format,
+                separator=separator,
+                compression="none",
+                has_header=True,
+            )
+
+            if result and result.get("success"):
+                logger.info(f"Data collection overwritten successfully: {result.get('message')}")
+                # Update project data store to trigger refresh
+                updated_project_data = project_data.copy()
+                updated_project_data["refresh_timestamp"] = datetime.now().isoformat()
+                # Close modal and refresh project data (hide error alert)
+                return False, updated_project_data, "", {"display": "none"}
+            else:
+                error_msg = result.get("message", "Unknown error") if result else "API call failed"
+                logger.error(f"Failed to overwrite data collection: {error_msg}")
+                return (
+                    dash.no_update,
+                    dash.no_update,
+                    f"Failed to overwrite: {error_msg}",
+                    {"display": "block"},
+                )
+
+        except Exception as e:
+            logger.error(f"Error overwriting data collection: {str(e)}")
             return (
                 dash.no_update,
                 dash.no_update,
