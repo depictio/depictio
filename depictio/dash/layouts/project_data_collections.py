@@ -1552,24 +1552,7 @@ def generate_cytoscape_elements_from_project_data(data_collections):
 
     logger.debug(f"All join columns mapping: {all_join_columns}")
 
-    # Calculate positions to center content in cytoscape viewport
-    viewport_width = 1000  # More conservative viewport width estimate
-    viewport_height = 600  # Cytoscape component viewport height
-    dc_width = 350  # Width per data collection including spacing
-    total_content_width = len(data_collections) * dc_width
-
-    # Better horizontal centering
-    start_x = max(50, (viewport_width - total_content_width) / 2 + 100)
-
-    # Vertical centering - calculate average height and center vertically
-    avg_columns = (
-        sum(len(dc_columns.get(dc.get("data_collection_tag", ""), [])) for dc in data_collections)
-        / len(data_collections)
-        if data_collections
-        else 5
-    )
-    estimated_content_height = avg_columns * 45 + 100  # Based on column spacing
-    start_y = max(100, (viewport_height - estimated_content_height) / 2 + 50)
+    # Positioning approach matching the reference file prototype
 
     # Create data collection groups and column nodes
     for i, dc in enumerate(data_collections):
@@ -1584,12 +1567,16 @@ def generate_cytoscape_elements_from_project_data(data_collections):
         # Get columns for this DC
         columns = dc_columns.get(dc_tag, ["id", "name"])
         num_columns = len(columns)
-        column_spacing = 45  # Consistent spacing
-        box_height = max(320, num_columns * column_spacing + 100)
 
-        # Center the background box on the column range
-        first_column_y = start_y
-        last_column_y = start_y + ((num_columns - 1) * column_spacing)
+        # Calculate positions exactly like reference file (lines 510, 515, 518-520)
+        x_offset = 300 + i * 350  # More space between data collections horizontally
+        box_height = max(
+            320, num_columns * 45 + 100
+        )  # Min 320px, or 45px per column + more padding
+
+        # Center the background box on the column range (exact copy from reference)
+        first_column_y = 140
+        last_column_y = 140 + ((num_columns - 1) * 50)
         center_y = (first_column_y + last_column_y) / 2
 
         # Create data collection background
@@ -1602,7 +1589,10 @@ def generate_cytoscape_elements_from_project_data(data_collections):
                     "column_count": num_columns,
                     "box_height": box_height,
                 },
-                "position": {"x": start_x + i * dc_width, "y": center_y},
+                "position": {
+                    "x": x_offset + 100,
+                    "y": center_y,
+                },  # Simple positioning like reference
                 "classes": f"data-collection-background dc-columns-{min(num_columns, 10)}",
             }
         )
@@ -1624,7 +1614,10 @@ def generate_cytoscape_elements_from_project_data(data_collections):
                         "dc_id": dc_id,
                         "is_join_column": is_join_column,
                     },
-                    "position": {"x": start_x + i * dc_width, "y": start_y + j * column_spacing},
+                    "position": {
+                        "x": x_offset + 100,
+                        "y": 140 + (j * 50),
+                    },  # Exact copy from reference line 538
                     "classes": "column-node join-column" if is_join_column else "column-node",
                 }
             )
@@ -1693,8 +1686,9 @@ def generate_cytoscape_elements_from_project_data(data_collections):
                                     "is_join_column": True,
                                 },
                                 "position": {
-                                    "x": start_x + i * dc_width,
-                                    "y": start_y + num_existing_columns * 45,
+                                    "x": x_offset + 100,
+                                    "y": 140
+                                    + (num_existing_columns * 50),  # Using 50 like reference
                                 },
                                 "classes": "column-node join-column",
                             }
@@ -1722,14 +1716,17 @@ def generate_cytoscape_elements_from_project_data(data_collections):
 
                         # Create the missing column node
                         target_column_id = f"{target_dc_tag}/{target_col}"
-                        target_y = (
-                            start_y + len(target_columns) * 45
-                        )  # Position after existing columns with consistent spacing
+                        target_y = 140 + (
+                            len(target_columns) * 50
+                        )  # Position after existing columns, using 50 like reference
                         target_dc_index = next(
                             idx
                             for idx, tdc in enumerate(data_collections)
                             if tdc.get("data_collection_tag") == target_dc_tag
                         )
+                        target_x_offset = (
+                            target_dc_index * 350
+                        )  # Simple offset calculation like reference
 
                         elements.append(
                             {
@@ -1744,7 +1741,7 @@ def generate_cytoscape_elements_from_project_data(data_collections):
                                     "is_join_column": True,
                                 },
                                 "position": {
-                                    "x": start_x + target_dc_index * dc_width,
+                                    "x": target_x_offset + 100,  # Simple positioning like reference
                                     "y": target_y,
                                 },
                                 "classes": "column-node join-column",

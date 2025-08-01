@@ -101,7 +101,7 @@ def create_joins_visualization_section(elements=None, theme="light"):
                     "background-color": bg_color,
                     "border": f"1px solid {border_color}"
                 },
-                responsive=True,
+                responsive=False,
                 minZoom=0.2,
                 maxZoom=3.0,
                 wheelSensitivity=0.1
