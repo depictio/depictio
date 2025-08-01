@@ -1299,11 +1299,78 @@ def register_project_data_collections_callbacks(app):
             Output("data-collections-manager-section", "children"),
             Output("project-type-indicator", "children"),
         ],
-        [Input("url", "pathname"), Input("local-store", "data")],
+        [
+            Input("url", "pathname"),
+            Input("local-store", "data"),
+            Input("project-data-store", "data"),
+        ],
         prevent_initial_call=True,
     )
-    def load_project_data_and_workflows(pathname, local_data):
+    def load_project_data_and_workflows(pathname, local_data, project_data_store):
         """Load project data and populate workflows manager based on project type."""
+        ctx_trigger = ctx.triggered_id
+
+        # If triggered by project-data-store change (refresh), handle differently
+        if ctx_trigger == "project-data-store" and project_data_store:
+            # Only refresh the data collections section, keep other sections unchanged
+            try:
+                project_id = project_data_store.get("project_id")
+                if not project_id or not local_data or not local_data.get("access_token"):
+                    return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+                # Fetch fresh project data from API
+                project_data = api_call_fetch_project_by_id(project_id, local_data["access_token"])
+                if not project_data:
+                    return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+                project = Project.model_validate(project_data)
+
+                # Update the stored project data with fresh data
+                if project.project_type == "basic":
+                    all_data_collections = []
+                    if project.data_collections:
+                        all_data_collections.extend(project.data_collections)
+                    if project.workflows:
+                        for workflow in project.workflows:
+                            if workflow.data_collections:
+                                all_data_collections.extend(workflow.data_collections)
+
+                    updated_project_store_data = {
+                        "project_id": project_id,
+                        "project_type": project.project_type,
+                        "workflows": [w.model_dump() for w in project.workflows]
+                        if project.workflows
+                        else [],
+                        "data_collections": [dc.model_dump() for dc in all_data_collections],
+                    }
+                    data_collections_section = create_basic_project_data_collections_section(
+                        all_data_collections
+                    )
+                else:
+                    updated_project_store_data = {
+                        "project_id": project_id,
+                        "project_type": project.project_type,
+                        "workflows": [w.model_dump() for w in project.workflows]
+                        if project.workflows
+                        else [],
+                        "data_collections": [dc.model_dump() for dc in project.data_collections]
+                        if project.data_collections
+                        else [],
+                    }
+                    data_collections_section = create_data_collections_manager_section()
+
+                return (
+                    updated_project_store_data,
+                    dash.no_update,
+                    data_collections_section,
+                    dash.no_update,
+                )
+
+            except Exception as e:
+                logger.error(f"Error refreshing project data: {e}")
+                return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+        # Original logic for URL/local-store changes
         if not pathname or not pathname.startswith("/project/") or not pathname.endswith("/data"):
             return dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
