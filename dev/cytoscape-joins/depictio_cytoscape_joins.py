@@ -91,7 +91,9 @@ def create_joins_visualization_section(elements=None, theme="light"):
                 layout={
                     "name": "preset",  # Use preset positions for better control
                     "animate": True,
-                    "animationDuration": 500
+                    "animationDuration": 500,
+                    "fit": True,  # Auto-fit content to viewport
+                    "padding": 50   # Add padding around fitted content
                 },
                 style={
                     "width": "100%",
@@ -717,12 +719,14 @@ def register_joins_callbacks(app):
         prevent_initial_call=True
     )
     def reset_layout(n_clicks):
-        """Reset the layout to preset positions."""
+        """Reset the layout to preset positions with proper centering."""
         if n_clicks:
             return {
                 "name": "preset",
                 "animate": True,
-                "animationDuration": 500
+                "animationDuration": 500,
+                "fit": True,  # Auto-fit and center content
+                "padding": 50   # Add padding around fitted content
             }
         return no_update
     

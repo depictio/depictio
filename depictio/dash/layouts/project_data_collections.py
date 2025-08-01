@@ -20,6 +20,11 @@ from dash_iconify import DashIconify
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_delta_table_info, api_call_fetch_project_by_id
 from depictio.dash.colors import colors
+from depictio.dash.components.depictio_cytoscape_joins import (
+    create_joins_visualization_section,
+    generate_sample_elements,
+    register_joins_callbacks,
+)
 from depictio.models.models.projects import Project
 
 
@@ -544,7 +549,7 @@ def create_basic_project_data_collections_section(data_collections):
                         [
                             DashIconify(icon="mdi:eye", width=24, color=colors["blue"]),
                             dmc.Text("Data Collection Viewer", fw="bold", size="lg"),
-                            dmc.Badge("Coming Soon", color="gray", variant="light"),
+                            dmc.Badge("Select a Data Collection", color="gray", variant="light"),
                         ],
                         gap="md",
                         align="center",
@@ -879,7 +884,7 @@ def create_data_collections_manager_section(workflow=None):
                         [
                             DashIconify(icon="mdi:eye", width=24, color=colors["blue"]),
                             dmc.Text("Data Collection Viewer", fw="bold", size="lg"),
-                            dmc.Badge("Select a data collection", color="gray", variant="light"),
+                            dmc.Badge("Select a Data Collection", color="gray", variant="light"),
                         ],
                         gap="md",
                         align="center",
@@ -973,15 +978,15 @@ def create_data_collection_viewer_content(
                     dmc.Stack(
                         [
                             dmc.Text(dc_tag, fw="bold", size="xl"),
-                            dmc.Group(
-                                [
-                                    dmc.Badge(dc_type, color="blue", size="sm"),
-                                    dmc.Badge(dc_metatype, color="gray", size="sm"),
-                                ],
-                                gap="sm",
-                            ),
+                            # dmc.Group(
+                            #     [
+                            #         dmc.Badge(dc_type, color="blue", size="sm"),
+                            #         dmc.Badge(dc_metatype, color="gray", size="sm"),
+                            #     ],
+                            #     gap="sm",
+                            # ),
                         ],
-                        gap="xs",
+                        # gap="xs",
                     ),
                 ],
                 gap="md",
@@ -1241,6 +1246,20 @@ def create_data_collections_landing_ui():
             html.Div(id="workflows-manager-section", style={"marginBottom": "3rem"}),
             # Data Collections Manager Section
             html.Div(id="data-collections-manager-section", style={"marginTop": "2rem"}),
+            # Data Collection Joins Visualization Section
+            html.Div(
+                id="joins-visualization-section",
+                children=[
+                    dmc.Divider(
+                        label="Data Collection Relationships", labelPosition="center", my="xl"
+                    ),
+                    create_joins_visualization_section(
+                        elements=[],  # Will be populated by callback
+                        theme="light",  # Will be updated by theme callback
+                    ),
+                ],
+                style={"display": "none", "marginTop": "3rem"},  # Hidden by default
+            ),
             # Hidden placeholder for future content
             html.Div(id="data-collections-content", style={"display": "none"}),
         ],
@@ -1259,6 +1278,9 @@ def register_project_data_collections_callbacks(app):
     Args:
         app: Dash application instance
     """
+
+    # Register the joins visualization callbacks
+    register_joins_callbacks(app)
 
     @app.callback(
         [
@@ -1622,3 +1644,384 @@ def register_project_data_collections_callbacks(app):
             )
 
         return dash.no_update
+
+    @app.callback(
+        [
+            Output("joins-visualization-section", "style"),
+            Output("depictio-cytoscape-joins", "elements"),
+        ],
+        [
+            Input("project-data-store", "data"),
+            Input("selected-workflow-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def update_joins_visualization(project_data, selected_workflow_id):
+        """Update joins visualization based on project data."""
+
+        if not project_data:
+            return {"display": "none"}, []
+
+        # Get data collections based on project type
+        data_collections = []
+
+        if project_data.get("project_type") == "basic":
+            # Basic projects: use flattened data collections
+            data_collections = project_data.get("data_collections", [])
+        else:
+            # Advanced projects: use selected workflow's data collections
+            if selected_workflow_id:
+                workflows = project_data.get("workflows", [])
+                selected_workflow = next(
+                    (w for w in workflows if str(w.get("id")) == selected_workflow_id), None
+                )
+                if selected_workflow:
+                    data_collections = selected_workflow.get("data_collections", [])
+
+        # Check if any data collections have joins
+        has_joins = False
+        for dc in data_collections:
+            config = dc.get("config", {})
+            if config.get("join") is not None:
+                has_joins = True
+                break
+
+        if has_joins and len(data_collections) > 1:
+            # Generate cytoscape elements from real Depictio data (inline)
+            elements = generate_cytoscape_elements_from_project_data(data_collections)
+            return {"display": "block"}, elements
+        elif len(data_collections) > 1:
+            # Show sample visualization for demonstration (no real joins)
+            elements = generate_sample_elements()
+            return {"display": "block"}, elements
+
+        # Hide if no data collections or only one DC
+        return {"display": "none"}, []
+
+
+def generate_cytoscape_elements_from_project_data(data_collections):
+    """Convert project data collections to cytoscape elements."""
+    elements = []
+
+    # First, collect all available columns from each data collection
+    dc_columns = {}
+    dc_info = {}
+
+    for dc in data_collections:
+        dc_tag = dc.get("data_collection_tag", f"DC_{dc.get('id', 'unknown')}")
+        dc_info[dc_tag] = dc
+
+        # Try to get columns from the data collection
+        columns = []
+
+        # Priority order for finding columns:
+        # 1. delta_table_schema if available
+        if "delta_table_schema" in dc and dc["delta_table_schema"]:
+            schema = dc["delta_table_schema"]
+            if isinstance(schema, dict):
+                columns = list(schema.keys())
+            elif isinstance(schema, list):
+                # Schema might be a list of field dictionaries
+                columns = [
+                    field.get("name", field.get("column", str(field)))
+                    for field in schema
+                    if isinstance(field, dict)
+                ]
+
+        # 2. Check config.dc_specific_properties.columns_description (from YAML)
+        elif dc.get("config", {}).get("dc_specific_properties", {}).get("columns_description"):
+            columns_desc = dc["config"]["dc_specific_properties"]["columns_description"]
+            if isinstance(columns_desc, dict):
+                columns = list(columns_desc.keys())
+
+        # 3. Check config.columns
+        elif dc.get("config", {}).get("columns"):
+            columns = dc["config"]["columns"]
+
+        # 4. Check direct columns field
+        elif "columns" in dc:
+            columns = dc["columns"]
+
+        # 5. Try to infer from join config + add defaults
+        else:
+            join_config = dc.get("config", {}).get("join")
+            if join_config and "on_columns" in join_config:
+                columns.extend(join_config["on_columns"])
+            # Add some common default columns for visualization
+            defaults = ["id", "name", "created_at", "updated_at"]
+            for default in defaults:
+                if default not in columns:
+                    columns.append(default)
+
+        # Remove duplicates while preserving order and ensure we have at least some columns
+        seen = set()
+        dc_columns[dc_tag] = [col for col in columns if col and not (col in seen or seen.add(col))]
+
+        # Ensure we have at least one column for visualization
+        if not dc_columns[dc_tag]:
+            dc_columns[dc_tag] = ["id", "name"]
+
+    # First, collect all join columns from all DCs to mark them properly
+    all_join_columns = {}  # dc_tag -> set of join column names
+
+    # Initialize empty sets for all DCs
+    for dc in data_collections:
+        dc_tag = dc.get("data_collection_tag", f"DC_{dc.get('id', 'unknown')}")
+        all_join_columns[dc_tag] = set()
+
+    # Now find all join relationships and mark both source and target columns
+    for dc in data_collections:
+        dc_tag = dc.get("data_collection_tag", f"DC_{dc.get('id', 'unknown')}")
+        join_config = dc.get("config", {}).get("join")
+
+        if join_config and "on_columns" in join_config and "with_dc" in join_config:
+            on_columns = join_config["on_columns"]
+            target_dc_tags = join_config["with_dc"]
+
+            # Mark source columns as join columns
+            all_join_columns[dc_tag].update(on_columns)
+
+            # Mark target columns as join columns (same column names)
+            for target_dc_tag in target_dc_tags:
+                if target_dc_tag in all_join_columns:
+                    all_join_columns[target_dc_tag].update(on_columns)
+
+    logger.debug(f"All join columns mapping: {all_join_columns}")
+
+    # Calculate positions to center content in cytoscape viewport
+    viewport_width = 1000  # More conservative viewport width estimate
+    viewport_height = 600  # Cytoscape component viewport height
+    dc_width = 350  # Width per data collection including spacing
+    total_content_width = len(data_collections) * dc_width
+
+    # Better horizontal centering
+    start_x = max(50, (viewport_width - total_content_width) / 2 + 100)
+
+    # Vertical centering - calculate average height and center vertically
+    avg_columns = (
+        sum(len(dc_columns.get(dc.get("data_collection_tag", ""), [])) for dc in data_collections)
+        / len(data_collections)
+        if data_collections
+        else 5
+    )
+    estimated_content_height = avg_columns * 45 + 100  # Based on column spacing
+    start_y = max(100, (viewport_height - estimated_content_height) / 2 + 50)
+
+    # Create data collection groups and column nodes
+    for i, dc in enumerate(data_collections):
+        dc_id = dc.get("id", f"dc_{i}")
+        dc_tag = dc.get("data_collection_tag", f"DC_{i}")
+        dc_type = dc.get("config", {}).get("type", "table")
+        dc_metatype = dc.get("config", {}).get("metatype", "unknown")
+
+        if dc_type.lower() != "table":
+            continue  # Skip non-table collections
+
+        # Get columns for this DC
+        columns = dc_columns.get(dc_tag, ["id", "name"])
+        num_columns = len(columns)
+        column_spacing = 45  # Consistent spacing
+        box_height = max(320, num_columns * column_spacing + 100)
+
+        # Center the background box on the column range
+        first_column_y = start_y
+        last_column_y = start_y + ((num_columns - 1) * column_spacing)
+        center_y = (first_column_y + last_column_y) / 2
+
+        # Create data collection background
+        elements.append(
+            {
+                "data": {
+                    "id": f"dc_bg_{dc_id}",
+                    "label": f"{dc_tag}\n[{dc_metatype}]",
+                    "type": "dc_background",
+                    "column_count": num_columns,
+                    "box_height": box_height,
+                },
+                "position": {"x": start_x + i * dc_width, "y": center_y},
+                "classes": f"data-collection-background dc-columns-{min(num_columns, 10)}",
+            }
+        )
+
+        # Create column nodes
+        for j, column in enumerate(columns):
+            column_id = f"{dc_tag}/{column}"
+
+            # Check if this column is part of a join (from comprehensive list)
+            is_join_column = column in all_join_columns.get(dc_tag, set())
+
+            elements.append(
+                {
+                    "data": {
+                        "id": column_id,
+                        "label": column,
+                        "type": "column",
+                        "dc_tag": dc_tag,
+                        "dc_id": dc_id,
+                        "is_join_column": is_join_column,
+                    },
+                    "position": {"x": start_x + i * dc_width, "y": start_y + j * column_spacing},
+                    "classes": "column-node join-column" if is_join_column else "column-node",
+                }
+            )
+
+    # Create a mapping from DC tags to their data for easier lookup
+    dc_tags_to_data = {}
+    for dc in data_collections:
+        dc_tag = dc.get("data_collection_tag", f"DC_{dc.get('id', f'dc_{i}')}")
+        dc_tags_to_data[dc_tag] = dc
+
+    # Create join edges in a second pass to ensure all nodes exist
+    edges_created = set()  # Track edges to avoid duplicates
+
+    for i, dc in enumerate(data_collections):
+        dc_tag = dc.get("data_collection_tag", f"DC_{dc.get('id', f'dc_{i}')}")
+        join_config = dc.get("config", {}).get("join")
+
+        if not join_config:
+            continue
+
+        on_columns = join_config.get("on_columns", [])
+        join_type = join_config.get("how", "inner")
+        target_dc_tags = join_config.get("with_dc", [])
+
+        logger.debug(f"Processing joins for DC '{dc_tag}': {join_config}")
+
+        for target_dc_tag in target_dc_tags:
+            # Check if target DC exists in our data
+            target_dc_exists = any(
+                d.get("data_collection_tag") == target_dc_tag for d in data_collections
+            )
+
+            if not target_dc_exists:
+                logger.warning(f"Target DC '{target_dc_tag}' not found in current data collections")
+                continue
+
+            for col in on_columns:
+                # Check if source node was created
+                source_columns = dc_columns.get(dc_tag, [])
+                if col not in source_columns:
+                    logger.warning(
+                        f"Source column '{col}' not found in DC '{dc_tag}' columns: {source_columns}"
+                    )
+                    # Try to add the column if it's a join column
+                    if col not in dc_columns[dc_tag]:
+                        dc_columns[dc_tag].append(col)
+                        logger.info(f"Added missing join column '{col}' to DC '{dc_tag}'")
+
+                        # Create the missing column node
+                        num_existing_columns = len(
+                            [
+                                e
+                                for e in elements
+                                if e["data"].get("dc_tag") == dc_tag
+                                and e["data"].get("type") == "column"
+                            ]
+                        )
+                        elements.append(
+                            {
+                                "data": {
+                                    "id": f"{dc_tag}/{col}",
+                                    "label": col,
+                                    "type": "column",
+                                    "dc_tag": dc_tag,
+                                    "dc_id": dc.get("id", f"dc_{i}"),
+                                    "is_join_column": True,
+                                },
+                                "position": {
+                                    "x": start_x + i * dc_width,
+                                    "y": start_y + num_existing_columns * 45,
+                                },
+                                "classes": "column-node join-column",
+                            }
+                        )
+
+                source_node = f"{dc_tag}/{col}"
+
+                # For target, try the same column name first, then look for similar
+                target_columns = dc_columns.get(target_dc_tag, [])
+                target_col = col
+
+                if col not in target_columns:
+                    # If the exact column name doesn't exist in target, skip this edge
+                    # In real joins, column names should match or be explicitly mapped
+                    logger.warning(
+                        f"Join column '{col}' not found in target DC '{target_dc_tag}' columns: {target_columns}"
+                    )
+
+                    # Still create the target column node for visualization purposes
+                    target_col = col
+                    if target_col not in dc_columns[target_dc_tag]:
+                        dc_columns[target_dc_tag].append(
+                            target_col
+                        )  # Add missing column to visualization
+
+                        # Create the missing column node
+                        target_column_id = f"{target_dc_tag}/{target_col}"
+                        target_y = (
+                            start_y + len(target_columns) * 45
+                        )  # Position after existing columns with consistent spacing
+                        target_dc_index = next(
+                            idx
+                            for idx, tdc in enumerate(data_collections)
+                            if tdc.get("data_collection_tag") == target_dc_tag
+                        )
+
+                        elements.append(
+                            {
+                                "data": {
+                                    "id": target_column_id,
+                                    "label": f"{target_col} (join)",
+                                    "type": "column",
+                                    "dc_tag": target_dc_tag,
+                                    "dc_id": dc_tags_to_data[target_dc_tag].get(
+                                        "id", f"dc_{target_dc_index}"
+                                    ),
+                                    "is_join_column": True,
+                                },
+                                "position": {
+                                    "x": start_x + target_dc_index * dc_width,
+                                    "y": target_y,
+                                },
+                                "classes": "column-node join-column",
+                            }
+                        )
+
+                target_node = f"{target_dc_tag}/{target_col}"
+
+                # Create unique edge identifier to avoid duplicates
+                edge_key = tuple(sorted([source_node, target_node]))
+                if edge_key in edges_created:
+                    continue
+                edges_created.add(edge_key)
+
+                # Determine adjacency for edge styling
+                source_dc_index = i
+                target_dc_index = next(
+                    (
+                        idx
+                        for idx, d in enumerate(data_collections)
+                        if d.get("data_collection_tag") == target_dc_tag
+                    ),
+                    0,
+                )
+                is_adjacent = abs(source_dc_index - target_dc_index) == 1
+                adjacency_class = "edge-adjacent" if is_adjacent else "edge-distant"
+
+                elements.append(
+                    {
+                        "data": {
+                            "id": f"join_{dc_tag}_{target_dc_tag}_{col}",
+                            "source": source_node,
+                            "target": target_node,
+                            "label": join_type,
+                            "join_type": join_type,
+                            "is_adjacent": is_adjacent,
+                        },
+                        "classes": f"join-edge join-{join_type} {adjacency_class}",
+                    }
+                )
+
+                logger.debug(f"Created edge: {source_node} -> {target_node} ({join_type})")
+
+    return elements
