@@ -297,7 +297,51 @@ async def delete_data_collection_by_id(
     if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="Data collection not found")
 
-    # TODO: Add cleanup of associated S3 data and delta tables
-    # This would require additional logic to remove files from S3/MinIO storage
+    # Cleanup associated S3 data and Delta tables
+    try:
+        import boto3
+        from botocore.exceptions import ClientError
+
+        # Initialize S3 client for MinIO
+        s3_client = boto3.client(
+            "s3",
+            endpoint_url=settings.minio.endpoint_url,
+            aws_access_key_id=settings.minio.aws_access_key_id,
+            aws_secret_access_key=settings.minio.aws_secret_access_key,
+            region_name="us-east-1",
+        )
+
+        # Delta table is stored with data_collection_id as the key
+        delta_table_prefix = data_collection_id
+        bucket_name = settings.minio.bucket
+
+        # Delete all objects in the Delta table directory
+        logger.info(f"Deleting Delta table for data collection: {data_collection_id}")
+        response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=delta_table_prefix)
+
+        if "Contents" in response:
+            objects_to_delete = [{"Key": obj["Key"]} for obj in response["Contents"]]
+            if objects_to_delete:
+                s3_client.delete_objects(Bucket=bucket_name, Delete={"Objects": objects_to_delete})
+                logger.info(
+                    f"Deleted {len(objects_to_delete)} Delta table objects for data collection {data_collection_id}"
+                )
+            else:
+                logger.info(
+                    f"No Delta table objects found for data collection {data_collection_id}"
+                )
+        else:
+            logger.info(f"No Delta table found for data collection {data_collection_id}")
+
+    except ClientError as e:
+        logger.error(
+            f"Failed to delete S3 Delta table objects for data collection {data_collection_id}: {e}"
+        )
+        # Don't fail the entire operation if S3 cleanup fails, just log the error
+    except Exception as e:
+        logger.error(
+            f"Unexpected error during S3 cleanup for data collection {data_collection_id}: {e}"
+        )
+        # Don't fail the entire operation if S3 cleanup fails, just log the error
 
     return {"message": "Data collection deleted successfully"}

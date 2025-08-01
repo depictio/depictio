@@ -2551,10 +2551,8 @@ def register_project_data_collections_callbacks(app):
             from pathlib import Path
 
             import polars as pl
-            import pymongo
-            from bson import ObjectId
 
-            from depictio.api.v1.configs.config import MONGODB_URL, settings
+            from depictio.api.v1.configs.config import settings
 
             # Decode and save the uploaded file temporarily for validation
             file_data = base64.b64decode(file_contents.split(",")[1])
@@ -2574,39 +2572,72 @@ def register_project_data_collections_callbacks(app):
                 variant="light",
             )
 
-            # Get existing data collection schema for validation
-            client = pymongo.MongoClient(MONGODB_URL)
-            db = client[settings.mongodb.db_name]
-            projects_collection = db["projects"]
+            # Get existing data collection schema using the specs endpoint
+            try:
+                import httpx
 
-            # Find project containing this data collection
-            project = projects_collection.find_one(
-                {"workflows.data_collections._id": ObjectId(dc_id)}
-            )
-            if not project:
-                return [file_info], [dmc.Alert("Data collection not found", color="red")]
+                # Get current token from local storage
+                token = local_data.get("access_token") if local_data else None
+                if not token:
+                    return [file_info], [dmc.Alert("Authentication token not found", color="red")]
 
-            # Find the specific data collection within the project
-            existing_dc = None
-            for workflow in project.get("workflows", []):
-                for dc in workflow.get("data_collections", []):
-                    if str(dc.get("_id")) == dc_id:
-                        existing_dc = dc
-                        break
-                if existing_dc:
-                    break
+                # Call the specs endpoint to get data collection metadata
+                specs_url = f"{settings.fastapi.url}/depictio/api/v1/datacollections/specs/{dc_id}"
+                headers = {"Authorization": f"Bearer {token}"}
 
-            if not existing_dc:
-                return [file_info], [dmc.Alert("Data collection not found", color="red")]
+                response = httpx.get(specs_url, headers=headers, timeout=30.0)
+                response.raise_for_status()
 
+                existing_dc = response.json()
+
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 404:
+                    return [file_info], [dmc.Alert("Data collection not found", color="red")]
+                else:
+                    return [file_info], [
+                        dmc.Alert(
+                            f"Failed to retrieve data collection info: {e.response.status_code}",
+                            color="red",
+                        )
+                    ]
+            except Exception as e:
+                return [file_info], [
+                    dmc.Alert(f"Failed to retrieve data collection info: {str(e)}", color="red")
+                ]
+
+            # Get existing schema from delta table metadata or try to read from Delta table
             existing_schema = existing_dc.get("delta_table_schema")
             if not existing_schema:
-                return [file_info], [
-                    dmc.Alert(
-                        "Cannot validate schema: existing data collection has no schema information",
-                        color="yellow",
-                    )
-                ]
+                try:
+                    # Construct S3 path for the Delta table
+                    s3_path = f"s3://{settings.minio.bucket}/{dc_id}"
+
+                    # Configure S3 storage options for reading Delta table
+                    storage_options = {
+                        "AWS_ENDPOINT_URL": settings.minio.endpoint_url,
+                        "AWS_ACCESS_KEY_ID": settings.minio.aws_access_key_id,
+                        "AWS_SECRET_ACCESS_KEY": settings.minio.aws_secret_access_key,
+                        "AWS_REGION": "us-east-1",
+                        "AWS_ALLOW_HTTP": "true",
+                        "AWS_S3_ALLOW_UNSAFE_RENAME": "true",
+                    }
+
+                    # Read a small sample to get schema
+                    df_sample = pl.read_delta(s3_path, storage_options=storage_options).limit(1)
+
+                    # Build schema dictionary from DataFrame
+                    existing_schema = {}
+                    for col_name in df_sample.columns:
+                        col_type = str(df_sample[col_name].dtype)
+                        existing_schema[col_name] = {"type": col_type}
+
+                except Exception as e:
+                    return [file_info], [
+                        dmc.Alert(
+                            f"Cannot validate schema: unable to retrieve existing data collection schema ({str(e)})",
+                            color="yellow",
+                        )
+                    ]
 
             # Try to read the new file
             try:

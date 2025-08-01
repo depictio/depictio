@@ -1408,38 +1408,82 @@ def api_call_overwrite_data_collection(
 
         logger.info(f"Saved file to: {temp_file_path}")
 
-        # Get existing data collection schema for validation
-        client = pymongo.MongoClient(MONGODB_URL)
-        db = client[settings.mongodb.db_name]
-        projects_collection = db["projects"]
+        # Get existing data collection schema using the specs endpoint
+        try:
+            import httpx
 
-        # Find project containing this data collection
-        project = projects_collection.find_one(
-            {"workflows.data_collections._id": ObjectId(data_collection_id)}
-        )
-        if not project:
-            return {"success": False, "message": "Data collection not found"}
+            # Get user token for API call
+            current_user = api_call_fetch_user_from_token(token)
+            if not current_user:
+                return {"success": False, "message": "Invalid authentication token"}
 
-        # Find the specific data collection within the project
-        existing_dc = None
-        for workflow in project.get("workflows", []):
-            for dc in workflow.get("data_collections", []):
-                if str(dc.get("_id")) == data_collection_id:
-                    existing_dc = dc
-                    break
-            if existing_dc:
-                break
+            # Call the specs endpoint to get data collection metadata
+            specs_url = (
+                f"{settings.fastapi.url}/depictio/api/v1/datacollections/specs/{data_collection_id}"
+            )
+            headers = {"Authorization": f"Bearer {token}"}
 
-        if not existing_dc:
-            return {"success": False, "message": "Data collection not found"}
+            logger.info(f"Fetching data collection specs from: {specs_url}")
+            response = httpx.get(specs_url, headers=headers, timeout=30.0)
+            response.raise_for_status()
 
-        # Get existing schema from delta table metadata if available
-        existing_schema = existing_dc.get("delta_table_schema")
-        if not existing_schema:
+            existing_dc = response.json()
+            logger.info(
+                f"Retrieved data collection specs: {existing_dc.get('data_collection_tag', 'unknown')}"
+            )
+
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return {"success": False, "message": "Data collection not found"}
+            else:
+                return {
+                    "success": False,
+                    "message": f"Failed to retrieve data collection info: {e.response.status_code}",
+                }
+        except Exception as e:
+            logger.error(f"Error fetching data collection specs: {str(e)}")
             return {
                 "success": False,
-                "message": "Cannot validate schema: existing data collection has no schema information",
+                "message": f"Failed to retrieve data collection info: {str(e)}",
             }
+
+        # Get existing schema from delta table metadata or read from actual delta table
+        existing_schema = existing_dc.get("delta_table_schema")
+
+        # If no stored schema, try to read it from the actual Delta table
+        if not existing_schema:
+            try:
+                # Construct S3 path for the Delta table
+                s3_path = f"s3://{settings.minio.bucket}/{data_collection_id}"
+
+                # Configure S3 storage options for reading Delta table
+                storage_options = {
+                    "AWS_ENDPOINT_URL": settings.minio.endpoint_url,
+                    "AWS_ACCESS_KEY_ID": settings.minio.access_key,
+                    "AWS_SECRET_ACCESS_KEY": settings.minio.secret_key,
+                    "AWS_REGION": settings.minio.region,
+                    "AWS_ALLOW_HTTP": "true",
+                    "AWS_S3_ALLOW_UNSAFE_RENAME": "true",
+                }
+
+                # Read a small sample to get schema
+                logger.info(f"Reading schema from Delta table at: {s3_path}")
+                df_sample = pl.read_delta(s3_path, storage_options=storage_options).limit(1)
+
+                # Build schema dictionary from DataFrame
+                existing_schema = {}
+                for col_name in df_sample.columns:
+                    col_type = str(df_sample[col_name].dtype)
+                    existing_schema[col_name] = {"type": col_type}
+
+                logger.info(f"Retrieved schema from Delta table: {existing_schema}")
+
+            except Exception as e:
+                logger.warning(f"Could not read schema from Delta table: {str(e)}")
+                return {
+                    "success": False,
+                    "message": f"Cannot validate schema: unable to retrieve existing data collection schema ({str(e)})",
+                }
 
         # Build polars kwargs for file reading
         polars_kwargs = {"has_header": has_header}
@@ -1504,6 +1548,9 @@ def api_call_overwrite_data_collection(
             logger.warning(f"Could not validate column types: {e}")
 
         # Proceed with overwrite - reuse existing data collection processing logic
+        # Connect to MongoDB for token lookup
+        client = pymongo.MongoClient(MONGODB_URL)
+        db = client[settings.mongodb.db_name]
         tokens_collection = db["tokens"]
         users_collection = db["users"]
 
@@ -1516,7 +1563,14 @@ def api_call_overwrite_data_collection(
         if not token_doc:
             return {"success": False, "message": "No admin token found"}
 
-        # Use the project we already found
+        # Get the project containing this data collection
+        projects_collection = db["projects"]
+        project = projects_collection.find_one(
+            {"workflows.data_collections._id": ObjectId(data_collection_id)}
+        )
+        if not project:
+            return {"success": False, "message": "Project not found"}
+
         project_obj = Project.from_mongo(project)
 
         # Find the workflow containing this data collection
