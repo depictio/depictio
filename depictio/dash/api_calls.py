@@ -868,3 +868,91 @@ def api_call_create_project(project_data: dict[str, Any], token: str) -> dict[st
     except Exception as e:
         logger.error(f"Error creating project: {e}")
         return {"success": False, "message": f"Network error: {str(e)}", "status_code": 500}
+
+
+@validate_call(validate_return=True)
+def api_call_update_project(project_data: dict[str, Any], token: str) -> dict[str, Any] | None:
+    """
+    Update an existing project using the API endpoint.
+
+    Args:
+        project_data: Project data dictionary
+        token: Authentication token
+
+    Returns:
+        Response from project update or None if failed
+    """
+    try:
+        logger.debug(f"Updating project: {project_data.get('name', 'Unknown')}")
+
+        response = httpx.put(
+            f"{API_BASE_URL}/depictio/api/v1/projects/update",
+            json=project_data,
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=settings.performance.api_request_timeout,
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            logger.info(f"Project updated successfully: {result.get('message', 'No message')}")
+            return result
+        else:
+            error_msg = f"Failed to update project: {response.status_code} - {response.text}"
+            logger.error(error_msg)
+            try:
+                error_data = response.json()
+                return {
+                    "success": False,
+                    "message": error_data.get("message", error_msg),
+                    "status_code": response.status_code,
+                }
+            except Exception:
+                return {"success": False, "message": error_msg, "status_code": response.status_code}
+
+    except Exception as e:
+        logger.error(f"Error updating project: {e}")
+        return {"success": False, "message": f"Network error: {str(e)}", "status_code": 500}
+
+
+@validate_call(validate_return=True)
+def api_call_delete_project(project_id: str, token: str) -> dict[str, Any] | None:
+    """
+    Delete a project using the API endpoint.
+
+    Args:
+        project_id: Project ID to delete
+        token: Authentication token
+
+    Returns:
+        Response from project deletion or None if failed
+    """
+    try:
+        logger.debug(f"Deleting project: {project_id}")
+
+        response = httpx.delete(
+            f"{API_BASE_URL}/depictio/api/v1/projects/delete",
+            params={"project_id": project_id},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=settings.performance.api_request_timeout,
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            logger.info(f"Project deleted successfully: {result.get('message', 'No message')}")
+            return result
+        else:
+            error_msg = f"Failed to delete project: {response.status_code} - {response.text}"
+            logger.error(error_msg)
+            try:
+                error_data = response.json()
+                return {
+                    "success": False,
+                    "message": error_data.get("message", error_msg),
+                    "status_code": response.status_code,
+                }
+            except Exception:
+                return {"success": False, "message": error_msg, "status_code": response.status_code}
+
+    except Exception as e:
+        logger.error(f"Error deleting project: {e}")
+        return {"success": False, "message": f"Network error: {str(e)}", "status_code": 500}

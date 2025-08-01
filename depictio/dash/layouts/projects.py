@@ -4,7 +4,7 @@ import dash_mantine_components as dmc
 import httpx
 import yaml
 from bson import ObjectId
-from dash import MATCH, Input, Output, State, dcc, html
+from dash import ALL, MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 from pydantic import validate_call
 
@@ -13,7 +13,12 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
 # from depictio.api.v1.endpoints.user_endpoints.models import UserBase
-from depictio.dash.api_calls import api_call_create_project, api_call_fetch_user_from_token
+from depictio.dash.api_calls import (
+    api_call_create_project,
+    api_call_delete_project,
+    api_call_fetch_user_from_token,
+    api_call_update_project,
+)
 from depictio.dash.colors import colors  # Import Depictio color palette
 from depictio.models.models.data_collections import DataCollection
 from depictio.models.models.projects import Project
@@ -44,6 +49,7 @@ def fetch_projects(token: str) -> list[Project]:
     # logger.info(f"Response JSON: {projects.json()}")
     # logger.info("Successfully fetched projects.")
     # logger.info(f"Projects: {projects.json()}")
+    logger.debug(f"Fetched {len(projects.json())} projects from API.")
 
     projects = [Project.from_mongo(project) for project in projects.json()]
     return projects
@@ -936,14 +942,53 @@ def render_workflow_item(wf: Workflow, token: str):
 
 def create_project_management_panel(project: Project) -> list:
     """
-    Create the project management panel with edit and delete buttons.
+    Create the project management panel with edit and delete buttons and their modals.
 
     Args:
         project: Project object
 
     Returns:
-        List of components for the management panel
+        List of components for the management panel including modals
     """
+    from depictio.dash.layouts.layouts_toolbox import (
+        create_add_with_input_modal,
+        create_delete_confirmation_modal,
+    )
+
+    # Create input field for the edit modal
+    edit_input_field = dmc.TextInput(
+        id={"type": "edit-project-name-input", "index": str(project.id)},
+        label="Project Name",
+        placeholder="Enter new project name",
+        value=project.name,
+        required=True,
+    )
+
+    # Create edit modal with unique prefix per project
+    edit_modal, edit_modal_id = create_add_with_input_modal(
+        id_prefix=f"edit-project-name-{project.id}",
+        input_field=edit_input_field,
+        title="Edit Project Name",
+        title_color="blue",
+        message="Enter a new name for this project.",
+        confirm_button_text="Save Changes",
+        confirm_button_color="blue",
+        icon="mdi:pencil",
+        opened=False,
+    )
+
+    # Create delete modal
+    delete_modal, delete_modal_id = create_delete_confirmation_modal(
+        id_prefix="delete-project",
+        item_id=str(project.id),
+        title="Delete Project",
+        message=f"Are you sure you want to delete the project '{project.name}'? This action cannot be undone and will permanently remove all associated data.",
+        delete_button_text="Delete Project",
+        cancel_button_text="Cancel",
+        icon="mdi:alert-circle",
+        opened=False,
+    )
+
     return [
         dmc.Group(
             [
@@ -966,35 +1011,9 @@ def create_project_management_panel(project: Project) -> list:
             ],
             gap="md",
         ),
-        # Add modals for edit and delete
-        # create_add_with_input_modal(
-        #     id_prefix="edit-project-name",
-        #     input_field=dmc.TextInput(
-        #         id={"type": "edit-project-name-input", "index": str(project.id)},
-        #         label="Project Name",
-        #         placeholder="Enter new project name",
-        #         value=project.name,
-        #         required=True,
-        #     ),
-        #     item_id=str(project.id),
-        #     title="Edit Project Name",
-        #     title_color="blue",
-        #     message="Enter a new name for this project.",
-        #     confirm_button_text="Save Changes",
-        #     confirm_button_color="blue",
-        #     icon="mdi:pencil",
-        #     opened=False,
-        # ),
-        # create_delete_confirmation_modal(
-        #     id_prefix="delete-project",
-        #     item_id=str(project.id),
-        #     title="Delete Project",
-        #     message=f"Are you sure you want to delete the project '{project.name}'? This action cannot be undone and will permanently remove all associated data.",
-        #     delete_button_text="Delete Project",
-        #     cancel_button_text="Cancel",
-        #     icon="mdi:alert-circle",
-        #     opened=False,
-        # ),
+        # Add the modals
+        edit_modal,
+        delete_modal,
     ]
 
 
@@ -1899,32 +1918,26 @@ def register_workflows_callbacks(app):
 
         return render_projects_list(projects=projects, admin_UI=False, token=token)
 
-    # Auto-refresh projects list when modal closes after project creation
+    # Auto-refresh projects list after project creation only
     @app.callback(
         Output("projects-content", "children", allow_duplicate=True),
-        [
-            Input("project-creation-modal", "opened"),
-        ],
+        Input("project-creation-modal", "opened"),
         [
             State("local-store", "data"),
             State("project-creation-store", "data"),
         ],
         prevent_initial_call=True,
     )
-    def refresh_projects_after_creation(modal_opened, local_store, project_store):
-        """Refresh projects list when modal closes after successful project creation."""
-        # Only refresh when modal is closing and a project was created
-        if not modal_opened and project_store and project_store.get("project_created"):
+    def refresh_projects_after_creation(creation_modal_opened, local_store, project_store):
+        """Refresh projects list after successful project creation."""
+        # Handle project creation (modal closing after creation)
+        if not creation_modal_opened and project_store and project_store.get("project_created"):
             token = local_store.get("access_token") if local_store else None
             if not token:
                 return dash.no_update
-
-            # Fetch updated projects from the API
             projects = fetch_projects(token)
             logger.info(f"Refreshed {len(projects)} projects after creation")
-
             return render_projects_list(projects=projects, admin_UI=False, token=token)
-
         return dash.no_update
 
     # Ensure modal stays closed on initial page load
@@ -1962,42 +1975,10 @@ def register_workflows_callbacks(app):
             return True
         return dash.no_update
 
-    @app.callback(
-        Output(
-            {"type": "edit-project-name-add-confirmation-modal", "index": MATCH},
-            "opened",
-            allow_duplicate=True,
-        ),
-        Input({"type": "confirm-edit-project-name-add-button", "index": MATCH}, "n_clicks"),
-        Input({"type": "cancel-edit-project-name-add-button", "index": MATCH}, "n_clicks"),
-        State({"type": "edit-project-name-input", "index": MATCH}, "value"),
-        prevent_initial_call=True,
-    )
-    def handle_edit_project_name(confirm_clicks, cancel_clicks, new_name):
-        """Handle project name edit confirmation."""
-        ctx = dash.callback_context
-        if not ctx.triggered:
-            return dash.no_update
+    # Handle edit project name with API integration - using dynamic callback registration
+    # This needs to be handled differently due to unique button IDs per project
 
-        button_id = ctx.triggered[0]["prop_id"].split(".")[0]
-
-        if "confirm" in button_id and new_name and new_name.strip():
-            # Get the project index from the button ID
-            import json
-
-            button_dict = json.loads(button_id)
-            project_index = button_dict["index"]
-
-            logger.info(f"Would update project {project_index} name to: {new_name}")
-            # TODO: Implement actual project name update API call
-
-            # Close modal - user will need to manually refresh for now
-            return False
-        elif "cancel" in button_id:
-            return False
-
-        return dash.no_update
-
+    # Handle delete project - close modal only
     @app.callback(
         Output(
             {"type": "delete-project-delete-confirmation-modal", "index": MATCH},
@@ -2005,11 +1986,11 @@ def register_workflows_callbacks(app):
             allow_duplicate=True,
         ),
         Input({"type": "confirm-delete-project-delete-button", "index": MATCH}, "n_clicks"),
-        Input({"type": "cancel-delete-project-delete-button", "index": MATCH}, "n_clicks"),
+        State("local-store", "data"),
         prevent_initial_call=True,
     )
-    def handle_delete_project(confirm_clicks, cancel_clicks):
-        """Handle project deletion confirmation."""
+    def handle_delete_project_confirm(confirm_clicks, local_store):
+        """Handle project deletion confirmation with API call."""
         ctx = dash.callback_context
         if not ctx.triggered:
             return dash.no_update
@@ -2021,16 +2002,133 @@ def register_workflows_callbacks(app):
             import json
 
             button_dict = json.loads(button_id)
-            project_index = button_dict["index"]
+            project_id = button_dict["index"]
 
-            logger.info(f"Would delete project {project_index}")
-            # TODO: Implement actual project deletion API call
+            token = local_store.get("access_token") if local_store else None
+            if not token:
+                return False
 
-            # Close modal - user will need to manually refresh for now
+            # Call API to delete project
+            result = api_call_delete_project(project_id, token)
+
+            if result and result.get("success"):
+                logger.info(f"Project {project_id} deleted successfully")
+                return False
+            else:
+                logger.error(f"Failed to delete project: {result}")
+
             return False
-        elif "cancel" in button_id:
+
+        return dash.no_update
+
+    # Refresh projects list after successful deletion - delayed trigger
+    @app.callback(
+        Output("projects-content", "children", allow_duplicate=True),
+        Input({"type": "delete-project-delete-confirmation-modal", "index": ALL}, "opened"),
+        State("local-store", "data"),
+        prevent_initial_call=True,
+    )
+    def refresh_projects_after_deletion(modal_states, local_store):
+        """Refresh projects list when delete modal closes after successful deletion."""
+        import time
+
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            return dash.no_update
+
+        # Check if any modal is closing (going from True to False)
+        if modal_states and not any(modal_states):
+            token = local_store.get("access_token") if local_store else None
+            if not token:
+                return dash.no_update
+            # Small delay to ensure API call completed
+            time.sleep(0.1)
+            # Fetch updated projects from the API
+            projects = fetch_projects(token)
+            logger.info(f"Refreshed {len(projects)} projects after deletion")
+            return render_projects_list(projects=projects, admin_UI=False, token=token)
+        return dash.no_update
+
+    # Handle edit project name confirmation with API integration - close modal only
+    @app.callback(
+        Output(
+            {"type": "edit-project-name-add-confirmation-modal", "index": MATCH},
+            "opened",
+            allow_duplicate=True,
+        ),
+        Input({"type": "confirm-edit-project-name-add-button", "index": MATCH}, "n_clicks"),
+        [
+            State({"type": "edit-project-name-input", "index": MATCH}, "value"),
+            State("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def handle_edit_project_name_confirm(confirm_clicks, new_name, local_store):
+        """Handle project name edit confirmation with API call."""
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            return dash.no_update
+
+        button_id = ctx.triggered[0]["prop_id"].split(".")[0]
+
+        if "confirm" in button_id:
+            # Get the project index from the button ID
+            import json
+
+            button_dict = json.loads(button_id)
+            project_id = button_dict["index"]
+
+            token = local_store.get("access_token") if local_store else None
+            if not token or not new_name:
+                return False
+
+            # Create project data for update
+            project_data = {
+                "id": project_id,
+                "name": new_name.strip(),
+            }
+
+            # Call API to update project
+            result = api_call_update_project(project_data, token)
+
+            if result and result.get("success"):
+                logger.info(f"Project {project_id} updated successfully with name: {new_name}")
+                return False
+            else:
+                logger.error(f"Failed to update project: {result}")
+
             return False
 
+        return dash.no_update
+
+    # Refresh projects list after successful edit - separate callback
+    @app.callback(
+        Output("projects-content", "children", allow_duplicate=True),
+        Input({"type": "edit-project-name-add-confirmation-modal", "index": ALL}, "opened"),
+        [
+            State("local-store", "data"),
+            State({"type": "confirm-edit-project-name-add-button", "index": ALL}, "n_clicks"),
+        ],
+        prevent_initial_call=True,
+    )
+    def refresh_projects_after_edit(modal_states, local_store, button_clicks):
+        """Refresh projects list when edit modal closes after successful edit."""
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            return dash.no_update
+
+        # Check if any modal is closing (going from True to False) and has actual button clicks (not None)
+        has_real_clicks = button_clicks and any(
+            click is not None and click > 0 for click in button_clicks
+        )
+        if modal_states and not any(modal_states) and has_real_clicks:
+            token = local_store.get("access_token") if local_store else None
+            if not token:
+                return dash.no_update
+            # Fetch updated projects from the API
+            projects = fetch_projects(token)
+            logger.info(f"Refreshed {len(projects)} projects after edit")
+            return render_projects_list(projects=projects, admin_UI=False, token=token)
         return dash.no_update
 
     # Add hover effects using clientside callback
