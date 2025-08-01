@@ -956,3 +956,302 @@ def api_call_delete_project(project_id: str, token: str) -> dict[str, Any] | Non
     except Exception as e:
         logger.error(f"Error deleting project: {e}")
         return {"success": False, "message": f"Network error: {str(e)}", "status_code": 500}
+
+
+@validate_call(validate_return=True)
+def api_call_create_data_collection(
+    name: str,
+    description: str,
+    data_type: str,
+    file_format: str,
+    separator: str,
+    custom_separator: str | None,
+    compression: str,
+    has_header: bool,
+    file_contents: str,
+    filename: str,
+    project_id: str,
+    token: str,
+) -> dict[str, Any] | None:
+    """
+    Create a data collection by processing uploaded file.
+
+    This function handles the complete data collection creation workflow:
+    1. Validates and decodes the uploaded file
+    2. Creates temporary storage for the file
+    3. Builds polars configuration based on user selections
+    4. Creates data collection and workflow models
+    5. Processes the data using the existing CLI infrastructure
+    6. Uploads processed data to S3/MinIO
+
+    Args:
+        name: Data collection name
+        description: Data collection description
+        data_type: Type of data (table, jbrowse2)
+        file_format: File format (csv, tsv, parquet, etc.)
+        separator: Field separator for delimited files
+        custom_separator: Custom separator if separator="custom"
+        compression: Compression format (none, gzip, zip, bz2)
+        has_header: Whether file has header row
+        file_contents: Base64 encoded file contents
+        filename: Original filename
+        project_id: Target project ID
+        token: Authentication token
+
+    Returns:
+        Response with success/failure status and details
+    """
+    try:
+        import base64
+        import os
+        import shutil
+        import tempfile
+
+        # Import required models and utilities
+        from depictio.api.v1.configs.config import settings
+        from depictio.cli.cli.utils.helpers import process_data_collection_helper
+        from depictio.models.models.cli import CLIConfig, UserBaseCLIConfig
+        from depictio.models.models.data_collections import (
+            DataCollection,
+            DataCollectionConfig,
+            Scan,
+            ScanSingle,
+        )
+        from depictio.models.models.data_collections_types.table import DCTableConfig
+        from depictio.models.models.workflows import (
+            Workflow,
+            WorkflowConfig,
+            WorkflowDataLocation,
+            WorkflowEngine,
+        )
+
+        logger.info(f"Creating data collection: {name}")
+
+        # Validate file size (5MB limit)
+        try:
+            _, content_string = file_contents.split(",")
+            decoded = base64.b64decode(content_string)
+            file_size = len(decoded)
+
+            max_size = 5 * 1024 * 1024  # 5MB
+            if file_size > max_size:
+                return {
+                    "success": False,
+                    "message": f"File size ({file_size / (1024 * 1024):.1f}MB) exceeds 5MB limit",
+                    "status_code": 400,
+                }
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Invalid file contents: {str(e)}",
+                "status_code": 400,
+            }
+
+        # Get user information from token first
+        current_user = api_call_fetch_user_from_token(token)
+        if not current_user:
+            return {
+                "success": False,
+                "message": "Invalid authentication token",
+                "status_code": 401,
+            }
+
+        # Fetch current project (now that we have a valid token)
+        project = api_call_fetch_project_by_id(project_id, token)
+        if not project:
+            return {
+                "success": False,
+                "message": f"Project {project_id} not found",
+                "status_code": 404,
+            }
+
+        # Create temporary directory for the file
+        temp_dir = tempfile.mkdtemp(prefix="depictio_upload_")
+        temp_file_path = os.path.join(temp_dir, filename)
+
+        try:
+            # Save uploaded file
+            with open(temp_file_path, "wb") as f:
+                f.write(decoded)
+
+            logger.info(f"Saved uploaded file to: {temp_file_path}")
+
+            # Build polars kwargs based on user selections
+            polars_kwargs = {}
+
+            if file_format in ["csv", "tsv"]:
+                # Determine separator
+                if separator == "custom" and custom_separator:
+                    polars_kwargs["separator"] = custom_separator
+                elif separator == "\t":
+                    polars_kwargs["separator"] = "\t"
+                elif separator in [",", ";", "|"]:
+                    polars_kwargs["separator"] = separator
+                else:
+                    polars_kwargs["separator"] = "," if file_format == "csv" else "\t"
+
+                # Header handling
+                polars_kwargs["has_header"] = has_header
+
+            # Add compression if specified
+            if compression != "none":
+                polars_kwargs["compression"] = compression
+
+            # Create data collection configuration
+            dc_table_config = DCTableConfig(
+                format=file_format,
+                polars_kwargs=polars_kwargs,
+                keep_columns=[],
+                columns_description={},
+            )
+
+            scan_config = Scan(mode="single", scan_parameters=ScanSingle(filename=temp_file_path))
+
+            dc_config = DataCollectionConfig(
+                type=data_type,
+                metatype="metadata",  # Always metadata for uploaded files
+                scan=scan_config,
+                dc_specific_properties=dc_table_config,
+            )
+
+            # Create the data collection
+            data_collection = DataCollection(
+                data_collection_tag=name,
+                config=dc_config,
+            )
+
+            logger.info(f"Created data collection: {data_collection}")
+
+            # Create a workflow to contain this data collection
+            workflow_config = WorkflowConfig()
+
+            workflow_data_location = WorkflowDataLocation(
+                structure="flat",
+                locations=[temp_dir],
+            )
+
+            workflow = Workflow(
+                name=f"{name}_workflow",
+                engine=WorkflowEngine(name="python", version="3.12"),
+                workflow_tag=f"{name}_workflow",
+                config=workflow_config,
+                data_location=workflow_data_location,
+                data_collections=[data_collection],
+            )
+
+            # Get the full token object from database (like the working sync_process_initial_data_collections does)
+            import pymongo
+
+            from depictio.api.v1.configs.config import MONGODB_URL
+            from depictio.api.v1.configs.config import settings as api_settings
+
+            # Connect to MongoDB to get full token object
+            mongo_client = pymongo.MongoClient(MONGODB_URL)
+            db = mongo_client[api_settings.mongodb.db_name]
+            tokens_collection = db["tokens"]
+
+            # Get the full token document for this user
+            full_token = tokens_collection.find_one({"user_id": current_user.id})
+            if not full_token:
+                return {
+                    "success": False,
+                    "message": "Token not found in database",
+                    "status_code": 401,
+                }
+
+            # Create CLI config for processing (using the same pattern as sync_process_initial_data_collections)
+            cli_config = CLIConfig(
+                user=UserBaseCLIConfig(
+                    id=current_user.id,
+                    email=current_user.email,
+                    is_admin=current_user.is_admin,
+                    token=full_token,  # Use the full token object from database
+                ),
+                api_base_url=settings.fastapi.url,
+                s3_storage=settings.minio,
+            )
+
+            # Add the new workflow to the project BEFORE processing
+            # This ensures the data collection is associated with the project during processing
+            if hasattr(project, "model_dump"):
+                # If project is a Pydantic model
+                project_dict = project.model_dump()
+            else:
+                # If project is already a dict (from API)
+                project_dict = project.copy()
+
+            project_dict["workflows"].append(workflow.model_dump())
+
+            # Update the project via API
+            update_result = api_call_update_project(project_dict, token)
+            if not update_result or not update_result.get("success"):
+                return {
+                    "success": False,
+                    "message": f"Failed to add data collection to project: {update_result.get('message', 'Unknown error') if update_result else 'API call failed'}",
+                    "status_code": 500,
+                }
+
+            logger.info("Data collection added to project successfully!")
+
+            # Process the data collection using existing CLI infrastructure
+            logger.info("Starting data collection processing...")
+
+            # First scan the files
+            scan_result = process_data_collection_helper(
+                CLI_config=cli_config,
+                wf=workflow,
+                dc_id=str(data_collection.id),
+                mode="scan",
+            )
+
+            logger.info(f"Scan result: {scan_result}")
+
+            if scan_result.get("result") != "success":
+                return {
+                    "success": False,
+                    "message": f"File scanning failed: {scan_result.get('message', 'Unknown error')}",
+                    "status_code": 500,
+                }
+
+            # Then process the data
+            process_result = process_data_collection_helper(
+                CLI_config=cli_config,
+                wf=workflow,
+                dc_id=str(data_collection.id),
+                mode="process",
+                command_parameters={"overwrite": True},
+            )
+
+            logger.info(f"Process result: {process_result}")
+
+            if process_result.get("result") != "success":
+                return {
+                    "success": False,
+                    "message": f"Data processing failed: {process_result.get('message', 'Unknown error')}",
+                    "status_code": 500,
+                }
+
+            logger.info("Data collection created and processed successfully!")
+
+            return {
+                "success": True,
+                "message": f"Data collection '{name}' created and processed successfully",
+                "data_collection_id": str(data_collection.id),
+                "workflow_id": str(workflow.id),
+            }
+
+        finally:
+            # Always cleanup temp directory
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            logger.info(f"Cleaned up temporary directory: {temp_dir}")
+
+    except Exception as e:
+        logger.error(f"Error creating data collection: {str(e)}")
+        import traceback
+
+        traceback.print_exc()
+        return {
+            "success": False,
+            "message": f"Internal error: {str(e)}",
+            "status_code": 500,
+        }

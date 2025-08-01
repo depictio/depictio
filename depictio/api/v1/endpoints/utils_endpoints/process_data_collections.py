@@ -127,7 +127,7 @@ def sync_process_initial_data_collections() -> dict[str, Any]:
             is_admin=admin_user["is_admin"],
             token=token,
         ),
-        api_base_url=f"http://localhost:{settings.fastapi.port}",
+        api_base_url=settings.fastapi.url,
         s3_storage=settings.minio,
     )
 

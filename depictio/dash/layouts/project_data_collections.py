@@ -46,7 +46,7 @@ def create_project_type_indicator(project_type):
         dmc.Group: Project type indicator component
     """
     if project_type.lower() == "basic":
-        color = "cyan"
+        color = "teal"
         description = "Simple project with direct data collection management"
     else:  # advanced
         color = "orange"
@@ -1734,31 +1734,32 @@ def register_project_data_collections_callbacks(app):
         return separator_style, custom_style
 
     @app.callback(
-        Output("data-collection-creation-modal", "opened"),
+        [
+            Output("data-collection-creation-modal", "opened"),
+            Output("data-collection-creation-error-alert", "style"),
+        ],
         [
             Input("create-data-collection-button", "n_clicks"),
             Input("cancel-data-collection-creation-button", "n_clicks"),
-            Input("create-data-collection-creation-submit", "n_clicks"),
         ],
         [dash.State("data-collection-creation-modal", "opened")],
         prevent_initial_call=True,
     )
-    def toggle_data_collection_modal(open_clicks, cancel_clicks, submit_clicks, opened):
+    def toggle_data_collection_modal(open_clicks, cancel_clicks, opened):
         """Handle opening and closing of data collection creation modal."""
         if not ctx.triggered:
-            return False
+            return False, {"display": "none"}
 
         ctx_trigger = ctx.triggered_id
 
         if ctx_trigger == "create-data-collection-button" and open_clicks:
-            return True
-        elif ctx_trigger in [
-            "cancel-data-collection-creation-button",
-            "create-data-collection-creation-submit",
-        ] and (cancel_clicks or submit_clicks):
-            return False
+            # When opening modal, hide error alert
+            return True, {"display": "none"}
+        elif ctx_trigger == "cancel-data-collection-creation-button" and cancel_clicks:
+            # When closing modal, hide error alert
+            return False, {"display": "none"}
 
-        return opened
+        return opened, {"display": "none"}
 
     @app.callback(
         Output("data-collection-creation-file-info", "children"),
@@ -2007,6 +2008,137 @@ def register_project_data_collections_callbacks(app):
                 f"File processing error: {str(e)}",
                 color="red",
                 icon=DashIconify(icon="mdi:alert"),
+            )
+
+    @app.callback(
+        [
+            Output("data-collection-creation-modal", "opened", allow_duplicate=True),
+            Output("project-data-store", "data", allow_duplicate=True),
+            Output("data-collection-creation-error-alert", "children", allow_duplicate=True),
+            Output("data-collection-creation-error-alert", "style", allow_duplicate=True),
+        ],
+        [Input("create-data-collection-creation-submit", "n_clicks")],
+        [
+            dash.State("data-collection-creation-name-input", "value"),
+            dash.State("data-collection-creation-description-input", "value"),
+            dash.State("data-collection-creation-type-select", "value"),
+            dash.State("data-collection-creation-format-select", "value"),
+            dash.State("data-collection-creation-separator-select", "value"),
+            dash.State("data-collection-creation-custom-separator-input", "value"),
+            dash.State("data-collection-creation-compression-select", "value"),
+            dash.State("data-collection-creation-has-header-switch", "checked"),
+            dash.State("data-collection-creation-file-upload", "contents"),
+            dash.State("data-collection-creation-file-upload", "filename"),
+            dash.State("project-data-store", "data"),
+            dash.State("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def submit_data_collection_creation(
+        submit_clicks,
+        name,
+        description,
+        data_type,
+        file_format,
+        separator,
+        custom_separator,
+        compression,
+        has_header,
+        file_contents,
+        filename,
+        project_data,
+        local_data,
+    ):
+        """Handle data collection creation submission with file processing."""
+        if not submit_clicks or not name or not file_contents or not filename:
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+        try:
+            from datetime import datetime
+
+            from depictio.dash.api_calls import api_call_create_data_collection
+
+            logger.info(f"Creating data collection: {name}")
+
+            # Get current project information
+            if not project_data or "project_id" not in project_data:
+                logger.error("No project information available")
+                return (
+                    dash.no_update,
+                    dash.no_update,
+                    "No project information available",
+                    {"display": "block"},
+                )
+
+            project_id = project_data.get("project_id")
+            if not project_id:
+                logger.error("No project ID available")
+                return (
+                    dash.no_update,
+                    dash.no_update,
+                    "No project ID available",
+                    {"display": "block"},
+                )
+
+            # Get authentication token from user session
+            if not local_data or not local_data.get("access_token"):
+                logger.error("No authentication token available")
+                return (
+                    dash.no_update,
+                    dash.no_update,
+                    "Authentication required. Please log in.",
+                    {"display": "block"},
+                )
+
+            token = local_data["access_token"]
+
+            # Call the API function to create the data collection
+            result = api_call_create_data_collection(
+                name=name,
+                description=description or "",
+                data_type=data_type,
+                file_format=file_format,
+                separator=separator,
+                custom_separator=custom_separator,
+                compression=compression,
+                has_header=has_header,
+                file_contents=file_contents,
+                filename=filename,
+                project_id=project_id,
+                token=token,
+            )
+
+            if result and result.get("success"):
+                logger.info(f"Data collection created successfully: {result.get('message')}")
+
+                # Update project data store to trigger refresh
+                updated_project_data = project_data.copy()
+                updated_project_data["refresh_timestamp"] = datetime.now().isoformat()
+
+                # Close modal and refresh project data (hide error alert)
+                return False, updated_project_data, "", {"display": "none"}
+            else:
+                error_msg = result.get("message", "Unknown error") if result else "API call failed"
+                logger.error(f"Data collection creation failed: {error_msg}")
+                logger.info("DEBUG: Showing error alert in modal")  # Debug log
+                return (
+                    dash.no_update,
+                    dash.no_update,
+                    f"Failed to create data collection: {error_msg}",
+                    {"display": "block"},
+                )
+
+        except Exception as e:
+            logger.error(f"Error creating data collection: {str(e)}")
+            logger.info("DEBUG: Showing exception error alert in modal")  # Debug log
+            import traceback
+
+            traceback.print_exc()
+            return (
+                dash.no_update,
+                dash.no_update,
+                f"Unexpected error: {str(e)}",
+                {"display": "block"},
             )
 
 

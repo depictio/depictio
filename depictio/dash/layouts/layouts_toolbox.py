@@ -870,6 +870,15 @@ def create_data_collection_modal(
                             ),
                         ],
                     ),
+                    # Error message display (hidden by default)
+                    dmc.Alert(
+                        "",
+                        id=f"{id_prefix}-error-alert",
+                        color="red",
+                        icon=DashIconify(icon="mdi:alert"),
+                        style={"display": "none"},
+                        variant="filled",
+                    ),
                     # Buttons
                     dmc.Group(
                         justify="flex-end",
