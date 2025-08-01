@@ -382,14 +382,24 @@ def create_add_with_input_modal(
                         children=[
                             dmc.Button(
                                 cancel_button_text,
-                                id=f"cancel-{id_prefix}-add-button",
+                                id={
+                                    "type": f"cancel-{id_prefix}-add-button",
+                                    "index": item_id,
+                                }
+                                if item_id
+                                else f"cancel-{id_prefix}-add-button",
                                 color="gray",
                                 variant="outline",
                                 radius="md",
                             ),
                             dmc.Button(
                                 confirm_button_text,
-                                id=f"confirm-{id_prefix}-add-button",
+                                id={
+                                    "type": f"confirm-{id_prefix}-add-button",
+                                    "index": item_id,
+                                }
+                                if item_id
+                                else f"confirm-{id_prefix}-add-button",
                                 color=confirm_button_color,
                                 radius="md",
                                 leftSection=DashIconify(icon="mdi:check-circle", width=16),

@@ -966,7 +966,8 @@ def create_project_management_panel(project: Project) -> list:
 
     # Create edit modal with unique prefix per project
     edit_modal, edit_modal_id = create_add_with_input_modal(
-        id_prefix=f"edit-project-name-{project.id}",
+        id_prefix="edit-project-name",
+        item_id=str(project.id),
         input_field=edit_input_field,
         title="Edit Project Name",
         title_color="blue",
@@ -2082,14 +2083,20 @@ def register_workflows_callbacks(app):
             if not token or not new_name:
                 return False
 
-            # Create project data for update
-            project_data = {
-                "id": project_id,
-                "name": new_name.strip(),
-            }
+            # First fetch the complete project data
+            from depictio.dash.api_calls import api_call_fetch_project_by_id
 
-            # Call API to update project
-            result = api_call_update_project(project_data, token)
+            current_project_data = api_call_fetch_project_by_id(project_id, token)
+
+            if not current_project_data:
+                logger.error(f"Could not fetch project data for {project_id}")
+                return False
+
+            # Update only the name field in the complete project data
+            current_project_data["name"] = new_name.strip()
+
+            # Call API to update project with complete data
+            result = api_call_update_project(current_project_data, token)
 
             if result and result.get("success"):
                 logger.info(f"Project {project_id} updated successfully with name: {new_name}")

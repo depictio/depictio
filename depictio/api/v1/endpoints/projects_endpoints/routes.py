@@ -151,7 +151,7 @@ async def update_project(project: Project, current_user: User = Depends(get_curr
     # Ensure the current_user is an owner
     if (
         current_user.id not in [owner.id for owner in project.permissions.owners]
-        or not current_user.is_admin
+        and not current_user.is_admin
     ):
         raise HTTPException(
             status_code=403,
@@ -159,7 +159,7 @@ async def update_project(project: Project, current_user: User = Depends(get_curr
         )
 
     try:
-        existing_project = await get_project_from_name(project.name, current_user)
+        existing_project = await get_project_from_id(project.id, current_user)
         if not existing_project:
             raise HTTPException(status_code=404, detail="Project not found.")
     except HTTPException as e:
