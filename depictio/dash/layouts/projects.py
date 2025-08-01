@@ -134,6 +134,11 @@ def create_project_modal(opened=False):
                     "data_collections": [],
                 },
             ),
+            dcc.Store(
+                id="project-card-click-memory",
+                data={"basic_clicks": 0},
+                storage_type="memory",
+            ),
             dmc.Stack(
                 gap="xl",
                 children=[
@@ -1390,46 +1395,57 @@ def register_projects_callbacks(app):
 
     # Project creation modal callbacks
     @app.callback(
-        Output("project-creation-modal", "opened"),
+        [
+            Output("project-creation-modal", "opened"),
+            Output("project-card-click-memory", "data", allow_duplicate=True),
+            Output("project-creation-store", "data", allow_duplicate=True),
+            Output("project-creation-stepper", "active", allow_duplicate=True),
+        ],
         Input("create-project-button", "n_clicks"),
         Input("project-cancel-button", "n_clicks"),
         prevent_initial_call=True,
     )
     def toggle_project_modal(create_clicks, cancel_clicks):
-        """Toggle the project creation modal."""
+        """Toggle the project creation modal and reset states."""
         ctx = dash.callback_context
+        default_store = {
+            "current_step": 0,
+            "project_type": None,
+            "project_name": "",
+            "is_public": False,
+            "data_collections": [],
+        }
+        default_memory = {"basic_clicks": 0}
+
         if not ctx.triggered:
-            return False
+            return False, default_memory, default_store, 0
 
         trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
 
         if trigger_id == "create-project-button":
-            return True  # Open modal
+            # Reset memory, store, and stepper when opening modal
+            return True, default_memory, default_store, 0
         elif trigger_id == "project-cancel-button":
-            return False  # Close modal
+            # Reset memory, store, and stepper when closing modal
+            return False, default_memory, default_store, 0
 
-        return False
+        return False, default_memory, default_store, 0
 
     # Initialize step content when modal opens
     @app.callback(
-        [
-            Output("step-1-content", "children", allow_duplicate=True),
-            Output("step-2-content", "children", allow_duplicate=True),
-            Output("step-3-content", "children", allow_duplicate=True),
-        ],
+        Output("step-1-content", "children", allow_duplicate=True),
         Input("project-creation-modal", "opened"),
         prevent_initial_call=True,
     )
     def initialize_step_content(modal_opened):
         """Initialize step content when modal opens."""
         if modal_opened:
-            return create_step_1_content(), "", ""
-        return "", "", ""
+            return create_step_1_content()
+        return ""
 
     # Step content management
     @app.callback(
         [
-            Output("step-1-content", "children"),
             Output("step-2-content", "children"),
             Output("step-3-content", "children"),
             Output("project-creation-stepper", "active"),
@@ -1437,47 +1453,36 @@ def register_projects_callbacks(app):
             Output("project-stepper-next", "children"),
             Output("project-stepper-next", "disabled"),
             Output("project-creation-store", "data"),
+            Output("project-card-click-memory", "data"),
         ],
         [
             Input("project-creation-store", "data"),
-            Input("basic-project-card", "n_clicks"),
             Input("project-stepper-next", "n_clicks"),
             Input("project-stepper-prev", "n_clicks"),
         ],
-        [State("project-creation-stepper", "active")],
+        [
+            State("project-creation-stepper", "active"),
+            State("project-card-click-memory", "data"),
+        ],
         prevent_initial_call=True,
     )
     def manage_stepper_content(
         store_data,
-        basic_clicks,
         next_clicks,
         prev_clicks,
         current_step,
+        click_memory,
     ):
         """Manage stepper content and navigation."""
         ctx = dash.callback_context
 
         if not ctx.triggered:
-            return create_step_1_content(), "", "", 0, True, "Next", False, store_data
+            return "", "", 0, True, "Next", False, store_data, click_memory
 
         trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
 
-        # Handle project type selection (only basic project is clickable)
-        if trigger_id == "basic-project-card" and basic_clicks and basic_clicks > 0:
-            project_type = "basic"
-            store_data = store_data or {}
-            store_data["project_type"] = project_type
-            # Automatically advance to step 2 when basic project is selected
-            return (
-                create_step_1_content(),
-                create_step_2_content(project_type),
-                create_step_3_content(),
-                1,  # Move to step 2 (step 1 index)
-                False,  # Enable prev button
-                "Next",
-                False,  # Enable next button
-                store_data,
-            )
+        # Initialize click memory if needed
+        click_memory = click_memory or {"basic_clicks": 0}
 
         # Handle navigation
         project_type = store_data.get("project_type") if store_data else None
@@ -1494,11 +1499,7 @@ def register_projects_callbacks(app):
         next_text = "Create Project" if new_step == max_steps else "Next"
         next_disabled = new_step == max_steps and project_type == "advanced"
 
-        # For basic projects on step 2, next button will be handled by separate validation
-        # next_disabled = new_step == max_steps and project_type == "advanced"
-
         return (
-            create_step_1_content(),
             create_step_2_content(project_type),
             create_step_3_content() if project_type == "basic" else "",
             new_step,
@@ -1506,7 +1507,43 @@ def register_projects_callbacks(app):
             next_text,
             next_disabled,
             store_data,
+            click_memory,
         )
+
+    # Handle project type card clicks
+    @app.callback(
+        [
+            Output("project-creation-store", "data", allow_duplicate=True),
+            Output("project-creation-stepper", "active", allow_duplicate=True),
+            Output("project-card-click-memory", "data", allow_duplicate=True),
+        ],
+        Input("basic-project-card", "n_clicks"),
+        [
+            State("project-creation-store", "data"),
+            State("project-card-click-memory", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def handle_project_card_click(basic_clicks, store_data, click_memory):
+        """Handle project type card clicks."""
+        if not basic_clicks:
+            raise dash.exceptions.PreventUpdate
+
+        click_memory = click_memory or {"basic_clicks": 0}
+
+        # Check if this is a NEW click by comparing with stored click count
+        if basic_clicks > click_memory.get("basic_clicks", 0):
+            project_type = "basic"
+            store_data = store_data or {}
+            store_data["project_type"] = project_type
+
+            # Update click memory to current click count
+            click_memory["basic_clicks"] = basic_clicks
+
+            # Automatically advance to step 2 (step 1 in 0-indexed)
+            return store_data, 1, click_memory
+
+        raise dash.exceptions.PreventUpdate
 
     @app.callback(
         Output({"type": "project-dc-table", "index": MATCH}, "className"),
