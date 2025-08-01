@@ -14,6 +14,7 @@ from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
 # from depictio.api.v1.endpoints.user_endpoints.models import UserBase
 from depictio.dash.api_calls import api_call_fetch_user_from_token
+from depictio.dash.colors import colors  # Import Depictio color palette
 from depictio.models.models.data_collections import DataCollection
 from depictio.models.models.projects import Project
 from depictio.models.models.users import UserBase
@@ -84,6 +85,380 @@ def fetch_projects(token: str) -> list[Project]:
 #             shared.append(wf)
 
 #     return owned, shared
+
+
+# =====================
+# Modal Components
+# =====================
+
+
+def create_project_modal(opened=False):
+    """
+    Creates a stylish modal for project creation with DMC Stepper.
+
+    Returns:
+    - modal: The project creation modal
+    - modal_id: The ID of the modal for callbacks
+    """
+    modal_id = "project-creation-modal"
+
+    modal = dmc.Modal(
+        opened=opened,
+        id=modal_id,
+        centered=True,
+        withCloseButton=True,
+        closeOnClickOutside=False,
+        closeOnEscape=False,
+        overlayProps={
+            "overlayBlur": 3,
+            "overlayOpacity": 0.55,
+        },
+        shadow="xl",
+        radius="md",
+        size="xl",
+        zIndex=10000,
+        styles={
+            "modal": {
+                "padding": "28px",
+            },
+        },
+        children=[
+            html.Div(id="dummy-hover-output", style={"display": "none"}),
+            dcc.Store(
+                id="project-creation-store",
+                data={
+                    "current_step": 0,
+                    "project_type": None,
+                    "project_name": "",
+                    "is_public": False,
+                    "data_collections": [],
+                },
+            ),
+            dmc.Stack(
+                gap="xl",
+                children=[
+                    # Header with icon and title
+                    dmc.Group(
+                        justify="center",
+                        gap="sm",
+                        children=[
+                            DashIconify(
+                                icon="mdi:folder-plus-outline",
+                                width=40,
+                                height=40,
+                                color=colors["teal"],
+                            ),
+                            dmc.Title(
+                                "Create New Project",
+                                order=1,
+                                c=colors["teal"],
+                                style={"margin": 0},
+                            ),
+                        ],
+                    ),
+                    # Divider
+                    dmc.Divider(style={"marginTop": 5, "marginBottom": 5}),
+                    # Stepper
+                    dmc.Stepper(
+                        id="project-creation-stepper",
+                        active=0,
+                        children=[
+                            dmc.StepperStep(
+                                label="Project Type",
+                                description="Choose basic or advanced",
+                                children=[html.Div(id="step-1-content")],
+                            ),
+                            dmc.StepperStep(
+                                label="Project Details",
+                                description="Configure your project",
+                                children=[html.Div(id="step-2-content")],
+                            ),
+                            dmc.StepperStep(
+                                label="Data Collections",
+                                description="Add your data (basic only)",
+                                children=[html.Div(id="step-3-content")],
+                            ),
+                            dmc.StepperCompleted(
+                                children=[
+                                    dmc.Center(
+                                        [
+                                            dmc.Stack(
+                                                [
+                                                    DashIconify(
+                                                        icon="mdi:check-circle",
+                                                        width=64,
+                                                        color="green",
+                                                    ),
+                                                    dmc.Text(
+                                                        "Project created successfully!",
+                                                        ta="center",
+                                                        fw="bold",
+                                                    ),
+                                                ],
+                                                align="center",
+                                            )
+                                        ]
+                                    )
+                                ]
+                            ),
+                        ],
+                    ),
+                    # Navigation buttons
+                    dmc.Group(
+                        justify="space-between",
+                        mt="xl",
+                        children=[
+                            dmc.Button(
+                                "Previous",
+                                id="project-stepper-prev",
+                                variant="outline",
+                                disabled=True,
+                            ),
+                            dmc.Group(
+                                [
+                                    dmc.Button(
+                                        "Cancel",
+                                        id="project-cancel-button",
+                                        color="gray",
+                                        variant="outline",
+                                    ),
+                                    dmc.Button(
+                                        "Next",
+                                        id="project-stepper-next",
+                                        color=colors["teal"],
+                                    ),
+                                ]
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+        ],
+    )
+
+    return modal, modal_id
+
+
+def create_step_1_content():
+    """Create Step 1: Project Type Selection."""
+    return dmc.Stack(
+        [
+            dmc.Text("Choose your project type:", fw="bold", size="lg", ta="center"),
+            dmc.Space(h="md"),
+            dmc.Grid(
+                [
+                    dmc.GridCol(
+                        [
+                            html.Div(
+                                [
+                                    dmc.Card(
+                                        [
+                                            dmc.Stack(
+                                                [
+                                                    dmc.Center(
+                                                        [
+                                                            DashIconify(
+                                                                icon="mdi:view-dashboard-outline",
+                                                                width=48,
+                                                                color="cyan",
+                                                            )
+                                                        ]
+                                                    ),
+                                                    dmc.Text(
+                                                        "Basic Project",
+                                                        fw="bold",
+                                                        size="lg",
+                                                        ta="center",
+                                                    ),
+                                                    dmc.Text(
+                                                        "Perfect for simple data visualization and exploration. "
+                                                        "No workflows required - upload data collections directly through the UI. "
+                                                        "Best for individual datasets and quick analysis.",
+                                                        size="sm",
+                                                        ta="center",
+                                                        c="gray",
+                                                    ),
+                                                    dmc.Center(
+                                                        [
+                                                            dmc.Badge(
+                                                                "UI Creation Only",
+                                                                color="cyan",
+                                                                variant="light",
+                                                            )
+                                                        ]
+                                                    ),
+                                                ],
+                                                gap="sm",
+                                            )
+                                        ],
+                                        withBorder=True,
+                                        shadow="sm",
+                                        radius="md",
+                                        p="lg",
+                                        style={
+                                            "height": "280px",
+                                            "transition": "all 0.2s ease",
+                                        },
+                                        className="project-type-card",
+                                    )
+                                ],
+                                id="basic-project-card",
+                                n_clicks=0,
+                                style={
+                                    "cursor": "pointer",
+                                    "transition": "all 0.2s ease",
+                                },
+                                className="project-type-card-wrapper",
+                            )
+                        ],
+                        span=6,
+                    ),
+                    dmc.GridCol(
+                        [
+                            html.Div(
+                                [
+                                    dmc.Card(
+                                        [
+                                            dmc.Stack(
+                                                [
+                                                    dmc.Center(
+                                                        [
+                                                            DashIconify(
+                                                                icon="mdi:workflow",
+                                                                width=48,
+                                                                color="orange",
+                                                            )
+                                                        ]
+                                                    ),
+                                                    dmc.Text(
+                                                        "Advanced Project",
+                                                        fw="bold",
+                                                        size="lg",
+                                                        ta="center",
+                                                    ),
+                                                    dmc.Text(
+                                                        "Designed for complex sequencing runs, processing workflows, and data ingestion pipelines. "
+                                                        "Requires depictio-CLI for project design and workflow management. "
+                                                        "Best for bioinformatics and computational analysis.",
+                                                        size="sm",
+                                                        ta="center",
+                                                        c="gray",
+                                                    ),
+                                                    dmc.Center(
+                                                        [
+                                                            dmc.Badge(
+                                                                "depictio-CLI only",
+                                                                color="orange",
+                                                                variant="light",
+                                                            )
+                                                        ]
+                                                    ),
+                                                ],
+                                                gap="sm",
+                                            )
+                                        ],
+                                        withBorder=True,
+                                        shadow="sm",
+                                        radius="md",
+                                        p="lg",
+                                        style={
+                                            "height": "280px",
+                                            "transition": "all 0.2s ease",
+                                        },
+                                        className="project-type-card",
+                                    )
+                                ],
+                                id="advanced-project-card",
+                                style={
+                                    "cursor": "not-allowed",
+                                    "opacity": "0.6",
+                                },
+                                className="project-type-card-wrapper-disabled",
+                            )
+                        ],
+                        span=6,
+                    ),
+                ]
+            ),
+        ]
+    )
+
+
+def create_step_2_content(project_type=None):
+    """Create Step 2: Project Details."""
+    if project_type == "advanced":
+        return dmc.Stack(
+            [
+                dmc.Center([DashIconify(icon="mdi:console", width=64, color="orange")]),
+                dmc.Text("Advanced Project Setup", fw="bold", size="xl", ta="center"),
+                dmc.Text(
+                    "Advanced projects require the depictio-CLI for proper setup and configuration.",
+                    size="lg",
+                    ta="center",
+                    c="gray",
+                ),
+                dmc.Divider(),
+                dmc.Stack(
+                    [
+                        dmc.Text("To create an advanced project:", fw="bold"),
+                        dmc.List(
+                            [
+                                dmc.ListItem("Install depictio-CLI: pip install depictio"),
+                                dmc.ListItem("Initialize your project: depictio init"),
+                                dmc.ListItem("Configure workflows and data collections"),
+                                dmc.ListItem("Register your project: depictio register"),
+                            ]
+                        ),
+                        dmc.Alert(
+                            "Advanced projects cannot be created through the web interface. "
+                            "Please use the CLI for the full workflow management capabilities.",
+                            color="orange",
+                            icon=DashIconify(icon="mdi:information"),
+                        ),
+                    ]
+                ),
+            ]
+        )
+
+    # Basic project form
+    return dmc.Stack(
+        [
+            dmc.TextInput(
+                label="Project Name",
+                description="Give your project a descriptive name",
+                placeholder="Enter project name",
+                id="project-name-input",
+                required=True,
+                leftSection=DashIconify(icon="mdi:folder-outline"),
+            ),
+            dmc.Switch(
+                id="project-public-switch",
+                label="Make this project public",
+                description="Public projects are visible to all users",
+            ),
+        ]
+    )
+
+
+def create_step_3_content():
+    """Create Step 3: Data Collections (Basic projects only)."""
+    return dmc.Stack(
+        [
+            dmc.Text("Add Data Collections", fw="bold", size="lg"),
+            dmc.Text(
+                "Upload tabular data files (CSV, TSV, Excel) to create data collections.", c="gray"
+            ),
+            dmc.Divider(),
+            html.Div(id="data-collections-list"),
+            dmc.Button(
+                "+ Add Data Collection",
+                id="add-data-collection-button",
+                variant="outline",
+                leftSection=DashIconify(icon="mdi:plus"),
+            ),
+            html.Div(id="data-collection-form", style={"display": "none"}),
+        ]
+    )
 
 
 # =====================
@@ -703,7 +1078,25 @@ def render_project_item(
             ),
         ]
 
-    sections = create_workflow_section("Workflows:", project.workflows)
+    def create_data_collections_section(title, data_collections: list[DataCollection]):
+        if not data_collections:
+            return None
+        dc_items = [
+            render_data_collection(dc=dc, workflow_id="", token=token) for dc in data_collections
+        ]
+        return [
+            dmc.Title(title, order=4, style={"marginTop": "10px"}),
+            dmc.Stack(dc_items, gap="sm"),
+        ]
+
+    # For basic projects, show data collections directly; for advanced projects, show workflows
+    project_type = getattr(project, "project_type", "advanced")
+    if project_type == "basic":
+        sections = create_data_collections_section(
+            "Data Collections:", getattr(project, "data_collections", [])
+        )
+    else:
+        sections = create_workflow_section("Workflows:", project.workflows)
 
     # Determine user's role in the project
     role = "Viewer"  # Default role
@@ -769,17 +1162,30 @@ def render_project_item(
                                 ],
                             ),
                             dmc.AccordionItem(
-                                value="project-workflows",
+                                value="project-content",
                                 children=[
                                     dmc.AccordionControl(
-                                        "Workflows",
-                                        icon=DashIconify(icon="mdi:workflow", width=20),
+                                        "Data Collections"
+                                        if project_type == "basic"
+                                        else "Workflows",
+                                        icon=DashIconify(
+                                            icon="mdi:database"
+                                            if project_type == "basic"
+                                            else "mdi:workflow",
+                                            width=20,
+                                        ),
                                     ),
                                     dmc.AccordionPanel(
                                         children=(
                                             sections
                                             if sections
-                                            else [html.P("No workflows available.")]
+                                            else [
+                                                html.P(
+                                                    "No data collections available."
+                                                    if project_type == "basic"
+                                                    else "No workflows available."
+                                                )
+                                            ]
                                         )
                                     ),
                                 ],
@@ -846,44 +1252,53 @@ def render_project_item(
 
 def render_projects_list(projects: list[Project], admin_UI: bool = False, token: str | None = None):
     """Render the full projects list, categorized into owned and shared."""
+
+    # Create project modal
+    project_modal, project_modal_id = create_project_modal()
+
     if not projects:
-        content = dmc.Center(
-            dmc.Paper(
-                children=[
-                    dmc.Stack(
+        content = dmc.Container(
+            [
+                project_modal,
+                dmc.Center(
+                    dmc.Paper(
                         children=[
-                            dmc.Center(
-                                DashIconify(
-                                    icon="material-symbols:folder-off-outline",
-                                    width=64,
-                                    height=64,
-                                    color="#6c757d",
-                                )
-                            ),
-                            dmc.Text(
-                                "No projects available",
-                                ta="center",
-                                fw="bold",
-                                size="xl",
-                            ),
-                            dmc.Text(
-                                "Projects created by users will appear here.",
-                                ta="center",
-                                c="gray",
-                                size="sm",
-                            ),
+                            dmc.Stack(
+                                children=[
+                                    dmc.Center(
+                                        DashIconify(
+                                            icon="material-symbols:folder-off-outline",
+                                            width=64,
+                                            height=64,
+                                            color="#6c757d",
+                                        )
+                                    ),
+                                    dmc.Text(
+                                        "No projects available",
+                                        ta="center",
+                                        fw="bold",
+                                        size="xl",
+                                    ),
+                                    dmc.Text(
+                                        "Create your first project to get started.",
+                                        ta="center",
+                                        c="gray",
+                                        size="sm",
+                                    ),
+                                ],
+                                align="center",
+                                gap="sm",
+                            )
                         ],
-                        align="center",
-                        gap="sm",
-                    )
-                ],
-                shadow="sm",
-                radius="md",
-                p="xl",
-                withBorder=True,
-                style={"width": "100%", "maxWidth": "500px"},
-            ),
-            style={"minHeight": "300px", "height": "auto"},
+                        shadow="sm",
+                        radius="md",
+                        p="xl",
+                        withBorder=True,
+                        style={"width": "100%", "maxWidth": "500px"},
+                    ),
+                    style={"minHeight": "300px", "height": "auto"},
+                ),
+            ]
         )
         return content
 
@@ -950,7 +1365,11 @@ def render_projects_list(projects: list[Project], admin_UI: bool = False, token:
     )
 
     return dmc.Container(
-        children=[column_headers] + (sections if sections else []),
+        [
+            project_modal,
+            column_headers,
+        ]
+        + (sections if sections else []),
         fluid=True,
         style={"height": "auto", "minHeight": "400px"},
     )
@@ -968,6 +1387,126 @@ def register_projects_callbacks(app):
     Args:
         app: Dash application instance
     """
+
+    # Project creation modal callbacks
+    @app.callback(
+        Output("project-creation-modal", "opened"),
+        Input("create-project-button", "n_clicks"),
+        Input("project-cancel-button", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def toggle_project_modal(create_clicks, cancel_clicks):
+        """Toggle the project creation modal."""
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            return False
+
+        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+
+        if trigger_id == "create-project-button":
+            return True  # Open modal
+        elif trigger_id == "project-cancel-button":
+            return False  # Close modal
+
+        return False
+
+    # Initialize step content when modal opens
+    @app.callback(
+        [
+            Output("step-1-content", "children", allow_duplicate=True),
+            Output("step-2-content", "children", allow_duplicate=True),
+            Output("step-3-content", "children", allow_duplicate=True),
+        ],
+        Input("project-creation-modal", "opened"),
+        prevent_initial_call=True,
+    )
+    def initialize_step_content(modal_opened):
+        """Initialize step content when modal opens."""
+        if modal_opened:
+            return create_step_1_content(), "", ""
+        return "", "", ""
+
+    # Step content management
+    @app.callback(
+        [
+            Output("step-1-content", "children"),
+            Output("step-2-content", "children"),
+            Output("step-3-content", "children"),
+            Output("project-creation-stepper", "active"),
+            Output("project-stepper-prev", "disabled"),
+            Output("project-stepper-next", "children"),
+            Output("project-stepper-next", "disabled"),
+            Output("project-creation-store", "data"),
+        ],
+        [
+            Input("project-creation-store", "data"),
+            Input("basic-project-card", "n_clicks"),
+            Input("project-stepper-next", "n_clicks"),
+            Input("project-stepper-prev", "n_clicks"),
+        ],
+        [State("project-creation-stepper", "active")],
+        prevent_initial_call=True,
+    )
+    def manage_stepper_content(
+        store_data,
+        basic_clicks,
+        next_clicks,
+        prev_clicks,
+        current_step,
+    ):
+        """Manage stepper content and navigation."""
+        ctx = dash.callback_context
+
+        if not ctx.triggered:
+            return create_step_1_content(), "", "", 0, True, "Next", False, store_data
+
+        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+
+        # Handle project type selection (only basic project is clickable)
+        if trigger_id == "basic-project-card" and basic_clicks and basic_clicks > 0:
+            project_type = "basic"
+            store_data = store_data or {}
+            store_data["project_type"] = project_type
+            # Automatically advance to step 2 when basic project is selected
+            return (
+                create_step_1_content(),
+                create_step_2_content(project_type),
+                create_step_3_content(),
+                1,  # Move to step 2 (step 1 index)
+                False,  # Enable prev button
+                "Next",
+                False,  # Enable next button
+                store_data,
+            )
+
+        # Handle navigation
+        project_type = store_data.get("project_type") if store_data else None
+        max_steps = 2 if project_type == "basic" else 1  # Basic: 3 steps, Advanced: 2 steps
+
+        if trigger_id == "project-stepper-next":
+            new_step = min(current_step + 1, max_steps)
+        elif trigger_id == "project-stepper-prev":
+            new_step = max(current_step - 1, 0)
+        else:
+            new_step = current_step
+
+        # Determine next button text
+        next_text = "Create Project" if new_step == max_steps else "Next"
+        next_disabled = new_step == max_steps and project_type == "advanced"
+
+        # For basic projects on step 2, next button will be handled by separate validation
+        # next_disabled = new_step == max_steps and project_type == "advanced"
+
+        return (
+            create_step_1_content(),
+            create_step_2_content(project_type),
+            create_step_3_content() if project_type == "basic" else "",
+            new_step,
+            new_step == 0,  # Previous disabled on first step
+            next_text,
+            next_disabled,
+            store_data,
+        )
 
     @app.callback(
         Output({"type": "project-dc-table", "index": MATCH}, "className"),
@@ -1072,54 +1611,42 @@ def register_workflows_callbacks(app):
         projects = fetch_projects(token)
         logger.info(f"Fetched projects: {projects}")
 
-        # Temporarily hardcode the current project to "Strand-Seq"
-        # Remove or modify this filter when dynamic project selection is implemented
-        # projects = [project for project in projects if project.get("name") == "Strand-Seq"]
-
-        if not projects:
-            logger.info("No projects matched the hardcoded filter.")
-            content = dmc.Center(
-                dmc.Paper(
-                    children=[
-                        dmc.Stack(
-                            children=[
-                                dmc.Center(
-                                    DashIconify(
-                                        icon="material-symbols:folder-off-outline",
-                                        width=64,
-                                        height=64,
-                                        color="#6c757d",
-                                    )
-                                ),
-                                dmc.Text(
-                                    "No projects available",
-                                    ta="center",
-                                    fw="bold",
-                                    size="xl",
-                                ),
-                                dmc.Text(
-                                    "Projects created by users will appear here.",
-                                    ta="center",
-                                    c="gray",
-                                    size="sm",
-                                ),
-                            ],
-                            align="center",
-                            gap="sm",
-                        )
-                    ],
-                    shadow="sm",
-                    radius="md",
-                    p="xl",
-                    withBorder=True,
-                    style={"width": "100%", "maxWidth": "500px"},
-                ),
-                style={"minHeight": "300px", "height": "auto"},
-            )
-            return content
-
         return html.Div(
             children=[
                 render_projects_list(projects=projects, admin_UI=False, token=token),
             ]
         )
+
+    # Add hover effects using clientside callback
+    app.clientside_callback(
+        """
+        function() {
+            setTimeout(function() {
+                // Only add hover effects to enabled cards (not disabled ones)
+                const cards = document.querySelectorAll('.project-type-card-wrapper');
+                cards.forEach(function(card) {
+                    // Skip disabled cards
+                    if (card.classList.contains('project-type-card-wrapper-disabled')) {
+                        return;
+                    }
+
+                    card.addEventListener('mouseenter', function() {
+                        const cardElement = this.querySelector('.project-type-card');
+                        if (cardElement) {
+                            cardElement.style.boxShadow = '0 0 0 2px var(--mantine-color-blue-5, #339af0)';
+                        }
+                    });
+                    card.addEventListener('mouseleave', function() {
+                        const cardElement = this.querySelector('.project-type-card');
+                        if (cardElement) {
+                            cardElement.style.boxShadow = '';
+                        }
+                    });
+                });
+            }, 500);
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("dummy-hover-output", "children"),
+        Input("project-creation-modal", "opened"),
+    )

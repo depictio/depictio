@@ -1,6 +1,7 @@
 # import dash_bootstrap_components as dbc  # Not needed for AppShell layout
 import dash_mantine_components as dmc
 from dash import dcc, html
+from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, purge_expired_tokens
@@ -36,6 +37,31 @@ def return_create_dashboard_button(email, is_anonymous=False):
         id={"type": "create-dashboard-button", "index": email},
         n_clicks=0,
         color=button_color,
+        style={
+            "fontFamily": "Virgil",
+            "marginRight": "10px",
+        },
+        size="lg",  # Changed from xl to lg for better proportions
+        radius="md",
+        disabled=False,  # Always enabled - behavior changes based on user type
+    )
+    return create_button
+
+
+def return_create_project_button(email, is_anonymous=False):
+    # For anonymous users, show "Login to Create Projects" button that redirects to profile
+    # For authenticated users, show normal "+ Create Project" button
+    button_text = "+ Create Project" if not is_anonymous else "Login to Create Projects"
+    button_color = (
+        "teal" if not is_anonymous else "blue"  # Use teal color matching colors.py
+    )  # Use blue to match temporary user button
+
+    create_button = dmc.Button(
+        button_text,
+        id="create-project-button",
+        n_clicks=0,
+        color=button_color,
+        # leftSection=DashIconify(icon="mdi:plus", width=16),
         style={
             "fontFamily": "Virgil",
             "marginRight": "10px",
@@ -108,7 +134,13 @@ def handle_authenticated_user(pathname, local_data, theme="light"):
         # return projects, header, pathname, local_data
 
     elif pathname == "/projects":
-        header = create_default_header("Projects registered")
+        user = api_call_fetch_user_from_token(local_data["access_token"])
+
+        # Check if user is anonymous
+        is_anonymous = hasattr(user, "is_anonymous") and user.is_anonymous
+
+        create_button = return_create_project_button(user.email, is_anonymous=is_anonymous)
+        header = create_header_with_button("Projects", create_button)
         projects = html.Div(id="projects-list")
         return projects, header, pathname, local_data
 
@@ -193,7 +225,6 @@ def create_admin_header(text):
     Returns:
     - dmc.Header: A Dash Mantine Components Header containing the title and navigation tabs.
     """
-    from dash_iconify import DashIconify
 
     add_group_button = dmc.Button(
         "Add Group",

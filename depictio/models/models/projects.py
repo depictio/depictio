@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.models.base import MongoModel
+from depictio.models.models.data_collections import DataCollection
 from depictio.models.models.users import Permission
 from depictio.models.models.workflows import Workflow
 
@@ -21,8 +22,9 @@ class ProjectPermissionRequest(BaseModel):
 class Project(MongoModel):
     name: str
     data_management_platform_project_url: str | None = None
-    workflows: list[Workflow]
-    yaml_config_path: str
+    workflows: list[Workflow] = []  # Optional for basic projects
+    data_collections: list[DataCollection] = []  # Direct data collections for basic projects
+    yaml_config_path: str | None = None  # Optional for basic projects
     permissions: Permission
     is_public: bool = False
     hash: str | None = None
@@ -61,15 +63,20 @@ class Project(MongoModel):
 
     @field_validator("yaml_config_path")
     @classmethod
-    def validate_yaml_config_path(cls, v):
+    def validate_yaml_config_path(cls, v, info):
+        # Basic projects don't require yaml_config_path
+        project_type = info.data.get("project_type", "basic") if info.data else "basic"
+        if project_type == "basic" and not v:
+            return None
+
         if DEPICTIO_CONTEXT.lower() == "cli":
             # Check if looks like a valid path but do not check if it exists
-            if not os.path.isabs(v):
+            if v and not os.path.isabs(v):
                 raise ValueError("Path must be absolute")
             return v
         else:
-            if not v:
-                raise ValueError("Path cannot be empty")
+            if not v and project_type == "advanced":
+                raise ValueError("Path cannot be empty for advanced projects")
             return v
 
     @field_validator("data_management_platform_project_url")
