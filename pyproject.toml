@@ -16,6 +16,7 @@ dependencies = [
   # "curl",
   "dash-ace==0.2.1",
   "dash-bootstrap-components==1.7.1",
+  "dash-cytoscape==1.0.2",
   "dash-extensions==1.0.1",
   "dash-iconify==0.1.2",
   "dash-mantine-components==2.1.0",

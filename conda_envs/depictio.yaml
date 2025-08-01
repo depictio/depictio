@@ -52,6 +52,7 @@ dependencies:
   - uvicorn==0.34.0
   - pip:
     # - dash-draggable==0.1.2
+    - dash-cytoscape==1.0.2
     - dash-ag-grid==31.3.1
     - dash-ace==0.2.1
     - dash-dynamic-grid-layout
