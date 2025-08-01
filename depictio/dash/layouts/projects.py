@@ -940,12 +940,13 @@ def render_workflow_item(wf: Workflow, token: str):
     )
 
 
-def create_project_management_panel(project: Project) -> list:
+def create_project_management_panel(project: Project, current_user: UserBase) -> list:
     """
     Create the project management panel with edit and delete buttons and their modals.
 
     Args:
         project: Project object
+        current_user: Current user object for permission checking
 
     Returns:
         List of components for the management panel including modals
@@ -954,6 +955,11 @@ def create_project_management_panel(project: Project) -> list:
         create_add_with_input_modal,
         create_delete_confirmation_modal,
     )
+
+    # Check if current user can manage this project (is owner or admin)
+    user_can_manage = current_user.is_admin or current_user.id in [
+        owner.id for owner in project.permissions.owners
+    ]
 
     # Create input field for the edit modal
     edit_input_field = dmc.TextInput(
@@ -1000,6 +1006,7 @@ def create_project_management_panel(project: Project) -> list:
                     color="blue",
                     leftSection=DashIconify(icon="mdi:pencil", width=16),
                     size="sm",
+                    disabled=not user_can_manage,
                 ),
                 dmc.Button(
                     "Delete Project",
@@ -1008,6 +1015,7 @@ def create_project_management_panel(project: Project) -> list:
                     color="red",
                     leftSection=DashIconify(icon="mdi:delete", width=16),
                     size="sm",
+                    disabled=not user_can_manage,
                 ),
             ],
             gap="md",
@@ -1381,7 +1389,9 @@ def render_project_item(
                                     ),
                                     dmc.AccordionPanel(
                                         # children=html.Div()
-                                        children=create_project_management_panel(project)
+                                        children=create_project_management_panel(
+                                            project, current_user
+                                        )
                                     ),
                                 ],
                             ),
