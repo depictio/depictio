@@ -1710,6 +1710,30 @@ def register_project_data_collections_callbacks(app):
 
     # Data collection creation modal callbacks
     @app.callback(
+        [
+            Output("data-collection-creation-separator-container", "style"),
+            Output("data-collection-creation-custom-separator-container", "style"),
+        ],
+        [
+            Input("data-collection-creation-format-select", "value"),
+            Input("data-collection-creation-separator-select", "value"),
+        ],
+    )
+    def update_separator_visibility(file_format, separator_value):
+        """Control visibility of separator options based on file format."""
+        # Show separator options only for delimited file formats
+        delimited_formats = ["csv", "tsv"]
+        show_separator = file_format in delimited_formats
+
+        separator_style = {"display": "block"} if show_separator else {"display": "none"}
+
+        # Show custom separator input if "custom" is selected and format supports it
+        show_custom = show_separator and separator_value == "custom"
+        custom_style = {"display": "block"} if show_custom else {"display": "none"}
+
+        return separator_style, custom_style
+
+    @app.callback(
         Output("data-collection-creation-modal", "opened"),
         [
             Input("create-data-collection-button", "n_clicks"),
@@ -1814,6 +1838,176 @@ def register_project_data_collections_callbacks(app):
         if not name or not file_contents:
             return True
         return False
+
+    @app.callback(
+        Output("data-collection-creation-file-info", "children", allow_duplicate=True),
+        [
+            Input("data-collection-creation-file-upload", "contents"),
+            Input("data-collection-creation-format-select", "value"),
+            Input("data-collection-creation-separator-select", "value"),
+            Input("data-collection-creation-custom-separator-input", "value"),
+            Input("data-collection-creation-has-header-switch", "checked"),
+        ],
+        [
+            dash.State("data-collection-creation-file-upload", "filename"),
+        ],
+        prevent_initial_call=True,
+    )
+    def validate_file_with_polars(
+        contents, file_format, separator, custom_separator, has_header, filename
+    ):
+        """Validate uploaded file using polars and display detailed information."""
+        if not contents or not filename:
+            return []
+
+        try:
+            # Decode file content
+            content_type, content_string = contents.split(",")
+            decoded = base64.b64decode(content_string)
+            file_size = len(decoded)
+
+            # Check file size limit (5MB)
+            max_size = 5 * 1024 * 1024
+            if file_size > max_size:
+                return dmc.Alert(
+                    f"File size ({file_size / (1024 * 1024):.1f}MB) exceeds the 5MB limit",
+                    color="red",
+                    icon=DashIconify(icon="mdi:alert"),
+                )
+
+            # Save file temporarily for polars validation
+            import os
+            import tempfile
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_format}") as tmp_file:
+                tmp_file.write(decoded)
+                temp_file_path = tmp_file.name
+
+            try:
+                # Build polars kwargs based on format and user selections
+                polars_kwargs = {}
+
+                if file_format in ["csv", "tsv"]:
+                    # Determine separator
+                    if separator == "custom" and custom_separator:
+                        polars_kwargs["separator"] = custom_separator
+                    elif separator == "\t":
+                        polars_kwargs["separator"] = "\t"
+                    elif separator in [",", ";", "|"]:
+                        polars_kwargs["separator"] = separator
+                    else:
+                        polars_kwargs["separator"] = "," if file_format == "csv" else "\t"
+
+                    # Header handling
+                    polars_kwargs["has_header"] = has_header
+
+                    # Try to read with polars
+                    df = pl.read_csv(temp_file_path, **polars_kwargs)
+
+                elif file_format == "parquet":
+                    df = pl.read_parquet(temp_file_path)
+
+                elif file_format == "feather":
+                    df = pl.read_ipc(temp_file_path)
+
+                elif file_format in ["xls", "xlsx"]:
+                    df = pl.read_excel(temp_file_path, **polars_kwargs)
+
+                else:
+                    raise ValueError(f"Unsupported format: {file_format}")
+
+                # File validation successful - show detailed info
+                return dmc.Stack(
+                    [
+                        dmc.Card(
+                            [
+                                dmc.Group(
+                                    [
+                                        DashIconify(icon="mdi:file-check", width=20, color="green"),
+                                        dmc.Stack(
+                                            [
+                                                dmc.Text(filename, fw="bold", size="sm"),
+                                                dmc.Text(
+                                                    f"Size: {file_size / 1024:.1f}KB • Format: {file_format.upper()}",
+                                                    size="xs",
+                                                    c="gray",
+                                                ),
+                                            ],
+                                            gap="xs",
+                                        ),
+                                    ],
+                                    gap="md",
+                                    align="center",
+                                ),
+                            ],
+                            withBorder=True,
+                            shadow="xs",
+                            radius="md",
+                            p="sm",
+                            style={"backgroundColor": "var(--mantine-color-green-0)"},
+                        ),
+                        dmc.Card(
+                            [
+                                dmc.Text("Data Preview", fw="bold", size="sm", mb="sm"),
+                                dmc.SimpleGrid(
+                                    cols=2,
+                                    children=[
+                                        dmc.Stack(
+                                            [
+                                                dmc.Text("Rows:", size="xs", fw="bold", c="gray"),
+                                                dmc.Text(f"{df.height:,}", size="sm"),
+                                            ],
+                                            gap="xs",
+                                        ),
+                                        dmc.Stack(
+                                            [
+                                                dmc.Text(
+                                                    "Columns:", size="xs", fw="bold", c="gray"
+                                                ),
+                                                dmc.Text(f"{df.width}", size="sm"),
+                                            ],
+                                            gap="xs",
+                                        ),
+                                    ],
+                                    spacing="sm",
+                                ),
+                                dmc.Text("Column Names:", size="xs", fw="bold", c="gray", mt="sm"),
+                                dmc.Text(
+                                    ", ".join(df.columns[:10])
+                                    + ("..." if len(df.columns) > 10 else ""),
+                                    size="xs",
+                                    c="gray",
+                                ),
+                            ],
+                            withBorder=True,
+                            shadow="xs",
+                            radius="md",
+                            p="sm",
+                            mt="sm",
+                        ),
+                    ],
+                    gap="sm",
+                )
+
+            except Exception as e:
+                return dmc.Alert(
+                    f"File validation failed: {str(e)}",
+                    color="red",
+                    icon=DashIconify(icon="mdi:alert"),
+                    title="Validation Error",
+                )
+
+            finally:
+                # Clean up temp file
+                if os.path.exists(temp_file_path):
+                    os.unlink(temp_file_path)
+
+        except Exception as e:
+            return dmc.Alert(
+                f"File processing error: {str(e)}",
+                color="red",
+                icon=DashIconify(icon="mdi:alert"),
+            )
 
 
 def generate_cytoscape_elements_from_project_data(data_collections):

@@ -679,7 +679,6 @@ def create_data_collection_modal(
                                 description="Type of data in your collection",
                                 data=[
                                     {"value": "table", "label": "Table Data"},
-                                    {"value": "jbrowse2", "label": "JBrowse2 Data"},
                                 ],
                                 id=f"{id_prefix}-type-select",
                                 placeholder="Select data type",
@@ -687,22 +686,110 @@ def create_data_collection_modal(
                                 required=True,
                                 leftSection=DashIconify(icon="mdi:format-list-bulleted", width=16),
                                 style={"width": "100%"},
+                                comboboxProps={"withinPortal": True, "zIndex": 10001},
+                                disabled=True,  # Disabled since only one option
                             ),
-                            # Scan mode indicator (read-only)
-                            dmc.TextInput(
+                            # File format selection
+                            dmc.Select(
+                                label="File Format",
+                                description="Format of your data file",
+                                data=[
+                                    {"value": "csv", "label": "CSV (Comma Separated)"},
+                                    {"value": "tsv", "label": "TSV (Tab Separated)"},
+                                    {"value": "parquet", "label": "Parquet"},
+                                    {"value": "feather", "label": "Feather"},
+                                    {"value": "xls", "label": "Excel (.xls)"},
+                                    {"value": "xlsx", "label": "Excel (.xlsx)"},
+                                ],
+                                id=f"{id_prefix}-format-select",
+                                placeholder="Select file format",
+                                value="csv",  # Default to CSV
+                                required=True,
+                                leftSection=DashIconify(icon="mdi:file-table", width=16),
+                                style={"width": "100%"},
+                                comboboxProps={"withinPortal": True, "zIndex": 10001},
+                            ),
+                            # Separator selection (for delimited files)
+                            html.Div(
+                                id=f"{id_prefix}-separator-container",
+                                children=[
+                                    dmc.Select(
+                                        label="Field Separator",
+                                        description="Character that separates fields in your file",
+                                        data=[
+                                            {"value": ",", "label": "Comma (,)"},
+                                            {"value": "\t", "label": "Tab (\\t)"},
+                                            {"value": ";", "label": "Semicolon (;)"},
+                                            {"value": "|", "label": "Pipe (|)"},
+                                            {"value": "custom", "label": "Custom"},
+                                        ],
+                                        id=f"{id_prefix}-separator-select",
+                                        value=",",  # Default to comma
+                                        leftSection=DashIconify(
+                                            icon="mdi:format-columns", width=16
+                                        ),
+                                        style={"width": "100%"},
+                                        comboboxProps={"withinPortal": True, "zIndex": 10001},
+                                    ),
+                                ],
+                            ),
+                            # Custom separator input (hidden by default)
+                            html.Div(
+                                id=f"{id_prefix}-custom-separator-container",
+                                children=[
+                                    dmc.TextInput(
+                                        label="Custom Separator",
+                                        description="Enter your custom field separator",
+                                        placeholder="e.g., #, @, etc.",
+                                        id=f"{id_prefix}-custom-separator-input",
+                                        leftSection=DashIconify(icon="mdi:format-text", width=16),
+                                        style={"width": "100%"},
+                                    ),
+                                ],
+                                style={"display": "none"},
+                            ),
+                            # Compression selection
+                            dmc.Select(
+                                label="Compression",
+                                description="Compression format (if applicable)",
+                                data=[
+                                    {"value": "none", "label": "No Compression"},
+                                    {"value": "gzip", "label": "GZIP (.gz)"},
+                                    {"value": "zip", "label": "ZIP (.zip)"},
+                                    {"value": "bz2", "label": "BZIP2 (.bz2)"},
+                                ],
+                                id=f"{id_prefix}-compression-select",
+                                value="none",  # Default to no compression
+                                leftSection=DashIconify(icon="mdi:archive", width=16),
+                                style={"width": "100%"},
+                                comboboxProps={"withinPortal": True, "zIndex": 10001},
+                            ),
+                            # Header row option
+                            dmc.Switch(
+                                label="File has header row",
+                                description="Check if your file contains column names in the first row",
+                                id=f"{id_prefix}-has-header-switch",
+                                checked=True,  # Default to true
+                                color="teal",
+                                styles={
+                                    "root": {"marginTop": "1rem"},
+                                    "label": {"fontFamily": "inherit"},
+                                    "description": {"fontFamily": "inherit"},
+                                },
+                            ),
+                            # Scan mode selection (disabled since only one option)
+                            dmc.Select(
                                 label="Scan Mode",
                                 description="Single file upload mode (metadata only)",
-                                value="Single File (Metadata)",
-                                id=f"{id_prefix}-scan-mode-display",
-                                readOnly=True,
+                                data=[
+                                    {"value": "single", "label": "Single File (Metadata)"},
+                                ],
+                                id=f"{id_prefix}-scan-mode-select",
+                                value="single",  # Default to single
                                 leftSection=DashIconify(icon="mdi:file-document", width=16),
                                 style={"width": "100%"},
-                                styles={
-                                    "input": {
-                                        "backgroundColor": "var(--mantine-color-gray-1)",
-                                        "color": "var(--mantine-color-gray-7)",
-                                    }
-                                },
+                                comboboxProps={"withinPortal": True, "zIndex": 10001},
+                                disabled=True,  # Disabled since only one option
                             ),
                             # File upload section
                             dmc.Stack(
