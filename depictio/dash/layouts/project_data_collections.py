@@ -13,11 +13,15 @@ The module is organized into:
 """
 
 import dash
+import dash_ag_grid as dag
 import dash_mantine_components as dmc
+import polars as pl
+from bson import ObjectId
 from dash import Input, Output, ctx, dcc, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.dash.api_calls import api_call_fetch_delta_table_info, api_call_fetch_project_by_id
 from depictio.dash.colors import colors
 from depictio.dash.components.depictio_cytoscape_joins import (
@@ -962,6 +966,54 @@ def create_data_collection_viewer_content(
                 p="md",
                 mt="md",
             ),
+            # Data Visualization Section
+            dmc.Card(
+                [
+                    dmc.Group(
+                        [
+                            DashIconify(icon="mdi:table-eye", width=20, color=colors["teal"]),
+                            dmc.Text("Data Preview", fw="bold", size="md"),
+                        ],
+                        gap="xs",
+                        align="center",
+                    ),
+                    dmc.Divider(my="sm"),
+                    dmc.Stack(
+                        [
+                            dmc.Group(
+                                [
+                                    dmc.Text("Rows to load:", size="sm", c="gray"),
+                                    dmc.NumberInput(
+                                        id="dc-viewer-row-limit",
+                                        value=1000,
+                                        min=100,
+                                        max=10000,
+                                        step=100,
+                                        w="120px",
+                                    ),
+                                    dmc.Button(
+                                        "Load Data",
+                                        id="dc-viewer-load-btn",
+                                        leftSection=DashIconify(icon="mdi:table-refresh"),
+                                        variant="light",
+                                        size="sm",
+                                    ),
+                                ],
+                                gap="md",
+                                align="center",
+                            ),
+                            dmc.Divider(),
+                            html.Div(id="dc-viewer-data-content"),
+                        ],
+                        gap="md",
+                    ),
+                ],
+                withBorder=True,
+                shadow="xs",
+                radius="md",
+                p="md",
+                mt="md",
+            ),
         ],
         gap="md",
     )
@@ -1045,6 +1097,177 @@ def register_project_data_collections_callbacks(app):
 
     # Register the joins visualization callbacks
     register_joins_callbacks(app)
+
+    # Data collection viewer data visualization callback
+    @app.callback(
+        Output("dc-viewer-data-content", "children"),
+        [
+            Input("dc-viewer-load-btn", "n_clicks"),
+            Input("dc-viewer-row-limit", "value"),
+        ],
+        [
+            dash.State("selected-data-collection-store", "data"),
+            dash.State("project-data-store", "data"),
+            dash.State("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def load_dc_viewer_data(n_clicks, row_limit, selected_dc_data, project_data, local_data):
+        """Load and display data in the data collection viewer using AG Grid."""
+        if not n_clicks or not selected_dc_data:
+            return dmc.Center(
+                [
+                    dmc.Text(
+                        "Click 'Load Data' to preview the data collection contents",
+                        size="sm",
+                        c="gray",
+                        ta="center",
+                    )
+                ],
+                py="xl",
+            )
+
+        try:
+            # selected_dc_data is the selected_dc_tag (string), not the DC ID
+            # We need to find the actual DC ID from project_data using the tag
+            selected_dc_tag = selected_dc_data
+            selected_dc_id = None
+
+            if not isinstance(project_data, dict):
+                return dmc.Alert("Invalid project data format", color="red")
+
+            # Find the data collection ID based on the tag
+            if project_data.get("project_type") == "basic":
+                # For basic projects, look in direct data collections
+                data_collections = project_data.get("data_collections", [])
+                for dc in data_collections:
+                    if dc.get("data_collection_tag") == selected_dc_tag:
+                        selected_dc_id = dc.get("id")
+                        break
+            else:
+                # For advanced projects, look in workflows
+                workflows = project_data.get("workflows", [])
+                for workflow in workflows:
+                    for dc in workflow.get("data_collections", []):
+                        if dc.get("data_collection_tag") == selected_dc_tag:
+                            selected_dc_id = dc.get("id")
+                            break
+                    if selected_dc_id:
+                        break
+
+            if not selected_dc_id:
+                return dmc.Alert(
+                    f"Could not find data collection ID for tag: {selected_dc_tag}", color="red"
+                )
+
+            # Handle project_data - could be string or dict
+            if isinstance(project_data, dict):
+                project_type = project_data.get("type", "basic")
+            else:
+                project_type = "basic"  # Default fallback
+            workflow_id = None
+
+            if project_type == "advanced" and isinstance(project_data, dict):
+                # For advanced projects, get workflow from stored data
+                workflows = project_data.get("workflows", [])
+                if workflows:
+                    # Use first workflow for now
+                    workflow_id = workflows[0].get("id")
+
+            # Get authentication token - handle both dict and other types
+            if isinstance(local_data, dict):
+                token = local_data.get("access_token")
+            else:
+                token = None
+
+            # Load the dataframe
+            df, error = load_data_collection_dataframe(
+                workflow_id=workflow_id,
+                data_collection_id=selected_dc_id,
+                token=token,
+                limit_rows=row_limit or 1000,
+            )
+
+            if error:
+                return dmc.Alert(
+                    f"Error loading data: {error}",
+                    color="red",
+                    title="Loading Error",
+                )
+
+            if df is None or df.height == 0:
+                return dmc.Alert(
+                    "No data found in the selected data collection.",
+                    color="yellow",
+                    title="No Data",
+                )
+
+            # Convert to pandas for AG Grid (more compatible)
+            df_pd = df.to_pandas()
+
+            # Create column definitions
+            column_defs = []
+            for col in df_pd.columns:
+                col_def = {
+                    "headerName": col,
+                    "field": col,
+                    "filter": True,
+                    "sortable": True,
+                    "resizable": True,
+                }
+
+                # Set appropriate column types
+                if df_pd[col].dtype in ["int64", "float64"]:
+                    col_def["type"] = "numericColumn"
+                elif df_pd[col].dtype == "bool":
+                    col_def["cellRenderer"] = "agCheckboxCellRenderer"
+                    col_def["cellEditor"] = "agCheckboxCellEditor"
+
+                column_defs.append(col_def)
+
+            # Create AG Grid
+            grid = dag.AgGrid(
+                id="dc-viewer-grid",
+                columnDefs=column_defs,
+                rowData=df_pd.to_dict("records"),
+                defaultColDef={
+                    "filter": True,
+                    "sortable": True,
+                    "resizable": True,
+                    "minWidth": 100,
+                },
+                dashGridOptions={
+                    "pagination": True,
+                    "paginationPageSize": 25,
+                    "domLayout": "normal",
+                    "animateRows": True,
+                },
+                style={"height": "400px", "width": "100%"},
+                className="ag-theme-alpine",
+            )
+
+            # Create summary info
+            summary = dmc.Group(
+                [
+                    dmc.Text(
+                        f"Showing {min(row_limit or 1000, df.height):,} of {df.height:,} rows",
+                        size="sm",
+                        c="gray",
+                    ),
+                    dmc.Text(f"{df.width} columns", size="sm", c="gray"),
+                ],
+                gap="lg",
+            )
+
+            return dmc.Stack([summary, dmc.Divider(), grid], gap="sm")
+
+        except Exception as e:
+            logger.error(f"Error in DC viewer data callback: {e}")
+            return dmc.Alert(
+                f"Unexpected error: {str(e)}",
+                color="red",
+                title="Error",
+            )
 
     @app.callback(
         [
@@ -1784,3 +2007,48 @@ def generate_cytoscape_elements_from_project_data(data_collections):
                 logger.debug(f"Created edge: {source_node} -> {target_node} ({join_type})")
 
     return elements
+
+
+def load_data_collection_dataframe(
+    workflow_id: str | None,
+    data_collection_id: str,
+    token: str | None = None,
+    limit_rows: int = 1000,
+) -> tuple[pl.DataFrame | None, str]:
+    """
+    Generic function to load dataframe from Delta table location.
+
+    Args:
+        workflow_id: Workflow ID (optional for basic projects)
+        data_collection_id: Data collection ID
+        token: Authorization token
+        limit_rows: Maximum number of rows to load
+
+    Returns:
+        Tuple of (dataframe, error_message)
+    """
+    try:
+        if workflow_id:
+            # Advanced project with workflow
+            df = load_deltatable_lite(
+                workflow_id=ObjectId(workflow_id),
+                data_collection_id=ObjectId(data_collection_id),
+                metadata=None,
+                TOKEN=token,
+                limit_rows=limit_rows,
+            )
+        else:
+            # Basic project - load directly using data collection ID
+            df = load_deltatable_lite(
+                workflow_id=ObjectId(
+                    data_collection_id
+                ),  # Use DC ID as workflow ID for basic projects
+                data_collection_id=ObjectId(data_collection_id),
+                metadata=None,
+                TOKEN=token,
+                limit_rows=limit_rows,
+            )
+        return df, ""
+    except Exception as e:
+        logger.error(f"Error loading data collection {data_collection_id}: {e}")
+        return None, str(e)
