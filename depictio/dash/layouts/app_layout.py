@@ -17,6 +17,9 @@ from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
 from depictio.dash.layouts.notes_footer import create_notes_footer
 from depictio.dash.layouts.palette import create_color_palette_page
 from depictio.dash.layouts.profile import layout as profile_layout
+from depictio.dash.layouts.project_data_collections import (
+    layout as project_data_collections_layout,
+)
 from depictio.dash.layouts.projectwise_user_management import (
     layout as projectwise_user_management_layout,
 )
@@ -127,9 +130,13 @@ def handle_authenticated_user(pathname, local_data, theme="light"):
         content = create_dashboards_management_layout()
         return content, header, pathname, local_data
 
-    elif pathname.startswith("/project/"):
+    elif pathname.startswith("/project/") and pathname.endswith("/permissions"):
         header = create_default_header("Project Permissions Manager")
         return projectwise_user_management_layout, header, pathname, local_data
+
+    elif pathname.startswith("/project/") and pathname.endswith("/data"):
+        header = create_default_header("Project Data Collections Manager")
+        return project_data_collections_layout, header, pathname, local_data
 
         # return projects, header, pathname, local_data
 

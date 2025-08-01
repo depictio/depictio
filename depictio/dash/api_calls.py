@@ -747,3 +747,80 @@ def api_call_handle_google_oauth_callback(code: str, state: str) -> dict[str, An
     except Exception as e:
         logger.error(f"Error handling Google OAuth callback: {e}")
         return None
+
+
+@validate_call(validate_return=True)
+def api_call_fetch_project_by_id(project_id: str, token: str) -> dict[str, Any] | None:
+    """
+    Fetch a specific project by ID.
+
+    Args:
+        project_id: Project ID to fetch
+        token: Authentication token
+
+    Returns:
+        Project data dictionary or None if not found
+    """
+    try:
+        logger.debug(f"Fetching project by ID: {project_id}")
+
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"project_id": project_id},
+            timeout=settings.performance.api_request_timeout,
+        )
+
+        if response.status_code == 200:
+            project_data = response.json()
+            logger.debug(f"Project fetched successfully: {project_id}")
+            return project_data
+        elif response.status_code == 404:
+            logger.debug(f"Project not found: {project_id}")
+            return None
+        else:
+            logger.warning(f"Failed to fetch project {project_id}: {response.status_code}")
+            return None
+
+    except Exception as e:
+        logger.error(f"Error fetching project {project_id}: {e}")
+        return None
+
+
+@validate_call(validate_return=True)
+def api_call_fetch_delta_table_info(data_collection_id: str, token: str) -> dict[str, Any] | None:
+    """
+    Fetch delta table information for a specific data collection.
+
+    Args:
+        data_collection_id: Data collection ID
+        token: Authentication token
+
+    Returns:
+        Delta table information or None if not found
+    """
+    try:
+        logger.debug(f"Fetching delta table info for data collection: {data_collection_id}")
+
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{data_collection_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=settings.performance.api_request_timeout,
+        )
+
+        if response.status_code == 200:
+            delta_info = response.json()
+            logger.debug(f"Delta table info fetched successfully for {data_collection_id}")
+            return delta_info
+        elif response.status_code == 404:
+            logger.debug(f"No delta table found for data collection {data_collection_id}")
+            return None
+        else:
+            logger.warning(
+                f"Failed to fetch delta table info for {data_collection_id}: {response.status_code}"
+            )
+            return None
+
+    except Exception as e:
+        logger.error(f"Error fetching delta table info for {data_collection_id}: {e}")
+        return None

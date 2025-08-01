@@ -1097,11 +1097,9 @@ def render_project_item(
     # For basic projects, show data collections directly; for advanced projects, show workflows
     project_type = getattr(project, "project_type", "advanced")
     if project_type == "basic":
-        sections = create_data_collections_section(
-            "Data Collections:", getattr(project, "data_collections", [])
-        )
-    else:
-        sections = create_workflow_section("Workflows:", project.workflows)
+        # For basic projects, show data collections directly; for advanced projects, show workflows
+        # Note: sections are now handled by the new data collections route
+        pass
 
     # Determine user's role in the project
     role = "Viewer"  # Default role
@@ -1169,30 +1167,34 @@ def render_project_item(
                             dmc.AccordionItem(
                                 value="project-content",
                                 children=[
-                                    dmc.AccordionControl(
-                                        "Data Collections"
-                                        if project_type == "basic"
-                                        else "Workflows",
-                                        icon=DashIconify(
-                                            icon="mdi:database"
+                                    dmc.Anchor(
+                                        dmc.AccordionControl(
+                                            "Data Collections"
                                             if project_type == "basic"
-                                            else "mdi:workflow",
-                                            width=20,
+                                            else "Workflows",
+                                            icon=DashIconify(
+                                                icon="mdi:database"
+                                                if project_type == "basic"
+                                                else "mdi:workflow",
+                                                width=20,
+                                            ),
                                         ),
+                                        href=f"/project/{str(project.id)}/data",
+                                        style={"textDecoration": "none", "color": "inherit"},
                                     ),
-                                    dmc.AccordionPanel(
-                                        children=(
-                                            sections
-                                            if sections
-                                            else [
-                                                html.P(
-                                                    "No data collections available."
-                                                    if project_type == "basic"
-                                                    else "No workflows available."
-                                                )
-                                            ]
-                                        )
-                                    ),
+                                    # dmc.AccordionPanel(
+                                    #     children=(
+                                    #         sections
+                                    #         if sections
+                                    #         else [
+                                    #             html.P(
+                                    #                 "No data collections available."
+                                    #                 if project_type == "basic"
+                                    #                 else "No workflows available."
+                                    #             )
+                                    #         ]
+                                    #     )
+                                    # ),
                                 ],
                             ),
                             dmc.AccordionItem(
@@ -1203,7 +1205,7 @@ def render_project_item(
                                             "Roles and permissions",
                                             icon=DashIconify(icon="mdi:shield-account", width=20),
                                         ),
-                                        href=f"/project/{str(project.id)}",
+                                        href=f"/project/{str(project.id)}/permissions",
                                         style={"textDecoration": "none", "color": "inherit"},
                                     ),
                                     # dmc.AccordionPanel(

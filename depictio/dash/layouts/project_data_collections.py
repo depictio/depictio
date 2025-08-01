@@ -1,0 +1,1624 @@
+"""
+Project Data Collections Management Module
+
+This module provides a Dash layout and callbacks for managing data collections
+within a project. It allows administrators and project owners to add, modify,
+and remove data collections, as well as upload new datasets.
+
+The module is organized into:
+- API utility functions for data fetching and manipulation
+- UI component definitions
+- Layout definition
+- Modular callback functions for handling user interactions
+"""
+
+import dash
+import dash_mantine_components as dmc
+from dash import Input, Output, ctx, dcc, html
+from dash_iconify import DashIconify
+
+from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.api_calls import api_call_fetch_delta_table_info, api_call_fetch_project_by_id
+from depictio.dash.colors import colors
+from depictio.models.models.projects import Project
+
+
+def create_project_type_indicator(project_type):
+    """
+    Create a project type indicator badge.
+
+    Args:
+        project_type: "basic" or "advanced"
+
+    Returns:
+        dmc.Group: Project type indicator component
+    """
+    if project_type.lower() == "basic":
+        color = "cyan"
+        description = "Simple project with direct data collection management"
+    else:  # advanced
+        color = "orange"
+        description = "Advanced project with workflow-based data collections"
+
+    return dmc.Group(
+        [
+            dmc.Group(
+                [
+                    DashIconify(icon="mdi:jira", width=20, color=color),
+                    dmc.Text("Project Type:", size="sm", fw="bold", c="gray"),
+                    dmc.Badge(project_type.title(), color=color, variant="light"),
+                ],
+                gap="xs",
+                align="center",
+            ),
+            dmc.Text(description, size="xs", c="gray", style={"fontStyle": "italic"}),
+        ],
+        justify="space-between",
+        align="center",
+        style={
+            "padding": "0.5rem 1rem",
+            "backgroundColor": "var(--app-surface-color, #f8f9fa)",
+            "borderRadius": "0.5rem",
+            "border": "1px solid var(--app-border-color, #dee2e6)",
+        },
+    )
+
+
+def create_workflow_card(workflow, selected_workflow_id=None):
+    """
+    Create a clickable workflow card displaying workflow information.
+
+    Args:
+        workflow: Workflow object
+        selected_workflow_id: ID of currently selected workflow
+
+    Returns:
+        html.Div: Clickable workflow card component
+    """
+    is_selected = str(workflow.id) == selected_workflow_id
+    card_style = {
+        "cursor": "pointer",
+        "transition": "all 0.2s ease",
+        "border": f"2px solid {colors['teal']}"
+        if is_selected
+        else "1px solid var(--app-border-color, #ddd)",
+        "backgroundColor": f"rgba({colors['teal']}, 0.05)"
+        if is_selected
+        else "var(--app-surface-color, #ffffff)",
+    }
+
+    # Get engine icon
+    engine_icons = {
+        "snakemake": "vscode-icons:file-type-snakemake",
+        "nextflow": "vscode-icons:file-type-nextflow",
+        "python": "vscode-icons:file-type-python",
+        "r": "vscode-icons:file-type-r",
+        "bash": "vscode-icons:file-type-bash",
+        "galaxy": "vscode-icons:file-type-galaxy",
+        "cwl": "vscode-icons:file-type-cwl",
+        "rust": "vscode-icons:file-type-rust",
+    }
+    engine_icon = engine_icons.get(workflow.engine.name.lower(), "hugeicons:workflow-square-01")
+
+    return html.Div(
+        [
+            dmc.Paper(
+                [
+                    dmc.Group(
+                        [
+                            DashIconify(icon=engine_icon, width=24),
+                            dmc.Stack(
+                                [
+                                    dmc.Text(workflow.name, fw="bold", size="sm"),
+                                    dmc.Group(
+                                        [
+                                            dmc.Badge(
+                                                workflow.engine.name, color="blue", size="xs"
+                                            ),
+                                            dmc.Badge(
+                                                f"{len(workflow.data_collections)} DCs",
+                                                color="green",
+                                                size="xs",
+                                            ),
+                                        ],
+                                        gap="xs",
+                                    ),
+                                ],
+                                gap="xs",
+                            ),
+                        ],
+                        gap="sm",
+                        justify="flex-start",
+                    ),
+                    dmc.Stack(
+                        [
+                            dmc.Group(
+                                [
+                                    dmc.Text("Repository:", size="xs", fw="bold", c="gray"),
+                                    dmc.Anchor(
+                                        workflow.repository_url.split("/")[-1]
+                                        if workflow.repository_url
+                                        else "N/A",
+                                        href=workflow.repository_url,
+                                        target="_blank",
+                                        size="xs",
+                                        c="blue",
+                                    )
+                                    if workflow.repository_url
+                                    else dmc.Text("N/A", size="xs", c="gray"),
+                                ],
+                                gap="xs",
+                            ),
+                            dmc.Group(
+                                [
+                                    dmc.Text("Catalog:", size="xs", fw="bold", c="gray"),
+                                    dmc.Text(
+                                        workflow.catalog.name if workflow.catalog else "N/A",
+                                        size="xs",
+                                        c="gray",
+                                    ),
+                                ],
+                                gap="xs",
+                            ),
+                            dmc.Group(
+                                [
+                                    dmc.Text("Version:", size="xs", fw="bold", c="gray"),
+                                    dmc.Text(
+                                        workflow.version if workflow.version else "N/A",
+                                        size="xs",
+                                        c="gray",
+                                    ),
+                                ],
+                                gap="xs",
+                            ),
+                        ],
+                        gap="xs",
+                        mt="sm",
+                    ),
+                ],
+                withBorder=True,
+                shadow="sm" if not is_selected else "md",
+                radius="md",
+                p="md",
+                style=card_style,
+            )
+        ],
+        id={"type": "workflow-card", "index": str(workflow.id)},
+        n_clicks=0,
+        style={"cursor": "pointer"},
+    )
+
+
+def create_workflows_manager_section(workflows, selected_workflow_id=None):
+    """
+    Create the workflows manager section.
+
+    Args:
+        workflows: List of workflow objects
+        selected_workflow_id: ID of currently selected workflow
+
+    Returns:
+        dmc.Stack: Workflows manager section
+    """
+    if not workflows:
+        return dmc.Card(
+            [
+                dmc.Center(
+                    [
+                        dmc.Stack(
+                            [
+                                DashIconify(
+                                    icon="mdi:workflow",
+                                    width=48,
+                                    color="gray",
+                                    style={"opacity": 0.5},
+                                ),
+                                dmc.Text(
+                                    "No workflows available",
+                                    size="lg",
+                                    c="gray",
+                                    ta="center",
+                                ),
+                                dmc.Text(
+                                    "This project doesn't have any workflows configured",
+                                    size="sm",
+                                    c="gray",
+                                    ta="center",
+                                ),
+                            ],
+                            align="center",
+                            gap="sm",
+                        )
+                    ],
+                    p="xl",
+                ),
+            ],
+            withBorder=True,
+            shadow="sm",
+            radius="md",
+            p="lg",
+        )
+
+    workflow_cards = [create_workflow_card(wf, selected_workflow_id) for wf in workflows]
+
+    return dmc.Stack(
+        [
+            dmc.Group(
+                [
+                    DashIconify(icon="mdi:workflow", width=24, color=colors["blue"]),
+                    dmc.Text("Workflows Manager", fw="bold", size="lg"),
+                    dmc.Badge(
+                        f"{len(workflows)} {'workflow' if len(workflows) == 1 else 'workflows'}",
+                        color="blue",
+                        variant="light",
+                    ),
+                ],
+                gap="sm",
+            ),
+            dmc.Text(
+                "Select a workflow to view its data collections",
+                size="sm",
+                c="gray",
+            ),
+            dmc.SimpleGrid(
+                cols=3,
+                children=workflow_cards,
+                spacing="lg",
+            ),
+        ],
+        gap="xl",
+    )
+
+
+def create_basic_project_data_collections_section(data_collections):
+    """
+    Create the data collections section for basic projects (no workflows).
+
+    Args:
+        data_collections: List of data collection objects
+
+    Returns:
+        dmc.Stack: Data collections section for basic projects
+    """
+    # Overview cards
+    overview_cards = dmc.SimpleGrid(
+        cols=2,
+        children=[
+            # Total Collections card
+            dmc.Card(
+                [
+                    dmc.Stack(
+                        [
+                            dmc.Group(
+                                [
+                                    DashIconify(
+                                        icon="mdi:database-outline",
+                                        width=20,
+                                        color=colors["blue"],
+                                    ),
+                                    dmc.Text("Total Collections", fw="bold", size="sm"),
+                                ],
+                                justify="center",
+                                align="center",
+                                gap="xs",
+                            ),
+                            dmc.Center(
+                                dmc.Text(
+                                    str(len(data_collections)) if data_collections else "0",
+                                    size="xl",
+                                    fw="bold",
+                                    c=colors["blue"],
+                                )
+                            ),
+                            dmc.Center(dmc.Text("data collections", size="xs", c="gray")),
+                        ],
+                        gap="sm",
+                        align="center",
+                    )
+                ],
+                withBorder=True,
+                shadow="sm",
+                radius="md",
+                p="lg",
+            ),
+            # Metatypes card
+            dmc.Card(
+                [
+                    dmc.Group(
+                        [
+                            DashIconify(
+                                icon="mdi:tag-multiple",
+                                width=20,
+                                color=colors["green"],
+                            ),
+                            dmc.Text("Collection Types", fw="bold", size="sm"),
+                        ],
+                        justify="center",
+                        align="center",
+                        gap="xs",
+                    ),
+                    dmc.Group(
+                        [
+                            dmc.Stack(
+                                [
+                                    dmc.Text(
+                                        str(
+                                            sum(
+                                                1
+                                                for dc in data_collections
+                                                if dc.config.metatype
+                                                and dc.config.metatype.lower() == "aggregate"
+                                            )
+                                        )
+                                        if data_collections
+                                        else "0",
+                                        size="lg",
+                                        fw="bold",
+                                        c=colors["green"],
+                                        ta="center",
+                                    ),
+                                    dmc.Text("Aggregate", size="xs", c="gray", ta="center"),
+                                ],
+                                gap="xs",
+                                align="center",
+                            ),
+                            dmc.Divider(orientation="vertical", style={"height": "40px"}),
+                            dmc.Stack(
+                                [
+                                    dmc.Text(
+                                        str(
+                                            sum(
+                                                1
+                                                for dc in data_collections
+                                                if dc.config.metatype
+                                                and dc.config.metatype.lower() == "metadata"
+                                            )
+                                        )
+                                        if data_collections
+                                        else "0",
+                                        size="lg",
+                                        fw="bold",
+                                        c=colors["green"],
+                                        ta="center",
+                                    ),
+                                    dmc.Text("Metadata", size="xs", c="gray", ta="center"),
+                                ],
+                                gap="xs",
+                                align="center",
+                            ),
+                        ],
+                        justify="space-around",
+                        align="center",
+                    ),
+                ],
+                withBorder=True,
+                shadow="sm",
+                radius="md",
+                p="lg",
+            ),
+            # # Total Size card - commented out as requested
+            # dmc.Card(
+            #     [
+            #         dmc.Group(
+            #             [
+            #                 DashIconify(
+            #                     icon="mdi:harddisk",
+            #                     width=24,
+            #                     color=colors["orange"],
+            #                 ),
+            #                 dmc.Text("Total Size", fw="bold"),
+            #             ],
+            #             justify="space-between",
+            #         ),
+            #         dmc.Text("Coming Soon", size="xl", fw="bold", c=colors["orange"]),
+            #         dmc.Text("storage calculation", size="sm", c="gray"),
+            #     ],
+            #     withBorder=True,
+            #     shadow="sm",
+            #     radius="md",
+            #     p="lg",
+            # ),
+        ],
+    )
+
+    # Data collections list
+    if data_collections:
+        dc_items = []
+        for dc in data_collections:
+            dc_card = html.Div(
+                [
+                    dmc.Card(
+                        [
+                            dmc.Group(
+                                [
+                                    DashIconify(
+                                        icon="mdi:table"
+                                        if dc.config.type.lower() == "table"
+                                        else "mdi:file-document",
+                                        width=20,
+                                        color=colors["teal"],
+                                    ),
+                                    dmc.Badge(dc.config.type, color="blue", size="xs"),
+                                    dmc.Badge(
+                                        dc.config.metatype or "Unknown",
+                                        color="gray",
+                                        size="xs",
+                                    ),
+                                    dmc.Text(dc.data_collection_tag, fw="bold", size="sm"),
+                                ],
+                                gap="sm",
+                                align="center",
+                            ),
+                        ],
+                        withBorder=True,
+                        shadow="xs",
+                        radius="md",
+                        p="sm",
+                        style={
+                            "cursor": "pointer",
+                            "transition": "box-shadow 0.2s ease",
+                        },
+                    )
+                ],
+                id={"type": "data-collection-card", "index": dc.data_collection_tag},
+                n_clicks=0,
+                style={"cursor": "pointer"},
+            )
+            dc_items.append(dc_card)
+
+        data_collections_list = dmc.Stack(dc_items, gap="sm")
+    else:
+        data_collections_list = dmc.Center(
+            [
+                dmc.Stack(
+                    [
+                        DashIconify(
+                            icon="mdi:database-off-outline",
+                            width=48,
+                            color="gray",
+                            style={"opacity": 0.5},
+                        ),
+                        dmc.Text(
+                            "No data collections yet",
+                            size="lg",
+                            c="gray",
+                            ta="center",
+                        ),
+                        dmc.Text(
+                            "Upload your first data collection to get started",
+                            size="sm",
+                            c="gray",
+                            ta="center",
+                        ),
+                    ],
+                    align="center",
+                    gap="sm",
+                )
+            ],
+            p="xl",
+        )
+
+    return dmc.Stack(
+        [
+            dmc.Group(
+                [
+                    DashIconify(icon="mdi:database", width=24, color=colors["teal"]),
+                    dmc.Text("Data Collections Manager", fw="bold", size="lg"),
+                    dmc.Badge("Basic Project", color="blue", variant="light"),
+                ],
+                gap="sm",
+            ),
+            dmc.Text(
+                "Managing data collections for this basic project",
+                size="sm",
+                c="gray",
+            ),
+            overview_cards,
+            dmc.Card(
+                [
+                    dmc.Group(
+                        [
+                            dmc.Text("Data Collections", fw="bold", size="lg"),
+                            dmc.Badge(
+                                f"{len(data_collections)} collections",
+                                color="teal",
+                                variant="light",
+                            ),
+                        ],
+                        gap="md",
+                        align="center",
+                    ),
+                    dmc.Divider(my="md"),
+                    data_collections_list,
+                ],
+                withBorder=True,
+                shadow="sm",
+                radius="md",
+                p="lg",
+                mt="md",
+            ),
+            # Data Collection Viewer Section
+            dmc.Card(
+                [
+                    dmc.Group(
+                        [
+                            DashIconify(icon="mdi:eye", width=24, color=colors["blue"]),
+                            dmc.Text("Data Collection Viewer", fw="bold", size="lg"),
+                            dmc.Badge("Coming Soon", color="gray", variant="light"),
+                        ],
+                        gap="md",
+                        align="center",
+                    ),
+                    dmc.Divider(my="md"),
+                    html.Div(id="data-collection-viewer-content"),
+                ],
+                withBorder=True,
+                shadow="sm",
+                radius="md",
+                p="lg",
+                mt="xl",
+            ),
+        ],
+        gap="xl",
+    )
+
+
+def create_data_collections_manager_section(workflow=None):
+    """
+    Create the data collections manager section based on selected workflow.
+
+    Args:
+        workflow: Selected workflow object (None if no workflow selected)
+
+    Returns:
+        dmc.Stack: Data collections manager section
+    """
+    if not workflow:
+        return dmc.Card(
+            [
+                dmc.Center(
+                    [
+                        dmc.Stack(
+                            [
+                                DashIconify(
+                                    icon="mdi:database-outline",
+                                    width=48,
+                                    color="gray",
+                                    style={"opacity": 0.5},
+                                ),
+                                dmc.Text(
+                                    "Select a workflow to continue",
+                                    size="lg",
+                                    c="gray",
+                                    ta="center",
+                                ),
+                                dmc.Text(
+                                    "Choose a workflow from above to view its data collections",
+                                    size="sm",
+                                    c="gray",
+                                    ta="center",
+                                ),
+                            ],
+                            align="center",
+                            gap="sm",
+                        )
+                    ],
+                    p="xl",
+                ),
+            ],
+            withBorder=True,
+            shadow="sm",
+            radius="md",
+            p="lg",
+        )
+
+    data_collections = workflow.data_collections if workflow else []
+
+    # Overview cards
+    overview_cards = dmc.SimpleGrid(
+        cols=2,
+        children=[
+            # Total Collections card
+            dmc.Card(
+                [
+                    dmc.Stack(
+                        [
+                            dmc.Group(
+                                [
+                                    DashIconify(
+                                        icon="mdi:database-outline",
+                                        width=20,
+                                        color=colors["blue"],
+                                    ),
+                                    dmc.Text("Total Collections", fw="bold", size="sm"),
+                                ],
+                                justify="center",
+                                align="center",
+                                gap="xs",
+                            ),
+                            dmc.Center(
+                                dmc.Text(
+                                    str(len(data_collections)) if data_collections else "0",
+                                    size="xl",
+                                    fw="bold",
+                                    c=colors["blue"],
+                                )
+                            ),
+                            dmc.Center(dmc.Text("data collections", size="xs", c="gray")),
+                        ],
+                        gap="sm",
+                        align="center",
+                    )
+                ],
+                withBorder=True,
+                shadow="sm",
+                radius="md",
+                p="lg",
+            ),
+            # Collection Types card (Aggregate/Metadata split)
+            dmc.Card(
+                [
+                    dmc.Stack(
+                        [
+                            dmc.Group(
+                                [
+                                    DashIconify(
+                                        icon="mdi:tag-multiple",
+                                        width=20,
+                                        color=colors["green"],
+                                    ),
+                                    dmc.Text("Collection Types", fw="bold", size="sm"),
+                                ],
+                                justify="center",
+                                align="center",
+                                gap="xs",
+                            ),
+                            dmc.Group(
+                                [
+                                    dmc.Stack(
+                                        [
+                                            dmc.Text(
+                                                str(
+                                                    sum(
+                                                        1
+                                                        for dc in data_collections
+                                                        if dc.config.metatype
+                                                        and dc.config.metatype.lower()
+                                                        == "aggregate"
+                                                    )
+                                                )
+                                                if data_collections
+                                                else "0",
+                                                size="lg",
+                                                fw="bold",
+                                                c=colors["green"],
+                                                ta="center",
+                                            ),
+                                            dmc.Text("Aggregate", size="xs", c="gray", ta="center"),
+                                        ],
+                                        gap="xs",
+                                        align="center",
+                                    ),
+                                    dmc.Divider(orientation="vertical", style={"height": "40px"}),
+                                    dmc.Stack(
+                                        [
+                                            dmc.Text(
+                                                str(
+                                                    sum(
+                                                        1
+                                                        for dc in data_collections
+                                                        if dc.config.metatype
+                                                        and dc.config.metatype.lower() == "metadata"
+                                                    )
+                                                )
+                                                if data_collections
+                                                else "0",
+                                                size="lg",
+                                                fw="bold",
+                                                c=colors["green"],
+                                                ta="center",
+                                            ),
+                                            dmc.Text("Metadata", size="xs", c="gray", ta="center"),
+                                        ],
+                                        gap="xs",
+                                        align="center",
+                                    ),
+                                ],
+                                justify="space-around",
+                                align="center",
+                            ),
+                        ],
+                        gap="md",
+                        align="center",
+                    )
+                ],
+                withBorder=True,
+                shadow="sm",
+                radius="md",
+                p="lg",
+            ),
+            # # Total Size card - commented out as requested
+            # dmc.Card(
+            #     [
+            #         dmc.Group(
+            #             [
+            #                 DashIconify(
+            #                     icon="mdi:harddisk",
+            #                     width=24,
+            #                     color=colors["orange"],
+            #                 ),
+            #                 dmc.Text("Total Size", fw="bold"),
+            #             ],
+            #             justify="space-between",
+            #         ),
+            #         dmc.Text("Coming Soon", size="xl", fw="bold", c=colors["orange"]),
+            #         dmc.Text("storage calculation", size="sm", c="gray"),
+            #     ],
+            #     withBorder=True,
+            #     shadow="sm",
+            #     radius="md",
+            #     p="lg",
+            # ),
+        ],
+    )
+
+    # Data collections list
+    if data_collections:
+        dc_items = []
+        for dc in data_collections:
+            dc_card = html.Div(
+                [
+                    dmc.Card(
+                        [
+                            dmc.Group(
+                                [
+                                    DashIconify(
+                                        icon="mdi:table"
+                                        if dc.config.type.lower() == "table"
+                                        else "mdi:file-document",
+                                        width=20,
+                                        color=colors["teal"],
+                                    ),
+                                    dmc.Badge(dc.config.type, color="blue", size="xs"),
+                                    dmc.Badge(
+                                        dc.config.metatype or "Unknown",
+                                        color="gray",
+                                        size="xs",
+                                    ),
+                                    dmc.Text(dc.data_collection_tag, fw="bold", size="sm"),
+                                ],
+                                gap="sm",
+                                align="center",
+                            ),
+                        ],
+                        withBorder=True,
+                        shadow="xs",
+                        radius="md",
+                        p="sm",
+                        style={
+                            "cursor": "pointer",
+                            "transition": "box-shadow 0.2s ease",
+                        },
+                    )
+                ],
+                id={"type": "data-collection-card", "index": dc.data_collection_tag},
+                n_clicks=0,
+                style={"cursor": "pointer"},
+            )
+            dc_items.append(dc_card)
+
+        data_collections_list = dmc.Stack(dc_items, gap="sm")
+    else:
+        data_collections_list = dmc.Center(
+            [
+                dmc.Stack(
+                    [
+                        DashIconify(
+                            icon="mdi:database-off-outline",
+                            width=48,
+                            color="gray",
+                            style={"opacity": 0.5},
+                        ),
+                        dmc.Text(
+                            "No data collections in this workflow",
+                            size="lg",
+                            c="gray",
+                            ta="center",
+                        ),
+                    ],
+                    align="center",
+                    gap="sm",
+                )
+            ],
+            p="xl",
+        )
+
+    return dmc.Stack(
+        [
+            dmc.Group(
+                [
+                    DashIconify(icon="mdi:database", width=24, color=colors["teal"]),
+                    dmc.Text("Data Collections Manager", fw="bold", size="lg"),
+                    dmc.Badge(f"Workflow: {workflow.name}", color="blue", variant="light"),
+                ],
+                gap="sm",
+            ),
+            dmc.Text(
+                f"Managing data collections for the {workflow.name} workflow",
+                size="sm",
+                c="gray",
+            ),
+            overview_cards,
+            dmc.Card(
+                [
+                    dmc.Group(
+                        [
+                            dmc.Text("Data Collections", fw="bold", size="lg"),
+                            dmc.Badge(
+                                f"{len(data_collections)} collections",
+                                color="teal",
+                                variant="light",
+                            ),
+                        ],
+                        gap="md",
+                        align="center",
+                    ),
+                    dmc.Divider(my="md"),
+                    data_collections_list,
+                ],
+                withBorder=True,
+                shadow="sm",
+                radius="md",
+                p="lg",
+                mt="md",
+            ),
+            # Data Collection Viewer Section
+            dmc.Card(
+                [
+                    dmc.Group(
+                        [
+                            DashIconify(icon="mdi:eye", width=24, color=colors["blue"]),
+                            dmc.Text("Data Collection Viewer", fw="bold", size="lg"),
+                            dmc.Badge("Select a data collection", color="gray", variant="light"),
+                        ],
+                        gap="md",
+                        align="center",
+                    ),
+                    dmc.Divider(my="md"),
+                    html.Div(id="data-collection-viewer-content"),
+                ],
+                withBorder=True,
+                shadow="sm",
+                radius="md",
+                p="lg",
+                mt="xl",
+            ),
+        ],
+        gap="xl",
+    )
+
+
+def create_data_collection_viewer_content(
+    data_collection=None, delta_info=None, workflow_info=None
+):
+    """
+    Create the content for the data collection viewer section.
+
+    Args:
+        data_collection: Selected data collection object or data
+        delta_info: Delta table information from API
+        workflow_info: Workflow information containing registration_time
+
+    Returns:
+        html.Div: Data collection viewer content
+    """
+    if not data_collection:
+        return dmc.Center(
+            [
+                dmc.Stack(
+                    [
+                        DashIconify(
+                            icon="mdi:table-eye",
+                            width=48,
+                            color="gray",
+                            style={"opacity": 0.5},
+                        ),
+                        dmc.Text(
+                            "No data collection selected",
+                            size="lg",
+                            c="gray",
+                            ta="center",
+                        ),
+                        dmc.Text(
+                            "Select a data collection above to preview its contents",
+                            size="sm",
+                            c="gray",
+                            ta="center",
+                        ),
+                    ],
+                    align="center",
+                    gap="sm",
+                )
+            ],
+            p="xl",
+        )
+
+    # Extract data collection info (could be from dict or object)
+    dc_tag = (
+        data_collection.get("data_collection_tag")
+        if isinstance(data_collection, dict)
+        else getattr(data_collection, "data_collection_tag", "Unknown")
+    )
+    dc_type = (
+        data_collection.get("config", {}).get("type")
+        if isinstance(data_collection, dict)
+        else getattr(data_collection.config, "type", "unknown")
+    )
+    dc_metatype = (
+        data_collection.get("config", {}).get("metatype")
+        if isinstance(data_collection, dict)
+        else getattr(data_collection.config, "metatype", "Unknown")
+    )
+
+    return dmc.Stack(
+        [
+            # Data collection header info
+            dmc.Group(
+                [
+                    DashIconify(
+                        icon="mdi:table" if dc_type.lower() == "table" else "mdi:file-document",
+                        width=32,
+                        color=colors["teal"],
+                    ),
+                    dmc.Stack(
+                        [
+                            dmc.Text(dc_tag, fw="bold", size="xl"),
+                            dmc.Group(
+                                [
+                                    dmc.Badge(dc_type, color="blue", size="sm"),
+                                    dmc.Badge(dc_metatype, color="gray", size="sm"),
+                                ],
+                                gap="sm",
+                            ),
+                        ],
+                        gap="xs",
+                    ),
+                ],
+                gap="md",
+                align="center",
+            ),
+            # Detailed data collection information
+            dmc.Divider(my="md"),
+            dmc.SimpleGrid(
+                cols=2,
+                spacing="lg",
+                children=[
+                    # Configuration Details
+                    dmc.Card(
+                        [
+                            dmc.Group(
+                                [
+                                    DashIconify(icon="mdi:cog", width=20, color=colors["blue"]),
+                                    dmc.Text("Configuration", fw="bold", size="md"),
+                                ],
+                                gap="xs",
+                                align="center",
+                            ),
+                            dmc.Divider(my="sm"),
+                            dmc.Stack(
+                                [
+                                    dmc.Group(
+                                        [
+                                            dmc.Text(
+                                                "Data Collection ID:",
+                                                size="sm",
+                                                fw="bold",
+                                                c="gray",
+                                            ),
+                                            dmc.Text(
+                                                data_collection.get("id")
+                                                if isinstance(data_collection, dict)
+                                                else str(getattr(data_collection, "id", "N/A")),
+                                                size="sm",
+                                                ff="monospace",
+                                            ),
+                                        ],
+                                        justify="space-between",
+                                    ),
+                                    dmc.Group(
+                                        [
+                                            dmc.Text("Type:", size="sm", fw="bold", c="gray"),
+                                            dmc.Badge(dc_type, color="blue", size="xs"),
+                                        ],
+                                        justify="space-between",
+                                    ),
+                                    dmc.Group(
+                                        [
+                                            dmc.Text("Metatype:", size="sm", fw="bold", c="gray"),
+                                            dmc.Badge(
+                                                dc_metatype or "Unknown", color="gray", size="xs"
+                                            ),
+                                        ],
+                                        justify="space-between",
+                                    ),
+                                ],
+                                gap="xs",
+                            ),
+                        ],
+                        withBorder=True,
+                        shadow="xs",
+                        radius="md",
+                        p="md",
+                    ),
+                    # Delta Table Information
+                    dmc.Card(
+                        [
+                            dmc.Group(
+                                [
+                                    DashIconify(icon="mdi:delta", width=20, color=colors["green"]),
+                                    dmc.Text("Delta Table Details", fw="bold", size="md"),
+                                ],
+                                gap="xs",
+                                align="center",
+                            ),
+                            dmc.Divider(my="sm"),
+                            dmc.Stack(
+                                [
+                                    dmc.Group(
+                                        [
+                                            dmc.Text(
+                                                "Delta Location:", size="sm", fw="bold", c="gray"
+                                            ),
+                                            dmc.Text(
+                                                delta_info.get("delta_table_location", "N/A")
+                                                if delta_info
+                                                else "N/A",
+                                                size="sm",
+                                                ff="monospace",
+                                            ),
+                                        ],
+                                        justify="space-between",
+                                    ),
+                                    dmc.Group(
+                                        [
+                                            dmc.Text(
+                                                "Last Aggregated:", size="sm", fw="bold", c="gray"
+                                            ),
+                                            dmc.Text(
+                                                # Get the most recent aggregation time from delta_info
+                                                (
+                                                    delta_info.get("aggregation", [{}])[-1].get(
+                                                        "aggregation_time", "Never"
+                                                    )
+                                                    if delta_info and delta_info.get("aggregation")
+                                                    else "Never"
+                                                ),
+                                                size="sm",
+                                            ),
+                                        ],
+                                        justify="space-between",
+                                    ),
+                                    dmc.Group(
+                                        [
+                                            dmc.Text("Format:", size="sm", fw="bold", c="gray"),
+                                            dmc.Badge(
+                                                # Access format through proper config structure
+                                                (
+                                                    data_collection.get("config", {})
+                                                    .get("dc_specific_properties", {})
+                                                    .get("format")
+                                                    if isinstance(data_collection, dict)
+                                                    else getattr(
+                                                        getattr(
+                                                            data_collection.config,
+                                                            "dc_specific_properties",
+                                                            None,
+                                                        ),
+                                                        "format",
+                                                        "Unknown",
+                                                    )
+                                                    if hasattr(data_collection, "config")
+                                                    else "Unknown"
+                                                )
+                                                or "Unknown",
+                                                color="blue",
+                                                size="xs",
+                                            ),
+                                        ],
+                                        justify="space-between",
+                                    ),
+                                ],
+                                gap="xs",
+                            ),
+                        ],
+                        withBorder=True,
+                        shadow="xs",
+                        radius="md",
+                        p="md",
+                    ),
+                ],
+            ),
+            # Description and Additional Info
+            dmc.Card(
+                [
+                    dmc.Group(
+                        [
+                            DashIconify(
+                                icon="mdi:information-outline", width=20, color=colors["orange"]
+                            ),
+                            dmc.Text("Additional Information", fw="bold", size="md"),
+                        ],
+                        gap="xs",
+                        align="center",
+                    ),
+                    dmc.Divider(my="sm"),
+                    dmc.Stack(
+                        [
+                            dmc.Group(
+                                [
+                                    dmc.Text("Description:", size="sm", fw="bold", c="gray"),
+                                    dmc.Text(
+                                        data_collection.get("description")
+                                        if isinstance(data_collection, dict)
+                                        else getattr(
+                                            data_collection,
+                                            "description",
+                                            "No description available",
+                                        ),
+                                        size="sm",
+                                    ),
+                                ],
+                                justify="flex-start",
+                                align="flex-start",
+                            ),
+                            dmc.Group(
+                                [
+                                    dmc.Text("Created:", size="sm", fw="bold", c="gray"),
+                                    dmc.Text(
+                                        workflow_info.get("registration_time", "N/A")
+                                        if workflow_info
+                                        else "N/A",
+                                        size="sm",
+                                    ),
+                                ],
+                                gap="xs",
+                            ),
+                        ],
+                        gap="sm",
+                    ),
+                ],
+                withBorder=True,
+                shadow="xs",
+                radius="md",
+                p="md",
+                mt="md",
+            ),
+        ],
+        gap="md",
+    )
+
+
+def create_data_collections_landing_ui():
+    """
+    Create the landing UI for data collections management.
+
+    Returns:
+        html.Div: The complete landing UI layout
+    """
+    return html.Div(
+        [
+            # Store components for state management
+            dcc.Store(id="project-data-store", data={}),
+            dcc.Store(id="selected-workflow-store", data=None),
+            dcc.Store(id="selected-data-collection-store", data=None),
+            # Header section
+            dmc.Stack(
+                [
+                    dmc.Group(
+                        [
+                            DashIconify(icon="mdi:database", width=32, color=colors["teal"]),
+                            dmc.Title(
+                                "Project Data Manager",
+                                order=2,
+                                style={"color": colors["teal"]},
+                            ),
+                        ],
+                        gap="md",
+                    ),
+                    dmc.Text(
+                        "Manage workflows and data collections for your project",
+                        size="lg",
+                        c="gray",
+                    ),
+                    # Project type indicator
+                    html.Div(id="project-type-indicator"),
+                    dmc.Divider(),
+                ],
+                gap="lg",
+                mb="xl",
+            ),
+            # Workflows Manager Section
+            html.Div(id="workflows-manager-section", style={"marginBottom": "3rem"}),
+            # Data Collections Manager Section
+            html.Div(id="data-collections-manager-section", style={"marginTop": "2rem"}),
+            # Hidden placeholder for future content
+            html.Div(id="data-collections-content", style={"display": "none"}),
+        ],
+        style={"padding": "2rem", "maxWidth": "1400px", "margin": "0 auto"},
+    )
+
+
+# Main layout for the data collections management page
+layout = create_data_collections_landing_ui()
+
+
+def register_project_data_collections_callbacks(app):
+    """
+    Register callbacks for project data collections functionality.
+
+    Args:
+        app: Dash application instance
+    """
+
+    @app.callback(
+        [
+            Output("project-data-store", "data"),
+            Output("workflows-manager-section", "children"),
+            Output("data-collections-manager-section", "children"),
+            Output("project-type-indicator", "children"),
+        ],
+        [Input("url", "pathname"), Input("local-store", "data")],
+        prevent_initial_call=True,
+    )
+    def load_project_data_and_workflows(pathname, local_data):
+        """Load project data and populate workflows manager based on project type."""
+        if not pathname or not pathname.startswith("/project/") or not pathname.endswith("/data"):
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+        # Extract project ID from URL
+        try:
+            project_id = pathname.split("/")[-2]
+        except IndexError:
+            logger.error(f"Could not extract project ID from pathname: {pathname}")
+            return {}, html.Div("Error: Invalid project URL"), html.Div(), html.Div()
+
+        # Get authentication token
+        if not local_data or not local_data.get("access_token"):
+            logger.error("No authentication token available")
+            return (
+                {"project_id": project_id},
+                html.Div("Authentication required"),
+                html.Div(),
+                html.Div(),
+            )
+
+        try:
+            # Fetch project data to determine project type
+            project_data = api_call_fetch_project_by_id(project_id, local_data["access_token"])
+            if not project_data:
+                logger.error(f"Failed to fetch project data for {project_id}")
+                return dash.no_update, dash.no_update, dash.no_update
+            project = Project.model_validate(project_data)
+
+            # Debug project information
+            logger.debug(f"Project loaded: {project.name}, type: {project.project_type}")
+            logger.debug(
+                f"Project workflows count: {len(project.workflows) if project.workflows else 0}"
+            )
+            logger.debug(
+                f"Project data_collections count: {len(project.data_collections) if project.data_collections else 0}"
+            )
+
+            # Store project data
+            # For basic projects, flatten data collections from workflows into the main data_collections array
+            if project.project_type == "basic":
+                # Collect all data collections from workflows and direct data collections
+                all_data_collections = []
+                if project.data_collections:
+                    all_data_collections.extend(project.data_collections)
+                if project.workflows:
+                    for workflow in project.workflows:
+                        if workflow.data_collections:
+                            all_data_collections.extend(workflow.data_collections)
+
+                project_store_data = {
+                    "project_id": project_id,
+                    "project_type": project.project_type,
+                    "workflows": [w.model_dump() for w in project.workflows]
+                    if project.workflows
+                    else [],
+                    "data_collections": [dc.model_dump() for dc in all_data_collections],
+                }
+            else:
+                # Advanced projects store data collections within workflows
+                project_store_data = {
+                    "project_id": project_id,
+                    "project_type": project.project_type,
+                    "workflows": [w.model_dump() for w in project.workflows]
+                    if project.workflows
+                    else [],
+                    "data_collections": [dc.model_dump() for dc in project.data_collections]
+                    if project.data_collections
+                    else [],
+                }
+
+            # Create sections based on project type
+            if project.project_type == "advanced":
+                # Advanced projects: Show workflows manager with project workflows
+                workflows_section = create_workflows_manager_section(project.workflows)
+                data_collections_section = create_data_collections_manager_section()
+            else:
+                # Basic projects: Skip workflows manager, show data collections directly
+                workflows_section = html.Div()  # Empty div
+
+                # For basic projects, data collections might be stored in the workflow
+                # Check both direct data collections and workflow data collections
+                basic_data_collections = []
+                if project.data_collections:
+                    basic_data_collections.extend(project.data_collections)
+
+                # Also check if there are data collections in workflows (common for basic projects)
+                if project.workflows:
+                    for workflow in project.workflows:
+                        if workflow.data_collections:
+                            basic_data_collections.extend(workflow.data_collections)
+
+                logger.debug(
+                    f"Basic project direct data collections count: {len(project.data_collections) if project.data_collections else 0}"
+                )
+                logger.debug(
+                    f"Basic project workflow data collections count: {sum(len(w.data_collections) for w in project.workflows if w.data_collections) if project.workflows else 0}"
+                )
+                logger.debug(
+                    f"Basic project total data collections count: {len(basic_data_collections)}"
+                )
+                logger.debug(
+                    f"Basic project data collections: {[dc.data_collection_tag for dc in basic_data_collections]}"
+                )
+
+                data_collections_section = create_basic_project_data_collections_section(
+                    basic_data_collections
+                )
+
+            # Create project type indicator
+            project_type_indicator = create_project_type_indicator(project.project_type)
+
+            return (
+                project_store_data,
+                workflows_section,
+                data_collections_section,
+                project_type_indicator,
+            )
+
+        except Exception as e:
+            logger.error(f"Error loading project data: {e}")
+            error_msg = html.Div(
+                [
+                    dmc.Alert(
+                        f"Error loading project: {str(e)}",
+                        title="Loading Error",
+                        color="red",
+                        icon=DashIconify(icon="mdi:alert"),
+                    )
+                ]
+            )
+            return {"project_id": project_id}, error_msg, html.Div(), html.Div()
+
+    @app.callback(
+        [
+            Output("selected-workflow-store", "data"),
+            Output("data-collections-manager-section", "children", allow_duplicate=True),
+        ],
+        [Input({"type": "workflow-card", "index": dash.ALL}, "n_clicks")],
+        [dash.State("project-data-store", "data")],
+        prevent_initial_call=True,
+    )
+    def handle_workflow_selection(workflow_clicks, project_data):
+        """Handle workflow card selection for advanced projects only."""
+        if not any(workflow_clicks) or not project_data:
+            return dash.no_update, dash.no_update
+
+        # Only handle workflow selection for advanced projects
+        if project_data.get("project_type") != "advanced":
+            return dash.no_update, dash.no_update
+
+        # Find which workflow was clicked
+        ctx_trigger = ctx.triggered_id
+        if not ctx_trigger:
+            return dash.no_update, dash.no_update
+
+        selected_workflow_id = ctx_trigger["index"]
+
+        # Find the selected workflow from the stored data
+        workflows = project_data.get("workflows", [])
+        selected_workflow = None
+        for wf in workflows:
+            if str(wf.get("id")) == selected_workflow_id:
+                selected_workflow = wf
+                break
+
+        # Create data collections section for the selected workflow
+        if selected_workflow:
+            # Reconstruct a mock workflow object with the necessary data
+            from types import SimpleNamespace
+
+            # Create a simple workflow-like object with the data we need
+            mock_workflow = SimpleNamespace()
+            mock_workflow.name = selected_workflow.get("name", "Unknown Workflow")
+            mock_workflow.data_collections = []
+
+            # Extract data collections if they exist in the workflow data
+            if "data_collections" in selected_workflow:
+                for dc_data in selected_workflow["data_collections"]:
+                    # Create mock data collection objects
+                    mock_dc = SimpleNamespace()
+                    mock_dc.data_collection_tag = dc_data.get("data_collection_tag", "Unknown DC")
+                    mock_dc.config = SimpleNamespace()
+                    mock_dc.config.type = dc_data.get("config", {}).get("type", "unknown")
+                    mock_dc.config.metatype = dc_data.get("config", {}).get("metatype", "Unknown")
+                    mock_workflow.data_collections.append(mock_dc)
+
+            data_collections_section = create_data_collections_manager_section(mock_workflow)
+        else:
+            data_collections_section = create_data_collections_manager_section()
+
+        return selected_workflow_id, data_collections_section
+
+    @app.callback(
+        Output("workflows-manager-section", "children", allow_duplicate=True),
+        [Input("selected-workflow-store", "data")],
+        [dash.State("project-data-store", "data")],
+        prevent_initial_call=True,
+    )
+    def update_workflow_selection_visual(selected_workflow_id, project_data):
+        """Update workflow cards to show selected state."""
+        if not project_data or project_data.get("project_type") != "advanced":
+            return dash.no_update
+
+        # Get workflows from project data and reconstruct workflow objects
+        workflows_data = project_data.get("workflows", [])
+        if not workflows_data:
+            return dash.no_update
+
+        # For this visual update, we need to create mock workflow objects to pass to the function
+        from types import SimpleNamespace
+
+        workflows = []
+        for wf_data in workflows_data:
+            mock_wf = SimpleNamespace()
+            mock_wf.id = wf_data.get("id")
+            mock_wf.name = wf_data.get("name", "Unknown")
+            mock_wf.engine = SimpleNamespace()
+            mock_wf.engine.name = wf_data.get("engine", {}).get("name", "unknown")
+            mock_wf.data_collections = wf_data.get("data_collections", [])
+            mock_wf.repository_url = wf_data.get("repository_url")
+            mock_wf.catalog = SimpleNamespace() if wf_data.get("catalog") else None
+            if mock_wf.catalog:
+                mock_wf.catalog.name = wf_data.get("catalog", {}).get("name", "Unknown")
+            mock_wf.version = wf_data.get("version")
+            workflows.append(mock_wf)
+
+        # Recreate workflows manager section with updated selection
+        return create_workflows_manager_section(workflows, selected_workflow_id)
+
+    @app.callback(
+        Output("data-collection-viewer-content", "children", allow_duplicate=True),
+        [Input("url", "pathname")],
+        prevent_initial_call=True,
+    )
+    def initialize_data_collection_viewer(pathname):
+        """Initialize the data collection viewer with empty state."""
+        if not pathname or not pathname.startswith("/project/") or not pathname.endswith("/data"):
+            return dash.no_update
+
+        return create_data_collection_viewer_content(None, None, None)
+
+    @app.callback(
+        [
+            Output("selected-data-collection-store", "data"),
+            Output("data-collection-viewer-content", "children", allow_duplicate=True),
+        ],
+        [Input({"type": "data-collection-card", "index": dash.ALL}, "n_clicks")],
+        [
+            dash.State("project-data-store", "data"),
+            dash.State("selected-workflow-store", "data"),
+            dash.State("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def handle_data_collection_selection(dc_clicks, project_data, selected_workflow_id, local_data):
+        """Handle data collection card selection and populate viewer."""
+        if not any(dc_clicks) or not project_data:
+            return dash.no_update, dash.no_update
+
+        # Find which data collection was clicked
+        ctx_trigger = ctx.triggered_id
+        if not ctx_trigger:
+            return dash.no_update, dash.no_update
+
+        selected_dc_tag = ctx_trigger["index"]
+
+        # Find the selected data collection from the project data
+        selected_dc = None
+        dc_id = None
+        workflow_info = None
+
+        if project_data.get("project_type") == "basic":
+            # For basic projects, look in direct data collections
+            data_collections = project_data.get("data_collections", [])
+            for dc in data_collections:
+                if dc.get("data_collection_tag") == selected_dc_tag:
+                    selected_dc = dc
+                    dc_id = dc.get("id")
+                    break
+        else:
+            # For advanced projects, look in the selected workflow's data collections
+            if selected_workflow_id:
+                workflows = project_data.get("workflows", [])
+                for workflow in workflows:
+                    if str(workflow.get("id")) == selected_workflow_id:
+                        workflow_info = workflow  # Store workflow info for registration_time
+                        for dc in workflow.get("data_collections", []):
+                            if dc.get("data_collection_tag") == selected_dc_tag:
+                                selected_dc = dc
+                                dc_id = dc.get("id")
+                                break
+                        break
+
+        # Fetch delta table information if we have the data collection ID and token
+        delta_info = None
+        if dc_id and local_data and local_data.get("access_token"):
+            try:
+                delta_info = api_call_fetch_delta_table_info(str(dc_id), local_data["access_token"])
+            except Exception as e:
+                logger.error(f"Error fetching delta table info: {e}")
+
+        # Create viewer content with delta information
+        viewer_content = create_data_collection_viewer_content(
+            selected_dc, delta_info, workflow_info
+        )
+
+        return selected_dc_tag, viewer_content
+
+    @app.callback(
+        Output("data-collections-content", "children"),
+        [
+            Input("upload-data-collection-btn", "n_clicks"),
+            Input("import-from-url-btn", "n_clicks"),
+            Input("create-from-template-btn", "n_clicks"),
+        ],
+        prevent_initial_call=True,
+    )
+    def handle_data_collection_actions(upload_clicks, import_clicks, template_clicks):
+        """Handle data collection action button clicks."""
+        ctx_trigger = ctx.triggered_id
+
+        if ctx_trigger == "upload-data-collection-btn":
+            logger.info("Upload data collection button clicked")
+            # TODO: Implement upload functionality
+            return dmc.Alert(
+                "Upload functionality coming soon!",
+                title="Feature in Development",
+                color="blue",
+                icon=DashIconify(icon="mdi:information"),
+            )
+        elif ctx_trigger == "import-from-url-btn":
+            logger.info("Import from URL button clicked")
+            # TODO: Implement URL import functionality
+            return dmc.Alert(
+                "URL import functionality coming soon!",
+                title="Feature in Development",
+                color="blue",
+                icon=DashIconify(icon="mdi:information"),
+            )
+        elif ctx_trigger == "create-from-template-btn":
+            logger.info("Create from template button clicked")
+            # TODO: Implement template creation functionality
+            return dmc.Alert(
+                "Template creation functionality coming soon!",
+                title="Feature in Development",
+                color="blue",
+                icon=DashIconify(icon="mdi:information"),
+            )
+
+        return dash.no_update
