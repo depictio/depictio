@@ -576,7 +576,8 @@ layout = html.Div(
             ),
             withCloseButton=False,
             closeOnEscape=True,
-            closeOnClickOutside=True,
+            # closeOnEscape=False,
+            closeOnClickOutside=False,
             size="lg",
             overlayProps={
                 "opacity": 0.03,  # Make overlay transparent so we can see our custom background

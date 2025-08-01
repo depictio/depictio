@@ -13,12 +13,16 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
 # from depictio.api.v1.endpoints.user_endpoints.models import UserBase
-from depictio.dash.api_calls import api_call_fetch_user_from_token
+from depictio.dash.api_calls import api_call_create_project, api_call_fetch_user_from_token
 from depictio.dash.colors import colors  # Import Depictio color palette
 from depictio.models.models.data_collections import DataCollection
 from depictio.models.models.projects import Project
-from depictio.models.models.users import UserBase
+from depictio.models.models.users import Permission, UserBase
 from depictio.models.models.workflows import Workflow
+
+# =========================
+# Module Level Components (defined after functions)
+# =========================
 
 # =========================
 # Data Fetching Functions
@@ -167,6 +171,7 @@ def create_project_modal(opened=False):
                     dmc.Stepper(
                         id="project-creation-stepper",
                         active=0,
+                        color=colors["teal"],
                         children=[
                             dmc.StepperStep(
                                 label="Project Type",
@@ -178,11 +183,6 @@ def create_project_modal(opened=False):
                                 description="Configure your project",
                                 children=[html.Div(id="step-2-content")],
                             ),
-                            dmc.StepperStep(
-                                label="Data Collections",
-                                description="Add your data (basic only)",
-                                children=[html.Div(id="step-3-content")],
-                            ),
                             dmc.StepperCompleted(
                                 children=[
                                     dmc.Center(
@@ -192,7 +192,7 @@ def create_project_modal(opened=False):
                                                     DashIconify(
                                                         icon="mdi:check-circle",
                                                         width=64,
-                                                        color="green",
+                                                        color=colors["teal"],
                                                     ),
                                                     dmc.Text(
                                                         "Project created successfully!",
@@ -244,12 +244,27 @@ def create_project_modal(opened=False):
     return modal, modal_id
 
 
+# Create project modal and layout at module level (similar to dashboards_management.py)
+logger.info("Creating project modal with opened=False")
+project_modal, project_modal_id = create_project_modal(opened=False)
+logger.info(f"Project modal created with ID: {project_modal_id}")
+
+# Create the main layout with modal included
+layout = html.Div(
+    [
+        project_modal,
+        html.Div(id="projects-content"),  # Content populated by callback
+    ]
+)
+
+
 def create_step_1_content():
     """Create Step 1: Project Type Selection."""
     return dmc.Stack(
         [
+            dmc.Space(h="xl"),  # Add extra space above the title
             dmc.Text("Choose your project type:", fw="bold", size="lg", ta="center"),
-            dmc.Space(h="md"),
+            dmc.Space(h="lg"),  # Increased space below the title
             dmc.Grid(
                 [
                     dmc.GridCol(
@@ -265,7 +280,7 @@ def create_step_1_content():
                                                             DashIconify(
                                                                 icon="mdi:view-dashboard-outline",
                                                                 width=48,
-                                                                color="cyan",
+                                                                color=colors["teal"],
                                                             )
                                                         ]
                                                     ),
@@ -283,6 +298,8 @@ def create_step_1_content():
                                                         ta="center",
                                                         c="gray",
                                                     ),
+                                                    # Spacer to push badge to bottom
+                                                    dmc.Space(style={"flex": "1"}),
                                                     dmc.Center(
                                                         [
                                                             dmc.Badge(
@@ -294,6 +311,7 @@ def create_step_1_content():
                                                     ),
                                                 ],
                                                 gap="sm",
+                                                style={"height": "100%"},
                                             )
                                         ],
                                         withBorder=True,
@@ -349,6 +367,8 @@ def create_step_1_content():
                                                         ta="center",
                                                         c="gray",
                                                     ),
+                                                    # Spacer to push badge to bottom
+                                                    dmc.Space(style={"flex": "1"}),
                                                     dmc.Center(
                                                         [
                                                             dmc.Badge(
@@ -360,6 +380,7 @@ def create_step_1_content():
                                                     ),
                                                 ],
                                                 gap="sm",
+                                                style={"height": "100%"},
                                             )
                                         ],
                                         withBorder=True,
@@ -436,10 +457,20 @@ def create_step_2_content(project_type=None):
                 required=True,
                 leftSection=DashIconify(icon="mdi:folder-outline"),
             ),
+            dmc.Textarea(
+                label="Project Description (Optional)",
+                description="Describe what this project is about",
+                placeholder="Enter project description...",
+                id="project-description-input",
+                autosize=True,
+                minRows=2,
+                maxRows=4,
+            ),
             dmc.Switch(
                 id="project-public-switch",
                 label="Make this project public",
                 description="Public projects are visible to all users",
+                color=colors["teal"],
             ),
         ]
     )
@@ -903,6 +934,70 @@ def render_workflow_item(wf: Workflow, token: str):
     )
 
 
+def create_project_management_panel(project: Project) -> list:
+    """
+    Create the project management panel with edit and delete buttons.
+
+    Args:
+        project: Project object
+
+    Returns:
+        List of components for the management panel
+    """
+    return [
+        dmc.Group(
+            [
+                dmc.Button(
+                    "Edit Project Name",
+                    id={"type": "edit-project-name-button", "index": str(project.id)},
+                    variant="outline",
+                    color="blue",
+                    leftSection=DashIconify(icon="mdi:pencil", width=16),
+                    size="sm",
+                ),
+                dmc.Button(
+                    "Delete Project",
+                    id={"type": "delete-project-button", "index": str(project.id)},
+                    variant="outline",
+                    color="red",
+                    leftSection=DashIconify(icon="mdi:delete", width=16),
+                    size="sm",
+                ),
+            ],
+            gap="md",
+        ),
+        # Add modals for edit and delete
+        # create_add_with_input_modal(
+        #     id_prefix="edit-project-name",
+        #     input_field=dmc.TextInput(
+        #         id={"type": "edit-project-name-input", "index": str(project.id)},
+        #         label="Project Name",
+        #         placeholder="Enter new project name",
+        #         value=project.name,
+        #         required=True,
+        #     ),
+        #     item_id=str(project.id),
+        #     title="Edit Project Name",
+        #     title_color="blue",
+        #     message="Enter a new name for this project.",
+        #     confirm_button_text="Save Changes",
+        #     confirm_button_color="blue",
+        #     icon="mdi:pencil",
+        #     opened=False,
+        # ),
+        # create_delete_confirmation_modal(
+        #     id_prefix="delete-project",
+        #     item_id=str(project.id),
+        #     title="Delete Project",
+        #     message=f"Are you sure you want to delete the project '{project.name}'? This action cannot be undone and will permanently remove all associated data.",
+        #     delete_button_text="Delete Project",
+        #     cancel_button_text="Cancel",
+        #     icon="mdi:alert-circle",
+        #     opened=False,
+        # ),
+    ]
+
+
 def render_project_item(
     project: Project, current_user: UserBase, admin_UI: bool = False, token: str = ""
 ):
@@ -917,7 +1012,7 @@ def render_project_item(
     Returns:
         Dash Mantine AccordionItem component
     """
-    logger.info(f"Rendering project item: {project}")
+    # logger.info(f"Rendering project item: {project}")
     project_details = dmc.Paper(
         children=[
             html.Div(
@@ -1136,13 +1231,23 @@ def render_project_item(
         style={"width": "100px", "justifyContent": "center"},
     )
 
+    # Create visibility badge
+    is_public = getattr(project, "is_public", False)  # Default to private if not set
+    badge_visibility = dmc.Badge(
+        children="Public" if is_public else "Private",
+        color="green" if is_public else "violet",
+        variant="filled",
+        style={"width": "80px", "justifyContent": "center"},
+    )
+
     return dmc.AccordionItem(
         children=[
             dmc.AccordionControl(
                 dmc.Group(
                     [
-                        badge_ownership,
                         badge_project_type,
+                        badge_visibility,
+                        badge_ownership,
                         dmc.Text(f"{project.name}", fw="bold", style={"flex": "1"}),
                         # dmc.Text(f" ({str(project.id)})", fw="medium"),
                     ],
@@ -1247,8 +1352,20 @@ def render_project_item(
                                     # ),
                                 ],
                             ),
+                            dmc.AccordionItem(
+                                value="project-management",
+                                children=[
+                                    dmc.AccordionControl(
+                                        "Project Management",
+                                        icon=DashIconify(icon="mdi:cog", width=20),
+                                    ),
+                                    dmc.AccordionPanel(
+                                        # children=html.Div()
+                                        children=create_project_management_panel(project)
+                                    ),
+                                ],
+                            ),
                         ],
-                        multiple=True,
                     ),
                 ]
             ),
@@ -1260,13 +1377,9 @@ def render_project_item(
 def render_projects_list(projects: list[Project], admin_UI: bool = False, token: str | None = None):
     """Render the full projects list, categorized into owned and shared."""
 
-    # Create project modal
-    project_modal, project_modal_id = create_project_modal()
-
     if not projects:
         content = dmc.Container(
             [
-                project_modal,
                 dmc.Center(
                     dmc.Paper(
                         children=[
@@ -1341,18 +1454,25 @@ def render_projects_list(projects: list[Project], admin_UI: bool = False, token:
     column_headers = dmc.Group(
         [
             dmc.Text(
-                "Ownership",
+                "Project Type",
+                fw="bold",
+                size="sm",
+                c="gray",
+                style={"width": "100px", "textAlign": "left"},
+            ),
+            dmc.Text(
+                "Visibility",
                 fw="bold",
                 size="sm",
                 c="gray",
                 style={"width": "80px", "textAlign": "left"},
             ),
             dmc.Text(
-                "Project Type",
+                "Permission",
                 fw="bold",
                 size="sm",
                 c="gray",
-                style={"width": "100px", "textAlign": "left"},
+                style={"width": "80px", "textAlign": "left"},
             ),
             dmc.Text(
                 "Project Name",
@@ -1373,7 +1493,6 @@ def render_projects_list(projects: list[Project], admin_UI: bool = False, token:
 
     return dmc.Container(
         [
-            project_modal,
             column_headers,
         ]
         + (sections if sections else []),
@@ -1449,7 +1568,6 @@ def register_projects_callbacks(app):
     @app.callback(
         [
             Output("step-2-content", "children"),
-            Output("step-3-content", "children"),
             Output("project-creation-stepper", "active"),
             Output("project-stepper-prev", "disabled"),
             Output("project-stepper-next", "children"),
@@ -1479,7 +1597,7 @@ def register_projects_callbacks(app):
         ctx = dash.callback_context
 
         if not ctx.triggered:
-            return "", "", 0, True, "Next", False, store_data, click_memory
+            return "", 0, True, "Next", False, store_data, click_memory
 
         trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
 
@@ -1488,24 +1606,32 @@ def register_projects_callbacks(app):
 
         # Handle navigation
         project_type = store_data.get("project_type") if store_data else None
-        max_steps = 2 if project_type == "basic" else 1  # Basic: 3 steps, Advanced: 2 steps
+        max_steps = 1  # Only 2 steps total: Project Type (0) + Project Details (1)
 
         if trigger_id == "project-stepper-next":
             new_step = min(current_step + 1, max_steps)
         elif trigger_id == "project-stepper-prev":
             new_step = max(current_step - 1, 0)
+        elif trigger_id == "project-creation-store":
+            # Store data changed (e.g., project type selected), keep current step
+            new_step = current_step
         else:
             new_step = current_step
 
+        # Check if project is completed (stepper has moved beyond max_steps)
+        project_completed = new_step > max_steps
+
         # Determine next button text
         next_text = "Create Project" if new_step == max_steps else "Next"
-        next_disabled = new_step == max_steps and project_type == "advanced"
+        next_disabled = project_completed  # Disable when project is completed
+
+        # Always provide step 2 content when project type is available
+        step_2_content = create_step_2_content(project_type) if project_type else ""
 
         return (
-            create_step_2_content(project_type),
-            create_step_3_content() if project_type == "basic" else "",
+            step_2_content,
             new_step,
-            new_step == 0,  # Previous disabled on first step
+            new_step == 0 or project_completed,  # Previous disabled on first step OR when completed
             next_text,
             next_disabled,
             store_data,
@@ -1518,6 +1644,7 @@ def register_projects_callbacks(app):
             Output("project-creation-store", "data", allow_duplicate=True),
             Output("project-creation-stepper", "active", allow_duplicate=True),
             Output("project-card-click-memory", "data", allow_duplicate=True),
+            Output("step-2-content", "children", allow_duplicate=True),
         ],
         Input("basic-project-card", "n_clicks"),
         [
@@ -1542,10 +1669,128 @@ def register_projects_callbacks(app):
             # Update click memory to current click count
             click_memory["basic_clicks"] = basic_clicks
 
+            # Create step 2 content immediately
+            step_2_content = create_step_2_content(project_type)
+
             # Automatically advance to step 2 (step 1 in 0-indexed)
-            return store_data, 1, click_memory
+            return store_data, 1, click_memory, step_2_content
 
         raise dash.exceptions.PreventUpdate
+
+    # Handle project creation
+    @app.callback(
+        [
+            Output("project-creation-stepper", "active", allow_duplicate=True),
+            Output("project-creation-store", "data", allow_duplicate=True),
+        ],
+        [
+            Input("project-stepper-next", "n_clicks"),
+        ],
+        [
+            State("project-creation-stepper", "active"),
+            State("project-creation-store", "data"),
+            State("project-name-input", "value"),
+            State("project-description-input", "value"),
+            State("project-public-switch", "checked"),
+            State("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def handle_project_creation(
+        next_clicks,
+        current_step,
+        store_data,
+        project_name,
+        project_description,
+        is_public,
+        local_data,
+    ):
+        """Handle project creation when Create Project button is clicked."""
+        if not next_clicks or not store_data:
+            raise dash.exceptions.PreventUpdate
+
+        # Only create project when on the final step (step 1) and button says "Create Project"
+        if current_step != 1:
+            raise dash.exceptions.PreventUpdate
+
+        try:
+            # Validate inputs
+            if not project_name or not project_name.strip():
+                logger.error("Project name is required")
+                # TODO: Add user feedback for validation errors
+                raise dash.exceptions.PreventUpdate
+
+            # Get current user info
+            token = local_data.get("access_token") if local_data else None
+            if not token:
+                logger.error("No authentication token available")
+                raise dash.exceptions.PreventUpdate
+
+            # Get user information to set as owner
+            current_user_info = api_call_fetch_user_from_token(token)
+            if not current_user_info:
+                logger.error("Could not fetch current user information")
+                raise dash.exceptions.PreventUpdate
+
+            # Create user object for permissions
+            current_user = UserBase(
+                id=current_user_info.id,
+                email=current_user_info.email,
+            )
+
+            # Create permissions with current user as owner
+            permissions = Permission(
+                owners=[current_user],
+                editors=[],
+                viewers=[],  # Public projects visible to all
+            )
+
+            # Create project data
+            project_data = {
+                "name": project_name.strip(),
+                "description": project_description.strip() if project_description else None,
+                "project_type": store_data.get("project_type", "basic"),
+                "is_public": bool(is_public),
+                "permissions": permissions,
+                "workflows": [],
+                "data_collections": [],
+                "data_management_platform_project_url": None,
+                "yaml_config_path": None,
+            }
+
+            # Validate project data by creating Project object first
+            try:
+                project = Project(**project_data)  # type: ignore[misc]
+                logger.debug(f"Project validation successful: {project.name}")
+            except Exception as validation_error:
+                logger.error(f"Project validation failed: {validation_error}")
+                store_data["creation_error"] = f"Invalid project data: {validation_error}"
+                raise dash.exceptions.PreventUpdate
+
+            # Call API to create project using validated data
+            result = api_call_create_project(project.model_dump(), token)
+
+            if result and result.get("success"):
+                logger.info(f"Project created successfully: {result.get('message')}")
+                # Move to completion step
+                store_data["project_created"] = True
+                store_data["creation_message"] = result.get(
+                    "message", "Project created successfully!"
+                )
+                return current_step + 1, store_data
+            else:
+                error_msg = (
+                    result.get("message", "Unknown error") if result else "Failed to create project"
+                )
+                logger.error(f"Project creation failed: {error_msg}")
+                # TODO: Add user feedback for creation errors
+                store_data["creation_error"] = error_msg
+                raise dash.exceptions.PreventUpdate
+
+        except Exception as e:
+            logger.error(f"Error in project creation: {e}")
+            # TODO: Add user feedback for errors
+            raise dash.exceptions.PreventUpdate
 
     @app.callback(
         Output({"type": "project-dc-table", "index": MATCH}, "className"),
@@ -1634,12 +1879,14 @@ def register_workflows_callbacks(app):
     """
 
     @app.callback(
-        Output("projects-list", "children"),
-        Input("url", "pathname"),
-        State("local-store", "data"),
-        prevent_initial_call=True,
+        Output("projects-content", "children"),
+        [
+            Input("url", "pathname"),
+            Input("local-store", "data"),
+        ],
+        prevent_initial_call=False,
     )
-    def update_projects_list(pathname, local_store):
+    def update_projects_content(pathname, local_store):
         """Update the projects list based on the current path and user token."""
         token = local_store.get("access_token") if local_store else None
         if not token:
@@ -1648,44 +1895,195 @@ def register_workflows_callbacks(app):
 
         # Fetch projects from the API
         projects = fetch_projects(token)
-        logger.info(f"Fetched projects: {projects}")
+        logger.info(f"Fetched projects: {len(projects)}")
 
-        return html.Div(
-            children=[
-                render_projects_list(projects=projects, admin_UI=False, token=token),
-            ]
-        )
+        return render_projects_list(projects=projects, admin_UI=False, token=token)
+
+    # Auto-refresh projects list when modal closes after project creation
+    @app.callback(
+        Output("projects-content", "children", allow_duplicate=True),
+        [
+            Input("project-creation-modal", "opened"),
+        ],
+        [
+            State("local-store", "data"),
+            State("project-creation-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def refresh_projects_after_creation(modal_opened, local_store, project_store):
+        """Refresh projects list when modal closes after successful project creation."""
+        # Only refresh when modal is closing and a project was created
+        if not modal_opened and project_store and project_store.get("project_created"):
+            token = local_store.get("access_token") if local_store else None
+            if not token:
+                return dash.no_update
+
+            # Fetch updated projects from the API
+            projects = fetch_projects(token)
+            logger.info(f"Refreshed {len(projects)} projects after creation")
+
+            return render_projects_list(projects=projects, admin_UI=False, token=token)
+
+        return dash.no_update
+
+    # Ensure modal stays closed on initial page load
+    @app.callback(
+        Output("project-creation-modal", "opened", allow_duplicate=True),
+        Input("url", "pathname"),
+        prevent_initial_call="initial_duplicate",
+    )
+    def ensure_modal_closed_on_load(pathname):
+        """Ensure modal is closed when navigating to projects page."""
+        if pathname == "/projects":
+            return False
+        return dash.no_update
+
+    # Project management callbacks
+    @app.callback(
+        Output({"type": "edit-project-name-add-confirmation-modal", "index": MATCH}, "opened"),
+        Input({"type": "edit-project-name-button", "index": MATCH}, "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def open_edit_project_name_modal(n_clicks):
+        """Open the edit project name modal when button is clicked."""
+        if n_clicks:
+            return True
+        return dash.no_update
+
+    @app.callback(
+        Output({"type": "delete-project-delete-confirmation-modal", "index": MATCH}, "opened"),
+        Input({"type": "delete-project-button", "index": MATCH}, "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def open_delete_project_modal(n_clicks):
+        """Open the delete project confirmation modal when button is clicked."""
+        if n_clicks:
+            return True
+        return dash.no_update
+
+    @app.callback(
+        Output(
+            {"type": "edit-project-name-add-confirmation-modal", "index": MATCH},
+            "opened",
+            allow_duplicate=True,
+        ),
+        Input({"type": "confirm-edit-project-name-add-button", "index": MATCH}, "n_clicks"),
+        Input({"type": "cancel-edit-project-name-add-button", "index": MATCH}, "n_clicks"),
+        State({"type": "edit-project-name-input", "index": MATCH}, "value"),
+        prevent_initial_call=True,
+    )
+    def handle_edit_project_name(confirm_clicks, cancel_clicks, new_name):
+        """Handle project name edit confirmation."""
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            return dash.no_update
+
+        button_id = ctx.triggered[0]["prop_id"].split(".")[0]
+
+        if "confirm" in button_id and new_name and new_name.strip():
+            # Get the project index from the button ID
+            import json
+
+            button_dict = json.loads(button_id)
+            project_index = button_dict["index"]
+
+            logger.info(f"Would update project {project_index} name to: {new_name}")
+            # TODO: Implement actual project name update API call
+
+            # Close modal - user will need to manually refresh for now
+            return False
+        elif "cancel" in button_id:
+            return False
+
+        return dash.no_update
+
+    @app.callback(
+        Output(
+            {"type": "delete-project-delete-confirmation-modal", "index": MATCH},
+            "opened",
+            allow_duplicate=True,
+        ),
+        Input({"type": "confirm-delete-project-delete-button", "index": MATCH}, "n_clicks"),
+        Input({"type": "cancel-delete-project-delete-button", "index": MATCH}, "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def handle_delete_project(confirm_clicks, cancel_clicks):
+        """Handle project deletion confirmation."""
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            return dash.no_update
+
+        button_id = ctx.triggered[0]["prop_id"].split(".")[0]
+
+        if "confirm" in button_id:
+            # Get the project index from the button ID
+            import json
+
+            button_dict = json.loads(button_id)
+            project_index = button_dict["index"]
+
+            logger.info(f"Would delete project {project_index}")
+            # TODO: Implement actual project deletion API call
+
+            # Close modal - user will need to manually refresh for now
+            return False
+        elif "cancel" in button_id:
+            return False
+
+        return dash.no_update
 
     # Add hover effects using clientside callback
-    app.clientside_callback(
-        """
-        function() {
-            setTimeout(function() {
-                // Only add hover effects to enabled cards (not disabled ones)
-                const cards = document.querySelectorAll('.project-type-card-wrapper');
-                cards.forEach(function(card) {
-                    // Skip disabled cards
-                    if (card.classList.contains('project-type-card-wrapper-disabled')) {
-                        return;
-                    }
+    # app.clientside_callback(
+    #     """
+    #     function() {
+    #         setTimeout(function() {
+    #             // Only add hover effects to enabled cards (not disabled ones)
+    #             const cards = document.querySelectorAll('.project-type-card-wrapper');
+    #             cards.forEach(function(card) {
+    #                 // Skip disabled cards
+    #                 if (card.classList.contains('project-type-card-wrapper-disabled')) {
+    #                     return;
+    #                 }
 
-                    card.addEventListener('mouseenter', function() {
-                        const cardElement = this.querySelector('.project-type-card');
-                        if (cardElement) {
-                            cardElement.style.boxShadow = '0 0 0 2px var(--mantine-color-blue-5, #339af0)';
-                        }
-                    });
-                    card.addEventListener('mouseleave', function() {
-                        const cardElement = this.querySelector('.project-type-card');
-                        if (cardElement) {
-                            cardElement.style.boxShadow = '';
-                        }
-                    });
-                });
-            }, 500);
-            return window.dash_clientside.no_update;
-        }
-        """,
-        Output("dummy-hover-output", "children"),
-        Input("project-creation-modal", "opened"),
-    )
+    #                 card.addEventListener('mouseenter', function() {
+    #                     const cardElement = this.querySelector('.project-type-card');
+    #                     if (cardElement) {
+    #                         cardElement.style.boxShadow = '0 0 0 2px var(--mantine-color-blue-5, #339af0)';
+    #                     }
+    #                 });
+    #                 card.addEventListener('mouseleave', function() {
+    #                     const cardElement = this.querySelector('.project-type-card');
+    #                     if (cardElement) {
+    #                         cardElement.style.boxShadow = '';
+    #                     }
+    #                 });
+    #             });
+    #         }, 500);
+    #         return window.dash_clientside.no_update;
+    #     }
+    #     """,
+    #     Output("dummy-hover-output", "children"),
+    #     Input("project-creation-modal", "opened"),
+    # )
+
+    # # Refresh projects list when modal closes after successful project creation
+    # app.clientside_callback(
+    #     """
+    #     function(modal_opened, store_data) {
+    #         // If modal is closing and a project was created, refresh the page
+    #         if (!modal_opened && store_data && store_data.project_created) {
+    #             // Small delay to ensure modal close animation completes
+    #             setTimeout(function() {
+    #                 if (window.location.pathname === '/projects') {
+    #                     window.location.reload();
+    #                 }
+    #             }, 300);
+    #         }
+    #         return window.dash_clientside.no_update;
+    #     }
+    #     """,
+    #     Output("dummy-hover-output", "children", allow_duplicate=True),
+    #     [Input("project-creation-modal", "opened"), Input("project-creation-store", "data")],
+    #     prevent_initial_call=True,
+    # )

@@ -20,6 +20,7 @@ from depictio.dash.layouts.profile import layout as profile_layout
 from depictio.dash.layouts.project_data_collections import (
     layout as project_data_collections_layout,
 )
+from depictio.dash.layouts.projects import layout as projects_layout
 from depictio.dash.layouts.projectwise_user_management import (
     layout as projectwise_user_management_layout,
 )
@@ -148,8 +149,8 @@ def handle_authenticated_user(pathname, local_data, theme="light"):
 
         create_button = return_create_project_button(user.email, is_anonymous=is_anonymous)
         header = create_header_with_button("Projects", create_button)
-        projects = html.Div(id="projects-list")
-        return projects, header, pathname, local_data
+        content = create_projects_layout()
+        return content, header, pathname, local_data
 
     elif pathname == "/profile":
         header = create_default_header("Profile")
@@ -392,6 +393,10 @@ def create_header_with_button(text, button):
 
 def create_dashboards_management_layout():
     return dashboards_management_layout
+
+
+def create_projects_layout():
+    return projects_layout
 
 
 def create_users_management_layout():

@@ -824,3 +824,47 @@ def api_call_fetch_delta_table_info(data_collection_id: str, token: str) -> dict
     except Exception as e:
         logger.error(f"Error fetching delta table info for {data_collection_id}: {e}")
         return None
+
+
+@validate_call(validate_return=True)
+def api_call_create_project(project_data: dict[str, Any], token: str) -> dict[str, Any] | None:
+    """
+    Create a new project using the API endpoint.
+
+    Args:
+        project_data: Project data dictionary
+        token: Authentication token
+
+    Returns:
+        Response from project creation or None if failed
+    """
+    try:
+        logger.debug(f"Creating project: {project_data.get('name', 'Unknown')}")
+
+        response = httpx.post(
+            f"{API_BASE_URL}/depictio/api/v1/projects/create",
+            json=project_data,
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=settings.performance.api_request_timeout,
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            logger.info(f"Project created successfully: {result.get('message', 'No message')}")
+            return result
+        else:
+            error_msg = f"Failed to create project: {response.status_code} - {response.text}"
+            logger.error(error_msg)
+            try:
+                error_data = response.json()
+                return {
+                    "success": False,
+                    "message": error_data.get("message", error_msg),
+                    "status_code": response.status_code,
+                }
+            except Exception:
+                return {"success": False, "message": error_msg, "status_code": response.status_code}
+
+    except Exception as e:
+        logger.error(f"Error creating project: {e}")
+        return {"success": False, "message": f"Network error: {str(e)}", "status_code": 500}
