@@ -1600,6 +1600,7 @@ def generate_cytoscape_elements_from_project_data(data_collections):
         # Create column nodes
         for j, column in enumerate(columns):
             column_id = f"{dc_tag}/{column}"
+            y_offset = 140 + (j * 50)  # Start lower and tighter spacing
 
             # Check if this column is part of a join (from comprehensive list)
             is_join_column = column in all_join_columns.get(dc_tag, set())
@@ -1614,10 +1615,7 @@ def generate_cytoscape_elements_from_project_data(data_collections):
                         "dc_id": dc_id,
                         "is_join_column": is_join_column,
                     },
-                    "position": {
-                        "x": x_offset + 100,
-                        "y": 140 + (j * 50),
-                    },  # Exact copy from reference line 538
+                    "position": {"x": x_offset + 100, "y": y_offset},
                     "classes": "column-node join-column" if is_join_column else "column-node",
                 }
             )
