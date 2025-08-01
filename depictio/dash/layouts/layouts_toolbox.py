@@ -1,7 +1,9 @@
 import dash_mantine_components as dmc
-from dash import html
+from dash import dcc, html
 from dash_extensions import EventListener
 from dash_iconify import DashIconify
+
+from depictio.dash.colors import colors
 
 
 def create_dashboard_modal(
@@ -582,3 +584,231 @@ def create_edit_password_modal(
 #     title="Update Password",
 #     save_button_text="Update"
 # )
+
+
+def create_data_collection_modal(
+    opened=False,
+    id_prefix="data-collection-creation",
+):
+    """
+    Creates a data collection creation modal with form fields for metadata-only data collections.
+
+    Parameters:
+    - opened: Whether the modal is initially open
+    - id_prefix: Prefix for all IDs in the modal
+
+    Returns:
+    - modal: The data collection creation modal
+    - modal_id: The ID of the modal for callbacks
+    """
+    modal_id = f"{id_prefix}-modal"
+
+    modal = dmc.Modal(
+        opened=opened,
+        id=modal_id,
+        centered=True,
+        withCloseButton=True,
+        closeOnClickOutside=False,
+        closeOnEscape=False,
+        overlayProps={
+            "overlayBlur": 3,
+            "overlayOpacity": 0.55,
+        },
+        shadow="xl",
+        radius="md",
+        size="lg",
+        zIndex=10000,
+        styles={
+            "modal": {
+                "padding": "28px",
+            },
+        },
+        children=[
+            dmc.Stack(
+                gap="lg",
+                children=[
+                    # Header with icon and title
+                    dmc.Group(
+                        justify="center",
+                        gap="sm",
+                        children=[
+                            DashIconify(
+                                icon="mdi:database-plus",
+                                width=40,
+                                height=40,
+                                color=colors["teal"],
+                            ),
+                            dmc.Title(
+                                "Create Data Collection",
+                                order=2,
+                                c="teal",
+                                style={"margin": 0},
+                            ),
+                        ],
+                    ),
+                    # Divider
+                    dmc.Divider(style={"marginTop": 5, "marginBottom": 5}),
+                    # Form fields
+                    dmc.Stack(
+                        gap="md",
+                        children=[
+                            # Data collection name
+                            dmc.TextInput(
+                                label="Data Collection Name",
+                                description="Unique identifier for your data collection",
+                                placeholder="Enter data collection name",
+                                id=f"{id_prefix}-name-input",
+                                required=True,
+                                leftSection=DashIconify(icon="mdi:tag", width=16),
+                                style={"width": "100%"},
+                            ),
+                            # Description
+                            dmc.Textarea(
+                                label="Description",
+                                description="Optional description of your data collection",
+                                placeholder="Enter description (optional)",
+                                id=f"{id_prefix}-description-input",
+                                autosize=True,
+                                minRows=2,
+                                maxRows=4,
+                                style={"width": "100%"},
+                            ),
+                            # Data type selection
+                            dmc.Select(
+                                label="Data Type",
+                                description="Type of data in your collection",
+                                data=[
+                                    {"value": "table", "label": "Table Data"},
+                                    {"value": "jbrowse2", "label": "JBrowse2 Data"},
+                                ],
+                                id=f"{id_prefix}-type-select",
+                                placeholder="Select data type",
+                                value="table",  # Default to table
+                                required=True,
+                                leftSection=DashIconify(icon="mdi:format-list-bulleted", width=16),
+                                style={"width": "100%"},
+                            ),
+                            # Scan mode indicator (read-only)
+                            dmc.TextInput(
+                                label="Scan Mode",
+                                description="Single file upload mode (metadata only)",
+                                value="Single File (Metadata)",
+                                id=f"{id_prefix}-scan-mode-display",
+                                readOnly=True,
+                                leftSection=DashIconify(icon="mdi:file-document", width=16),
+                                style={"width": "100%"},
+                                styles={
+                                    "input": {
+                                        "backgroundColor": "var(--mantine-color-gray-1)",
+                                        "color": "var(--mantine-color-gray-7)",
+                                    }
+                                },
+                            ),
+                            # File upload section
+                            dmc.Stack(
+                                gap="sm",
+                                children=[
+                                    dmc.Text(
+                                        "File Upload",
+                                        size="sm",
+                                        fw="bold",
+                                        c="gray",
+                                    ),
+                                    dmc.Text(
+                                        "Upload your data file (maximum 5MB)",
+                                        size="xs",
+                                        c="gray",
+                                    ),
+                                    dcc.Loading(
+                                        id=f"{id_prefix}-upload-loading",
+                                        type="default",
+                                        children=[
+                                            dcc.Upload(
+                                                id=f"{id_prefix}-file-upload",
+                                                children=dmc.Paper(
+                                                    children=[
+                                                        dmc.Stack(
+                                                            align="center",
+                                                            gap="sm",
+                                                            children=[
+                                                                DashIconify(
+                                                                    icon="mdi:cloud-upload",
+                                                                    width=48,
+                                                                    height=48,
+                                                                    color="gray",
+                                                                ),
+                                                                dmc.Text(
+                                                                    "Drag and drop a file here, or click to select",
+                                                                    ta="center",
+                                                                    size="sm",
+                                                                    c="gray",
+                                                                ),
+                                                                dmc.Text(
+                                                                    "Maximum file size: 5MB",
+                                                                    ta="center",
+                                                                    size="xs",
+                                                                    c="gray",
+                                                                ),
+                                                            ],
+                                                        )
+                                                    ],
+                                                    withBorder=True,
+                                                    radius="md",
+                                                    p="xl",
+                                                    style={
+                                                        "borderStyle": "dashed",
+                                                        "borderWidth": "2px",
+                                                        "cursor": "pointer",
+                                                        "minHeight": "120px",
+                                                        "display": "flex",
+                                                        "alignItems": "center",
+                                                        "justifyContent": "center",
+                                                    },
+                                                ),
+                                                style={
+                                                    "width": "100%",
+                                                    "minHeight": "120px",
+                                                },
+                                                multiple=False,
+                                                max_size=5 * 1024 * 1024,  # 5MB in bytes
+                                            ),
+                                        ],
+                                    ),
+                                    # File info display
+                                    html.Div(
+                                        id=f"{id_prefix}-file-info",
+                                        children=[],
+                                    ),
+                                ],
+                            ),
+                        ],
+                    ),
+                    # Buttons
+                    dmc.Group(
+                        justify="flex-end",
+                        gap="md",
+                        mt="lg",
+                        children=[
+                            dmc.Button(
+                                "Cancel",
+                                variant="outline",
+                                color="gray",
+                                radius="md",
+                                id=f"cancel-{id_prefix}-button",
+                            ),
+                            dmc.Button(
+                                "Create Data Collection",
+                                id=f"create-{id_prefix}-submit",
+                                color="teal",
+                                radius="md",
+                                leftSection=DashIconify(icon="mdi:plus", width=16),
+                                disabled=True,  # Start disabled
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+        ],
+    )
+
+    return modal, modal_id

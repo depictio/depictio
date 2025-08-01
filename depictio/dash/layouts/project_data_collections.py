@@ -12,6 +12,8 @@ The module is organized into:
 - Modular callback functions for handling user interactions
 """
 
+import base64
+
 import dash
 import dash_ag_grid as dag
 import dash_mantine_components as dmc
@@ -29,6 +31,7 @@ from depictio.dash.components.depictio_cytoscape_joins import (
     generate_sample_elements,
     register_joins_callbacks,
 )
+from depictio.dash.layouts.layouts_toolbox import create_data_collection_modal
 from depictio.models.models.projects import Project
 
 
@@ -553,14 +556,29 @@ def create_unified_data_collections_manager_section(
                 [
                     dmc.Group(
                         [
-                            dmc.Text("Data Collections", fw="bold", size="lg"),
-                            dmc.Badge(
-                                f"{len(data_collections)} collections",
+                            dmc.Group(
+                                [
+                                    dmc.Text("Data Collections", fw="bold", size="lg"),
+                                    dmc.Badge(
+                                        f"{len(data_collections)} collections",
+                                        color="teal",
+                                        variant="light",
+                                    ),
+                                ],
+                                gap="md",
+                                align="center",
+                            ),
+                            dmc.Button(
+                                "Create Data Collection",
+                                id="create-data-collection-button",
+                                leftSection=DashIconify(icon="mdi:plus", width=16),
+                                variant="filled",
                                 color="teal",
-                                variant="light",
+                                size="sm",
+                                radius="md",
                             ),
                         ],
-                        gap="md",
+                        justify="space-between",
                         align="center",
                     ),
                     dmc.Divider(my="md"),
@@ -1026,12 +1044,17 @@ def create_data_collections_landing_ui():
     Returns:
         html.Div: The complete landing UI layout
     """
+    # Create data collection modal
+    data_collection_modal, data_collection_modal_id = create_data_collection_modal()
+
     return html.Div(
         [
             # Store components for state management
             dcc.Store(id="project-data-store", data={}),
             dcc.Store(id="selected-workflow-store", data=None),
             dcc.Store(id="selected-data-collection-store", data=None),
+            # Data collection creation modal
+            data_collection_modal,
             # Header section
             dmc.Stack(
                 [
@@ -1684,6 +1707,113 @@ def register_project_data_collections_callbacks(app):
 
         # Hide if no data collections or only one DC
         return {"display": "none"}, []
+
+    # Data collection creation modal callbacks
+    @app.callback(
+        Output("data-collection-creation-modal", "opened"),
+        [
+            Input("create-data-collection-button", "n_clicks"),
+            Input("cancel-data-collection-creation-button", "n_clicks"),
+            Input("create-data-collection-creation-submit", "n_clicks"),
+        ],
+        [dash.State("data-collection-creation-modal", "opened")],
+        prevent_initial_call=True,
+    )
+    def toggle_data_collection_modal(open_clicks, cancel_clicks, submit_clicks, opened):
+        """Handle opening and closing of data collection creation modal."""
+        if not ctx.triggered:
+            return False
+
+        ctx_trigger = ctx.triggered_id
+
+        if ctx_trigger == "create-data-collection-button" and open_clicks:
+            return True
+        elif ctx_trigger in [
+            "cancel-data-collection-creation-button",
+            "create-data-collection-creation-submit",
+        ] and (cancel_clicks or submit_clicks):
+            return False
+
+        return opened
+
+    @app.callback(
+        Output("data-collection-creation-file-info", "children"),
+        [Input("data-collection-creation-file-upload", "contents")],
+        [
+            dash.State("data-collection-creation-file-upload", "filename"),
+            dash.State("data-collection-creation-file-upload", "last_modified"),
+        ],
+        prevent_initial_call=True,
+    )
+    def handle_file_upload(contents, filename, last_modified):
+        """Handle file upload and display file information."""
+        if not contents or not filename:
+            return []
+
+        # Decode the file content to check size
+        try:
+            content_type, content_string = contents.split(",")
+            decoded = base64.b64decode(content_string)
+            file_size = len(decoded)
+
+            # Check file size limit (5MB)
+            max_size = 5 * 1024 * 1024  # 5MB in bytes
+            if file_size > max_size:
+                return dmc.Alert(
+                    f"File size ({file_size / (1024 * 1024):.1f}MB) exceeds the 5MB limit",
+                    color="red",
+                    icon=DashIconify(icon="mdi:alert"),
+                )
+
+            # Display file info
+            return dmc.Card(
+                [
+                    dmc.Group(
+                        [
+                            DashIconify(icon="mdi:file-check", width=20, color="green"),
+                            dmc.Stack(
+                                [
+                                    dmc.Text(filename, fw="bold", size="sm"),
+                                    dmc.Text(
+                                        f"Size: {file_size / 1024:.1f}KB",
+                                        size="xs",
+                                        c="gray",
+                                    ),
+                                ],
+                                gap="xs",
+                            ),
+                        ],
+                        gap="md",
+                        align="center",
+                    ),
+                ],
+                withBorder=True,
+                shadow="xs",
+                radius="md",
+                p="sm",
+                style={"backgroundColor": "var(--mantine-color-green-0)"},
+            )
+
+        except Exception as e:
+            return dmc.Alert(
+                f"Error processing file: {str(e)}",
+                color="red",
+                icon=DashIconify(icon="mdi:alert"),
+            )
+
+    @app.callback(
+        Output("create-data-collection-creation-submit", "disabled"),
+        [
+            Input("data-collection-creation-name-input", "value"),
+            Input("data-collection-creation-file-upload", "contents"),
+        ],
+    )
+    def update_submit_button_state(name, file_contents):
+        """Enable/disable submit button based on form completeness."""
+        # Require name and file upload (data type has default value)
+        if not name or not file_contents:
+            return True
+        return False
 
 
 def generate_cytoscape_elements_from_project_data(data_collections):
