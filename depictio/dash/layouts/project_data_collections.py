@@ -2514,17 +2514,72 @@ def register_project_data_collections_callbacks(app):
     )
     def update_overwrite_submit_button_state(file_contents, validation_result):
         """Enable/disable overwrite submit button based on file upload and validation."""
+        logger.debug(
+            f"Button state update: file_contents={'[PRESENT]' if file_contents else '[MISSING]'}"
+        )
+        logger.debug(f"Validation result type: {type(validation_result)}")
+        logger.debug(f"Validation result: {validation_result}")
+
         if not file_contents:
+            logger.debug("No file contents, disabling button")
             return True
 
         # Check if validation was successful
         if isinstance(validation_result, list) and len(validation_result) > 0:
+            logger.debug(f"Validation result is list with {len(validation_result)} items")
             # Look for a successful validation indicator
-            for child in validation_result:
-                if hasattr(child, "props") and hasattr(child.props, "color"):
-                    if child.props.color == "green":  # Success validation
+            for i, child in enumerate(validation_result):
+                logger.debug(f"Checking validation item {i}: {type(child)}")
+
+                # Handle both dict format (from serialization) and component objects
+                if isinstance(child, dict) and "props" in child:
+                    props = child["props"]
+                    logger.debug(f"Item {i} has dict props: color={props.get('color')}")
+                    # Check for green color (success)
+                    if props.get("color") == "green":
+                        logger.debug("Found green validation (dict format), enabling button")
+                        return False
+                    # Check for validation passed text
+                    if (
+                        "children" in props
+                        and "validation passed" in str(props["children"]).lower()
+                    ):
+                        logger.debug("Found validation passed text (dict format), enabling button")
                         return False
 
+                elif hasattr(child, "props"):
+                    logger.debug(
+                        f"Item {i} has object props: {hasattr(child.props, 'color')}, {hasattr(child.props, 'children')}"
+                    )
+                    # Check for green color (success) and validation passed text
+                    if hasattr(child.props, "color") and child.props.color == "green":
+                        logger.debug("Found green validation (object format), enabling button")
+                        return False
+                    if (
+                        hasattr(child.props, "children")
+                        and "validation passed" in str(child.props.children).lower()
+                    ):
+                        logger.debug(
+                            "Found validation passed text (object format), enabling button"
+                        )
+                        return False
+
+        # Also check for direct validation success
+        if validation_result and isinstance(validation_result, list):
+            for i, item in enumerate(validation_result):
+                content = ""
+                if isinstance(item, dict) and "props" in item and "children" in item["props"]:
+                    content = str(item["props"]["children"]).lower()
+                elif hasattr(item, "props") and hasattr(item.props, "children"):
+                    content = str(item.props.children).lower()
+
+                if content:
+                    logger.debug(f"Item {i} content: {content[:100]}")
+                    if "schema validation passed" in content or "validation passed" in content:
+                        logger.debug("Found validation passed in content, enabling button")
+                        return False
+
+        logger.debug("No validation success found, keeping button disabled")
         return True
 
     @app.callback(
@@ -2555,18 +2610,46 @@ def register_project_data_collections_callbacks(app):
             from depictio.api.v1.configs.config import settings
 
             # Decode and save the uploaded file temporarily for validation
-            file_data = base64.b64decode(file_contents.split(",")[1])
+            # Debug: Log the file_contents format
+            logger.debug(
+                f"file_contents format: {file_contents[:100] if file_contents else 'None'}"
+            )
+
+            # Handle different file_contents formats
+            if file_contents and "," in file_contents:
+                # Standard format: "data:mime/type;base64,base64_data"
+                base64_data = file_contents.split(",")[1]
+                logger.debug(f"Standard format detected, base64 length: {len(base64_data)}")
+                file_data = base64.b64decode(base64_data)
+            elif file_contents:
+                # Fallback: Assume it's already base64 encoded
+                try:
+                    logger.debug(f"Fallback format detected, content length: {len(file_contents)}")
+                    file_data = base64.b64decode(file_contents)
+                except Exception as e:
+                    logger.error(f"Failed to decode file contents: {e}")
+                    return [dmc.Alert("Error decoding file", color="red")], []
+            else:
+                logger.warning("No file contents provided")
+                return [dmc.Alert("No file contents provided", color="red")], []
+
+            logger.debug(f"File data decoded successfully, size: {len(file_data)} bytes")
             temp_file_path = Path(tempfile.gettempdir()) / filename
 
             with open(temp_file_path, "wb") as f:
                 f.write(file_data)
 
-            # Get file size
+            # Get file size with appropriate units
             file_size = len(file_data)
-            file_size_mb = file_size / (1024 * 1024)
+            if file_size < 1024 * 1024:  # Less than 1MB, show in KB
+                file_size_display = f"{file_size / 1024:.2f} KB"
+            else:
+                file_size_display = f"{file_size / (1024 * 1024):.2f} MB"
+
+            logger.debug(f"File size display: {file_size} bytes = {file_size_display}")
 
             file_info = dmc.Alert(
-                f"File uploaded: {filename} ({file_size_mb:.2f} MB)",
+                f"File uploaded: {filename} ({file_size_display})",
                 color="blue",
                 icon=DashIconify(icon="mdi:file-check"),
                 variant="light",
@@ -2658,24 +2741,30 @@ def register_project_data_collections_callbacks(app):
                         dmc.Alert(f"Unsupported file format: {file_ext}", color="red")
                     ]
 
-                # Validate schema
+                # Validate schema - exclude system-generated columns
+                system_columns = {"depictio_run_id", "aggregation_time"}
                 new_columns = set(df.columns)
                 existing_columns = (
                     set(existing_schema.keys()) if isinstance(existing_schema, dict) else set()
                 )
 
-                if new_columns == existing_columns:
+                # Remove system columns from existing schema for comparison
+                existing_user_columns = existing_columns - system_columns
+
+                if new_columns == existing_user_columns:
+                    success_message = f"✓ Schema validation passed! File contains {df.shape[0]} rows and {df.shape[1]} columns with matching schema."
+                    logger.debug(f"Schema validation SUCCESS: {success_message}")
                     validation_result = [
                         dmc.Alert(
-                            f"✓ Schema validation passed! File contains {df.shape[0]} rows and {df.shape[1]} columns with matching schema.",
+                            success_message,
                             color="green",
                             icon=DashIconify(icon="mdi:check-circle"),
                             variant="light",
                         )
                     ]
                 else:
-                    missing_cols = existing_columns - new_columns
-                    extra_cols = new_columns - existing_columns
+                    missing_cols = existing_user_columns - new_columns
+                    extra_cols = new_columns - existing_user_columns
                     error_msg = "Schema mismatch: "
                     if missing_cols:
                         error_msg += f"Missing columns: {list(missing_cols)}. "

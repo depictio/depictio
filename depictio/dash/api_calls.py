@@ -1388,10 +1388,7 @@ def api_call_overwrite_data_collection(
     from bson import ObjectId
 
     from depictio.api.v1.configs.config import MONGODB_URL, settings
-    from depictio.cli.cli.utils.helpers import process_data_collection_helper
-    from depictio.models.models.cli import CLIConfig, UserBaseCLIConfig
     from depictio.models.models.projects import Project
-    from depictio.models.models.workflows import WorkflowDataLocation
 
     temp_dir = None
     try:
@@ -1458,10 +1455,10 @@ def api_call_overwrite_data_collection(
 
                 # Configure S3 storage options for reading Delta table
                 storage_options = {
-                    "AWS_ENDPOINT_URL": settings.minio.endpoint_url,
-                    "AWS_ACCESS_KEY_ID": settings.minio.access_key,
-                    "AWS_SECRET_ACCESS_KEY": settings.minio.secret_key,
-                    "AWS_REGION": settings.minio.region,
+                    "AWS_ENDPOINT_URL": settings.minio.url,
+                    "AWS_ACCESS_KEY_ID": settings.minio.root_user,
+                    "AWS_SECRET_ACCESS_KEY": settings.minio.root_password,
+                    "AWS_REGION": "us-east-1",
                     "AWS_ALLOW_HTTP": "true",
                     "AWS_S3_ALLOW_UNSAFE_RENAME": "true",
                 }
@@ -1512,14 +1509,19 @@ def api_call_overwrite_data_collection(
             return {"success": False, "message": f"Failed to read file: {str(e)}"}
 
         # Validate schema matches existing data collection
+        # Exclude system-generated columns from comparison
+        system_columns = {"depictio_run_id", "aggregation_time"}
         new_columns = set(df.columns)
         existing_columns = (
             set(existing_schema.keys()) if isinstance(existing_schema, dict) else set()
         )
 
-        if new_columns != existing_columns:
-            missing_cols = existing_columns - new_columns
-            extra_cols = new_columns - existing_columns
+        # Remove system columns from existing schema for comparison
+        existing_user_columns = existing_columns - system_columns
+
+        if new_columns != existing_user_columns:
+            missing_cols = existing_user_columns - new_columns
+            extra_cols = new_columns - existing_user_columns
             error_msg = "Schema mismatch: "
             if missing_cols:
                 error_msg += f"Missing columns: {list(missing_cols)}. "
@@ -1586,49 +1588,64 @@ def api_call_overwrite_data_collection(
         if not target_workflow:
             return {"success": False, "message": "Parent workflow not found"}
 
-        # Create CLI config for processing
-        cli_config = CLIConfig(
-            user=UserBaseCLIConfig(
-                id=admin_user["_id"],
-                email=admin_user["email"],
-                is_admin=admin_user["is_admin"],
-                token=token_doc,
-            ),
-            api_base_url=settings.fastapi.url,
-            s3_storage=settings.minio,
-        )
+        # For overwrite, directly write to Delta table instead of using CLI processing pipeline
+        # This avoids issues with existing file metadata and scan configurations
 
-        # Update the data collection's file location
-        existing_dc_obj = None
-        for dc in target_workflow.data_collections:
-            if str(dc.id) == data_collection_id:
-                existing_dc_obj = dc
-                break
+        try:
+            # Prepare the new dataframe with system columns for Delta table
+            # Add system columns that are expected in the Delta table
+            from datetime import datetime
 
-        if existing_dc_obj:
-            # Update file location to point to new file
-            existing_dc_obj.data_location = WorkflowDataLocation(
-                structure="flat", locations=[str(temp_file_path)]
+            # Get the data collection for run_tag
+            target_dc = None
+            for dc in target_workflow.data_collections:
+                if str(dc.id) == data_collection_id:
+                    target_dc = dc
+                    break
+
+            if not target_dc:
+                return {"success": False, "message": "Target data collection not found in workflow"}
+
+            # Add system columns to match existing Delta table schema
+            df_with_system_cols = df.with_columns(
+                [
+                    pl.lit(f"{target_dc.data_collection_tag}-overwrite").alias("depictio_run_id"),
+                    pl.lit(datetime.now().strftime("%Y-%m-%d %H:%M:%S")).alias("aggregation_time"),
+                ]
             )
 
-        # Process the updated data collection
-        process_result = process_data_collection_helper(
-            CLI_config=cli_config,
-            wf=target_workflow,
-            dc_id=data_collection_id,
-            mode="process",
-            command_parameters={"overwrite": True},
-        )
+            # Construct S3 path for the Delta table
+            s3_path = f"s3://{settings.minio.bucket}/{data_collection_id}"
 
-        if process_result.get("result") != "success":
-            error_msg = process_result.get("message", "Processing failed")
-            return {"success": False, "message": f"Failed to process data: {error_msg}"}
+            # Configure S3 storage options for writing Delta table
+            storage_options = {
+                "AWS_ENDPOINT_URL": settings.minio.url,
+                "AWS_ACCESS_KEY_ID": settings.minio.root_user,
+                "AWS_SECRET_ACCESS_KEY": settings.minio.root_password,
+                "AWS_REGION": "us-east-1",
+                "AWS_ALLOW_HTTP": "true",
+                "AWS_S3_ALLOW_UNSAFE_RENAME": "true",
+            }
 
-        logger.info("Data collection overwrite completed successfully")
-        return {
-            "success": True,
-            "message": f"Data collection overwritten successfully with {df.shape[0]} rows",
-        }
+            logger.info(f"Overwriting Delta table at: {s3_path}")
+            logger.info(f"New data shape: {df_with_system_cols.shape}")
+
+            # Write the new data to Delta table (overwrite mode)
+            df_with_system_cols.write_delta(
+                target=s3_path,
+                mode="overwrite",  # This completely replaces the existing data
+                storage_options=storage_options,
+            )
+
+            logger.info("Data collection overwrite completed successfully")
+            return {
+                "success": True,
+                "message": f"Data collection overwritten successfully with {df.shape[0]} rows",
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to write to Delta table: {str(e)}")
+            return {"success": False, "message": f"Failed to overwrite data: {str(e)}"}
 
     except Exception as e:
         logger.error(f"Error overwriting data collection: {str(e)}")

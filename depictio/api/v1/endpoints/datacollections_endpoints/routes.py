@@ -7,6 +7,9 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import db, projects_collection
 from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
+    _delete_data_collection_by_id,
+    _get_data_collection_specs,
+    _update_data_collection_name,
     generate_join_dict,
     normalize_join_details,
 )
@@ -34,41 +37,7 @@ async def specs(
     data_collection_id: PyObjectId,
     current_user: str = Depends(get_user_or_anonymous),
 ):
-    try:
-        data_collection_oid = ObjectId(data_collection_id)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    # Use MongoDB aggregation to directly retrieve the specific data collection
-    pipeline = [
-        # Match projects containing this collection and with appropriate permissions
-        {
-            "$match": {
-                "workflows.data_collections._id": data_collection_oid,
-                "$or": [
-                    {"permissions.owners._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
-                    {"permissions.viewers._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
-                    {"permissions.viewers": "*"},
-                    {"is_public": True},
-                ],
-            }
-        },
-        # Unwind the workflows array
-        {"$unwind": "$workflows"},
-        # Unwind the data_collections array
-        {"$unwind": "$workflows.data_collections"},
-        # Match the specific data collection ID
-        {"$match": {"workflows.data_collections._id": data_collection_oid}},
-        # Return only the data collection
-        {"$replaceRoot": {"newRoot": "$workflows.data_collections"}},
-    ]
-
-    result = list(projects_collection.aggregate(pipeline))
-
-    if not result:
-        raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
-
-    return convert_objectid_to_str(result[0])
+    return await _get_data_collection_specs(data_collection_id, current_user)
 
 
 @datacollections_endpoint_router.delete("/delete/{workflow_id}/{data_collection_id}")
@@ -227,40 +196,10 @@ async def update_data_collection_name(
     current_user: str = Depends(get_current_user),
 ):
     """Update the name of a data collection."""
-    try:
-        data_collection_oid = ObjectId(data_collection_id)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
     new_name = request_data.get("new_name")
-    if not new_name:
+    if new_name is None:
         raise HTTPException(status_code=400, detail="new_name is required")
-
-    # Find the project containing this data collection
-    project = projects_collection.find_one(
-        {
-            "workflows.data_collections._id": data_collection_oid,
-            "$or": [
-                {"permissions.owners._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
-                {"permissions.viewers._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
-            ],
-        }
-    )
-
-    if not project:
-        raise HTTPException(status_code=404, detail="Data collection not found or access denied")
-
-    # Update the data collection name in the project
-    result = projects_collection.update_one(
-        {"_id": project["_id"], "workflows.data_collections._id": data_collection_oid},
-        {"$set": {"workflows.$[].data_collections.$[dc].data_collection_tag": new_name}},
-        array_filters=[{"dc._id": data_collection_oid}],
-    )
-
-    if result.modified_count == 0:
-        raise HTTPException(status_code=404, detail="Data collection not found")
-
-    return {"message": f"Data collection name updated to '{new_name}' successfully"}
+    return await _update_data_collection_name(data_collection_id, new_name, current_user)
 
 
 @datacollections_endpoint_router.delete("/{data_collection_id}")
@@ -269,79 +208,4 @@ async def delete_data_collection_by_id(
     current_user: str = Depends(get_current_user),
 ):
     """Delete a data collection by its ID."""
-    try:
-        data_collection_oid = ObjectId(data_collection_id)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    # Find the project containing this data collection
-    project = projects_collection.find_one(
-        {
-            "workflows.data_collections._id": data_collection_oid,
-            "$or": [
-                {"permissions.owners._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
-                {"permissions.viewers._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
-            ],
-        }
-    )
-
-    if not project:
-        raise HTTPException(status_code=404, detail="Data collection not found or access denied")
-
-    # Remove the data collection from the project
-    result = projects_collection.update_one(
-        {"_id": project["_id"]},
-        {"$pull": {"workflows.$[].data_collections": {"_id": data_collection_oid}}},
-    )
-
-    if result.modified_count == 0:
-        raise HTTPException(status_code=404, detail="Data collection not found")
-
-    # Cleanup associated S3 data and Delta tables
-    try:
-        import boto3
-        from botocore.exceptions import ClientError
-
-        # Initialize S3 client for MinIO
-        s3_client = boto3.client(
-            "s3",
-            endpoint_url=settings.minio.endpoint_url,
-            aws_access_key_id=settings.minio.aws_access_key_id,
-            aws_secret_access_key=settings.minio.aws_secret_access_key,
-            region_name="us-east-1",
-        )
-
-        # Delta table is stored with data_collection_id as the key
-        delta_table_prefix = data_collection_id
-        bucket_name = settings.minio.bucket
-
-        # Delete all objects in the Delta table directory
-        logger.info(f"Deleting Delta table for data collection: {data_collection_id}")
-        response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=delta_table_prefix)
-
-        if "Contents" in response:
-            objects_to_delete = [{"Key": obj["Key"]} for obj in response["Contents"]]
-            if objects_to_delete:
-                s3_client.delete_objects(Bucket=bucket_name, Delete={"Objects": objects_to_delete})
-                logger.info(
-                    f"Deleted {len(objects_to_delete)} Delta table objects for data collection {data_collection_id}"
-                )
-            else:
-                logger.info(
-                    f"No Delta table objects found for data collection {data_collection_id}"
-                )
-        else:
-            logger.info(f"No Delta table found for data collection {data_collection_id}")
-
-    except ClientError as e:
-        logger.error(
-            f"Failed to delete S3 Delta table objects for data collection {data_collection_id}: {e}"
-        )
-        # Don't fail the entire operation if S3 cleanup fails, just log the error
-    except Exception as e:
-        logger.error(
-            f"Unexpected error during S3 cleanup for data collection {data_collection_id}: {e}"
-        )
-        # Don't fail the entire operation if S3 cleanup fails, just log the error
-
-    return {"message": "Data collection deleted successfully"}
+    return await _delete_data_collection_by_id(data_collection_id, current_user)
