@@ -164,8 +164,10 @@ def register_callbacks_stepper(app):
             if component_selected in mapping_component_data_collection[dc["config"]["type"]]
         ]
 
-        # Add joined data collection options for table-based components
-        if component_selected in mapping_component_data_collection.get("table", []):
+        # Add joined data collection options only for Figure and Table components
+        # Exclude Card and Interactive components from having access to joined data collections
+        allowed_components_for_joined = ["Figure", "Table"]
+        if component_selected in allowed_components_for_joined:
             try:
                 # Fetch available joins for this workflow
                 joins_response = httpx.get(
