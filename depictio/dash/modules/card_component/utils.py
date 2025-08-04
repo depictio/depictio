@@ -449,7 +449,7 @@ def build_card(**kwargs):
     # Create comparison text if reference value is available
     comparison_text = None
     comparison_icon = None
-    comparison_color = "gray"
+    comparison_color = "gray"  # Use valid DMC color for secondary text
 
     if reference_value is not None and is_filtered_data and v != "N/A" and v != "Error":
         try:
@@ -469,37 +469,58 @@ def build_card(**kwargs):
                     comparison_icon = "mdi:trending-down"
                 else:
                     comparison_text = f"Same as unfiltered ({ref_val})"
-                    comparison_color = "black"  # Changed from gray to black for horizontal trend
+                    comparison_color = "gray"  # Use valid DMC color for neutral trends
                     comparison_icon = "mdi:trending-neutral"
             else:
                 comparison_text = f"Reference: {ref_val}"
-                comparison_color = "gray"
+                comparison_color = "gray"  # Use valid DMC color for reference text
                 comparison_icon = "mdi:information-outline"
         except (ValueError, TypeError):
             comparison_text = f"Reference: {reference_value}"
-            comparison_color = "gray"
+            comparison_color = "gray"  # Use valid DMC color for error text
             comparison_icon = "mdi:information-outline"
 
-    # Create card content using modern DMC components
-    title_color = color if color else "gray"
+    # Create card content using modern DMC components with theme-aware colors
+    # Use theme-aware color system for better dark/light mode compatibility
+    # Ensure all color values are strings for DMC compatibility
+    def ensure_string_color(color_value, default_color="gray"):
+        """Ensure color value is a string that DMC can parse."""
+        if color_value is None:
+            return default_color  # Use provided default
+        elif isinstance(color_value, str):
+            return color_value
+        else:
+            # Convert non-string values to string
+            return str(color_value) if color_value else default_color
+
+    title_color = (
+        ensure_string_color(color) if color else "gray"
+    )  # 'gray' is a valid DMC color for secondary text
     value_color = (
-        color
+        ensure_string_color(color)
         if color and v not in ["N/A", "Error"]
-        else ("dark" if v not in ["N/A", "Error"] else "red")
+        else (
+            "red" if v in ["N/A", "Error"] else None
+        )  # Use None for default theme-aware text color
     )
+
+    # Create value text component with conditional color handling
+    value_text_props = {
+        "children": str(v),
+        "size": "xl",
+        "fw": "bold",
+        "id": {
+            "type": "card-value",
+            "index": str(index),
+        },
+    }
+    # Only add color if it's not None (let DMC use default theme-aware color)
+    if value_color is not None:
+        value_text_props["c"] = value_color
 
     card_content = [
         dmc.Text(card_title, size="sm", c=title_color, fw="normal"),
-        dmc.Text(
-            str(v),
-            size="xl",
-            fw="bold",
-            c=value_color,
-            id={
-                "type": "card-value",
-                "index": str(index),
-            },
-        ),
+        dmc.Text(**value_text_props),
     ]
 
     # Add comparison text if available
@@ -507,10 +528,17 @@ def build_card(**kwargs):
         card_content.append(
             dmc.Group(
                 [
-                    DashIconify(icon=comparison_icon, width=14, color=comparison_color)
+                    DashIconify(
+                        icon=comparison_icon, width=14, color=ensure_string_color(comparison_color)
+                    )
                     if comparison_icon
                     else None,
-                    dmc.Text(comparison_text, size="xs", c=comparison_color, fw="normal"),  # type: ignore
+                    dmc.Text(
+                        comparison_text,
+                        size="xs",
+                        c=ensure_string_color(comparison_color),
+                        fw="normal",
+                    ),  # type: ignore
                 ],
                 gap="xs",
                 align="center",
