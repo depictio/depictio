@@ -928,11 +928,11 @@ def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None):
         dc_ids_all_components += [extra_dc]
     # logger.info(f"dc_ids_all_components - {dc_ids_all_components}")
 
-    # Using itertools, generate all the combinations of dc_ids in order to get all the possible joins
-    dc_ids_all_joins = list(itertools.combinations(dc_ids_all_components, 2))
-    # Turn the list of tuples into a list of strings with -- as separator, and store it in dc_ids_all_joins in the 2 possible orders
-    dc_ids_all_joins = [f"{dc_id1}--{dc_id2}" for dc_id1, dc_id2 in dc_ids_all_joins] + [
-        f"{dc_id2}--{dc_id1}" for dc_id1, dc_id2 in dc_ids_all_joins
+    # Generate initial join combinations - this will be updated after we identify additional DCs
+    # with interactive components (the actual logic for this is below after we filter joins)
+    initial_dc_ids_all_joins = list(itertools.combinations(dc_ids_all_components, 2))
+    dc_ids_all_joins = [f"{dc_id1}--{dc_id2}" for dc_id1, dc_id2 in initial_dc_ids_all_joins] + [
+        f"{dc_id2}--{dc_id1}" for dc_id1, dc_id2 in initial_dc_ids_all_joins
     ]
 
     # logger.info(f"dc_ids_all_joins - {dc_ids_all_joins}")
@@ -946,10 +946,52 @@ def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None):
     join_tables_for_wf = get_join_tables(wf, TOKEN)
     # logger.info(f"join_tables_for_wf - {join_tables_for_wf}")
 
+    # ENHANCED LOGIC: Include all joins that contain DCs with interactive components
+    # This ensures that joined DCs stay synchronized with their constituent DCs
+
+    # First, identify DCs that have interactive components
+    dc_ids_with_interactive = list(
+        set(
+            [
+                v["dc_id"]
+                for v in stored_metadata
+                if v["component_type"] == "interactive" and v["wf_id"] == wf
+            ]
+        )
+    )
+    logger.debug(f"DCs with interactive components: {dc_ids_with_interactive}")
+
     # Extract the intersection between dc_ids_all_joins and join_tables_for_wf[wf].keys()
-    join_tables_for_wf[wf] = {
-        k: join_tables_for_wf[wf][k] for k in join_tables_for_wf[wf].keys() if k in dc_ids_all_joins
-    }
+    # PLUS include any joins that contain DCs with interactive components
+    filtered_joins = {}
+    for join_key, join_config in join_tables_for_wf[wf].items():
+        # Include join if it's between current dashboard components (original logic)
+        if join_key in dc_ids_all_joins:
+            filtered_joins[join_key] = join_config
+            logger.debug(f"Including join (dashboard components): {join_key}")
+        # OR include join if it contains any DC with interactive components (new logic)
+        elif any(dc_id in join_key for dc_id in dc_ids_with_interactive):
+            filtered_joins[join_key] = join_config
+            logger.debug(f"Including join (interactive DC dependency): {join_key}")
+
+            # Also add the constituent DCs to the components list if not already present
+            dc_id1, dc_id2 = join_key.split("--")
+            if dc_id1 not in dc_ids_all_components:
+                dc_ids_all_components.append(dc_id1)
+                logger.debug(f"Added DC to components list: {dc_id1}")
+            if dc_id2 not in dc_ids_all_components:
+                dc_ids_all_components.append(dc_id2)
+                logger.debug(f"Added DC to components list: {dc_id2}")
+
+    join_tables_for_wf[wf] = filtered_joins
+    logger.debug(f"Total joins after filtering: {len(filtered_joins)}")
+
+    # Regenerate join combinations with the updated component list (including newly added DCs)
+    updated_dc_ids_all_joins = list(itertools.combinations(dc_ids_all_components, 2))
+    dc_ids_all_joins = [f"{dc_id1}--{dc_id2}" for dc_id1, dc_id2 in updated_dc_ids_all_joins] + [
+        f"{dc_id2}--{dc_id1}" for dc_id1, dc_id2 in updated_dc_ids_all_joins
+    ]
+    logger.debug(f"Updated join combinations: {len(dc_ids_all_joins)} total combinations")
     # logger.info(f"join_tables_for_wf - {join_tables_for_wf}")
 
     # Initialize Union-Find structure
