@@ -51,8 +51,31 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
     logger.info(f"Rendering dashboard with ID: {dashboard_id}")
     from depictio.dash.layouts.draggable import clean_stored_metadata
 
+    logger.info(
+        f"📊 RESTORE DEBUG - Raw stored_metadata count: {len(stored_metadata) if stored_metadata else 0}"
+    )
+
+    # Log the first few raw metadata entries for debugging
+    if stored_metadata:
+        for i, elem in enumerate(stored_metadata[:3]):  # Only first 3 to avoid spam
+            logger.info(
+                f"📊 RESTORE DEBUG - Raw metadata {i}: keys={list(elem.keys()) if elem else 'None'}"
+            )
+            if elem:
+                logger.info(
+                    f"📊 RESTORE DEBUG - Raw metadata {i}: dict_kwargs={elem.get('dict_kwargs', 'MISSING')}"
+                )
+                logger.info(
+                    f"📊 RESTORE DEBUG - Raw metadata {i}: wf_id={elem.get('wf_id', 'MISSING')}"
+                )
+                logger.info(
+                    f"📊 RESTORE DEBUG - Raw metadata {i}: dc_id={elem.get('dc_id', 'MISSING')}"
+                )
+
     stored_metadata = clean_stored_metadata(stored_metadata)
-    # logger.info(f"Stored metadata: {stored_metadata}")
+    logger.info(
+        f"📊 RESTORE DEBUG - After cleaning, metadata count: {len(stored_metadata) if stored_metadata else 0}"
+    )
 
     children = list()
 
