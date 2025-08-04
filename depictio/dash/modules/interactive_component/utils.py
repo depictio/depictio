@@ -774,6 +774,28 @@ def build_interactive(**kwargs):
             # Recreate the component with additional MultiSelect properties
             interactive_component = func_name(**component_kwargs)
 
+    # # If the aggregation value is TextInput - DISABLED: causes auto-refresh on every character
+    # elif interactive_component_type == "TextInput":
+    #     logger.debug("TextInput")
+    #     logger.debug(f"Value: {value}")
+    #     logger.debug(f"Value type: {type(value)}")
+    #     kwargs = {"persistence_type": "local"}
+    #     if not value:
+    #         value = ""
+    #     logger.debug(f"Value: {value}")
+    #     logger.debug(f"Value type: {type(value)}")
+    #     kwargs.update({"value": value})
+
+    #     # Apply custom color to TextInput if specified
+    #     if color:
+    #         kwargs["styles"] = {"input": {"borderColor": color}, "label": {"color": color}}
+
+    #     interactive_component = func_name(
+    #         placeholder="Your selected value",
+    #         id={"type": value_div_type, "index": str(index)},
+    #         **kwargs,
+    #     )
+
     ## Numerical data
 
     # # If the aggregation value is Slider or RangeSlider
@@ -1370,7 +1392,7 @@ agg_functions = {
         "input_methods": {
             # "TextInput": {
             #     "component": dmc.TextInput,
-            #     "description": "Text input: will return corresponding data to the exact text or regular expression",
+            #     "description": "Text input: will return corresponding data to the exact text or regular expression - DISABLED: causes auto-refresh on every character",
             # },
             "Select": {
                 "component": dmc.Select,
