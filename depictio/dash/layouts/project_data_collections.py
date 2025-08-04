@@ -500,6 +500,7 @@ def create_unified_data_collections_manager_section(
                                                     variant="subtle",
                                                     color="orange",
                                                     size="sm",
+                                                    disabled=False,  # Will be controlled by callback
                                                 ),
                                                 label="Overwrite data",
                                                 position="top",
@@ -514,6 +515,7 @@ def create_unified_data_collections_manager_section(
                                                     variant="subtle",
                                                     color="blue",
                                                     size="sm",
+                                                    disabled=False,  # Will be controlled by callback
                                                 ),
                                                 label="Edit name",
                                                 position="top",
@@ -528,6 +530,7 @@ def create_unified_data_collections_manager_section(
                                                     variant="subtle",
                                                     color="red",
                                                     size="sm",
+                                                    disabled=False,  # Will be controlled by callback
                                                 ),
                                                 label="Delete",
                                                 position="top",
@@ -640,6 +643,7 @@ def create_unified_data_collections_manager_section(
                                 color="teal",
                                 size="sm",
                                 radius="md",
+                                disabled=False,  # Will be controlled by callback
                             ),
                         ],
                         justify="space-between",
@@ -1294,21 +1298,39 @@ def register_project_data_collections_callbacks(app):
             # Convert to pandas for AG Grid (more compatible)
             df_pd = df.to_pandas()
 
+            # Handle column names with dots - rename DataFrame columns for AG Grid compatibility
+            column_mapping = {}
+            for col in df_pd.columns:
+                if "." in col:
+                    safe_col_name = col.replace(".", "_")
+                    column_mapping[col] = safe_col_name
+                    logger.debug(
+                        f"🔍 DC Viewer: Found column with dot: '{col}', mapping to '{safe_col_name}'"
+                    )
+                else:
+                    column_mapping[col] = col
+
+            # Rename DataFrame columns to safe names
+            df_pd = df_pd.rename(columns=column_mapping)
+
             # Create column definitions
             column_defs = []
-            for col in df_pd.columns:
+            original_columns = list(column_mapping.keys())
+            for original_col in original_columns:
+                safe_col = column_mapping[original_col]
+
                 col_def = {
-                    "headerName": col,
-                    "field": col,
+                    "headerName": original_col,  # Keep original name for display
+                    "field": safe_col,  # Use safe name for field reference
                     "filter": True,
                     "sortable": True,
                     "resizable": True,
                 }
 
-                # Set appropriate column types
-                if df_pd[col].dtype in ["int64", "float64"]:
+                # Set appropriate column types based on the DataFrame data
+                if df_pd[safe_col].dtype in ["int64", "float64"]:
                     col_def["type"] = "numericColumn"
-                elif df_pd[col].dtype == "bool":
+                elif df_pd[safe_col].dtype == "bool":
                     col_def["cellRenderer"] = "agCheckboxCellRenderer"
                     col_def["cellEditor"] = "agCheckboxCellEditor"
 
@@ -1865,6 +1887,100 @@ def register_project_data_collections_callbacks(app):
         custom_style = {"display": "block"} if show_custom else {"display": "none"}
 
         return separator_style, custom_style
+
+    def _check_user_is_viewer(project_data, local_data):
+        """Helper function to check if current user is a viewer."""
+        if not project_data or not local_data:
+            return True  # Treat as viewer if no data available
+
+        try:
+            # Get current user ID from local storage
+            current_user_id = local_data.get("user_id")
+            if not current_user_id:
+                return True  # Treat as viewer if no user ID
+
+            # Get project permissions
+            permissions = project_data.get("permissions", {})
+            if not permissions:
+                return True  # Treat as viewer if no permissions data
+
+            # Check if user is in viewers list (viewers can't modify data collections)
+            viewers = permissions.get("viewers", [])
+            for viewer in viewers:
+                if isinstance(viewer, dict) and viewer.get("id") == current_user_id:
+                    return True  # User is a viewer
+                elif isinstance(viewer, str) and viewer == "*":
+                    # Check if user is not in owners or editors when wildcard viewer access
+                    owners = permissions.get("owners", [])
+                    editors = permissions.get("editors", [])
+
+                    # Check if user is owner or editor
+                    is_owner_or_editor = False
+                    for owner in owners:
+                        if isinstance(owner, dict) and owner.get("id") == current_user_id:
+                            is_owner_or_editor = True
+                            break
+
+                    if not is_owner_or_editor:
+                        for editor in editors:
+                            if isinstance(editor, dict) and editor.get("id") == current_user_id:
+                                is_owner_or_editor = True
+                                break
+
+                    # If wildcard viewer and not owner/editor, treat as viewer
+                    if not is_owner_or_editor:
+                        return True
+
+            # User is owner or editor
+            return False
+
+        except Exception as e:
+            logger.error(f"Error checking user permissions: {e}")
+            return True  # Treat as viewer on error
+
+    @app.callback(
+        Output("create-data-collection-button", "disabled"),
+        [
+            Input("project-data-store", "data"),
+            Input("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def control_create_button_access(project_data, local_data):
+        """Control access to Create Data Collection button based on user role."""
+        return _check_user_is_viewer(project_data, local_data)
+
+    @app.callback(
+        [
+            Output({"type": "dc-overwrite-button", "index": dash.ALL}, "disabled"),
+            Output({"type": "dc-edit-name-button", "index": dash.ALL}, "disabled"),
+            Output({"type": "dc-delete-button", "index": dash.ALL}, "disabled"),
+        ],
+        [
+            Input("project-data-store", "data"),
+            Input("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def control_dc_action_buttons_access(project_data, local_data):
+        """Control access to data collection action buttons based on user role."""
+        is_viewer = _check_user_is_viewer(project_data, local_data)
+
+        # Get the number of data collections to return the right number of disabled states
+        try:
+            if project_data and project_data.get("data_collections"):
+                num_dcs = len(project_data["data_collections"])
+            else:
+                num_dcs = 0
+
+            # Return disabled state for all buttons (same state for all three button types)
+            disabled_states = [is_viewer] * num_dcs
+            return disabled_states, disabled_states, disabled_states
+
+        except Exception as e:
+            logger.error(f"Error controlling DC action buttons: {e}")
+            # Return disabled state for safety
+            return [], [], []
 
     @app.callback(
         [
