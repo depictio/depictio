@@ -7,13 +7,10 @@ describe('Basic Theme Switch Test', () => {
   })
 
   it('should find and interact with theme switch after login', () => {
-    // Login using the reusable function
-    cy.loginAsTestUser('testUser')
+    // Fast token-based login
+    cy.loginWithTokenAsTestUser('testUser')
 
-    // Wait for login to complete
-    cy.wait(3000)
-
-    // Force navigation to dashboards if not already there
+    // Navigate to dashboards
     cy.visit('/dashboards')
     cy.wait(2000)
 

@@ -21,11 +21,10 @@ describe('Logout Test', () => {
     })
 
     it('logs out of the application', () => {
-      // Log in using the reusable function
-      cy.loginAsTestUser('testUser')
+      // Fast token-based login for test setup
+      cy.loginWithTokenAsTestUser('testUser')
 
-      // Wait for login to complete and navigate
-      cy.wait(3000)
+      // Navigate to dashboards
       cy.visit('/dashboards')
       cy.wait(2000)
 

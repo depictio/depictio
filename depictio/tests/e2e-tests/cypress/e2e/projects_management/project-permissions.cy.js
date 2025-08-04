@@ -103,7 +103,7 @@ describe('Project Permissions Management', () => {
 
     // Helper function to login
     function login(user) {
-        cy.loginUser(user.email, user.password)
+        cy.loginWithToken(user.email, user.password)
         cy.url().should('include', '/dashboards')
     }
 

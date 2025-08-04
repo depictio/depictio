@@ -21,11 +21,10 @@ describe('About Page Test', () => {
     })
 
     it('tests the About page for errors', () => {
-      // Log in using the reusable function
-      cy.loginAsTestUser('testUser')
+      // Fast token-based login
+      cy.loginWithTokenAsTestUser('testUser')
 
-      // Wait for login to complete and navigate
-      cy.wait(3000)
+      // Navigate to dashboards
       cy.visit('/dashboards')
       cy.wait(2000)
 
