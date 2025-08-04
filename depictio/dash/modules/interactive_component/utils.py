@@ -25,7 +25,7 @@ def build_interactive_frame(index, children=None, show_border=False):
                     "Configure your interactive component using the edit menu",
                     style={
                         "textAlign": "center",
-                        "color": "#999",
+                        "color": "var(--app-text-color, #999)",  # Use theme-aware text color
                         "fontSize": "14px",
                         "fontStyle": "italic",
                     },
@@ -52,6 +52,7 @@ def build_interactive_frame(index, children=None, show_border=False):
                 "boxShadow": "none",
                 "border": "1px solid var(--app-border-color, #ddd)",
                 "borderRadius": "4px",
+                "backgroundColor": "var(--app-surface-color, transparent)",  # Use theme-aware background
             },
             id={
                 "type": "interactive-component",
@@ -82,6 +83,7 @@ def build_interactive_frame(index, children=None, show_border=False):
                 "position": "relative",  # Ensure positioning context
                 "border": "1px solid var(--app-border-color, #ddd)",
                 "borderRadius": "4px",
+                "backgroundColor": "var(--app-surface-color, transparent)",  # Use theme-aware background
             },
             id={
                 "type": "interactive-component",
@@ -1217,13 +1219,18 @@ def build_interactive(**kwargs):
     else:
         logger.info(f"Interactive - component value: {value}")
 
-    # Apply custom color if specified
-    title_style = {"marginBottom": "0.5rem"}
+    # Apply custom color if specified, otherwise use theme-aware color
+    title_style = {
+        "marginBottom": "0.5rem",
+        "color": "var(--app-text-color, #000000)",  # Default to theme-aware text color
+    }
     if color:
         title_style["color"] = color
         # Store color for component styling
         store_data["custom_color"] = color
         logger.info(f"Applied custom color: {color}")
+    else:
+        logger.debug("Using theme-aware text color for title")
 
     card_title_h5 = html.H5(card_title, style=title_style)
 
@@ -1281,6 +1288,8 @@ def build_interactive(**kwargs):
             "maxWidth": "500px !important",  # Constrain width to reasonable size
             "padding": "10px",
             "boxSizing": "border-box",
+            "backgroundColor": "var(--app-surface-color, transparent)",  # Use theme-aware background
+            "color": "var(--app-text-color, #000000)",  # Use theme-aware text color
             # Prevent vertical stretching with !important
             "flex": "none !important",
             "flexGrow": "0 !important",
