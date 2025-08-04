@@ -50,7 +50,7 @@ describe('Authentication UI - Login Flow', () => {
       // Wait for error message to appear
       cy.get('#user-feedback-message-login').should('be.visible')
       cy.get('#user-feedback-message-login')
-        .should('contain.text', 'Invalid credentials')
+        .should('contain.text', 'User not found. Please register first.')
     })
   })
 

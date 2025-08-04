@@ -63,7 +63,9 @@ describe('Edit Password Test', () => {
       .should('be.visible')
       .focus()
       .clear()
+      .wait(100)  // Small delay after clear
       .type(new_password, { delay: 50 })
+      .wait(100)  // Small delay after typing
       .should('have.value', new_password)
 
     // Wait a bit for form validation to complete

@@ -35,12 +35,8 @@ describe('Authentication - Account Management', () => {
       cy.visit('/profile')
       cy.wait(2000)
 
-      // Click on profile details accordion to expand it
-      cy.get('[data-accordion-control="true"]').contains('Profile Details').click()
-      cy.wait(1000)
-
-      // Click on "Edit Password" button or link
-      cy.contains('Edit Password').click()
+      // Look for "Edit Password" button directly (no accordion needed)
+      cy.contains('Edit Password', { timeout: 10000 }).should('be.visible').click()
       cy.wait(1000)
 
       // The edit password form should now be visible

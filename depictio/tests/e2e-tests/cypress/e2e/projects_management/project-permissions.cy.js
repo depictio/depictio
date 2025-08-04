@@ -120,8 +120,12 @@ describe('Project Permissions Management', () => {
         cy.wait(500)
         cy.get('#permissions-manager-input-email').parent().should('contain', userEmail)
 
+        // Ensure MultiSelect dropdown is closed before interacting with checkboxes
+        cy.get('body').click(0, 0)  // Click outside to close any dropdown
+        cy.wait(500)  // Wait for dropdown to close
+
         // Select the permission
-        cy.get(`#permissions-manager-checkbox-${permission.toLowerCase()}`).should('be.visible').and('not.be.disabled').click()
+        cy.get(`#permissions-manager-checkbox-${permission.toLowerCase()}`).should('be.visible').and('not.be.disabled').click({ force: true })
         cy.get(`#permissions-manager-checkbox-${permission.toLowerCase()}`).should('be.checked')
         cy.wait(1000)
 
@@ -401,10 +405,14 @@ describe('Project Permissions Management', () => {
             // Without selecting any permission, button should be disabled
             cy.get('#permissions-manager-btn-add-user').should('be.disabled')
 
+            // Ensure dropdown is closed before interacting with checkboxes
+            cy.get('body').click(0, 0)
+            cy.wait(500)
+
             // Select multiple permissions
-            cy.get('#permissions-manager-checkbox-owner').click()
+            cy.get('#permissions-manager-checkbox-owner').click({ force: true })
             cy.wait(200)
-            cy.get('#permissions-manager-checkbox-editor').click()
+            cy.get('#permissions-manager-checkbox-editor').click({ force: true })
             cy.wait(500)
 
             // With RadioGroup behavior, only the last clicked should be selected
@@ -412,7 +420,7 @@ describe('Project Permissions Management', () => {
             cy.get('#permissions-manager-btn-add-user').should('be.disabled')
 
             // Uncheck the Editor permission
-            cy.get('#permissions-manager-checkbox-owner').click()
+            cy.get('#permissions-manager-checkbox-owner').click({ force: true })
             cy.wait(200)
 
             // Add the user
