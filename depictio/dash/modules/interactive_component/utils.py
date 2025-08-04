@@ -683,7 +683,7 @@ def build_interactive(**kwargs):
 
     # If the aggregation value is Select, MultiSelect or SegmentedControl
     if interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
-        data = sorted(df[column_name].drop_nulls().unique())
+        data = sorted(df[column_name].drop_nulls().unique())[:100]  # Limit to 100 options
 
         # CRITICAL: If DataFrame is empty but we have a preserved value, include those values in options
         # This ensures the component can display the preserved selection even when filtered data is empty
@@ -773,28 +773,6 @@ def build_interactive(**kwargs):
             component_kwargs.update(multiselect_kwargs)
             # Recreate the component with additional MultiSelect properties
             interactive_component = func_name(**component_kwargs)
-
-    # If the aggregation value is TextInput
-    elif interactive_component_type == "TextInput":
-        logger.debug("TextInput")
-        logger.debug(f"Value: {value}")
-        logger.debug(f"Value type: {type(value)}")
-        kwargs = {"persistence_type": "local"}
-        if not value:
-            value = ""
-        logger.debug(f"Value: {value}")
-        logger.debug(f"Value type: {type(value)}")
-        kwargs.update({"value": value})
-
-        # Apply custom color to TextInput if specified
-        if color:
-            kwargs["styles"] = {"input": {"borderColor": color}, "label": {"color": color}}
-
-        interactive_component = func_name(
-            placeholder="Your selected value",
-            id={"type": value_div_type, "index": str(index)},
-            **kwargs,
-        )
 
     ## Numerical data
 
@@ -1001,9 +979,12 @@ def build_interactive(**kwargs):
             "id": {"type": value_div_type, "index": str(index)},
             # Keep it simple - no step, precision, or label parameters initially
             "step": 0.01,  # Default step for DMC sliders
-            "minRange": 0.01,  # Default min range for DMC RangeSlider
             "persistence_type": "local",
         }
+
+        # Add minRange only for RangeSlider (not supported by regular Slider)
+        if interactive_component_type == "RangeSlider":
+            kwargs_component["minRange"] = 0.01  # Default min range for DMC RangeSlider
 
         logger.info(f"DMC Slider: Using range {min_value}-{max_value}")
 
@@ -1387,10 +1368,10 @@ agg_functions = {
     "object": {
         "title": "Object",
         "input_methods": {
-            "TextInput": {
-                "component": dmc.TextInput,
-                "description": "Text input: will return corresponding data to the exact text or regular expression",
-            },
+            # "TextInput": {
+            #     "component": dmc.TextInput,
+            #     "description": "Text input: will return corresponding data to the exact text or regular expression",
+            # },
             "Select": {
                 "component": dmc.Select,
                 "description": "Select: will return corresponding data to the selected value",

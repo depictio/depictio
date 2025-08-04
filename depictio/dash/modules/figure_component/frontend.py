@@ -9,7 +9,7 @@ import httpx
 from dash import ALL, MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
-from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
 from depictio.dash.modules.figure_component.code_mode import (
@@ -742,6 +742,11 @@ def register_callbacks_figure_component(app):
             logger.warning("Missing required data for parameter initialization")
             raise dash.exceptions.PreventUpdate
 
+        # Check if auto-generation is disabled in settings
+        if not settings.dash.auto_generate_figures:
+            logger.info("Skipping parameter initialization - auto-generation disabled in settings")
+            raise dash.exceptions.PreventUpdate
+
         try:
             # Get column information for defaults
             TOKEN = local_data["access_token"]
@@ -864,6 +869,11 @@ def register_callbacks_figure_component(app):
         if current_kwargs or not workflow_id or not data_collection_id or not local_data:
             raise dash.exceptions.PreventUpdate
 
+        # Check if auto-generation is disabled in settings
+        if not settings.dash.auto_generate_figures:
+            logger.info("Skipping auto-initialization - auto-generation disabled in settings")
+            raise dash.exceptions.PreventUpdate
+
         try:
             # Get column information for defaults
             TOKEN = local_data["access_token"]
@@ -931,6 +941,11 @@ def register_callbacks_figure_component(app):
         # Don't generate default figure if in code mode - let code execution handle it
         if current_mode == "code":
             logger.info("Skipping default figure generation - in code mode")
+            raise dash.exceptions.PreventUpdate
+
+        # Check if auto-generation is disabled in settings
+        if not settings.dash.auto_generate_figures:
+            logger.info("Skipping default figure generation - auto-generation disabled in settings")
             raise dash.exceptions.PreventUpdate
 
         # Get existing component data
