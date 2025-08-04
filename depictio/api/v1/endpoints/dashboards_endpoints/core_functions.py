@@ -5,7 +5,7 @@ from depictio.api.v1.db import dashboards_collection, projects_collection
 from depictio.models.models.base import convert_objectid_to_str
 
 
-def load_dashboards_from_db(owner, admin_mode=False):
+def load_dashboards_from_db(owner, admin_mode=False, user=None):
     logger.info("Loading dashboards from MongoDB with project-based permissions")
 
     projection = {
@@ -27,22 +27,33 @@ def load_dashboards_from_db(owner, admin_mode=False):
         # Sort dashboards by title
         dashboards = sorted(dashboards, key=lambda x: x["title"])
     else:
-        # Get all projects that the user has access to
+        # Check if user is anonymous - if so, only show public projects
         user_id = ObjectId(owner)
-        accessible_projects = list(
-            projects_collection.find(
-                {
-                    "$or": [
-                        {"permissions.owners._id": user_id},
-                        {"permissions.editors._id": user_id},
-                        {"permissions.viewers._id": user_id},
-                        {"permissions.viewers": {"$in": ["*"]}},
-                        {"is_public": True},
-                    ]
-                },
-                {"_id": 1},
+
+        if user and hasattr(user, "is_anonymous") and user.is_anonymous:
+            # Anonymous users can only access public projects
+            accessible_projects = list(
+                projects_collection.find(
+                    {"is_public": True},
+                    {"_id": 1},
+                )
             )
-        )
+        else:
+            # Regular authenticated users can access projects based on permissions
+            accessible_projects = list(
+                projects_collection.find(
+                    {
+                        "$or": [
+                            {"permissions.owners._id": user_id},
+                            {"permissions.editors._id": user_id},
+                            {"permissions.viewers._id": user_id},
+                            {"permissions.viewers": {"$in": ["*"]}},
+                            {"is_public": True},
+                        ]
+                    },
+                    {"_id": 1},
+                )
+            )
 
         accessible_project_ids = [project["_id"] for project in accessible_projects]
 

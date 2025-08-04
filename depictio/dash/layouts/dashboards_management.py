@@ -909,7 +909,10 @@ def register_callbacks_dashboards_management(app):
             current_user_api = api_call_fetch_user_from_token(user_data["access_token"])
             if not current_user_api:
                 logger.warning("User not found in dashboards management.")
-                return dash.no_update
+                # Return empty list for each dashboard-list component
+                # Ensure we always return a list, even if store_data_list is empty
+                list_length = max(len(store_data_list), 1)
+                return [html.Div("User not found. Please login again.")] * list_length
             # Create UserContext from API response for consistency
             current_user = UserContext(
                 id=str(current_user_api.id),

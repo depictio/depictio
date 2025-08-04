@@ -140,6 +140,10 @@ def check_project_permission(
     if not project:
         return False
 
+    # In anonymous mode, anonymous users can only access public projects
+    if hasattr(user, "is_anonymous") and user.is_anonymous:
+        return project.get("is_public", False)
+
     # Check if project is public
     if project.get("is_public", False):
         return True
@@ -228,7 +232,7 @@ async def list_dashboards(
     user_id = current_user.id
     logger.debug(f"Current user ID: {user_id}")
 
-    result = load_dashboards_from_db(owner=user_id, admin_mode=False)
+    result = load_dashboards_from_db(owner=user_id, admin_mode=False, user=current_user)
 
     if not result["success"]:
         raise HTTPException(status_code=404, detail=result["message"])
@@ -608,18 +612,30 @@ async def get_component_data_endpoint(
     user_id = current_user.id
     logger.debug(f"Current user ID: {user_id}, fetching component: {component_id}")
 
+    # First check if dashboard exists and get project permissions
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(
+            status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
+        )
+
+    # Get project_id from dashboard and check project-based permissions
+    project_id = dashboard_data.get("project_id")
+    if not project_id:
+        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
+
+    # Check project-based permissions (viewer level required for reading components)
+    if not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to access this dashboard component."
+        )
+
     # Optimized aggregation pipeline to fetch only the specific component
     pipeline = [
-        # Stage 1: Match dashboard and user permissions
+        # Stage 1: Match dashboard (permissions already verified above)
         {
             "$match": {
                 "dashboard_id": dashboard_id,
-                "$or": [
-                    {"permissions.owners._id": user_id},
-                    {"permissions.viewers._id": user_id},
-                    {"permissions.viewers": "*"},
-                    {"is_public": True},  # Allow public access if dashboard is public
-                ],
             }
         },
         # Stage 2: Project only the filtered component from stored_metadata
@@ -653,31 +669,11 @@ async def get_component_data_endpoint(
     logger.debug(f"Aggregation result: {result}")
 
     if not result:
-        # Check if dashboard exists vs component not found
-        dashboard_exists = dashboards_collection.find_one(
-            {
-                "dashboard_id": dashboard_id,
-                "$or": [
-                    {"permissions.owners._id": user_id},
-                    {"permissions.viewers._id": user_id},
-                    {"permissions.viewers": "*"},
-                    {"is_public": True},  # Allow public access if dashboard is public
-                ],
-            },
-            {"_id": 1},  # Only fetch _id to check existence
+        logger.error(f"Component with ID {component_id} not found in dashboard {dashboard_id}.")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Component with ID '{component_id}' not found in dashboard.",
         )
-
-        if not dashboard_exists:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Dashboard with ID '{dashboard_id}' not found or access denied.",
-            )
-        else:
-            logger.error(f"Component with ID {component_id} not found in dashboard {dashboard_id}.")
-            raise HTTPException(
-                status_code=404,
-                detail=f"Component with ID '{component_id}' not found in dashboard.",
-            )
 
     # Get the component metadata
     component_metadata = result[0]
