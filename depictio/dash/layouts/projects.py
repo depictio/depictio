@@ -1164,6 +1164,7 @@ def render_project_item(
                                 variant="filled",
                                 radius="xl",
                                 size="xs",
+                                style={"width": "100px", "justifyContent": "center"},
                             ),
                         ],
                         gap="xs",
@@ -1179,6 +1180,7 @@ def render_project_item(
                                 variant="light",
                                 radius="xl",
                                 size="xs",
+                                style={"width": "100px", "justifyContent": "center"},
                             ),
                         ],
                         gap="xs",
@@ -1245,7 +1247,7 @@ def render_project_item(
     badge_ownership = dmc.Badge(
         children=role,
         color=color,
-        style={"width": "80px", "justifyContent": "center"},
+        style={"width": "100px", "justifyContent": "center"},
     )
 
     # Create project type badge
@@ -1265,7 +1267,7 @@ def render_project_item(
         children="Public" if is_public else "Private",
         color="green" if is_public else "violet",
         variant="filled",
-        style={"width": "80px", "justifyContent": "center"},
+        style={"width": "100px", "justifyContent": "center"},
     )
 
     return dmc.AccordionItem(
@@ -1495,14 +1497,14 @@ def render_projects_list(projects: list[Project], admin_UI: bool = False, token:
                 fw="bold",
                 size="sm",
                 c="gray",
-                style={"width": "80px", "textAlign": "left"},
+                style={"width": "100px", "textAlign": "left"},
             ),
             dmc.Text(
                 "Permission",
                 fw="bold",
                 size="sm",
                 c="gray",
-                style={"width": "80px", "textAlign": "left"},
+                style={"width": "100px", "textAlign": "left"},
             ),
             dmc.Text(
                 "Project Name",

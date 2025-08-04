@@ -1,5 +1,6 @@
 # Palmer Penguins Multi-Species Analysis for Depictio
 name: "Palmer Penguins Species Comparison"
+project_type: "advanced"
 workflows:
   - name: "penguin_species_analysis"
     engine:
