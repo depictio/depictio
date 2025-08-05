@@ -1430,6 +1430,7 @@ def register_project_data_collections_callbacks(app):
                         if project.workflows
                         else [],
                         "data_collections": [dc.model_dump() for dc in all_data_collections],
+                        "permissions": project.permissions.dict() if project.permissions else {},
                     }
                     data_collections_section = create_basic_project_data_collections_section(
                         all_data_collections
@@ -1444,6 +1445,7 @@ def register_project_data_collections_callbacks(app):
                         "data_collections": [dc.model_dump() for dc in project.data_collections]
                         if project.data_collections
                         else [],
+                        "permissions": project.permissions.dict() if project.permissions else {},
                     }
                     data_collections_section = create_data_collections_manager_section()
 
@@ -1515,6 +1517,7 @@ def register_project_data_collections_callbacks(app):
                     if project.workflows
                     else [],
                     "data_collections": [dc.model_dump() for dc in all_data_collections],
+                    "permissions": project.permissions.dict() if project.permissions else {},
                 }
             else:
                 # Advanced projects store data collections within workflows
@@ -1527,6 +1530,7 @@ def register_project_data_collections_callbacks(app):
                     "data_collections": [dc.model_dump() for dc in project.data_collections]
                     if project.data_collections
                     else [],
+                    "permissions": project.permissions.dict() if project.permissions else {},
                 }
 
             # Create sections based on project type
@@ -1897,42 +1901,65 @@ def register_project_data_collections_callbacks(app):
             # Get current user ID from local storage
             current_user_id = local_data.get("user_id")
             if not current_user_id:
+                logger.debug("No user_id in local_data - treating as viewer")
                 return True  # Treat as viewer if no user ID
 
             # Get project permissions
             permissions = project_data.get("permissions", {})
+            logger.debug(f"Project data : {project_data}")
             if not permissions:
+                logger.debug("No permissions in project_data - treating as viewer")
                 return True  # Treat as viewer if no permissions data
 
-            # Check if user is in viewers list (viewers can't modify data collections)
+            logger.debug(f"Checking permissions for user_id: {current_user_id}")
+            logger.debug(f"Project permissions: {permissions}")
+
+            # First, check if user is an owner (owners can modify data collections)
+            owners = permissions.get("owners", [])
+            logger.debug(f"Project owners: {owners}")
+            for owner in owners:
+                if isinstance(owner, dict):
+                    # Project store data uses Pydantic format with 'id'
+                    owner_id = owner.get("id")
+                    logger.debug(
+                        f"Comparing owner_id {owner_id} (type: {type(owner_id)}) with current_user_id {current_user_id} (type: {type(current_user_id)})"
+                    )
+                    # Handle both string and ObjectId comparisons
+                    if str(owner_id) == str(current_user_id):
+                        logger.debug("User is an owner - can create data collections")
+                        return False  # User is an owner, not a viewer
+
+            # Second, check if user is an editor (editors can modify data collections)
+            editors = permissions.get("editors", [])
+            for editor in editors:
+                if isinstance(editor, dict):
+                    # Project store data uses Pydantic format with 'id'
+                    editor_id = editor.get("id")
+                    # Handle both string and ObjectId comparisons
+                    if str(editor_id) == str(current_user_id):
+                        logger.debug("User is an editor - can create data collections")
+                        return False  # User is an editor, not a viewer
+
+            # Finally, check if user is explicitly a viewer or has wildcard viewer access
             viewers = permissions.get("viewers", [])
             for viewer in viewers:
-                if isinstance(viewer, dict) and viewer.get("id") == current_user_id:
-                    return True  # User is a viewer
+                if isinstance(viewer, dict):
+                    # Project store data uses Pydantic format with 'id'
+                    viewer_id = viewer.get("id")
+                    # Handle both string and ObjectId comparisons
+                    if str(viewer_id) == str(current_user_id):
+                        logger.debug("User is explicitly a viewer - cannot create data collections")
+                        return True  # User is explicitly a viewer
                 elif isinstance(viewer, str) and viewer == "*":
-                    # Check if user is not in owners or editors when wildcard viewer access
-                    owners = permissions.get("owners", [])
-                    editors = permissions.get("editors", [])
+                    # Wildcard viewer access means user is a viewer
+                    # (owners and editors already checked above)
+                    logger.debug("User has wildcard viewer access - cannot create data collections")
+                    return True
 
-                    # Check if user is owner or editor
-                    is_owner_or_editor = False
-                    for owner in owners:
-                        if isinstance(owner, dict) and owner.get("id") == current_user_id:
-                            is_owner_or_editor = True
-                            break
-
-                    if not is_owner_or_editor:
-                        for editor in editors:
-                            if isinstance(editor, dict) and editor.get("id") == current_user_id:
-                                is_owner_or_editor = True
-                                break
-
-                    # If wildcard viewer and not owner/editor, treat as viewer
-                    if not is_owner_or_editor:
-                        return True
-
-            # User is owner or editor
-            return False
+            # User has no explicit permissions - treat as viewer for safety
+            logger.debug("User has no explicit permissions - treating as viewer for safety")
+            logger.debug("User CANNOT create data collections")
+            return True
 
         except Exception as e:
             logger.error(f"Error checking user permissions: {e}")

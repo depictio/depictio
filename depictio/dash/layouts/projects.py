@@ -228,17 +228,12 @@ def create_project_modal(opened=False):
                             dmc.Group(
                                 [
                                     dmc.Button(
-                                        "Cancel",
-                                        id="project-cancel-button",
-                                        color="gray",
-                                        variant="outline",
-                                    ),
-                                    dmc.Button(
                                         "Next",
                                         id="project-stepper-next",
                                         color=colors["teal"],
                                     ),
-                                ]
+                                ],
+                                justify="flex-end",
                             ),
                         ],
                     ),
@@ -1553,13 +1548,21 @@ def register_projects_callbacks(app):
             Output("project-card-click-memory", "data", allow_duplicate=True),
             Output("project-creation-store", "data", allow_duplicate=True),
             Output("project-creation-stepper", "active", allow_duplicate=True),
+            Output("url", "pathname", allow_duplicate=True),
         ],
-        Input("create-project-button", "n_clicks"),
-        Input("project-cancel-button", "n_clicks"),
+        [
+            Input("create-project-button", "n_clicks"),
+        ],
+        [
+            dash.State("local-store", "data"),
+            dash.State("user-cache-store", "data"),
+        ],
         prevent_initial_call=True,
     )
-    def toggle_project_modal(create_clicks, cancel_clicks):
+    def toggle_project_modal(create_clicks, local_data, user_cache):
         """Toggle the project creation modal and reset states."""
+        from depictio.models.models.users import UserContext
+
         ctx = dash.callback_context
         default_store = {
             "current_step": 0,
@@ -1571,18 +1574,53 @@ def register_projects_callbacks(app):
         default_memory = {"basic_clicks": 0}
 
         if not ctx.triggered:
-            return False, default_memory, default_store, 0
+            return False, default_memory, default_store, 0, dash.no_update
 
         trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
 
         if trigger_id == "create-project-button":
-            # Reset memory, store, and stepper when opening modal
-            return True, default_memory, default_store, 0
-        elif trigger_id == "project-cancel-button":
-            # Reset memory, store, and stepper when closing modal
-            return False, default_memory, default_store, 0
+            # Check if user is anonymous and redirect to profile instead of opening modal
+            # Use the same pattern as dashboard creation
+            current_user = UserContext.from_cache(user_cache)
+            if not current_user:
+                # Fallback to direct API call if cache not available
+                logger.info("🔄 Project Create: Using fallback API call for user data")
+                if local_data and local_data.get("access_token"):
+                    current_user_api = api_call_fetch_user_from_token(local_data["access_token"])
+                    if not current_user_api:
+                        logger.warning("User not found in project creation.")
+                        return False, default_memory, default_store, 0, "/profile"
+                    # Create UserContext from API response for consistency
+                    current_user = UserContext(
+                        id=str(current_user_api.id),
+                        email=current_user_api.email,
+                        is_admin=current_user_api.is_admin,
+                        is_anonymous=getattr(current_user_api, "is_anonymous", False),
+                    )
+                    # Also set temporary user status
+                    current_user.is_temporary = getattr(current_user_api, "is_temporary", False)
+                else:
+                    # No valid user data, treat as anonymous
+                    return False, default_memory, default_store, 0, "/profile"
+            else:
+                logger.info("✅ Project Create: Using consolidated cache for user data")
 
-        return False, default_memory, default_store, 0
+            if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
+                logger.info(
+                    "Anonymous user clicked 'Login to Create Projects' - redirecting to profile"
+                )
+                return (
+                    False,  # Keep modal closed
+                    default_memory,
+                    default_store,
+                    0,
+                    "/profile",  # Redirect to profile page
+                )
+
+            # Reset memory, store, and stepper when opening modal (for authenticated users)
+            return True, default_memory, default_store, 0, dash.no_update
+
+        return False, default_memory, default_store, 0, dash.no_update
 
     # Initialize step content when modal opens
     @app.callback(
@@ -1764,10 +1802,14 @@ def register_projects_callbacks(app):
                 logger.error("Could not fetch current user information")
                 raise dash.exceptions.PreventUpdate
 
-            # Create user object for permissions
+            # Create user object for permissions - include all user attributes
             current_user = UserBase(
                 id=current_user_info.id,
                 email=current_user_info.email,
+                is_admin=getattr(current_user_info, "is_admin", False),
+                is_anonymous=getattr(current_user_info, "is_anonymous", False),
+                is_temporary=getattr(current_user_info, "is_temporary", False),
+                expiration_time=getattr(current_user_info, "expiration_time", None),
             )
 
             # Create permissions with current user as owner
