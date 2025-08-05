@@ -255,3 +255,6 @@ depictio/tests/e2e-tests/cypress/screenshots/
 # Backups
 depictio/backups/
 depictio/depictio/backups/
+
+# Benchmarks
+benchmark_datasets/
