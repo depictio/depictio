@@ -1,4 +1,5 @@
 import dash
+import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import httpx
@@ -301,6 +302,145 @@ def register_callbacks_stepper(app):
 
         return next_step, disable_next
 
+    # Data preview callback for stepper
+    @app.callback(
+        Output({"type": "stepper-data-preview", "index": MATCH}, "children"),
+        [
+            Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+        ],
+        State("local-store", "data"),
+        prevent_initial_call=True,
+    )
+    def update_stepper_data_preview(workflow_id, data_collection_id, local_data):
+        """Update data preview in stepper when workflow/data collection changes."""
+        if not workflow_id or not data_collection_id or not local_data:
+            return html.Div()
+
+        try:
+            TOKEN = local_data["access_token"]
+
+            # Load data preview (first 100 rows for stepper)
+            df = load_deltatable_lite(
+                workflow_id=workflow_id,
+                data_collection_id=data_collection_id,
+                TOKEN=TOKEN,
+                limit_rows=100,  # Default preview size for stepper
+            )
+
+            if df is None or df.height == 0:
+                return dmc.Alert(
+                    "No data available for preview",
+                    color="yellow",
+                    title="No Data",
+                )
+
+            # Convert to pandas for AG Grid
+            df_pd = df.to_pandas()
+
+            # Handle column names with dots
+            column_mapping = {}
+            for col in df_pd.columns:
+                if "." in col:
+                    safe_col_name = col.replace(".", "_")
+                    column_mapping[col] = safe_col_name
+                else:
+                    column_mapping[col] = col
+
+            # Rename DataFrame columns to safe names
+            df_pd = df_pd.rename(columns=column_mapping)
+
+            # Create column definitions with improved styling
+            column_defs = []
+            original_columns = list(column_mapping.keys())
+            for original_col in original_columns:
+                safe_col = column_mapping[original_col]
+
+                col_def = {
+                    "headerName": original_col,
+                    "field": safe_col,
+                    "filter": True,
+                    "sortable": True,
+                    "resizable": True,
+                    "minWidth": 120,
+                }
+
+                # Set appropriate column types
+                if df_pd[safe_col].dtype in ["int64", "float64"]:
+                    col_def["type"] = "numericColumn"
+                elif df_pd[safe_col].dtype == "bool":
+                    col_def["cellRenderer"] = "agCheckboxCellRenderer"
+
+                column_defs.append(col_def)
+
+            # Create enhanced AG Grid for stepper
+            grid = dag.AgGrid(
+                id={"type": "stepper-data-grid", "index": workflow_id},
+                columnDefs=column_defs,
+                rowData=df_pd.to_dict("records"),
+                defaultColDef={
+                    "filter": True,
+                    "sortable": True,
+                    "resizable": True,
+                    "minWidth": 100,
+                },
+                dashGridOptions={
+                    "pagination": True,
+                    "paginationPageSize": 10,  # Smaller page size for stepper
+                    "domLayout": "normal",
+                    "animateRows": True,
+                    "suppressMenuHide": True,
+                },
+                style={"height": "350px", "width": "100%"},
+                className="ag-theme-alpine",
+            )
+
+            # Create summary and controls
+            summary_controls = dmc.Group(
+                [
+                    dmc.Group(
+                        [
+                            DashIconify(icon="mdi:table-eye", width=20, color="#228be6"),
+                            dmc.Text("Data Preview", fw="bold", size="md"),
+                        ],
+                        gap="xs",
+                    ),
+                    dmc.Group(
+                        [
+                            dmc.Text(
+                                f"Showing {min(100, df.height):,} of {df.height:,} rows",
+                                size="sm",
+                                c="gray",
+                            ),
+                            dmc.Text(f"{df.width} columns", size="sm", c="gray"),
+                        ],
+                        gap="lg",
+                    ),
+                ],
+                justify="space-between",
+                align="center",
+            )
+
+            return dmc.Card(
+                [
+                    summary_controls,
+                    dmc.Space(h="sm"),
+                    grid,
+                ],
+                withBorder=True,
+                shadow="sm",
+                radius="md",
+                p="md",
+            )
+
+        except Exception as e:
+            logger.error(f"Error in stepper data preview: {e}")
+            return dmc.Alert(
+                f"Error loading data preview: {str(e)}",
+                color="red",
+                title="Preview Error",
+            )
+
 
 def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
     # logger.info(f"Component data: {component_data}")
@@ -531,6 +671,8 @@ def create_stepper_output(n, active):
             ),
             html.Hr(),
             dbc.Row(html.Div(id={"type": "dropdown-output", "index": n})),
+            # Data preview section
+            html.Div(id={"type": "stepper-data-preview", "index": n}, style={"margin-top": "20px"}),
         ],
         # style={
         #     "height": "100%",
