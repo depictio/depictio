@@ -34,7 +34,19 @@ def add_filter(
             logger.debug(
                 f"Creating filter: column='{column_name}', values={value}, type={interactive_component_type}"
             )
-            filter_list.append(pl.col(column_name).is_in(value))
+
+            # Cast both the column and values to string to ensure type compatibility
+            try:
+                # Convert values to strings to match string casting
+                string_values = [str(v) for v in value]
+                filter_list.append(pl.col(column_name).cast(pl.String).is_in(string_values))
+                logger.debug(f"Applied string casting for filter on column '{column_name}'")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to apply filter with string casting on column '{column_name}': {e}"
+                )
+                # Fallback to original filter without casting
+                filter_list.append(pl.col(column_name).is_in(value))
 
     elif interactive_component_type == "TextInput":
         if value:
@@ -260,6 +272,9 @@ def _load_joined_deltatable(
     logger.debug(f"DF2 shape: {df2.shape}, columns: {df2.columns}")
 
     try:
+        # Normalize join column types to ensure compatibility
+        df1, df2 = normalize_join_column_types(df1, df2, join_columns)
+
         # Perform the join using Polars
         joined_df = df1.join(df2, on=join_columns, how=join_how)
         logger.info(f"Successfully joined DataFrames. Result shape: {joined_df.shape}")
@@ -277,6 +292,38 @@ def _load_joined_deltatable(
         logger.error(f"DF2 columns: {df2.columns}")
         logger.error(f"Join columns: {join_columns}")
         raise Exception(f"Join operation failed: {str(e)}") from e
+
+
+def normalize_join_column_types(df1, df2, join_columns):
+    """
+    Normalize the data types of join columns between two DataFrames to ensure compatibility.
+
+    Args:
+        df1: First DataFrame
+        df2: Second DataFrame
+        join_columns: List of column names to normalize
+
+    Returns:
+        tuple: (normalized_df1, normalized_df2)
+    """
+    for col in join_columns:
+        if col in df1.columns and col in df2.columns:
+            dtype1 = df1[col].dtype
+            dtype2 = df2[col].dtype
+
+            # If types are different, cast both to string for compatibility
+            if dtype1 != dtype2:
+                logger.debug(
+                    f"Type mismatch in join column '{col}': {dtype1} vs {dtype2}. Converting both to String."
+                )
+
+                # Cast both columns to string to ensure compatibility
+                df1 = df1.with_columns(pl.col(col).cast(pl.String))
+                df2 = df2.with_columns(pl.col(col).cast(pl.String))
+
+                logger.debug(f"Normalized column '{col}' to String type for both DataFrames")
+
+    return df1, df2
 
 
 def load_deltatable_lite(
@@ -1131,9 +1178,13 @@ def join_deltatables_dev(
     common_columns = list(
         set(loaded_dfs[dc_id1].columns).intersection(set(loaded_dfs[dc_id2].columns))
     )
-    merged_df = loaded_dfs[dc_id1].join(
-        loaded_dfs[dc_id2], on=common_columns, how=join_details["how"]
+
+    # Normalize join column types to ensure compatibility
+    df1_normalized, df2_normalized = normalize_join_column_types(
+        loaded_dfs[dc_id1], loaded_dfs[dc_id2], common_columns
     )
+
+    merged_df = df1_normalized.join(df2_normalized, on=common_columns, how=join_details["how"])
 
     # logger.info(f"Initial merged_df shape: {merged_df.shape}")
     # logger.info(f"Columns in merged_df: {merged_df.columns}")
@@ -1161,7 +1212,15 @@ def join_deltatables_dev(
                 continue
 
             common_columns = list(set(merged_df.columns).intersection(set(new_df.columns)))
-            merged_df = merged_df.join(new_df, on=common_columns, how=join_details["how"])
+
+            # Normalize join column types to ensure compatibility
+            merged_df_normalized, new_df_normalized = normalize_join_column_types(
+                merged_df, new_df, common_columns
+            )
+
+            merged_df = merged_df_normalized.join(
+                new_df_normalized, on=common_columns, how=join_details["how"]
+            )
 
     logger.info(f"AFTER 2nd FOR LOOP - merged_df shape: {merged_df.shape}")
     logger.info(f"Columns in merged_df: {merged_df.columns}")
