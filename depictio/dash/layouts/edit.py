@@ -233,8 +233,8 @@ def _create_component_buttons(
         "jbrowse": {"orientation": "horizontal", "buttons": ["drag", "remove", "duplicate"]},
         "text": {
             "orientation": "horizontal",
-            "buttons": ["drag", "remove", "edit", "duplicate", "alignment"],
-        },  # Text components get alignment button
+            "buttons": ["drag", "remove", "duplicate", "alignment"],
+        },  # Text components get alignment button (no edit button)
         "default": {
             "orientation": "horizontal",
             "buttons": ["drag", "remove", "edit", "duplicate"],
