@@ -426,10 +426,10 @@ class BenchmarkDatasetGenerator:
         yaml_content = f'''# Depictio Benchmark Dataset: {dataset_name.title()}
 name: "Depictio Benchmark - {dataset_name.replace("_", " ").title()}"
 project_type: "advanced"
-project_id: "{project_id}"
+id: "{project_id}"
 workflows:
   - name: "{dataset_name}_analysis"
-    workflow_id: "{workflow_id}"
+    id: "{workflow_id}"
     engine:
       name: "python"
       version: "3.11"
@@ -442,7 +442,7 @@ workflows:
     data_collections:
       # Physical features dataset
       - data_collection_tag: "physical_features"
-        data_collection_id: "{physical_dc_id}"
+        id: "{physical_dc_id}"
         description: "Physical characteristics measurements - {benchmark_type.value} benchmark"
         config:
           type: "Table"
