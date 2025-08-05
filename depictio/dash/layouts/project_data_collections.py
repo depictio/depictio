@@ -40,6 +40,100 @@ from depictio.dash.layouts.layouts_toolbox import (
 from depictio.models.models.projects import Project
 
 
+def calculate_total_storage_size(data_collections):
+    """
+    Calculate the total storage size across all data collections.
+
+    Args:
+        data_collections: List of data collection objects
+
+    Returns:
+        int: Total size in bytes across all data collections
+    """
+    total_bytes = 0
+
+    if not data_collections:
+        return total_bytes
+
+    for dc in data_collections:
+        # Handle dict or object access
+        if isinstance(dc, dict):
+            flexible_metadata = dc.get("flexible_metadata", {})
+        else:
+            flexible_metadata = getattr(dc, "flexible_metadata", {})
+
+        if isinstance(flexible_metadata, dict):
+            deltatable_size_bytes = flexible_metadata.get("deltatable_size_bytes", 0)
+        else:
+            deltatable_size_bytes = (
+                getattr(flexible_metadata, "deltatable_size_bytes", 0) if flexible_metadata else 0
+            )
+
+        if deltatable_size_bytes and isinstance(deltatable_size_bytes, (int, float)):
+            total_bytes += int(deltatable_size_bytes)
+
+    return total_bytes
+
+
+def format_storage_size(size_bytes):
+    """
+    Format storage size in bytes to human-readable format.
+
+    Args:
+        size_bytes (int): Size in bytes
+
+    Returns:
+        tuple: (formatted_size_str, unit_str) for display
+    """
+    if size_bytes == 0:
+        return "0", "bytes"
+    elif size_bytes < 1024:
+        return f"{size_bytes}", "bytes"
+    elif size_bytes < 1024**2:
+        return f"{size_bytes / 1024:.1f}", "KB"
+    elif size_bytes < 1024**3:
+        return f"{size_bytes / (1024**2):.1f}", "MB"
+    elif size_bytes < 1024**4:
+        return f"{size_bytes / (1024**3):.1f}", "GB"
+    else:
+        return f"{size_bytes / (1024**4):.1f}", "TB"
+
+
+def get_data_collection_size_display(data_collection):
+    """
+    Get formatted size display string for a data collection.
+
+    Args:
+        data_collection: Data collection object or dict
+
+    Returns:
+        str: Formatted size string for display
+    """
+    try:
+        # Extract flexible_metadata
+        if isinstance(data_collection, dict):
+            flexible_metadata = data_collection.get("flexible_metadata", {})
+        else:
+            flexible_metadata = getattr(data_collection, "flexible_metadata", {})
+
+        # Extract size_bytes
+        if isinstance(flexible_metadata, dict):
+            size_bytes = flexible_metadata.get("deltatable_size_bytes", 0)
+        else:
+            size_bytes = (
+                getattr(flexible_metadata, "deltatable_size_bytes", 0) if flexible_metadata else 0
+            )
+
+        # Format and return
+        if size_bytes and isinstance(size_bytes, (int, float)):
+            formatted_size, unit = format_storage_size(size_bytes)
+            return f"{formatted_size} {unit}"
+        else:
+            return "N/A"
+    except Exception:
+        return "N/A"
+
+
 def create_project_type_indicator(project_type):
     """
     Create a project type indicator badge.
@@ -303,7 +397,7 @@ def create_unified_data_collections_manager_section(
     """
     # Overview cards
     overview_cards = dmc.SimpleGrid(
-        cols=2,
+        cols=3,
         children=[
             # Total Collections card
             dmc.Card(
@@ -331,7 +425,7 @@ def create_unified_data_collections_manager_section(
                                     c=colors["blue"],
                                 )
                             ),
-                            dmc.Center(dmc.Text("data collections", size="xs", c="gray")),
+                            dmc.Center(dmc.Text("Data Collections", size="xs", c="gray")),
                         ],
                         gap="sm",
                         align="center",
@@ -428,28 +522,38 @@ def create_unified_data_collections_manager_section(
                 radius="md",
                 p="lg",
             ),
-            # # Total Size card - commented out as requested
-            # dmc.Card(
-            #     [
-            #         dmc.Group(
-            #             [
-            #                 DashIconify(
-            #                     icon="mdi:harddisk",
-            #                     width=24,
-            #                     color=colors["orange"],
-            #                 ),
-            #                 dmc.Text("Total Size", fw="bold"),
-            #             ],
-            #             justify="space-between",
-            #         ),
-            #         dmc.Text("Coming Soon", size="xl", fw="bold", c=colors["orange"]),
-            #         dmc.Text("storage calculation", size="sm", c="gray"),
-            #     ],
-            #     withBorder=True,
-            #     shadow="sm",
-            #     radius="md",
-            #     p="lg",
-            # ),
+            # Total Size card - re-enabled with storage calculation
+            dmc.Card(
+                [
+                    dmc.Stack(
+                        [
+                            dmc.Group(
+                                [
+                                    DashIconify(
+                                        icon="mdi:harddisk",
+                                        width=20,
+                                        color=colors["orange"],
+                                    ),
+                                    dmc.Text("Total Storage", fw="bold", size="sm"),
+                                ],
+                                justify="center",
+                                align="center",
+                                gap="xs",
+                            ),
+                            html.Div(
+                                id="storage-size-display",
+                                style={"textAlign": "center"},
+                            ),
+                        ],
+                        gap="sm",
+                        align="center",
+                    )
+                ],
+                withBorder=True,
+                shadow="sm",
+                radius="md",
+                p="lg",
+            ),
         ],
     )
 
@@ -984,6 +1088,18 @@ def create_data_collection_viewer_content(
                                                 or "Unknown",
                                                 color="blue",
                                                 size="xs",
+                                            ),
+                                        ],
+                                        justify="space-between",
+                                    ),
+                                    # Add size information from flexible_metadata
+                                    dmc.Group(
+                                        [
+                                            dmc.Text("Size:", size="sm", fw="bold", c="gray"),
+                                            dmc.Text(
+                                                get_data_collection_size_display(data_collection),
+                                                size="sm",
+                                                ff="monospace",
                                             ),
                                         ],
                                         justify="space-between",
@@ -3037,6 +3153,55 @@ def register_project_data_collections_callbacks(app):
                 f"Unexpected error: {str(e)}",
                 {"display": "block"},
             )
+
+    # Storage size display callback
+    @app.callback(
+        Output("storage-size-display", "children"),
+        [Input("project-data-store", "data")],
+        prevent_initial_call=False,  # Allow initial call to show default state
+    )
+    def update_storage_size_display(project_data):
+        """Update the storage size display card with cumulative size of all data collections."""
+        if not project_data:
+            return [
+                dmc.Text("0", size="lg", fw="bold", c="gray", ta="center"),
+                dmc.Text("bytes", size="xs", c="gray", ta="center"),
+            ]
+
+        try:
+            # Extract data collections from project data
+            workflows = project_data.get("workflows", [])
+            all_data_collections = []
+
+            for workflow in workflows:
+                data_collections = workflow.get("data_collections", [])
+                all_data_collections.extend(data_collections)
+
+            # Calculate total storage size
+            total_size_bytes = calculate_total_storage_size(all_data_collections)
+            formatted_size, unit = format_storage_size(total_size_bytes)
+
+            # Determine color based on size
+            if total_size_bytes == 0:
+                color = "gray"
+                formatted_size = "0"
+                unit = "bytes"
+            elif total_size_bytes < 1024**3:  # Less than 1GB
+                color = colors["orange"]
+            else:  # 1GB or more
+                color = colors["red"]
+
+            return [
+                dmc.Text(formatted_size, size="lg", fw="bold", c=color, ta="center"),
+                dmc.Text(unit, size="xs", c="gray", ta="center"),
+            ]
+
+        except Exception as e:
+            logger.error(f"Error calculating storage size: {e}")
+            return [
+                dmc.Text("Error", size="lg", fw="bold", c="red", ta="center"),
+                dmc.Text("calc failed", size="xs", c="gray", ta="center"),
+            ]
 
 
 def generate_cytoscape_elements_from_project_data(data_collections):
