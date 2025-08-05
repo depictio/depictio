@@ -492,6 +492,52 @@ def _create_umap_placeholder(df: pl.DataFrame, dict_kwargs: Dict[str, Any], them
     return placeholder_fig
 
 
+def create_figure_placeholder(theme: str = "light", visu_type: str = "scatter") -> Any:
+    """Create a placeholder figure when auto-generation is disabled.
+
+    Args:
+        theme: Theme for the placeholder ('light' or 'dark')
+        visu_type: Visualization type for the placeholder
+
+    Returns:
+        Plotly figure object with placeholder content
+    """
+    # Use standard Plotly templates for better compatibility
+    template = "plotly_dark" if theme == "dark" else "plotly"
+
+    # Create an empty scatter plot as base
+    placeholder_fig = px.scatter(
+        template=template,
+        title="",
+    )
+
+    # Add annotation to indicate auto-generation is disabled
+    placeholder_fig.add_annotation(
+        text="📊 Figure auto-generation is disabled<br>🔧 Configure parameters to generate visualization",
+        xref="paper",
+        yref="paper",
+        x=0.5,
+        y=0.5,
+        showarrow=False,
+        font=dict(size=16),
+        bgcolor="rgba(255,255,255,0.9)" if theme == "light" else "rgba(50,50,50,0.9)",
+        bordercolor="#ddd" if theme == "light" else "#666",
+        borderwidth=1,
+    )
+
+    # Style the placeholder appropriately for the theme
+    placeholder_fig.update_layout(
+        autosize=True,
+        margin=dict(l=40, r=40, t=60, b=40),
+        height=None,
+        showlegend=False,
+        xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, title=""),
+        yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, title=""),
+    )
+
+    return placeholder_fig
+
+
 def _should_defer_umap_computation(df: pl.DataFrame, context: str = "unknown") -> bool:
     """Determine if UMAP computation should be deferred based on data size and context."""
     if df is None or df.is_empty():

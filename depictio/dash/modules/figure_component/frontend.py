@@ -35,6 +35,7 @@ from depictio.dash.modules.figure_component.state_manager import state_manager
 from depictio.dash.modules.figure_component.utils import (
     build_figure,
     build_figure_frame,
+    create_figure_placeholder,
 )
 from depictio.dash.utils import (
     UNSELECTED_STYLE,
@@ -946,7 +947,27 @@ def register_callbacks_figure_component(app):
         # Check if auto-generation is disabled in settings
         if not settings.dash.auto_generate_figures:
             logger.info("Skipping default figure generation - auto-generation disabled in settings")
-            raise dash.exceptions.PreventUpdate
+            # raise dash.exceptions.PreventUpdate
+
+            # Create placeholder figure
+            placeholder_figure = create_figure_placeholder(theme=theme_data, visu_type="scatter")
+
+            # Create placeholder component
+            placeholder_div = html.Div(
+                [
+                    dcc.Graph(
+                        figure=placeholder_figure,
+                        config={
+                            "editable": False,
+                            "scrollZoom": False,
+                            "responsive": True,
+                            "displayModeBar": False,  # Hide toolbar for placeholder
+                        },
+                        className="responsive-graph",
+                    ),
+                ]
+            )
+            return placeholder_div
 
         # Get existing component data
         component_data = None
