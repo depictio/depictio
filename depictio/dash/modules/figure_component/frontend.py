@@ -945,13 +945,30 @@ def register_callbacks_figure_component(app):
             raise dash.exceptions.PreventUpdate
 
         # Check if auto-generation is disabled in settings
-        if not settings.dash.auto_generate_figures:
-            logger.info("Skipping default figure generation - auto-generation disabled in settings")
+        # BUT allow generation if we have existing parameters (editing existing figure)
+        has_existing_parameters = dict_kwargs and any(
+            dict_kwargs.get(key) for key in ["x", "y", "color", "visu_type"] if key in dict_kwargs
+        )
+
+        if not settings.dash.auto_generate_figures and not has_existing_parameters:
+            logger.info(
+                "Skipping default figure generation - auto-generation disabled in settings and no existing parameters"
+            )
             # raise dash.exceptions.PreventUpdate
 
             # Create placeholder figure
             placeholder_figure = create_figure_placeholder(theme=theme_data, visu_type="scatter")
+        elif not settings.dash.auto_generate_figures and has_existing_parameters:
+            logger.info(
+                "Auto-generation disabled but editing existing figure with parameters - allowing generation"
+            )
+            # Continue with normal figure generation
+        else:
+            # Auto-generation enabled - continue normally
+            pass
 
+        # Only create placeholder if auto-generation is disabled AND no existing parameters
+        if not settings.dash.auto_generate_figures and not has_existing_parameters:
             # Create placeholder component
             placeholder_div = html.Div(
                 [
@@ -2017,7 +2034,9 @@ def design_figure(id, component_data=None):
         # Store components
         dcc.Store(
             id={"type": "dict_kwargs", "index": id["index"]},
-            data={},  # Initialize empty to trigger default generation
+            data=component_data.get("dict_kwargs", {})
+            if component_data
+            else {},  # Initialize with existing data when editing
             storage_type="memory",
         ),
         # CRITICAL: Create stored-metadata-component store for code mode compatibility
