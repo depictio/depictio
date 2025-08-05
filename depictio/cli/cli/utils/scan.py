@@ -3,6 +3,7 @@ import re
 from datetime import datetime
 
 from bson import ObjectId
+from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 
 from depictio.cli.cli.utils.api_calls import (
     api_create_files,
@@ -403,7 +404,7 @@ def scan_run_for_multiple_data_collections(
                 [str(sc.file.file_location) for sc in dc_file_scan_results]
             )
             missing_files = [
-                existing_files_for_dc[file_location]["_id"]
+                str(existing_files_for_dc[file_location]["_id"])
                 for file_location in missing_files_location
             ]
 
@@ -539,17 +540,46 @@ def scan_files_for_workflow(
     permissions = Permission(owners=[user_base])
     logger.debug(f"Permissions: {permissions}")
 
-    # Pre-fetch existing files for ALL data collections
+    # Pre-fetch existing files for ALL data collections with progress indicator
     all_existing_files = {}
-    for dc in data_collections:
-        response = api_get_files_by_dc_id(dc_id=str(dc.id), CLI_config=CLI_config)
-        if response.status_code == 200:
-            existing_files = response.json()
-            dc_files = {f["file_location"]: f for f in existing_files} if existing_files else {}
-            all_existing_files[str(dc.id)] = dc_files
-        else:
-            all_existing_files[str(dc.id)] = {}
-            logger.warning(f"Failed to retrieve existing files for data collection {dc.id}")
+    if len(data_collections) > 1:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=None,
+        ) as progress:
+            task_id = progress.add_task(
+                "📋 Loading existing files from database", total=len(data_collections)
+            )
+
+            for dc in data_collections:
+                progress.update(
+                    task_id, description=f"📋 Loading files for {dc.data_collection_tag}"
+                )
+                response = api_get_files_by_dc_id(dc_id=str(dc.id), CLI_config=CLI_config)
+                if response.status_code == 200:
+                    existing_files = response.json()
+                    dc_files = (
+                        {f["file_location"]: f for f in existing_files} if existing_files else {}
+                    )
+                    all_existing_files[str(dc.id)] = dc_files
+                else:
+                    all_existing_files[str(dc.id)] = {}
+                    logger.warning(f"Failed to retrieve existing files for data collection {dc.id}")
+                progress.advance(task_id)
+    else:
+        # Single data collection - no progress bar needed
+        for dc in data_collections:
+            response = api_get_files_by_dc_id(dc_id=str(dc.id), CLI_config=CLI_config)
+            if response.status_code == 200:
+                existing_files = response.json()
+                dc_files = {f["file_location"]: f for f in existing_files} if existing_files else {}
+                all_existing_files[str(dc.id)] = dc_files
+            else:
+                all_existing_files[str(dc.id)] = {}
+                logger.warning(f"Failed to retrieve existing files for data collection {dc.id}")
 
     # Pre-allocation of existing runs (shared across all data collections)
     existing_runs_reformated: dict[str, dict] = {}
@@ -593,21 +623,29 @@ def scan_files_for_workflow(
                 logger.error(f"Workflow config is None for workflow {workflow_id}")
                 continue
 
-            workflow_run = scan_run_for_multiple_data_collections(
-                run_location=location,
-                run_tag=run_tag,
-                workflow_config=workflow.config,
-                data_collections=data_collections,
-                all_existing_files=all_existing_files,
-                workflow_id=workflow_id,
-                CLI_config=CLI_config,
-                permissions=permissions,
-                rescan_folders=rescan_folders,
-                update_files=update_files,
-                existing_run=existing_runs_reformated.get(run_tag, None),
-            )
-            if workflow_run:
-                all_workflow_runs.append(workflow_run)
+            # Show simple spinner for single-location scanning
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=None,
+            ) as progress:
+                progress.add_task(f"🔍 Scanning single location: {run_tag}")
+
+                workflow_run = scan_run_for_multiple_data_collections(
+                    run_location=location,
+                    run_tag=run_tag,
+                    workflow_config=workflow.config,
+                    data_collections=data_collections,
+                    all_existing_files=all_existing_files,
+                    workflow_id=workflow_id,
+                    CLI_config=CLI_config,
+                    permissions=permissions,
+                    rescan_folders=rescan_folders,
+                    update_files=update_files,
+                    existing_run=existing_runs_reformated.get(run_tag, None),
+                )
+                if workflow_run:
+                    all_workflow_runs.append(workflow_run)
 
         elif workflow.data_location.structure == "sequencing-runs":
             # Each subdirectory that matches the regex is a run
@@ -616,39 +654,66 @@ def scan_files_for_workflow(
                 logger.error("runs_regex is required for sequencing-runs structure but was None")
                 continue
 
+            # Collect all valid runs first to show accurate progress
+            valid_runs = []
             for run in sorted(os.listdir(location)):
                 run_path = os.path.join(location, run)
                 if os.path.isdir(run_path) and re.match(runs_regex, run):
                     if run in existing_runs_reformated and not rescan_folders:
                         logger.debug(f"Skipping existing run {run}.")
                         continue
+                    valid_runs.append((run_path, run))
 
-                    if workflow.config is None:
-                        logger.error(f"Workflow config is None for workflow {workflow_id}")
-                        continue
-
-                    workflow_run = scan_run_for_multiple_data_collections(
-                        run_location=run_path,
-                        run_tag=run,
-                        workflow_config=workflow.config,
-                        data_collections=data_collections,
-                        all_existing_files=all_existing_files,
-                        workflow_id=workflow_id,
-                        CLI_config=CLI_config,
-                        permissions=permissions,
-                        rescan_folders=rescan_folders,
-                        update_files=update_files,
-                        existing_run=existing_runs_reformated.get(run, None),
+            # Process runs with progress bar
+            if valid_runs:
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    BarColumn(),
+                    TaskProgressColumn(),
+                    TextColumn("({task.completed}/{task.total} runs)"),
+                    console=None,  # Use default console
+                ) as progress:
+                    task_id = progress.add_task(
+                        f"🔍 Scanning runs in {os.path.basename(location)}", total=len(valid_runs)
                     )
-                    if workflow_run:
-                        all_workflow_runs.append(workflow_run)
+
+                    for run_path, run in valid_runs:
+                        if workflow.config is None:
+                            logger.error(f"Workflow config is None for workflow {workflow_id}")
+                            progress.advance(task_id)
+                            continue
+
+                        progress.update(task_id, description=f"🔍 Scanning run: {run}")
+
+                        workflow_run = scan_run_for_multiple_data_collections(
+                            run_location=run_path,
+                            run_tag=run,
+                            workflow_config=workflow.config,
+                            data_collections=data_collections,
+                            all_existing_files=all_existing_files,
+                            workflow_id=workflow_id,
+                            CLI_config=CLI_config,
+                            permissions=permissions,
+                            rescan_folders=rescan_folders,
+                            update_files=update_files,
+                            existing_run=existing_runs_reformated.get(run, None),
+                        )
+                        if workflow_run:
+                            all_workflow_runs.append(workflow_run)
+
+                        progress.advance(task_id)
+
+                    progress.update(task_id, description="✅ Scanning completed")
 
         # Handle missing runs if rescanning
         if rescan_folders:
             missing_runs_tag = set(existing_runs_reformated.keys()) - set(
                 [run.run_tag for run in all_workflow_runs if run]
             )
-            missing_runs = [existing_runs_reformated[run_tag].id for run_tag in missing_runs_tag]
+            missing_runs = [
+                str(existing_runs_reformated[run_tag].id) for run_tag in missing_runs_tag
+            ]
 
             if missing_runs:
                 logger.info(f"Runs to remove: {missing_runs}")
@@ -657,16 +722,22 @@ def scan_files_for_workflow(
                     # Delete related files
                     for dc_id, files in all_existing_files.items():
                         for file in files.values():
-                            if file["run_id"] == run_id:
-                                api_delete_file(file_id=file["_id"], CLI_config=CLI_config)
+                            if str(file["run_id"]) == run_id:
+                                api_delete_file(file_id=str(file["_id"]), CLI_config=CLI_config)
                 rich_print_checked_statement(
                     f"Removed {len(missing_runs)} runs and related files from the DB : {missing_runs_tag}",
                     "info",
                 )
 
-    # Upsert all runs at once
+    # Upsert all runs at once with progress indicator
     if all_workflow_runs:
-        api_upsert_runs_batch(all_workflow_runs, CLI_config, rescan_folders)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=None,
+        ) as progress:
+            progress.add_task(f"💾 Uploading {len(all_workflow_runs)} run(s) to server")
+            api_upsert_runs_batch(all_workflow_runs, CLI_config, rescan_folders)
 
     # Generate single summary table for the entire workflow
     # if all_workflow_runs:

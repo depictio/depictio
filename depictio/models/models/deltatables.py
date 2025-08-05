@@ -79,3 +79,4 @@ class UpsertDeltaTableAggregated(BaseModel):
     data_collection_id: PyObjectId
     delta_table_location: str
     update: bool = False
+    deltatable_size_bytes: int | None = None

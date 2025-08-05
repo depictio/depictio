@@ -151,6 +151,57 @@ async def upsert_deltatable(
     # deltatable = convert_objectid_to_str(deltatable.model_dump())
     # logger.info(f"DeltaTableAggregated Mongo: {deltatable}")
 
+    # Update DataCollection flexible_metadata with deltatable size if provided
+    logger.info(
+        f"🔍 DEBUG: Received payload.deltatable_size_bytes = {payload.deltatable_size_bytes}"
+    )
+    if payload.deltatable_size_bytes is not None:
+        # Find the project and update the specific data collection's flexible_metadata
+        logger.info(
+            f"Updating DataCollection flexible_metadata with deltatable size: {payload.deltatable_size_bytes} bytes"
+        )
+
+        # First, initialize flexible_metadata if it's null
+        logger.info("🔍 DEBUG: Ensuring flexible_metadata is initialized...")
+        init_result = projects_collection.update_one(
+            {
+                "workflows.data_collections._id": data_collection_oid,
+                "workflows.data_collections.flexible_metadata": None,
+            },
+            {"$set": {"workflows.$[workflow].data_collections.$[dc].flexible_metadata": {}}},
+            array_filters=[
+                {"workflow.data_collections": {"$exists": True}},
+                {"dc._id": data_collection_oid},
+            ],
+        )
+        logger.info(
+            f"🔍 DEBUG: Initialization result - matched: {init_result.matched_count}, modified: {init_result.modified_count}"
+        )
+
+        # Now update the data collection with deltatable size information
+        update_result = projects_collection.update_one(
+            {
+                "workflows.data_collections._id": data_collection_oid,
+            },
+            {
+                "$set": {
+                    "workflows.$[workflow].data_collections.$[dc].flexible_metadata.deltatable_size_bytes": payload.deltatable_size_bytes,
+                    "workflows.$[workflow].data_collections.$[dc].flexible_metadata.deltatable_size_mb": round(
+                        payload.deltatable_size_bytes / (1024 * 1024), 2
+                    ),
+                    "workflows.$[workflow].data_collections.$[dc].flexible_metadata.deltatable_size_updated": datetime.now().isoformat(),
+                }
+            },
+            array_filters=[
+                {"workflow.data_collections": {"$exists": True}},
+                {"dc._id": data_collection_oid},
+            ],
+        )
+        logger.info(
+            f"🔍 DEBUG: MongoDB update result - matched: {update_result.matched_count}, modified: {update_result.modified_count}"
+        )
+        logger.info("DataCollection flexible_metadata updated successfully")
+
     # Query to find files associated with the data collection
     # Check if the DeltaTableAggregated exists, if not create a new one, else update the existing one
     logger.info("Checking if deltatable exists")

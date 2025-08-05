@@ -122,9 +122,28 @@ def api_sync_project_config_to_server(
     logger.info(f"Project configuration: {ProjectConfig}")
     project_config = ProjectConfig
 
-    response = api_get_project_from_name(str(ProjectConfig["name"]), CLI_config)
-    # response = api_get_project_from_id(str(ProjectConfig.id), CLI_config)
-    # project_config = convert_objectid_to_str(ProjectConfig.mongo())
+    # First try to find project by ID (for updates to existing projects with new names)
+    response_by_id = None
+    if "id" in ProjectConfig:
+        try:
+            response_by_id = api_get_project_from_id(PyObjectId(ProjectConfig["id"]), CLI_config)
+            logger.info(
+                f"Checked project by ID {ProjectConfig['id']}: status {response_by_id.status_code}"
+            )
+        except Exception as e:
+            logger.info(f"Could not check project by ID: {e}")
+            response_by_id = None
+
+    # If found by ID, use that response; otherwise check by name
+    if response_by_id and response_by_id.status_code == 200:
+        response = response_by_id
+        logger.info("Project found by ID, will update existing project")
+    else:
+        response = api_get_project_from_name(str(ProjectConfig["name"]), CLI_config)
+        logger.info(
+            f"Checked project by name '{ProjectConfig['name']}': status {response.status_code}"
+        )
+
     logger.info(f"Project configuration: {project_config}")
 
     if response.status_code == 200:
@@ -203,7 +222,12 @@ def api_create_files(
 
     logger.debug(f"Payload: {payload}")
 
-    response = httpx.post(url, json=payload, headers=generate_api_headers(CLI_config))
+    response = httpx.post(
+        url,
+        json=payload,
+        headers=generate_api_headers(CLI_config),
+        timeout=120.0,  # 2 minutes timeout for file batch operations
+    )
     return response
 
 
@@ -282,7 +306,12 @@ def api_upsert_runs_batch(
     logger.debug(f"Payload runs upsert batch: {payload}")
     url = f"{CLI_config.api_base_url}/depictio/api/v1/runs/upsert_batch"
 
-    response = httpx.post(url, json=payload, headers=generate_api_headers(CLI_config))
+    response = httpx.post(
+        url,
+        json=payload,
+        headers=generate_api_headers(CLI_config),
+        timeout=120.0,  # 2 minutes timeout for runs batch operations
+    )
     return response
 
 
@@ -349,6 +378,7 @@ def api_upsert_deltatable(
     delta_table_location: str,
     CLI_config: CLIConfig,
     update: bool = False,
+    deltatable_size_bytes: int | None = None,
 ) -> httpx.Response:
     """
     Create or update a Delta Table on the server using a bulk upsert.
@@ -356,6 +386,7 @@ def api_upsert_deltatable(
     Args:
         deltaTable (UpsertDeltaTableAggregated): Delta Table to send.
         CLI_config (CLIConfig): Configuration object containing API base URL and credentials.
+        deltatable_size_bytes (int, optional): Size of the deltatable in bytes to store in flexible_metadata.
 
     Returns:
         httpx.Response: The response from the server.
@@ -368,12 +399,28 @@ def api_upsert_deltatable(
         "update": update,
     }
 
+    # Add deltatable size to payload if provided
+    if deltatable_size_bytes is not None:
+        payload["deltatable_size_bytes"] = deltatable_size_bytes
+
     url = f"{CLI_config.api_base_url}/depictio/api/v1/deltatables/upsert"
 
     logger.debug(f"Payload: {payload}")
 
-    response = httpx.post(url, json=payload, headers=generate_api_headers(CLI_config))
-    return response
+    try:
+        response = httpx.post(
+            url,
+            json=payload,
+            headers=generate_api_headers(CLI_config),
+            timeout=300.0,  # 5 minutes timeout for large deltatable processing
+        )
+        return response
+    except httpx.TimeoutException:
+        logger.error(
+            f"Deltatable upsert timed out after 300 seconds for data collection {data_collection_id}"
+        )
+        # Re-raise the exception to be handled by the caller
+        raise
 
 
 @validate_call
