@@ -83,111 +83,58 @@ NAME_CLI_ASCII = """
 
 
 FAVICON_BLACK_AND_WHITE_ASCII = """
-                                                                                                                      █████████████                                                                     
-                                                                                                                      ██████████████████████                                                            
-                                                                                                                      █████████████████████████████                                                     
-                                                                                                                      ██████████████████████████████████                                                
-                                                                                                                      ██████████████████████████████████████                                            
-                                                                                                                      ██████████████████████████████████████████                                        
-                                                                                                                      █████████████████████████████████████████████                                     
-                                                                                                                      ████████████████████████████████████████████████                                  
-                                                                                                                      ███████████████████████████████████████████████████                               
-                                                                                                                      ██████████████████████████████████████████████████████                            
-                                                                                                                      █████████████████████████████████████████████████████████                         
-                                                                                                                      ███████████████████████████████████████████████████████████                       
-                                                                                                                      ██████████████████████████████████████████████████████████████                    
-                                                                                                                      ████████████████████████████████████████████████████████████████                  
-                                                                                                                      ██████████████████████████████████████████████████████████████████                
-                                                                                                                      ███████████████████████████████████████████████████████████████████               
-                                                                                                   ██████             █████████████████████████████████████████████████████████████████                 
-                                                                                          ███████████████             ████████████████████████████████████████████████████████████████                  
-                                                                                    █████████████████████             ██████████████████████████████████████████████████████████████                    
-                                                                                █████████████████████████             ████████████████████████████████████████████████████████████                      
-                                                                            █████████████████████████████             ██████████████████████████████████████████████████████████                        
-                                                                         ████████████████████████████████             ████████████████████████████████████████████████████████                          
-                                                                      ███████████████████████████████████             ███████████████████████████████████████████████████████                           
-                                                                   ██████████████████████████████████████             █████████████████████████████████████████████████████                             
-                                                                █████████████████████████████████████████             ███████████████████████████████████████████████████                               
-                                                             ████████████████████████████████████████████             █████████████████████████████████████████████████                                 
-                                                           ██████████████████████████████████████████████             ███████████████████████████████████████████████                                   
-                                                           ██████████████████████████████████████████████             ██████████████████████████████████████████████                                    
-                                                             ████████████████████████████████████████████             ████████████████████████████████████████████                                      
-                                                               ██████████████████████████████████████████             ██████████████████████████████████████████                                        
-                                                                █████████████████████████████████████████             ████████████████████████████████████████                                          
-                                                                  ███████████████████████████████████████             ██████████████████████████████████████                                            
-                                                                    █████████████████████████████████████             ████████████████████████████████████                  █                           
-                                                                      ███████████████████████████████████             ███████████████████████████████████                 █████                         
-                                                                        █████████████████████████████████             █████████████████████████████████                 ████████                        
-                                                                         ████████████████████████████████             ███████████████████████████████                 ████████████                      
-                                                                           ██████████████████████████████             █████████████████████████████                  ██████████████                     
-                                                                             ████████████████████████████             ████████████████████████████                 █████████████████                    
-                                                                               ██████████████████████████             ██████████████████████████                 ████████████████████                   
-                                                                                 ████████████████████████             ████████████████████████                 ███████████████████████                  
-                                                                                  ███████████████████████             ██████████████████████                 ██████████████████████████                 
-                                                                                    █████████████████████             ████████████████████                 █████████████████████████████                
-                                                                                      ███████████████████             ██████████████████                  ███████████████████████████████               
-                                                                                        █████████████████             █████████████████                 ██████████████████████████████████              
-                                                                                          ███████████████             ███████████████                 ████████████████████████████████████              
-                                                                      ████                 ██████████████             █████████████                 ███████████████████████████████████████             
-                                                                     ███████                 ████████████             ███████████                 ██████████████████████████████████████████            
-                                                                    ██████████                 ██████████             ██████████                ████████████████████████████████████████████            
-                                                                   █████████████                 ████████             ████████                 ██████████████████████████████████████████████           
-                                                                  ████████████████                 ██████             ██████                 ████████████████████████████████████████████████           
-                                                                  █████████████████                  ████             ████                 ███████████████████████████████████████████████████          
-                                                                 ████████████████████                  ██             ██                 █████████████████████████████████████████████████████          
-                                                                ███████████████████████                                                 ███████████████████████████████████████████████████████         
-                                                                █████████████████████████                                             █████████████████████████████████████████████████████████         
-                                                               ████████████████████████████                                         ███████████████████████████████████████████████████████████         
-                                                               █████████████████████████████                                      ██████████████████████████████████████████████████████████████        
-                                                              ████████████████████████████████                                  ████████████████████████████████████████████████████████████████        
-                                                              █████████████████████████████████                                █████████████████████████████████████████████████████████████████        
-                                                                                                                                                                                                        
-                                                                                                                                                                                                        
-                                                                                                                                                                                                        
-                                                                                                                                                                                                        
-                                                                                                                                                                                                        
-                                                                                                                                                                                                        
-██████████████████████████████████████████████████████████████████████████████████████████████                                  ████████████████████████████████████████████████████████████████        
-███████████████████████████████████████████████████████████████████████████████████████████████                                 █████████████████████████████████████████████████████████████████       
-█████████████████████████████████████████████████████████████████████████████████████████████                                     ███████████████████████████████████████████████████████████████       
-███████████████████████████████████████████████████████████████████████████████████████████                                         ████████████████████████████████████████████████████████████        
-█████████████████████████████████████████████████████████████████████████████████████████                                            ███████████████████████████████████████████████████████████        
- ██████████████████████████████████████████████████████████████████████████████████████                                                █████████████████████████████████████████████████████████        
- ████████████████████████████████████████████████████████████████████████████████████                  ██             ██                 ███████████████████████████████████████████████████████        
- ██████████████████████████████████████████████████████████████████████████████████                  ████             ████                 ████████████████████████████████████████████████████         
-  ████████████████████████████████████████████████████████████████████████████████                 ██████             ██████                ███████████████████████████████████████████████████         
-  ██████████████████████████████████████████████████████████████████████████████                 ████████             ███████                 ████████████████████████████████████████████████          
-  ████████████████████████████████████████████████████████████████████████████                 ██████████             █████████                 ██████████████████████████████████████████████          
-  ██████████████████████████████████████████████████████████████████████████                 ████████████             ███████████                 ███████████████████████████████████████████           
-   ████████████████████████████████████████████████████████████████████████                 █████████████             █████████████                 ████████████████████████████████████████            
-   ██████████████████████████████████████████████████████████████████████                 ███████████████             ███████████████                 ██████████████████████████████████████            
-    ███████████████████████████████████████████████████████████████████                 █████████████████             ████████████████                  ███████████████████████████████████             
-    █████████████████████████████████████████████████████████████████                 ███████████████████             ██████████████████                 █████████████████████████████████              
-     ██████████████████████████████████████████████████████████████                  ████████████████████             ████████████████████                 ██████████████████████████████               
-     ████████████████████████████████████████████████████████████                  ██████████████████████             ██████████████████████                 ███████████████████████████                
-      ██████████████████████████████████████████████████████████                 ████████████████████████             ███████████████████████                  ████████████████████████                 
-       ███████████████████████████████████████████████████████                 ██████████████████████████             ███████████████████████                    █████████████████████                  
-        ████████████████████████████████████████████████████                 ████████████████████████████             ████████████████████                        ███████████████████                   
-        ██████████████████████████████████████████████████                 ██████████████████████████████             █████████████████                             ████████████████                    
-         ████████████████████████████████████████████████                 ███████████████████████████████             █████████████                                   █████████████                     
-          █████████████████████████████████████████████                 █████████████████████████████████             ████████                                          ██████████                      
-           ██████████████████████████████████████████                 ███████████████████████████████████             ██                                                  ██████                        
-            ███████████████████████████████████████                 █████████████████████████████████████                                                                   ███                         
-             ████████████████████████████████████                 ███████████████████████████████████████                                                                                               
-              █████████████████████████████████                  ████████████████████████████████████████                                                                                               
-               ███████████████████████████████                 ██████████████████████████████████████████                                                                                               
-                ████████████████████████████                 ████████████████████████████████████████████                                                                                               
-                  ████████████████████████                 ██████████████████████████████████████████████                                                                                               
-                   █████████████████████                    █████████████████████████████████████████████                                                                                               
-                    ██████████████████                         ██████████████████████████████████████████                                                                                               
-                     ███████████████                             ████████████████████████████████████████                                                                                               
-                       ███████████                                  █████████████████████████████████████                                                                                               
-                        █████████                                     ███████████████████████████████████                                                                                               
-                          █████                                          ████████████████████████████████                                                                                               
-                           ██                                                ████████████████████████████                                                                                               
-                                                                                 ████████████████████████                                                                                               
-                                                                                      ███████████████████                                                                                               
-                                                                                              ███████████                                                                                               
+                                                           ███████████                              
+                                                          ██████████████████                        
+                                                          ██████████████████████                    
+                                                          █████████████████████████                 
+                                                          ████████████████████████████              
+                                                          ███████████████████████████████           
+                                                          █████████████████████████████████         
+                                                          ███████████████████████████████████       
+                                             ████████     ██████████████████████████████████        
+                                        █████████████     ████████████████████████████████          
+                                    █████████████████     ██████████████████████████████            
+                                  ███████████████████     ████████████████████████████              
+                               ██████████████████████     ██████████████████████████                
+                             ████████████████████████     ████████████████████████                  
+                               ██████████████████████     ███████████████████████                   
+                                █████████████████████     █████████████████████                     
+                                  ███████████████████     ███████████████████        ███            
+                                    █████████████████     █████████████████        ██████           
+                                      ███████████████     ████████████████       █████████          
+                                        █████████████     ██████████████       █████████████        
+                                         ████████████     ████████████       ████████████████       
+                                           ██████████     ██████████       ██████████████████       
+                                   ██        ████████     ████████        ████████████████████      
+                                  █████        ██████     ██████        ███████████████████████     
+                                 ████████        ████     █████       █████████████████████████     
+                                ███████████        ██     ███       ████████████████████████████    
+                                █████████████                      █████████████████████████████    
+                               ████████████████                  ████████████████████████████████   
+                               █████████████████                ████████████████████████████████    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+████████████████████████████████████████████████                █████████████████████████████████   
+██████████████████████████████████████████████                    ███████████████████████████████   
+████████████████████████████████████████████                        █████████████████████████████   
+██████████████████████████████████████████        ███     ████       ███████████████████████████    
+ ███████████████████████████████████████        █████     █████        █████████████████████████    
+ █████████████████████████████████████        ███████     ███████        ██████████████████████     
+  ██████████████████████████████████         ████████     █████████        ███████████████████      
+  ████████████████████████████████         ██████████     ███████████        █████████████████      
+  ███████████████████████████████        ████████████     ████████████         ██████████████       
+   ████████████████████████████        ██████████████     █████████████         ████████████        
+    █████████████████████████        ████████████████     ██████████              ████████          
+     ███████████████████████       ██████████████████     ██████                    █████           
+     █████████████████████        ███████████████████                                 ██            
+      ██████████████████        █████████████████████                                               
+        ██████████████        ███████████████████████                                               
+         ███████████          ███████████████████████                                               
+          ████████              █████████████████████                                               
+            ████                   ██████████████████                                               
+                                      ███████████████                                               
+                                           ██████████                                                                                                                                    
 """
 
 # The ASCII art has been updated to use a unique character for each visually distinct triangle.
@@ -280,6 +227,103 @@ def scale_ascii_art(ascii_art: str, scale: float = 1.0) -> str:
     return "\n".join(scaled_art_lines)
 
 
+def create_colored_logo_bw(size: str = "full") -> Text:
+    """Create a colored version of the black and white Depictio ASCII logo using Rich.
+    
+    This version maps the black and white ASCII regions to match the exact same
+    8 triangular segments as the triangle-based favicon, preserving the same color layout.
+
+    Args:
+        size: Logo size - "full", "large" (0.75), "medium" (0.5), "small" (0.33), "tiny" (0.25), or "micro" (0.15)
+
+    Returns:
+        Rich Text object with colored logo
+    """
+    # Size presets
+    size_scales = {"full": 1.0, "large": 0.75, "medium": 0.5, "small": 0.33, "tiny": 0.25, "micro": 0.15}
+
+    # Get scale factor
+    if isinstance(size, str):
+        scale = size_scales.get(size.lower(), 1.0)
+    else:
+        scale = float(size)
+
+    # Scale the ASCII art
+    scaled_art = scale_ascii_art(FAVICON_BLACK_AND_WHITE_ASCII, scale)
+
+    import math
+    logo_text = Text()
+
+    # Colors mapped to match the triangle positions
+    # Character to color mapping from the triangle version
+    triangle_colors = {
+        "*": DEPICTIO_COLORS["violet"],   # Top center (12 o'clock)
+        "+": DEPICTIO_COLORS["blue"],     # Top right  
+        "_": DEPICTIO_COLORS["orange"],   # Bottom right
+        ".": DEPICTIO_COLORS["yellow"],   # Bottom center
+        ":": DEPICTIO_COLORS["green"],    # Bottom left
+        "-": DEPICTIO_COLORS["teal"],     # Left
+        "~": DEPICTIO_COLORS["pink"],     # Top left
+        "=": DEPICTIO_COLORS["purple"],   # Far left
+    }
+
+    lines = scaled_art.split("\n")
+    total_lines = len(lines)
+    
+    # Get logo dimensions to map regions
+    max_width = max(len(line) for line in lines if line.strip())
+    center_col = max_width // 2
+    center_row = total_lines // 2
+    
+    for line_idx, line in enumerate(lines):
+        line_text = Text()
+        if line.strip():  # Only process non-empty lines
+            for char_idx, char in enumerate(line):
+                if char != ' ' and char != '\t':
+                    # Determine which triangle region this position belongs to
+                    # Based on angular position relative to center (like a clock)
+                    
+                    rel_row = line_idx - center_row  # Negative = above center, positive = below
+                    rel_col = char_idx - center_col  # Negative = left of center, positive = right
+                    
+                    # Calculate angle from center (0 = right, 90 = down, 180 = left, 270 = up)
+                    if rel_col == 0 and rel_row == 0:
+                        angle = 0  # Center point
+                    else:
+                        angle = math.degrees(math.atan2(-rel_row, rel_col))  # Negative rel_row for screen coordinates
+                        if angle < 0:
+                            angle += 360  # Convert to 0-360 range
+                    
+                    # Map angle to triangle regions (8 segments of 45 degrees each)
+                    # Clockwise from 12 o'clock: * + _ . : - ~ =
+                    if 337.5 <= angle or angle < 22.5:      # 12 o'clock ± 22.5°
+                        color = triangle_colors["*"]  # Violet - top center  
+                    elif 22.5 <= angle < 67.5:             # 1:30 o'clock ± 22.5°
+                        color = triangle_colors["+"]  # Blue - top right
+                    elif 67.5 <= angle < 112.5:            # 3 o'clock ± 22.5° 
+                        color = triangle_colors["_"]  # Orange - right
+                    elif 112.5 <= angle < 157.5:           # 4:30 o'clock ± 22.5°
+                        color = triangle_colors["."]  # Yellow - bottom right
+                    elif 157.5 <= angle < 202.5:           # 6 o'clock ± 22.5°
+                        color = triangle_colors[":"]  # Green - bottom
+                    elif 202.5 <= angle < 247.5:           # 7:30 o'clock ± 22.5°
+                        color = triangle_colors["-"]  # Teal - bottom left
+                    elif 247.5 <= angle < 292.5:           # 9 o'clock ± 22.5°
+                        color = triangle_colors["~"]  # Pink - left
+                    else:  # 292.5 <= angle < 337.5        # 10:30 o'clock ± 22.5°
+                        color = triangle_colors["="]  # Purple - top left
+                    
+                    line_text.append(char, style=color)
+                else:
+                    line_text.append(char)
+        else:
+            line_text.append(line)
+        line_text.append("\n")
+        logo_text.append_text(line_text)
+
+    return logo_text
+
+
 def create_colored_logo(size: str = "full") -> Text:
     """Create a colored version of the Depictio ASCII logo using Rich.
 
@@ -290,7 +334,7 @@ def create_colored_logo(size: str = "full") -> Text:
         Rich Text object with colored logo
     """
     # Size presets
-    size_scales = {"full": 1.0, "large": 0.75, "medium": 0.5, "small": 0.33, "tiny": 0.25}
+    size_scales = {"full": 1.0, "large": 0.75, "medium": 0.5, "small": 0.33, "tiny": 0.25, "micro": 0.15}
 
     # Get scale factor
     if isinstance(size, str):
@@ -329,7 +373,7 @@ def create_colored_name(size: str = "full", version: str = "depictio") -> Text:
         Rich Text object with colored name
     """
     # Size presets
-    size_scales = {"full": 1.0, "large": 0.75, "medium": 0.5, "small": 0.33, "tiny": 0.25}
+    size_scales = {"full": 1.0, "large": 0.75, "medium": 0.5, "small": 0.33, "tiny": 0.25, "micro": 0.15}
 
     # Get scale factor
     if isinstance(size, str):
@@ -432,22 +476,29 @@ def display_logo_with_name(
     with_panel: bool = True,
     title: str = "🎨 DEPICTIO",
     name_version: str = "depictio",
+    use_bw_favicon: bool = False,
 ) -> None:
     """Display favicon and name together in various layouts.
 
     Args:
         console: Rich console instance
         layout: Layout style - "horizontal", "vertical", "favicon-only", "name-only"
-        favicon_size: Favicon size - "full", "large", "medium", "small", "tiny", or float
-        name_size: Name size - "full", "large", "medium", "small", "tiny", or float
+        favicon_size: Favicon size - "full", "large", "medium", "small", "tiny", "micro", or float
+        name_size: Name size - "full", "large", "medium", "small", "tiny", "micro", or float
         with_panel: Whether to display with a panel border
         title: Panel title text
         name_version: Name version - "depictio" or "cli"
+        use_bw_favicon: Whether to use the black and white favicon version
     """
     if console is None:
         console = Console()
 
-    favicon = create_colored_logo(favicon_size)
+    # Choose which favicon version to use
+    if use_bw_favicon:
+        favicon = create_colored_logo_bw(favicon_size)
+    else:
+        favicon = create_colored_logo(favicon_size)
+    
     name = create_colored_name(name_size, name_version)
 
     # Auto-adjust title based on version
@@ -496,7 +547,7 @@ def display_logo_with_name(
 
 
 def display_logo(
-    console: Console = None, with_panel: bool = True, title: str = "🎨 DEPICTIO", size: str = "full"
+    console: Console = None, with_panel: bool = True, title: str = "🎨 DEPICTIO", size: str = "full", use_bw: bool = False
 ) -> None:
     """Display the Depictio logo with optional panel and title.
 
@@ -504,12 +555,17 @@ def display_logo(
         console: Rich console instance
         with_panel: Whether to display with a panel border
         title: Panel title text
-        size: Logo size - "full", "large", "medium", "small", "tiny", or float scale factor
+        size: Logo size - "full", "large", "medium", "small", "tiny", "micro", or float scale factor
+        use_bw: Whether to use the black and white favicon version
     """
     if console is None:
         console = Console()
 
-    logo = create_colored_logo(size)
+    # Choose which logo version to use
+    if use_bw:
+        logo = create_colored_logo_bw(size)
+    else:
+        logo = create_colored_logo(size)
 
     if with_panel:
         # Display with a panel border
@@ -537,26 +593,35 @@ def main():
     show_sizes = False
     show_layouts = False
     favicon_size = "medium"
-    name_size = "medium"
+    name_size = "micro"  # CLI text is much larger, so default to micro
     name_version = "cli"  # Default to CLI version since we have it
+    use_bw_favicon = False
 
     if len(sys.argv) > 1:
+        # Check for --bw flag in any position
+        if "--bw" in [arg.lower() for arg in sys.argv] or "--black-white" in [arg.lower() for arg in sys.argv]:
+            use_bw_favicon = True
+            
         arg = sys.argv[1].lower()
 
         if arg == "--sizes":
             show_sizes = True
         elif arg == "--layouts":
             show_layouts = True
+        elif arg == "--bw" or arg == "--black-white":
+            # Already handled above, just use default display
+            pass
         elif arg in ["horizontal", "vertical", "favicon-only", "name-only"]:
             layout = arg
-            # Parse additional size arguments
-            if len(sys.argv) > 2:
+            # Parse additional size arguments, skipping --bw if present
+            remaining_args = [a for a in sys.argv[2:] if a.lower() not in ["--bw", "--black-white"]]
+            if len(remaining_args) > 0:
                 try:
-                    favicon_size = sys.argv[2]
-                    if len(sys.argv) > 3:
-                        name_size = sys.argv[3]
-                    if len(sys.argv) > 4 and sys.argv[4].lower() in ["depictio", "cli"]:
-                        name_version = sys.argv[4].lower()
+                    favicon_size = remaining_args[0]
+                    if len(remaining_args) > 1:
+                        name_size = remaining_args[1]
+                    if len(remaining_args) > 2 and remaining_args[2].lower() in ["depictio", "cli"]:
+                        name_version = remaining_args[2].lower()
                 except (ValueError, IndexError):
                     pass
         elif arg in ["cli", "depictio"]:
@@ -577,7 +642,7 @@ def main():
 
     if show_sizes:
         # Demonstrate all sizes for favicon only
-        sizes = ["full", "large", "medium", "small", "tiny"]
+        sizes = ["full", "large", "medium", "small", "tiny", "micro"]
         for s in sizes:
             console.print(f"\n[bold]Favicon Size: {s}[/bold]")
             display_logo_with_name(console, layout="favicon-only", favicon_size=s, with_panel=False)
@@ -611,7 +676,7 @@ def main():
     else:
         # Display logo based on layout
         if layout == "favicon-only":
-            display_logo(console, with_panel=True, size=size)
+            display_logo(console, with_panel=True, size=size, use_bw=use_bw_favicon)
             subtitle = Text("Data Visualization & Analytics Platform", style="italic dim")
             console.print(Align.center(subtitle))
         else:
@@ -622,6 +687,7 @@ def main():
                 name_size=name_size,
                 with_panel=True,
                 name_version=name_version,
+                use_bw_favicon=use_bw_favicon,
             )
 
         console.print()
@@ -639,6 +705,7 @@ Usage:
     python logo.py [size]              # Favicon only
     python logo.py --sizes             # Show all size demos
     python logo.py --layouts           # Show all layout demos
+    python logo.py --bw                # Use black & white favicon version
 
 Layout Options:
     horizontal      Favicon left, name right (default)
@@ -647,7 +714,7 @@ Layout Options:
     name-only       Name only
 
 Size Options:
-    full, large, medium, small, tiny, or float value (e.g., 0.3)
+    full, large, medium, small, tiny, micro, or float value (e.g., 0.3)
 
 Version Options:
     cli             Use DEPICTIO-CLI text (default)
