@@ -85,6 +85,7 @@ dev = [
   "testcontainers[minio]",
   "types-bleach",
   "types-boto3",
+  "textual>=5.2.0",
 ]
 
 [project.scripts]
