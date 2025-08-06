@@ -1,16 +1,11 @@
 #!/usr/bin/env python3
 """
-Depictio Project Wizard - Textual TUI Application
+Depictio Project Wizard - Modal-Based TUI Application
 
-A step-by-step wizard for creating and editing Depictio project YAML configurations.
-
-FIXED ISSUES:
-- ✅ Bottom navigation buttons now visible (disabled command palette, fixed layout)
-- ✅ YAML preview updates automatically on all input changes
-- ✅ Add workflow button functionality implemented
-- ✅ Add data collection button functionality implemented  
-- ✅ Tab navigation with proper state management
-- ✅ Error handling for widget queries during initialization
+A streamlined wizard for creating Depictio project YAML configurations:
+- Project information section
+- Workflow management with modal creation
+- Data collection management via modals for each workflow
 """
 
 import argparse
@@ -23,6 +18,7 @@ import yaml
 from textual import on
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical
+from textual.screen import ModalScreen
 from textual.widgets import (
     Button,
     Input,
@@ -30,8 +26,6 @@ from textual.widgets import (
     RadioButton,
     RadioSet,
     Static,
-    TabbedContent,
-    TabPane,
     TextArea,
 )
 
@@ -70,7 +64,7 @@ class WizardState:
     
     def __init__(self):
         self.current_step = 0
-        self.project_data = {}
+        self.project_data = {"project_type": "basic"}  # Set default project type
         self.workflows = []
         self.data_collections = []
         self.file_path: Optional[Path] = None
@@ -134,6 +128,252 @@ class WizardState:
         
         # Extract data collections
         self.data_collections = data.get("data_collections", [])
+
+
+class WorkflowModal(ModalScreen[dict]):
+    """Modal screen for creating a new workflow."""
+    
+    def compose(self) -> ComposeResult:
+        with Container(id="modal-dialog"):
+            yield Label("Create New Workflow", id="modal-title")
+            
+            yield Label("Workflow Name:")
+            yield Input(placeholder="Enter workflow name...", id="workflow-name")
+            
+            yield Label("Engine:")
+            with RadioSet(id="workflow-engine"):
+                yield RadioButton("Python", value=True)
+                yield RadioButton("R", value=False)
+                yield RadioButton("Snakemake", value=False)
+            
+            yield Label("Data Structure:")
+            with RadioSet(id="data-structure"):
+                yield RadioButton("Flat", value=True)
+                yield RadioButton("Sequencing Runs", value=False)
+            
+            yield Label("Data Location:")
+            yield Input(placeholder="./data", id="data-location")
+            
+            # Regex pattern field (only shown for sequencing-runs)
+            with Container(id="regex-container", classes="hidden"):
+                yield Label("Runs Regex Pattern:")
+                yield Input(placeholder=".*\\.fastq$", id="runs-regex")
+                yield Static("", id="regex-validation", classes="validation-message")
+            
+            with Horizontal(id="modal-buttons"):
+                yield Button("Cancel", id="cancel-btn", variant="error")
+                yield Button("Save", id="save-btn", variant="success")
+    
+    def on_mount(self) -> None:
+        """Set up initial state."""
+        self._update_regex_visibility()
+    
+    @on(RadioSet.Changed, "#data-structure")
+    def _on_data_structure_change(self, _: RadioSet.Changed) -> None:
+        """Handle data structure radio button changes."""
+        self._update_regex_visibility()
+    
+    def _update_regex_visibility(self) -> None:
+        """Show/hide regex field based on data structure selection."""
+        try:
+            data_structure_radio = self.query_one("#data-structure", RadioSet)
+            regex_container = self.query_one("#regex-container")
+            
+            # Check if "Sequencing Runs" is selected
+            sequencing_selected = False
+            for button in data_structure_radio.query(RadioButton):
+                if button.value and "Sequencing" in str(button.label):
+                    sequencing_selected = True
+                    break
+            
+            if sequencing_selected:
+                regex_container.remove_class("hidden")
+            else:
+                regex_container.add_class("hidden")
+        except Exception:
+            pass
+    
+    @on(Button.Pressed, "#cancel-btn")
+    def cancel_modal(self) -> None:
+        """Cancel and close the modal."""
+        self.dismiss(None)
+    
+    @on(Button.Pressed, "#save-btn")
+    def save_workflow(self) -> None:
+        """Save the workflow and close the modal."""
+        workflow_name = self.query_one("#workflow-name", Input).value.strip()
+        if not workflow_name:
+            self.notify("Please enter a workflow name", severity="error")
+            return
+        
+        # Get selected engine
+        engine_radio = self.query_one("#workflow-engine", RadioSet)
+        engine_name = "python"
+        for button in engine_radio.query(RadioButton):
+            if button.value:
+                engine_name = button.label.plain.lower()
+                break
+        
+        # Get data structure
+        structure_radio = self.query_one("#data-structure", RadioSet)
+        structure = "flat"
+        for button in structure_radio.query(RadioButton):
+            if button.value:
+                structure = "flat" if button.label.plain == "Flat" else "sequencing-runs"
+                break
+        
+        # Get data location
+        data_location = self.query_one("#data-location", Input).value or "./data"
+        
+        # Get regex pattern
+        runs_regex = self.query_one("#runs-regex", Input).value or ".*"
+        
+        # Validate regex for sequencing-runs
+        if structure == "sequencing-runs":
+            try:
+                re.compile(runs_regex)
+            except re.error as e:
+                self.notify(f"Invalid regex pattern: {str(e)}", severity="error")
+                return
+        
+        # Create workflow object
+        workflow = {
+            "name": workflow_name,
+            "engine": {"name": engine_name},
+            "data_location": {
+                "structure": structure,
+                "locations": [data_location]
+            },
+            "data_collections": []
+        }
+        
+        # Add runs_regex for sequencing-runs structure
+        if structure == "sequencing-runs":
+            workflow["data_location"]["runs_regex"] = runs_regex
+        
+        self.dismiss(workflow)
+
+
+class DataCollectionModal(ModalScreen[dict]):
+    """Modal screen for creating a new data collection."""
+    
+    def __init__(self, workflow_name: str):
+        super().__init__()
+        self.workflow_name = workflow_name
+    
+    def compose(self) -> ComposeResult:
+        with Container(id="modal-dialog"):
+            yield Label(f"Add Data Collection to: {self.workflow_name}", id="modal-title")
+            
+            yield Label("Data Collection Name:")
+            yield Input(placeholder="Enter collection name...", id="dc-name")
+            
+            yield Label("Description:")
+            yield Input(placeholder="Enter description...", id="dc-description")
+            
+            yield Label("Type:")
+            with RadioSet(id="dc-type"):
+                yield RadioButton("Table", value=True)
+                yield RadioButton("JBrowse2", value=False)
+            
+            yield Label("Metatype:")
+            with RadioSet(id="dc-metatype"):
+                yield RadioButton("Metadata", value=True)
+                yield RadioButton("Aggregate", value=False)
+            
+            yield Label("Scan Mode:")
+            with RadioSet(id="scan-mode"):
+                yield RadioButton("Single File", value=True)
+                yield RadioButton("Recursive", value=False)
+            
+            yield Label("File Pattern/Filename:")
+            yield Input(placeholder="*.csv or specific filename", id="file-pattern")
+            
+            yield Label("Format:")
+            with RadioSet(id="file-format"):
+                yield RadioButton("CSV", value=True)
+                yield RadioButton("TSV", value=False)
+                yield RadioButton("Parquet", value=False)
+            
+            with Horizontal(id="modal-buttons"):
+                yield Button("Cancel", id="cancel-btn", variant="error")
+                yield Button("Save", id="save-btn", variant="success")
+    
+    @on(Button.Pressed, "#cancel-btn")
+    def cancel_modal(self) -> None:
+        """Cancel and close the modal."""
+        self.dismiss(None)
+    
+    @on(Button.Pressed, "#save-btn")
+    def save_data_collection(self) -> None:
+        """Save the data collection and close the modal."""
+        dc_name = self.query_one("#dc-name", Input).value.strip()
+        if not dc_name:
+            self.notify("Please enter a data collection name", severity="error")
+            return
+        
+        dc_description = self.query_one("#dc-description", Input).value or "Data collection"
+        
+        # Get type
+        type_radio = self.query_one("#dc-type", RadioSet)
+        dc_type = "Table"
+        for button in type_radio.query(RadioButton):
+            if button.value:
+                dc_type = button.label.plain
+                break
+        
+        # Get metatype
+        metatype_radio = self.query_one("#dc-metatype", RadioSet)
+        metatype = "Metadata"
+        for button in metatype_radio.query(RadioButton):
+            if button.value:
+                metatype = button.label.plain
+                break
+        
+        # Get scan mode
+        scan_radio = self.query_one("#scan-mode", RadioSet)
+        scan_mode = "single"
+        for button in scan_radio.query(RadioButton):
+            if button.value:
+                scan_mode = "single" if button.label.plain == "Single File" else "recursive"
+                break
+        
+        # Get file pattern
+        file_pattern = self.query_one("#file-pattern", Input).value or "*.csv"
+        
+        # Get format
+        format_radio = self.query_one("#file-format", RadioSet)
+        file_format = "CSV"
+        for button in format_radio.query(RadioButton):
+            if button.value:
+                file_format = button.label.plain
+                break
+        
+        # Create data collection
+        data_collection = {
+            "data_collection_tag": dc_name,
+            "description": dc_description,
+            "config": {
+                "type": dc_type,
+                "metatype": metatype,
+                "scan": {
+                    "mode": scan_mode,
+                    "scan_parameters": {}
+                },
+                "dc_specific_properties": {
+                    "format": file_format,
+                    "polars_kwargs": {"separator": "," if file_format == "CSV" else "\t"}
+                }
+            }
+        }
+        
+        # Set scan parameters based on mode
+        if scan_mode == "single":
+            data_collection["config"]["scan"]["scan_parameters"]["filename"] = file_pattern
+        else:
+            data_collection["config"]["scan"]["scan_parameters"]["regex_config"] = {"pattern": file_pattern}
+        
+        self.dismiss(data_collection)
 
 
 class ProjectStep(Container):
@@ -866,10 +1106,195 @@ class LandingScreen(Container):
             yield Static("", id="bottom-spacer")
 
 
+class MainWizardInterface(Container):
+    """Main wizard interface with project info, workflows, and data collections."""
+    
+    def __init__(self, wizard_state: WizardState, **kwargs):
+        super().__init__(**kwargs)
+        self.wizard_state = wizard_state
+    
+    def compose(self) -> ComposeResult:
+        # Project Information Section
+        yield Label("📋 Project Configuration", classes="section-title")
+        with Container(classes="project-section"):
+            yield Label("Project Name:")
+            yield Input(
+                value=self.wizard_state.project_data.get("name", ""),
+                placeholder="Enter project name...",
+                id="project-name"
+            )
+            
+            yield Label("Project Type:")
+            with RadioSet(id="project-type"):
+                # Default to "basic" if no project type is set
+                project_type = self.wizard_state.project_data.get("project_type", "basic")
+                yield RadioButton("Basic", value=(project_type == "basic"))
+                yield RadioButton("Advanced", value=(project_type == "advanced"))
+            
+            yield Label("Data Management Platform URL (optional):")
+            yield Input(
+                value=self.wizard_state.project_data.get("data_management_platform_project_url", ""),
+                placeholder="https://example.com/project/...",
+                id="project-url"
+            )
+        
+        # Workflow Management Section
+        yield Label("⚙️ Workflow Management", classes="section-title")
+        with Container(classes="workflow-section"):
+            yield Button("➕ Add Workflow", id="add-workflow-btn", variant="primary")
+            
+            # Workflow list container
+            with Container(id="workflows-container", classes="workflows-list"):
+                if not self.wizard_state.workflows:
+                    yield Static("No workflows yet. Click 'Add Workflow' to create one!", classes="empty-state")
+                else:
+                    for i, workflow in enumerate(self.wizard_state.workflows):
+                        with Container(classes="workflow-item"):
+                            # Workflow header with info
+                            engine_name = self._get_engine_name(workflow)
+                            dc_count = len(workflow.get('data_collections', []))
+                            
+                            yield Label(f"🔧 {workflow['name']} ({engine_name}) - {dc_count} data collection{'s' if dc_count != 1 else ''}", classes="workflow-label")
+                            
+                            # Workflow actions
+                            with Horizontal(classes="workflow-actions"):
+                                yield Button("📊 Add Data Collection", id=f"add-dc-{i}", variant="success")
+                                yield Button("🗑️ Delete", id=f"delete-workflow-{i}", variant="error")
+                            
+                            # Data collections list for this workflow
+                            if workflow.get('data_collections'):
+                                with Container(classes="dc-list"):
+                                    for j, dc in enumerate(workflow['data_collections']):
+                                        dc_name = dc.get('data_collection_tag', dc.get('name', 'Unknown'))
+                                        dc_type = self._get_dc_type(dc)
+                                        with Horizontal(classes="dc-item"):
+                                            yield Label(f"  📊 {dc_name} ({dc_type})", classes="dc-label")
+                                            yield Button("🗑️", id=f"delete-dc-{i}-{j}", classes="delete-btn-small")
+    
+    
+    def _get_engine_name(self, workflow: dict) -> str:
+        """Extract engine name from workflow."""
+        if 'engine' in workflow:
+            if isinstance(workflow['engine'], dict):
+                return workflow['engine'].get('name', 'python')
+            else:
+                return workflow['engine']
+        return 'python'
+    
+    def _get_dc_type(self, dc: dict) -> str:
+        """Extract data collection type."""
+        if 'type' in dc:
+            return dc['type']
+        elif 'config' in dc and 'type' in dc['config']:
+            return dc['config']['type']
+        return 'table'
+    
+    
+    @on(Input.Changed, "#project-name")
+    def project_name_changed(self, event: Input.Changed) -> None:
+        """Handle project name changes."""
+        self.wizard_state.project_data["name"] = event.value
+        self.app.update_preview()
+    
+    @on(Input.Changed, "#project-url")
+    def project_url_changed(self, event: Input.Changed) -> None:
+        """Handle project URL changes."""
+        self.wizard_state.project_data["data_management_platform_project_url"] = event.value
+        self.app.update_preview()
+    
+    @on(RadioSet.Changed, "#project-type")
+    def project_type_changed(self, event: RadioSet.Changed) -> None:
+        """Handle project type changes."""
+        if event.pressed and event.pressed.label:
+            project_type = "basic" if event.pressed.label.plain == "Basic" else "advanced"
+            self.wizard_state.project_data["project_type"] = project_type
+            self.app.update_preview()
+    
+    @on(Button.Pressed, "#add-workflow-btn")
+    def open_workflow_modal(self) -> None:
+        """Open the modal to create a new workflow."""
+        self.app.notify("Opening workflow modal...", severity="info")
+        
+        def handle_workflow_result(result: dict | None) -> None:
+            if result:
+                self.wizard_state.workflows.append(result)
+                # Notify the main app to refresh the entire interface
+                self.app.refresh_main_interface()
+                self.app.notify(f"Added workflow: {result['name']}", severity="success")
+            else:
+                self.app.notify("Workflow creation cancelled", severity="info")
+        
+        self.app.push_screen(WorkflowModal(), handle_workflow_result)
+    
+    @on(Button.Pressed)
+    def handle_button_press(self, event: Button.Pressed) -> None:
+        """Handle various button presses."""
+        button_id = str(event.button.id) if event.button.id else ""
+        
+        if not button_id:
+            return
+        
+        # Handle add data collection buttons
+        if button_id.startswith("add-dc-"):
+            try:
+                workflow_index = int(button_id.split("-")[-1])
+                self.app.notify(f"Adding data collection to workflow {workflow_index}...", severity="info")
+                
+                if workflow_index < len(self.wizard_state.workflows):
+                    workflow = self.wizard_state.workflows[workflow_index]
+                    workflow_name = workflow['name']
+                    
+                    def handle_dc_result(result: dict | None) -> None:
+                        if result:
+                            workflow['data_collections'].append(result)
+                            self.app.refresh_main_interface()
+                            self.app.notify(f"Added data collection to {workflow_name}", severity="success")
+                        else:
+                            self.app.notify("Data collection creation cancelled", severity="info")
+                    
+                    self.app.push_screen(DataCollectionModal(workflow_name), handle_dc_result)
+                else:
+                    self.app.notify(f"Invalid workflow index: {workflow_index}", severity="error")
+            except (ValueError, IndexError) as e:
+                self.app.notify(f"Error adding data collection: {str(e)}", severity="error")
+        
+        # Handle workflow deletion
+        elif button_id.startswith("delete-workflow-"):
+            try:
+                workflow_index = int(button_id.split("-")[-1])
+                if workflow_index < len(self.wizard_state.workflows):
+                    workflow_name = self.wizard_state.workflows[workflow_index]["name"]
+                    del self.wizard_state.workflows[workflow_index]
+                    self.app.refresh_main_interface()
+                    self.app.notify(f"Deleted workflow: {workflow_name}", severity="success")
+            except (ValueError, IndexError) as e:
+                self.app.notify(f"Error deleting workflow: {str(e)}", severity="error")
+        
+        # Handle data collection deletion
+        elif button_id.startswith("delete-dc-"):
+            try:
+                parts = button_id.split("-")
+                if len(parts) >= 4:
+                    workflow_index = int(parts[-2])
+                    dc_index = int(parts[-1])
+                    
+                    if (workflow_index < len(self.wizard_state.workflows) and 
+                        dc_index < len(self.wizard_state.workflows[workflow_index]["data_collections"])):
+                        
+                        workflow = self.wizard_state.workflows[workflow_index]
+                        dc_name = workflow["data_collections"][dc_index].get("data_collection_tag", "Unknown")
+                        del workflow["data_collections"][dc_index]
+                        
+                        self.app.refresh_main_interface()
+                        self.app.notify(f"Deleted data collection: {dc_name}", severity="success")
+            except (ValueError, IndexError) as e:
+                self.app.notify(f"Error deleting data collection: {str(e)}", severity="error")
+
+
 class WizardApp(App):
     """Main Wizard Application"""
     
-    ENABLE_COMMAND_PALETTE = False  # Disable to avoid Ctrl+P conflicts
+    ENABLE_COMMAND_PALETTE = True  # Enable command palette for theme access
     
     def __init__(self, yaml_file: Optional[Path] = None, template: Optional[str] = None):
         super().__init__()
@@ -921,57 +1346,205 @@ class WizardApp(App):
         margin: 1 0;
     }
     
-    #top-spacer {
-        height: 4;
-    }
-    
-    #middle-spacer {
-        height: 3;
-    }
-    
-    #bottom-spacer {
-        height: 4;
+    #top-spacer, #middle-spacer, #bottom-spacer {
+        height: 2;
     }
     
     #button-spacer, #button-spacer2 {
         height: 1;
     }
     
-    /* Wizard Styles */
+    /* Main Wizard Styles */
     #step-indicator {
         dock: top;
-        height: 1;
+        height: 3;
         text-align: center;
         text-style: bold;
+        background: $surface;
+        padding: 1;
     }
     
     .navigation {
         dock: bottom;
         height: 3;
+        background: $surface;
+        padding: 0 1;
+    }
+    
+    #main-container {
+        layout: horizontal;
+        height: 100%;
     }
     
     #left-panel {
-        width: 60%;
+        width: 3fr;
+        height: 100%;
+        overflow-y: scroll;
+        scrollbar-size: 1 1;
+        scrollbar-background: $surface;
+        scrollbar-color: $primary;
+        border-right: solid $primary;
+        padding: 1;
+    }
+    
+    MainWizardInterface {
+        height: auto;
+        min-height: 100%;
     }
     
     #right-panel {
-        width: 40%;
+        width: 2fr;
+        height: 100%;
+        padding: 1;
     }
     
+    /* Section Styles */
+    .section-title {
+        text-style: bold;
+        margin: 0 0 1 0;
+        color: $primary;
+        background: $surface;
+        padding: 1;
+        text-align: center;
+    }
+    
+    .project-section {
+        border: solid $primary;
+        padding: 1;
+        margin: 0 0 2 0;
+        background: $surface;
+        height: auto;
+    }
+    
+    .workflow-section {
+        border: solid $secondary;
+        padding: 1;
+        margin: 0 0 2 0;
+        background: $surface;
+        height: auto;
+        min-height: 20;
+    }
+    
+    /* Workflow List Styles */
+    .workflows-list {
+        margin: 1 0;
+        height: auto;
+        min-height: 15;
+    }
+    
+    #workflows-container {
+        height: auto;
+        min-height: 10;
+    }
+    
+    .workflow-item {
+        border: solid $primary;
+        margin: 0 0 1 0;
+        padding: 1;
+        background: $panel;
+        height: auto;
+        min-height: 8;
+    }
+    
+    .workflow-label {
+        text-style: bold;
+        margin: 0 0 1 0;
+        color: $text;
+    }
+    
+    .workflow-actions {
+        height: auto;
+        min-height: 3;
+        margin: 1 0;
+    }
+    
+    .workflow-actions Button {
+        margin: 0 1 0 0;
+    }
+    
+    /* Data Collection Styles */
+    .dc-list {
+        margin: 1 0 0 0;
+        border-top: solid $accent;
+        padding: 1 0 0 0;
+        height: auto;
+    }
+    
+    .dc-item {
+        height: auto;
+        min-height: 3;
+        margin: 0 0 1 0;
+        padding: 0 1;
+        background: $surface;
+        border: solid $accent;
+    }
+    
+    .dc-label {
+        width: 1fr;
+    }
+    
+    .delete-btn-small {
+        width: 3;
+        min-width: 3;
+        margin: 0;
+        background: $error;
+    }
+    
+    /* Modal Styles */
+    #modal-dialog {
+        width: 60;
+        height: auto;
+        max-height: 80%;
+        border: solid $primary;
+        background: $surface;
+        padding: 2;
+        overflow-y: auto;
+        align: center middle;
+    }
+    
+    #modal-title {
+        text-align: center;
+        text-style: bold;
+        color: $primary;
+        margin: 0 0 2 0;
+    }
+    
+    #modal-buttons {
+        height: 3;
+        margin: 2 0 0 0;
+    }
+    
+    #modal-buttons Button {
+        width: 1fr;
+        margin: 0 1;
+    }
+    
+    /* Regex field visibility */
+    #regex-container.hidden {
+        height: 0;
+        max-height: 0;
+        overflow: hidden;
+        visibility: hidden;
+    }
+    
+    /* General Styles */
     Button {
         margin: 0 1;
-        min-width: 10;
+        min-width: 8;
     }
     
-    #new-project {
-        background: $primary;
-        color: $text;
+    .empty-state {
+        color: $text-muted;
+        text-style: italic;
+        margin: 2 0;
+        padding: 1;
+        text-align: center;
     }
     
     .validation-message {
         height: 1;
         text-align: center;
-        margin: 0;
+        margin: 1 0;
     }
     
     .validation-success {
@@ -982,63 +1555,39 @@ class WizardApp(App):
         color: $error;
     }
     
-    .section-title {
-        text-style: bold;
-        margin: 1 0 0 0;
-    }
-    
-    .workflow-item, .datacollection-item {
-        height: 1;
-        margin: 0;
-        padding: 0;
-    }
-    
-    .workflow-label, .datacollection-label {
-        width: 1fr;
-    }
-    
-    .delete-btn {
-        width: 4;
-        min-width: 4;
-        margin: 0;
-    }
-    
-    .workflow-group-label {
-        text-style: italic;
-        color: $text-muted;
-        margin: 0;
+    /* YAML Preview Styles */
+    .yaml-header {
+        dock: top;
+        height: 3;
+        background: $surface;
+        padding: 0 1;
     }
     
     .preview-title {
-        width: 1fr;
+        width: 24;
         text-style: bold;
     }
     
-    .edit-toggle-btn, .apply-btn {
+    .edit-toggle-btn {
         width: 12;
         min-width: 12;
         margin: 0 0 0 1;
     }
+    .apply-btn {
+        width: 22;
+        min-width: 22;
+        margin: 0 0 0 1;
+    }
     
     #yaml-preview {
+        dock: bottom;
         height: 1fr;
-        min-height: 20;
+        border: solid $primary;
     }
     
-    #right-panel {
+    #yaml-preview-container {
         height: 100%;
-    }
-    
-    .empty-state {
-        color: $text-muted;
-        text-style: italic;
-        margin: 0;
-        padding: 1 0;
-    }
-    
-    .yaml-header {
-        height: 3;
-        margin: 0 0 1 0;
+        layout: vertical;
     }
     
     """
@@ -1055,28 +1604,20 @@ class WizardApp(App):
     def compose_wizard(self) -> ComposeResult:
         """Compose the main wizard interface."""
         # Step indicator with Depictio branding
-        yield Static("🎨 DEPICTIO Project Wizard - Project Configuration", id="step-indicator", classes="step-indicator")
+        yield Static("🎨 DEPICTIO Project Wizard", id="step-indicator", classes="step-indicator")
         
         # Main content area
         with Horizontal(id="main-container"):
-            # Left panel - forms
+            # Left panel - main interface
             with Container(id="left-panel"):
-                with TabbedContent(initial="project"):
-                    with TabPane("Project", id="project"):
-                        yield ProjectStep(self.wizard_state)
-                    with TabPane("Workflows", id="workflows"):
-                        yield WorkflowStep(self.wizard_state)
-                    with TabPane("Data Collections", id="data-collections"):
-                        yield DataCollectionStep(self.wizard_state)
+                yield MainWizardInterface(self.wizard_state)
             
             # Right panel - YAML preview
             with Container(id="right-panel"):
                 yield YAMLPreview(self.wizard_state, id="yaml-preview-container")
         
-        # Navigation - direct horizontal container with buttons
+        # Navigation
         with Horizontal(classes="navigation"):
-            yield Button("◀ Previous", id="prev-btn", disabled=True)
-            yield Button("Next ▶", id="next-btn")
             yield Button("💾 Save YAML", id="save-btn", variant="success")
             yield Button("❌ Exit", id="exit-btn", variant="error")
     
@@ -1085,9 +1626,22 @@ class WizardApp(App):
         if not self.show_landing:
             # Initial preview update
             self.update_preview()
-            
-            # Set initial button states
-            self.query_one("#prev-btn", Button).disabled = True
+    
+    def refresh_main_interface(self) -> None:
+        """Refresh the main wizard interface."""
+        try:
+            # Find the left panel and refresh its contents
+            left_panel = self.query_one("#left-panel")
+            # Remove current main interface
+            old_interface = left_panel.query_one(MainWizardInterface)
+            old_interface.remove()
+            # Mount new interface
+            new_interface = MainWizardInterface(self.wizard_state)
+            left_panel.mount(new_interface)
+            # Force a refresh after mounting
+            self.call_after_refresh(self.update_preview)
+        except Exception as e:
+            self.notify(f"Error refreshing interface: {str(e)}", severity="error")
     
     async def switch_to_wizard(self) -> None:
         """Switch from landing screen to wizard interface."""
@@ -1115,60 +1669,6 @@ class WizardApp(App):
         """Exit from landing screen."""
         self.exit()
     
-    @on(Button.Pressed, "#next-btn")
-    def next_step(self) -> None:
-        """Move to next step."""
-        tabs = self.query_one(TabbedContent)
-        current = tabs.active
-        
-        if current == "project":
-            tabs.active = "workflows"
-            self.update_step_indicator()
-        elif current == "workflows":
-            tabs.active = "data-collections"
-            self.update_step_indicator()
-            self.query_one("#next-btn", Button).disabled = True
-        
-        self.update_preview()
-    
-    @on(Button.Pressed, "#prev-btn")
-    def prev_step(self) -> None:
-        """Move to previous step."""
-        tabs = self.query_one(TabbedContent)
-        current = tabs.active
-        
-        if current == "workflows":
-            tabs.active = "project"
-            self.update_step_indicator()
-            self.query_one("#prev-btn", Button).disabled = True
-        elif current == "data-collections":
-            tabs.active = "workflows"
-            self.update_step_indicator()
-            self.query_one("#next-btn", Button).disabled = False
-        
-        self.update_preview()
-    
-    @on(TabbedContent.TabActivated)
-    def tab_changed(self, event: TabbedContent.TabActivated) -> None:
-        """Handle tab changes and update navigation."""
-        tab_id = event.tab.id
-        
-        # Update step indicator
-        if tab_id == "project":
-            self.update_step_indicator()
-            self.query_one("#prev-btn", Button).disabled = True
-            self.query_one("#next-btn", Button).disabled = False
-        elif tab_id == "workflows":
-            self.update_step_indicator()
-            self.query_one("#prev-btn", Button).disabled = False
-            self.query_one("#next-btn", Button).disabled = False
-        elif tab_id == "data-collections":
-            self.update_step_indicator()
-            self.query_one("#prev-btn", Button).disabled = False
-            self.query_one("#next-btn", Button).disabled = True
-        
-        # Update YAML preview
-        self.update_preview()
     
     @on(Button.Pressed, "#save-btn")
     def save_yaml(self) -> None:
@@ -1190,23 +1690,21 @@ class WizardApp(App):
     def update_step_indicator(self, text: str = None) -> None:
         """Update the step indicator text."""
         if text is None:
-            # Auto-generate based on current tab
-            tabs = self.query_one(TabbedContent)
-            current = tabs.active
+            # Auto-generate based on current state
             workflow_count = len(self.wizard_state.workflows)
+            project_name = self.wizard_state.project_data.get("name", "Unnamed Project")
             
-            if current == "project":
-                text = "Project Configuration"
-            elif current == "workflows":
-                text = f"Workflow Configuration ({workflow_count} workflow{'s' if workflow_count != 1 else ''})"
-            elif current == "data-collections":
-                if workflow_count == 0:
-                    text = "Data Collection Configuration (No workflows available)"
-                else:
-                    text = f"Data Collection Configuration (Add to {workflow_count} workflow{'s' if workflow_count != 1 else ''})"
+            if workflow_count == 0:
+                text = f"{project_name} (No workflows)"
+            else:
+                text = f"{project_name} ({workflow_count} workflow{'s' if workflow_count != 1 else ''})"
         
-        indicator = self.query_one("#step-indicator", Static)
-        indicator.update(f"🎨 DEPICTIO Project Wizard - {text}")
+        try:
+            indicator = self.query_one("#step-indicator", Static)
+            indicator.update(f"🎨 DEPICTIO Project Wizard - {text}")
+        except Exception:
+            # Indicator might not exist yet
+            pass
     
     def update_preview(self) -> None:
         """Update the YAML preview."""
