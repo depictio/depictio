@@ -1422,9 +1422,10 @@ def register_callbacks_figure_component(app):
     @app.callback(
         Output({"type": "stored-metadata-component", "index": MATCH}, "data", allow_duplicate=True),
         [Input({"type": "code-generated-figure", "index": MATCH}, "data")],
+        [State({"type": "stored-metadata-component", "index": MATCH}, "data")],
         prevent_initial_call=True,
     )
-    def create_metadata_for_code_figure(figure_data):
+    def create_metadata_for_code_figure(figure_data, existing_metadata):
         """
         Create/update stored-metadata-component for code-generated figures
         to ensure code-generated figures are saved properly to the dashboard.
@@ -1481,7 +1482,15 @@ def register_callbacks_figure_component(app):
         # Extract the visualization type from the code
         visu_type = extract_visualization_type_from_code(code) if code else "scatter"
 
-        # Create metadata for code mode figure
+        # Start with existing metadata if available, otherwise create new
+        if existing_metadata and isinstance(existing_metadata, dict):
+            metadata = existing_metadata.copy()
+            logger.debug(f"Merging with existing metadata for {component_index}")
+        else:
+            metadata = {}
+            logger.debug(f"Creating new metadata for {component_index}")
+
+        # Create/update metadata for code mode figure
         # For stepper mode, store with clean index (without -tmp) so Done button logic works
         # The Done button expects metadata.index + "-tmp" == triggered_index
         clean_index = (
@@ -1489,21 +1498,37 @@ def register_callbacks_figure_component(app):
             if component_index.endswith("-tmp")
             else component_index
         )
-        metadata = {
-            "index": clean_index,
-            "component_type": "figure",
-            "dict_kwargs": code_params,
-            "visu_type": visu_type,  # Use extracted visualization type from code
-            "wf_id": workflow_id,
-            "dc_id": data_collection_id,
-            "last_updated": datetime.now().isoformat(),
-            "mode": "code",  # Track that this was generated via code mode
-            "code_content": code,  # Store the code for potential future use
-        }
 
-        logger.debug(
-            f"Created metadata for code mode {visu_type} figure with clean index {clean_index} (from {component_index}): {metadata}"
+        # Update metadata fields, preserving existing values when new ones are not available
+        metadata.update(
+            {
+                "index": clean_index,
+                "component_type": "figure",
+                "last_updated": datetime.now().isoformat(),
+            }
         )
+
+        # Only update these fields if we have new data from code mode
+        if code:
+            metadata.update(
+                {
+                    "dict_kwargs": code_params,
+                    "visu_type": visu_type,
+                    "mode": "code",
+                    "code_content": code,
+                }
+            )
+
+        # Only update workflow/dc IDs if we have them (preserve existing if not)
+        if workflow_id is not None:
+            metadata["wf_id"] = workflow_id
+        if data_collection_id is not None:
+            metadata["dc_id"] = data_collection_id
+
+        logger.info(
+            f"Updated stored metadata for component {clean_index}: wf_id={metadata.get('wf_id')}, dc_id={metadata.get('dc_id')}, has_dict_kwargs={bool(metadata.get('dict_kwargs'))}"
+        )
+        logger.debug(f"Full metadata: {metadata}")
         return metadata
 
     #     if isinstance(figure_data, dict) and "code" in figure_data:

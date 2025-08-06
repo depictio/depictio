@@ -430,36 +430,56 @@ def register_callbacks_save(app):
                     f"Component data: type={component.get('component_type')}, title={component.get('title')}, aggregation={component.get('aggregation')}"
                 )
 
-                # Find and log the original component that will be removed
+                # Find and log the original components that will be removed (both original and temp)
+                temp_parent_index = f"{parent_index}-tmp"
                 original_component = None
+                temp_component = None
+
                 for elem in non_edited_components:
                     if elem.get("index") == parent_index:
                         original_component = elem
-                        break
+                    elif elem.get("index") == temp_parent_index:
+                        temp_component = elem
 
+                components_to_remove = []
                 if original_component:
-                    logger.info(
-                        f"Found original component to remove: index={original_component.get('index')}, type={original_component.get('component_type')}, title={original_component.get('title')}, aggregation={original_component.get('aggregation')}"
-                    )
-                else:
-                    logger.warning(f"Could not find original component with index {parent_index}")
+                    components_to_remove.append(f"original ({original_component.get('index')})")
+                if temp_component:
+                    components_to_remove.append(f"temp ({temp_component.get('index')})")
 
-                # Remove the original component that was being edited
+                if components_to_remove:
+                    logger.info(f"Found components to remove: {', '.join(components_to_remove)}")
+                else:
+                    logger.warning(
+                        f"Could not find any components to remove with parent_index {parent_index}"
+                    )
+
+                # Remove the original component and its temp component that were being edited
+                temp_parent_index = f"{parent_index}-tmp"
+                original_count = len(non_edited_components)
                 non_edited_components = [
-                    elem for elem in non_edited_components if elem.get("index") != parent_index
+                    elem
+                    for elem in non_edited_components
+                    if elem.get("index") not in [parent_index, temp_parent_index]
                 ]
-                logger.info(f"Removed original component with index {parent_index}")
+                removed_count = original_count - len(non_edited_components)
+                logger.info(
+                    f"Removed {removed_count} components with indices {parent_index} and {temp_parent_index}"
+                )
 
                 # Update the edited component's index to be the same as the original
                 component["index"] = parent_index
                 logger.info(
                     f"Updated edited component index from {component_index} to {parent_index}"
                 )
+
+                # Clear parent_index since this is now the final component (no longer a child)
+                component["parent_index"] = None
+                logger.info(f"Cleared parent_index for final component {parent_index}")
+
                 logger.info(
                     f"Updated component data: type={component.get('component_type')}, title={component.get('title')}, aggregation={component.get('aggregation')}"
                 )
-
-                # # Remove parent_index from the component data before saving
                 # if "parent_index" in component:
                 #     del component["parent_index"]
                 #     logger.info(f"Removed parent_index from component {parent_index}")
