@@ -922,7 +922,7 @@ def register_callbacks_draggable(app):
                                         )
 
                     # dash-dynamic-grid-layout returns a single layout array - normalize and store it
-                    state_stored_draggable_children[dashboard_id] = draggable_children
+                    # Note: We'll return the updated children in the callback output instead of modifying state directly
                     # Fix responsive scaling issues before normalizing
                     logger.info(
                         "🔧 RESPONSIVE FIX - Applying fixes to currentLayout before storing"
@@ -937,10 +937,18 @@ def register_callbacks_draggable(app):
                             f"  Stored Layout {i}: {layout.get('i')} -> {layout.get('w')}x{layout.get('h')} at ({layout.get('x')},{layout.get('y')})"
                         )
 
+                    # Prepare updated stored children data
+                    updated_stored_children = (
+                        state_stored_draggable_children.copy()
+                        if isinstance(state_stored_draggable_children, dict)
+                        else {}
+                    )
+                    updated_stored_children[dashboard_id] = draggable_children
+
                     return (
                         draggable_children,
                         fixed_layouts,  # Return the normalized layout array
-                        dash.no_update,
+                        updated_stored_children,  # Update stored children
                         state_stored_draggable_layouts,
                         dash.no_update,
                     )
