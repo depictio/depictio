@@ -735,6 +735,7 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         "filter_applied": filter_applied,
         "last_updated": datetime.now().isoformat(),
     }
+    logger.info(f"Component metadata: {store_component_data}")
 
     # Ensure dc_config is available for build_figure
     if not dc_config and wf_id and dc_id:
