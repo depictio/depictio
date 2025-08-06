@@ -480,11 +480,13 @@ def register_callbacks_figure_component(app):
         Output({"type": "btn-done-edit", "index": MATCH}, "disabled", allow_duplicate=True),
         [
             Input({"type": "dict_kwargs", "index": MATCH}, "data"),
+            Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
         ],
         prevent_initial_call=True,
     )
-    def disable_done_button(value):
-        if value:
+    def disable_done_button(dict_kwargs_value, visu_type_value):
+        # Enable the button if either parameters exist or a visualization type is selected
+        if dict_kwargs_value or visu_type_value:
             return False
         return True
 
@@ -611,10 +613,12 @@ def register_callbacks_figure_component(app):
             except Exception as e:
                 logger.warning(f"Failed to get component data: {e}")
 
-        # Use component data to override if available
+        # Use component data to override if available, but prioritize dropdown selection
         if component_data:
-            if "visu_type" in component_data:
+            # Only use stored visu_type if no dropdown selection was made
+            if "visu_type" in component_data and not visu_type_label:
                 visu_type = component_data["visu_type"]
+            # Always load stored parameters if no current parameters exist
             if not dict_kwargs and "dict_kwargs" in component_data:
                 dict_kwargs = component_data["dict_kwargs"]
 
