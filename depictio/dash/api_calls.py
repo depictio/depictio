@@ -612,20 +612,20 @@ def api_call_get_dashboard(dashboard_id: str, token: str) -> dict[str, Any] | No
         dashboard_data = response.json()
 
         # Log what metadata is being received from the API
-        stored_metadata = dashboard_data.get("stored_metadata", [])
-        logger.info(f"📊 API LOAD DEBUG - Received {len(stored_metadata)} metadata items from API")
-        if stored_metadata:
-            for i, elem in enumerate(stored_metadata[:2]):  # Only first 2 to avoid spam
-                if elem:
-                    logger.info(
-                        f"📊 API LOAD DEBUG - Metadata {i}: dict_kwargs={elem.get('dict_kwargs', 'MISSING')}"
-                    )
-                    logger.info(
-                        f"📊 API LOAD DEBUG - Metadata {i}: wf_id={elem.get('wf_id', 'MISSING')}"
-                    )
-                    logger.info(
-                        f"📊 API LOAD DEBUG - Metadata {i}: dc_id={elem.get('dc_id', 'MISSING')}"
-                    )
+        # stored_metadata = dashboard_data.get("stored_metadata", [])
+        # logger.info(f"📊 API LOAD DEBUG - Received {len(stored_metadata)} metadata items from API")
+        # if stored_metadata:
+        #     for i, elem in enumerate(stored_metadata[:2]):  # Only first 2 to avoid spam
+        #         if elem:
+        # logger.info(
+        #     f"📊 API LOAD DEBUG - Metadata {i}: dict_kwargs={elem.get('dict_kwargs', 'MISSING')}"
+        # )
+        # logger.info(
+        #     f"📊 API LOAD DEBUG - Metadata {i}: wf_id={elem.get('wf_id', 'MISSING')}"
+        # )
+        # logger.info(
+        #     f"📊 API LOAD DEBUG - Metadata {i}: dc_id={elem.get('dc_id', 'MISSING')}"
+        # )
 
         logger.debug(f"Dashboard data fetched successfully for dashboard {dashboard_id}.")
         return dashboard_data
@@ -650,20 +650,20 @@ def api_call_save_dashboard(dashboard_id: str, dashboard_data: dict, token: str)
     """
     try:
         # Log what metadata is being sent to the API
-        stored_metadata = dashboard_data.get("stored_metadata", [])
-        logger.info(f"📊 API SAVE DEBUG - Sending {len(stored_metadata)} metadata items to API")
-        if stored_metadata:
-            for i, elem in enumerate(stored_metadata[:2]):  # Only first 2 to avoid spam
-                if elem:
-                    logger.info(
-                        f"📊 API SAVE DEBUG - Metadata {i}: dict_kwargs={elem.get('dict_kwargs', 'MISSING')}"
-                    )
-                    logger.info(
-                        f"📊 API SAVE DEBUG - Metadata {i}: wf_id={elem.get('wf_id', 'MISSING')}"
-                    )
-                    logger.info(
-                        f"📊 API SAVE DEBUG - Metadata {i}: dc_id={elem.get('dc_id', 'MISSING')}"
-                    )
+        # stored_metadata = dashboard_data.get("stored_metadata", [])
+        # logger.info(f"📊 API SAVE DEBUG - Sending {len(stored_metadata)} metadata items to API")
+        # if stored_metadata:
+        #     for i, elem in enumerate(stored_metadata[:2]):  # Only first 2 to avoid spam
+        #         if elem:
+        #             logger.info(
+        #                 f"📊 API SAVE DEBUG - Metadata {i}: dict_kwargs={elem.get('dict_kwargs', 'MISSING')}"
+        #             )
+        #             logger.info(
+        #                 f"📊 API SAVE DEBUG - Metadata {i}: wf_id={elem.get('wf_id', 'MISSING')}"
+        #             )
+        #             logger.info(
+        #                 f"📊 API SAVE DEBUG - Metadata {i}: dc_id={elem.get('dc_id', 'MISSING')}"
+        #             )
 
         response = httpx.post(
             f"{API_BASE_URL}/depictio/api/v1/dashboards/save/{dashboard_id}",

@@ -145,21 +145,21 @@ def register_callbacks_save(app):
         )
 
         # Log the first few raw metadata entries for debugging
-        if stored_metadata:
-            for i, elem in enumerate(stored_metadata[:3]):  # Only first 3 to avoid spam
-                logger.info(
-                    f"📊 SAVE DEBUG - Raw metadata {i}: keys={list(elem.keys()) if elem else 'None'}"
-                )
-                if elem:
-                    logger.info(
-                        f"📊 SAVE DEBUG - Raw metadata {i}: dict_kwargs={elem.get('dict_kwargs', 'MISSING')}"
-                    )
-                    logger.info(
-                        f"📊 SAVE DEBUG - Raw metadata {i}: wf_id={elem.get('wf_id', 'MISSING')}, workflow_id={elem.get('workflow_id', 'MISSING')}"
-                    )
-                    logger.info(
-                        f"📊 SAVE DEBUG - Raw metadata {i}: dc_id={elem.get('dc_id', 'MISSING')}"
-                    )
+        # if stored_metadata:
+        #     for i, elem in enumerate(stored_metadata[:3]):  # Only first 3 to avoid spam
+        #         logger.info(
+        #             f"📊 SAVE DEBUG - Raw metadata {i}: keys={list(elem.keys()) if elem else 'None'}"
+        #         )
+        #         if elem:
+        #             logger.info(
+        #                 f"📊 SAVE DEBUG - Raw metadata {i}: dict_kwargs={elem.get('dict_kwargs', 'MISSING')}"
+        #             )
+        #             logger.info(
+        #                 f"📊 SAVE DEBUG - Raw metadata {i}: wf_id={elem.get('wf_id', 'MISSING')}, workflow_id={elem.get('workflow_id', 'MISSING')}"
+        #             )
+        #             logger.info(
+        #                 f"📊 SAVE DEBUG - Raw metadata {i}: dc_id={elem.get('dc_id', 'MISSING')}"
+        #             )
 
         stored_metadata_for_logging = [
             {
@@ -261,9 +261,9 @@ def register_callbacks_save(app):
                 best_metadata = metadata_list[0]
             else:
                 # Multiple entries - prioritize by completeness
-                logger.info(
-                    f"📊 SAVE DEBUG - Found {len(metadata_list)} duplicate entries for index {index}"
-                )
+                # logger.info(
+                #     f"📊 SAVE DEBUG - Found {len(metadata_list)} duplicate entries for index {index}"
+                # )
 
                 # Score each metadata entry by completeness
                 def score_metadata(meta):
@@ -301,23 +301,23 @@ def register_callbacks_save(app):
                 for i, meta in enumerate(metadata_list):
                     score = score_metadata(meta)
                     candidate_scores.append((score, i, meta))
-                    logger.info(
-                        f"📊 SAVE DEBUG - Candidate {i} for index {index}: score={score}, dict_kwargs={meta.get('dict_kwargs', 'MISSING')}"
-                    )
+                    # logger.info(
+                    #     f"📊 SAVE DEBUG - Candidate {i} for index {index}: score={score}, dict_kwargs={meta.get('dict_kwargs', 'MISSING')}"
+                    # )
 
                 # Select the metadata with the highest completeness score
                 best_metadata = max(metadata_list, key=score_metadata)
-                best_score = score_metadata(best_metadata)
+                # best_score = score_metadata(best_metadata)
 
-                logger.info(
-                    f"📊 SAVE DEBUG - SELECTED metadata with score {best_score} for index {index}"
-                )
-                logger.info(
-                    f"📊 SAVE DEBUG - SELECTED metadata dict_kwargs: {best_metadata.get('dict_kwargs', 'MISSING')}"
-                )
-                logger.info(
-                    f"📊 SAVE DEBUG - SELECTED metadata has {len(best_metadata.get('dict_kwargs', {}))} parameters"
-                )
+                # logger.info(
+                #     f"📊 SAVE DEBUG - SELECTED metadata with score {best_score} for index {index}"
+                # )
+                # logger.info(
+                #     f"📊 SAVE DEBUG - SELECTED metadata dict_kwargs: {best_metadata.get('dict_kwargs', 'MISSING')}"
+                # )
+                # logger.info(
+                #     f"📊 SAVE DEBUG - SELECTED metadata has {len(best_metadata.get('dict_kwargs', {}))} parameters"
+                # )
 
             # Safety check: ensure we're not accidentally selecting empty metadata when better options exist
             if len(metadata_list) > 1:
@@ -343,32 +343,32 @@ def register_callbacks_save(app):
             seen_indexes.add(index)
 
         # Summary logging of deduplication results
-        logger.info(
-            f"📊 SAVE DEBUG - Deduplication complete: {len(unique_metadata)} unique components"
-        )
-        components_with_dict_kwargs = sum(
-            1
-            for meta in unique_metadata
-            if meta.get("dict_kwargs") and len(meta.get("dict_kwargs", {})) > 0
-        )
-        logger.info(
-            f"📊 SAVE DEBUG - Components with non-empty dict_kwargs: {components_with_dict_kwargs}/{len(unique_metadata)}"
-        )
+        # logger.info(
+        #     f"📊 SAVE DEBUG - Deduplication complete: {len(unique_metadata)} unique components"
+        # )
+        # components_with_dict_kwargs = sum(
+        #     1
+        #     for meta in unique_metadata
+        #     if meta.get("dict_kwargs") and len(meta.get("dict_kwargs", {})) > 0
+        # )
+        # # logger.info(
+        # #     f"📊 SAVE DEBUG - Components with non-empty dict_kwargs: {components_with_dict_kwargs}/{len(unique_metadata)}"
+        # # )
 
-        # Log any components that ended up with empty dict_kwargs for investigation
-        empty_dict_kwargs_components = [
-            meta
-            for meta in unique_metadata
-            if not meta.get("dict_kwargs") or len(meta.get("dict_kwargs", {})) == 0
-        ]
-        if empty_dict_kwargs_components:
-            logger.warning(
-                f"📊 SAVE DEBUG - WARNING: {len(empty_dict_kwargs_components)} components have empty dict_kwargs:"
-            )
-            for meta in empty_dict_kwargs_components:
-                logger.warning(
-                    f"📊 SAVE DEBUG - Empty dict_kwargs component: index={meta.get('index')}, type={meta.get('component_type')}"
-                )
+        # # Log any components that ended up with empty dict_kwargs for investigation
+        # empty_dict_kwargs_components = [
+        #     meta
+        #     for meta in unique_metadata
+        #     if not meta.get("dict_kwargs") or len(meta.get("dict_kwargs", {})) == 0
+        # ]
+        # if empty_dict_kwargs_components:
+        #     logger.warning(
+        #         f"📊 SAVE DEBUG - WARNING: {len(empty_dict_kwargs_components)} components have empty dict_kwargs:"
+        #     )
+        #     for meta in empty_dict_kwargs_components:
+        #         logger.warning(
+        #             f"📊 SAVE DEBUG - Empty dict_kwargs component: index={meta.get('index')}, type={meta.get('component_type')}"
+        #         )
 
         # logger.info(f"Unique metadata: {unique_metadata}")
         # logger.info(f"seen_indexes: {seen_indexes}")
@@ -459,10 +459,10 @@ def register_callbacks_save(app):
                     f"Updated component data: type={component.get('component_type')}, title={component.get('title')}, aggregation={component.get('aggregation')}"
                 )
 
-                # Remove parent_index from the component data before saving
-                if "parent_index" in component:
-                    del component["parent_index"]
-                    logger.info(f"Removed parent_index from component {parent_index}")
+                # # Remove parent_index from the component data before saving
+                # if "parent_index" in component:
+                #     del component["parent_index"]
+                #     logger.info(f"Removed parent_index from component {parent_index}")
 
             # Combine all components back together
             unique_metadata = non_edited_components + edited_components

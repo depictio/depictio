@@ -271,7 +271,35 @@ def remove_duplicates_by_index(components):
     for component in components:
         index = component["index"]
         if index not in unique_components:
+            # First occurrence of this index
             unique_components[index] = component
+        else:
+            # Duplicate found - prefer the one with non-None parent_index
+            existing = unique_components[index]
+            current_parent = component.get("parent_index")
+            existing_parent = existing.get("parent_index")
+
+            # If current has parent_index but existing doesn't, prefer current
+            if current_parent is not None and existing_parent is None:
+                logger.debug(f"DEDUP: Replacing {index} (parent_index: None -> {current_parent})")
+                unique_components[index] = component
+            # If existing has parent_index but current doesn't, keep existing (do nothing)
+            elif existing_parent is not None and current_parent is None:
+                logger.debug(
+                    f"DEDUP: Keeping {index} (parent_index: {existing_parent}, rejecting None)"
+                )
+                continue
+            # If both have same parent_index status, prefer the one with more recent last_updated
+            else:
+                current_updated = component.get("last_updated")
+                existing_updated = existing.get("last_updated")
+                if current_updated and existing_updated:
+                    if current_updated > existing_updated:
+                        logger.debug(
+                            f"DEDUP: Replacing {index} based on timestamp ({existing_updated} -> {current_updated})"
+                        )
+                        unique_components[index] = component
+                # If last_updated is not available, keep existing (first occurrence)
     return list(unique_components.values())
 
 
@@ -642,14 +670,16 @@ def register_callbacks_draggable(app):
 
         ctx = dash.callback_context
 
-        # logger.info("CTX: {}".format(ctx))
-        # logger.info("CTX triggered: {}".format(ctx.triggered))
-        # logger.info("CTX triggered_id: {}".format(ctx.triggered_id))
-        # logger.info("TYPE CTX triggered_id: {}".format(type(ctx.triggered_id)))
-        # logger.info("CTX triggered_props_id: {}".format(ctx.triggered_prop_ids))
+        logger.info("\n===== DRAGGABLE CALLBACK TRIGGERED =====\n")
+
+        logger.info("CTX: {}".format(ctx))
+        logger.info("CTX triggered: {}".format(ctx.triggered))
+        logger.info("CTX triggered_id: {}".format(ctx.triggered_id))
+        logger.info("TYPE CTX triggered_id: {}".format(type(ctx.triggered_id)))
+        logger.info("CTX triggered_props_id: {}".format(ctx.triggered_prop_ids))
         # logger.info("CTX args_grouping: {}".format(ctx.args_grouping))
-        # logger.info("CTX inputs: {}".format(ctx.inputs))
-        # logger.info("CTX inputs_list: {}".format(ctx.inputs_list))
+        logger.info("CTX inputs: {}".format(ctx.inputs))
+        logger.info("CTX inputs_list: {}".format(ctx.inputs_list))
         # logger.debug("CTX states: {}".format(ctx.states))
         # logger.debug("CTX states_list: {}".format(ctx.states_list))
 
@@ -658,6 +688,8 @@ def register_callbacks_draggable(app):
         # logger.info(f"Stored draggable layouts: {state_stored_draggable_layouts}")
         # logger.info(f"Stored draggable children: {state_stored_draggable_children}")
         # logger.info(f"Input stored draggable children: {input_stored_draggable_children}")
+        logger.info(f"Stored metadata: {stored_metadata}")
+        logger.info("\n")
 
         # Extract dashboard_id from the pathname
         dashboard_id = pathname.split("/")[-1]
@@ -1300,18 +1332,45 @@ def register_callbacks_draggable(app):
                 )
 
             elif triggered_input == "btn-done-edit":
-                logger.info("Done edit button clicked")
+                logger.info("=== BTN-DONE-EDIT TRIGGERED ===")
+                logger.info("Re-rendering dashboard with updated component parameters")
+                logger.info(f"Stored metadata: {stored_metadata}")
+
                 index = ctx.triggered_id["index"]
 
                 edited_child = None
                 parent_index = None
                 logger.info(f"Index: {index}")
                 # logger.info(f"Stored metadata: {stored_metadata}")
-                logger.info(f"test_container: {test_container}")
+                # logger.info(f"test_container: {test_container}")
+                logger.info(f"Looking for metadata with index: {index}")
+                logger.info(f"Available metadata entries for index {index}:")
+                for i, metadata in enumerate(stored_metadata):
+                    if str(metadata["index"]) == str(index):
+                        logger.info(
+                            f"  Entry {i}: parent_index={metadata.get('parent_index')}, last_updated={metadata.get('last_updated')}"
+                        )
+                # Find metadata for the edited component, prioritizing entries with non-None parent_index
+                parent_index = None
+                parent_metadata = None
                 for metadata in stored_metadata:
                     if str(metadata["index"]) == str(index):
-                        parent_index = metadata["parent_index"]
-                        parent_metadata = metadata
+                        # If this is our first match or if this has a non-None parent_index
+                        # while our current match has None, prefer this one
+                        if parent_metadata is None or (
+                            parent_index is None and metadata.get("parent_index") is not None
+                        ):
+                            parent_index = metadata["parent_index"]
+                            parent_metadata = metadata
+                        # If we already have a non-None parent_index, don't overwrite it with None
+                        elif parent_index is not None and metadata.get("parent_index") is None:
+                            continue
+                        else:
+                            # Update with this metadata (both have same parent_index status)
+                            parent_index = metadata["parent_index"]
+                            parent_metadata = metadata
+
+                logger.info(f"Selected parent_index: {parent_index} for index: {index}")
                 for child, metadata in zip(test_container, stored_metadata):
                     # Extract child index safely
                     child_index = None
@@ -1349,10 +1408,17 @@ def register_callbacks_draggable(app):
 
                 if parent_index:
                     updated_children = list()
+                    temp_parent_box_id = f"box-{parent_index}-tmp"
+                    parent_box_id = f"box-{parent_index}"
+
                     for child in draggable_children:
                         child_id = get_component_id(child)
-                        if child_id == f"box-{parent_index}":
-                            updated_children.append(edited_child)  # Replace the entire child
+                        if child_id == parent_box_id:
+                            updated_children.append(edited_child)  # Replace the original component
+                            logger.info(f"Replaced component with box ID: {parent_box_id}")
+                        elif child_id == temp_parent_box_id:
+                            logger.info(f"Removed temp component with box ID: {temp_parent_box_id}")
+                            # Skip adding the temp component (remove it)
                         else:
                             updated_children.append(child)
 

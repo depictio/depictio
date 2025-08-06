@@ -9,7 +9,7 @@ import httpx
 from dash import ALL, MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
-from depictio.api.v1.configs.config import API_BASE_URL, settings
+from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
 from depictio.dash.modules.figure_component.code_mode import (
@@ -35,7 +35,6 @@ from depictio.dash.modules.figure_component.state_manager import state_manager
 from depictio.dash.modules.figure_component.utils import (
     build_figure,
     build_figure_frame,
-    create_figure_placeholder,
 )
 from depictio.dash.utils import (
     UNSELECTED_STYLE,
@@ -743,11 +742,6 @@ def register_callbacks_figure_component(app):
             logger.warning("Missing required data for parameter initialization")
             raise dash.exceptions.PreventUpdate
 
-        # Check if auto-generation is disabled in settings
-        if not settings.dash.auto_generate_figures:
-            logger.info("Skipping parameter initialization - auto-generation disabled in settings")
-            raise dash.exceptions.PreventUpdate
-
         try:
             # Get column information for defaults
             TOKEN = local_data["access_token"]
@@ -870,11 +864,6 @@ def register_callbacks_figure_component(app):
         if current_kwargs or not workflow_id or not data_collection_id or not local_data:
             raise dash.exceptions.PreventUpdate
 
-        # Check if auto-generation is disabled in settings
-        if not settings.dash.auto_generate_figures:
-            logger.info("Skipping auto-initialization - auto-generation disabled in settings")
-            raise dash.exceptions.PreventUpdate
-
         try:
             # Get column information for defaults
             TOKEN = local_data["access_token"]
@@ -943,48 +932,6 @@ def register_callbacks_figure_component(app):
         if current_mode == "code":
             logger.info("Skipping default figure generation - in code mode")
             raise dash.exceptions.PreventUpdate
-
-        # Check if auto-generation is disabled in settings
-        # BUT allow generation if we have existing parameters (editing existing figure)
-        has_existing_parameters = dict_kwargs and any(
-            dict_kwargs.get(key) for key in ["x", "y", "color", "visu_type"] if key in dict_kwargs
-        )
-
-        if not settings.dash.auto_generate_figures and not has_existing_parameters:
-            logger.info(
-                "Skipping default figure generation - auto-generation disabled in settings and no existing parameters"
-            )
-            # raise dash.exceptions.PreventUpdate
-
-            # Create placeholder figure
-            placeholder_figure = create_figure_placeholder(theme=theme_data, visu_type="scatter")
-        elif not settings.dash.auto_generate_figures and has_existing_parameters:
-            logger.info(
-                "Auto-generation disabled but editing existing figure with parameters - allowing generation"
-            )
-            # Continue with normal figure generation
-        else:
-            # Auto-generation enabled - continue normally
-            pass
-
-        # Only create placeholder if auto-generation is disabled AND no existing parameters
-        if not settings.dash.auto_generate_figures and not has_existing_parameters:
-            # Create placeholder component
-            placeholder_div = html.Div(
-                [
-                    dcc.Graph(
-                        figure=placeholder_figure,
-                        config={
-                            "editable": False,
-                            "scrollZoom": False,
-                            "responsive": True,
-                            "displayModeBar": False,  # Hide toolbar for placeholder
-                        },
-                        className="responsive-graph",
-                    ),
-                ]
-            )
-            return placeholder_div
 
         # Get existing component data
         component_data = None
@@ -2034,9 +1981,7 @@ def design_figure(id, component_data=None):
         # Store components
         dcc.Store(
             id={"type": "dict_kwargs", "index": id["index"]},
-            data=component_data.get("dict_kwargs", {})
-            if component_data
-            else {},  # Initialize with existing data when editing
+            data={},  # Initialize empty to trigger default generation
             storage_type="memory",
         ),
         # CRITICAL: Create stored-metadata-component store for code mode compatibility
