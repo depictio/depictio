@@ -41,6 +41,16 @@ def register_callbacks_stepper(app):
         return True
 
     @app.callback(
+        Output({"type": "modal-edit", "index": MATCH}, "opened"),
+        [Input({"type": "btn-done-edit", "index": MATCH}, "n_clicks")],
+        prevent_initial_call=True,
+    )
+    def close_edit_modal(n_clicks):
+        if n_clicks and n_clicks > 0:
+            return False
+        return True
+
+    @app.callback(
         Output({"type": "workflow-selection-label", "index": MATCH}, "data"),
         Output({"type": "workflow-selection-label", "index": MATCH}, "value"),
         Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
@@ -919,3 +929,17 @@ def update_modal_size(opened):
 def update_modal_size_regular(opened):
     """Update regular modal size when it opens."""
     return MODAL_CONFIG["size"]
+
+
+@callback(
+    Output({"type": "stepper-data-grid", "index": MATCH}, "className"),
+    Input("theme-store", "data"),
+    prevent_initial_call=False,
+)
+def update_ag_grid_theme(theme_data):
+    """Update AG Grid theme class based on current theme."""
+    theme = theme_data or "light"
+    if theme == "dark":
+        return "ag-theme-alpine-dark"
+    else:
+        return "ag-theme-alpine"
