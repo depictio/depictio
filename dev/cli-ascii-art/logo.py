@@ -6,10 +6,13 @@ Depictio ASCII Art Logo Display
 A rich console script to display the Depictio logo with colored ASCII art.
 """
 
+import sys
 from rich.align import Align
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
+from rich.columns import Columns
+from rich.layout import Layout
 
 # Depictio brand colors from depictio/dash/colors.py
 DEPICTIO_COLORS = {
@@ -197,6 +200,168 @@ def create_colored_logo(size: str = "full") -> Text:
     return logo_text
 
 
+def create_colored_name(size: str = "full") -> Text:
+    """Create a colored version of the Depictio name using Rich.
+    
+    Args:
+        size: Logo size - "full", "large", "medium", "small", "tiny", or float scale factor
+    
+    Returns:
+        Rich Text object with colored name
+    """
+    # Size presets
+    size_scales = {
+        "full": 1.0,
+        "large": 0.75,
+        "medium": 0.5,
+        "small": 0.33,
+        "tiny": 0.25
+    }
+    
+    # Get scale factor
+    if isinstance(size, str):
+        scale = size_scales.get(size.lower(), 1.0)
+    else:
+        scale = float(size)
+    
+    # Scale the ASCII art
+    scaled_art = scale_ascii_art(NAME_ASCII, scale)
+    
+    name_text = Text()
+    
+    # Apply gradient colors to the name
+    colors = [
+        DEPICTIO_COLORS["violet"],
+        DEPICTIO_COLORS["blue"], 
+        DEPICTIO_COLORS["teal"],
+        DEPICTIO_COLORS["green"],
+        DEPICTIO_COLORS["yellow"],
+        DEPICTIO_COLORS["orange"],
+        DEPICTIO_COLORS["pink"],
+        DEPICTIO_COLORS["purple"]
+    ]
+    
+    lines = scaled_art.split('\n')
+    for line in lines:
+        line_text = Text()
+        if line.strip():  # Only process non-empty lines
+            # Calculate color segments
+            char_count = len(line.replace(' ', ''))  # Count non-space characters
+            if char_count > 0:
+                chars_per_color = max(1, char_count // len(colors))
+                color_index = 0
+                char_index = 0
+                
+                for char in line:
+                    if char != ' ':
+                        if char_index > 0 and char_index % chars_per_color == 0 and color_index < len(colors) - 1:
+                            color_index += 1
+                        line_text.append(char, style=colors[color_index])
+                        char_index += 1
+                    else:
+                        line_text.append(char)
+            else:
+                line_text.append(line)
+        else:
+            line_text.append(line)
+        line_text.append('\n')
+        name_text.append_text(line_text)
+    
+    return name_text
+
+
+def _get_text_height(text: Text) -> int:
+    """Get the height (number of lines) of a Rich Text object."""
+    return len(text.plain.split('\n'))
+
+
+def _pad_text_vertically(text: Text, target_height: int) -> Text:
+    """Add vertical padding to center text within target height."""
+    current_height = _get_text_height(text)
+    if current_height >= target_height:
+        return text
+    
+    padding_needed = target_height - current_height
+    top_padding = padding_needed // 2
+    bottom_padding = padding_needed - top_padding
+    
+    padded_text = Text()
+    
+    # Add top padding
+    for _ in range(top_padding):
+        padded_text.append('\n')
+    
+    # Add original text
+    padded_text.append_text(text)
+    
+    # Add bottom padding  
+    for _ in range(bottom_padding):
+        padded_text.append('\n')
+    
+    return padded_text
+
+
+def display_logo_with_name(console: Console = None, layout: str = "horizontal", 
+                          favicon_size: str = "medium", name_size: str = "medium",
+                          with_panel: bool = True, title: str = "🎨 DEPICTIO") -> None:
+    """Display favicon and name together in various layouts.
+    
+    Args:
+        console: Rich console instance
+        layout: Layout style - "horizontal", "vertical", "favicon-only", "name-only"
+        favicon_size: Favicon size - "full", "large", "medium", "small", "tiny", or float
+        name_size: Name size - "full", "large", "medium", "small", "tiny", or float
+        with_panel: Whether to display with a panel border
+        title: Panel title text
+    """
+    if console is None:
+        console = Console()
+    
+    favicon = create_colored_logo(favicon_size)
+    name = create_colored_name(name_size)
+    
+    if layout == "horizontal":
+        # Display favicon left, name right with vertical centering
+        favicon_height = _get_text_height(favicon)
+        name_height = _get_text_height(name)
+        max_height = max(favicon_height, name_height)
+        
+        # Pad both to the same height for vertical centering
+        centered_favicon = _pad_text_vertically(favicon, max_height)
+        centered_name = _pad_text_vertically(name, max_height)
+        
+        content = Columns([centered_favicon, centered_name], align="left", expand=False)
+    elif layout == "vertical":
+        # Display favicon top, name bottom
+        content = Align.center(Text.assemble(favicon, "\n\n", name))
+    elif layout == "favicon-only":
+        content = Align.center(favicon)
+    elif layout == "name-only":
+        content = Align.center(name)
+    else:
+        # Default to horizontal with centering
+        favicon_height = _get_text_height(favicon)
+        name_height = _get_text_height(name)
+        max_height = max(favicon_height, name_height)
+        
+        centered_favicon = _pad_text_vertically(favicon, max_height)
+        centered_name = _pad_text_vertically(name, max_height)
+        
+        content = Columns([centered_favicon, centered_name], align="left", expand=False)
+    
+    if with_panel:
+        panel = Panel(
+            content,
+            title=title,
+            title_align="center",
+            border_style="bright_blue",
+            padding=(1, 2)
+        )
+        console.print(panel)
+    else:
+        console.print(content)
+
+
 def display_logo(console: Console = None, with_panel: bool = True, title: str = "🎨 DEPICTIO", 
                  size: str = "full") -> None:
     """Display the Depictio logo with optional panel and title.
@@ -229,40 +394,85 @@ def display_logo(console: Console = None, with_panel: bool = True, title: str = 
 
 def main():
     """Main function to display the logo."""
-    import sys
     
     console = Console()
     
     # Parse command line arguments
-    size = "full"
+    size = "medium"
+    layout = "horizontal" 
     show_sizes = False
+    show_layouts = False
+    favicon_size = "medium"
+    name_size = "medium"
     
     if len(sys.argv) > 1:
-        if sys.argv[1] == "--sizes":
+        arg = sys.argv[1].lower()
+        
+        if arg == "--sizes":
             show_sizes = True
-        elif sys.argv[1] in ["full", "large", "medium", "small", "tiny"]:
-            size = sys.argv[1]
+        elif arg == "--layouts":
+            show_layouts = True
+        elif arg in ["horizontal", "vertical", "favicon-only", "name-only"]:
+            layout = arg
+            # Parse additional size arguments
+            if len(sys.argv) > 2:
+                try:
+                    favicon_size = sys.argv[2]
+                    if len(sys.argv) > 3:
+                        name_size = sys.argv[3]
+                except (ValueError, IndexError):
+                    pass
+        elif arg in ["full", "large", "medium", "small", "tiny"]:
+            # Single logo display with specified size
+            size = arg
+            layout = "favicon-only"
         else:
             try:
                 size = float(sys.argv[1])
+                layout = "favicon-only"
             except ValueError:
-                console.print("Invalid size. Use: full, large, medium, small, tiny, or a float value", style="red")
+                console.print("Invalid argument. Use --help for usage information", style="red")
+                print_usage()
                 return
     
     if show_sizes:
-        # Demonstrate all sizes
+        # Demonstrate all sizes for favicon only
         sizes = ["full", "large", "medium", "small", "tiny"]
         for s in sizes:
-            console.print(f"\n[bold]Size: {s}[/bold]")
-            display_logo(console, with_panel=False, size=s)
+            console.print(f"\n[bold]Favicon Size: {s}[/bold]")
+            display_logo_with_name(console, layout="favicon-only", favicon_size=s, with_panel=False)
+            console.print("-" * 40)
+            
+        # Demonstrate combined layouts
+        console.print("\n[bold]Combined Layout Examples (medium size)[/bold]")
+        layouts = ["horizontal", "vertical"]
+        for lay in layouts:
+            console.print(f"\n[bold]Layout: {lay}[/bold]")
+            display_logo_with_name(console, layout=lay, favicon_size="medium", name_size="medium", with_panel=False)
             console.print("-" * 60)
-    else:
-        # Display single logo
-        display_logo(console, with_panel=True, size=size)
+            
+    elif show_layouts:
+        # Demonstrate all layout options
+        layouts = [
+            ("horizontal", "Favicon left, name right"),
+            ("vertical", "Favicon top, name bottom"), 
+            ("favicon-only", "Favicon only"),
+            ("name-only", "Name only")
+        ]
         
-        # Add a subtitle
-        subtitle = Text("Data Visualization & Analytics Platform", style="italic dim")
-        console.print(Align.center(subtitle))
+        for lay, desc in layouts:
+            console.print(f"\n[bold]{lay.title()} Layout[/bold] - {desc}")
+            display_logo_with_name(console, layout=lay, favicon_size="small", name_size="small", with_panel=False)
+            console.print("-" * 80)
+    else:
+        # Display logo based on layout
+        if layout == "favicon-only":
+            display_logo(console, with_panel=True, size=size)
+            subtitle = Text("Data Visualization & Analytics Platform", style="italic dim")
+            console.print(Align.center(subtitle))
+        else:
+            display_logo_with_name(console, layout=layout, favicon_size=favicon_size, name_size=name_size, with_panel=True)
+        
         console.print()
 
 
@@ -273,20 +483,34 @@ def print_usage():
 [bold]Depictio ASCII Logo Display[/bold]
 
 Usage:
-    python logo.py [size]
-    python logo.py --sizes
+    python logo.py [layout] [favicon_size] [name_size]
+    python logo.py [size]              # Favicon only
+    python logo.py --sizes             # Show all size demos
+    python logo.py --layouts           # Show all layout demos
 
-Arguments:
-    size        Logo size: full, large, medium, small, tiny, or float value (e.g., 0.3)
-    --sizes     Show all size options
+Layout Options:
+    horizontal      Favicon left, name right (default)
+    vertical        Favicon top, name bottom
+    favicon-only    Favicon only
+    name-only       Name only
+
+Size Options:
+    full, large, medium, small, tiny, or float value (e.g., 0.3)
 
 Examples:
-    python logo.py           # Full size logo
-    python logo.py medium    # Medium size logo
-    python logo.py 0.3       # Custom 30% scale
-    python logo.py --sizes   # Show all sizes
+    python logo.py                          # Horizontal layout, medium sizes
+    python logo.py horizontal small medium  # Horizontal: small favicon, medium name
+    python logo.py vertical                 # Vertical layout, medium sizes
+    python logo.py favicon-only large       # Large favicon only
+    python logo.py name-only small          # Small name only
+    python logo.py medium                   # Medium favicon only (shorthand)
+    python logo.py --sizes                  # Show all size and layout demos
+    python logo.py --layouts               # Show all layout options
     """)
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] in ["--help", "-h"]:
+        print_usage()
+    else:
+        main()
