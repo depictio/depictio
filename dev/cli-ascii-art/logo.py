@@ -10,7 +10,6 @@ import sys
 from rich.align import Align
 from rich.columns import Columns
 from rich.console import Console
-from rich.layout import Layout
 from rich.panel import Panel
 from rich.text import Text
 
@@ -65,18 +64,6 @@ NAME_ASCII = """
 """
 
 NAME_CLI_ASCII = """
-                                                                                                                                                                                                                                                                                                             
-                                                                                                                                                                                                                                                                                                             
-                                                                                                                                                                                                                                                                                                             
-                                                                                                                                                                                                                                                                                                             
-                                                                                                                                                                                                                                                                                                             
-                                                                                                                                                                                                                                                                                                             
-                                                                                                                                                                                                                                                                                                             
-                                                                                                                                                                                                                                                                                                             
-                                                                                                                                                                                                                                                                                                             
-                                                                                                                                                                                                                                                                                                             
-                                                                                                                                                                                                                                                                                                             
-                                                                                                                                                                                                                                                                                                             
       ██████████████████           ██████████████████████    ███████████████████        ██████           ████████████        ████████████████████████   ██████            █████████████                                       ██████████      █████               ████████████████                           
       █████████████████████        ███████████████████████   █████████████████████     ███████        ██████████████████     ████████████████████████  ███████         ███████████████████                                 ██████████████    ███████              █████████████████                          
       ███████████████████████      ███████████████████████   ██████████████████████    ███████      ██████████████████████   ████████████████████████  ███████       ██████████████████████                              ████████████████    ███████              █████████████████                          
@@ -92,19 +79,6 @@ NAME_CLI_ASCII = """
       ███████████████████████      ██████████████████████    ██████                    ███████      ███████████████████████           ██████           ███████      ████████████████████████                             ████████████████    ██████████████████   █████████████████                          
       ██████████████████████       ███████████████████████   ██████                    ███████       ████████████████████             ██████           ███████        █████████████████████                               ███████████████    ██████████████████   █████████████████                          
       ███████████████████          ███████████████████████   ██████                    ███████         ████████████████               ██████           ███████          ████████████████                                     ██████████       ████████████████    ████████████████                           
-       █████████████                                                                                       ████████                                                         ████████                                                                                                                         
-                                                                                                                                                                                                                                                                                                             
-                                                                                                                                                                                                                                                                                                             
-                                                                                                                                                                                                                                                                                                             
-                                                                                                                                                                                                                                                                                                             
-                                                                                                                                                                                                                                                                                                             
-                                                                                                                                                                                                                                                                                                             
-                                                                                                                                                                                                                                                                                                             
-                                                                                                                                                                                                                                                                                                             
-                                                                                                                                                                                                                                                                                                             
-                                                                                                                                                                                                                                                              
-                                                                                                                                                                                                                                                                                                             
-
 """
 
 
@@ -344,11 +318,12 @@ def create_colored_logo(size: str = "full") -> Text:
     return logo_text
 
 
-def create_colored_name(size: str = "full") -> Text:
+def create_colored_name(size: str = "full", version: str = "depictio") -> Text:
     """Create a colored version of the Depictio name using Rich.
 
     Args:
         size: Logo size - "full", "large", "medium", "small", "tiny", or float scale factor
+        version: Name version - "depictio" for just DEPICTIO, "cli" for DEPICTIO-CLI
 
     Returns:
         Rich Text object with colored name
@@ -362,8 +337,14 @@ def create_colored_name(size: str = "full") -> Text:
     else:
         scale = float(size)
 
+    # Choose ASCII art based on version
+    if version.lower() == "cli":
+        ascii_art = NAME_CLI_ASCII
+    else:
+        ascii_art = NAME_ASCII
+
     # Scale the ASCII art
-    scaled_art = scale_ascii_art(NAME_ASCII, scale)
+    scaled_art = scale_ascii_art(ascii_art, scale)
 
     name_text = Text()
 
@@ -450,6 +431,7 @@ def display_logo_with_name(
     name_size: str = "medium",
     with_panel: bool = True,
     title: str = "🎨 DEPICTIO",
+    name_version: str = "depictio",
 ) -> None:
     """Display favicon and name together in various layouts.
 
@@ -460,13 +442,21 @@ def display_logo_with_name(
         name_size: Name size - "full", "large", "medium", "small", "tiny", or float
         with_panel: Whether to display with a panel border
         title: Panel title text
+        name_version: Name version - "depictio" or "cli"
     """
     if console is None:
         console = Console()
 
     favicon = create_colored_logo(favicon_size)
-    name = create_colored_name(name_size)
+    name = create_colored_name(name_size, name_version)
 
+    # Auto-adjust title based on version
+    if title == "🎨 DEPICTIO" and name_version.lower() == "cli":
+        title = "🎨 DEPICTIO-CLI"
+
+    # Initialize content variable
+    content = None
+    
     if layout == "horizontal":
         # Display favicon left, name right with vertical centering
         favicon_height = _get_text_height(favicon)
@@ -548,6 +538,7 @@ def main():
     show_layouts = False
     favicon_size = "medium"
     name_size = "medium"
+    name_version = "cli"  # Default to CLI version since we have it
 
     if len(sys.argv) > 1:
         arg = sys.argv[1].lower()
@@ -564,8 +555,13 @@ def main():
                     favicon_size = sys.argv[2]
                     if len(sys.argv) > 3:
                         name_size = sys.argv[3]
+                    if len(sys.argv) > 4 and sys.argv[4].lower() in ["depictio", "cli"]:
+                        name_version = sys.argv[4].lower()
                 except (ValueError, IndexError):
                     pass
+        elif arg in ["cli", "depictio"]:
+            # Set name version
+            name_version = arg
         elif arg in ["full", "large", "medium", "small", "tiny"]:
             # Single logo display with specified size
             size = arg
@@ -593,7 +589,7 @@ def main():
         for lay in layouts:
             console.print(f"\n[bold]Layout: {lay}[/bold]")
             display_logo_with_name(
-                console, layout=lay, favicon_size="medium", name_size="medium", with_panel=False
+                console, layout=lay, favicon_size="medium", name_size="medium", with_panel=False, name_version=name_version
             )
             console.print("-" * 60)
 
@@ -609,7 +605,7 @@ def main():
         for lay, desc in layouts:
             console.print(f"\n[bold]{lay.title()} Layout[/bold] - {desc}")
             display_logo_with_name(
-                console, layout=lay, favicon_size="small", name_size="small", with_panel=False
+                console, layout=lay, favicon_size="small", name_size="small", with_panel=False, name_version=name_version
             )
             console.print("-" * 80)
     else:
@@ -625,6 +621,7 @@ def main():
                 favicon_size=favicon_size,
                 name_size=name_size,
                 with_panel=True,
+                name_version=name_version,
             )
 
         console.print()
@@ -637,7 +634,8 @@ def print_usage():
 [bold]Depictio ASCII Logo Display[/bold]
 
 Usage:
-    python logo.py [layout] [favicon_size] [name_size]
+    python logo.py [layout] [favicon_size] [name_size] [version]
+    python logo.py [version]           # CLI or DEPICTIO name version
     python logo.py [size]              # Favicon only
     python logo.py --sizes             # Show all size demos
     python logo.py --layouts           # Show all layout demos
@@ -651,15 +649,20 @@ Layout Options:
 Size Options:
     full, large, medium, small, tiny, or float value (e.g., 0.3)
 
+Version Options:
+    cli             Use DEPICTIO-CLI text (default)
+    depictio        Use DEPICTIO text only
+
 Examples:
-    python logo.py                          # Horizontal layout, medium sizes
-    python logo.py horizontal small medium  # Horizontal: small favicon, medium name
-    python logo.py vertical                 # Vertical layout, medium sizes
-    python logo.py favicon-only large       # Large favicon only
-    python logo.py name-only small          # Small name only
-    python logo.py medium                   # Medium favicon only (shorthand)
-    python logo.py --sizes                  # Show all size and layout demos
-    python logo.py --layouts               # Show all layout options
+    python logo.py                              # Horizontal layout, CLI version, medium sizes
+    python logo.py horizontal small medium cli # Horizontal: small favicon, medium name, CLI
+    python logo.py cli                          # CLI version, horizontal layout, medium sizes  
+    python logo.py depictio                     # DEPICTIO version, horizontal layout, medium sizes
+    python logo.py vertical                     # Vertical layout, CLI version, medium sizes
+    python logo.py favicon-only large           # Large favicon only
+    python logo.py name-only small depictio     # Small DEPICTIO name only
+    python logo.py --sizes                      # Show all size and layout demos
+    python logo.py --layouts                   # Show all layout options
     """)
 
 
