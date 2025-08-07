@@ -320,10 +320,11 @@ spec:
             mkdir -p /tmp/depictio-uploads
 
             # Set ownership and permissions for PVC-mounted directories
-            chown -R 1000:1000 /app/depictio/dash/static/screenshots
-            chown -R 1000:1000 /app/depictio/keys
-            chown -R 1000:1000 /app/depictio/.depictio
-            chown -R 1000:1000 /tmp/depictio-uploads
+            # Match frontend security context: user 1000, group 2000
+            chown -R 1000:2000 /app/depictio/dash/static/screenshots
+            chown -R 1000:2000 /app/depictio/keys
+            chown -R 1000:2000 /app/depictio/.depictio
+            chown -R 1000:2000 /tmp/depictio-uploads
 
             chmod -R 775 /app/depictio/dash/static/screenshots
             chmod -R 775 /app/depictio/keys
