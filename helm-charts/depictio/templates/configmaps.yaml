@@ -18,10 +18,10 @@ data:
   DEPICTIO_MONGODB_WIPE: {{ .Values.backend.env.DEPICTIO_MONGODB_WIPE | quote }}
   DEPICTIO_MONGODB_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_MONGODB_SERVICE_PORT | quote }}
 
-  # Unauthenticated mode
-  DEPICTIO_AUTH_UNAUTHENTICATED_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_UNAUTHENTICATED_MODE | quote }}
-  DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.backend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | quote }}
-  DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.backend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | quote }}
+  # Authentication mode (defaults to authenticated mode)
+  DEPICTIO_AUTH_UNAUTHENTICATED_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_UNAUTHENTICATED_MODE | default "false" | quote }}
+  DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.backend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | default "anonymous@example.com" | quote }}
+  DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.backend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | default "24" | quote }}
   # Performance
   DEPICTIO_FASTAPI_WORKERS: {{ .Values.backend.env.DEPICTIO_FASTAPI_WORKERS | quote }}
   {{- if not .Values.minio.enabled }}
@@ -54,10 +54,10 @@ data:
   # DEPICTIO_MINIO_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_MINIO_SERVICE_PORT | quote }}
   DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo" .Release.Name | quote }}
   DEPICTIO_MONGODB_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_MONGODB_SERVICE_PORT | quote }}
-  # Unauthenticated mode
-  DEPICTIO_AUTH_UNAUTHENTICATED_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_UNAUTHENTICATED_MODE | quote }}
-  DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.backend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | quote }}
-  DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.backend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | quote }}
+  # Authentication mode (defaults to authenticated mode)
+  DEPICTIO_AUTH_UNAUTHENTICATED_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_UNAUTHENTICATED_MODE | default "false" | quote }}
+  DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.backend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | default "anonymous@example.com" | quote }}
+  DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.backend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | default "24" | quote }}
   # Performance
   DEPICTIO_DASH_WORKERS: {{ .Values.frontend.env.DEPICTIO_DASH_WORKERS | quote }}
   {{- if not .Values.minio.enabled }}

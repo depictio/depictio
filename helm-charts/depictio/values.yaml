@@ -132,12 +132,6 @@ backend:
     # DEPICTIO_FASTAPI_PUBLIC_URL: "https://{{ .Release.Name }}-api.{{ .Values.global.domain }}"
     # DEPICTIO_MINIO_PUBLIC_URL: "https://{{ .Release.Name }}-minio.{{ .Values.global.domain }}"
 
-    # Enable unauthenticated mode (allows anonymous access)
-    DEPICTIO_AUTH_UNAUTHENTICATED_MODE: "true"
-
-    # Anonymous user configuration
-    DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
-    DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "24"
     # Performance - Reduced workers for better stability with multiple replicas
     DEPICTIO_FASTAPI_WORKERS: "4"
 
@@ -176,7 +170,7 @@ frontend:
     httpsPort: 443
     targetPort: 5080
   env:
-    DEPICTIO_CONTENXT: "server"
+    DEPICTIO_CONTEXT: "server"
     DEV_MODE: "false"
     DEPICTIO_FASTAPI_SERVICE_PORT: "80"
     DEPICTIO_MONGODB_SERVICE_PORT: "27018"
