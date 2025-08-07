@@ -25,7 +25,7 @@ def build_interactive_frame(index, children=None, show_border=False):
                     "Configure your interactive component using the edit menu",
                     style={
                         "textAlign": "center",
-                        "color": "#999",
+                        "color": "var(--app-text-color, #999)",  # Use theme-aware text color
                         "fontSize": "14px",
                         "fontStyle": "italic",
                     },
@@ -52,6 +52,7 @@ def build_interactive_frame(index, children=None, show_border=False):
                 "boxShadow": "none",
                 "border": "1px solid var(--app-border-color, #ddd)",
                 "borderRadius": "4px",
+                "backgroundColor": "var(--app-surface-color, transparent)",  # Use theme-aware background
             },
             id={
                 "type": "interactive-component",
@@ -82,6 +83,7 @@ def build_interactive_frame(index, children=None, show_border=False):
                 "position": "relative",  # Ensure positioning context
                 "border": "1px solid var(--app-border-color, #ddd)",
                 "borderRadius": "4px",
+                "backgroundColor": "var(--app-surface-color, transparent)",  # Use theme-aware background
             },
             id={
                 "type": "interactive-component",
@@ -640,9 +642,17 @@ def build_interactive(**kwargs):
             df_for_options = pl.DataFrame()
         else:
             # Always load unfiltered data for categorical component options
-            df_for_options = load_deltatable_lite(
-                ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN, load_for_options=True
-            )
+            # Handle joined data collection IDs - don't convert to ObjectId
+            if isinstance(dc_id, str) and "--" in dc_id:
+                # For joined data collections, pass the DC ID as string
+                df_for_options = load_deltatable_lite(
+                    ObjectId(wf_id), dc_id, TOKEN=TOKEN, load_for_options=True
+                )
+            else:
+                # Regular data collection - convert to ObjectId
+                df_for_options = load_deltatable_lite(
+                    ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN, load_for_options=True
+                )
 
         # Use the unfiltered data for generating options
         df = df_for_options
@@ -655,7 +665,13 @@ def build_interactive(**kwargs):
             logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
             df = pl.DataFrame()  # Return empty DataFrame if IDs are missing
         else:
-            df = load_deltatable_lite(ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN)
+            # Handle joined data collection IDs - don't convert to ObjectId
+            if isinstance(dc_id, str) and "--" in dc_id:
+                # For joined data collections, pass the DC ID as string
+                df = load_deltatable_lite(ObjectId(wf_id), dc_id, TOKEN=TOKEN)
+            else:
+                # Regular data collection - convert to ObjectId
+                df = load_deltatable_lite(ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN)
     else:
         logger.debug(
             f"Interactive component {index}: Using pre-loaded DataFrame (shape: {df.shape})"
@@ -667,7 +683,7 @@ def build_interactive(**kwargs):
 
     # If the aggregation value is Select, MultiSelect or SegmentedControl
     if interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
-        data = sorted(df[column_name].drop_nulls().unique())
+        data = sorted(df[column_name].drop_nulls().unique())[:100]  # Limit to 100 options
 
         # CRITICAL: If DataFrame is empty but we have a preserved value, include those values in options
         # This ensures the component can display the preserved selection even when filtered data is empty
@@ -758,27 +774,27 @@ def build_interactive(**kwargs):
             # Recreate the component with additional MultiSelect properties
             interactive_component = func_name(**component_kwargs)
 
-    # If the aggregation value is TextInput
-    elif interactive_component_type == "TextInput":
-        logger.debug("TextInput")
-        logger.debug(f"Value: {value}")
-        logger.debug(f"Value type: {type(value)}")
-        kwargs = {"persistence_type": "local"}
-        if not value:
-            value = ""
-        logger.debug(f"Value: {value}")
-        logger.debug(f"Value type: {type(value)}")
-        kwargs.update({"value": value})
+    # # If the aggregation value is TextInput - DISABLED: causes auto-refresh on every character
+    # elif interactive_component_type == "TextInput":
+    #     logger.debug("TextInput")
+    #     logger.debug(f"Value: {value}")
+    #     logger.debug(f"Value type: {type(value)}")
+    #     kwargs = {"persistence_type": "local"}
+    #     if not value:
+    #         value = ""
+    #     logger.debug(f"Value: {value}")
+    #     logger.debug(f"Value type: {type(value)}")
+    #     kwargs.update({"value": value})
 
-        # Apply custom color to TextInput if specified
-        if color:
-            kwargs["styles"] = {"input": {"borderColor": color}, "label": {"color": color}}
+    #     # Apply custom color to TextInput if specified
+    #     if color:
+    #         kwargs["styles"] = {"input": {"borderColor": color}, "label": {"color": color}}
 
-        interactive_component = func_name(
-            placeholder="Your selected value",
-            id={"type": value_div_type, "index": str(index)},
-            **kwargs,
-        )
+    #     interactive_component = func_name(
+    #         placeholder="Your selected value",
+    #         id={"type": value_div_type, "index": str(index)},
+    #         **kwargs,
+    #     )
 
     ## Numerical data
 
@@ -985,9 +1001,12 @@ def build_interactive(**kwargs):
             "id": {"type": value_div_type, "index": str(index)},
             # Keep it simple - no step, precision, or label parameters initially
             "step": 0.01,  # Default step for DMC sliders
-            "minRange": 0.01,  # Default min range for DMC RangeSlider
             "persistence_type": "local",
         }
+
+        # Add minRange only for RangeSlider (not supported by regular Slider)
+        if interactive_component_type == "RangeSlider":
+            kwargs_component["minRange"] = 0.01  # Default min range for DMC RangeSlider
 
         logger.info(f"DMC Slider: Using range {min_value}-{max_value}")
 
@@ -1203,13 +1222,18 @@ def build_interactive(**kwargs):
     else:
         logger.info(f"Interactive - component value: {value}")
 
-    # Apply custom color if specified
-    title_style = {"marginBottom": "0.5rem"}
+    # Apply custom color if specified, otherwise use theme-aware color
+    title_style = {
+        "marginBottom": "0.5rem",
+        "color": "var(--app-text-color, #000000)",  # Default to theme-aware text color
+    }
     if color:
         title_style["color"] = color
         # Store color for component styling
         store_data["custom_color"] = color
         logger.info(f"Applied custom color: {color}")
+    else:
+        logger.debug("Using theme-aware text color for title")
 
     card_title_h5 = html.H5(card_title, style=title_style)
 
@@ -1267,6 +1291,8 @@ def build_interactive(**kwargs):
             "maxWidth": "500px !important",  # Constrain width to reasonable size
             "padding": "10px",
             "boxSizing": "border-box",
+            "backgroundColor": "var(--app-surface-color, transparent)",  # Use theme-aware background
+            "color": "var(--app-text-color, #000000)",  # Use theme-aware text color
             # Prevent vertical stretching with !important
             "flex": "none !important",
             "flexGrow": "0 !important",
@@ -1364,10 +1390,10 @@ agg_functions = {
     "object": {
         "title": "Object",
         "input_methods": {
-            "TextInput": {
-                "component": dmc.TextInput,
-                "description": "Text input: will return corresponding data to the exact text or regular expression",
-            },
+            # "TextInput": {
+            #     "component": dmc.TextInput,
+            #     "description": "Text input: will return corresponding data to the exact text or regular expression - DISABLED: causes auto-refresh on every character",
+            # },
             "Select": {
                 "component": dmc.Select,
                 "description": "Select: will return corresponding data to the selected value",

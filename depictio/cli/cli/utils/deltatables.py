@@ -18,6 +18,31 @@ from depictio.models.models.s3 import PolarsStorageOptions
 from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
 
 
+def calculate_dataframe_size_bytes(df: pl.DataFrame) -> int:
+    """
+    Calculate the memory size of a Polars DataFrame in bytes using Polars' native estimated_size method.
+
+    Args:
+        df (pl.DataFrame): The Polars DataFrame to calculate size for
+
+    Returns:
+        int: Estimated size in bytes of the DataFrame in memory
+    """
+    try:
+        # Use Polars' native estimated_size method (available in Polars >= 0.20.0)
+        size_bytes = int(df.estimated_size("b"))  # 'b' for bytes
+        logger.info(
+            f"Calculated DataFrame size: {size_bytes} bytes ({size_bytes / (1024 * 1024):.2f} MB)"
+        )
+        return size_bytes
+    except Exception as e:
+        logger.warning(f"Could not calculate DataFrame size using estimated_size: {e}")
+        # Simple fallback: rough estimate based on shape
+        estimated_size = df.height * len(df.columns) * 8  # 8 bytes per cell average
+        logger.info(f"Using fallback size estimate: {estimated_size} bytes")
+        return estimated_size
+
+
 @validate_call
 def fetch_file_data(dc_id: str, CLI_config: CLIConfig) -> list[File]:
     """
@@ -407,6 +432,22 @@ def client_aggregate_data(
         )
         logger.info("S3 Destination does not exist, will create it during processing")
 
+    # Calculate DataFrame size before writing (more accurate than S3 file size estimation)
+    logger.info(f"Aggregated DataFrame shape before size calculation: {aggregated_df.shape}")
+    logger.debug(f"Aggregated DataFrame columns: {aggregated_df.columns}")
+    deltatable_size_bytes = calculate_dataframe_size_bytes(aggregated_df)
+
+    # Enhanced debugging for size calculation
+    logger.info(f"🔍 DEBUG: Calculated deltatable_size_bytes = {deltatable_size_bytes}")
+    logger.info(f"🔍 DEBUG: Size in MB = {deltatable_size_bytes / (1024 * 1024):.2f} MB")
+
+    if deltatable_size_bytes == 0:
+        logger.warning("DataFrame size calculated as 0 bytes - this indicates an empty DataFrame")
+        logger.debug(f"DataFrame shape: {aggregated_df.shape}")
+        logger.debug(
+            f"DataFrame head: {aggregated_df.head(2) if aggregated_df.height > 0 else 'DataFrame is empty'}"
+        )
+
     result = write_delta_table(
         aggregated_df=aggregated_df,
         destination_file=destination_prefix,
@@ -427,13 +468,18 @@ def client_aggregate_data(
 
     aggregated_df.rich_info(extended)  # type: ignore[unresolved-attribute]
 
-    # 6. Upsert object in the remote DB
+    # 6. Upsert object in the remote DB with size information
+    logger.info(
+        f"🔍 DEBUG: About to call api_upsert_deltatable with deltatable_size_bytes={deltatable_size_bytes}"
+    )
     api_upsert_result = api_upsert_deltatable(
         data_collection_id=str(dc_id),
         CLI_config=CLI_config,
         delta_table_location=destination_prefix,
         update=overwrite,
+        deltatable_size_bytes=deltatable_size_bytes,
     )
+    logger.info(f"🔍 DEBUG: API upsert response status: {api_upsert_result.status_code}")
     if api_upsert_result.status_code != 200:
         error_msg = f"Error upserting Delta table metadata: {api_upsert_result.text}"
         logger.error(error_msg)

@@ -65,6 +65,38 @@ class SimpleCodeExecutor:
             "_setattr_": safe_setattr,
         }
 
+    def _validate_no_df_assignment(self, code: str) -> Tuple[bool, str]:
+        """
+        Validate that the code doesn't attempt to reassign the 'df' variable.
+
+        Args:
+            code: Python code to validate
+
+        Returns:
+            (is_valid: bool, error_message: str)
+        """
+        import ast
+
+        try:
+            tree = ast.parse(code)
+        except SyntaxError as e:
+            return False, f"Syntax error in code: {e}"
+
+        # Check for df assignment
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == "df":
+                        return False, "❌ Cannot reassign 'df' variable. Use the provided dataset."
+            elif isinstance(node, ast.AugAssign):
+                if isinstance(node.target, ast.Name) and node.target.id == "df":
+                    return (
+                        False,
+                        "❌ Cannot modify 'df' variable assignment. Use the provided dataset.",
+                    )
+
+        return True, ""
+
     def execute_code(self, code: str, dataframe: pd.DataFrame) -> Tuple[bool, Any, str]:
         """
         Execute user code safely using RestrictedPython.
@@ -77,6 +109,11 @@ class SimpleCodeExecutor:
             (success: bool, result: Any, message: str)
         """
         try:
+            # First, validate that df is not being reassigned
+            is_valid, validation_error = self._validate_no_df_assignment(code)
+            if not is_valid:
+                return False, None, validation_error
+
             # Compile code with RestrictedPython
             byte_code = compile_restricted(code, filename="<user_code>", mode="exec")
 

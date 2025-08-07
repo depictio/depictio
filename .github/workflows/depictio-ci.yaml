@@ -1256,6 +1256,8 @@ jobs:
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
           cp .env.example .env
+          # Enable dev mode
+          sed -i 's/# DEV_MODE=false/DEV_MODE=true/' docker-compose/.env
           mkdir -p depictioDB minio_data
           chmod 777 depictioDB minio_data
 
@@ -1336,6 +1338,7 @@ jobs:
           cp .env.example .env
           # Enable unauthenticated mode
           sed -i 's/# DEPICTIO_AUTH_UNAUTHENTICATED_MODE=false/DEPICTIO_AUTH_UNAUTHENTICATED_MODE=true/' docker-compose/.env
+          sed -i 's/# DEV_MODE=false/DEV_MODE=true/' docker-compose/.env
           mkdir -p depictioDB minio_data
           chmod 777 depictioDB minio_data
 

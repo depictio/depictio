@@ -96,12 +96,48 @@ def register_callbacks_stepper_part_one(app):
 
         # print(data_collection_selection)
 
-        dc_specs = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
-            headers={
-                "Authorization": f"Bearer {TOKEN}",
-            },
-        ).json()
+        # Handle both regular and joined data collection IDs
+        if isinstance(data_collection_id, str) and "--" in data_collection_id:
+            # Handle joined data collection - create synthetic specs
+            dc_ids = data_collection_id.split("--")
+            try:
+                # Get individual DC specs for display
+                dc1_specs = httpx.get(
+                    f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_ids[0]}",
+                    headers={"Authorization": f"Bearer {TOKEN}"},
+                ).json()
+                dc2_specs = httpx.get(
+                    f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_ids[1]}",
+                    headers={"Authorization": f"Bearer {TOKEN}"},
+                ).json()
+
+                # Create synthetic specs for joined DC
+                dc_specs = {
+                    "config": {
+                        "type": "table",  # Joined DCs are always table type
+                        "metatype": "joined",  # Custom metatype for joined DCs
+                    },
+                    "data_collection_tag": f"Joined: {dc1_specs['data_collection_tag']} + {dc2_specs['data_collection_tag']}",
+                    "description": f"Joined data collection combining {dc1_specs['data_collection_tag']} and {dc2_specs['data_collection_tag']}",
+                    "_id": data_collection_id,
+                }
+            except Exception as e:
+                logger.error(f"Error fetching specs for joined DC: {e}")
+                # Fallback specs
+                dc_specs = {
+                    "config": {"type": "table", "metatype": "joined"},
+                    "data_collection_tag": f"Joined: {data_collection_id}",
+                    "description": "Joined data collection",
+                    "_id": data_collection_id,
+                }
+        else:
+            # Regular data collection
+            dc_specs = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
+                headers={
+                    "Authorization": f"Bearer {TOKEN}",
+                },
+            ).json()
         # dc_specs = {
         #     "config": {
         #         "type": "Table",

@@ -7,6 +7,9 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import db, projects_collection
 from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
+    _delete_data_collection_by_id,
+    _get_data_collection_specs,
+    _update_data_collection_name,
     generate_join_dict,
     normalize_join_details,
 )
@@ -34,41 +37,7 @@ async def specs(
     data_collection_id: PyObjectId,
     current_user: str = Depends(get_user_or_anonymous),
 ):
-    try:
-        data_collection_oid = ObjectId(data_collection_id)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    # Use MongoDB aggregation to directly retrieve the specific data collection
-    pipeline = [
-        # Match projects containing this collection and with appropriate permissions
-        {
-            "$match": {
-                "workflows.data_collections._id": data_collection_oid,
-                "$or": [
-                    {"permissions.owners._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
-                    {"permissions.viewers._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
-                    {"permissions.viewers": "*"},
-                    {"is_public": True},
-                ],
-            }
-        },
-        # Unwind the workflows array
-        {"$unwind": "$workflows"},
-        # Unwind the data_collections array
-        {"$unwind": "$workflows.data_collections"},
-        # Match the specific data collection ID
-        {"$match": {"workflows.data_collections._id": data_collection_oid}},
-        # Return only the data collection
-        {"$replaceRoot": {"newRoot": "$workflows.data_collections"}},
-    ]
-
-    result = list(projects_collection.aggregate(pipeline))
-
-    if not result:
-        raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
-
-    return convert_objectid_to_str(result[0])
+    return await _get_data_collection_specs(data_collection_id, current_user)
 
 
 @datacollections_endpoint_router.delete("/delete/{workflow_id}/{data_collection_id}")
@@ -218,3 +187,25 @@ async def get_tag_from_id(
     dc_tag = result[0]["data_collection_tag"]
 
     return dc_tag
+
+
+@datacollections_endpoint_router.put("/{data_collection_id}/name")
+async def update_data_collection_name(
+    data_collection_id: str,
+    request_data: dict,
+    current_user: str = Depends(get_current_user),
+):
+    """Update the name of a data collection."""
+    new_name = request_data.get("new_name")
+    if new_name is None:
+        raise HTTPException(status_code=400, detail="new_name is required")
+    return await _update_data_collection_name(data_collection_id, new_name, current_user)
+
+
+@datacollections_endpoint_router.delete("/{data_collection_id}")
+async def delete_data_collection_by_id(
+    data_collection_id: str,
+    current_user: str = Depends(get_current_user),
+):
+    """Delete a data collection by its ID."""
+    return await _delete_data_collection_by_id(data_collection_id, current_user)

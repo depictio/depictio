@@ -141,17 +141,35 @@ def render_login_form():
                                 icon="devicon:google",
                                 width=20,
                                 height=20,
-                                style={"marginRight": "8px"},
+                                style={"marginRight": "10px"},
                             ),
                             "Sign in with Google",
                         ],
                         id="google-oauth-button",
                         radius="md",
                         variant="outline",
-                        color="red",
                         fullWidth=True,
                         style={
                             "display": "block" if settings.auth.google_oauth_enabled else "none",
+                            "borderColor": "var(--app-border-color, #ddd)",
+                            "backgroundColor": "var(--app-surface-color, #ffffff)",
+                            "color": "var(--app-text-color, #000000)",
+                            "fontWeight": "500",
+                            "padding": "12px 16px",
+                            "height": "48px",
+                            "fontSize": "14px",
+                            "transition": "all 0.2s ease",
+                            "boxShadow": "0 1px 2px rgba(0, 0, 0, 0.05)",
+                        },
+                        styles={
+                            "root": {
+                                "&:hover": {
+                                    "backgroundColor": "var(--app-surface-color, #f8f9fa)",
+                                    "borderColor": "#4285f4",
+                                    "boxShadow": "0 2px 4px rgba(66, 133, 244, 0.1)",
+                                    "transform": "translateY(-1px)",
+                                }
+                            }
                         },
                     ),
                 ],
@@ -576,7 +594,8 @@ layout = html.Div(
             ),
             withCloseButton=False,
             closeOnEscape=True,
-            closeOnClickOutside=True,
+            # closeOnEscape=False,
+            closeOnClickOutside=False,
             size="lg",
             overlayProps={
                 "opacity": 0.03,  # Make overlay transparent so we can see our custom background

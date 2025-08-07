@@ -140,7 +140,26 @@ def register_callbacks_save(app):
         interactive_component_values_all,
     ):
         logger.info("Saving dashboard data...")
-        # logger.info(f"Stored metadata: {stored_metadata}")
+        logger.info(
+            f"📊 SAVE DEBUG - Raw stored_metadata count: {len(stored_metadata) if stored_metadata else 0}"
+        )
+
+        # Log the first few raw metadata entries for debugging
+        # if stored_metadata:
+        #     for i, elem in enumerate(stored_metadata[:3]):  # Only first 3 to avoid spam
+        #         logger.info(
+        #             f"📊 SAVE DEBUG - Raw metadata {i}: keys={list(elem.keys()) if elem else 'None'}"
+        #         )
+        #         if elem:
+        #             logger.info(
+        #                 f"📊 SAVE DEBUG - Raw metadata {i}: dict_kwargs={elem.get('dict_kwargs', 'MISSING')}"
+        #             )
+        #             logger.info(
+        #                 f"📊 SAVE DEBUG - Raw metadata {i}: wf_id={elem.get('wf_id', 'MISSING')}, workflow_id={elem.get('workflow_id', 'MISSING')}"
+        #             )
+        #             logger.info(
+        #                 f"📊 SAVE DEBUG - Raw metadata {i}: dc_id={elem.get('dc_id', 'MISSING')}"
+        #             )
 
         stored_metadata_for_logging = [
             {
@@ -223,15 +242,134 @@ def register_callbacks_save(app):
         ):
             return dash.no_update
 
-        # Deduplicate and clean metadata
+        # Deduplicate and clean metadata - prioritize complete metadata entries
         unique_metadata = []
         seen_indexes = set()
+        indexed_metadata = {}
 
-        # logger.info(f"Stored metadata: {stored_metadata}")
+        # First pass: collect all metadata entries by index
         for elem in stored_metadata:
-            if elem["index"] not in seen_indexes:
-                unique_metadata.append(elem)
-                seen_indexes.add(elem["index"])
+            index = elem["index"]
+            if index not in indexed_metadata:
+                indexed_metadata[index] = []
+            indexed_metadata[index].append(elem)
+
+        # Second pass: for each index, select the most complete metadata entry
+        for index, metadata_list in indexed_metadata.items():
+            if len(metadata_list) == 1:
+                # Single entry - use it
+                best_metadata = metadata_list[0]
+            else:
+                # Multiple entries - prioritize by completeness
+                # logger.info(
+                #     f"📊 SAVE DEBUG - Found {len(metadata_list)} duplicate entries for index {index}"
+                # )
+
+                # Score each metadata entry by completeness
+                def score_metadata(meta):
+                    score = 0
+                    # Highest priority: non-empty dict_kwargs (this is the critical field we need to preserve)
+                    dict_kwargs = meta.get("dict_kwargs", {})
+                    if isinstance(dict_kwargs, dict) and len(dict_kwargs) > 0:
+                        score += 1000  # Much higher weight for dict_kwargs
+                        # Bonus points for specific important fields in dict_kwargs
+                        important_fields = ["x", "y", "color", "size", "hover_data"]
+                        for field in important_fields:
+                            if field in dict_kwargs and dict_kwargs[field]:
+                                score += 10
+
+                    # Medium priority: component configuration fields
+                    if meta.get("wf_id"):
+                        score += 100
+                    if meta.get("dc_id"):
+                        score += 100
+                    if meta.get("visu_type"):
+                        score += 50
+                    if meta.get("component_type"):
+                        score += 25
+
+                    # Low priority: metadata fields
+                    if meta.get("last_updated"):
+                        score += 1
+                    if meta.get("title"):
+                        score += 5
+
+                    return score
+
+                # Log all candidates with their scores for debugging
+                candidate_scores = []
+                for i, meta in enumerate(metadata_list):
+                    score = score_metadata(meta)
+                    candidate_scores.append((score, i, meta))
+                    # logger.info(
+                    #     f"📊 SAVE DEBUG - Candidate {i} for index {index}: score={score}, dict_kwargs={meta.get('dict_kwargs', 'MISSING')}"
+                    # )
+
+                # Select the metadata with the highest completeness score
+                best_metadata = max(metadata_list, key=score_metadata)
+                # best_score = score_metadata(best_metadata)
+
+                # logger.info(
+                #     f"📊 SAVE DEBUG - SELECTED metadata with score {best_score} for index {index}"
+                # )
+                # logger.info(
+                #     f"📊 SAVE DEBUG - SELECTED metadata dict_kwargs: {best_metadata.get('dict_kwargs', 'MISSING')}"
+                # )
+                # logger.info(
+                #     f"📊 SAVE DEBUG - SELECTED metadata has {len(best_metadata.get('dict_kwargs', {}))} parameters"
+                # )
+
+            # Safety check: ensure we're not accidentally selecting empty metadata when better options exist
+            if len(metadata_list) > 1:
+                dict_kwargs = best_metadata.get("dict_kwargs", {})
+                if not isinstance(dict_kwargs, dict) or len(dict_kwargs) == 0:
+                    # Double-check if any other candidate has non-empty dict_kwargs
+                    alternatives = [
+                        meta
+                        for meta in metadata_list
+                        if meta.get("dict_kwargs") and len(meta.get("dict_kwargs", {})) > 0
+                    ]
+                    if alternatives:
+                        logger.warning(
+                            f"📊 SAVE DEBUG - SAFETY CHECK: Found {len(alternatives)} alternatives with non-empty dict_kwargs for index {index}"
+                        )
+                        # Use the first alternative with non-empty dict_kwargs
+                        best_metadata = alternatives[0]
+                        logger.warning(
+                            f"📊 SAVE DEBUG - SAFETY CHECK: Switched to alternative with dict_kwargs: {best_metadata.get('dict_kwargs', 'MISSING')}"
+                        )
+
+            unique_metadata.append(best_metadata)
+            seen_indexes.add(index)
+
+        # Summary logging of deduplication results
+        # logger.info(
+        #     f"📊 SAVE DEBUG - Deduplication complete: {len(unique_metadata)} unique components"
+        # )
+        # components_with_dict_kwargs = sum(
+        #     1
+        #     for meta in unique_metadata
+        #     if meta.get("dict_kwargs") and len(meta.get("dict_kwargs", {})) > 0
+        # )
+        # # logger.info(
+        # #     f"📊 SAVE DEBUG - Components with non-empty dict_kwargs: {components_with_dict_kwargs}/{len(unique_metadata)}"
+        # # )
+
+        # # Log any components that ended up with empty dict_kwargs for investigation
+        # empty_dict_kwargs_components = [
+        #     meta
+        #     for meta in unique_metadata
+        #     if not meta.get("dict_kwargs") or len(meta.get("dict_kwargs", {})) == 0
+        # ]
+        # if empty_dict_kwargs_components:
+        #     logger.warning(
+        #         f"📊 SAVE DEBUG - WARNING: {len(empty_dict_kwargs_components)} components have empty dict_kwargs:"
+        #     )
+        #     for meta in empty_dict_kwargs_components:
+        #         logger.warning(
+        #             f"📊 SAVE DEBUG - Empty dict_kwargs component: index={meta.get('index')}, type={meta.get('component_type')}"
+        #         )
+
         # logger.info(f"Unique metadata: {unique_metadata}")
         # logger.info(f"seen_indexes: {seen_indexes}")
         # Remove child components for edit mode
@@ -292,39 +430,59 @@ def register_callbacks_save(app):
                     f"Component data: type={component.get('component_type')}, title={component.get('title')}, aggregation={component.get('aggregation')}"
                 )
 
-                # Find and log the original component that will be removed
+                # Find and log the original components that will be removed (both original and temp)
+                temp_parent_index = f"{parent_index}-tmp"
                 original_component = None
+                temp_component = None
+
                 for elem in non_edited_components:
                     if elem.get("index") == parent_index:
                         original_component = elem
-                        break
+                    elif elem.get("index") == temp_parent_index:
+                        temp_component = elem
 
+                components_to_remove = []
                 if original_component:
-                    logger.info(
-                        f"Found original component to remove: index={original_component.get('index')}, type={original_component.get('component_type')}, title={original_component.get('title')}, aggregation={original_component.get('aggregation')}"
-                    )
-                else:
-                    logger.warning(f"Could not find original component with index {parent_index}")
+                    components_to_remove.append(f"original ({original_component.get('index')})")
+                if temp_component:
+                    components_to_remove.append(f"temp ({temp_component.get('index')})")
 
-                # Remove the original component that was being edited
+                if components_to_remove:
+                    logger.info(f"Found components to remove: {', '.join(components_to_remove)}")
+                else:
+                    logger.warning(
+                        f"Could not find any components to remove with parent_index {parent_index}"
+                    )
+
+                # Remove the original component and its temp component that were being edited
+                temp_parent_index = f"{parent_index}-tmp"
+                original_count = len(non_edited_components)
                 non_edited_components = [
-                    elem for elem in non_edited_components if elem.get("index") != parent_index
+                    elem
+                    for elem in non_edited_components
+                    if elem.get("index") not in [parent_index, temp_parent_index]
                 ]
-                logger.info(f"Removed original component with index {parent_index}")
+                removed_count = original_count - len(non_edited_components)
+                logger.info(
+                    f"Removed {removed_count} components with indices {parent_index} and {temp_parent_index}"
+                )
 
                 # Update the edited component's index to be the same as the original
                 component["index"] = parent_index
                 logger.info(
                     f"Updated edited component index from {component_index} to {parent_index}"
                 )
+
+                # Clear parent_index since this is now the final component (no longer a child)
+                component["parent_index"] = None
+                logger.info(f"Cleared parent_index for final component {parent_index}")
+
                 logger.info(
                     f"Updated component data: type={component.get('component_type')}, title={component.get('title')}, aggregation={component.get('aggregation')}"
                 )
-
-                # Remove parent_index from the component data before saving
-                if "parent_index" in component:
-                    del component["parent_index"]
-                    logger.info(f"Removed parent_index from component {parent_index}")
+                # if "parent_index" in component:
+                #     del component["parent_index"]
+                #     logger.info(f"Removed parent_index from component {parent_index}")
 
             # Combine all components back together
             unique_metadata = non_edited_components + edited_components

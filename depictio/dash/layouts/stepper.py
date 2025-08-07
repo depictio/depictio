@@ -1,4 +1,5 @@
 import dash
+import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import httpx
@@ -36,6 +37,16 @@ def register_callbacks_stepper(app):
     )
     def close_modal(n_clicks):
         if n_clicks > 0:
+            return False
+        return True
+
+    @app.callback(
+        Output({"type": "modal-edit", "index": MATCH}, "opened"),
+        [Input({"type": "btn-done-edit", "index": MATCH}, "n_clicks")],
+        prevent_initial_call=True,
+    )
+    def close_edit_modal(n_clicks):
+        if n_clicks and n_clicks > 0:
             return False
         return True
 
@@ -154,6 +165,7 @@ def register_callbacks_stepper(app):
 
         logger.info(f"Component selected: {component_selected}")
 
+        # Get regular data collections
         valid_dcs = [
             {
                 "label": dc["data_collection_tag"],
@@ -163,7 +175,58 @@ def register_callbacks_stepper(app):
             if component_selected in mapping_component_data_collection[dc["config"]["type"]]
         ]
 
+        # Add joined data collection options only for Figure and Table components
+        # Exclude Card and Interactive components from having access to joined data collections
+        allowed_components_for_joined = ["Figure", "Table"]
+        if component_selected in allowed_components_for_joined:
+            try:
+                # Fetch available joins for this workflow
+                joins_response = httpx.get(
+                    f"{API_BASE_URL}/depictio/api/v1/datacollections/get_dc_joined/{selected_workflow}",
+                    headers={"Authorization": f"Bearer {TOKEN}"},
+                )
+
+                if joins_response.status_code == 200:
+                    joins_data = joins_response.json()
+                    workflow_joins = joins_data.get(selected_workflow, {})
+
+                    # Create a mapping from DC ID to DC tag for display names
+                    dc_id_to_tag = {
+                        dc["id"]: dc["data_collection_tag"]
+                        for dc in selected_wf_data["data_collections"]
+                    }
+
+                    # Add joined DC options
+                    for join_key, join_config in workflow_joins.items():
+                        # Extract DC IDs from join key (format: "dc_id1--dc_id2")
+                        dc_ids = join_key.split("--")
+                        if len(dc_ids) == 2:
+                            dc1_id, dc2_id = dc_ids
+                            dc1_tag = dc_id_to_tag.get(dc1_id, dc1_id)
+                            dc2_tag = dc_id_to_tag.get(dc2_id, dc2_id)
+
+                            # Create display name for joined DC
+                            joined_label = f"🔗 Joined: {dc1_tag} + {dc2_tag}"
+
+                            valid_dcs.append(
+                                {
+                                    "label": joined_label,
+                                    "value": join_key,  # Use join key as value (e.g., "dc_id1--dc_id2")
+                                }
+                            )
+
+                    logger.info(f"Added {len(workflow_joins)} joined data collection options")
+                else:
+                    logger.warning(
+                        f"Failed to fetch joins for workflow {selected_workflow}: {joins_response.status_code}"
+                    )
+
+            except Exception as e:
+                logger.error(f"Error fetching joined data collections: {str(e)}")
+
         logger.info(f"ID: {id}")
+        logger.info(f"Total valid DCs (including joins): {len(valid_dcs)}")
+
         if not selected_workflow:
             raise dash.exceptions.PreventUpdate
 
@@ -248,6 +311,145 @@ def register_callbacks_stepper(app):
             next_step = max(0, current_step - 1)  # Move to the previous step, minimum is step 0
 
         return next_step, disable_next
+
+    # Data preview callback for stepper
+    @app.callback(
+        Output({"type": "stepper-data-preview", "index": MATCH}, "children"),
+        [
+            Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+        ],
+        State("local-store", "data"),
+        prevent_initial_call=True,
+    )
+    def update_stepper_data_preview(workflow_id, data_collection_id, local_data):
+        """Update data preview in stepper when workflow/data collection changes."""
+        if not workflow_id or not data_collection_id or not local_data:
+            return html.Div()
+
+        try:
+            TOKEN = local_data["access_token"]
+
+            # Load data preview (first 100 rows for stepper)
+            df = load_deltatable_lite(
+                workflow_id=workflow_id,
+                data_collection_id=data_collection_id,
+                TOKEN=TOKEN,
+                limit_rows=100,  # Default preview size for stepper
+            )
+
+            if df is None or df.height == 0:
+                return dmc.Alert(
+                    "No data available for preview",
+                    color="yellow",
+                    title="No Data",
+                )
+
+            # Convert to pandas for AG Grid
+            df_pd = df.to_pandas()
+
+            # Handle column names with dots
+            column_mapping = {}
+            for col in df_pd.columns:
+                if "." in col:
+                    safe_col_name = col.replace(".", "_")
+                    column_mapping[col] = safe_col_name
+                else:
+                    column_mapping[col] = col
+
+            # Rename DataFrame columns to safe names
+            df_pd = df_pd.rename(columns=column_mapping)
+
+            # Create column definitions with improved styling
+            column_defs = []
+            original_columns = list(column_mapping.keys())
+            for original_col in original_columns:
+                safe_col = column_mapping[original_col]
+
+                col_def = {
+                    "headerName": original_col,
+                    "field": safe_col,
+                    "filter": True,
+                    "sortable": True,
+                    "resizable": True,
+                    "minWidth": 120,
+                }
+
+                # Set appropriate column types
+                if df_pd[safe_col].dtype in ["int64", "float64"]:
+                    col_def["type"] = "numericColumn"
+                elif df_pd[safe_col].dtype == "bool":
+                    col_def["cellRenderer"] = "agCheckboxCellRenderer"
+
+                column_defs.append(col_def)
+
+            # Create enhanced AG Grid for stepper
+            grid = dag.AgGrid(
+                id={"type": "stepper-data-grid", "index": workflow_id},
+                columnDefs=column_defs,
+                rowData=df_pd.to_dict("records"),
+                defaultColDef={
+                    "filter": True,
+                    "sortable": True,
+                    "resizable": True,
+                    "minWidth": 100,
+                },
+                dashGridOptions={
+                    "pagination": True,
+                    "paginationPageSize": 10,  # Smaller page size for stepper
+                    "domLayout": "normal",
+                    "animateRows": True,
+                    "suppressMenuHide": True,
+                },
+                style={"height": "350px", "width": "100%"},
+                className="ag-theme-alpine",
+            )
+
+            # Create summary and controls
+            summary_controls = dmc.Group(
+                [
+                    dmc.Group(
+                        [
+                            DashIconify(icon="mdi:table-eye", width=20, color="#228be6"),
+                            dmc.Text("Data Preview", fw="bold", size="md"),
+                        ],
+                        gap="xs",
+                    ),
+                    dmc.Group(
+                        [
+                            dmc.Text(
+                                f"Showing {min(100, df.height):,} of {df.height:,} rows",
+                                size="sm",
+                                c="gray",
+                            ),
+                            dmc.Text(f"{df.width} columns", size="sm", c="gray"),
+                        ],
+                        gap="lg",
+                    ),
+                ],
+                justify="space-between",
+                align="center",
+            )
+
+            return dmc.Card(
+                [
+                    summary_controls,
+                    dmc.Space(h="sm"),
+                    grid,
+                ],
+                withBorder=True,
+                shadow="sm",
+                radius="md",
+                p="md",
+            )
+
+        except Exception as e:
+            logger.error(f"Error in stepper data preview: {e}")
+            return dmc.Alert(
+                f"Error loading data preview: {str(e)}",
+                color="red",
+                title="Preview Error",
+            )
 
 
 def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
@@ -479,6 +681,8 @@ def create_stepper_output(n, active):
             ),
             html.Hr(),
             dbc.Row(html.Div(id={"type": "dropdown-output", "index": n})),
+            # Data preview section
+            html.Div(id={"type": "stepper-data-preview", "index": n}, style={"margin-top": "20px"}),
         ],
         # style={
         #     "height": "100%",
@@ -725,3 +929,17 @@ def update_modal_size(opened):
 def update_modal_size_regular(opened):
     """Update regular modal size when it opens."""
     return MODAL_CONFIG["size"]
+
+
+@callback(
+    Output({"type": "stepper-data-grid", "index": MATCH}, "className"),
+    Input("theme-store", "data"),
+    prevent_initial_call=False,
+)
+def update_ag_grid_theme(theme_data):
+    """Update AG Grid theme class based on current theme."""
+    theme = theme_data or "light"
+    if theme == "dark":
+        return "ag-theme-alpine-dark"
+    else:
+        return "ag-theme-alpine"

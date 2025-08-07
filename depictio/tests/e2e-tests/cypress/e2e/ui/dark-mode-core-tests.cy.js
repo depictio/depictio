@@ -8,9 +8,8 @@ describe('Dark Mode Core Functionality', () => {
     // Clear localStorage to start with clean state
     cy.clearLocalStorage()
 
-    // Login and navigate to dashboard
-    cy.loginAsTestUser('testUser')
-    cy.wait(3000)
+    // Fast token-based login and navigate to dashboard
+    cy.loginWithTokenAsTestUser('testUser')
     cy.visit('/dashboards')
     cy.wait(2000)
   })

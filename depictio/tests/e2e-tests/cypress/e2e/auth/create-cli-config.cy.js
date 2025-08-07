@@ -22,11 +22,11 @@ describe('Create CLI Config Test', () => {
   })
 
   it('creates a new CLI configuration', () => {
-    // Log in using the reusable function
-    cy.loginAsTestUser('testUser')
+    // Fast token-based login
+    cy.loginWithTokenAsTestUser('testUser')
 
-    // Wait for login to complete and navigate to dashboard
-    cy.wait(3000)
+    // Navigate to dashboard
+    cy.wait(1000)
 
     // Check if we're redirected off auth page (more flexible)
     cy.url().should('not.include', '/auth')

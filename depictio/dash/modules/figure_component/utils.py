@@ -492,6 +492,52 @@ def _create_umap_placeholder(df: pl.DataFrame, dict_kwargs: Dict[str, Any], them
     return placeholder_fig
 
 
+def create_figure_placeholder(theme: str = "light", visu_type: str = "scatter") -> Any:
+    """Create a placeholder figure when auto-generation is disabled.
+
+    Args:
+        theme: Theme for the placeholder ('light' or 'dark')
+        visu_type: Visualization type for the placeholder
+
+    Returns:
+        Plotly figure object with placeholder content
+    """
+    # Use standard Plotly templates for better compatibility
+    template = "plotly_dark" if theme == "dark" else "plotly"
+
+    # Create an empty scatter plot as base
+    placeholder_fig = px.scatter(
+        template=template,
+        title="",
+    )
+
+    # Add annotation to indicate auto-generation is disabled
+    placeholder_fig.add_annotation(
+        text="📊 Figure auto-generation is disabled<br>🔧 Configure parameters to generate visualization",
+        xref="paper",
+        yref="paper",
+        x=0.5,
+        y=0.5,
+        showarrow=False,
+        font=dict(size=16),
+        bgcolor="rgba(255,255,255,0.9)" if theme == "light" else "rgba(50,50,50,0.9)",
+        bordercolor="#ddd" if theme == "light" else "#666",
+        borderwidth=1,
+    )
+
+    # Style the placeholder appropriately for the theme
+    placeholder_fig.update_layout(
+        autosize=True,
+        margin=dict(l=40, r=40, t=60, b=40),
+        height=None,
+        showlegend=False,
+        xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, title=""),
+        yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, title=""),
+    )
+
+    return placeholder_fig
+
+
 def _should_defer_umap_computation(df: pl.DataFrame, context: str = "unknown") -> bool:
     """Determine if UMAP computation should be deferred based on data size and context."""
     if df is None or df.is_empty():
@@ -689,6 +735,7 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         "filter_applied": filter_applied,
         "last_updated": datetime.now().isoformat(),
     }
+    logger.info(f"Component metadata: {store_component_data}")
 
     # Ensure dc_config is available for build_figure
     if not dc_config and wf_id and dc_id:
@@ -699,10 +746,21 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
             from depictio.api.v1.configs.config import API_BASE_URL
 
             headers = {"Authorization": f"Bearer {TOKEN}"} if TOKEN else {}
-            dc_specs = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_id}",
-                headers=headers,
-            ).json()
+            # Handle joined data collection IDs
+            if isinstance(dc_id, str) and "--" in dc_id:
+                # For joined data collections, create synthetic specs
+                dc_specs = {
+                    "config": {"type": "table", "metatype": "joined"},
+                    "data_collection_tag": f"Joined data collection ({dc_id})",
+                    "description": "Virtual joined data collection",
+                    "_id": dc_id,
+                }
+            else:
+                # Regular data collection - fetch from API
+                dc_specs = httpx.get(
+                    f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_id}",
+                    headers=headers,
+                ).json()
             dc_config = dc_specs.get("config", {})
             store_component_data["dc_config"] = dc_config
             logger.info(f"Successfully fetched dc_config for figure {index}")
@@ -718,7 +776,13 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         if wf_id and dc_id:
             logger.info(f"Loading data for {wf_id}:{dc_id}")
             try:
-                df = load_deltatable_lite(ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN)
+                # Handle joined data collection IDs - don't convert to ObjectId
+                if isinstance(dc_id, str) and "--" in dc_id:
+                    # For joined data collections, pass the DC ID as string
+                    df = load_deltatable_lite(ObjectId(wf_id), dc_id, TOKEN=TOKEN)
+                else:
+                    # Regular data collection - convert to ObjectId
+                    df = load_deltatable_lite(ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN)
             except Exception as e:
                 logger.error(f"Failed to load data: {e}")
                 df = pl.DataFrame()

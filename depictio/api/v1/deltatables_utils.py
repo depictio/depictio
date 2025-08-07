@@ -34,7 +34,19 @@ def add_filter(
             logger.debug(
                 f"Creating filter: column='{column_name}', values={value}, type={interactive_component_type}"
             )
-            filter_list.append(pl.col(column_name).is_in(value))
+
+            # Cast both the column and values to string to ensure type compatibility
+            try:
+                # Convert values to strings to match string casting
+                string_values = [str(v) for v in value]
+                filter_list.append(pl.col(column_name).cast(pl.String).is_in(string_values))
+                logger.debug(f"Applied string casting for filter on column '{column_name}'")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to apply filter with string casting on column '{column_name}': {e}"
+                )
+                # Fallback to original filter without casting
+                filter_list.append(pl.col(column_name).is_in(value))
 
     elif interactive_component_type == "TextInput":
         if value:
@@ -177,23 +189,167 @@ def convert_filter_model_to_metadata(filter_model):
     return metadata
 
 
+def _load_joined_deltatable(
+    workflow_id: ObjectId,
+    joined_data_collection_id: str,
+    metadata: list[dict] | None = None,
+    TOKEN: str | None = None,
+    limit_rows: int | None = None,
+    load_for_options: bool = False,
+) -> pl.DataFrame:
+    """
+    Load and join data collections based on a joined data collection ID.
+
+    Args:
+        workflow_id (ObjectId): The ID of the workflow.
+        joined_data_collection_id (str): Joined ID in format "dc1--dc2".
+        metadata (Optional[list[dict]]): List of metadata dicts for filtering.
+        TOKEN (Optional[str]): Authorization token.
+        limit_rows (Optional[int]): Maximum number of rows to return.
+        load_for_options (bool): Whether loading for component options.
+
+    Returns:
+        pl.DataFrame: The joined DataFrame.
+    """
+    logger.info(f"Loading joined data collection: {joined_data_collection_id}")
+
+    # Parse the joined DC ID to get individual DC IDs
+    dc_ids = joined_data_collection_id.split("--")
+    if len(dc_ids) != 2:
+        raise ValueError(f"Invalid joined data collection ID format: {joined_data_collection_id}")
+
+    dc1_id, dc2_id = dc_ids
+
+    # Get join configuration from the API
+    try:
+        joins_response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/datacollections/get_dc_joined/{workflow_id}",
+            headers={"Authorization": f"Bearer {TOKEN}"} if TOKEN else {},
+        )
+        joins_response.raise_for_status()
+        joins_data = joins_response.json()
+
+        workflow_joins = joins_data.get(str(workflow_id), {})
+        join_config = workflow_joins.get(joined_data_collection_id)
+
+        if not join_config:
+            raise ValueError(f"No join configuration found for {joined_data_collection_id}")
+
+    except httpx.HTTPError as e:
+        logger.error(f"Failed to fetch join configuration: {e}")
+        raise Exception("Error fetching join configuration") from e
+
+    # Load individual DataFrames
+    logger.debug(f"Loading DataFrame for DC1: {dc1_id}")
+    df1 = load_deltatable_lite(
+        workflow_id=workflow_id,
+        data_collection_id=ObjectId(dc1_id),
+        metadata=metadata if not load_for_options else None,
+        TOKEN=TOKEN,
+        limit_rows=None,  # Don't limit individual DFs before join
+        load_for_options=load_for_options,
+    )
+
+    logger.debug(f"Loading DataFrame for DC2: {dc2_id}")
+    df2 = load_deltatable_lite(
+        workflow_id=workflow_id,
+        data_collection_id=ObjectId(dc2_id),
+        metadata=metadata if not load_for_options else None,
+        TOKEN=TOKEN,
+        limit_rows=None,  # Don't limit individual DFs before join
+        load_for_options=load_for_options,
+    )
+
+    # Perform the join
+    join_how = join_config.get("how", "inner")
+    join_columns = join_config.get("on_columns", [])
+
+    if not join_columns:
+        raise ValueError(f"No join columns specified for {joined_data_collection_id}")
+
+    logger.info(f"Joining DataFrames on columns {join_columns} using {join_how} join")
+    logger.debug(f"DF1 shape: {df1.shape}, columns: {df1.columns}")
+    logger.debug(f"DF2 shape: {df2.shape}, columns: {df2.columns}")
+
+    try:
+        # Normalize join column types to ensure compatibility
+        df1, df2 = normalize_join_column_types(df1, df2, join_columns)
+
+        # Perform the join using Polars
+        joined_df = df1.join(df2, on=join_columns, how=join_how)
+        logger.info(f"Successfully joined DataFrames. Result shape: {joined_df.shape}")
+
+        # Apply row limit if specified
+        if limit_rows:
+            joined_df = joined_df.limit(limit_rows)
+            logger.debug(f"Applied row limit: {limit_rows}")
+
+        return joined_df
+
+    except Exception as e:
+        logger.error(f"Error during join operation: {e}")
+        logger.error(f"DF1 columns: {df1.columns}")
+        logger.error(f"DF2 columns: {df2.columns}")
+        logger.error(f"Join columns: {join_columns}")
+        raise Exception(f"Join operation failed: {str(e)}") from e
+
+
+def normalize_join_column_types(df1, df2, join_columns):
+    """
+    Normalize the data types of join columns between two DataFrames to ensure compatibility.
+
+    Args:
+        df1: First DataFrame
+        df2: Second DataFrame
+        join_columns: List of column names to normalize
+
+    Returns:
+        tuple: (normalized_df1, normalized_df2)
+    """
+    for col in join_columns:
+        if col in df1.columns and col in df2.columns:
+            dtype1 = df1[col].dtype
+            dtype2 = df2[col].dtype
+
+            # If types are different, cast both to string for compatibility
+            if dtype1 != dtype2:
+                logger.debug(
+                    f"Type mismatch in join column '{col}': {dtype1} vs {dtype2}. Converting both to String."
+                )
+
+                # Cast both columns to string to ensure compatibility
+                df1 = df1.with_columns(pl.col(col).cast(pl.String))
+                df2 = df2.with_columns(pl.col(col).cast(pl.String))
+
+                logger.debug(f"Normalized column '{col}' to String type for both DataFrames")
+
+    return df1, df2
+
+
 def load_deltatable_lite(
     workflow_id: ObjectId,
-    data_collection_id: ObjectId,
+    data_collection_id: ObjectId | str,  # Allow string for joined DC IDs like "dc1--dc2"
     metadata: list[dict] | None = None,
     TOKEN: str | None = None,
     limit_rows: int | None = None,
     load_for_options: bool = False,  # New parameter to load unfiltered data for component options
 ) -> pl.DataFrame:
     """
-    Load a Delta table with optional filtering based on metadata.
+    Load a Delta table with adaptive memory management based on DataFrame size.
+
+    ADAPTIVE MEMORY STRATEGY:
+    - Small DataFrames (<1GB): Cached in memory for fast filtering
+    - Large DataFrames (>=1GB): Always use lazy loading to prevent OOM
+
+    Supports both regular data collection IDs and joined data collection IDs (format: "dc1--dc2").
 
     Args:
         workflow_id (ObjectId): The ID of the workflow.
-        data_collection_id (ObjectId): The ID of the data collection.
+        data_collection_id (ObjectId | str): The ID of the data collection or joined ID like "dc1--dc2".
         metadata (Optional[list[dict]], optional): List of metadata dicts for filtering the DataFrame. Defaults to None.
         TOKEN (Optional[str], optional): Authorization token. Defaults to None.
         limit_rows (Optional[int], optional): Maximum number of rows to return. Defaults to None.
+        load_for_options (bool): Whether loading unfiltered data for component options.
 
     Returns:
         pl.DataFrame: The loaded and optionally filtered DataFrame.
@@ -201,9 +357,33 @@ def load_deltatable_lite(
     Raises:
         Exception: If the HTTP request to load the Delta table fails.
     """
-    # Convert ObjectId to string
+    # Check if this is a joined data collection ID
+    data_collection_id_str = str(data_collection_id)
+    if isinstance(data_collection_id, str) and "--" in data_collection_id:
+        # Handle joined data collection - use original logic for now
+        logger.info(f"Loading joined data collection: {data_collection_id}")
+        return _load_joined_deltatable(
+            workflow_id, data_collection_id, metadata, TOKEN, limit_rows, load_for_options
+        )
+
+    # Convert ObjectId to string for regular data collections
     workflow_id_str = str(workflow_id)
     data_collection_id_str = str(data_collection_id)
+
+    # ADAPTIVE MEMORY MANAGEMENT - Check DataFrame size first
+    data_collection_id_obj = (
+        ObjectId(data_collection_id) if isinstance(data_collection_id, str) else data_collection_id
+    )
+    size_bytes = get_deltatable_size_from_db(data_collection_id_obj)
+
+    if size_bytes > 0:
+        logger.debug(
+            f"Loading deltatable {data_collection_id_str}: size={size_bytes} bytes ({size_bytes / (1024 * 1024):.2f} MB)"
+        )
+    else:
+        logger.debug(
+            f"Loading deltatable {data_collection_id_str}: size unknown, will estimate dynamically"
+        )
 
     # Prepare the request URL and headers
     url = f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{data_collection_id_str}"
@@ -229,48 +409,167 @@ def load_deltatable_lite(
         )
         raise Exception("Invalid response: missing 'delta_table_location'")
 
-    # logger.info(
-    #     f"Loading deltatable for workflow {workflow_id_str}, data collection "
-    #     f"{data_collection_id_str}, metadata: {metadata}, from file_id: {file_id}"
-    # )
-
-    # logger.debug(f"polars_s3_config: {polars_s3_config}")
-    # logger.debug(f"file_id: {file_id}")
-
     # Initialize the Delta table scan
     delta_scan = pl.scan_delta(file_id, storage_options=polars_s3_config)
 
-    # Apply filtering if metadata is provided and not loading for options
-    if metadata and not load_for_options:
-        filter_expressions = process_metadata_and_filter(metadata)
-        logger.debug(f"Filter expressions: {filter_expressions}")
+    # ADAPTIVE LOADING STRATEGY
+    if size_bytes == -1:
+        # UNKNOWN SIZE: Use dynamic estimation approach
+        logger.debug(
+            "Unknown DataFrame size - will estimate dynamically and decide caching strategy"
+        )
 
-        if filter_expressions:
-            combined_filter = filter_expressions[0]
-            for filt in filter_expressions[1:]:
-                combined_filter &= filt
-            delta_scan = delta_scan.filter(combined_filter)
-            logger.debug("Applied filters based on metadata.")
-    elif load_for_options:
-        logger.debug("Skipping filters - loading unfiltered data for component options")
+        # Check if we already have it cached
+        base_cache_key = f"{workflow_id_str}_{data_collection_id_str}_base"
 
-    if limit_rows:
-        delta_scan = delta_scan.limit(limit_rows)
-        logger.debug(f"Applied row limit: {limit_rows}")
+        if base_cache_key in _dataframe_memory_cache:
+            # Use cached DataFrame and apply runtime filters
+            logger.debug(f"Using cached DataFrame: {base_cache_key}")
+            update_cache_timestamp(base_cache_key)
 
-    # Collect the DataFrame
-    try:
-        df = delta_scan.collect()
-    except Exception as e:
-        logger.error(f"Error collecting Delta table data: {e}")
-        raise Exception("Error collecting Delta table data") from e
+            # Get cached DataFrame and apply filters in memory
+            cached_df = _dataframe_memory_cache[base_cache_key]
+
+            # Apply row limit first if specified
+            if limit_rows:
+                cached_df = cached_df.limit(limit_rows)
+                logger.debug(f"Applied row limit: {limit_rows}")
+
+            # Apply metadata filters in memory (very fast)
+            if metadata and not load_for_options:
+                df = apply_runtime_filters(cached_df, metadata)
+            else:
+                df = cached_df
+        else:
+            # Load DataFrame and estimate size dynamically
+            logger.debug("Loading DataFrame for dynamic size estimation")
+
+            # Apply row limit to scan if specified
+            if limit_rows:
+                delta_scan = delta_scan.limit(limit_rows)
+                logger.debug(f"Applied row limit: {limit_rows}")
+
+            # Collect the FULL DataFrame first (no filters) to get accurate size and cache the full data
+            try:
+                df = delta_scan.collect()
+                # Use Polars' estimated_size method if available, fallback to rough estimation
+                if hasattr(df, "estimated_size"):
+                    actual_size = df.estimated_size("b")
+                else:
+                    # Fallback: rough estimate based on shape and data types
+                    actual_size = df.height * df.width * 8  # 8 bytes per cell average
+
+                logger.debug(
+                    f"Estimated DataFrame size: {actual_size} bytes ({actual_size / (1024 * 1024):.2f} MB)"
+                )
+
+                # Cache the FULL DataFrame if small enough
+                if actual_size <= MEMORY_THRESHOLD_BYTES:
+                    import time
+
+                    logger.debug(
+                        f"DataFrame is small ({actual_size / (1024 * 1024):.2f} MB), caching full dataset for future use"
+                    )
+                    _dataframe_memory_cache[base_cache_key] = df
+                    _cache_metadata[base_cache_key] = {
+                        "size_bytes": actual_size,
+                        "timestamp": time.time(),
+                    }
+                    global _total_memory_usage
+                    _total_memory_usage += actual_size
+                else:
+                    logger.debug(
+                        f"DataFrame is large ({actual_size / (1024 * 1024):.2f} MB), not caching"
+                    )
+
+            except Exception as e:
+                logger.error(f"Error collecting Delta table data: {e}")
+                raise Exception("Error collecting Delta table data") from e
+
+            # Apply metadata filters IN MEMORY after loading (preserves full dataset in cache)
+            if metadata and not load_for_options:
+                logger.debug("Applying metadata filters in memory after loading full dataset")
+                df = apply_runtime_filters(df, metadata)
+
+    elif size_bytes <= MEMORY_THRESHOLD_BYTES:
+        # SMALL DATAFRAME: Use memory caching for fast filtering
+        logger.debug(
+            f"Small DataFrame ({size_bytes / (1024 * 1024):.2f} MB) - using memory caching"
+        )
+
+        # Check if we have a cached version (without filters)
+        base_cache_key = f"{workflow_id_str}_{data_collection_id_str}_base"
+
+        if base_cache_key in _dataframe_memory_cache:
+            # Use cached DataFrame and apply runtime filters
+            logger.debug(f"Using cached DataFrame: {base_cache_key}")
+            update_cache_timestamp(base_cache_key)
+
+            # Get cached DataFrame and apply filters in memory
+            cached_df = _dataframe_memory_cache[base_cache_key]
+
+            # Apply row limit first if specified
+            if limit_rows:
+                cached_df = cached_df.limit(limit_rows)
+                logger.debug(f"Applied row limit: {limit_rows}")
+
+            # Apply metadata filters in memory (very fast)
+            if metadata and not load_for_options:
+                df = apply_runtime_filters(cached_df, metadata)
+            else:
+                df = cached_df
+
+        else:
+            # Load and cache the DataFrame
+            logger.debug(f"Loading and caching DataFrame: {base_cache_key}")
+
+            # Apply row limit to scan if specified
+            if limit_rows:
+                delta_scan = delta_scan.limit(limit_rows)
+                logger.debug(f"Applied row limit: {limit_rows}")
+
+            # Load and cache the base DataFrame (no filters)
+            df = load_and_cache_dataframe(base_cache_key, size_bytes, delta_scan)
+
+            # Apply metadata filters in memory after caching
+            if metadata and not load_for_options:
+                df = apply_runtime_filters(df, metadata)
+
+    else:
+        # LARGE DATAFRAME: Always use lazy loading to prevent memory issues
+        logger.debug(f"Large DataFrame ({size_bytes / (1024 * 1024):.2f} MB) - using lazy loading")
+
+        # Apply filtering if metadata is provided and not loading for options
+        if metadata and not load_for_options:
+            filter_expressions = process_metadata_and_filter(metadata)
+            logger.debug(f"Filter expressions: {filter_expressions}")
+
+            if filter_expressions:
+                combined_filter = filter_expressions[0]
+                for filt in filter_expressions[1:]:
+                    combined_filter &= filt
+                delta_scan = delta_scan.filter(combined_filter)
+                logger.debug("Applied filters to lazy scan.")
+        elif load_for_options:
+            logger.debug("Skipping filters - loading unfiltered data for component options")
+
+        if limit_rows:
+            delta_scan = delta_scan.limit(limit_rows)
+            logger.debug(f"Applied row limit: {limit_rows}")
+
+        # Collect the DataFrame (materialization happens here)
+        try:
+            df = delta_scan.collect()
+        except Exception as e:
+            logger.error(f"Error collecting Delta table data: {e}")
+            raise Exception("Error collecting Delta table data") from e
 
     # Drop the 'depictio_aggregation_time' column if it exists
     if "depictio_aggregation_time" in df.columns:
         df = df.drop("depictio_aggregation_time")
         logger.debug("Dropped 'depictio_aggregation_time' column.")
 
-    logger.debug(f"Loaded DataFrame with {df.height} rows and {df.width} columns.")
+    logger.debug(f"Final DataFrame shape: {df.height} rows x {df.width} columns")
     return df
 
 
@@ -550,6 +849,197 @@ def compute_essential_columns(dataframes: dict[str, pl.DataFrame]) -> set[str]:
 # Cache for loaded DataFrames to avoid redundant loading
 _iterative_join_cache = {}
 
+# Memory management for DataFrames - new adaptive caching system
+_dataframe_memory_cache = {}
+_cache_metadata = {}  # Track size and timestamp for each cached DataFrame
+_total_memory_usage = 0
+MEMORY_THRESHOLD_BYTES = 1024 * 1024 * 1024  # 1GB threshold
+
+
+def get_deltatable_size_from_db(data_collection_id: ObjectId) -> int:
+    """
+    Get pre-calculated DataFrame size from MongoDB deltatable metadata.
+
+    Args:
+        data_collection_id: ObjectId of the data collection
+
+    Returns:
+        Size in bytes, or estimated small size if not found
+    """
+    from depictio.api.v1.db import deltatables_collection
+
+    try:
+        dt_doc = deltatables_collection.find_one({"data_collection_id": data_collection_id})
+        if dt_doc and "flexible_metadata" in dt_doc:
+            size_bytes = dt_doc["flexible_metadata"].get("deltatable_size_bytes")
+            if size_bytes and isinstance(size_bytes, (int, float)) and size_bytes > 0:
+                logger.debug(
+                    f"Found deltatable size for {data_collection_id}: {size_bytes} bytes ({size_bytes / (1024 * 1024):.2f} MB)"
+                )
+                return int(size_bytes)
+
+        # If no size metadata found, try to estimate from the DataFrame directly
+        logger.debug(
+            f"No size metadata found for {data_collection_id}, will estimate size dynamically"
+        )
+        return -1  # Special value to indicate dynamic estimation needed
+
+    except Exception as e:
+        logger.warning(f"Error retrieving deltatable size for {data_collection_id}: {e}")
+        return -1  # Special value to indicate dynamic estimation needed
+
+
+def evict_oldest_cached_dataframe():
+    """
+    Evict the oldest cached DataFrame to free memory.
+    Uses LRU (Least Recently Used) strategy.
+    """
+    global _total_memory_usage
+
+    if not _cache_metadata:
+        return
+
+    # Find oldest cached DataFrame by timestamp
+    oldest_key = min(_cache_metadata.keys(), key=lambda k: _cache_metadata[k]["timestamp"])
+
+    # Remove from cache and update memory usage
+    if oldest_key in _dataframe_memory_cache:
+        size_bytes = _cache_metadata[oldest_key]["size_bytes"]
+        del _dataframe_memory_cache[oldest_key]
+        del _cache_metadata[oldest_key]
+        _total_memory_usage -= size_bytes
+
+        logger.debug(
+            f"Evicted cached DataFrame {oldest_key}, freed {size_bytes} bytes ({size_bytes / (1024 * 1024):.2f} MB)"
+        )
+        logger.debug(
+            f"Total memory usage now: {_total_memory_usage} bytes ({_total_memory_usage / (1024 * 1024):.2f} MB)"
+        )
+
+
+def load_and_cache_dataframe(cache_key: str, size_bytes: int, delta_scan) -> pl.DataFrame:
+    """
+    Load DataFrame and cache it in memory if space allows.
+
+    Args:
+        cache_key: Unique identifier for this DataFrame
+        size_bytes: Expected size of the DataFrame in bytes
+        delta_scan: Polars LazyFrame to materialize
+
+    Returns:
+        Materialized DataFrame
+    """
+    global _total_memory_usage
+    import time
+
+    # Evict oldest entries if adding this would exceed threshold
+    while _total_memory_usage + size_bytes > MEMORY_THRESHOLD_BYTES and _cache_metadata:
+        evict_oldest_cached_dataframe()
+
+    # Materialize the DataFrame
+    logger.debug(f"Materializing DataFrame for cache key: {cache_key}")
+    df = delta_scan.collect()
+
+    # Calculate actual size and cache if under threshold
+    actual_size = df.estimated_size("b") if hasattr(df, "estimated_size") else size_bytes
+
+    if _total_memory_usage + actual_size <= MEMORY_THRESHOLD_BYTES:
+        _dataframe_memory_cache[cache_key] = df
+        _cache_metadata[cache_key] = {
+            "size_bytes": actual_size,
+            "timestamp": time.time(),
+        }
+        _total_memory_usage += actual_size
+
+        logger.debug(
+            f"Cached DataFrame {cache_key}: {actual_size} bytes ({actual_size / (1024 * 1024):.2f} MB)"
+        )
+        logger.debug(
+            f"Total memory usage: {_total_memory_usage} bytes ({_total_memory_usage / (1024 * 1024):.2f} MB)"
+        )
+    else:
+        logger.debug(
+            f"DataFrame {cache_key} too large to cache ({actual_size} bytes), using lazy loading"
+        )
+
+    return df
+
+
+def apply_runtime_filters(df: pl.DataFrame, metadata: list[dict] | None) -> pl.DataFrame:
+    """
+    Apply filters to a cached DataFrame in memory - very fast operation.
+
+    Args:
+        df: Materialized DataFrame
+        metadata: List of metadata dicts for filtering
+
+    Returns:
+        Filtered DataFrame
+    """
+    if not metadata:
+        return df
+
+    logger.debug(
+        f"Applying runtime filters to cached DataFrame with {len(metadata)} filter criteria"
+    )
+
+    filter_expressions = process_metadata_and_filter(metadata)
+    if filter_expressions:
+        # Apply filters using Polars expressions on materialized DataFrame
+        combined_filter = filter_expressions[0]
+        for filt in filter_expressions[1:]:
+            combined_filter &= filt
+        df = df.filter(combined_filter)
+        logger.debug(f"Filtered DataFrame shape: {df.shape}")
+
+    return df
+
+
+def update_cache_timestamp(cache_key: str):
+    """Update timestamp for LRU cache management."""
+    import time
+
+    if cache_key in _cache_metadata:
+        _cache_metadata[cache_key]["timestamp"] = time.time()
+
+
+def get_memory_cache_stats() -> dict:
+    """
+    Get current memory cache statistics for monitoring and debugging.
+
+    Returns:
+        dict: Cache statistics including total usage, cached DataFrames, etc.
+    """
+    return {
+        "total_memory_usage_bytes": _total_memory_usage,
+        "total_memory_usage_mb": _total_memory_usage / (1024 * 1024),
+        "memory_threshold_bytes": MEMORY_THRESHOLD_BYTES,
+        "memory_threshold_mb": MEMORY_THRESHOLD_BYTES / (1024 * 1024),
+        "cached_dataframes_count": len(_dataframe_memory_cache),
+        "memory_utilization_percent": (_total_memory_usage / MEMORY_THRESHOLD_BYTES) * 100,
+        "cached_dataframes": [
+            {
+                "cache_key": key,
+                "size_bytes": _cache_metadata[key]["size_bytes"],
+                "size_mb": _cache_metadata[key]["size_bytes"] / (1024 * 1024),
+                "timestamp": _cache_metadata[key]["timestamp"],
+            }
+            for key in _dataframe_memory_cache.keys()
+            if key in _cache_metadata
+        ],
+    }
+
+
+def clear_memory_cache():
+    """Clear all cached DataFrames to free memory."""
+    global _total_memory_usage
+
+    _dataframe_memory_cache.clear()
+    _cache_metadata.clear()
+    _total_memory_usage = 0
+
+    logger.info("Cleared all cached DataFrames from memory")
+
 
 def iterative_join(
     workflow_id: ObjectId,
@@ -816,11 +1306,11 @@ def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None):
         dc_ids_all_components += [extra_dc]
     # logger.info(f"dc_ids_all_components - {dc_ids_all_components}")
 
-    # Using itertools, generate all the combinations of dc_ids in order to get all the possible joins
-    dc_ids_all_joins = list(itertools.combinations(dc_ids_all_components, 2))
-    # Turn the list of tuples into a list of strings with -- as separator, and store it in dc_ids_all_joins in the 2 possible orders
-    dc_ids_all_joins = [f"{dc_id1}--{dc_id2}" for dc_id1, dc_id2 in dc_ids_all_joins] + [
-        f"{dc_id2}--{dc_id1}" for dc_id1, dc_id2 in dc_ids_all_joins
+    # Generate initial join combinations - this will be updated after we identify additional DCs
+    # with interactive components (the actual logic for this is below after we filter joins)
+    initial_dc_ids_all_joins = list(itertools.combinations(dc_ids_all_components, 2))
+    dc_ids_all_joins = [f"{dc_id1}--{dc_id2}" for dc_id1, dc_id2 in initial_dc_ids_all_joins] + [
+        f"{dc_id2}--{dc_id1}" for dc_id1, dc_id2 in initial_dc_ids_all_joins
     ]
 
     # logger.info(f"dc_ids_all_joins - {dc_ids_all_joins}")
@@ -834,10 +1324,52 @@ def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None):
     join_tables_for_wf = get_join_tables(wf, TOKEN)
     # logger.info(f"join_tables_for_wf - {join_tables_for_wf}")
 
+    # ENHANCED LOGIC: Include all joins that contain DCs with interactive components
+    # This ensures that joined DCs stay synchronized with their constituent DCs
+
+    # First, identify DCs that have interactive components
+    dc_ids_with_interactive = list(
+        set(
+            [
+                v["dc_id"]
+                for v in stored_metadata
+                if v["component_type"] == "interactive" and v["wf_id"] == wf
+            ]
+        )
+    )
+    logger.debug(f"DCs with interactive components: {dc_ids_with_interactive}")
+
     # Extract the intersection between dc_ids_all_joins and join_tables_for_wf[wf].keys()
-    join_tables_for_wf[wf] = {
-        k: join_tables_for_wf[wf][k] for k in join_tables_for_wf[wf].keys() if k in dc_ids_all_joins
-    }
+    # PLUS include any joins that contain DCs with interactive components
+    filtered_joins = {}
+    for join_key, join_config in join_tables_for_wf[wf].items():
+        # Include join if it's between current dashboard components (original logic)
+        if join_key in dc_ids_all_joins:
+            filtered_joins[join_key] = join_config
+            logger.debug(f"Including join (dashboard components): {join_key}")
+        # OR include join if it contains any DC with interactive components (new logic)
+        elif any(dc_id in join_key for dc_id in dc_ids_with_interactive):
+            filtered_joins[join_key] = join_config
+            logger.debug(f"Including join (interactive DC dependency): {join_key}")
+
+            # Also add the constituent DCs to the components list if not already present
+            dc_id1, dc_id2 = join_key.split("--")
+            if dc_id1 not in dc_ids_all_components:
+                dc_ids_all_components.append(dc_id1)
+                logger.debug(f"Added DC to components list: {dc_id1}")
+            if dc_id2 not in dc_ids_all_components:
+                dc_ids_all_components.append(dc_id2)
+                logger.debug(f"Added DC to components list: {dc_id2}")
+
+    join_tables_for_wf[wf] = filtered_joins
+    logger.debug(f"Total joins after filtering: {len(filtered_joins)}")
+
+    # Regenerate join combinations with the updated component list (including newly added DCs)
+    updated_dc_ids_all_joins = list(itertools.combinations(dc_ids_all_components, 2))
+    dc_ids_all_joins = [f"{dc_id1}--{dc_id2}" for dc_id1, dc_id2 in updated_dc_ids_all_joins] + [
+        f"{dc_id2}--{dc_id1}" for dc_id1, dc_id2 in updated_dc_ids_all_joins
+    ]
+    logger.debug(f"Updated join combinations: {len(dc_ids_all_joins)} total combinations")
     # logger.info(f"join_tables_for_wf - {join_tables_for_wf}")
 
     # Initialize Union-Find structure
@@ -977,9 +1509,13 @@ def join_deltatables_dev(
     common_columns = list(
         set(loaded_dfs[dc_id1].columns).intersection(set(loaded_dfs[dc_id2].columns))
     )
-    merged_df = loaded_dfs[dc_id1].join(
-        loaded_dfs[dc_id2], on=common_columns, how=join_details["how"]
+
+    # Normalize join column types to ensure compatibility
+    df1_normalized, df2_normalized = normalize_join_column_types(
+        loaded_dfs[dc_id1], loaded_dfs[dc_id2], common_columns
     )
+
+    merged_df = df1_normalized.join(df2_normalized, on=common_columns, how=join_details["how"])
 
     # logger.info(f"Initial merged_df shape: {merged_df.shape}")
     # logger.info(f"Columns in merged_df: {merged_df.columns}")
@@ -1007,7 +1543,15 @@ def join_deltatables_dev(
                 continue
 
             common_columns = list(set(merged_df.columns).intersection(set(new_df.columns)))
-            merged_df = merged_df.join(new_df, on=common_columns, how=join_details["how"])
+
+            # Normalize join column types to ensure compatibility
+            merged_df_normalized, new_df_normalized = normalize_join_column_types(
+                merged_df, new_df, common_columns
+            )
+
+            merged_df = merged_df_normalized.join(
+                new_df_normalized, on=common_columns, how=join_details["how"]
+            )
 
     logger.info(f"AFTER 2nd FOR LOOP - merged_df shape: {merged_df.shape}")
     logger.info(f"Columns in merged_df: {merged_df.columns}")

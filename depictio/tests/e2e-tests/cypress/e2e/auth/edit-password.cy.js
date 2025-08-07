@@ -22,19 +22,8 @@ describe('Edit Password Test', () => {
   })
 
   it('edits the password of the user', () => {
-    // Use the reusable login function that works in login-success.cy.js
-    cy.loginAsTestUser('testUser')
-
-    // Wait for login to complete
-    cy.wait(5000)
-
-    // Check if login modal is still visible - if so, login failed
-    cy.get('body').then(($body) => {
-      if ($body.find('[role="dialog"][aria-modal="true"]').length > 0) {
-        cy.log('Login modal still visible - login may have failed')
-        throw new Error('Login failed - modal still visible')
-      }
-    })
+    // Fast token-based login for test setup
+    cy.loginWithTokenAsTestUser('testUser')
 
     // Navigate to dashboards
     cy.visit('/dashboards')
@@ -74,7 +63,9 @@ describe('Edit Password Test', () => {
       .should('be.visible')
       .focus()
       .clear()
+      .wait(100)  // Small delay after clear
       .type(new_password, { delay: 50 })
+      .wait(100)  // Small delay after typing
       .should('have.value', new_password)
 
     // Wait a bit for form validation to complete

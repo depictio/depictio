@@ -24,11 +24,10 @@ describe('Create and manage dashboard', () => {
     })
 
     it('logs in, creates, duplicates, edits, toggles privacy and manages dashboards', () => {
-        // Log in using the reusable function
-        cy.loginAsTestUser('adminUser')
+        // Fast token-based login (bypasses /auth UI)
+        cy.loginWithTokenAsTestUser('adminUser')
 
-        // Wait for login to complete and navigate
-        cy.wait(3000)
+        // Navigate to dashboards page
         cy.visit('/dashboards')
         cy.wait(2000)
 

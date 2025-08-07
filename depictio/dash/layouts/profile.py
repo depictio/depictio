@@ -259,7 +259,9 @@ layout = dbc.Container(
                                         ),
                                         dmc.ListItem("• Your own isolated workspace"),
                                         dmc.ListItem("• All changes auto-save to your session"),
-                                        dmc.ListItem("• Session expires automatically in 24 hours"),
+                                        dmc.ListItem(
+                                            f"• Session expires automatically in {str(settings.auth.temporary_user_expiry_hours)}:{str(settings.auth.temporary_user_expiry_minutes).zfill(2)} hours:minutes"
+                                        ),
                                     ]
                                 ),
                             ],
@@ -533,6 +535,10 @@ def register_profile_callbacks(app):
 
         user = api_call_fetch_user_from_token(local_data["access_token"])
         logger.info(f"PROFILE user: {user}")
+
+        if user is None:
+            return html.Div(), html.Div(), {"display": "none"}
+
         user = user.model_dump()
 
         if not user:

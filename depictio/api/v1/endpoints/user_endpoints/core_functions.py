@@ -160,7 +160,14 @@ async def _create_temporary_user_session(temp_user: UserBeanie) -> dict:
 
 
 async def _cleanup_expired_temporary_users() -> dict:
-    """Clean up expired temporary users and their associated tokens.
+    """Clean up expired temporary users and their associated data.
+
+    This includes:
+    - Tokens associated with the users
+    - Projects owned by the users
+    - Dashboards owned by the users
+    - Files owned by the users
+    - Deltatables associated with those projects
 
     Returns:
         Dictionary with cleanup results
@@ -178,23 +185,115 @@ async def _cleanup_expired_temporary_users() -> dict:
         "expired_users_found": len(expired_users),
         "users_deleted": 0,
         "tokens_deleted": 0,
+        "projects_deleted": 0,
+        "dashboards_deleted": 0,
+        "deltatables_deleted": 0,
+        "files_deleted": 0,
         "errors": [],
     }
 
     for user in expired_users:
         try:
-            # Delete associated tokens first
+            # 1. Delete associated projects first (to get data_collection_ids for deltatables)
+            try:
+                from depictio.models.models.projects import ProjectBeanie
+
+                user_projects = await ProjectBeanie.find(
+                    {"permissions.owners._id": user.id}
+                ).to_list()
+            except Exception as e:
+                logger.warning(f"Failed to query projects: {e}")
+                user_projects = []
+
+            # Collect data collection IDs from user projects for deltatable cleanup
+            data_collection_ids = []
+            for project in user_projects:
+                # Get data collection IDs from workflows
+                for workflow in project.workflows:
+                    for dc in workflow.data_collections:
+                        data_collection_ids.append(dc.id)
+                # Get data collection IDs from direct project data collections
+                for dc in project.data_collections:
+                    data_collection_ids.append(dc.id)
+
+            # Delete projects
+            for project in user_projects:
+                try:
+                    await project.delete()
+                    cleanup_results["projects_deleted"] += 1
+                except Exception as e:
+                    logger.warning(f"Failed to delete project {project.name}: {e}")
+
+            # 2. Delete associated deltatables using data collection IDs
+            try:
+                from depictio.api.v1.db import deltatables_collection
+
+                deltatables_count = 0
+                for dc_id in data_collection_ids:
+                    user_deltatables = deltatables_collection.find({"data_collection_id": dc_id})
+                    for deltatable in user_deltatables:
+                        try:
+                            deltatables_collection.delete_one({"_id": deltatable["_id"]})
+                            deltatables_count += 1
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to delete deltatable {deltatable.get('_id')}: {e}"
+                            )
+
+                cleanup_results["deltatables_deleted"] += deltatables_count
+            except Exception as e:
+                logger.debug(f"Deltatables collection not available: {e}")
+
+            # 3. Delete associated dashboards
+            try:
+                from depictio.api.v1.db import dashboards_collection
+
+                user_dashboards = dashboards_collection.find({"permissions.owners._id": user.id})
+                dashboards_count = 0
+                for dashboard in user_dashboards:
+                    try:
+                        dashboards_collection.delete_one({"_id": dashboard["_id"]})
+                        dashboards_count += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to delete dashboard {dashboard.get('_id')}: {e}")
+
+                cleanup_results["dashboards_deleted"] += dashboards_count
+            except Exception as e:
+                logger.debug(f"Dashboards collection not available: {e}")
+
+            # 4. Delete associated files
+            try:
+                from depictio.api.v1.db import files_collection
+
+                user_files = files_collection.find({"permissions.owners._id": user.id})
+                files_count = 0
+                for file_doc in user_files:
+                    try:
+                        files_collection.delete_one({"_id": file_doc["_id"]})
+                        files_count += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to delete file {file_doc.get('_id')}: {e}")
+
+                cleanup_results["files_deleted"] = (
+                    cleanup_results.get("files_deleted", 0) + files_count
+                )
+            except Exception as e:
+                logger.debug(f"Files collection not available: {e}")
+
+            # 5. Delete associated tokens
             user_tokens = await TokenBeanie.find({"user_id": user.id}).to_list()
             for token in user_tokens:
                 await token.delete()
                 cleanup_results["tokens_deleted"] += 1
 
-            # Delete the user
+            # 6. Delete the user
             await user.delete()
             cleanup_results["users_deleted"] += 1
 
             logger.info(
-                f"Deleted expired temporary user: {user.email} (expired at: {user.expiration_time})"
+                f"Deleted expired temporary user: {user.email} (expired at: {user.expiration_time}) "
+                f"with {len(user_projects)} projects, {dashboards_count} dashboards, "
+                f"{deltatables_count} deltatables, and {files_count} files"
             )
 
         except Exception as e:

@@ -139,6 +139,9 @@ class DashConfig(ServiceConfig):
     host: str = Field(default="0.0.0.0")
     workers: int = Field(default=1)
     debug: bool = Field(default=True)
+    auto_generate_figures: bool = Field(
+        default=True, description="Enable automatic figure generation in UI mode"
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_DASH_")
 

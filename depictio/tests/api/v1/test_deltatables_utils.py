@@ -752,13 +752,19 @@ class TestLoadDeltatablelite:
 
     @patch("depictio.api.v1.deltatables_utils.httpx.get")
     @patch("depictio.api.v1.deltatables_utils.pl.scan_delta")
-    def test_load_deltatable_lite_with_metadata_filtering(self, mock_scan_delta, mock_httpx_get):
+    @patch("depictio.api.v1.deltatables_utils.get_deltatable_size_from_db")
+    def test_load_deltatable_lite_with_metadata_filtering(
+        self, mock_get_size, mock_scan_delta, mock_httpx_get
+    ):
         """Test Delta table loading with metadata filtering."""
         # Arrange
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"delta_table_location": "s3://bucket/table"}
         mock_httpx_get.return_value = mock_response
+
+        # Mock large size to force lazy loading path
+        mock_get_size.return_value = 2 * 1024 * 1024 * 1024  # 2GB - forces lazy loading
 
         mock_df = pl.DataFrame({"category": ["A", "B"], "value": [1, 2]})
         mock_lazy_frame = MagicMock()

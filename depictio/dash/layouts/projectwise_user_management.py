@@ -36,6 +36,37 @@ from depictio.models.models.base import convert_objectid_to_str
 # GROUP_OPTIONS = []  # Disabled for user-only permissions
 
 
+def extract_project_id_from_pathname(pathname: str) -> str:
+    """
+    Extract project ID from pathname, handling both regular project pages and sub-pages like permissions.
+
+    Args:
+        pathname (str): URL pathname (e.g., "/project/646b0f3c1e4a2d7f8e5b8c9a/permissions")
+
+    Returns:
+        str: Project ID extracted from the URL
+
+    Examples:
+        "/project/646b0f3c1e4a2d7f8e5b8c9a" -> "646b0f3c1e4a2d7f8e5b8c9a"
+        "/project/646b0f3c1e4a2d7f8e5b8c9a/permissions" -> "646b0f3c1e4a2d7f8e5b8c9a"
+        "/project/646b0f3c1e4a2d7f8e5b8c9a/dashboard/xyz" -> "646b0f3c1e4a2d7f8e5b8c9a"
+    """
+    parts = pathname.strip("/").split("/")
+
+    # Find the index of "project" in the path
+    try:
+        project_index = parts.index("project")
+        # The project ID should be the next segment after "project"
+        if project_index + 1 < len(parts):
+            return parts[project_index + 1]
+    except ValueError:
+        # "project" not found in path
+        pass
+
+    # Fallback: assume project ID is the last segment (original behavior)
+    return parts[-1] if parts else ""
+
+
 # DISABLED: Group management removed for user-only permissions
 # def fetch_groups_data(token):
 #     """
@@ -509,7 +540,7 @@ def register_projectwise_user_management_callbacks(app):
         """
         Initialize UI components with data fetched from the API when the page loads.
         """
-        project_id = pathname.split("/")[-1]
+        project_id = extract_project_id_from_pathname(pathname)
 
         # Fetch all users for the MultiSelect
         user_options = fetch_all_users(token=local_store_data["access_token"])
@@ -757,7 +788,7 @@ def register_projectwise_user_management_callbacks(app):
 
         # Check if user has permission to add users (admin or project owner)
         is_admin = current_user.get("is_admin", False)
-        project_id = pathname.split("/")[-1]
+        project_id = extract_project_id_from_pathname(pathname)
 
         # Get project data to check ownership
         project_response = httpx.get(
@@ -790,7 +821,7 @@ def register_projectwise_user_management_callbacks(app):
             return current_rows, grid_options, [], False, False, False, dropdown_data
 
         new_users = []
-        project_id = pathname.split("/")[-1]
+        project_id = extract_project_id_from_pathname(pathname)
 
         # Add selected users to the project.
         if triggered_id == "permissions-manager-btn-add-user" and selected_user_ids:
@@ -926,7 +957,7 @@ def register_projectwise_user_management_callbacks(app):
 
                 # Check if user has permission to delete users
                 is_admin = current_user.get("is_admin", False)
-                project_id = pathname.split("/")[-1]
+                project_id = extract_project_id_from_pathname(pathname)
 
                 # Get project data to check ownership
                 project_response = httpx.get(
@@ -989,7 +1020,7 @@ def register_projectwise_user_management_callbacks(app):
 
                 # Check if user has permission to modify permissions
                 is_admin = current_user.get("is_admin", False)
-                project_id = pathname.split("/")[-1]
+                project_id = extract_project_id_from_pathname(pathname)
 
                 # Get project data to check ownership
                 project_response = httpx.get(
@@ -1066,7 +1097,9 @@ def register_projectwise_user_management_callbacks(app):
             return working_rows, current_rows_store, False
 
         update_permissions_api(
-            updated_rows, pathname.split("/")[-1], local_store_data["access_token"]
+            updated_rows,
+            extract_project_id_from_pathname(pathname),
+            local_store_data["access_token"],
         )
         return updated_rows, updated_rows, False
 
@@ -1172,7 +1205,7 @@ def register_projectwise_user_management_callbacks(app):
         elif triggered_id in ["cancel-make-project-public-add-button"]:
             return False, store_data, dash.no_update
         elif triggered_id in ["confirm-make-project-public-add-button"]:
-            project_id = pathname.split("/")[-1]
+            project_id = extract_project_id_from_pathname(pathname)
             response = api_toggle_project_public_private(
                 project_id=str(project_id),
                 token=local_store["access_token"],

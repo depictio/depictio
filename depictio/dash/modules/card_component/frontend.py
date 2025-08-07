@@ -336,10 +336,21 @@ def register_callbacks_card_component(app):
             logger.info(f"BUILD CARD - relevant_metadata: {relevant_metadata}")
 
         # Get the data collection specs
-        dc_specs = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_id}",
-            headers=headers,
-        ).json()
+        # Handle joined data collection IDs
+        if isinstance(dc_id, str) and "--" in dc_id:
+            # For joined data collections, create synthetic specs
+            dc_specs = {
+                "config": {"type": "table", "metatype": "joined"},
+                "data_collection_tag": f"Joined data collection ({dc_id})",
+                "description": "Virtual joined data collection",
+                "_id": dc_id,
+            }
+        else:
+            # Regular data collection - fetch from API
+            dc_specs = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_id}",
+                headers=headers,
+            ).json()
 
         # Get the type of the selected column and the value for the selected aggregation
         column_type = cols_json[column_name]["type"]

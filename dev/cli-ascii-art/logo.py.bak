@@ -1,0 +1,243 @@
+#!/usr/bin/env python3
+"""
+Demo of the improved horizontally expanded Depictio logo with brand colors
+Run this to see how it looks in your terminal
+"""
+
+from rich.align import Align
+from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
+
+# Depictio brand colors from depictio/dash/colors.py
+DEPICTIO_COLORS = {
+    "purple": "#9966CC",
+    "violet": "#7A5DC7", 
+    "blue": "#6495ED",
+    "teal": "#45B8AC",
+    "green": "#8BC34A",
+    "yellow": "#F9CB40",
+    "orange": "#F68B33",
+    "pink": "#E6779F",
+    "red": "#E53935",
+    "black": "#000000",
+}
+
+def create_final_depictio_logo():
+    """Create the final horizontally expanded Depictio logo with brand colors"""
+    
+    # The improved horizontally expanded ASCII art
+    FAVICON_ASCII_FINAL = """
+                                   .=+++++**=-:.            
+                                   .=+++++++++++=-:.        
+                                   .=+++++++++++++*+=-      
+                                   .=+++++++++++++++++=-:.  
+                             .==.  .=++++++++++++++++++++-  
+                      .:-=+****+:  .=++++++++++++++++++-.   
+                   .-++********+:  .=++++++++++++++++-.     
+                 .-+***********+:  .=++++++++++++++-.       
+                 .-+***********+:  .=++++++++++++=.         
+                   .-+*********+:  .=++++++++++-.  :=-.     
+                     .-+*******+:  .=++++++++=. .:=++++-.   
+                       .-+*****+:  .=++++++=.  .=+++++++-.  
+                         .-+***+:  .=++++=.  :=++++++++++-. 
+                   .=*#*-. .-+*+:  .=++=.  .=++++++++++++=-:
+                  .-*####*-. .==:  .==:  .=++++++++++++++=:.
+                  .=*%#####*-:.        :=+++++++++++++++++++
+                   :-=------=-        .:--::::::::::::::::--
+                                                            
+*****************************        :==+==================
+**************************+:   ..   .. :+##################%
+************************#+:. :**-. .*#-. .+##############*=-
+**********************#+:  .+#%#:  .*%%#-. .+############*-:
+:-*#****************#+:. .+#%%%*:  .*%%%%*-. :+##########+:.
+:-+#**************#+-. .+#%%#%%*:  .*%%%%%%*:  :+######*+-  
+  =**#**********#+-. .+#%%###%%*:  .*%%%%#=.     :+###%*-   
+  -+*#********#+-. .+#%%#####%%*:  .++-..          :=+=:    
+   :*##*****#*-. .+#%%#######%%*-                           
+    .-*#**#*-.   .=*%%%######%%*-                           
+      :=**-.       .=*##%%###%%*-                           
+       .:.            .:=*#%%%%*-                           
+"""
+
+    # Character to color mapping using Depictio brand colors
+    color_map = {
+        '+': DEPICTIO_COLORS['yellow'],    # Plus signs -> yellow (bright elements)
+        '*': DEPICTIO_COLORS['red'],       # Asterisks -> red (core elements)  
+        '#': DEPICTIO_COLORS['purple'],    # Hash signs -> purple (main brand color)
+        '%': DEPICTIO_COLORS['blue'],      # Percent signs -> blue
+        '=': DEPICTIO_COLORS['teal'],      # Equals signs -> teal (connecting elements)
+        '-': DEPICTIO_COLORS['green'],     # Hyphens -> green (structural elements)
+        ':': DEPICTIO_COLORS['violet'],    # Colons -> violet (accent elements)
+        '.': DEPICTIO_COLORS['orange']     # Dots -> orange (detail elements)
+    }
+    
+    logo = Text()
+    
+    for line in FAVICON_ASCII_FINAL.split('\n'):
+        for char in line:
+            if char in color_map:
+                logo.append(char, style=f"{color_map[char]} bold")
+            else:
+                logo.append(char)  # spaces and other characters
+        logo.append('\n')
+    
+    return logo
+
+def create_depictio_text_logo():
+    """Create a colorful DEPICTIO text using brand colors"""
+    logo = Text()
+    
+    # Each letter gets a different brand color
+    letters_colors = [
+        ('D', DEPICTIO_COLORS['purple']),
+        ('E', DEPICTIO_COLORS['violet']),  
+        ('P', DEPICTIO_COLORS['blue']),
+        ('I', DEPICTIO_COLORS['teal']),
+        ('C', DEPICTIO_COLORS['green']),
+        ('T', DEPICTIO_COLORS['yellow']),
+        ('I', DEPICTIO_COLORS['orange']),
+        ('O', DEPICTIO_COLORS['red'])
+    ]
+    
+    for letter, color in letters_colors:
+        logo.append(letter, style=f"{color} bold")
+    
+    logo.append(" CLI", style=f"{DEPICTIO_COLORS['black']} bold")
+    return logo
+
+def demo_final_logo():
+    """Demo the final logo in different styles"""
+    console = Console()
+    
+    # ASCII Logo only
+    console.print("\n[bold]Final Horizontally Expanded ASCII Logo:[/bold]")
+    ascii_logo = create_final_depictio_logo()
+    console.print(Panel.fit(
+        Align.center(ascii_logo),
+        border_style=DEPICTIO_COLORS['purple'],
+        title="✨ Depictio CLI ✨",
+        title_align="center",
+        padding=(1, 2)
+    ))
+    
+    # Text Logo
+    console.print("\n[bold]Colorful Text Logo:[/bold]")
+    text_logo = create_depictio_text_logo()
+    console.print(Panel.fit(
+        Align.center(text_logo),
+        border_style=DEPICTIO_COLORS['teal'],
+        title="Welcome",
+        title_align="center"
+    ))
+    
+    # Combined
+    console.print("\n[bold]Combined Version:[/bold]")
+    combined_content = Text()
+    combined_content.append_text(ascii_logo)
+    combined_content.append("\n\n")
+    combined_content.append_text(Align.center(text_logo))
+    
+    console.print(Panel.fit(
+        Align.center(combined_content),
+        border_style=DEPICTIO_COLORS['blue'],
+        title="✨ Welcome to Depictio CLI ✨", 
+        title_align="center",
+        padding=(1, 2)
+    ))
+
+# Code snippet for direct integration into your depictio_cli.py
+def get_cli_integration_code():
+    """Returns the code snippet to integrate into your CLI"""
+    
+    integration_code = '''
+# Add this to your depictio/cli/depictio_cli.py main() function
+
+from rich import print
+from rich.panel import Panel
+from rich.text import Text
+from rich.align import Align
+
+# Depictio brand colors
+DEPICTIO_COLORS = {
+    "purple": "#9966CC", "violet": "#7A5DC7", "blue": "#6495ED", 
+    "teal": "#45B8AC", "green": "#8BC34A", "yellow": "#F9CB40",
+    "orange": "#F68B33", "pink": "#E6779F", "red": "#E53935", "black": "#000000"
+}
+
+def create_depictio_logo():
+    FAVICON_ASCII = """
+                                   .=+++++**=-:.            
+                                   .=+++++++++++=-:.        
+                                   .=+++++++++++++*+=-      
+                                   .=+++++++++++++++++=-:.  
+                             .==.  .=++++++++++++++++++++-  
+                      .:-=+****+:  .=++++++++++++++++++-.   
+                   .-++********+:  .=++++++++++++++++-.     
+                 .-+***********+:  .=++++++++++++++-.       
+                 .-+***********+:  .=++++++++++++=.         
+                   .-+*********+:  .=++++++++++-.  :=-.     
+                     .-+*******+:  .=++++++++=. .:=++++-.   
+                       .-+*****+:  .=++++++=.  .=+++++++-.  
+                         .-+***+:  .=++++=.  :=++++++++++-. 
+                   .=*#*-. .-+*+:  .=++=.  .=++++++++++++=-:
+                  .-*####*-. .==:  .==:  .=++++++++++++++=:.
+                  .=*%#####*-:.        :=+++++++++++++++++++
+                   :-=------=-        .:--::::::::::::::::--
+                                                            
+=============================-        :==+==================
+###########################+:....   .. :+##################%
+************************#+:. :**-. .*#-. .+##############*=-
+**********************#+:  .+#%#:  .*%%#-. .+############*-:
+:-*#****************#+:. .+#%%%*:  .*%%%%*-. :+##########+:.
+:-+#**************#+-. .+#%%#%%*:  .*%%%%%%*:  :+######*+-  
+  =**#**********#+-. .+#%%###%%*:  .*%%%%#=.     :+###%*-   
+  -+*#********#+-. .+#%%#####%%*:  .++-..          :=+=:    
+   :*##*****#*-. .+#%%#######%%*-                           
+    .-*#**#*-.   .=*%%%######%%*-                           
+      :=**-.       .=*##%%###%%*-                           
+       .:.            .:=*#%%%%*-                           
+"""
+    
+    color_map = {
+        '+': DEPICTIO_COLORS['yellow'], '*': DEPICTIO_COLORS['red'], 
+        '#': DEPICTIO_COLORS['purple'], '%': DEPICTIO_COLORS['blue'],
+        '=': DEPICTIO_COLORS['teal'], '-': DEPICTIO_COLORS['green'],
+        ':': DEPICTIO_COLORS['violet'], '.': DEPICTIO_COLORS['orange']
+    }
+    
+    logo = Text()
+    for line in FAVICON_ASCII.split('\\n'):
+        for char in line:
+            if char in color_map:
+                logo.append(char, style=f"{color_map[char]} bold")
+            else:
+                logo.append(char)
+        logo.append('\\n')
+    return logo
+
+def main():
+    add_rich_display_to_polars()
+    
+    # Create and display logo
+    logo = create_depictio_logo()
+    print(Panel.fit(
+        Align.center(logo),
+        border_style=DEPICTIO_COLORS['purple'],
+        title="✨ Welcome to Depictio CLI ✨",
+        title_align="center",
+        padding=(1, 2)
+    ))
+    
+    app()
+'''
+    
+    return integration_code
+
+if __name__ == "__main__":
+    demo_final_logo()
+    
+    print("\n" + "="*60)
+    print("INTEGRATION CODE:")
+    print("="*60)
+    print(get_cli_integration_code())
