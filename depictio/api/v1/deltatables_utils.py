@@ -335,7 +335,12 @@ def load_deltatable_lite(
     load_for_options: bool = False,  # New parameter to load unfiltered data for component options
 ) -> pl.DataFrame:
     """
-    Load a Delta table with optional filtering based on metadata.
+    Load a Delta table with adaptive memory management based on DataFrame size.
+
+    ADAPTIVE MEMORY STRATEGY:
+    - Small DataFrames (<1GB): Cached in memory for fast filtering
+    - Large DataFrames (>=1GB): Always use lazy loading to prevent OOM
+
     Supports both regular data collection IDs and joined data collection IDs (format: "dc1--dc2").
 
     Args:
@@ -344,6 +349,7 @@ def load_deltatable_lite(
         metadata (Optional[list[dict]], optional): List of metadata dicts for filtering the DataFrame. Defaults to None.
         TOKEN (Optional[str], optional): Authorization token. Defaults to None.
         limit_rows (Optional[int], optional): Maximum number of rows to return. Defaults to None.
+        load_for_options (bool): Whether loading unfiltered data for component options.
 
     Returns:
         pl.DataFrame: The loaded and optionally filtered DataFrame.
@@ -354,7 +360,7 @@ def load_deltatable_lite(
     # Check if this is a joined data collection ID
     data_collection_id_str = str(data_collection_id)
     if isinstance(data_collection_id, str) and "--" in data_collection_id:
-        # Handle joined data collection
+        # Handle joined data collection - use original logic for now
         logger.info(f"Loading joined data collection: {data_collection_id}")
         return _load_joined_deltatable(
             workflow_id, data_collection_id, metadata, TOKEN, limit_rows, load_for_options
@@ -363,6 +369,21 @@ def load_deltatable_lite(
     # Convert ObjectId to string for regular data collections
     workflow_id_str = str(workflow_id)
     data_collection_id_str = str(data_collection_id)
+
+    # ADAPTIVE MEMORY MANAGEMENT - Check DataFrame size first
+    data_collection_id_obj = (
+        ObjectId(data_collection_id) if isinstance(data_collection_id, str) else data_collection_id
+    )
+    size_bytes = get_deltatable_size_from_db(data_collection_id_obj)
+
+    if size_bytes > 0:
+        logger.debug(
+            f"Loading deltatable {data_collection_id_str}: size={size_bytes} bytes ({size_bytes / (1024 * 1024):.2f} MB)"
+        )
+    else:
+        logger.debug(
+            f"Loading deltatable {data_collection_id_str}: size unknown, will estimate dynamically"
+        )
 
     # Prepare the request URL and headers
     url = f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{data_collection_id_str}"
@@ -388,48 +409,166 @@ def load_deltatable_lite(
         )
         raise Exception("Invalid response: missing 'delta_table_location'")
 
-    # logger.info(
-    #     f"Loading deltatable for workflow {workflow_id_str}, data collection "
-    #     f"{data_collection_id_str}, metadata: {metadata}, from file_id: {file_id}"
-    # )
-
-    # logger.debug(f"polars_s3_config: {polars_s3_config}")
-    # logger.debug(f"file_id: {file_id}")
-
     # Initialize the Delta table scan
     delta_scan = pl.scan_delta(file_id, storage_options=polars_s3_config)
 
-    # Apply filtering if metadata is provided and not loading for options
-    if metadata and not load_for_options:
-        filter_expressions = process_metadata_and_filter(metadata)
-        logger.debug(f"Filter expressions: {filter_expressions}")
+    # ADAPTIVE LOADING STRATEGY
+    if size_bytes == -1:
+        # UNKNOWN SIZE: Use dynamic estimation approach
+        logger.debug(
+            "Unknown DataFrame size - will estimate dynamically and decide caching strategy"
+        )
 
-        if filter_expressions:
-            combined_filter = filter_expressions[0]
-            for filt in filter_expressions[1:]:
-                combined_filter &= filt
-            delta_scan = delta_scan.filter(combined_filter)
-            logger.debug("Applied filters based on metadata.")
-    elif load_for_options:
-        logger.debug("Skipping filters - loading unfiltered data for component options")
+        # Check if we already have it cached
+        base_cache_key = f"{workflow_id_str}_{data_collection_id_str}_base"
 
-    if limit_rows:
-        delta_scan = delta_scan.limit(limit_rows)
-        logger.debug(f"Applied row limit: {limit_rows}")
+        if base_cache_key in _dataframe_memory_cache:
+            # Use cached DataFrame and apply runtime filters
+            logger.debug(f"Using cached DataFrame: {base_cache_key}")
+            update_cache_timestamp(base_cache_key)
 
-    # Collect the DataFrame
-    try:
-        df = delta_scan.collect()
-    except Exception as e:
-        logger.error(f"Error collecting Delta table data: {e}")
-        raise Exception("Error collecting Delta table data") from e
+            # Get cached DataFrame and apply filters in memory
+            cached_df = _dataframe_memory_cache[base_cache_key]
+
+            # Apply row limit first if specified
+            if limit_rows:
+                cached_df = cached_df.limit(limit_rows)
+                logger.debug(f"Applied row limit: {limit_rows}")
+
+            # Apply metadata filters in memory (very fast)
+            if metadata and not load_for_options:
+                df = apply_runtime_filters(cached_df, metadata)
+            else:
+                df = cached_df
+        else:
+            # Load DataFrame and estimate size dynamically
+            logger.debug("Loading DataFrame for dynamic size estimation")
+
+            # Apply row limit to scan if specified
+            if limit_rows:
+                delta_scan = delta_scan.limit(limit_rows)
+                logger.debug(f"Applied row limit: {limit_rows}")
+
+            # Collect the DataFrame to estimate its size
+            try:
+                df = delta_scan.collect()
+                # Use Polars' estimated_size method if available, fallback to rough estimation
+                if hasattr(df, "estimated_size"):
+                    actual_size = df.estimated_size("b")
+                else:
+                    # Fallback: rough estimate based on shape and data types
+                    actual_size = df.height * df.width * 8  # 8 bytes per cell average
+
+                logger.debug(
+                    f"Estimated DataFrame size: {actual_size} bytes ({actual_size / (1024 * 1024):.2f} MB)"
+                )
+
+                # Cache if small enough
+                if actual_size <= MEMORY_THRESHOLD_BYTES:
+                    import time
+
+                    logger.debug(
+                        f"DataFrame is small ({actual_size / (1024 * 1024):.2f} MB), caching for future use"
+                    )
+                    _dataframe_memory_cache[base_cache_key] = df
+                    _cache_metadata[base_cache_key] = {
+                        "size_bytes": actual_size,
+                        "timestamp": time.time(),
+                    }
+                    global _total_memory_usage
+                    _total_memory_usage += actual_size
+                else:
+                    logger.debug(
+                        f"DataFrame is large ({actual_size / (1024 * 1024):.2f} MB), not caching"
+                    )
+
+            except Exception as e:
+                logger.error(f"Error collecting Delta table data: {e}")
+                raise Exception("Error collecting Delta table data") from e
+
+            # Apply metadata filters in memory after loading
+            if metadata and not load_for_options:
+                df = apply_runtime_filters(df, metadata)
+
+    elif size_bytes <= MEMORY_THRESHOLD_BYTES:
+        # SMALL DATAFRAME: Use memory caching for fast filtering
+        logger.debug(
+            f"Small DataFrame ({size_bytes / (1024 * 1024):.2f} MB) - using memory caching"
+        )
+
+        # Check if we have a cached version (without filters)
+        base_cache_key = f"{workflow_id_str}_{data_collection_id_str}_base"
+
+        if base_cache_key in _dataframe_memory_cache:
+            # Use cached DataFrame and apply runtime filters
+            logger.debug(f"Using cached DataFrame: {base_cache_key}")
+            update_cache_timestamp(base_cache_key)
+
+            # Get cached DataFrame and apply filters in memory
+            cached_df = _dataframe_memory_cache[base_cache_key]
+
+            # Apply row limit first if specified
+            if limit_rows:
+                cached_df = cached_df.limit(limit_rows)
+                logger.debug(f"Applied row limit: {limit_rows}")
+
+            # Apply metadata filters in memory (very fast)
+            if metadata and not load_for_options:
+                df = apply_runtime_filters(cached_df, metadata)
+            else:
+                df = cached_df
+
+        else:
+            # Load and cache the DataFrame
+            logger.debug(f"Loading and caching DataFrame: {base_cache_key}")
+
+            # Apply row limit to scan if specified
+            if limit_rows:
+                delta_scan = delta_scan.limit(limit_rows)
+                logger.debug(f"Applied row limit: {limit_rows}")
+
+            # Load and cache the base DataFrame (no filters)
+            df = load_and_cache_dataframe(base_cache_key, size_bytes, delta_scan)
+
+            # Apply metadata filters in memory after caching
+            if metadata and not load_for_options:
+                df = apply_runtime_filters(df, metadata)
+
+    else:
+        # LARGE DATAFRAME: Always use lazy loading to prevent memory issues
+        logger.debug(f"Large DataFrame ({size_bytes / (1024 * 1024):.2f} MB) - using lazy loading")
+
+        # Apply filtering if metadata is provided and not loading for options
+        if metadata and not load_for_options:
+            filter_expressions = process_metadata_and_filter(metadata)
+            logger.debug(f"Filter expressions: {filter_expressions}")
+
+            if filter_expressions:
+                combined_filter = filter_expressions[0]
+                for filt in filter_expressions[1:]:
+                    combined_filter &= filt
+                delta_scan = delta_scan.filter(combined_filter)
+                logger.debug("Applied filters to lazy scan.")
+        elif load_for_options:
+            logger.debug("Skipping filters - loading unfiltered data for component options")
+
+        if limit_rows:
+            delta_scan = delta_scan.limit(limit_rows)
+            logger.debug(f"Applied row limit: {limit_rows}")
+
+        # Collect the DataFrame (materialization happens here)
+        try:
+            df = delta_scan.collect()
+        except Exception as e:
+            logger.error(f"Error collecting Delta table data: {e}")
+            raise Exception("Error collecting Delta table data") from e
 
     # Drop the 'depictio_aggregation_time' column if it exists
     if "depictio_aggregation_time" in df.columns:
         df = df.drop("depictio_aggregation_time")
         logger.debug("Dropped 'depictio_aggregation_time' column.")
 
-    logger.debug(f"Loaded DataFrame with {df.height} rows and {df.width} columns.")
+    logger.debug(f"Final DataFrame shape: {df.height} rows x {df.width} columns")
     return df
 
 
@@ -708,6 +847,197 @@ def compute_essential_columns(dataframes: dict[str, pl.DataFrame]) -> set[str]:
 
 # Cache for loaded DataFrames to avoid redundant loading
 _iterative_join_cache = {}
+
+# Memory management for DataFrames - new adaptive caching system
+_dataframe_memory_cache = {}
+_cache_metadata = {}  # Track size and timestamp for each cached DataFrame
+_total_memory_usage = 0
+MEMORY_THRESHOLD_BYTES = 1024 * 1024 * 1024  # 1GB threshold
+
+
+def get_deltatable_size_from_db(data_collection_id: ObjectId) -> int:
+    """
+    Get pre-calculated DataFrame size from MongoDB deltatable metadata.
+
+    Args:
+        data_collection_id: ObjectId of the data collection
+
+    Returns:
+        Size in bytes, or estimated small size if not found
+    """
+    from depictio.api.v1.db import deltatables_collection
+
+    try:
+        dt_doc = deltatables_collection.find_one({"data_collection_id": data_collection_id})
+        if dt_doc and "flexible_metadata" in dt_doc:
+            size_bytes = dt_doc["flexible_metadata"].get("deltatable_size_bytes")
+            if size_bytes and isinstance(size_bytes, (int, float)) and size_bytes > 0:
+                logger.debug(
+                    f"Found deltatable size for {data_collection_id}: {size_bytes} bytes ({size_bytes / (1024 * 1024):.2f} MB)"
+                )
+                return int(size_bytes)
+
+        # If no size metadata found, try to estimate from the DataFrame directly
+        logger.debug(
+            f"No size metadata found for {data_collection_id}, will estimate size dynamically"
+        )
+        return -1  # Special value to indicate dynamic estimation needed
+
+    except Exception as e:
+        logger.warning(f"Error retrieving deltatable size for {data_collection_id}: {e}")
+        return -1  # Special value to indicate dynamic estimation needed
+
+
+def evict_oldest_cached_dataframe():
+    """
+    Evict the oldest cached DataFrame to free memory.
+    Uses LRU (Least Recently Used) strategy.
+    """
+    global _total_memory_usage
+
+    if not _cache_metadata:
+        return
+
+    # Find oldest cached DataFrame by timestamp
+    oldest_key = min(_cache_metadata.keys(), key=lambda k: _cache_metadata[k]["timestamp"])
+
+    # Remove from cache and update memory usage
+    if oldest_key in _dataframe_memory_cache:
+        size_bytes = _cache_metadata[oldest_key]["size_bytes"]
+        del _dataframe_memory_cache[oldest_key]
+        del _cache_metadata[oldest_key]
+        _total_memory_usage -= size_bytes
+
+        logger.debug(
+            f"Evicted cached DataFrame {oldest_key}, freed {size_bytes} bytes ({size_bytes / (1024 * 1024):.2f} MB)"
+        )
+        logger.debug(
+            f"Total memory usage now: {_total_memory_usage} bytes ({_total_memory_usage / (1024 * 1024):.2f} MB)"
+        )
+
+
+def load_and_cache_dataframe(cache_key: str, size_bytes: int, delta_scan) -> pl.DataFrame:
+    """
+    Load DataFrame and cache it in memory if space allows.
+
+    Args:
+        cache_key: Unique identifier for this DataFrame
+        size_bytes: Expected size of the DataFrame in bytes
+        delta_scan: Polars LazyFrame to materialize
+
+    Returns:
+        Materialized DataFrame
+    """
+    global _total_memory_usage
+    import time
+
+    # Evict oldest entries if adding this would exceed threshold
+    while _total_memory_usage + size_bytes > MEMORY_THRESHOLD_BYTES and _cache_metadata:
+        evict_oldest_cached_dataframe()
+
+    # Materialize the DataFrame
+    logger.debug(f"Materializing DataFrame for cache key: {cache_key}")
+    df = delta_scan.collect()
+
+    # Calculate actual size and cache if under threshold
+    actual_size = df.estimated_size("b") if hasattr(df, "estimated_size") else size_bytes
+
+    if _total_memory_usage + actual_size <= MEMORY_THRESHOLD_BYTES:
+        _dataframe_memory_cache[cache_key] = df
+        _cache_metadata[cache_key] = {
+            "size_bytes": actual_size,
+            "timestamp": time.time(),
+        }
+        _total_memory_usage += actual_size
+
+        logger.debug(
+            f"Cached DataFrame {cache_key}: {actual_size} bytes ({actual_size / (1024 * 1024):.2f} MB)"
+        )
+        logger.debug(
+            f"Total memory usage: {_total_memory_usage} bytes ({_total_memory_usage / (1024 * 1024):.2f} MB)"
+        )
+    else:
+        logger.debug(
+            f"DataFrame {cache_key} too large to cache ({actual_size} bytes), using lazy loading"
+        )
+
+    return df
+
+
+def apply_runtime_filters(df: pl.DataFrame, metadata: list[dict] | None) -> pl.DataFrame:
+    """
+    Apply filters to a cached DataFrame in memory - very fast operation.
+
+    Args:
+        df: Materialized DataFrame
+        metadata: List of metadata dicts for filtering
+
+    Returns:
+        Filtered DataFrame
+    """
+    if not metadata:
+        return df
+
+    logger.debug(
+        f"Applying runtime filters to cached DataFrame with {len(metadata)} filter criteria"
+    )
+
+    filter_expressions = process_metadata_and_filter(metadata)
+    if filter_expressions:
+        # Apply filters using Polars expressions on materialized DataFrame
+        combined_filter = filter_expressions[0]
+        for filt in filter_expressions[1:]:
+            combined_filter &= filt
+        df = df.filter(combined_filter)
+        logger.debug(f"Filtered DataFrame shape: {df.shape}")
+
+    return df
+
+
+def update_cache_timestamp(cache_key: str):
+    """Update timestamp for LRU cache management."""
+    import time
+
+    if cache_key in _cache_metadata:
+        _cache_metadata[cache_key]["timestamp"] = time.time()
+
+
+def get_memory_cache_stats() -> dict:
+    """
+    Get current memory cache statistics for monitoring and debugging.
+
+    Returns:
+        dict: Cache statistics including total usage, cached DataFrames, etc.
+    """
+    return {
+        "total_memory_usage_bytes": _total_memory_usage,
+        "total_memory_usage_mb": _total_memory_usage / (1024 * 1024),
+        "memory_threshold_bytes": MEMORY_THRESHOLD_BYTES,
+        "memory_threshold_mb": MEMORY_THRESHOLD_BYTES / (1024 * 1024),
+        "cached_dataframes_count": len(_dataframe_memory_cache),
+        "memory_utilization_percent": (_total_memory_usage / MEMORY_THRESHOLD_BYTES) * 100,
+        "cached_dataframes": [
+            {
+                "cache_key": key,
+                "size_bytes": _cache_metadata[key]["size_bytes"],
+                "size_mb": _cache_metadata[key]["size_bytes"] / (1024 * 1024),
+                "timestamp": _cache_metadata[key]["timestamp"],
+            }
+            for key in _dataframe_memory_cache.keys()
+            if key in _cache_metadata
+        ],
+    }
+
+
+def clear_memory_cache():
+    """Clear all cached DataFrames to free memory."""
+    global _total_memory_usage
+
+    _dataframe_memory_cache.clear()
+    _cache_metadata.clear()
+    _total_memory_usage = 0
+
+    logger.info("Cleared all cached DataFrames from memory")
 
 
 def iterative_join(
