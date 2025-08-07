@@ -244,6 +244,7 @@ def api_get_files_by_dc_id(dc_id: str, CLI_config: CLIConfig) -> httpx.Response:
         httpx.Response: The response from the server.
     """
     logger.info(f"Getting files for data collection ID: {dc_id}")
+    logger.debug(f"CLI Config: {CLI_config}")
     logger.info(f"{CLI_config.api_base_url}/depictio/api/v1/files/list/{dc_id}")
     logger.info(generate_api_headers(CLI_config))
     response = httpx.get(

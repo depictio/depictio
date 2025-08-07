@@ -132,6 +132,7 @@ def sync_process_initial_data_collections() -> dict[str, Any]:
     )
 
     logger.debug(f"CLI config: {format_pydantic(cli_config)}")
+    logger.debug(f"CLI Config model dump: {cli_config.model_dump()}")
 
     wf = project.workflows[0]
     dc_id = str(project.workflows[0].data_collections[0].id)

@@ -1,3 +1,4 @@
+# MongoDB Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -47,6 +48,7 @@ spec:
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-mongo-pvc
 ---
+# MinIO Deployment (S3-compatible storage)
 {{- if .Values.minio.enabled }}
 apiVersion: apps/v1
 kind: Deployment
@@ -107,6 +109,7 @@ spec:
             claimName: {{ .Release.Name }}-minio-pvc
 {{- end }}
 ---
+# Depictio Backend Deployment (FastAPI)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -117,7 +120,7 @@ metadata:
 spec:
   strategy:
     type: Recreate
-  replicas: 1
+  replicas: {{ .Values.backend.replicas }}
   selector:
     matchLabels:
       release: {{ .Release.Name }}
@@ -142,22 +145,35 @@ spec:
           args:
           - -c
           - |
-            echo "Fixing permissions..."
-            # Create directories with correct permissions
-            mkdir -p /app/depictio/.depictio
-            mkdir -p /app/logs
+            echo "Fixing permissions for mounted volumes..."
+            # Create directories with correct permissions for mounted PVCs
             mkdir -p /app/depictio/dash/static/screenshots
+            mkdir -p /app/depictio/keys
+            mkdir -p /app/depictio/.depictio
+            mkdir -p /tmp/depictio-uploads
 
-            # Set ownership and permissions
-            chown -R 1000:1000 /app
-            chmod -R 755 /app
-            chmod -R 777 /app/depictio/.depictio
-            chmod -R 777 /app/logs
-            chmod -R 777 /app/depictio/dash/static/screenshots
+            # Set ownership and permissions for PVC-mounted directories
+            chown -R 1000:2000 /app/depictio/dash/static/screenshots
+            chown -R 1000:2000 /app/depictio/keys
+            chown -R 1000:2000 /app/depictio/.depictio
+            chown -R 1000:2000 /tmp/depictio-uploads
 
-            echo "Permissions fixed!"
+            chmod -R 775 /app/depictio/dash/static/screenshots
+            chmod -R 775 /app/depictio/keys
+            chmod -R 775 /app/depictio/.depictio
+            chmod -R 775 /tmp/depictio-uploads
+
+            echo "PVC permissions fixed!"
+          volumeMounts:
+            - name: depictio-screenshots
+              mountPath: /app/depictio/dash/static/screenshots
+            - name: depictio-keys
+              mountPath: /app/depictio/keys
+            - name: depictio-config
+              mountPath: /app/depictio/.depictio
+            - name: depictio-uploads
+              mountPath: /tmp/depictio-uploads
         {{- end }}
-
         - name: copy-screenshot-file
           image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
@@ -203,6 +219,7 @@ spec:
             - configMapRef:
                 name: {{ .Release.Name }}-backend-config
           env:
+            {{- if .Values.minio.enabled }}
             - name: DEPICTIO_MINIO_ROOT_USER
               valueFrom:
                 secretKeyRef:
@@ -213,6 +230,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Release.Name }}-depictio-secrets
                   key: MINIO_ROOT_PASSWORD
+            {{- end }}
             - name: WATCHFILES_FORCE_POLLING
               value: "true"
             - name: PYTHONUNBUFFERED
@@ -228,11 +246,15 @@ spec:
               mountPath: /app/depictio/dash/static/screenshots
             - name: depictio-keys
               mountPath: /app/depictio/keys
+            - name: depictio-config
+              mountPath: /app/depictio/.depictio
+            - name: depictio-uploads
+              mountPath: /tmp/depictio-uploads
             {{- if .Values.local_development }}
             # DEV ONLY: mount the depictio source code for development
             ## Use minikube mount or similar to mount the local source code
             - name: depictio-source
-              mountPath: /app/depictio
+              mountPath: /app
             {{- end }}
       volumes:
         - name: depictio-screenshots
@@ -241,15 +263,22 @@ spec:
         - name: depictio-keys
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-depictio-keys-pvc
+        - name: depictio-config
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-depictio-config-pvc
+        - name: depictio-uploads
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-depictio-uploads-pvc
         {{- if .Values.local_development }}
         # DEV ONLY: mount the depictio source code for development
         ## Use minikube mount or similar to mount the local source code
         - name: depictio-source
           hostPath:
-            path: /app/depictio
+            path: /app
             type: Directory
         {{- end }}
 ---
+# Depictio Frontend Deployment (Dash)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -258,7 +287,7 @@ metadata:
   labels:
     app: depictio-frontend
 spec:
-  replicas: 1
+  replicas: {{ .Values.frontend.replicas }}
   strategy:
     type: Recreate
   selector:
@@ -276,6 +305,42 @@ spec:
         type: app
     spec:
       initContainers:
+        # STEP 0: Fix permissions for mounted volumes (always run for frontend)
+        - name: fix-permissions-frontend
+          image: busybox:1.35
+          command: ["/bin/sh"]
+          args:
+          - -c
+          - |
+            echo "Fixing permissions for frontend mounted volumes..."
+            # Create directories with correct permissions for mounted PVCs
+            mkdir -p /app/depictio/dash/static/screenshots
+            mkdir -p /app/depictio/keys
+            mkdir -p /app/depictio/.depictio
+            mkdir -p /tmp/depictio-uploads
+
+            # Set ownership and permissions for PVC-mounted directories
+            # Match frontend security context: user 1000, group 2000
+            chown -R 1000:2000 /app/depictio/dash/static/screenshots
+            chown -R 1000:2000 /app/depictio/keys
+            chown -R 1000:2000 /app/depictio/.depictio
+            chown -R 1000:2000 /tmp/depictio-uploads
+
+            chmod -R 775 /app/depictio/dash/static/screenshots
+            chmod -R 775 /app/depictio/keys
+            chmod -R 775 /app/depictio/.depictio
+            chmod -R 775 /tmp/depictio-uploads
+
+            echo "Frontend PVC permissions fixed!"
+          volumeMounts:
+            - name: depictio-screenshots
+              mountPath: /app/depictio/dash/static/screenshots
+            - name: depictio-keys
+              mountPath: /app/depictio/keys
+            - name: depictio-config
+              mountPath: /app/depictio/.depictio
+            - name: depictio-uploads
+              mountPath: /tmp/depictio-uploads
         # STEP 1: Wait for backend service to be available (network check)
         - name: wait-for-backend
           image: busybox:1.35
@@ -366,6 +431,7 @@ spec:
             - configMapRef:
                 name: {{ .Release.Name }}-frontend-config
           env:
+            {{- if .Values.minio.enabled }}
             - name: DEPICTIO_MINIO_ROOT_USER
               valueFrom:
                 secretKeyRef:
@@ -376,6 +442,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Release.Name }}-depictio-secrets
                   key: MINIO_ROOT_PASSWORD
+            {{- end }}
           command:
             - "/app/run_dash.sh"
           ports:
@@ -387,11 +454,15 @@ spec:
               mountPath: /app/depictio/dash/static/screenshots
             - name: depictio-keys
               mountPath: /app/depictio/keys
+            - name: depictio-config
+              mountPath: /app/depictio/.depictio
+            - name: depictio-uploads
+              mountPath: /tmp/depictio-uploads
             {{- if .Values.local_development }}
             # DEV ONLY: mount the depictio source code for development
             ## Use minikube mount or similar to mount the local source code
             - name: depictio-source
-              mountPath: /app/depictio
+              mountPath: /app
             {{- end }}
 
       volumes:
@@ -401,11 +472,17 @@ spec:
         - name: depictio-keys
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-depictio-keys-pvc
+        - name: depictio-config
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-depictio-config-pvc
+        - name: depictio-uploads
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-depictio-uploads-pvc
         {{- if .Values.local_development }}
         # DEV ONLY: mount the depictio source code for development
         ## Use minikube mount or similar to mount the local source code
         - name: depictio-source
           hostPath:
-            path: /app/depictio
+            path: /app
             type: Directory
         {{- end }}

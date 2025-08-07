@@ -258,3 +258,7 @@ depictio/depictio/backups/
 
 # Benchmarks
 benchmark_datasets/
+
+# Sensitive Helm values files
+helm-charts/depictio/values-*-secrets.yaml
+helm-charts/depictio/*secrets*.yaml

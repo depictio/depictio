@@ -189,18 +189,43 @@ jobs:
 
           # Wait for pods to be ready first
           echo "⏳ Waiting for pods to be ready..."
-          kubectl wait --for=condition=ready pod -l "app=depictio-backend" --timeout=300s
-          kubectl wait --for=condition=ready pod -l "app=depictio-frontend" --timeout=300s
+          kubectl wait --for=condition=ready pod -l "release=${RELEASE_NAME},app=depictio-backend" --timeout=300s
+          kubectl wait --for=condition=ready pod -l "release=${RELEASE_NAME},app=depictio-frontend" --timeout=300s
 
           # Additional wait for containers to fully start
           sleep 30
 
-          # Use the working selectors from your debug output
-          BACKEND_POD=$(kubectl get pods -l "app=depictio-backend" -o jsonpath='{.items[0].metadata.name}')
-          FRONTEND_POD=$(kubectl get pods -l "app=depictio-frontend" -o jsonpath='{.items[0].metadata.name}')
+          # Use the correct selectors with release name
+          BACKEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-backend" -o jsonpath='{.items[0].metadata.name}')
+          FRONTEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-frontend" -o jsonpath='{.items[0].metadata.name}')
 
           echo "Backend pod: $BACKEND_POD"
           echo "Frontend pod: $FRONTEND_POD"
+
+          # Check pod status and logs before connectivity tests
+          echo "📊 Pod Status Summary:"
+          kubectl get pods -l "release=${RELEASE_NAME}"
+
+          echo ""
+          echo "🔍 Backend Pod Detailed Status:"
+          kubectl describe pod $BACKEND_POD | grep -A 10 "Conditions:"
+
+          echo ""
+          echo "🔍 Frontend Pod Detailed Status:"
+          kubectl describe pod $FRONTEND_POD | grep -A 10 "Conditions:"
+
+          echo ""
+          echo "📋 Backend Pod Logs (last 50 lines):"
+          kubectl logs $BACKEND_POD --tail=50 || echo "❌ Could not get backend logs"
+
+          echo ""
+          echo "📋 Frontend Pod Logs (last 50 lines):"
+          kubectl logs $FRONTEND_POD --tail=50 || echo "❌ Could not get frontend logs"
+
+          echo ""
+          echo "🔧 Service Endpoints Check:"
+          kubectl get endpoints ${RELEASE_NAME}-depictio-backend
+          kubectl get endpoints ${RELEASE_NAME}-depictio-frontend
 
           # Construct service names (these match your output)
           MONGODB_SERVICE="${RELEASE_NAME}-mongo"  # Note: "mongo" not "mongodb"
@@ -271,7 +296,7 @@ jobs:
           echo "🗄️ Testing database and storage functionality..."
 
           RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
-          BACKEND_POD=$(kubectl get pods -l "app=depictio-backend" -o jsonpath='{.items[0].metadata.name}')
+          BACKEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-backend" -o jsonpath='{.items[0].metadata.name}')
 
           echo "Using backend pod: $BACKEND_POD"
 
@@ -483,7 +508,8 @@ jobs:
           fi
 
           # Get backend pod name
-          BACKEND_POD=$(kubectl get pods -l "app=depictio-backend" -o jsonpath='{.items[0].metadata.name}')
+          RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
+          BACKEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-backend" -o jsonpath='{.items[0].metadata.name}')
           echo "Backend pod: $BACKEND_POD"
 
           # Log backend BEFORE the request

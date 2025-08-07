@@ -12,7 +12,10 @@ spec:
       port: {{ .Values.mongo.service.port }}
       targetPort: {{ .Values.mongo.service.port }}
   selector:
+    release: {{ .Release.Name }}
     app: mongo
+    project: {{ .Values.project.slug }}
+    type: app
 ---
 {{- if .Values.minio.enabled }}
 apiVersion: v1
@@ -32,7 +35,10 @@ spec:
       name: console
       targetPort: {{ .Values.minio.service.consolePort }}
   selector:
+    release: {{ .Release.Name }}
     app: minio
+    project: {{ .Values.project.slug }}
+    type: app
 {{- end }}
 ---
 apiVersion: v1
@@ -54,7 +60,10 @@ spec:
       protocol: TCP
       name: https
   selector:
+    release: {{ .Release.Name }}
     app: depictio-backend
+    project: {{ .Values.project.slug }}
+    type: app
 ---
 apiVersion: v1
 kind: Service
@@ -75,4 +84,7 @@ spec:
       protocol: TCP
       name: https
   selector:
+    release: {{ .Release.Name }}
     app: depictio-frontend
+    project: {{ .Values.project.slug }}
+    type: app

@@ -26,6 +26,7 @@ initContainerResources:
 
 ## SecurityContext
 backend:
+  replicas: 1  # Single replica for state consistency
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000
@@ -35,6 +36,14 @@ backend:
       drop: ["ALL"]
     seccompProfile:
       type: RuntimeDefault
+  resources:
+    requests:
+      memory: "4Gi"     # Further increased for data processing
+      cpu: "1"          # More CPU for intensive S3 operations
+    limits:
+      memory: "12Gi"    # Much higher memory for large datasets
+      cpu: "6"          # More CPU headroom for concurrent data processing
+
   env:
     # Enable unauthenticated mode (allows anonymous access)
     DEPICTIO_AUTH_UNAUTHENTICATED_MODE: "true"
@@ -43,8 +52,12 @@ backend:
     DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
     DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
 
+    # Performance - Increased workers to compensate for single replica
+    DEPICTIO_FASTAPI_WORKERS: "8"
+
 
 frontend:
+  replicas: 1  # Single replica for state consistency
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000
@@ -54,6 +67,25 @@ frontend:
       drop: ["ALL"]
     seccompProfile:
       type: RuntimeDefault
+
+  resources:
+    requests:
+      memory: "2Gi"     # Increased for single replica with 8 workers
+      cpu: "400m"       # More CPU for 8 workers
+    limits:
+      memory: "6Gi"     # Higher memory for single replica handling all frontend load
+      cpu: "3"          # More CPU headroom for 8 concurrent workers
+
+  env:
+    # Enable unauthenticated mode (allows anonymous access)
+    DEPICTIO_AUTH_UNAUTHENTICATED_MODE: "true"
+
+    # Anonymous user configuration
+    DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
+    DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
+
+    # Performance - Increased workers to compensate for single replica
+    DEPICTIO_DASH_WORKERS: "8"
 
 mongo:
   image:
@@ -68,27 +100,20 @@ mongo:
     seccompProfile:
       type: RuntimeDefault
 
+# External S3 service configuration
 minio:
-  image:
-    pullPolicy: Always
-  securityContext:
-    runAsNonRoot: true
-    runAsUser: 1000
-    runAsGroup: 1000
-    allowPrivilegeEscalation: false
-    capabilities:
-      drop: ["ALL"]
-    seccompProfile:
-      type: RuntimeDefault
+  enabled: false  # Using external EMBL S3 service instead of local MinIO
+  # NOTE: S3 credentials are defined in values-embl-secrets.yaml
+  # This file should be loaded separately and not committed to version control
 
 ## Ingress
 ingress:
   enabled: true
-  ingressClassName: "internal-users"
+  ingressClassName: "external-users"
 
   # EMBL specific annotations
   annotations:
-    traefik.ingress.kubernetes.io/router.tls.certresolver: sectigo
+    cert-manager.io/cluster-issuer: harica-issuer
 
   # Host configuration for split frontend/backend setup
   hosts:
@@ -106,15 +131,30 @@ ingress:
           service:
             name: depictio-backend
             portName: http
+    # - host: "minio.demo.depictio.embl.org"
+    #   paths:
+    #     - path: /
+    #       pathType: Prefix
+    #       service:
+    #         name: minio
+    #         portName: http
 
   # TLS configuration
   tls:
     - hosts:
         - "demo.depictio.embl.org"
         - "api.demo.depictio.embl.org"
+        # - "minio.demo.depictio.embl.org"
+      secretName: demo-depictio-tls
+
+global:
+  domain: "depictio.embl.org"  # Global domain for all services
+
 
 # Example deployment command:
+# IMPORTANT: You must also load the secrets file (values-embl-secrets.yaml)
 # helm upgrade --install demo ./helm-charts/depictio \
 #   -f ./helm-charts/depictio/values.yaml \
 #   -f ./helm-charts/depictio/values-embl-unauth.yaml \
+#   -f ./helm-charts/depictio/values-embl-secrets.yaml \
 #   -n datasci-depictio-project-demo
