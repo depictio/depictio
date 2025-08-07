@@ -42,17 +42,25 @@ def fetch_projects(token: str) -> list[Project]:
     url = f"{API_BASE_URL}/depictio/api/v1/projects/get/all"
 
     headers = {"Authorization": f"Bearer {token}"}
-    projects = httpx.get(url, headers=headers)
-    # logger.info(f"Response status code: {projects.status_code}")
-    # logger.info(f"Response content: {projects.content}")
-    # logger.info(f"Response headers: {projects.headers}")
-    # logger.info(f"Response JSON: {projects.json()}")
-    # logger.info("Successfully fetched projects.")
-    # logger.info(f"Projects: {projects.json()}")
-    logger.debug(f"Fetched {len(projects.json())} projects from API.")
+    response = httpx.get(url, headers=headers)
 
-    projects = [Project.from_mongo(project) for project in projects.json()]
-    return projects
+    # Handle error responses
+    if response.status_code != 200:
+        logger.warning(f"Failed to fetch projects: HTTP {response.status_code}")
+        return []
+
+    try:
+        projects_data = response.json()
+        if not isinstance(projects_data, list):
+            logger.error(f"Expected list of projects, got {type(projects_data)}")
+            return []
+
+        logger.debug(f"Fetched {len(projects_data)} projects from API.")
+        projects = [Project.from_mongo(project) for project in projects_data]
+        return projects
+    except Exception as e:
+        logger.error(f"Error processing projects data: {e}")
+        return []
 
 
 # =====================

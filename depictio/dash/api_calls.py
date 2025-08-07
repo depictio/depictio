@@ -875,9 +875,14 @@ def api_call_create_project(project_data: dict[str, Any], token: str) -> dict[st
     try:
         logger.debug(f"Creating project: {project_data.get('name', 'Unknown')}")
 
+        # Ensure datetime objects and ObjectIds are properly serialized
+        from depictio.models.models.base import convert_objectid_to_str
+
+        serialized_project_data = convert_objectid_to_str(project_data)
+
         response = httpx.post(
             f"{API_BASE_URL}/depictio/api/v1/projects/create",
-            json=project_data,
+            json=serialized_project_data,
             headers={"Authorization": f"Bearer {token}"},
             timeout=settings.performance.api_request_timeout,
         )
@@ -1151,6 +1156,7 @@ def api_call_create_data_collection(
             # Create the data collection
             data_collection = DataCollection(
                 data_collection_tag=name,
+                description=description,
                 config=dc_config,
             )
 
