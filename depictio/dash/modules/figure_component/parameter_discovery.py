@@ -887,6 +887,7 @@ def discover_all_visualizations() -> Dict[str, VisualizationDefinition]:
         "parallel_categories",
         "parallel_coordinates",
         "strip",
+        "umap",  # Disabled UMAP visualization
     }
 
     visualizations = {}
