@@ -96,6 +96,123 @@ class TestPeriodicCleanupExpiredTemporaryUsers:
         # Verify sleep was still called (task continues despite error)
         self.mock_sleep.assert_called_once_with(3600)
 
+    @pytest.mark.asyncio
+    async def test_periodic_cleanup_with_minutes(self):
+        """Test cleanup execution with minutes interval."""
+        # Arrange
+        self.mock_cleanup.return_value = {
+            "expired_users_found": 1,
+            "users_deleted": 1,
+            "tokens_deleted": 1,
+            "errors": [],
+        }
+
+        # Make sleep raise exception to break the infinite loop after first iteration
+        self.mock_sleep.side_effect = KeyboardInterrupt("Test interrupt")
+
+        # Act & Assert
+        with pytest.raises(KeyboardInterrupt):
+            await periodic_cleanup_expired_temporary_users(interval_minutes=30)
+
+        # Verify cleanup was called
+        self.mock_cleanup.assert_called_once()
+        # Verify sleep was called with correct interval (30 minutes = 1800 seconds)
+        self.mock_sleep.assert_called_once_with(1800)
+
+    @pytest.mark.asyncio
+    async def test_periodic_cleanup_with_seconds(self):
+        """Test cleanup execution with seconds interval."""
+        # Arrange
+        self.mock_cleanup.return_value = {
+            "expired_users_found": 0,
+            "users_deleted": 0,
+            "tokens_deleted": 0,
+            "errors": [],
+        }
+
+        # Make sleep raise exception to break the infinite loop after first iteration
+        self.mock_sleep.side_effect = KeyboardInterrupt("Test interrupt")
+
+        # Act & Assert
+        with pytest.raises(KeyboardInterrupt):
+            await periodic_cleanup_expired_temporary_users(interval_seconds=90)
+
+        # Verify cleanup was called
+        self.mock_cleanup.assert_called_once()
+        # Verify sleep was called with correct interval (90 seconds)
+        self.mock_sleep.assert_called_once_with(90)
+
+    @pytest.mark.asyncio
+    async def test_periodic_cleanup_precedence_seconds_over_minutes(self):
+        """Test that seconds takes precedence over minutes and hours."""
+        # Arrange
+        self.mock_cleanup.return_value = {
+            "expired_users_found": 0,
+            "users_deleted": 0,
+            "tokens_deleted": 0,
+            "errors": [],
+        }
+
+        # Make sleep raise exception to break the infinite loop after first iteration
+        self.mock_sleep.side_effect = KeyboardInterrupt("Test interrupt")
+
+        # Act & Assert - provide all three intervals, seconds should win
+        with pytest.raises(KeyboardInterrupt):
+            await periodic_cleanup_expired_temporary_users(
+                interval_hours=2, interval_minutes=30, interval_seconds=60
+            )
+
+        # Verify cleanup was called
+        self.mock_cleanup.assert_called_once()
+        # Verify sleep was called with seconds interval (60 seconds)
+        self.mock_sleep.assert_called_once_with(60)
+
+    @pytest.mark.asyncio
+    async def test_periodic_cleanup_precedence_minutes_over_hours(self):
+        """Test that minutes takes precedence over hours when seconds not provided."""
+        # Arrange
+        self.mock_cleanup.return_value = {
+            "expired_users_found": 0,
+            "users_deleted": 0,
+            "tokens_deleted": 0,
+            "errors": [],
+        }
+
+        # Make sleep raise exception to break the infinite loop after first iteration
+        self.mock_sleep.side_effect = KeyboardInterrupt("Test interrupt")
+
+        # Act & Assert - provide hours and minutes, minutes should win
+        with pytest.raises(KeyboardInterrupt):
+            await periodic_cleanup_expired_temporary_users(interval_hours=2, interval_minutes=15)
+
+        # Verify cleanup was called
+        self.mock_cleanup.assert_called_once()
+        # Verify sleep was called with minutes interval (15 minutes = 900 seconds)
+        self.mock_sleep.assert_called_once_with(900)
+
+    @pytest.mark.asyncio
+    async def test_periodic_cleanup_default_interval(self):
+        """Test default interval when no parameters are provided."""
+        # Arrange
+        self.mock_cleanup.return_value = {
+            "expired_users_found": 0,
+            "users_deleted": 0,
+            "tokens_deleted": 0,
+            "errors": [],
+        }
+
+        # Make sleep raise exception to break the infinite loop after first iteration
+        self.mock_sleep.side_effect = KeyboardInterrupt("Test interrupt")
+
+        # Act & Assert - no interval parameters provided
+        with pytest.raises(KeyboardInterrupt):
+            await periodic_cleanup_expired_temporary_users()
+
+        # Verify cleanup was called
+        self.mock_cleanup.assert_called_once()
+        # Verify sleep was called with default interval (1 hour = 3600 seconds)
+        self.mock_sleep.assert_called_once_with(3600)
+
 
 # ------------------------------------------------------
 # Test start_cleanup_tasks function
@@ -126,7 +243,7 @@ class TestStartCleanupTasks:
         assert asyncio.iscoroutine(call_args)
 
     def test_start_cleanup_tasks_uses_default_interval(self):
-        """Test that start_cleanup_tasks uses the default 1-hour interval."""
+        """Test that start_cleanup_tasks uses the default interval when no parameters provided."""
         # Mock the periodic function to capture its arguments
         with patch(
             "depictio.api.v1.tasks.cleanup_tasks.periodic_cleanup_expired_temporary_users"
@@ -135,7 +252,65 @@ class TestStartCleanupTasks:
             start_cleanup_tasks()
 
             # Assert
-            mock_periodic.assert_called_once_with(interval_hours=1)
+            mock_periodic.assert_called_once_with(
+                interval_hours=None, interval_minutes=None, interval_seconds=None
+            )
+
+    def test_start_cleanup_tasks_with_hours(self):
+        """Test that start_cleanup_tasks passes hours interval correctly."""
+        # Mock the periodic function to capture its arguments
+        with patch(
+            "depictio.api.v1.tasks.cleanup_tasks.periodic_cleanup_expired_temporary_users"
+        ) as mock_periodic:
+            # Act
+            start_cleanup_tasks(interval_hours=2)
+
+            # Assert
+            mock_periodic.assert_called_once_with(
+                interval_hours=2, interval_minutes=None, interval_seconds=None
+            )
+
+    def test_start_cleanup_tasks_with_minutes(self):
+        """Test that start_cleanup_tasks passes minutes interval correctly."""
+        # Mock the periodic function to capture its arguments
+        with patch(
+            "depictio.api.v1.tasks.cleanup_tasks.periodic_cleanup_expired_temporary_users"
+        ) as mock_periodic:
+            # Act
+            start_cleanup_tasks(interval_minutes=30)
+
+            # Assert
+            mock_periodic.assert_called_once_with(
+                interval_hours=None, interval_minutes=30, interval_seconds=None
+            )
+
+    def test_start_cleanup_tasks_with_seconds(self):
+        """Test that start_cleanup_tasks passes seconds interval correctly."""
+        # Mock the periodic function to capture its arguments
+        with patch(
+            "depictio.api.v1.tasks.cleanup_tasks.periodic_cleanup_expired_temporary_users"
+        ) as mock_periodic:
+            # Act
+            start_cleanup_tasks(interval_seconds=90)
+
+            # Assert
+            mock_periodic.assert_called_once_with(
+                interval_hours=None, interval_minutes=None, interval_seconds=90
+            )
+
+    def test_start_cleanup_tasks_with_multiple_intervals(self):
+        """Test that start_cleanup_tasks passes all provided intervals correctly."""
+        # Mock the periodic function to capture its arguments
+        with patch(
+            "depictio.api.v1.tasks.cleanup_tasks.periodic_cleanup_expired_temporary_users"
+        ) as mock_periodic:
+            # Act
+            start_cleanup_tasks(interval_hours=1, interval_minutes=15, interval_seconds=45)
+
+            # Assert
+            mock_periodic.assert_called_once_with(
+                interval_hours=1, interval_minutes=15, interval_seconds=45
+            )
 
     def test_start_cleanup_tasks_logging(self):
         """Test that start_cleanup_tasks logs appropriate messages."""

@@ -20,6 +20,7 @@ from depictio.api.v1.configs.config import MONGODB_URL, settings
 from depictio.api.v1.endpoints.routers import router
 from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import process_collections
 from depictio.api.v1.initialization import run_initialization
+from depictio.api.v1.tasks.cleanup_tasks import start_cleanup_tasks
 from depictio.api.v1.utils import clean_screenshots
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.projects import ProjectBeanie
@@ -167,6 +168,10 @@ async def lifespan(app: FastAPI):
         print(f"Worker {os.getpid()}: Starting background data collection processing")
         background_task = delayed_process_data_collections()
 
+    # Start cleanup tasks on every worker (not just the initializing one)
+    print(f"Worker {os.getpid()}: Starting cleanup tasks")
+    start_cleanup_tasks()
+
     # Start the app
     yield
 
@@ -287,4 +292,5 @@ app.include_router(router, prefix=api_prefix)
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc):
+    _ = request  # Suppress unused parameter warning
     return JSONResponse(status_code=422, content={"detail": [str(error) for error in exc.errors()]})
