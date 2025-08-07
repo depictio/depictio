@@ -189,15 +189,15 @@ jobs:
 
           # Wait for pods to be ready first
           echo "⏳ Waiting for pods to be ready..."
-          kubectl wait --for=condition=ready pod -l "app=depictio-backend" --timeout=300s
-          kubectl wait --for=condition=ready pod -l "app=depictio-frontend" --timeout=300s
+          kubectl wait --for=condition=ready pod -l "release=${RELEASE_NAME},app=depictio-backend" --timeout=300s
+          kubectl wait --for=condition=ready pod -l "release=${RELEASE_NAME},app=depictio-frontend" --timeout=300s
 
           # Additional wait for containers to fully start
           sleep 30
 
-          # Use the working selectors from your debug output
-          BACKEND_POD=$(kubectl get pods -l "app=depictio-backend" -o jsonpath='{.items[0].metadata.name}')
-          FRONTEND_POD=$(kubectl get pods -l "app=depictio-frontend" -o jsonpath='{.items[0].metadata.name}')
+          # Use the correct selectors with release name
+          BACKEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-backend" -o jsonpath='{.items[0].metadata.name}')
+          FRONTEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-frontend" -o jsonpath='{.items[0].metadata.name}')
 
           echo "Backend pod: $BACKEND_POD"
           echo "Frontend pod: $FRONTEND_POD"
@@ -271,7 +271,7 @@ jobs:
           echo "🗄️ Testing database and storage functionality..."
 
           RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
-          BACKEND_POD=$(kubectl get pods -l "app=depictio-backend" -o jsonpath='{.items[0].metadata.name}')
+          BACKEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-backend" -o jsonpath='{.items[0].metadata.name}')
 
           echo "Using backend pod: $BACKEND_POD"
 
@@ -483,7 +483,8 @@ jobs:
           fi
 
           # Get backend pod name
-          BACKEND_POD=$(kubectl get pods -l "app=depictio-backend" -o jsonpath='{.items[0].metadata.name}')
+          RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
+          BACKEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-backend" -o jsonpath='{.items[0].metadata.name}')
           echo "Backend pod: $BACKEND_POD"
 
           # Log backend BEFORE the request
