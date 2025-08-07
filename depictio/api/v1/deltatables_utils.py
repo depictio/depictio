@@ -444,26 +444,12 @@ def load_deltatable_lite(
             # Load DataFrame and estimate size dynamically
             logger.debug("Loading DataFrame for dynamic size estimation")
 
-            # Apply metadata filters to lazy scan BEFORE collecting (more efficient)
-            if metadata and not load_for_options:
-                logger.debug("Applying metadata filters to lazy scan before collection")
-                filter_expressions = process_metadata_and_filter(metadata)
-
-                if filter_expressions:
-                    # Combine all filters with logical AND
-                    combined_filter = filter_expressions[0]
-                    for filt in filter_expressions[1:]:
-                        combined_filter &= filt
-
-                    delta_scan = delta_scan.filter(combined_filter)
-                    logger.debug("Applied filters to lazy scan for unknown size DataFrame.")
-
             # Apply row limit to scan if specified
             if limit_rows:
                 delta_scan = delta_scan.limit(limit_rows)
                 logger.debug(f"Applied row limit: {limit_rows}")
 
-            # Collect the DataFrame to estimate its size
+            # Collect the FULL DataFrame first (no filters) to get accurate size and cache the full data
             try:
                 df = delta_scan.collect()
                 # Use Polars' estimated_size method if available, fallback to rough estimation
@@ -477,22 +463,15 @@ def load_deltatable_lite(
                     f"Estimated DataFrame size: {actual_size} bytes ({actual_size / (1024 * 1024):.2f} MB)"
                 )
 
-                # Cache if small enough (cache the filtered result if filtering was applied)
+                # Cache the FULL DataFrame if small enough
                 if actual_size <= MEMORY_THRESHOLD_BYTES:
                     import time
 
                     logger.debug(
-                        f"DataFrame is small ({actual_size / (1024 * 1024):.2f} MB), caching for future use"
+                        f"DataFrame is small ({actual_size / (1024 * 1024):.2f} MB), caching full dataset for future use"
                     )
-                    # If we applied filters, cache with a specific key that includes filter info
-                    cache_key = base_cache_key
-                    if metadata and not load_for_options:
-                        # For filtered data, we might want to cache it separately or not cache at all
-                        # For now, cache the base unfiltered data separately if possible
-                        pass
-
-                    _dataframe_memory_cache[cache_key] = df
-                    _cache_metadata[cache_key] = {
+                    _dataframe_memory_cache[base_cache_key] = df
+                    _cache_metadata[base_cache_key] = {
                         "size_bytes": actual_size,
                         "timestamp": time.time(),
                     }
@@ -507,7 +486,10 @@ def load_deltatable_lite(
                 logger.error(f"Error collecting Delta table data: {e}")
                 raise Exception("Error collecting Delta table data") from e
 
-            # Filters already applied at lazy scan level, no need to apply again
+            # Apply metadata filters IN MEMORY after loading (preserves full dataset in cache)
+            if metadata and not load_for_options:
+                logger.debug("Applying metadata filters in memory after loading full dataset")
+                df = apply_runtime_filters(df, metadata)
 
     elif size_bytes <= MEMORY_THRESHOLD_BYTES:
         # SMALL DATAFRAME: Use memory caching for fast filtering
