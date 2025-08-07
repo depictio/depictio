@@ -39,34 +39,10 @@ describe('Edit Password Test', () => {
     // Wait for edit password modal to appear
     cy.get('#edit-password-modal-body').should('be.visible')
 
-    // Fill in current password field
-    // From the HTML, the correct id is "old-password" and placeholder is "Old Password"
-    cy.get('#old-password')
-      .should('be.visible')
-      .focus()
-      .clear()
-      .type(testUser.password, { delay: 50 })
-      .should('have.value', testUser.password)
-
-    // Fill in new password field
-    // From the HTML, the correct id is "new-password" and placeholder is "New Password"
-    cy.get('#new-password')
-      .should('be.visible')
-      .focus()
-      .clear()
-      .type(new_password, { delay: 50 })
-      .should('have.value', new_password)
-
-    // Fill in confirm new password field
-    // From the HTML, the correct id is "confirm-new-password" and placeholder is "Confirm Password"
-    cy.get('#confirm-new-password')
-      .should('be.visible')
-      .focus()
-      .clear()
-      .wait(100)  // Small delay after clear
-      .type(new_password, { delay: 50 })
-      .wait(100)  // Small delay after typing
-      .should('have.value', new_password)
+    // Fill in password fields using robust typing commands
+    cy.typePassword('#old-password', testUser.password)
+    cy.typePassword('#new-password', new_password)
+    cy.typePassword('#confirm-new-password', new_password)
 
     // Wait a bit for form validation to complete
     cy.wait(1000)
@@ -85,10 +61,10 @@ describe('Edit Password Test', () => {
       if ($body.find('#message-password:contains("passwords do not match")').length > 0) {
         cy.log('Password mismatch detected - retrying with fresh inputs')
 
-        // Clear and re-enter the passwords more carefully
-        cy.get('#old-password').clear().type(testUser.password, { delay: 100 })
-        cy.get('#new-password').clear().type(new_password, { delay: 100 })
-        cy.get('#confirm-new-password').clear().type(new_password, { delay: 100 })
+        // Clear and re-enter the passwords using robust commands
+        cy.typePassword('#old-password', testUser.password)
+        cy.typePassword('#new-password', new_password)
+        cy.typePassword('#confirm-new-password', new_password)
 
         cy.wait(1000)
         cy.get('#save-password').click()
@@ -133,26 +109,14 @@ describe('Edit Password Test', () => {
 
     // Edit the password back to the original for cleanup
     cy.visit('/profile')
+    cy.wait(2000)
     cy.contains('button', 'Edit Password').click()
     cy.get('#edit-password-modal-body').should('be.visible')
-    cy.get('#old-password')
-      .should('be.visible')
-      .focus()
-      .clear()
-      .type(new_password, { delay: 50 })
-      .should('have.value', new_password)
-    cy.get('#new-password')
-      .should('be.visible')
-      .focus()
-      .clear()
-      .type(testUser.password, { delay: 50 })
-      .should('have.value', testUser.password)
-    cy.get('#confirm-new-password')
-      .should('be.visible')
-      .focus()
-      .clear()
-      .type(testUser.password, { delay: 50 })
-      .should('have.value', testUser.password)
+
+    // Use robust typing commands for cleanup
+    cy.typePassword('#old-password', new_password)  // Current password is now the new one
+    cy.typePassword('#new-password', testUser.password)  // Restore to original
+    cy.typePassword('#confirm-new-password', testUser.password)  // Confirm original
     cy.get('#save-password').should('be.enabled')
     cy.get('#save-password').click()
     cy.get('#message-password')

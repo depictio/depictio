@@ -60,14 +60,8 @@ describe('Create CLI Config Test', () => {
     configName = `Test_CLI_Config_${timestamp}`;
     cy.log(`Creating config with name: ${configName}`);
 
-    // Fill in CLI config fields with the stored name
-    cy.get('[placeholder="Enter a name for your CLI configuration"]')
-      .should('be.visible')
-      .should('be.enabled')
-      .focus()
-      .clear()
-      .type(configName, { delay: 50 })
-      .should('have.value', configName)
+    // Fill in CLI config fields with the stored name using robust typing
+    cy.typeRobust('[placeholder="Enter a name for your CLI configuration"]', configName)
 
     // Save the configuration
     cy.contains('button', 'Save').click()
@@ -118,12 +112,9 @@ describe('Create CLI Config Test', () => {
     // Wait for the confirmation dialog to appear
     cy.contains('Confirm Deletion').should('be.visible');
 
-    // Type "delete" in the confirmation field - try more flexible selector
+    // Type "delete" in the confirmation field using robust typing
     cy.wait(1000); // Wait for dialog to fully render
-    cy.get('.mantine-Modal-content input, .mantine-TextInput-input, input[type="text"]')
-      .filter(':visible')
-      .first()
-      .type('delete');
+    cy.typeRobust('.mantine-Modal-content input, .mantine-TextInput-input, input[type="text"]', 'delete')
 
     // Click the "Confirm Delete" button
     cy.contains('button', 'Confirm Delete').click();

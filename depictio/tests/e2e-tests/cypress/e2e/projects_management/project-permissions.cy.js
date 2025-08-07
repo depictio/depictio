@@ -113,7 +113,7 @@ describe('Project Permissions Management', () => {
 
         // Click on user dropdown and select user
         cy.get('#permissions-manager-input-email').should('be.visible').click()
-        cy.get('#permissions-manager-input-email').clear().type(userEmail)
+        cy.typeRobust('#permissions-manager-input-email', userEmail)
         cy.contains(userEmail).click()
 
         // Wait for dropdown to update
@@ -398,7 +398,7 @@ describe('Project Permissions Management', () => {
 
             // Test that user must select exactly one permission type
             cy.get('#permissions-manager-input-email').click()
-            cy.get('#permissions-manager-input-email').clear().type(testUser.email)
+            cy.typeRobust('#permissions-manager-input-email', testUser.email)
             cy.contains(testUser.email).click()
             cy.wait(500)
 
