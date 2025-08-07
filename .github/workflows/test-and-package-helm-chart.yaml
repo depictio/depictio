@@ -202,6 +202,31 @@ jobs:
           echo "Backend pod: $BACKEND_POD"
           echo "Frontend pod: $FRONTEND_POD"
 
+          # Check pod status and logs before connectivity tests
+          echo "📊 Pod Status Summary:"
+          kubectl get pods -l "release=${RELEASE_NAME}"
+
+          echo ""
+          echo "🔍 Backend Pod Detailed Status:"
+          kubectl describe pod $BACKEND_POD | grep -A 10 "Conditions:"
+
+          echo ""
+          echo "🔍 Frontend Pod Detailed Status:"
+          kubectl describe pod $FRONTEND_POD | grep -A 10 "Conditions:"
+
+          echo ""
+          echo "📋 Backend Pod Logs (last 50 lines):"
+          kubectl logs $BACKEND_POD --tail=50 || echo "❌ Could not get backend logs"
+
+          echo ""
+          echo "📋 Frontend Pod Logs (last 50 lines):"
+          kubectl logs $FRONTEND_POD --tail=50 || echo "❌ Could not get frontend logs"
+
+          echo ""
+          echo "🔧 Service Endpoints Check:"
+          kubectl get endpoints ${RELEASE_NAME}-depictio-backend
+          kubectl get endpoints ${RELEASE_NAME}-depictio-frontend
+
           # Construct service names (these match your output)
           MONGODB_SERVICE="${RELEASE_NAME}-mongo"  # Note: "mongo" not "mongodb"
           MINIO_SERVICE="${RELEASE_NAME}-minio"
