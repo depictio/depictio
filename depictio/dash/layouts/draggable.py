@@ -675,16 +675,16 @@ def register_callbacks_draggable(app):
         logger.info("CTX: {}".format(ctx))
         logger.info("CTX triggered: {}".format(ctx.triggered))
         logger.info("CTX triggered_id: {}".format(ctx.triggered_id))
-        logger.info("TYPE CTX triggered_id: {}".format(type(ctx.triggered_id)))
-        logger.info("CTX triggered_props_id: {}".format(ctx.triggered_prop_ids))
-        # logger.info("CTX args_grouping: {}".format(ctx.args_grouping))
-        logger.info("CTX inputs: {}".format(ctx.inputs))
-        logger.info("CTX inputs_list: {}".format(ctx.inputs_list))
+        # logger.info("TYPE CTX triggered_id: {}".format(type(ctx.triggered_id)))
+        # logger.info("CTX triggered_props_id: {}".format(ctx.triggered_prop_ids))
+        # # logger.info("CTX args_grouping: {}".format(ctx.args_grouping))
+        # logger.info("CTX inputs: {}".format(ctx.inputs))
+        # logger.info("CTX inputs_list: {}".format(ctx.inputs_list))
         # logger.debug("CTX states: {}".format(ctx.states))
         # logger.debug("CTX states_list: {}".format(ctx.states_list))
 
         # logger.info(f"Input draggable layouts: {input_draggable_layouts}")
-        # logger.info(f"Draggable layout : {draggable_layouts}")
+        logger.info(f"Draggable layout : {draggable_layouts}")
         # logger.info(f"Stored draggable layouts: {state_stored_draggable_layouts}")
         # logger.info(f"Stored draggable children: {state_stored_draggable_children}")
         # logger.info(f"Input stored draggable children: {input_stored_draggable_children}")
@@ -1378,7 +1378,19 @@ def register_callbacks_draggable(app):
                             parent_index = metadata["parent_index"]
                             parent_metadata = metadata
 
-                logger.info(f"Selected parent_index: {parent_index} for index: {index}")
+                logger.info(
+                    f"🔧 EDIT DEBUG - Selected parent_index: {parent_index} for index: {index}"
+                )
+
+                # CRITICAL DEBUG: Log current layout data before processing
+                logger.info(
+                    f"🔧 EDIT DEBUG - Current draggable_layouts before processing: {draggable_layouts}"
+                )
+                for i, layout in enumerate(draggable_layouts):
+                    logger.info(
+                        f"🔧 EDIT DEBUG - Layout {i}: ID='{layout.get('i')}', x={layout.get('x')}, y={layout.get('y')}, w={layout.get('w')}, h={layout.get('h')}"
+                    )
+
                 for child, metadata in zip(test_container, stored_metadata):
                     # Extract child index safely
                     child_index = None
@@ -1415,30 +1427,114 @@ def register_callbacks_draggable(app):
                         )
 
                 if parent_index:
+                    logger.info(
+                        f"🔧 EDIT DEBUG - Processing component replacement for parent_index: {parent_index}"
+                    )
+
                     updated_children = list()
                     temp_parent_box_id = f"box-{parent_index}-tmp"
                     parent_box_id = f"box-{parent_index}"
 
-                    for child in draggable_children:
+                    logger.info(
+                        f"🔧 EDIT DEBUG - Looking for parent_box_id: '{parent_box_id}' and temp_parent_box_id: '{temp_parent_box_id}'"
+                    )
+
+                    # CRITICAL DEBUG: Check edited_child ID
+                    edited_child_id = get_component_id(edited_child)
+                    logger.info(f"🔧 EDIT DEBUG - edited_child ID: '{edited_child_id}'")
+
+                    # CRITICAL FIX: Force the edited component to have the correct ID for layout preservation
+                    if edited_child_id != parent_box_id:
+                        logger.info(
+                            f"🔧 EDIT FIX - Updating edited_child ID from '{edited_child_id}' to '{parent_box_id}'"
+                        )
+
+                        # Update the component ID to match the parent box ID for layout preservation
+                        if hasattr(edited_child, "id"):
+                            # Native Dash component
+                            edited_child.id = parent_box_id
+                        elif isinstance(edited_child, dict) and "props" in edited_child:
+                            # JSON representation
+                            edited_child["props"]["id"] = parent_box_id
+
+                        # Verify the ID was updated
+                        updated_child_id = get_component_id(edited_child)
+                        logger.info(
+                            f"🔧 EDIT FIX - Verified updated edited_child ID: '{updated_child_id}'"
+                        )
+
+                    component_replaced = False
+                    temp_component_removed = False
+
+                    for i, child in enumerate(draggable_children):
                         child_id = get_component_id(child)
+                        logger.info(f"🔧 EDIT DEBUG - Child {i}: ID='{child_id}'")
+
                         if child_id == parent_box_id:
                             updated_children.append(edited_child)  # Replace the original component
-                            logger.info(f"Replaced component with box ID: {parent_box_id}")
+                            component_replaced = True
+                            logger.info(
+                                f"✅ EDIT DEBUG - Replaced component with box ID: {parent_box_id}"
+                            )
                         elif child_id == temp_parent_box_id:
-                            logger.info(f"Removed temp component with box ID: {temp_parent_box_id}")
+                            temp_component_removed = True
+                            logger.info(
+                                f"✅ EDIT DEBUG - Removed temp component with box ID: {temp_parent_box_id}"
+                            )
                             # Skip adding the temp component (remove it)
                         else:
                             updated_children.append(child)
 
-                    # Update the layout to use the parent_index (keep the component at the same position)
+                    logger.info(
+                        f"🔧 EDIT DEBUG - Component replacement results: replaced={component_replaced}, temp_removed={temp_component_removed}"
+                    )
+                    logger.info(
+                        f"🔧 EDIT DEBUG - Updated children count: {len(updated_children)} (was {len(draggable_children)})"
+                    )
+
+                    # CRITICAL FIX: Update the layout to use the parent_index (keep the component at the same position)
                     # The edited component should replace the original component in the same layout position
-                    # Now working with list format directly
+                    logger.info(
+                        f"🔧 EDIT FIX - Preserving layout for edited component at parent_index: {parent_index}"
+                    )
+                    logger.info(f"🔧 EDIT FIX - Current draggable_layouts: {draggable_layouts}")
+
+                    # Remove any temporary layout entries and ensure the parent layout is preserved
+                    preserved_layouts = []
+                    temp_parent_layout_id = f"box-{parent_index}-tmp"
+                    parent_layout_id = f"box-{parent_index}"
+                    parent_layout_found = False
+
                     for layout in draggable_layouts:
-                        # logger.info(f"Layout: {layout}")
-                        if layout["i"] == f"box-{parent_index}":
-                            # Keep the layout ID as parent_index (don't change to new index)
-                            # This ensures the component stays in the same position
-                            break
+                        layout_id = layout.get("i", "")
+
+                        if layout_id == parent_layout_id:
+                            # Keep the original parent layout exactly as it was
+                            preserved_layouts.append(layout)
+                            parent_layout_found = True
+                            logger.info(f"🔧 EDIT FIX - Preserved original layout: {layout}")
+
+                        elif layout_id == temp_parent_layout_id:
+                            # Skip the temporary layout - don't include it
+                            logger.info(f"🔧 EDIT FIX - Removed temporary layout: {layout}")
+
+                        else:
+                            # Keep all other layouts unchanged
+                            preserved_layouts.append(layout)
+
+                    # Use the preserved layouts
+                    draggable_layouts = preserved_layouts
+
+                    if parent_layout_found:
+                        logger.info(
+                            f"✅ EDIT FIX - Successfully preserved layout for {parent_layout_id}"
+                        )
+                    else:
+                        logger.warning(
+                            f"⚠️ EDIT FIX - Could not find original layout for {parent_layout_id}"
+                        )
+
+                    logger.info(f"🔧 EDIT FIX - Final draggable_layouts: {draggable_layouts}")
 
                     state_stored_draggable_layouts[dashboard_id] = draggable_layouts
 
@@ -1656,14 +1752,63 @@ def register_callbacks_draggable(app):
                         f"🔍 RESPONSIVE DEBUG - Layout {i}: {layout.get('i')} -> w:{actual_w}, h:{actual_h}"
                     )
 
-                n = len(updated_children)  # Position based on the number of components
+                # CRITICAL FIX: Preserve original component's layout dimensions and position
+                original_layout = None
+                original_component_id = f"box-{triggered_index}"
 
-                new_layout = calculate_new_layout_position(
-                    metadata["component_type"],
-                    existing_layouts,
-                    child_id,
-                    n,
-                )
+                # Find the original component's layout to preserve its dimensions and position
+                for layout in existing_layouts:
+                    if layout.get("i") == original_component_id:
+                        original_layout = layout
+                        logger.debug(
+                            f"🔍 DUPLICATE DEBUG - Found original layout: {original_layout}"
+                        )
+                        break
+
+                if original_layout:
+                    # Preserve the original dimensions and find a nearby position
+                    logger.info(
+                        f"🔧 DUPLICATE FIX - Preserving original layout dimensions: w={original_layout.get('w')}, h={original_layout.get('h')}"
+                    )
+
+                    # Find a position near the original component (slightly offset)
+                    original_x = original_layout.get("x", 0)
+                    original_y = original_layout.get("y", 0)
+                    original_w = original_layout.get("w", 6)
+                    original_h = original_layout.get("h", 8)
+
+                    # Try to place the duplicate to the right of the original, or below if no space
+                    new_x = original_x + original_w
+                    new_y = original_y
+
+                    # If it would go beyond the grid (12 columns), place it below instead
+                    if new_x + original_w > 12:
+                        new_x = 0  # Start from left
+                        new_y = original_y + original_h  # Place below original
+
+                    new_layout = {
+                        "x": new_x,
+                        "y": new_y,
+                        "w": original_w,  # Preserve original width
+                        "h": original_h,  # Preserve original height
+                        "i": child_id,
+                    }
+
+                    logger.info(
+                        f"🔧 DUPLICATE FIX - Created layout preserving original dimensions: {new_layout}"
+                    )
+                else:
+                    # Fallback to default behavior if original layout not found
+                    logger.warning(
+                        f"⚠️ DUPLICATE WARNING - Could not find original layout for {original_component_id}, using fallback"
+                    )
+                    n = len(updated_children)  # Position based on the number of components
+                    new_layout = calculate_new_layout_position(
+                        metadata["component_type"],
+                        existing_layouts,
+                        child_id,
+                        n,
+                    )
 
                 logger.debug(f"🔍 DUPLICATE DEBUG - Component type: {metadata['component_type']}")
                 logger.debug(f"🔍 DUPLICATE DEBUG - New layout created: {new_layout}")
