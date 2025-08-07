@@ -1,13 +1,19 @@
+# =====================================================
+# Depictio Helm Chart Configuration
+# =====================================================
+# This file contains the default configuration values for Depictio deployment.
+# Override these values in environment-specific values files.
+
 # Global values
 nameOverride: ""
 fullnameOverride: ""
 
-# Application name (used in labels)
+# Application configuration
 appname: "depictio"
 
-# Project configuration (required for matchLabels)
+# Project configuration (required for Kubernetes labels and selectors)
 project:
-  slug: "depictio" # Add your project slug here
+  slug: "depictio"  # Used in matchLabels - change for different project instances
 
 # Storage settings
 storageClass: "standard"
@@ -23,6 +29,12 @@ persistence:
     accessMode: ReadWriteMany
   keys:
     size: 1Mi
+    accessMode: ReadWriteMany
+  config:
+    size: 10Mi
+    accessMode: ReadWriteMany
+  uploads:
+    size: 5Gi
     accessMode: ReadWriteMany
 
 # Secrets
@@ -81,6 +93,12 @@ minio:
     capabilities: {}
     seccompProfile:
       type: RuntimeDefault
+  # env:
+  #   DEPICTIO_MINIO_PUBLIC_URL: "https://minio.depictio.example.com"
+  #   DEPICTIO_MINIO_ROOT_USER: "minioadmin"
+  #   DEPICTIO_MINIO_ROOT_PASSWORD: "minioadmin"
+  #   DEPICTIO_MINIO_BUCKET: "depictio-bucket"
+  #   DEPICTIO_MINIO_EXTERNAL_SERVICE: "false"  # Use external MinIO service
 
 # Backend settings
 backend:
@@ -88,6 +106,7 @@ backend:
     repository: ghcr.io/depictio/depictio # Corrected repository path with .io
     tag: "0.3.0"
     pullPolicy: Always
+  replicas: 1 # Balanced for stability and performance
   resources:
     requests:
       memory: "1Gi"
@@ -104,9 +123,11 @@ backend:
     DEPICTIO_CONTEXT: "server"
     DEV_MODE: "false"
     DEPICTIO_LOGGING_VERBOSITY_LEVEL: "DEBUG"
-    DEPICTIO_FASTAPI_SERVICE_PORT: "8058"
+    DEPICTIO_FASTAPI_SERVICE_PORT: "80"
     DEPICTIO_DASH_SERVICE_PORT: "80"
     DEPICTIO_MONGODB_WIPE: "false" # Set to true for development to wipe MongoDB on startup
+    DEPICTIO_MONGODB_SERVICE_PORT: "27018"
+    # DEPICTIO_MINIO_SERVICE_PORT: "9000"
     # DEPICTIO_DASH_SERVICE_NAME: "depictio-frontend"
     # DEPICTIO_FASTAPI_PUBLIC_URL: "https://{{ .Release.Name }}-api.{{ .Values.global.domain }}"
     # DEPICTIO_MINIO_PUBLIC_URL: "https://{{ .Release.Name }}-minio.{{ .Values.global.domain }}"
@@ -117,13 +138,21 @@ backend:
     # Anonymous user configuration
     DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
     DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "24"
+    # Performance - Reduced workers for better stability with multiple replicas
+    DEPICTIO_FASTAPI_WORKERS: "4"
 
   podSecurityContext:
+    runAsUser: 1000
+    runAsGroup: 2000
     fsGroup: 2000
   securityContext:
-    runAsNonRoot: false # Default allows root for compatibility
-    allowPrivilegeEscalation: true
-    capabilities: {}
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 2000
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
     seccompProfile:
       type: RuntimeDefault
 
@@ -133,6 +162,7 @@ frontend:
     repository: ghcr.io/depictio/depictio # Corrected repository path with .io
     tag: "0.3.0"
     pullPolicy: Always
+  replicas: 1 # Balanced for stability and performance
   resources:
     requests:
       memory: "1Gi"
@@ -146,12 +176,17 @@ frontend:
     httpsPort: 443
     targetPort: 5080
   env:
+    DEPICTIO_CONTENXT: "server"
     DEV_MODE: "false"
-    # DEPICTIO_FASTAPI_SERVICE_NAME: "depictio-backend"
     DEPICTIO_FASTAPI_SERVICE_PORT: "80"
+    DEPICTIO_MONGODB_SERVICE_PORT: "27018"
     DEPICTIO_DASH_SERVICE_PORT: "5080"
+    # DEPICTIO_MINIO_SERVICE_PORT: "9000"
     # DEPICTIO_FASTAPI_PUBLIC_URL: "https://{{ .Release.Name }}-api.{{ .Values.global.domain }}"
     # DEPICTIO_MINIO_PUBLIC_URL: "https://{{ .Release.Name }}-minio.{{ .Values.global.domain }}"
+
+    # Performance - Reduced workers for better stability with multiple replicas
+    DEPICTIO_DASH_WORKERS: "4"
 
   securityContext:
     runAsNonRoot: false # Default allows root for compatibility
@@ -174,6 +209,15 @@ ingress:
 
   # Empty TLS configuration by default
   tls: []
+
+# Init container resource configuration
+initContainerResources:
+  requests:
+    memory: "64Mi"
+    cpu: "50m"
+  limits:
+    memory: "128Mi"
+    cpu: "100m"
 
 global:
   domain: "example.com" # Default domain, can be overridden in environment-specific values

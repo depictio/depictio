@@ -59,3 +59,33 @@ spec:
   resources:
     requests:
       storage: {{ .Values.persistence.keys.size }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-depictio-config-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: depictio
+spec:
+  storageClassName: {{ .Values.storageClass }}
+  accessModes:
+    - {{ .Values.persistence.config.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.config.size }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-depictio-uploads-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: depictio
+spec:
+  storageClassName: {{ .Values.storageClass }}
+  accessModes:
+    - {{ .Values.persistence.uploads.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.uploads.size }}

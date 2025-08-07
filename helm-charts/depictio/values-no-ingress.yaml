@@ -29,9 +29,9 @@ ingress:
 global:
   domain: null
 
-backend:
-  env:
-    DEPICTIO_MONGODB_WIPE: "true"
+# backend:
+#   env:
+#     DEPICTIO_MONGODB_WIPE: "true"
 
 local_development:
   false # Set to true for local development
