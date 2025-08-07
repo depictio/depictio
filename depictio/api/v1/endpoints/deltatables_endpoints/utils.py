@@ -160,7 +160,22 @@ def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict, d
         # Identify the column data type
         col_type = str(aggregated_df[column].dtype).lower()
         # logger.info(col_type)
-        tmp_dict["type"] = col_type.lower()
+
+        # Normalize pandas dtypes to match allowed values
+        if col_type.startswith("datetime64"):
+            normalized_type = "datetime"
+        elif col_type.startswith("timedelta64"):
+            normalized_type = "time"
+        elif col_type in ["int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"]:
+            normalized_type = "int64"
+        elif col_type in ["float16", "float32", "float64"]:
+            normalized_type = "float64"
+        elif col_type in ["bool", "boolean"]:
+            normalized_type = "bool"
+        else:
+            normalized_type = col_type.lower()
+
+        tmp_dict["type"] = normalized_type
         # logger.info(agg_functions)
         # Check if the type exists in the agg_functions dict
         if col_type in agg_functions:
