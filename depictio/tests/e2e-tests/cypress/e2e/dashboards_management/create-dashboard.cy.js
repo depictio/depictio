@@ -43,9 +43,7 @@ describe('Create and manage dashboard', () => {
 
         // Input the dashboard title with timestamp for uniqueness
         const uniqueTitle = `Test Dashboard ${new Date().toISOString().replace(/:/g, '-')}`;
-        cy.get('input[placeholder="Enter dashboard title"]')
-            .should('be.visible')
-            .type(uniqueTitle)
+        cy.typeRobust('input[placeholder="Enter dashboard title"]', uniqueTitle)
 
         // Select the project from the dropdown
         cy.get('#dashboard-projects').click()

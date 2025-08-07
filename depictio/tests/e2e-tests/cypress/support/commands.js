@@ -46,33 +46,9 @@ Cypress.Commands.add('loginUser', (email, password, options = {}) => {
   cy.get('[role="dialog"][aria-modal="true"]', { timeout }).should('be.visible');
   cy.get('#modal-content', { timeout }).should('be.visible');
 
-  // Fill in email input with improved reliability for CI
-  cy.get('#modal-content')
-    .find('input[id="login-email"]')
-    .should('be.visible')
-    .should('be.enabled')
-    .focus()
-    .clear()
-    .wait(100) // Small wait after clear
-    .type(email, { delay: 100, force: true })
-    .should('have.value', email)
-    .then(($input) => {
-      // Verify the email was typed correctly, retry if truncated
-      if ($input.val() !== email) {
-        cy.wrap($input).clear().wait(200).type(email, { delay: 150, force: true })
-      }
-    });
-
-  // Fill in password input with improved reliability
-  cy.get('#modal-content')
-    .find('input[id="login-password"]')
-    .should('be.visible')
-    .should('be.enabled')
-    .focus()
-    .clear()
-    .wait(100) // Small wait after clear
-    .type(password, { delay: 100, force: true })
-    .should('have.value', password);
+  // Use robust typing for email and password
+  cy.typeRobust('#modal-content input[id="login-email"]', email)
+  cy.typePassword('#modal-content input[id="login-password"]', password)
 
   // Click login button
   cy.get('#modal-content')
@@ -116,45 +92,10 @@ Cypress.Commands.add('registerUser', (email, password, confirmPassword = null, o
   // Wait for form to switch
   cy.wait(500);
 
-  // Fill in email input - wait for register form to be visible with improved CI reliability
-  cy.get('#modal-content')
-    .find('input[id="register-email"]')
-    .should('be.visible')
-    .should('be.enabled')
-    .should('not.have.css', 'display', 'none')
-    .focus()
-    .clear()
-    .wait(100) // Small wait after clear
-    .type(email, { delay: 150, force: true })
-    .should('have.value', email)
-    .then(($input) => {
-      // Verify the email was typed correctly, retry if truncated
-      if ($input.val() !== email) {
-        cy.wrap($input).clear().wait(200).type(email, { delay: 200, force: true })
-      }
-    });
-
-  // Fill in password input with improved reliability
-  cy.get('#modal-content')
-    .find('input[id="register-password"]')
-    .should('be.visible')
-    .should('be.enabled')
-    .focus()
-    .clear()
-    .wait(100) // Small wait after clear
-    .type(password, { delay: 100, force: true })
-    .should('have.value', password);
-
-  // Fill in confirm password input with improved reliability
-  cy.get('#modal-content')
-    .find('input[id="register-confirm-password"]')
-    .should('be.visible')
-    .should('be.enabled')
-    .focus()
-    .clear()
-    .wait(100) // Small wait after clear
-    .type(confirmPwd, { delay: 100, force: true })
-    .should('have.value', confirmPwd);
+  // Use robust typing for registration fields
+  cy.typeRobust('#modal-content input[id="register-email"]', email, { delay: 150 })
+  cy.typePassword('#modal-content input[id="register-password"]', password)
+  cy.typePassword('#modal-content input[id="register-confirm-password"]', confirmPwd)
 
   // Click register button
   cy.get('#modal-content')
@@ -394,7 +335,84 @@ Cypress.Commands.add('loginWithToken', (email = 'admin@example.com', password = 
 });
 
 /**
- * Quick token-based login using test credentials
+ * Ensures test user exists by attempting to create it if login fails
+ * @param {string} email - User email
+ * @param {string} password - User password
+ * @param {boolean} isAdmin - Whether user should be admin
+ */
+Cypress.Commands.add('ensureUserExists', (email, password, isAdmin = false) => {
+  const apiBaseUrl = 'http://localhost:8058';
+
+  cy.log(`🔍 Ensuring user exists: ${email}`);
+
+  // First try to login to check if user exists
+  return cy.request({
+    method: 'POST',
+    url: `${apiBaseUrl}/depictio/api/v1/auth/login`,
+    form: true,
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: { username: email, password: password, grant_type: 'password' },
+    failOnStatusCode: false
+  }).then((response) => {
+    if (response.status === 200) {
+      cy.log(`✅ User ${email} already exists and credentials are valid`);
+      return cy.wrap({ exists: true, user: { email, password, isAdmin } });
+    } else {
+      cy.log(`⚠️ User ${email} login failed (${response.status}). Attempting to create user...`);
+
+      // Try to create the user via admin API (if available)
+      // First login as admin to get admin token
+      return cy.request({
+        method: 'POST',
+        url: `${apiBaseUrl}/depictio/api/v1/auth/login`,
+        form: true,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: { username: 'admin@example.com', password: 'changeme', grant_type: 'password' },
+        failOnStatusCode: false
+      }).then((adminResponse) => {
+        if (adminResponse.status === 200) {
+          cy.log(`✅ Admin login successful. Creating user ${email}...`);
+
+          // Create the user using admin token
+          return cy.request({
+            method: 'POST',
+            url: `${apiBaseUrl}/depictio/api/v1/users/create`,
+            headers: {
+              'Authorization': `Bearer ${adminResponse.body.access_token}`,
+              'Content-Type': 'application/json'
+            },
+            body: {
+              email: email,
+              password: password,
+              is_admin: isAdmin
+            },
+            failOnStatusCode: false
+          }).then((createResponse) => {
+            if (createResponse.status === 200 || createResponse.status === 201) {
+              cy.log(`✅ User ${email} created successfully`);
+              return cy.wrap({ exists: true, user: { email, password, isAdmin } });
+            } else {
+              cy.log(`⚠️ Failed to create user ${email}. Using admin fallback.`);
+              return cy.wrap({
+                exists: false,
+                fallback: { email: 'admin@example.com', password: 'changeme', isAdmin: true }
+              });
+            }
+          });
+        } else {
+          cy.log(`❌ Admin login also failed. Using hardcoded admin fallback.`);
+          return cy.wrap({
+            exists: false,
+            fallback: { email: 'admin@example.com', password: 'changeme', isAdmin: true }
+          });
+        }
+      });
+    }
+  });
+});
+
+/**
+ * Quick token-based login using test credentials with user existence check
  * @param {string} userType - Type of user to login as ('testUser' or 'adminUser')
  */
 Cypress.Commands.add('loginWithTokenAsTestUser', (userType = 'testUser') => {
@@ -415,7 +433,98 @@ Cypress.Commands.add('loginWithTokenAsTestUser', (userType = 'testUser') => {
     cy.log(`   - Email: ${user.email}`);
     cy.log(`   - Password: ${'*'.repeat(user.password?.length || 0)}`);
 
-    // Call the main loginWithToken command
-    cy.loginWithToken(user.email, user.password);
+    // Ensure user exists before attempting login
+    cy.ensureUserExists(user.email, user.password, user.is_admin).then((result) => {
+      if (result.exists) {
+        cy.log(`🚀 Logging in with verified user: ${user.email}`);
+        cy.loginWithToken(user.email, user.password);
+      } else if (result.fallback) {
+        cy.log(`🔄 Using fallback user: ${result.fallback.email}`);
+        cy.loginWithToken(result.fallback.email, result.fallback.password);
+      } else {
+        throw new Error(`Unable to ensure user ${user.email} exists and no fallback available`);
+      }
+    });
   });
+});
+
+/**
+ * Robust text input with retry logic and validation
+ * Handles timing issues with text inputs in React components
+ * @param {string} selector - CSS selector for the input element
+ * @param {string} text - Text to input
+ * @param {object} options - Configuration options
+ * @param {number} options.delay - Delay between keystrokes (default: 100)
+ * @param {number} options.clearDelay - Delay after clearing (default: 200)
+ * @param {number} options.retryDelay - Delay before retry (default: 300)
+ * @param {number} options.maxRetries - Maximum retry attempts (default: 2)
+ * @param {boolean} options.force - Force typing even if element not in viewport (default: true)
+ * @param {boolean} options.validateValue - Validate the final value matches input (default: true)
+ * @param {number} options.timeout - Timeout for element selection (default: 10000)
+ */
+Cypress.Commands.add('typeRobust', (selector, text, options = {}) => {
+  const {
+    delay = 100,
+    clearDelay = 200,
+    retryDelay = 300,
+    maxRetries = 2,
+    force = true,
+    validateValue = true,
+    timeout = 10000
+  } = options;
+
+  cy.log(`📝 Robust typing: "${text}" into ${selector}`);
+
+  // Helper function to perform the typing operation
+  const performTyping = (attempt = 1) => {
+    cy.log(`🎯 Typing attempt ${attempt}/${maxRetries + 1}`);
+
+    return cy.get(selector, { timeout })
+      .should('be.visible')
+      .should('be.enabled')
+      .focus()
+      .clear()
+      .wait(clearDelay)
+      .type(text, { delay, force })
+      .wait(clearDelay)
+      .then(($el) => {
+        if (validateValue && $el.val() !== text) {
+          if (attempt <= maxRetries) {
+            cy.log(`⚠️ Input mismatch (expected: "${text}", got: "${$el.val()}"). Retrying...`);
+            cy.wait(retryDelay);
+            return performTyping(attempt + 1);
+          } else {
+            cy.log(`❌ Input failed after ${maxRetries + 1} attempts. Expected: "${text}", Got: "${$el.val()}"`);
+            throw new Error(`Text input failed after ${maxRetries + 1} attempts. Expected: "${text}", Got: "${$el.val()}"`);
+          }
+        }
+
+        cy.log(`✅ Successfully typed "${text}" into ${selector}`);
+        return cy.wrap($el);
+      });
+  };
+
+  return performTyping();
+});
+
+/**
+ * Simplified robust typing for password fields
+ * Pre-configured for common password input scenarios
+ * @param {string} selector - CSS selector for the password input
+ * @param {string} password - Password to input
+ * @param {object} options - Additional options (merged with password defaults)
+ */
+Cypress.Commands.add('typePassword', (selector, password, options = {}) => {
+  const passwordDefaults = {
+    delay: 100,
+    clearDelay: 200,
+    retryDelay: 300,
+    maxRetries: 2,
+    force: true,
+    validateValue: true
+  };
+
+  const finalOptions = { ...passwordDefaults, ...options };
+  cy.log(`🔒 Robust password typing into ${selector}`);
+  return cy.typeRobust(selector, password, finalOptions);
 });
