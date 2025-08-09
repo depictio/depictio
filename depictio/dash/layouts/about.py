@@ -1,8 +1,8 @@
-import dash
 import dash_mantine_components as dmc
-from dash import dcc, html
 from dash_iconify import DashIconify
 
+import dash
+from dash import dcc, html
 from depictio.dash.colors import colors  # Import our color palette
 
 # Create a Stack to vertically arrange all elements with proper spacing

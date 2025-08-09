@@ -6,9 +6,9 @@ The footer respects the collapsible sidebar layout using CSS variables automatic
 """
 
 import dash_mantine_components as dmc
-from dash import Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
+from dash import Input, Output, State, dcc, html
 from depictio.api.v1.configs.logging_init import logger
 
 

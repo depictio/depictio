@@ -7,8 +7,8 @@ import base64
 import os
 
 import dash_mantine_components as dmc
-from dash import Input, Output, dcc, get_app, html
 
+from dash import Input, Output, dcc, get_app, html
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import (
     get_component_display_name,
