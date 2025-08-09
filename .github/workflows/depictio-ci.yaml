@@ -85,11 +85,11 @@ jobs:
           source venv/bin/activate
           ruff check depictio
 
-      # - name: Run ty type checker (must pass)
-      #   run: |
-      #     source venv/bin/activate
-      #     ty version
-      #     ty check depictio/models/ depictio/api/ depictio/dash/ depictio/cli/ depictio/tests/
+      - name: Run ty type checker (must pass)
+        run: |
+          source venv/bin/activate
+          ty version
+          ty check depictio/models/ depictio/api/ depictio/dash/ depictio/cli/ depictio/tests/
 
       # - name: Run pre-commit hooks
       #   run: |
