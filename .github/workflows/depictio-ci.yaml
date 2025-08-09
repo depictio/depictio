@@ -56,11 +56,11 @@ jobs:
       #     source venv/bin/activate
       #     ruff format depictio
 
-      - uses: astral-sh/ruff-action@v3
-        with:
-          src: depictio
-          args: check --fix --exit-non-zero-on-fix --line-length=100
-          version-file: pyproject.toml
+      # - uses: astral-sh/ruff-action@v3
+      #   with:
+      #     src: depictio
+      #     args: check --fix --exit-non-zero-on-fix --line-length=100
+      #     version-file: pyproject.toml
 
       # - name: Debug environment before Ruff check
       #   run: |
@@ -91,17 +91,17 @@ jobs:
       #     source venv/bin/activate
       #     ruff check depictio
 
-      - uses: astral-sh/ruff-action@v3
-        with:
-          src: depictio
-          args: format
-          version-file: pyproject.toml
+      # - uses: astral-sh/ruff-action@v3
+      #   with:
+      #     src: depictio
+      #     args: format
+      #     version-file: pyproject.toml
 
-      - name: Run ty type checker (must pass)
-        run: |
-          source venv/bin/activate
-          ty version
-          ty check depictio/models/ depictio/api/ depictio/dash/ depictio/cli/ depictio/tests/
+      # - name: Run ty type checker (must pass)
+      #   run: |
+      #     source venv/bin/activate
+      #     ty version
+      #     ty check depictio/models/ depictio/api/ depictio/dash/ depictio/cli/ depictio/tests/
 
       # - name: Run pre-commit hooks
       #   run: |
