@@ -4,14 +4,9 @@ Test file for debugging import sorting - placed in root to avoid exclusions.
 """
 
 # Deliberately unsorted imports to test ruff behavior
-import datetime
-from typing import Dict, List
+import os
+import sys
 
-import dash_cytoscape as cyto
-import dash_mantine_components as dmc
-from dash_iconify import DashIconify
-
-from dash import html  # This should be with other dash imports
-from depictio.dash.colors import colors
-
-print("Test file with deliberately bad import sorting")
+t = 1
+os.environ["TEST_ENV_VAR"] = "test_value"
+sys.path.append("/tmp")
