@@ -1,0 +1,147 @@
+name: "Debug Ruff Import Sorting Test"
+
+on:
+  push:
+    branches: [fix/dynamic-joining-rows-nb-issue]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  debug-ruff-single-file:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+          cache-dependency-path: "pyproject.toml"
+
+      - name: Install Dependencies
+        run: |
+          uv venv --python 3.12.9 venv
+          source venv/bin/activate
+          uv pip install --upgrade pip
+          uv pip install -e ".[dev]"
+
+      - name: Debug Test File - Controlled Import Issues
+        run: |
+          source venv/bin/activate
+
+          echo "=== CONTROLLED TEST FILE DEBUG ==="
+          echo "Target file: test_import_debug.py"
+          echo "Ruff version: $(ruff --version)"
+          echo "Working directory: $(pwd)"
+
+          echo ""
+          echo "=== TEST FILE CONTENTS ==="
+          cat test_import_debug.py
+
+          echo ""
+          echo "=== RUFF CHECK ON TEST FILE (should pass after local fixes) ==="
+          echo "Command: ruff check test_import_debug.py --select I --output-format=json"
+          ruff check test_import_debug.py --select I --output-format=json || echo "Test file check result"
+
+          echo ""
+          echo "=== SHOW WHAT RUFF WOULD FIX ON TEST FILE ==="
+          echo "Command: ruff check test_import_debug.py --select I --diff"
+          ruff check test_import_debug.py --select I --diff || echo "Test file diff result"
+
+      - name: Debug Single File - depictio_cytoscape_joins.py
+        run: |
+          source venv/bin/activate
+
+          echo "=== ACTUAL PROBLEM FILE DEBUG ==="
+          echo "Target file: depictio/dash/components/depictio_cytoscape_joins.py"
+
+          echo ""
+          echo "=== FILE CONTENTS (first 20 lines) ==="
+          head -20 depictio/dash/components/depictio_cytoscape_joins.py
+
+          echo ""
+          echo "=== RUFF CHECK ON SINGLE FILE ==="
+          echo "Command: ruff check depictio/dash/components/depictio_cytoscape_joins.py --select I --output-format=json"
+          ruff check depictio/dash/components/depictio_cytoscape_joins.py --select I --output-format=json || echo "Ruff check result"
+
+          echo ""
+          echo "=== SHOW WHAT RUFF WOULD FIX ==="
+          echo "Command: ruff check depictio/dash/components/depictio_cytoscape_joins.py --select I --diff"
+          ruff check depictio/dash/components/depictio_cytoscape_joins.py --select I --diff || echo "Ruff diff result"
+
+      - name: Debug Second File - admin_management.py
+        run: |
+          source venv/bin/activate
+
+          echo "=== SECOND FILE DEBUG ==="
+          echo "Target file: depictio/dash/layouts/admin_management.py"
+
+          echo ""
+          echo "=== FILE CONTENTS (first 20 lines) ==="
+          head -20 depictio/dash/layouts/admin_management.py
+
+          echo ""
+          echo "=== RUFF CHECK ON SECOND FILE ==="
+          echo "Command: ruff check depictio/dash/layouts/admin_management.py --select I --output-format=json"
+          ruff check depictio/dash/layouts/admin_management.py --select I --output-format=json || echo "Ruff check failed"
+
+          echo ""
+          echo "=== SHOW WHAT RUFF WOULD FIX ==="
+          echo "Command: ruff check depictio/dash/layouts/admin_management.py --select I --diff"
+          ruff check depictio/dash/layouts/admin_management.py --select I --diff || echo "Ruff diff failed"
+
+      - name: Compare Local vs Git Versions
+        run: |
+          echo "=== COMPARE WORKING TREE VS COMMITTED VERSIONS ==="
+
+          echo "=== Git status ==="
+          git status --porcelain
+
+          echo ""
+          echo "=== Diff for cytoscape file ==="
+          git diff HEAD depictio/dash/components/depictio_cytoscape_joins.py || echo "No diff found"
+
+          echo ""
+          echo "=== Diff for admin_management file ==="
+          git diff HEAD depictio/dash/layouts/admin_management.py || echo "No diff found"
+
+      - name: Test Ruff Configuration
+        run: |
+          source venv/bin/activate
+
+          echo "=== RUFF CONFIGURATION DEBUG ==="
+          echo "Show settings for the problematic file:"
+          ruff check --show-settings depictio/dash/components/depictio_cytoscape_joins.py | grep -A 20 -B 5 "isort\|import"
+
+          echo ""
+          echo "=== PYPROJECT.TOML RUFF SECTION ==="
+          grep -A 10 "\[tool\.ruff\]" pyproject.toml || echo "No ruff config found"
+
+          echo ""
+          echo "=== PRE-COMMIT CONFIG ==="
+          grep -A 5 "ruff-pre-commit" .pre-commit-config.yaml || echo "No pre-commit ruff config found"
+
+      - name: Final Test - Directory Check
+        run: |
+          source venv/bin/activate
+
+          echo "=== DIRECTORY-WIDE CHECK ==="
+          echo "Checking entire depictio directory for import violations:"
+
+          VIOLATIONS=$(ruff check depictio --select I --output-format=json)
+          echo "Violations found: $VIOLATIONS"
+
+          if [ "$VIOLATIONS" = "[]" ]; then
+            echo "✅ NO IMPORT VIOLATIONS FOUND"
+            exit 0
+          else
+            echo "❌ IMPORT VIOLATIONS STILL EXIST"
+            echo "$VIOLATIONS" | head -1000
+            exit 1
+          fi
