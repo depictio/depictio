@@ -1,12 +1,12 @@
-import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import yaml
-from dash import ALL, ctx, dcc
-from dash.exceptions import PreventUpdate
 from dash_extensions.enrich import Input, Output, State, html
 from dash_iconify import DashIconify
 
+import dash
+from dash import ALL, ctx, dcc
+from dash.exceptions import PreventUpdate
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import (

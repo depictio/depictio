@@ -2,9 +2,9 @@ import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import numpy as np
 import pandas as pd
-from dash import dcc, html
 from dash_iconify import DashIconify
 
+from dash import dcc, html
 from depictio.api.v1.configs.logging_init import logger
 
 

@@ -1,9 +1,9 @@
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import httpx
-from dash import dcc, html
 from dash_iconify import DashIconify
 
+from dash import dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 

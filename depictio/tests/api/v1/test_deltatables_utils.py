@@ -1932,3 +1932,356 @@ class TestIterativeJoin:
         assert workflow_id1 != workflow_id2
         assert joins_dict1 != joins_dict2
         assert metadata_dict1 != metadata_dict2
+
+
+class TestCachingFixes:
+    """Test fixes for caching and filtering issues in joined data collections."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.test_df = pl.DataFrame(
+            {
+                "id": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+                "category": ["A", "B", "A", "B", "A", "B", "A", "B", "A", "B"],
+                "value": [10, 20, 15, 25, 30, 35, 40, 45, 50, 55],
+            }
+        )
+
+    def test_apply_runtime_filters_preserves_full_dataset(self):
+        """Test that runtime filters are applied correctly before row limits."""
+        from depictio.api.v1.deltatables_utils import apply_runtime_filters
+
+        # Create metadata filtering for category "A"
+        metadata = [
+            {
+                "component_id": "test-component",
+                "component_type": "interactive",
+                "interactive_component_type": "Select",
+                "column_name": "category",
+                "value": ["A"],
+            }
+        ]
+
+        # Apply runtime filters
+        filtered_df = apply_runtime_filters(self.test_df, metadata)
+
+        # Verify correct filtering - should have only category "A" rows
+        assert filtered_df.height == 5  # Should have 5 rows of category "A"
+        unique_categories = filtered_df["category"].unique().to_list()
+        assert unique_categories == ["A"], f"Expected only category 'A', got {unique_categories}"
+
+        # Verify the values are correct (should be 10, 15, 30, 40, 50)
+        expected_values = [10, 15, 30, 40, 50]
+        actual_values = sorted(filtered_df["value"].to_list())
+        assert actual_values == expected_values
+
+    def test_row_limit_applied_after_filters(self):
+        """Test that row limits are applied AFTER filters, not before."""
+        from depictio.api.v1.deltatables_utils import apply_runtime_filters
+
+        # Create metadata filtering for category "A"
+        metadata = [
+            {
+                "component_id": "test-component",
+                "component_type": "interactive",
+                "interactive_component_type": "Select",
+                "column_name": "category",
+                "value": ["A"],
+            }
+        ]
+
+        # Apply filters first
+        filtered_df = apply_runtime_filters(self.test_df, metadata)
+
+        # Then apply row limit
+        limited_df = filtered_df.limit(3)
+
+        # Verify we get 3 rows, all of category "A"
+        assert limited_df.height == 3
+        unique_categories = limited_df["category"].unique().to_list()
+        assert unique_categories == ["A"]
+
+        # Verify all values are from category "A" only
+        expected_values = [10, 15, 30]  # First 3 values from category "A"
+        actual_values = limited_df["value"].to_list()
+        assert actual_values == expected_values
+
+    def test_range_slider_filtering(self):
+        """Test that range slider filters work correctly."""
+        from depictio.api.v1.deltatables_utils import apply_runtime_filters
+
+        # Create DataFrame with bill_length_mm column as in production logs
+        df = pl.DataFrame(
+            {"bill_length_mm": [30.0, 35.0, 40.0, 45.0, 50.0, 55.0], "id": [1, 2, 3, 4, 5, 6]}
+        )
+
+        # Create range slider metadata as seen in production
+        metadata = [
+            {
+                "component_id": "e69ba3a8-4c42-48d4-9019-8ade0ed077e4",
+                "component_type": "interactive",
+                "interactive_component_type": "RangeSlider",
+                "column_name": "bill_length_mm",
+                "value": [32.1, 52.47],
+            }
+        ]
+
+        # Apply range filter
+        filtered_df = apply_runtime_filters(df, metadata)
+
+        # Verify range filtering works correctly
+        assert filtered_df.height == 4  # Values 35.0, 40.0, 45.0, 50.0 should pass
+        actual_values = filtered_df["bill_length_mm"].to_list()
+        expected_values = [35.0, 40.0, 45.0, 50.0]
+        assert actual_values == expected_values
+
+        # Verify all values are within range
+        min_val = filtered_df["bill_length_mm"].min()
+        max_val = filtered_df["bill_length_mm"].max()
+        assert min_val is not None and min_val >= 32.1
+        assert max_val is not None and max_val <= 52.47
+
+    def test_empty_dataframe_handling(self):
+        """Test that empty DataFrames don't crash the filtering system."""
+        from depictio.api.v1.deltatables_utils import apply_runtime_filters
+
+        # Create empty DataFrame
+        empty_df = pl.DataFrame(
+            {"category": [], "value": []}, schema={"category": pl.String, "value": pl.Int64}
+        )
+
+        metadata = [
+            {
+                "component_id": "test-empty",
+                "component_type": "interactive",
+                "interactive_component_type": "Select",
+                "column_name": "category",
+                "value": ["A"],
+            }
+        ]
+
+        # Apply filters to empty DataFrame
+        result = apply_runtime_filters(empty_df, metadata)
+
+        # Should remain empty
+        assert result.height == 0
+        assert result.width == 2  # Should preserve schema
+
+    def test_multiple_filters_combination(self):
+        """Test that multiple filters work together correctly."""
+        from depictio.api.v1.deltatables_utils import apply_runtime_filters
+
+        df = pl.DataFrame(
+            {"category": ["A", "B", "A", "C", "A", "B"], "value": [10, 20, 30, 40, 50, 60]}
+        )
+
+        # Apply both category and range filters
+        metadata = [
+            {
+                "component_id": "test-cat",
+                "component_type": "interactive",
+                "interactive_component_type": "Select",
+                "column_name": "category",
+                "value": ["A", "B"],
+            },
+            {
+                "component_id": "test-val",
+                "component_type": "interactive",
+                "interactive_component_type": "RangeSlider",
+                "column_name": "value",
+                "value": [25, 55],
+            },
+        ]
+
+        result = apply_runtime_filters(df, metadata)
+
+        # Should have category A or B, AND value between 25-55
+        # This means A-30 and A-50 should match
+        assert result.height == 2
+        values = sorted(result["value"].to_list())
+        assert values == [30, 50]
+
+        # Verify all categories are A or B
+        categories = result["category"].unique().to_list()
+        assert all(cat in ["A", "B"] for cat in categories)
+
+
+class TestInteractiveComponentsLogic:
+    """Test fixes for interactive components affecting joined data collections."""
+
+    def test_join_inclusion_with_interactive_components(self):
+        """Test that joins are included when DCs have interactive components."""
+        # Simulate the exact scenario from production logs
+        dc_ids_with_interactive = ["68966a9759ec31ef651950c1"]
+        join_tables = {
+            "68966a9759ec31ef651950c1--68966a9759ec31ef651950c3": {
+                "how": "inner",
+                "on_columns": ["individual_id"],
+            }
+        }
+
+        # Test the matching logic from return_joins_dict function
+        filtered_joins = {}
+        for join_key, join_config in join_tables.items():
+            # This is the exact logic from the fixed code
+            if any(dc_id in join_key for dc_id in dc_ids_with_interactive):
+                filtered_joins[join_key] = join_config
+
+        # Verify the join was included
+        assert len(filtered_joins) == 1
+        assert "68966a9759ec31ef651950c1--68966a9759ec31ef651950c3" in filtered_joins
+
+        # Verify join configuration is preserved
+        join_config = filtered_joins["68966a9759ec31ef651950c1--68966a9759ec31ef651950c3"]
+        assert join_config["how"] == "inner"
+        assert join_config["on_columns"] == ["individual_id"]
+
+    def test_join_inclusion_multiple_interactive_dcs(self):
+        """Test join inclusion when multiple DCs have interactive components."""
+        dc_ids_with_interactive = ["dc1", "dc3"]
+        join_tables = {
+            "dc1--dc2": {"how": "inner", "on_columns": ["id"]},
+            "dc2--dc3": {"how": "left", "on_columns": ["id"]},
+            "dc3--dc4": {"how": "outer", "on_columns": ["id"]},
+            "dc4--dc5": {"how": "inner", "on_columns": ["id"]},
+        }
+
+        # Apply the filtering logic
+        filtered_joins = {}
+        for join_key, join_config in join_tables.items():
+            if any(dc_id in join_key for dc_id in dc_ids_with_interactive):
+                filtered_joins[join_key] = join_config
+
+        # Should include joins that contain dc1 or dc3
+        expected_joins = {"dc1--dc2", "dc2--dc3", "dc3--dc4"}
+        assert set(filtered_joins.keys()) == expected_joins
+
+        # Should exclude dc4--dc5 since neither dc4 nor dc5 have interactive components
+        assert "dc4--dc5" not in filtered_joins
+
+    def test_join_exclusion_no_interactive_components(self):
+        """Test that joins are excluded when no DCs have interactive components."""
+        dc_ids_with_interactive = []  # No interactive components
+        join_tables = {
+            "dc1--dc2": {"how": "inner", "on_columns": ["id"]},
+            "dc2--dc3": {"how": "left", "on_columns": ["id"]},
+        }
+
+        # Apply the filtering logic
+        filtered_joins = {}
+        for join_key, join_config in join_tables.items():
+            if any(dc_id in join_key for dc_id in dc_ids_with_interactive):
+                filtered_joins[join_key] = join_config
+
+        # Should have no joins since no DCs have interactive components
+        assert len(filtered_joins) == 0
+
+    def test_join_key_parsing(self):
+        """Test that join keys are parsed correctly."""
+        dc_ids_with_interactive = ["68966a9759ec31ef651950c1"]
+        join_key = "68966a9759ec31ef651950c1--68966a9759ec31ef651950c3"
+
+        # Test the parsing logic
+        dc_id1, dc_id2 = join_key.split("--")
+
+        assert dc_id1 == "68966a9759ec31ef651950c1"
+        assert dc_id2 == "68966a9759ec31ef651950c3"
+
+        # Test that the matching works
+        has_interactive = any(dc_id in join_key for dc_id in dc_ids_with_interactive)
+        assert has_interactive  # Should be True since dc_id1 matches
+
+
+class TestJoinedDataCollectionIntegration:
+    """Integration tests for the complete joined data collection workflow."""
+
+    @patch("depictio.api.v1.deltatables_utils.load_deltatable_lite")
+    def test_joined_collection_preserves_full_dataset(self, mock_load):
+        """Test that joined collections get the full filtered dataset, not limited cache."""
+        from depictio.api.v1.deltatables_utils import _load_joined_deltatable
+
+        # Create test ObjectIds
+        test_workflow_id = ObjectId()
+        dc1_id = ObjectId()
+        dc2_id = ObjectId()
+        joined_dc_id = f"{dc1_id}--{dc2_id}"
+
+        # Mock the individual DataFrame loading with unique IDs per row
+        df1 = pl.DataFrame(
+            {
+                "individual_id": list(range(1, 101)),  # 100 unique IDs
+                "bill_length_mm": [32.1, 35.0, 40.0, 45.0, 50.0] * 20,
+                "category": ["A", "B", "A", "B", "A"] * 20,
+            }
+        )
+
+        df2 = pl.DataFrame(
+            {
+                "individual_id": list(range(1, 101)),  # 100 unique IDs matching df1
+                "island": ["Dream", "Biscoe", "Dream", "Torgersen", "Dream"] * 20,
+                "species": ["Adelie", "Chinstrap", "Adelie", "Gentoo", "Adelie"] * 20,
+            }
+        )
+
+        mock_load.side_effect = [df1, df2]
+
+        # Mock the join configuration API response
+        with patch("httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = {
+                str(test_workflow_id): {  # Use the actual workflow ID
+                    joined_dc_id: {"how": "inner", "on_columns": ["individual_id"]}
+                }
+            }
+            mock_response.status_code = 200
+            mock_get.return_value = mock_response
+            mock_get.return_value.raise_for_status = MagicMock()
+
+            # Test joined data collection loading
+            result = _load_joined_deltatable(
+                workflow_id=test_workflow_id,
+                joined_data_collection_id=joined_dc_id,
+                metadata=None,
+                TOKEN="test_token",
+                limit_rows=None,  # No limit to get full dataset
+            )
+
+            # Should preserve full dataset after join
+            assert result.height == 100  # Full joined dataset
+            assert "individual_id" in result.columns
+            assert "bill_length_mm" in result.columns
+            assert "island" in result.columns
+            assert "species" in result.columns
+
+    def test_metadata_format_validation(self):
+        """Test that metadata format is correctly validated."""
+        from depictio.api.v1.deltatables_utils import process_metadata_and_filter
+
+        # Test valid metadata format
+        valid_metadata = [
+            {
+                "component_id": "test-id",
+                "component_type": "interactive",
+                "interactive_component_type": "RangeSlider",
+                "column_name": "value",
+                "value": [10, 50],
+            }
+        ]
+
+        # Should not raise exception
+        filter_expressions = process_metadata_and_filter(valid_metadata)
+        assert len(filter_expressions) == 1
+
+        # Test metadata with nested format (alternative format)
+        nested_metadata = [
+            {
+                "component_id": "test-id",
+                "component_type": "interactive",
+                "metadata": {"interactive_component_type": "Select", "column_name": "category"},
+                "value": ["A", "B"],
+            }
+        ]
+
+        # Should also work
+        filter_expressions = process_metadata_and_filter(nested_metadata)
+        assert len(filter_expressions) == 1

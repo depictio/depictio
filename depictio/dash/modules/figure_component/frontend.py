@@ -2,13 +2,13 @@
 from collections import defaultdict
 from typing import Any, Dict, List
 
-import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import httpx
-from dash import ALL, MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
+import dash
+from dash import ALL, MATCH, Input, Output, State, dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import get_dmc_button_color, is_enabled

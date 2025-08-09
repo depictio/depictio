@@ -262,10 +262,19 @@ def _load_joined_deltatable(
 
     # Perform the join
     join_how = join_config.get("how", "inner")
-    join_columns = join_config.get("on_columns", [])
+    join_columns = join_config.get("on_columns", []).copy()
 
     if not join_columns:
         raise ValueError(f"No join columns specified for {joined_data_collection_id}")
+
+    # Always include depictio_run_id in join if both dataframes have it
+    # This prevents cross-joining between different runs/batches
+    if "depictio_run_id" in df1.columns and "depictio_run_id" in df2.columns:
+        if "depictio_run_id" not in join_columns:
+            join_columns.append("depictio_run_id")
+            logger.debug(
+                "LoadJoinedDeltatable: Added depictio_run_id to join columns for proper run isolation"
+            )
 
     logger.info(f"Joining DataFrames on columns {join_columns} using {join_how} join")
     logger.debug(f"DF1 shape: {df1.shape}, columns: {df1.columns}")
@@ -430,16 +439,16 @@ def load_deltatable_lite(
             # Get cached DataFrame and apply filters in memory
             cached_df = _dataframe_memory_cache[base_cache_key]
 
-            # Apply row limit first if specified
-            if limit_rows:
-                cached_df = cached_df.limit(limit_rows)
-                logger.debug(f"Applied row limit: {limit_rows}")
-
-            # Apply metadata filters in memory (very fast)
+            # Apply metadata filters in memory first (very fast)
             if metadata and not load_for_options:
                 df = apply_runtime_filters(cached_df, metadata)
             else:
                 df = cached_df
+
+            # Apply row limit AFTER filters to avoid limiting joined data prematurely
+            if limit_rows:
+                df = df.limit(limit_rows)
+                logger.debug(f"Applied row limit: {limit_rows}")
         else:
             # Load DataFrame and estimate size dynamically
             logger.debug("Loading DataFrame for dynamic size estimation")
@@ -508,16 +517,16 @@ def load_deltatable_lite(
             # Get cached DataFrame and apply filters in memory
             cached_df = _dataframe_memory_cache[base_cache_key]
 
-            # Apply row limit first if specified
-            if limit_rows:
-                cached_df = cached_df.limit(limit_rows)
-                logger.debug(f"Applied row limit: {limit_rows}")
-
-            # Apply metadata filters in memory (very fast)
+            # Apply metadata filters in memory first (very fast)
             if metadata and not load_for_options:
                 df = apply_runtime_filters(cached_df, metadata)
             else:
                 df = cached_df
+
+            # Apply row limit AFTER filters to avoid limiting joined data prematurely
+            if limit_rows:
+                df = df.limit(limit_rows)
+                logger.debug(f"Applied row limit: {limit_rows}")
 
         else:
             # Load and cache the DataFrame
@@ -655,22 +664,28 @@ def merge_multiple_dataframes(
         how = join_step["how"]
         on = join_step["on"].copy()  # Make a copy to modify
 
-        logger.debug(
-            f"Join Step {idx}: '{left_id}' {how} joined with '{right_id}' on columns {on}."
-        )
-
-        # Determine the current left DataFrame
+        # Always include depictio_run_id in join if both dataframes have it
+        # This prevents cross-joining between different runs/batches
         if merged_df is None:
             left_df = dataframes[left_id]
         else:
             left_df = merged_df
+        right_df = dataframes[right_id]
+
+        if "depictio_run_id" in left_df.columns and "depictio_run_id" in right_df.columns:
+            if "depictio_run_id" not in on:
+                on.append("depictio_run_id")
+                logger.debug(
+                    "MergeMultipleDataframes: Added depictio_run_id to join columns for proper run isolation"
+                )
+
+        logger.debug(
+            f"Join Step {idx}: '{left_id}' {how} joined with '{right_id}' on columns {on}."
+        )
 
         if right_id in dc_ids_processed:
             logger.debug(f"Skipping join with '{right_id}' as it has already been processed.")
             continue
-
-        # The right DataFrame is always from the join instructions
-        right_df = dataframes[right_id]
 
         # Identify overlapping columns excluding join keys
         overlapping_cols = set(left_df.columns).intersection(set(right_df.columns)) - set(on)
@@ -1197,11 +1212,18 @@ def iterative_join(
 
             # Optimize: Build join columns efficiently
             base_columns = join_details["on_columns"]
-            join_columns = (
-                base_columns + ["depictio_run_id"]
-                if "depictio_run_id" in merged_df.columns and "depictio_run_id" in right_df.columns
-                else base_columns
-            )
+
+            # Always include depictio_run_id in join if both dataframes have it
+            # This prevents cross-joining between different runs/batches
+            join_columns = base_columns.copy()
+            if "depictio_run_id" in merged_df.columns and "depictio_run_id" in right_df.columns:
+                if "depictio_run_id" not in join_columns:
+                    join_columns.append("depictio_run_id")
+                    logger.debug(
+                        "IterativeJoin: Added depictio_run_id to join columns for proper run isolation"
+                    )
+
+            logger.debug(f"IterativeJoin: Final join columns: {join_columns}")
 
             # logger.debug(
             #     f"IterativeJoin: Join {join_count} - {join_dc_id} ({right_df.shape}) -> merged ({merged_df.shape})"
@@ -1342,6 +1364,10 @@ def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None):
     # Extract the intersection between dc_ids_all_joins and join_tables_for_wf[wf].keys()
     # PLUS include any joins that contain DCs with interactive components
     filtered_joins = {}
+    logger.debug(f"Available join keys: {list(join_tables_for_wf[wf].keys())}")
+    logger.debug(f"dc_ids_all_joins: {dc_ids_all_joins}")
+    logger.debug(f"dc_ids_all_components: {dc_ids_all_components}")
+
     for join_key, join_config in join_tables_for_wf[wf].items():
         # Include join if it's between current dashboard components (original logic)
         if join_key in dc_ids_all_joins:
@@ -1360,6 +1386,10 @@ def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None):
             if dc_id2 not in dc_ids_all_components:
                 dc_ids_all_components.append(dc_id2)
                 logger.debug(f"Added DC to components list: {dc_id2}")
+        else:
+            logger.debug(
+                f"Skipping join {join_key} - no match for dashboard components or interactive DCs"
+            )
 
     join_tables_for_wf[wf] = filtered_joins
     logger.debug(f"Total joins after filtering: {len(filtered_joins)}")

@@ -3,9 +3,9 @@ import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import httpx
 import polars as pl
-from dash import MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
+from dash import MATCH, Input, Output, State, dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL
 
 # Depictio imports
@@ -162,8 +162,8 @@ def register_callbacks_table_component(app):
         - Cache invalidation when interactive values change
         """
         from bson import ObjectId
-        from dash import ctx, no_update
 
+        from dash import ctx, no_update
         from depictio.api.v1.deltatables_utils import (
             iterative_join,
             load_deltatable_lite,

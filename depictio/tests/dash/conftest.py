@@ -1,9 +1,11 @@
 import os
+from typing import cast
 
 import pytest
 from beanie import init_beanie
 from bson import ObjectId
 from mongomock_motor import AsyncMongoMockClient
+from pymongo.asynchronous.database import AsyncDatabase
 
 from depictio import BASE_PATH
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _hash_password
@@ -79,7 +81,9 @@ async def mock_mongodb_async():
     db = client.test_db
 
     # Initialize Beanie with the mock database
-    await init_beanie(database=db, document_models=[UserBeanie, GroupBeanie, TokenBeanie])
+    await init_beanie(
+        database=cast(AsyncDatabase, db), document_models=[UserBeanie, GroupBeanie, TokenBeanie]
+    )
 
     # Load initial users from config
     config_path = os.path.join(BASE_PATH, "depictio", "api", "v1", "configs", "initial_users.yaml")

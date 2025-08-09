@@ -1,8 +1,8 @@
 import dash_mantine_components as dmc
-from dash import dcc, html
 from dash_extensions import EventListener
 from dash_iconify import DashIconify
 
+from dash import dcc, html
 from depictio.dash.colors import colors
 
 

@@ -1,10 +1,12 @@
 import functools
+from typing import cast
 
 import bcrypt
 import pytest
 from beanie import Document, init_beanie
 from fastapi.testclient import TestClient
 from mongomock_motor import AsyncMongoMockClient
+from pymongo.asynchronous.database import AsyncDatabase
 
 from depictio.api.main import app
 
@@ -49,7 +51,7 @@ def beanie_setup(models: list[type[Document]] | None = None):
         async def wrapper(*args, **kwargs):
             # Initialize Beanie with the specified models
             client = AsyncMongoMockClient()
-            await init_beanie(database=client.test_db, document_models=models)
+            await init_beanie(database=cast(AsyncDatabase, client.test_db), document_models=models)
             # Run the actual test function
             return await func(*args, **kwargs)
 

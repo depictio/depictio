@@ -2,7 +2,7 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 import pymongo
 from beanie import PydanticObjectId, init_beanie
@@ -15,6 +15,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.asynchronous.database import AsyncDatabase
 
 from depictio.api.v1.configs.config import MONGODB_URL, settings
 from depictio.api.v1.endpoints.routers import router
@@ -36,7 +37,7 @@ DEPICTIO_CONTEXT = get_depictio_context()
 async def init_motor_beanie():
     client = AsyncIOMotorClient(MONGODB_URL)
     await init_beanie(
-        database=client[settings.mongodb.db_name],
+        database=cast(AsyncDatabase, client[settings.mongodb.db_name]),
         document_models=[TokenBeanie, GroupBeanie, UserBeanie, ProjectBeanie],
     )
 

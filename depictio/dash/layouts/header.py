@@ -7,13 +7,13 @@ Includes modular components for buttons, badges, modals, and responsive layout m
 
 import datetime
 
-import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import httpx
-from dash import Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
+import dash
+from dash import Input, Output, State, dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, api_call_get_dashboard

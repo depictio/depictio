@@ -1,5 +1,6 @@
 """Tests for datacollections core functions using mongomock_motor with pre-populated data."""
 
+from typing import cast
 from unittest.mock import patch
 
 import bcrypt
@@ -8,6 +9,7 @@ from beanie import init_beanie
 from bson import ObjectId
 from fastapi import HTTPException
 from mongomock_motor import AsyncMongoMockClient
+from pymongo.asynchronous.database import AsyncDatabase
 
 from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
     _delete_data_collection_by_id,
@@ -36,7 +38,9 @@ async def setup_test_database_with_projects():
     """Set up test database with pre-populated projects and data collections."""
     # Initialize mongomock_motor database
     client = AsyncMongoMockClient()
-    await init_beanie(database=client.test_db, document_models=[UserBeanie, ProjectBeanie])
+    await init_beanie(
+        database=cast(AsyncDatabase, client.test_db), document_models=[UserBeanie, ProjectBeanie]
+    )
 
     # Create test user
     test_user = UserBeanie(

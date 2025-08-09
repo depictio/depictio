@@ -1,9 +1,9 @@
-import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
+
+import dash
 from dash import html
 from dash.dependencies import Input, Output
-
 from depictio.dash.colors import color_sequences, colors
 
 

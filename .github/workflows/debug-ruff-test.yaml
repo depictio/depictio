@@ -1,0 +1,38 @@
+name: "Debug Ruff Import Sorting Test"
+
+on:
+  push:
+    branches: [fix/dynamic-joining-rows-nb-issue]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  debug-ruff-single-file:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # - name: Install uv
+      #   uses: astral-sh/setup-uv@v5
+      #   with:
+      #     enable-cache: true
+
+      # - name: "Set up Python"
+      #   uses: actions/setup-python@v5
+      #   with:
+      #     python-version-file: "pyproject.toml"
+      #     cache-dependency-path: "pyproject.toml"
+
+      # - name: Install Dependencies
+      #   run: |
+      #     uv venv --python 3.12.9 venv
+      #     source venv/bin/activate
+      #     uv pip install --upgrade pip
+      #     uv pip install -e ".[dev]"
+
+
+      - uses: astral-sh/ruff-action@v3
+        with:
+          src: test_import_debug.py
+          args: check --fix --exit-non-zero-on-fix --line-length=100

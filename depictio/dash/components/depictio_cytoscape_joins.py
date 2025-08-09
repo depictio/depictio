@@ -9,9 +9,9 @@ into the project data collections management interface.
 
 import dash_cytoscape as cyto
 import dash_mantine_components as dmc
-from dash import html
 from dash_iconify import DashIconify
 
+from dash import html
 from depictio.dash.colors import colors
 
 

@@ -1,8 +1,8 @@
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash import ALL, MATCH, Input, Output, State, ctx, dcc, html
 from dash_iconify import DashIconify
 
+from dash import ALL, MATCH, Input, Output, State, ctx, dcc, html
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import is_enabled
 from depictio.dash.modules.card_component.frontend import create_stepper_card_button
