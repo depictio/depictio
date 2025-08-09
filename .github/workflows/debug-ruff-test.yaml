@@ -33,5 +33,6 @@ jobs:
 
 
       - uses: astral-sh/ruff-action@v3
-      - run: ruff format test_import_debug.py
-      - run: ruff check --fix test_import_debug.py
+        with:
+          src: test_import_debug.py
+          args: check --fix --exit-non-zero-on-fix --line-length=100
