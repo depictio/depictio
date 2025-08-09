@@ -14,14 +14,14 @@ The module is organized into:
 
 import base64
 
-import dash
 import dash_ag_grid as dag
 import dash_mantine_components as dmc
 import polars as pl
 from bson import ObjectId
-from dash import Input, Output, ctx, dcc, html
 from dash_iconify import DashIconify
 
+import dash
+from dash import Input, Output, ctx, dcc, html
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.dash.api_calls import api_call_fetch_delta_table_info, api_call_fetch_project_by_id
