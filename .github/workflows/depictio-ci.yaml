@@ -60,6 +60,7 @@ jobs:
         with:
           src: depictio
           args: check --fix --exit-non-zero-on-fix --line-length=100
+          version-file: pyproject.toml
 
       # - name: Debug environment before Ruff check
       #   run: |
@@ -94,6 +95,7 @@ jobs:
         with:
           src: depictio
           args: format
+          version-file: pyproject.toml
 
       - name: Run ty type checker (must pass)
         run: |
