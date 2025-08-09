@@ -262,10 +262,19 @@ def _load_joined_deltatable(
 
     # Perform the join
     join_how = join_config.get("how", "inner")
-    join_columns = join_config.get("on_columns", [])
+    join_columns = join_config.get("on_columns", []).copy()
 
     if not join_columns:
         raise ValueError(f"No join columns specified for {joined_data_collection_id}")
+
+    # Always include depictio_run_id in join if both dataframes have it
+    # This prevents cross-joining between different runs/batches
+    if "depictio_run_id" in df1.columns and "depictio_run_id" in df2.columns:
+        if "depictio_run_id" not in join_columns:
+            join_columns.append("depictio_run_id")
+            logger.debug(
+                "LoadJoinedDeltatable: Added depictio_run_id to join columns for proper run isolation"
+            )
 
     logger.info(f"Joining DataFrames on columns {join_columns} using {join_how} join")
     logger.debug(f"DF1 shape: {df1.shape}, columns: {df1.columns}")
@@ -655,22 +664,28 @@ def merge_multiple_dataframes(
         how = join_step["how"]
         on = join_step["on"].copy()  # Make a copy to modify
 
-        logger.debug(
-            f"Join Step {idx}: '{left_id}' {how} joined with '{right_id}' on columns {on}."
-        )
-
-        # Determine the current left DataFrame
+        # Always include depictio_run_id in join if both dataframes have it
+        # This prevents cross-joining between different runs/batches
         if merged_df is None:
             left_df = dataframes[left_id]
         else:
             left_df = merged_df
+        right_df = dataframes[right_id]
+
+        if "depictio_run_id" in left_df.columns and "depictio_run_id" in right_df.columns:
+            if "depictio_run_id" not in on:
+                on.append("depictio_run_id")
+                logger.debug(
+                    "MergeMultipleDataframes: Added depictio_run_id to join columns for proper run isolation"
+                )
+
+        logger.debug(
+            f"Join Step {idx}: '{left_id}' {how} joined with '{right_id}' on columns {on}."
+        )
 
         if right_id in dc_ids_processed:
             logger.debug(f"Skipping join with '{right_id}' as it has already been processed.")
             continue
-
-        # The right DataFrame is always from the join instructions
-        right_df = dataframes[right_id]
 
         # Identify overlapping columns excluding join keys
         overlapping_cols = set(left_df.columns).intersection(set(right_df.columns)) - set(on)
@@ -1197,11 +1212,18 @@ def iterative_join(
 
             # Optimize: Build join columns efficiently
             base_columns = join_details["on_columns"]
-            join_columns = (
-                base_columns + ["depictio_run_id"]
-                if "depictio_run_id" in merged_df.columns and "depictio_run_id" in right_df.columns
-                else base_columns
-            )
+
+            # Always include depictio_run_id in join if both dataframes have it
+            # This prevents cross-joining between different runs/batches
+            join_columns = base_columns.copy()
+            if "depictio_run_id" in merged_df.columns and "depictio_run_id" in right_df.columns:
+                if "depictio_run_id" not in join_columns:
+                    join_columns.append("depictio_run_id")
+                    logger.debug(
+                        "IterativeJoin: Added depictio_run_id to join columns for proper run isolation"
+                    )
+
+            logger.debug(f"IterativeJoin: Final join columns: {join_columns}")
 
             # logger.debug(
             #     f"IterativeJoin: Join {join_count} - {join_dc_id} ({right_df.shape}) -> merged ({merged_df.shape})"
