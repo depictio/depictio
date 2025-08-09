@@ -4,9 +4,9 @@ Factory module for creating and configuring the Dash application.
 
 import os
 
-import dash
 import dash_bootstrap_components as dbc
 
+import dash
 from depictio.api.v1.configs.logging_init import logger
 
 # Set environment context

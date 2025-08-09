@@ -4,8 +4,8 @@ import os
 
 import dash_bootstrap_components as dbc
 import httpx
-from dash import dcc, html
 
+from dash import dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token

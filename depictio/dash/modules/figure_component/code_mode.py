@@ -6,8 +6,9 @@ from typing import Any, Dict
 
 import dash_ace
 import dash_mantine_components as dmc
-from dash import html
 from dash_iconify import DashIconify
+
+from dash import html
 
 from .simple_code_executor import get_code_examples
 

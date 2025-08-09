@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import bcrypt
@@ -7,6 +8,7 @@ from beanie import PydanticObjectId, init_beanie
 from bson import ObjectId
 from fastapi import HTTPException
 from mongomock_motor import AsyncMongoMockClient
+from pymongo.asynchronous.database import AsyncDatabase
 
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _add_token,
@@ -322,7 +324,9 @@ class TestPurgeExpiredTokensFromUser:
         """Test successful purging of expired tokens."""
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[TokenBeanie, UserBeanie])
+        await init_beanie(
+            database=cast(AsyncDatabase, client.test_db), document_models=[TokenBeanie, UserBeanie]
+        )
 
         # Set up test data
         user_id = PydanticObjectId()
@@ -374,7 +378,9 @@ class TestPurgeExpiredTokensFromUser:
         """Test when no expired tokens are found to delete."""
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[TokenBeanie, UserBeanie])
+        await init_beanie(
+            database=cast(AsyncDatabase, client.test_db), document_models=[TokenBeanie, UserBeanie]
+        )
 
         # Set up test data
         user_id = PydanticObjectId()
@@ -409,7 +415,9 @@ class TestPurgeExpiredTokensFromUser:
         """Test when user has no tokens at all."""
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[TokenBeanie, UserBeanie])
+        await init_beanie(
+            database=cast(AsyncDatabase, client.test_db), document_models=[TokenBeanie, UserBeanie]
+        )
 
         # Act
         result = await _purge_expired_tokens(

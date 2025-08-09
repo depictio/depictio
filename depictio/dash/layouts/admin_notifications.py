@@ -3,9 +3,9 @@ Admin security notifications for Depictio Dash application.
 """
 
 import requests
-from dash import Input, Output, no_update
 from dash_iconify import DashIconify
 
+from dash import Input, Output, no_update
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 

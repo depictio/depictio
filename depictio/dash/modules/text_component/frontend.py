@@ -1,9 +1,10 @@
 # Import necessary libraries
-import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash import MATCH, Input, Output, State, callback_context, dcc, html
 from dash_iconify import DashIconify
+
+import dash
+from dash import MATCH, Input, Output, State, callback_context, dcc, html
 
 # Depictio imports
 from depictio.api.v1.configs.logging_init import logger

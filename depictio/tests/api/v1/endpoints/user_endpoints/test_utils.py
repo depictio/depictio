@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from typing import cast
 from unittest.mock import MagicMock, call, patch
 
 import bcrypt
@@ -8,6 +9,7 @@ from beanie import PydanticObjectId, init_beanie
 from bson import ObjectId
 from mongomock_motor import AsyncMongoMockClient
 from pydantic_core import ValidationError
+from pymongo.asynchronous.database import AsyncDatabase
 
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _create_user_in_db,
@@ -669,7 +671,9 @@ class TestCreateUserInDb:
         """Test successful user creation with valid data."""
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[UserBeanie])
+        await init_beanie(
+            database=cast(AsyncDatabase, client.test_db), document_models=[UserBeanie]
+        )
 
         # Set up test data
         id = ObjectId("507f1f77bcf86cd799439011")  # Example ObjectId
@@ -712,7 +716,9 @@ class TestCreateUserInDb:
         """Test creating an admin user."""
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[UserBeanie])
+        await init_beanie(
+            database=cast(AsyncDatabase, client.test_db), document_models=[UserBeanie]
+        )
 
         # Set up test data
         id = ObjectId("507f1f77bcf86cd799439012")  # Example ObjectId
@@ -748,7 +754,9 @@ class TestCreateUserInDb:
         """Test attempting to create a user that already exists."""
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[UserBeanie])
+        await init_beanie(
+            database=cast(AsyncDatabase, client.test_db), document_models=[UserBeanie]
+        )
 
         # Set up test data
         id = ObjectId("507f1f77bcf86cd799439013")  # Example ObjectId
@@ -795,7 +803,7 @@ class TestCreateUserInDb:
     #     """Test that timestamps are formatted correctly."""
     #     # Initialize Beanie directly in the test
     #     client = AsyncMongoMockClient()
-    #     await init_beanie(database=client.test_db, document_models=[UserBeanie])
+    #     await init_beanie(database=cast(AsyncDatabase, client.test_db), document_models=[UserBeanie])
 
     #     # Set up test data
     #     email = "timestamp@example.com"
@@ -821,7 +829,7 @@ class TestCreateUserInDb:
     #     """Test creating a user with a specific group."""
     #     # Initialize Beanie directly in the test
     #     client = AsyncMongoMockClient()
-    #     await init_beanie(database=client.test_db, document_models=[UserBeanie, GroupBeanie])
+    #     await init_beanie(database=cast(AsyncDatabase, client.test_db), document_models=[UserBeanie, GroupBeanie])
 
     #     # Set up test data
     #     email = "group@example.com"

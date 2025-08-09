@@ -2,8 +2,8 @@ import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import polars as pl
 from bson import ObjectId
-from dash import dcc, html
 
+from dash import dcc, html
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.dash.modules.figure_component.utils import stringify_id
