@@ -18,7 +18,7 @@ repos:
 
 # Ruff lint & format (includes import sorting)
 -   repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: v0.11.8
+    rev: v0.11.10
     hooks:
     -   id: ruff
         args: [--fix, --exit-non-zero-on-fix, --line-length=100]
