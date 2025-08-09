@@ -439,16 +439,16 @@ def load_deltatable_lite(
             # Get cached DataFrame and apply filters in memory
             cached_df = _dataframe_memory_cache[base_cache_key]
 
-            # Apply row limit first if specified
-            if limit_rows:
-                cached_df = cached_df.limit(limit_rows)
-                logger.debug(f"Applied row limit: {limit_rows}")
-
-            # Apply metadata filters in memory (very fast)
+            # Apply metadata filters in memory first (very fast)
             if metadata and not load_for_options:
                 df = apply_runtime_filters(cached_df, metadata)
             else:
                 df = cached_df
+
+            # Apply row limit AFTER filters to avoid limiting joined data prematurely
+            if limit_rows:
+                df = df.limit(limit_rows)
+                logger.debug(f"Applied row limit: {limit_rows}")
         else:
             # Load DataFrame and estimate size dynamically
             logger.debug("Loading DataFrame for dynamic size estimation")
@@ -517,16 +517,16 @@ def load_deltatable_lite(
             # Get cached DataFrame and apply filters in memory
             cached_df = _dataframe_memory_cache[base_cache_key]
 
-            # Apply row limit first if specified
-            if limit_rows:
-                cached_df = cached_df.limit(limit_rows)
-                logger.debug(f"Applied row limit: {limit_rows}")
-
-            # Apply metadata filters in memory (very fast)
+            # Apply metadata filters in memory first (very fast)
             if metadata and not load_for_options:
                 df = apply_runtime_filters(cached_df, metadata)
             else:
                 df = cached_df
+
+            # Apply row limit AFTER filters to avoid limiting joined data prematurely
+            if limit_rows:
+                df = df.limit(limit_rows)
+                logger.debug(f"Applied row limit: {limit_rows}")
 
         else:
             # Load and cache the DataFrame
@@ -1364,6 +1364,10 @@ def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None):
     # Extract the intersection between dc_ids_all_joins and join_tables_for_wf[wf].keys()
     # PLUS include any joins that contain DCs with interactive components
     filtered_joins = {}
+    logger.debug(f"Available join keys: {list(join_tables_for_wf[wf].keys())}")
+    logger.debug(f"dc_ids_all_joins: {dc_ids_all_joins}")
+    logger.debug(f"dc_ids_all_components: {dc_ids_all_components}")
+
     for join_key, join_config in join_tables_for_wf[wf].items():
         # Include join if it's between current dashboard components (original logic)
         if join_key in dc_ids_all_joins:
@@ -1382,6 +1386,10 @@ def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None):
             if dc_id2 not in dc_ids_all_components:
                 dc_ids_all_components.append(dc_id2)
                 logger.debug(f"Added DC to components list: {dc_id2}")
+        else:
+            logger.debug(
+                f"Skipping join {join_key} - no match for dashboard components or interactive DCs"
+            )
 
     join_tables_for_wf[wf] = filtered_joins
     logger.debug(f"Total joins after filtering: {len(filtered_joins)}")
