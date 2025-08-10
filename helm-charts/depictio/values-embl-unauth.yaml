@@ -106,6 +106,26 @@ minio:
   # NOTE: S3 credentials are defined in values-embl-secrets.yaml
   # This file should be loaded separately and not committed to version control
 
+  # Security context override for PodSecurity "restricted" policy compliance
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+
+  # External MinIO/S3 environment configuration (placeholder values)
+  # These will be overridden by values-embl-secrets.yaml
+  env:
+    DEPICTIO_MINIO_PUBLIC_URL: "https://s3.embl.de"
+    DEPICTIO_MINIO_ROOT_USER: "placeholder-user"
+    DEPICTIO_MINIO_ROOT_PASSWORD: "placeholder-password"
+    DEPICTIO_MINIO_BUCKET: "depictio-bucket"
+    DEPICTIO_MINIO_SERVICE_PORT: "9000"
+
 ## Ingress
 ingress:
   enabled: true

@@ -57,8 +57,8 @@ mongo:
       memory: "1Gi"
       cpu: "0.5"
     limits:
-      memory: "2Gi"
-      cpu: "1"
+      memory: "4Gi"
+      cpu: "2"
   service:
     type: ClusterIP
     port: 27018
@@ -81,8 +81,8 @@ minio:
       memory: "1Gi"
       cpu: "0.5"
     limits:
-      memory: "2Gi"
-      cpu: "1"
+      memory: "4Gi"
+      cpu: "2"
   service:
     type: ClusterIP
     httpPort: 9000
@@ -93,12 +93,12 @@ minio:
     capabilities: {}
     seccompProfile:
       type: RuntimeDefault
-  # env:
-  #   DEPICTIO_MINIO_PUBLIC_URL: "https://minio.depictio.example.com"
-  #   DEPICTIO_MINIO_ROOT_USER: "minioadmin"
-  #   DEPICTIO_MINIO_ROOT_PASSWORD: "minioadmin"
-  #   DEPICTIO_MINIO_BUCKET: "depictio-bucket"
-  #   DEPICTIO_MINIO_EXTERNAL_SERVICE: "false"  # Use external MinIO service
+  env:
+    # Default MinIO credentials - these will be overridden by values-embl-secrets.yaml
+    DEPICTIO_MINIO_ROOT_USER: "minio"
+    DEPICTIO_MINIO_ROOT_PASSWORD: "minio123"
+    DEPICTIO_MINIO_BUCKET: "depictio-bucket"
+    DEPICTIO_MINIO_SERVICE_PORT: "9000"
 
 # Backend settings
 backend:
@@ -112,8 +112,8 @@ backend:
       memory: "1Gi"
       cpu: "0.5"
     limits:
-      memory: "4Gi"
-      cpu: "2"
+      memory: "8Gi"
+      cpu: "4"
   service:
     type: ClusterIP
     httpPort: 80
@@ -122,7 +122,7 @@ backend:
   env:
     DEPICTIO_CONTEXT: "server"
     DEV_MODE: "false"
-    DEPICTIO_LOGGING_VERBOSITY_LEVEL: "DEBUG"
+    DEPICTIO_LOGGING_VERBOSITY_LEVEL: "INFO"
     DEPICTIO_FASTAPI_SERVICE_PORT: "80"
     DEPICTIO_DASH_SERVICE_PORT: "80"
     DEPICTIO_MONGODB_WIPE: "false" # Set to true for development to wipe MongoDB on startup
@@ -131,9 +131,15 @@ backend:
     # DEPICTIO_DASH_SERVICE_NAME: "depictio-frontend"
     # DEPICTIO_FASTAPI_PUBLIC_URL: "https://{{ .Release.Name }}-api.{{ .Values.global.domain }}"
     # DEPICTIO_MINIO_PUBLIC_URL: "https://{{ .Release.Name }}-minio.{{ .Values.global.domain }}"
-
     # Performance - Reduced workers for better stability with multiple replicas
     DEPICTIO_FASTAPI_WORKERS: "4"
+
+    # Enable unauthenticated mode (allows anonymous access)
+    DEPICTIO_AUTH_UNAUTHENTICATED_MODE: "false"
+
+    # Anonymous user configuration
+    DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
+    DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "24"
 
   podSecurityContext:
     runAsUser: 1000
@@ -162,8 +168,8 @@ frontend:
       memory: "1Gi"
       cpu: "0.5"
     limits:
-      memory: "4Gi"
-      cpu: "2"
+      memory: "8Gi"
+      cpu: "4"
   service:
     type: ClusterIP
     httpPort: 80
