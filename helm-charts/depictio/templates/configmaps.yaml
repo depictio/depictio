@@ -10,8 +10,6 @@ data:
   DEPICTIO_FASTAPI_SERVICE_NAME: {{ printf "%s-depictio-backend" .Release.Name | quote }}
   DEPICTIO_FASTAPI_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_FASTAPI_SERVICE_PORT | quote }}
   DEPICTIO_FASTAPI_PUBLIC_URL: {{ printf "https://%s-api.%s" .Release.Name .Values.global.domain | quote }}
-  DEPICTIO_MINIO_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
-  # DEPICTIO_MINIO_PUBLIC_URL: {{ printf "https://%s-minio.%s" .Release.Name .Values.global.domain | quote }}
   DEPICTIO_DASH_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_DASH_SERVICE_PORT | quote }}
   DEPICTIO_DASH_SERVICE_NAME: {{ printf "%s-depictio-frontend" .Release.Name | quote }}
   DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo" .Release.Name | quote }}
@@ -24,16 +22,20 @@ data:
   DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.backend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | default "24" | quote }}
   # Performance
   DEPICTIO_FASTAPI_WORKERS: {{ .Values.backend.env.DEPICTIO_FASTAPI_WORKERS | quote }}
+  # MinIO/S3 configuration
+  DEPICTIO_MINIO_ROOT_USER: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_USER | default "minio" | quote }}
+  DEPICTIO_MINIO_ROOT_PASSWORD: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_PASSWORD | default "minio123" | quote }}
+  DEPICTIO_MINIO_BUCKET: {{ .Values.minio.env.DEPICTIO_MINIO_BUCKET | default "depictio-bucket" | quote }}
   {{- if not .Values.minio.enabled }}
   # External MinIO/S3 configuration (when built-in MinIO is disabled)
   DEPICTIO_MINIO_PUBLIC_URL: {{ .Values.minio.env.DEPICTIO_MINIO_PUBLIC_URL | quote }}
-  DEPICTIO_MINIO_ROOT_USER: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_USER | quote }}
-  DEPICTIO_MINIO_ROOT_PASSWORD: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_PASSWORD | quote }}
-  DEPICTIO_MINIO_BUCKET: {{ .Values.minio.env.DEPICTIO_MINIO_BUCKET | quote }}
-  DEPICTIO_MINIO_EXTERNAL_SERVICE: {{ .Values.minio.env.DEPICTIO_MINIO_EXTERNAL_SERVICE | quote }}
+  DEPICTIO_MINIO_EXTERNAL_SERVICE: "true"
   {{- else }}
   # Built-in MinIO service configuration
   DEPICTIO_MINIO_PUBLIC_URL: {{ printf "https://%s-minio.%s" .Release.Name .Values.global.domain | quote }}
+  DEPICTIO_MINIO_EXTERNAL_SERVICE: "false"
+  DEPICTIO_MINIO_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
+  DEPICTIO_MINIO_SERVICE_PORT: {{ .Values.minio.env.DEPICTIO_MINIO_SERVICE_PORT | default "9000" | quote }}
   {{- end }}
 
 ---
@@ -48,10 +50,7 @@ data:
   DEPICTIO_FASTAPI_SERVICE_NAME: {{ printf "%s-depictio-backend" .Release.Name | quote }}
   DEPICTIO_FASTAPI_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_FASTAPI_SERVICE_PORT | quote }}
   DEPICTIO_FASTAPI_PUBLIC_URL: {{ printf "https://%s-api.%s" .Release.Name .Values.global.domain | quote }}
-  # DEPICTIO_MINIO_PUBLIC_URL: {{ printf "https://%s-minio.%s" .Release.Name .Values.global.domain | quote }}
   DEPICTIO_DASH_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_DASH_SERVICE_PORT | quote }}
-  DEPICTIO_MINIO_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
-  # DEPICTIO_MINIO_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_MINIO_SERVICE_PORT | quote }}
   DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo" .Release.Name | quote }}
   DEPICTIO_MONGODB_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_MONGODB_SERVICE_PORT | quote }}
   # Authentication mode (defaults to authenticated mode)
@@ -60,14 +59,18 @@ data:
   DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.backend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | default "24" | quote }}
   # Performance
   DEPICTIO_DASH_WORKERS: {{ .Values.frontend.env.DEPICTIO_DASH_WORKERS | quote }}
+  # MinIO/S3 configuration
+  DEPICTIO_MINIO_ROOT_USER: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_USER | default "minio" | quote }}
+  DEPICTIO_MINIO_ROOT_PASSWORD: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_PASSWORD | default "minio123" | quote }}
+  DEPICTIO_MINIO_BUCKET: {{ .Values.minio.env.DEPICTIO_MINIO_BUCKET | default "depictio-bucket" | quote }}
   {{- if not .Values.minio.enabled }}
   # External MinIO/S3 configuration (when built-in MinIO is disabled)
   DEPICTIO_MINIO_PUBLIC_URL: {{ .Values.minio.env.DEPICTIO_MINIO_PUBLIC_URL | quote }}
-  DEPICTIO_MINIO_ROOT_USER: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_USER | quote }}
-  DEPICTIO_MINIO_ROOT_PASSWORD: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_PASSWORD | quote }}
-  DEPICTIO_MINIO_BUCKET: {{ .Values.minio.env.DEPICTIO_MINIO_BUCKET | quote }}
-  DEPICTIO_MINIO_EXTERNAL_SERVICE: {{ .Values.minio.env.DEPICTIO_MINIO_EXTERNAL_SERVICE | quote }}
+  DEPICTIO_MINIO_EXTERNAL_SERVICE: "true"
   {{- else }}
   # Built-in MinIO service configuration
   DEPICTIO_MINIO_PUBLIC_URL: {{ printf "https://%s-minio.%s" .Release.Name .Values.global.domain | quote }}
+  DEPICTIO_MINIO_EXTERNAL_SERVICE: "false"
+  DEPICTIO_MINIO_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
+  DEPICTIO_MINIO_SERVICE_PORT: {{ .Values.minio.env.DEPICTIO_MINIO_SERVICE_PORT | default "9000" | quote }}
   {{- end }}

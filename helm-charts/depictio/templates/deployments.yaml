@@ -173,6 +173,10 @@ spec:
               mountPath: /app/depictio/.depictio
             - name: depictio-uploads
               mountPath: /tmp/depictio-uploads
+          securityContext:
+            {{- toYaml .Values.backend.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
         {{- end }}
         - name: copy-screenshot-file
           image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
@@ -341,6 +345,10 @@ spec:
               mountPath: /app/depictio/.depictio
             - name: depictio-uploads
               mountPath: /tmp/depictio-uploads
+          securityContext:
+            {{- toYaml .Values.frontend.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
         # STEP 1: Wait for backend service to be available (network check)
         - name: wait-for-backend
           image: busybox:1.35
