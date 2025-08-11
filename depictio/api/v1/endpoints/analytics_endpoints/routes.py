@@ -42,10 +42,12 @@ def get_analytics_service() -> AnalyticsService:
 
 
 def verify_internal_api_key(
-    api_key: str = Header(..., description="Internal API key for authentication"),
+    x_api_key: str = Header(
+        ..., alias="X-Api-Key", description="Internal API key for authentication"
+    ),
 ) -> None:
     """Dependency to verify internal API key for protected analytics endpoints."""
-    if api_key != settings.auth.internal_api_key:
+    if x_api_key != settings.auth.internal_api_key:
         raise HTTPException(
             status_code=403,
             detail="Invalid API key",
@@ -231,17 +233,27 @@ async def end_session(
 
 @router.post("/cleanup")
 async def cleanup_old_data(
+    days_to_keep: Optional[int] = Query(
+        None, ge=1, description="Days of data to keep (overrides default)"
+    ),
     analytics_service: AnalyticsService = Depends(get_analytics_service),
     _: None = Depends(verify_internal_api_key),
 ) -> dict:
     """
     Manually trigger cleanup of old analytics data.
+
+    Args:
+        days_to_keep: Optional override for how many days of data to keep
     """
     if not settings.analytics.enabled:
         raise HTTPException(status_code=404, detail="Analytics not enabled")
 
-    result = await analytics_service.cleanup_old_sessions()
-    return {"message": "Cleanup completed successfully", "result": result}
+    result = await analytics_service.cleanup_old_sessions(days_to_keep)
+    return {
+        "message": "Cleanup completed successfully",
+        "days_kept": days_to_keep or settings.analytics.cleanup_days,
+        "result": result,
+    }
 
 
 @router.get("/stats/users")

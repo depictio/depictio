@@ -224,11 +224,15 @@ class AnalyticsService:
 
         return session
 
-    async def cleanup_old_sessions(self) -> dict:
+    async def cleanup_old_sessions(self, days_to_keep: Optional[int] = None) -> dict:
         """
         Clean up old sessions and activities.
+
+        Args:
+            days_to_keep: Override default cleanup_days if provided
         """
-        cutoff_date = datetime.utcnow() - timedelta(days=self.cleanup_days)
+        cleanup_days = days_to_keep if days_to_keep is not None else self.cleanup_days
+        cutoff_date = datetime.utcnow() - timedelta(days=cleanup_days)
 
         # End inactive sessions
         inactive_sessions = await UserSession.find(
@@ -276,25 +280,49 @@ class AnalyticsService:
         todays_sessions = await UserSession.find(UserSession.start_time >= today_start).count()
 
         # Today's activities
-        todays_activities = await UserActivity.find(UserActivity.timestamp >= today_start).to_list()
+        try:
+            todays_activities = await UserActivity.find(
+                UserActivity.timestamp >= today_start
+            ).to_list()
+            if not isinstance(todays_activities, list):
+                todays_activities = []
+        except Exception:
+            todays_activities = []
 
         page_views_today = len([a for a in todays_activities if a.activity_type == "page_view"])
         api_calls_today = len([a for a in todays_activities if a.activity_type == "api_call"])
 
         # User counts
-        all_sessions = await UserSession.find().to_list()
+        try:
+            all_sessions = await UserSession.find().to_list()
+            if not isinstance(all_sessions, list):
+                all_sessions = []
+        except Exception:
+            all_sessions = []
+
         unique_users = set(session.user_id for session in all_sessions)
         total_users = len(unique_users)
 
-        anonymous_sessions = await UserSession.find(UserSession.is_anonymous).to_list()
+        try:
+            anonymous_sessions = await UserSession.find(UserSession.is_anonymous).to_list()
+            if not isinstance(anonymous_sessions, list):
+                anonymous_sessions = []
+        except Exception:
+            anonymous_sessions = []
+
         anonymous_user_ids = set(session.user_id for session in anonymous_sessions)
         anonymous_users_count = len(anonymous_user_ids)
         authenticated_users = total_users - anonymous_users_count
 
         # Average session duration
-        completed_sessions = await UserSession.find(
-            UserSession.duration_seconds is not None, UserSession.start_time >= today_start
-        ).to_list()
+        try:
+            completed_sessions = await UserSession.find(
+                UserSession.duration_seconds is not None, UserSession.start_time >= today_start
+            ).to_list()
+            if not isinstance(completed_sessions, list):
+                completed_sessions = []
+        except Exception:
+            completed_sessions = []
 
         avg_duration = 0
         if completed_sessions:

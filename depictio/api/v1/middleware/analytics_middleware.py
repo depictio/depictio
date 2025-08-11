@@ -73,6 +73,8 @@ class AnalyticsMiddleware(BaseHTTPMiddleware):
             "/favicon.ico",
             "/robots.txt",
             "/_dash-",  # Dash internal endpoints
+            "/depictio/api/v1/analytics",  # Skip analytics endpoints to avoid recursion
+            "/depictio/api/v1/analytics-data",  # Skip analytics data endpoints
         ]
 
         for skip_path in skip_paths:

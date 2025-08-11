@@ -330,6 +330,15 @@ def create_admin_header(text):
                                             # value="dashboards",
                                             # component=dcc.Link("Dashboards", href="/admin/dashboards", style={"textDecoration": "none", "color": "inherit"})
                                         ),
+                                        dmc.TabsTab(  # type: ignore[unresolved-attribute]
+                                            "Analytics",
+                                            leftSection=DashIconify(
+                                                icon="mdi:chart-line",
+                                                width=20,
+                                                height=20,
+                                            ),
+                                            value="analytics",
+                                        ),
                                         dmc.TabsPanel(
                                             children=[],
                                             value="users",
@@ -349,6 +358,11 @@ def create_admin_header(text):
                                             children=[],
                                             value="dashboards",
                                             id="admin-tabs-dashboards",
+                                        ),
+                                        dmc.TabsPanel(
+                                            children=[],
+                                            value="analytics",
+                                            id="admin-tabs-analytics",
                                         ),
                                     ]
                                 ),

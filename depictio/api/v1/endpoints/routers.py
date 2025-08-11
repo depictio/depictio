@@ -2,6 +2,9 @@
 from fastapi import APIRouter
 
 from depictio.api.v1.configs.config import settings
+from depictio.api.v1.endpoints.analytics_data_endpoints.routes import (
+    router as analytics_data_router,
+)
 from depictio.api.v1.endpoints.analytics_endpoints.routes import router as analytics_router
 from depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes import google_oauth_router
 from depictio.api.v1.endpoints.backup_endpoints.routes import backup_endpoint_router
@@ -104,4 +107,9 @@ if settings.analytics.enabled:
         analytics_router,
         prefix="/analytics",
         tags=["Analytics"],
+    )
+    router.include_router(
+        analytics_data_router,
+        prefix="/analytics-data",
+        tags=["Analytics Data"],
     )
