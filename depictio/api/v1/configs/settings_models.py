@@ -353,6 +353,34 @@ class BackupConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_BACKUP_")
 
 
+class AnalyticsConfig(BaseSettings):
+    """Configuration for analytics tracking."""
+
+    enabled: bool = Field(default=True, description="Enable analytics tracking")
+    session_timeout_minutes: int = Field(
+        default=30,
+        description="Session timeout in minutes",
+        ge=5,
+        le=1440,
+    )
+    cleanup_days: int = Field(
+        default=90,
+        description="Days to retain analytics data",
+        ge=1,
+        le=365,
+    )
+    track_anonymous_users: bool = Field(
+        default=True,
+        description="Track anonymous user sessions",
+    )
+    cleanup_enabled: bool = Field(
+        default=True,
+        description="Enable automatic cleanup of old analytics data",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_ANALYTICS_")
+
+
 class Settings(BaseSettings):
     context: str = Field(default="server")
     fastapi: FastAPIConfig = Field(default_factory=FastAPIConfig)
@@ -364,5 +392,6 @@ class Settings(BaseSettings):
     jbrowse: JBrowseConfig = Field(default_factory=JBrowseConfig)
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
     backup: BackupConfig = Field(default_factory=BackupConfig)
+    analytics: AnalyticsConfig = Field(default_factory=AnalyticsConfig)
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_")

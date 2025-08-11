@@ -21,8 +21,10 @@ from depictio.api.v1.configs.config import MONGODB_URL, settings
 from depictio.api.v1.endpoints.routers import router
 from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import process_collections
 from depictio.api.v1.initialization import run_initialization
+from depictio.api.v1.middleware.analytics_middleware import AnalyticsMiddleware
 from depictio.api.v1.tasks.cleanup_tasks import start_cleanup_tasks
 from depictio.api.v1.utils import clean_screenshots
+from depictio.models.models.analytics import UserActivity, UserSession
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.projects import ProjectBeanie
 from depictio.models.models.users import GroupBeanie, TokenBeanie, UserBeanie
@@ -38,7 +40,14 @@ async def init_motor_beanie():
     client = AsyncIOMotorClient(MONGODB_URL)
     await init_beanie(
         database=cast(AsyncDatabase, client[settings.mongodb.db_name]),
-        document_models=[TokenBeanie, GroupBeanie, UserBeanie, ProjectBeanie],
+        document_models=[
+            TokenBeanie,
+            GroupBeanie,
+            UserBeanie,
+            ProjectBeanie,
+            UserSession,
+            UserActivity,
+        ],
     )
 
 
@@ -285,6 +294,10 @@ app.add_middleware(
     allow_methods=["*"],  # Allow all methods
     allow_headers=["*"],  # Allow all headers
 )
+
+# Add analytics middleware if enabled
+if settings.analytics.enabled:
+    app.add_middleware(AnalyticsMiddleware, enabled=settings.analytics.enabled)
 
 api_version = get_api_version()
 api_prefix = f"/depictio/api/{api_version}"
