@@ -365,8 +365,13 @@ async def track_client_pageview(
         raise HTTPException(status_code=404, detail="Analytics not enabled")
 
     try:
-        # Get or create session (use provided session_id if available)
-        user_id = pageview.user_id or pageview.session_id
+        # Get or create session
+        # Don't use random session_id from client as user_id - let the service determine proper user_id
+        user_id = (
+            pageview.user_id
+            if pageview.user_id and not pageview.user_id.startswith("anon_")
+            else None
+        )
         session = await analytics_service.get_or_create_session(request, user_id)
 
         # Create a mock request object for the page view
@@ -504,3 +509,57 @@ async def consolidate_duplicate_sessions(
     except Exception as e:
         print(f"Error in session consolidation: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to consolidate sessions: {str(e)}")
+
+
+@router.delete("/admin/cleanup-anonymous-sessions")
+async def cleanup_anonymous_sessions(
+    _: None = Depends(verify_internal_api_key),
+):
+    """
+    Clean up anonymous sessions when unauthenticated mode is disabled.
+
+    This removes all anonymous sessions and their associated activities
+    since anonymous sessions shouldn't exist when unauthenticated mode is disabled.
+    """
+    if not settings.analytics.enabled:
+        raise HTTPException(status_code=404, detail="Analytics not enabled")
+
+    # Only allow cleanup when unauthenticated mode is disabled
+    if settings.auth.unauthenticated_mode:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot cleanup anonymous sessions when unauthenticated mode is enabled",
+        )
+
+    try:
+        # Delete anonymous sessions and their activities
+        anonymous_sessions = await UserSession.find(UserSession.is_anonymous).to_list()
+        session_ids = [session.session_id for session in anonymous_sessions]
+
+        # Delete activities first (foreign key constraint)
+        deleted_activities = 0
+        if session_ids:
+            activities_result = await UserActivity.find(
+                {"session_id": {"$in": session_ids}}
+            ).delete()
+            deleted_activities = getattr(activities_result, "deleted_count", 0)
+
+        # Delete anonymous sessions
+        sessions_result = await UserSession.find(UserSession.is_anonymous).delete()
+        deleted_sessions = getattr(sessions_result, "deleted_count", 0)
+
+        return {
+            "success": True,
+            "message": "Anonymous sessions cleanup completed",
+            "details": {
+                "deleted_sessions": deleted_sessions,
+                "deleted_activities": deleted_activities,
+                "reason": "Unauthenticated mode is disabled - anonymous sessions not allowed",
+            },
+        }
+
+    except Exception as e:
+        print(f"Error in anonymous session cleanup: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to cleanup anonymous sessions: {str(e)}"
+        )

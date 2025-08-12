@@ -37,8 +37,10 @@ class AnalyticsService:
         ip_address = self.get_client_ip(request)
         user_agent = request.headers.get("user-agent", "Unknown")
 
-        # Skip analytics for internal Docker/container traffic
-        if self.is_internal_ip(ip_address):
+        # For containerized deployments, we'll get Docker IPs but that's OK
+        # Real client IP detection is handled in get_client_ip() via proxy headers
+        # Only skip analytics for truly internal traffic (e.g., health checks from 127.0.0.1)
+        if ip_address in ["127.0.0.1", "localhost", "unknown"]:
             return await self.create_minimal_session(ip_address, user_agent)
 
         # Try to get authenticated user ID from token if user_id not provided
@@ -155,19 +157,36 @@ class AnalyticsService:
     def get_client_ip(self, request: Request) -> str:
         """
         Extract client IP address from request.
+        For containerized deployments, prioritize reverse proxy headers.
         """
-        # Try to get real IP from headers (for reverse proxy setups)
+        # Try to get real IP from headers (for reverse proxy/load balancer setups)
         forwarded_for = request.headers.get("X-Forwarded-For")
         if forwarded_for:
-            return forwarded_for.split(",")[0].strip()
+            # X-Forwarded-For can be comma-separated, get the first (original client) IP
+            client_ip = forwarded_for.split(",")[0].strip()
+            if client_ip and not self.is_internal_ip(client_ip):
+                return client_ip
 
         real_ip = request.headers.get("X-Real-IP")
-        if real_ip:
+        if real_ip and not self.is_internal_ip(real_ip):
             return real_ip
 
-        # Fallback to direct client IP
+        # Additional common proxy headers
+        cf_connecting_ip = request.headers.get("CF-Connecting-IP")  # Cloudflare
+        if cf_connecting_ip and not self.is_internal_ip(cf_connecting_ip):
+            return cf_connecting_ip
+
+        x_original_forwarded_for = request.headers.get("X-Original-Forwarded-For")
+        if x_original_forwarded_for:
+            original_ip = x_original_forwarded_for.split(",")[0].strip()
+            if original_ip and not self.is_internal_ip(original_ip):
+                return original_ip
+
+        # Fallback to direct client IP (will be internal for containers)
         if hasattr(request.client, "host"):
-            return request.client.host
+            direct_ip = request.client.host
+            # For development/non-container deployments, use direct IP even if internal
+            return direct_ip
 
         return "unknown"
 

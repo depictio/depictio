@@ -544,7 +544,7 @@ def create_analytics_dashboard_404() -> dmc.Container:
                     dmc.Stack(
                         [
                             dmc.ThemeIcon(
-                                DashIconify(icon="mdi:chart-box-off-outline", width=64),
+                                DashIconify(icon="mdi:checkbox-blank-off-outline", width=64),
                                 size=120,
                                 variant="light",
                                 color="gray",
@@ -557,12 +557,12 @@ def create_analytics_dashboard_404() -> dmc.Container:
                                 c="gray",
                                 size="lg",
                             ),
-                            dmc.Button(
-                                "Back to Admin",
-                                id="back-to-admin-button",
-                                leftSection=DashIconify(icon="mdi:arrow-left", width=16),
-                                variant="light",
-                            ),
+                            # dmc.Button(
+                            #     "Back to Admin",
+                            #     id="back-to-admin-button",
+                            #     leftSection=DashIconify(icon="mdi:arrow-left", width=16),
+                            #     variant="light",
+                            # ),
                         ],
                         align="center",
                         gap="lg",

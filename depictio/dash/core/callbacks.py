@@ -95,10 +95,10 @@ def register_all_callbacks(app):
     register_reset_button_callbacks(app)
 
     # Register analytics callbacks
-    from depictio.dash.components.analytics_tracker import register_analytics_callbacks
+    # from depictio.dash.components.analytics_tracker import register_analytics_callbacks
     from depictio.dash.layouts.admin_analytics_callbacks import register_admin_analytics_callbacks
 
-    register_analytics_callbacks(app)
+    # register_analytics_callbacks(app)
     register_admin_analytics_callbacks(app)
 
 

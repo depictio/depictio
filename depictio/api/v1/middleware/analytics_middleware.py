@@ -39,6 +39,12 @@ class AnalyticsMiddleware(BaseHTTPMiddleware):
         try:
             # Get or create user session
             user_id = await self.extract_user_id(request)
+
+            # Don't create anonymous sessions if unauthenticated mode is disabled
+            if not user_id and not settings.auth.unauthenticated_mode:
+                # Skip analytics for unauthenticated requests when unauthenticated mode is disabled
+                return response
+
             session = await self.analytics_service.get_or_create_session(request, user_id)
 
             # Store session in request state for other handlers
