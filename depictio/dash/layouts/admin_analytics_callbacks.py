@@ -57,11 +57,16 @@ def register_admin_analytics_callbacks(app):
         [
             Input("analytics-auto-refresh", "n_intervals"),
             Input("refresh-all-analytics", "n_clicks"),
+            Input("date-range-picker", "value"),
+            Input("user-type-filter", "value"),
+            Input("specific-user-filter", "value"),
         ],
         [State("auto-refresh-toggle", "checked"), State("local-store", "data")],
         prevent_initial_call=False,
     )
-    def update_realtime_metrics(n_intervals, refresh_clicks, auto_refresh, local_data):
+    def update_realtime_metrics(
+        n_intervals, refresh_clicks, date_range, user_type, user_id, auto_refresh, local_data
+    ):
         """Update real-time metrics display."""
         if not local_data or not local_data.get("access_token"):
             raise PreventUpdate
@@ -71,6 +76,18 @@ def register_admin_analytics_callbacks(app):
             raise PreventUpdate
 
         try:
+            # Build query parameters for filters
+            params = {}
+            if date_range and len(date_range) == 2:
+                if date_range[0]:
+                    params["start_date"] = date_range[0]
+                if date_range[1]:
+                    params["end_date"] = date_range[1]
+            if user_type and user_type != "all":
+                params["user_type"] = user_type
+            if user_id:
+                params["user_id"] = user_id
+
             # Call analytics API
             response = requests.get(
                 f"{settings.fastapi.url}/depictio/api/v1/analytics-data/dashboard/realtime-metrics",
@@ -78,6 +95,7 @@ def register_admin_analytics_callbacks(app):
                     "Authorization": f"Bearer {local_data['access_token']}",
                     "X-Api-Key": settings.auth.internal_api_key,
                 },
+                params=params,
                 timeout=10,
             )
 
@@ -86,7 +104,7 @@ def register_admin_analytics_callbacks(app):
                 return (
                     str(data.get("active_sessions", 0)),
                     str(data.get("sessions_today", 0)),
-                    str(data.get("page_views_today", 0)),
+                    str(data.get("page_views_per_hour", 0)),
                     f"{data.get('avg_response_time_ms', 0):.0f}ms",
                     data,
                 )
@@ -102,22 +120,40 @@ def register_admin_analytics_callbacks(app):
         [
             Input("analytics-auto-refresh", "n_intervals"),
             Input("refresh-activity-chart", "n_clicks"),
+            Input("date-range-picker", "value"),
+            Input("user-type-filter", "value"),
+            Input("specific-user-filter", "value"),
         ],
         State("local-store", "data"),
         prevent_initial_call=False,
     )
-    def update_daily_activity_chart(n_intervals, refresh_clicks, local_data):
+    def update_daily_activity_chart(
+        n_intervals, refresh_clicks, date_range, user_type, user_id, local_data
+    ):
         """Update daily activity trends chart."""
         if not local_data or not local_data.get("access_token"):
             return go.Figure()  # type: ignore
 
         try:
+            # Build query parameters for filters
+            params = {}
+            if date_range and len(date_range) == 2:
+                if date_range[0]:
+                    params["start_date"] = date_range[0]
+                if date_range[1]:
+                    params["end_date"] = date_range[1]
+            if user_type and user_type != "all":
+                params["user_type"] = user_type
+            if user_id:
+                params["user_id"] = user_id
+
             response = requests.get(
                 f"{settings.fastapi.url}/depictio/api/v1/analytics-data/dashboard/daily-activity-chart",
                 headers={
                     "Authorization": f"Bearer {local_data['access_token']}",
                     "X-Api-Key": settings.auth.internal_api_key,
                 },
+                params=params,
                 timeout=10,
             )
 
@@ -173,22 +209,43 @@ def register_admin_analytics_callbacks(app):
 
     @app.callback(
         Output("user-types-chart", "figure"),
-        [Input("analytics-auto-refresh", "n_intervals"), Input("refresh-user-types", "n_clicks")],
+        [
+            Input("analytics-auto-refresh", "n_intervals"),
+            Input("refresh-user-types", "n_clicks"),
+            Input("date-range-picker", "value"),
+            Input("user-type-filter", "value"),
+            Input("specific-user-filter", "value"),
+        ],
         State("local-store", "data"),
         prevent_initial_call=False,
     )
-    def update_user_types_chart(n_intervals, refresh_clicks, local_data):
+    def update_user_types_chart(
+        n_intervals, refresh_clicks, date_range, user_type, user_id, local_data
+    ):
         """Update user types distribution pie chart."""
         if not local_data or not local_data.get("access_token"):
             return go.Figure()  # type: ignore
 
         try:
+            # Build query parameters for filters
+            params = {}
+            if date_range and len(date_range) == 2:
+                if date_range[0]:
+                    params["start_date"] = date_range[0]
+                if date_range[1]:
+                    params["end_date"] = date_range[1]
+            if user_type and user_type != "all":
+                params["user_type"] = user_type
+            if user_id:
+                params["user_id"] = user_id
+
             response = requests.get(
                 f"{settings.fastapi.url}/depictio/api/v1/analytics-data/dashboard/user-types-distribution",
                 headers={
                     "Authorization": f"Bearer {local_data['access_token']}",
                     "X-Api-Key": settings.auth.internal_api_key,
                 },
+                params=params,
                 timeout=10,
             )
 
@@ -238,97 +295,108 @@ def register_admin_analytics_callbacks(app):
             return go.Figure()  # type: ignore
 
     @app.callback(
-        Output("top-users-table", "children"),
-        [Input("analytics-auto-refresh", "n_intervals"), Input("refresh-top-users", "n_clicks")],
+        Output("users-active-today-content", "children"),
+        [
+            Input("analytics-auto-refresh", "n_intervals"),
+            Input("refresh-users-active-today", "n_clicks"),
+        ],
         State("local-store", "data"),
         prevent_initial_call=False,
     )
-    def update_top_users_table(n_intervals, refresh_clicks, local_data):
-        """Update top users table."""
-        if not local_data or not local_data.get("access_token"):
-            return html.Div("No data available")
-
+    def update_users_active_today(n_intervals, refresh_clicks, local_data):
+        """Update users active today metrics."""
         try:
+            # Since API works with just internal API key, try that first
+            headers = {"X-Api-Key": settings.auth.internal_api_key}
+
+            # Add authorization if available (not required for this endpoint)
+            if local_data and local_data.get("access_token"):
+                headers["Authorization"] = f"Bearer {local_data['access_token']}"
+
             response = requests.get(
-                f"{settings.fastapi.url}/depictio/api/v1/analytics-data/dashboard/top-users?limit=10",
-                headers={
-                    "Authorization": f"Bearer {local_data['access_token']}",
-                    "X-Api-Key": settings.auth.internal_api_key,
-                },
+                f"{settings.fastapi.url}/depictio/api/v1/analytics-data/dashboard/users-active-today",
+                headers=headers,
                 timeout=10,
             )
 
             if response.status_code == 200:
                 data = response.json()["data"]
-
-                if not data:
-                    return dmc.Text("No user data available yet", c="gray", ta="center", mt="xl")
-
-                # Format the data for display
-                formatted_data = []
-                for user in data:
-                    formatted_data.append(
-                        {
-                            "User": user.get("user_email", "Unknown"),
-                            "Sessions": user.get("total_sessions", 0),
-                            "Page Views": user.get("total_page_views", 0),
-                            "Time (min)": f"{user.get('total_time_minutes', 0):.0f}",
-                            "Admin": "✓" if user.get("user_is_admin") else "",
-                        }
-                    )
-
-                return dash_table.DataTable(
-                    data=formatted_data,
-                    columns=[{"name": col, "id": col} for col in formatted_data[0].keys()],
-                    style_cell={
-                        "textAlign": "left",
-                        "fontSize": "14px",
-                        "fontFamily": "Arial",
-                        "backgroundColor": "var(--app-surface-color, #ffffff)",
-                        "color": "var(--app-text-color, #000000)",
-                    },
-                    style_header={
-                        "backgroundColor": "var(--app-border-color, #e0e0e0)",
-                        "fontWeight": "bold",
-                    },
-                    style_data_conditional=[
-                        {
-                            "if": {"column_id": "Admin", "filter_query": "{Admin} = ✓"},
-                            "color": "green",
-                            "fontWeight": "bold",
-                        }
-                    ],
-                    page_size=10,
-                    sort_action="native",
-                )
+                print(f"DEBUG: Successfully fetched users active today data: {data}")
             else:
-                return dmc.Text("Error loading user data", c="red")
+                print(f"API returned status {response.status_code}: {response.text}")
+                return dmc.Text(f"API Error {response.status_code}", c="red", ta="center")
 
         except Exception as e:
-            print(f"Failed to fetch top users data: {e}")
-            return dmc.Text("Failed to load data", c="red")
+            print(f"Failed to fetch users active today: {e}")
+            import traceback
+
+            traceback.print_exc()
+            return dmc.Text("Failed to load data", c="red", ta="center")
+
+        # Render the data - simplified version for debugging
+        try:
+            return dmc.Stack(
+                [
+                    dmc.Text(
+                        f"Total Active: {data.get('total_active', 0)}",
+                        size="lg",
+                        fw="bold",
+                        c="blue",
+                    ),
+                    dmc.Text(
+                        f"Authenticated: {data.get('authenticated_users', 0)}", size="md", c="green"
+                    ),
+                    dmc.Text(
+                        f"Anonymous: {data.get('anonymous_sessions', 0)}", size="md", c="orange"
+                    ),
+                    dmc.Badge("Last 24h", color="blue", variant="light"),
+                ],
+                gap="sm",
+                align="center",
+            )
+        except Exception as e:
+            print(f"Error rendering users active today component: {e}")
+            return dmc.Text(f"Render error: {str(e)}", c="red", ta="center")
 
     @app.callback(
         Output("activity-overview-content", "children"),
         [
             Input("analytics-auto-refresh", "n_intervals"),
             Input("refresh-activity-overview", "n_clicks"),
+            Input("date-range-picker", "value"),
+            Input("user-type-filter", "value"),
+            Input("specific-user-filter", "value"),
         ],
         State("local-store", "data"),
         prevent_initial_call=False,
     )
-    def update_activity_overview(n_intervals, refresh_clicks, local_data):
+    def update_activity_overview(
+        n_intervals, refresh_clicks, date_range, user_type, user_id, local_data
+    ):
         """Update activity overview content."""
         if not local_data or not local_data.get("access_token"):
             return html.Div("No data available")
 
         try:
+            # Build query parameters for filters
+            params = {}
+            if date_range and len(date_range) == 2:
+                if date_range[0]:
+                    params["start_date"] = date_range[0]
+                if date_range[1]:
+                    params["end_date"] = date_range[1]
+            if user_type and user_type != "all":
+                params["user_type"] = user_type
+            if user_id:
+                params["user_id"] = user_id
+
             response = requests.get(
                 f"{settings.fastapi.url}/depictio/api/v1/analytics-data/dashboard/activity-trends",
                 headers={
                     "Authorization": f"Bearer {local_data['access_token']}",
                     "X-Api-Key": settings.auth.internal_api_key,
                 },
+                params=params,
                 timeout=10,
             )
 
@@ -439,3 +507,361 @@ def register_admin_analytics_callbacks(app):
         except Exception as e:
             print(f"Failed to refresh analytics data: {e}")
             return "Refresh failed"
+
+    @app.callback(
+        Output("specific-user-filter", "data"),
+        Input("analytics-auto-refresh", "n_intervals"),
+        State("local-store", "data"),
+    )
+    def update_user_filter_options(n_intervals, local_data):
+        """Update the user filter dropdown options."""
+        if not local_data or not local_data.get("access_token"):
+            return []
+
+        try:
+            response = requests.get(
+                f"{settings.fastapi.url}/depictio/api/v1/analytics-data/dashboard/user-list",
+                headers={
+                    "Authorization": f"Bearer {local_data['access_token']}",
+                    "X-Api-Key": settings.auth.internal_api_key,
+                },
+                timeout=10,
+            )
+
+            if response.status_code == 200:
+                data = response.json()["data"]
+                return data
+            else:
+                return []
+
+        except Exception as e:
+            print(f"Failed to fetch user list: {e}")
+            return []
+
+    @app.callback(
+        Output("top-pages-content", "children"),
+        [
+            Input("analytics-auto-refresh", "n_intervals"),
+            Input("refresh-top-pages", "n_clicks"),
+            Input("date-range-picker", "value"),
+            Input("user-type-filter", "value"),
+            Input("specific-user-filter", "value"),
+        ],
+        State("local-store", "data"),
+    )
+    def update_top_pages(n_intervals, refresh_clicks, date_range, user_type, user_id, local_data):
+        """Update top pages content."""
+        if not local_data or not local_data.get("access_token"):
+            return dmc.Text("Authentication required", c="red")
+
+        try:
+            # Build query parameters for filters
+            params = {"limit": 10}
+            if date_range and len(date_range) == 2:
+                if date_range[0]:
+                    params["start_date"] = date_range[0]
+                if date_range[1]:
+                    params["end_date"] = date_range[1]
+            if user_type and user_type != "all":
+                params["user_type"] = user_type
+            if user_id:
+                params["user_id"] = user_id
+
+            response = requests.get(
+                f"{settings.fastapi.url}/depictio/api/v1/analytics-data/dashboard/top-pages",
+                headers={
+                    "Authorization": f"Bearer {local_data['access_token']}",
+                    "X-Api-Key": settings.auth.internal_api_key,
+                },
+                params=params,
+                timeout=10,
+            )
+
+            if response.status_code == 200:
+                data = response.json()["data"]
+
+                if not data:
+                    return dmc.Text("No page data available yet", c="gray", ta="center", mt="xl")
+
+                return dmc.Stack(
+                    [
+                        dmc.Group(
+                            [
+                                dmc.Text(page["path"], fw="bold", size="sm"),
+                                dmc.Group(
+                                    [
+                                        dmc.Badge(
+                                            f"{page['page_views']:,}", color="blue", variant="light"
+                                        ),
+                                        dmc.Text(f"{page['percentage']}%", size="xs", c="gray"),
+                                    ],
+                                    gap="xs",
+                                ),
+                            ],
+                            justify="space-between",
+                        )
+                        for page in data
+                    ],
+                    gap="sm",
+                )
+            else:
+                return dmc.Text("Error loading page data", c="red")
+
+        except Exception as e:
+            print(f"Failed to fetch top pages data: {e}")
+            return dmc.Text("Failed to load data", c="red")
+
+    @app.callback(
+        [
+            Output("date-range-picker", "value"),
+            Output("user-type-filter", "value"),
+            Output("specific-user-filter", "value"),
+        ],
+        Input("clear-filters", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def clear_all_filters(n_clicks):
+        """Clear all filters when clear button is clicked."""
+        if n_clicks:
+            from datetime import datetime, timedelta
+
+            return [
+                [datetime.now().date() - timedelta(days=7), datetime.now().date()],
+                "all",
+                None,
+            ]
+        raise PreventUpdate
+
+    @app.callback(
+        Output("comprehensive-summary-content", "children"),
+        [
+            Input("analytics-auto-refresh", "n_intervals"),
+            Input("refresh-comprehensive-summary", "n_clicks"),
+            Input("date-range-picker", "value"),
+            Input("user-type-filter", "value"),
+            Input("specific-user-filter", "value"),
+        ],
+        State("local-store", "data"),
+        prevent_initial_call=False,
+    )
+    def update_comprehensive_summary(
+        n_intervals, refresh_clicks, date_range, user_type, user_id, local_data
+    ):
+        """Update comprehensive analytics summary."""
+        if not local_data or not local_data.get("access_token"):
+            return dmc.Text("Authentication required", c="red")
+
+        try:
+            # Build query parameters for filters
+            params = {}
+            if date_range and len(date_range) == 2:
+                if date_range[0]:
+                    params["start_date"] = date_range[0]
+                if date_range[1]:
+                    params["end_date"] = date_range[1]
+            if user_type and user_type != "all":
+                params["user_type"] = user_type
+            if user_id:
+                params["user_id"] = user_id
+
+            response = requests.get(
+                f"{settings.fastapi.url}/depictio/api/v1/analytics-data/dashboard/comprehensive-summary",
+                headers={
+                    "Authorization": f"Bearer {local_data['access_token']}",
+                    "X-Api-Key": settings.auth.internal_api_key,
+                },
+                params=params,
+                timeout=15,
+            )
+
+            if response.status_code == 200:
+                data = response.json()["data"]
+                period_summary = data["period_summary"]
+                user_breakdown = data["user_breakdown"]
+
+                if not user_breakdown:
+                    return dmc.Text(
+                        "No data available for the selected period", c="gray", ta="center", mt="xl"
+                    )
+
+                # Create summary metrics grid
+                summary_grid = dmc.Grid(
+                    [
+                        dmc.GridCol(
+                            dmc.Stack(
+                                [
+                                    dmc.Text("Total Users", size="sm", c="gray", fw="bold"),
+                                    dmc.Text(
+                                        f"{period_summary['total_users']:,}",
+                                        size="xl",
+                                        fw="bold",
+                                        c="blue",
+                                    ),
+                                ],
+                                gap="xs",
+                                align="center",
+                            ),
+                            span=2,
+                        ),
+                        dmc.GridCol(
+                            dmc.Stack(
+                                [
+                                    dmc.Text("Total Sessions", size="sm", c="gray", fw="bold"),
+                                    dmc.Text(
+                                        f"{period_summary['total_sessions']:,}",
+                                        size="xl",
+                                        fw="bold",
+                                        c="green",
+                                    ),
+                                ],
+                                gap="xs",
+                                align="center",
+                            ),
+                            span=2,
+                        ),
+                        dmc.GridCol(
+                            dmc.Stack(
+                                [
+                                    dmc.Text("Page Views", size="sm", c="gray", fw="bold"),
+                                    dmc.Text(
+                                        f"{period_summary['total_page_views']:,}",
+                                        size="xl",
+                                        fw="bold",
+                                        c="orange",
+                                    ),
+                                ],
+                                gap="xs",
+                                align="center",
+                            ),
+                            span=2,
+                        ),
+                        dmc.GridCol(
+                            dmc.Stack(
+                                [
+                                    dmc.Text("API Calls", size="sm", c="gray", fw="bold"),
+                                    dmc.Text(
+                                        f"{period_summary['total_api_calls']:,}",
+                                        size="xl",
+                                        fw="bold",
+                                        c="red",
+                                    ),
+                                ],
+                                gap="xs",
+                                align="center",
+                            ),
+                            span=2,
+                        ),
+                        dmc.GridCol(
+                            dmc.Stack(
+                                [
+                                    dmc.Text("Total Time", size="sm", c="gray", fw="bold"),
+                                    dmc.Text(
+                                        f"{period_summary['total_time_minutes']:.0f}m",
+                                        size="xl",
+                                        fw="bold",
+                                        c="violet",
+                                    ),
+                                ],
+                                gap="xs",
+                                align="center",
+                            ),
+                            span=2,
+                        ),
+                        dmc.GridCol(
+                            dmc.Stack(
+                                [
+                                    dmc.Text("Avg Session", size="sm", c="gray", fw="bold"),
+                                    dmc.Text(
+                                        f"{period_summary['avg_session_duration']:.1f}m",
+                                        size="xl",
+                                        fw="bold",
+                                        c="teal",
+                                    ),
+                                ],
+                                gap="xs",
+                                align="center",
+                            ),
+                            span=2,
+                        ),
+                    ],
+                    gutter="md",
+                )
+
+                # Create user breakdown table
+                user_table_data = []
+                for user in user_breakdown[:10]:  # Top 10 users
+                    user_table_data.append(
+                        {
+                            "User": user["user_email"]
+                            if not user["is_anonymous"]
+                            else f"Anonymous ({user['user_email']})",
+                            "Sessions": user["sessions"],
+                            "Page Views": user["page_views"],
+                            "API Calls": user["api_calls"],
+                            "Time (min)": f"{user['time_minutes']:.0f}",
+                            "Avg Session": f"{user['avg_session_duration']:.1f}m",
+                            "Type": "Admin"
+                            if user["is_admin"]
+                            else ("Auth" if not user["is_anonymous"] else "Anon"),
+                        }
+                    )
+
+                user_table = dash_table.DataTable(
+                    data=user_table_data,
+                    columns=[{"name": col, "id": col} for col in user_table_data[0].keys()],
+                    filter_action="native",  # Enable column filtering
+                    sort_action="native",  # Enable column sorting
+                    page_size=10,
+                    style_cell={
+                        "textAlign": "left",
+                        "fontSize": "13px",
+                        "fontFamily": "Arial",
+                        "backgroundColor": "var(--app-surface-color, #ffffff)",
+                        "color": "var(--app-text-color, #000000)",
+                        "padding": "8px",
+                    },
+                    style_header={
+                        "backgroundColor": "var(--app-border-color, #e0e0e0)",
+                        "fontWeight": "bold",
+                        "fontSize": "13px",
+                    },
+                    style_filter={
+                        "backgroundColor": "var(--app-surface-color, #ffffff)",
+                        "color": "var(--app-text-color, #000000)",
+                        "border": "1px solid var(--app-border-color, #ddd)",
+                        "fontSize": "12px",
+                    },
+                    style_data_conditional=[
+                        {
+                            "if": {"column_id": "Type", "filter_query": "{Type} = Admin"},
+                            "color": "green",
+                            "fontWeight": "bold",
+                        },
+                        {
+                            "if": {"column_id": "Type", "filter_query": "{Type} = Auth"},
+                            "color": "blue",
+                        },
+                        {
+                            "if": {"column_id": "Type", "filter_query": "{Type} = Anon"},
+                            "color": "gray",
+                        },
+                    ],
+                )
+
+                return dmc.Stack(
+                    [
+                        # Summary metrics
+                        summary_grid,
+                        dmc.Divider(),
+                        # User breakdown table
+                        dmc.Title("User Activity Breakdown", order=5, c="dark", mt="md"),
+                        user_table,
+                    ],
+                    gap="md",
+                )
+            else:
+                return dmc.Text("Error loading comprehensive summary", c="red")
+
+        except Exception as e:
+            print(f"Failed to fetch comprehensive summary: {e}")
+            return dmc.Text("Failed to load comprehensive summary", c="red")

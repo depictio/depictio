@@ -75,10 +75,27 @@ class AnalyticsMiddleware(BaseHTTPMiddleware):
             "/_dash-",  # Dash internal endpoints
             "/depictio/api/v1/analytics",  # Skip analytics endpoints to avoid recursion
             "/depictio/api/v1/analytics-data",  # Skip analytics data endpoints
+            "/depictio/api/v1/auth/check_token_validity",  # Skip frequent auth checks
+            "/depictio/api/v1/auth/purge_expired_tokens",  # Skip cleanup operations
+            "/depictio/api/v1/utils/status",  # Skip status checks
+        ]
+
+        # Skip frequent internal API calls that aren't user-initiated
+        frequent_patterns = [
+            "/depictio/api/v1/deltatables/get/",  # Data fetching
+            "/depictio/api/v1/projects/get/from_id",  # Project lookups
+            "/depictio/api/v1/auth/fetch_user/from_token",  # User validation
+            "/depictio/api/v1/auth/me",  # User info requests
+            "/depictio/api/v1/auth/list",  # Auth token listing
+            "/depictio/api/v1/dashboards/get/",  # Dashboard data
         ]
 
         for skip_path in skip_paths:
             if path.startswith(skip_path):
+                return True
+
+        for pattern in frequent_patterns:
+            if path.startswith(pattern):
                 return True
 
         return False
@@ -91,9 +108,10 @@ class AnalyticsMiddleware(BaseHTTPMiddleware):
             # Try to get user from JWT token
             authorization = request.headers.get("Authorization")
             if authorization and authorization.startswith("Bearer "):
-                # TODO: Decode JWT and extract user ID
-                # For now, return None to use anonymous tracking
-                pass
+                # Use the analytics service method to get user ID from token
+                user_id = await self.analytics_service.extract_user_id_from_token(request)
+                if user_id:
+                    return user_id
 
             # Try to get user from session/cookies
             # TODO: Implement session-based user extraction

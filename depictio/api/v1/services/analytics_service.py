@@ -81,7 +81,7 @@ class AnalyticsService:
         session = await UserSession.find_one(
             UserSession.user_id == user_id,
             UserSession.ip_address == ip_address,
-            UserSession.end_time is None,
+            UserSession.end_time == None,  # noqa: E711
             UserSession.last_activity >= cutoff_time,
         )
 
@@ -136,14 +136,15 @@ class AnalyticsService:
         """
         Classify the type of activity based on path and method.
         """
-        if path.startswith("/api/"):
-            if path.startswith("/api/v1/auth/login"):
+        if path.startswith("/depictio/api/"):
+            if path.startswith("/depictio/api/v1/auth/login"):
                 return "login"
-            elif path.startswith("/api/v1/auth/logout"):
+            elif path.startswith("/depictio/api/v1/auth/logout"):
                 return "logout"
             else:
                 return "api_call"
         else:
+            # Non-API paths are actual page views (dashboard pages, admin, etc.)
             return "page_view"
 
     def get_client_ip(self, request: Request) -> str:
@@ -236,7 +237,7 @@ class AnalyticsService:
 
         # End inactive sessions
         inactive_sessions = await UserSession.find(
-            UserSession.end_time is None,
+            UserSession.end_time == None,  # noqa: E711
             UserSession.last_activity
             < datetime.utcnow() - timedelta(minutes=self.session_timeout_minutes),
         ).to_list()
@@ -272,7 +273,7 @@ class AnalyticsService:
 
         # Active sessions
         active_sessions = await UserSession.find(
-            UserSession.end_time is None,
+            UserSession.end_time == None,  # noqa: E711
             UserSession.last_activity >= now - timedelta(minutes=self.session_timeout_minutes),
         ).count()
 
@@ -304,7 +305,8 @@ class AnalyticsService:
         total_users = len(unique_users)
 
         try:
-            anonymous_sessions = await UserSession.find(UserSession.is_anonymous).to_list()
+            # Note: == True explicit comparison needed for proper Beanie query (ignore type checker warning)
+            anonymous_sessions = await UserSession.find(UserSession.is_anonymous == True).to_list()  # noqa: E712
             if not isinstance(anonymous_sessions, list):
                 anonymous_sessions = []
         except Exception:
@@ -372,7 +374,8 @@ class AnalyticsService:
 
         sessions = (
             await UserSession.find(
-                UserSession.end_time is None, UserSession.last_activity >= cutoff_time
+                UserSession.end_time == None,  # noqa: E711
+                UserSession.last_activity >= cutoff_time,
             )
             .sort([(UserSession.last_activity, DESCENDING)])
             .limit(limit)

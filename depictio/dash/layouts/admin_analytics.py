@@ -2,16 +2,182 @@
 Admin Analytics Dashboard - Monitor users and system activity.
 """
 
+from datetime import datetime, timedelta
+from typing import Literal
+
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
 
 from dash import dcc, html
 
 
+def get_valid_dmc_color(
+    color: str,
+) -> Literal[
+    "blue",
+    "cyan",
+    "gray",
+    "green",
+    "indigo",
+    "lime",
+    "orange",
+    "pink",
+    "red",
+    "teal",
+    "violet",
+    "yellow",
+    "dark",
+    "grape",
+]:
+    """Map color strings to valid DMC colors."""
+    color_mapping = {
+        "blue": "blue",
+        "green": "green",
+        "orange": "orange",
+        "red": "red",
+        "purple": "violet",
+        "violet": "violet",
+        "cyan": "cyan",
+        "teal": "teal",
+        "yellow": "yellow",
+        "gray": "gray",
+        "grey": "gray",
+        "pink": "pink",
+        "lime": "lime",
+        "indigo": "indigo",
+        "dark": "dark",
+        "grape": "grape",
+    }
+    return color_mapping.get(color.lower(), "blue")
+
+
+def create_analytics_filters() -> dmc.Card:
+    """Create filters section for analytics dashboard."""
+    return dmc.Card(
+        [
+            dmc.Group(
+                [
+                    dmc.Title("Filters", order=5, c="dark"),
+                    dmc.ActionIcon(
+                        DashIconify(icon="mdi:filter-off", width=16),
+                        id="clear-filters",
+                        variant="subtle",
+                        color="gray",
+                        size="sm",
+                    ),
+                ],
+                justify="space-between",
+                mb="md",
+            ),
+            dmc.Grid(
+                [
+                    dmc.GridCol(
+                        dmc.Stack(
+                            [
+                                dmc.Text("Date Range", size="sm", fw="bold", c="gray"),
+                                dmc.DatePickerInput(
+                                    id="date-range-picker",
+                                    label="Select Date Range",
+                                    placeholder="Pick dates range",
+                                    type="range",
+                                    value=[
+                                        datetime.now().date() - timedelta(days=7),
+                                        datetime.now().date(),
+                                    ],
+                                    maxDate=datetime.now().date(),
+                                    minDate=datetime.now().date() - timedelta(days=365),
+                                    clearable=True,
+                                    size="sm",
+                                ),
+                            ],
+                            gap="xs",
+                        ),
+                        span=4,
+                    ),
+                    dmc.GridCol(
+                        dmc.Stack(
+                            [
+                                dmc.Text("User Type", size="sm", fw="bold", c="gray"),
+                                dmc.Select(
+                                    id="user-type-filter",
+                                    label="Filter by User Type",
+                                    placeholder="All Users",
+                                    data=[
+                                        {"value": "all", "label": "All Users"},
+                                        {"value": "authenticated", "label": "Authenticated Only"},
+                                        {"value": "anonymous", "label": "Anonymous Only"},
+                                        {"value": "admin", "label": "Admin Users Only"},
+                                    ],
+                                    value="all",
+                                    clearable=True,
+                                    size="sm",
+                                ),
+                            ],
+                            gap="xs",
+                        ),
+                        span=4,
+                    ),
+                    dmc.GridCol(
+                        dmc.Stack(
+                            [
+                                dmc.Text("Specific User", size="sm", fw="bold", c="gray"),
+                                dmc.Select(
+                                    id="specific-user-filter",
+                                    label="Select Specific User",
+                                    placeholder="All Users",
+                                    data=[],  # Will be populated by callback
+                                    value=None,
+                                    searchable=True,
+                                    clearable=True,
+                                    size="sm",
+                                ),
+                            ],
+                            gap="xs",
+                        ),
+                        span=4,
+                    ),
+                ],
+            ),
+        ],
+        withBorder=True,
+        shadow="sm",
+        radius="md",
+        p="md",
+        mb="lg",
+    )
+
+
+def create_top_pages_card() -> dmc.Card:
+    """Create top pages card showing most consulted pages."""
+    return dmc.Card(
+        [
+            dmc.Group(
+                [
+                    dmc.Title("Most Consulted Pages", order=4, c="dark"),
+                    dmc.ActionIcon(
+                        DashIconify(icon="mdi:refresh", width=16),
+                        id="refresh-top-pages",
+                        variant="subtle",
+                        color="gray",
+                        size="sm",
+                    ),
+                ],
+                justify="space-between",
+            ),
+            html.Div(id="top-pages-content"),
+        ],
+        withBorder=True,
+        shadow="sm",
+        radius="md",
+        p="md",
+    )
+
+
 def create_metric_card(
     title: str, value: str, metric_id: str, icon: str = "mdi:chart-line", color: str = "blue"
 ) -> dmc.Card:
     """Create a metric card component."""
+    dmc_color = get_valid_dmc_color(color)
     return dmc.Card(
         [
             dmc.Group(
@@ -20,13 +186,15 @@ def create_metric_card(
                         DashIconify(icon=icon, width=24),
                         size="lg",
                         variant="light",
-                        color="blue",
+                        color=dmc_color,
                         radius="md",
                     ),
                     dmc.Stack(
                         [
                             dmc.Text(title, size="sm", c="gray", fw="bold"),
-                            dmc.Text(id=metric_id, children=value, size="xl", fw="bold", c="blue"),
+                            dmc.Text(
+                                id=metric_id, children=value, size="xl", fw="bold", c=dmc_color
+                            ),
                         ],
                         gap="xs",
                     ),
@@ -99,16 +267,16 @@ def create_user_type_distribution() -> dmc.Card:
     )
 
 
-def create_top_users_table() -> dmc.Card:
-    """Create top users table component."""
+def create_users_active_today_card() -> dmc.Card:
+    """Create users active today metrics card."""
     return dmc.Card(
         [
             dmc.Group(
                 [
-                    dmc.Title("Top Active Users", order=4, c="dark"),
+                    dmc.Title("Users Active Today", order=4, c="dark"),
                     dmc.ActionIcon(
                         DashIconify(icon="mdi:refresh", width=16),
-                        id="refresh-top-users",
+                        id="refresh-users-active-today",
                         variant="subtle",
                         color="gray",
                         size="sm",
@@ -116,7 +284,16 @@ def create_top_users_table() -> dmc.Card:
                 ],
                 justify="space-between",
             ),
-            html.Div(id="top-users-table"),
+            html.Div(
+                id="users-active-today-content",
+                children="Loading...",
+                style={
+                    "minHeight": "120px",
+                    "display": "flex",
+                    "alignItems": "center",
+                    "justifyContent": "center",
+                },
+            ),
         ],
         withBorder=True,
         shadow="sm",
@@ -196,6 +373,8 @@ def create_analytics_dashboard_layout() -> html.Div:
                 justify="space-between",
                 mb="lg",
             ),
+            # Filters section
+            create_analytics_filters(),
             # Real-time metrics row
             dmc.Grid(
                 [
@@ -246,12 +425,43 @@ def create_analytics_dashboard_layout() -> html.Div:
                 ],
                 mb="lg",
             ),
-            # Tables row
+            # Cards row
             dmc.Grid(
                 [
-                    dmc.GridCol(create_top_users_table(), span=6),
-                    dmc.GridCol(create_recent_activity_table(), span=6),
-                ]
+                    dmc.GridCol(create_users_active_today_card(), span=4),
+                    dmc.GridCol(create_recent_activity_table(), span=4),
+                    dmc.GridCol(create_top_pages_card(), span=4),
+                ],
+                mb="lg",
+            ),
+            # Comprehensive Analytics Summary Section
+            dmc.Card(
+                [
+                    dmc.Group(
+                        [
+                            dmc.Title("Period Summary", order=4, c="dark"),
+                            dmc.ActionIcon(
+                                DashIconify(icon="mdi:refresh", width=16),
+                                id="refresh-comprehensive-summary",
+                                variant="subtle",
+                                size="sm",
+                                color="gray",
+                            ),
+                        ],
+                        justify="space-between",
+                    ),
+                    dmc.Divider(),
+                    html.Div(
+                        id="comprehensive-summary-content",
+                        children="Loading comprehensive summary...",
+                        style={"minHeight": "200px"},
+                    ),
+                ],
+                withBorder=True,
+                shadow="sm",
+                radius="md",
+                p="lg",
+                mt="xl",
             ),
             # Hidden components for data management
             dcc.Store(id="analytics-dashboard-store", storage_type="memory"),

@@ -2,7 +2,8 @@
 Analytics Data API endpoints - ETL and data serving for admin dashboard.
 """
 
-from typing import Any, Dict
+from datetime import date
+from typing import Any, Dict, Optional
 
 import polars as pl
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -63,6 +64,10 @@ async def refresh_user_summary(
 
 @router.get("/dashboard/realtime-metrics")
 async def get_dashboard_realtime_metrics(
+    start_date: Optional[date] = Query(None, description="Start date filter"),
+    end_date: Optional[date] = Query(None, description="End date filter"),
+    user_type: Optional[str] = Query("all", description="User type filter"),
+    user_id: Optional[str] = Query(None, description="Specific user ID filter"),
     analytics_data_service: AnalyticsDataService = Depends(get_analytics_data_service),
     _: None = Depends(verify_internal_api_key),
 ) -> Dict[str, Any]:
@@ -73,7 +78,9 @@ async def get_dashboard_realtime_metrics(
         raise HTTPException(status_code=404, detail="Analytics not enabled")
 
     try:
-        metrics = await analytics_data_service.get_realtime_metrics()
+        metrics = await analytics_data_service.get_realtime_metrics(
+            start_date=start_date, end_date=end_date, user_type=user_type or "all", user_id=user_id
+        )
         return {"success": True, "data": metrics}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get realtime metrics: {str(e)}")
@@ -81,6 +88,10 @@ async def get_dashboard_realtime_metrics(
 
 @router.get("/dashboard/user-summary")
 async def get_dashboard_user_summary(
+    start_date: Optional[date] = Query(None, description="Start date filter"),
+    end_date: Optional[date] = Query(None, description="End date filter"),
+    user_type: Optional[str] = Query("all", description="User type filter"),
+    user_id: Optional[str] = Query(None, description="Specific user ID filter"),
     analytics_data_service: AnalyticsDataService = Depends(get_analytics_data_service),
     _: None = Depends(verify_internal_api_key),
 ) -> Dict[str, Any]:
@@ -91,7 +102,9 @@ async def get_dashboard_user_summary(
         raise HTTPException(status_code=404, detail="Analytics not enabled")
 
     try:
-        df = await analytics_data_service.load_user_summary_data()
+        df = await analytics_data_service.load_user_summary_data(
+            start_date=start_date, end_date=end_date, user_type=user_type or "all", user_id=user_id
+        )
 
         # Convert to JSON-serializable format
         data = df.to_dicts() if df.height > 0 else []
@@ -103,6 +116,10 @@ async def get_dashboard_user_summary(
 
 @router.get("/dashboard/activity-trends")
 async def get_dashboard_activity_trends(
+    start_date: Optional[date] = Query(None, description="Start date filter"),
+    end_date: Optional[date] = Query(None, description="End date filter"),
+    user_type: Optional[str] = Query("all", description="User type filter"),
+    user_id: Optional[str] = Query(None, description="Specific user ID filter"),
     analytics_data_service: AnalyticsDataService = Depends(get_analytics_data_service),
     _: None = Depends(verify_internal_api_key),
 ) -> Dict[str, Any]:
@@ -113,7 +130,9 @@ async def get_dashboard_activity_trends(
         raise HTTPException(status_code=404, detail="Analytics not enabled")
 
     try:
-        df = await analytics_data_service.load_activity_trends_data()
+        df = await analytics_data_service.load_activity_trends_data(
+            start_date=start_date, end_date=end_date, user_type=user_type or "all", user_id=user_id
+        )
 
         # Convert to JSON-serializable format
         data = df.to_dicts() if df.height > 0 else []
@@ -126,6 +145,10 @@ async def get_dashboard_activity_trends(
 @router.get("/dashboard/top-users")
 async def get_dashboard_top_users(
     limit: int = Query(10, ge=1, le=50, description="Number of top users to return"),
+    start_date: Optional[date] = Query(None, description="Start date filter"),
+    end_date: Optional[date] = Query(None, description="End date filter"),
+    user_type: Optional[str] = Query("all", description="User type filter"),
+    user_id: Optional[str] = Query(None, description="Specific user ID filter"),
     analytics_data_service: AnalyticsDataService = Depends(get_analytics_data_service),
     _: None = Depends(verify_internal_api_key),
 ) -> Dict[str, Any]:
@@ -136,7 +159,9 @@ async def get_dashboard_top_users(
         raise HTTPException(status_code=404, detail="Analytics not enabled")
 
     try:
-        df = await analytics_data_service.load_user_summary_data()
+        df = await analytics_data_service.load_user_summary_data(
+            start_date=start_date, end_date=end_date, user_type=user_type or "all", user_id=user_id
+        )
 
         if df.height == 0:
             return {"success": True, "data": [], "count": 0}
@@ -147,11 +172,20 @@ async def get_dashboard_top_users(
         logger.debug(f"Top users - DataFrame dtypes: {df.dtypes}")
         logger.debug(f"Top users - Requested limit: {limit}")
 
-        top_users = (
-            df.filter(~pl.col("is_anonymous"))  # Exclude anonymous users
-            .sort("total_page_views", descending=True)
-            .head(limit)
-        )
+        # Apply user type filtering
+        filtered_df = df
+        if user_type == "authenticated":
+            filtered_df = df.filter(~pl.col("is_anonymous"))
+        elif user_type == "anonymous":
+            filtered_df = df.filter(pl.col("is_anonymous"))
+        elif user_type == "admin":
+            filtered_df = df.filter(pl.col("user_is_admin"))
+        else:  # "all"
+            filtered_df = df.filter(
+                ~pl.col("is_anonymous")
+            )  # Still exclude anonymous for top users
+
+        top_users = filtered_df.sort("total_page_views", descending=True).head(limit)
 
         logger.debug(f"Top users - Filtered result shape: {top_users.shape}")
         data = top_users.to_dicts()
@@ -164,6 +198,10 @@ async def get_dashboard_top_users(
 
 @router.get("/dashboard/user-types-distribution")
 async def get_user_types_distribution(
+    start_date: Optional[date] = Query(None, description="Start date filter"),
+    end_date: Optional[date] = Query(None, description="End date filter"),
+    user_type: Optional[str] = Query("all", description="User type filter"),
+    user_id: Optional[str] = Query(None, description="Specific user ID filter"),
     analytics_data_service: AnalyticsDataService = Depends(get_analytics_data_service),
     _: None = Depends(verify_internal_api_key),
 ) -> Dict[str, Any]:
@@ -174,7 +212,9 @@ async def get_user_types_distribution(
         raise HTTPException(status_code=404, detail="Analytics not enabled")
 
     try:
-        df = await analytics_data_service.load_user_summary_data()
+        df = await analytics_data_service.load_user_summary_data(
+            start_date=start_date, end_date=end_date, user_type=user_type or "all", user_id=user_id
+        )
 
         if df.height == 0:
             return {"success": True, "data": [{"user_type": "No Data", "count": 0}]}
@@ -213,6 +253,10 @@ async def get_user_types_distribution(
 
 @router.get("/dashboard/daily-activity-chart")
 async def get_daily_activity_chart_data(
+    start_date: Optional[date] = Query(None, description="Start date filter"),
+    end_date: Optional[date] = Query(None, description="End date filter"),
+    user_type: Optional[str] = Query("all", description="User type filter"),
+    user_id: Optional[str] = Query(None, description="Specific user ID filter"),
     analytics_data_service: AnalyticsDataService = Depends(get_analytics_data_service),
     _: None = Depends(verify_internal_api_key),
 ) -> Dict[str, Any]:
@@ -223,7 +267,9 @@ async def get_daily_activity_chart_data(
         raise HTTPException(status_code=404, detail="Analytics not enabled")
 
     try:
-        df = await analytics_data_service.load_activity_trends_data()
+        df = await analytics_data_service.load_activity_trends_data(
+            start_date=start_date, end_date=end_date, user_type=user_type or "all", user_id=user_id
+        )
 
         if df.height == 0:
             return {"success": True, "data": [], "count": 0}
@@ -244,3 +290,94 @@ async def get_daily_activity_chart_data(
         return {"success": True, "data": data, "count": len(data)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get daily activity data: {str(e)}")
+
+
+@router.get("/dashboard/top-pages")
+async def get_top_pages(
+    limit: int = Query(10, ge=1, le=50, description="Number of top pages to return"),
+    start_date: Optional[date] = Query(None, description="Start date filter"),
+    end_date: Optional[date] = Query(None, description="End date filter"),
+    user_type: Optional[str] = Query("all", description="User type filter"),
+    user_id: Optional[str] = Query(None, description="Specific user ID filter"),
+    analytics_data_service: AnalyticsDataService = Depends(get_analytics_data_service),
+    _: None = Depends(verify_internal_api_key),
+) -> Dict[str, Any]:
+    """
+    Get top pages by activity for dashboard display.
+    """
+    if not settings.analytics.enabled:
+        raise HTTPException(status_code=404, detail="Analytics not enabled")
+
+    try:
+        data = await analytics_data_service.get_top_pages(
+            limit=limit,
+            start_date=start_date,
+            end_date=end_date,
+            user_type=user_type or "all",
+            user_id=user_id,
+        )
+        return {"success": True, "data": data, "count": len(data)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get top pages: {str(e)}")
+
+
+@router.get("/dashboard/user-list")
+async def get_user_list(
+    analytics_data_service: AnalyticsDataService = Depends(get_analytics_data_service),
+    _: None = Depends(verify_internal_api_key),
+) -> Dict[str, Any]:
+    """
+    Get list of users for filter dropdown.
+    """
+    if not settings.analytics.enabled:
+        raise HTTPException(status_code=404, detail="Analytics not enabled")
+
+    try:
+        users = await analytics_data_service.get_user_list()
+        return {"success": True, "data": users}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get user list: {str(e)}")
+
+
+@router.get("/dashboard/comprehensive-summary")
+async def get_comprehensive_analytics_summary(
+    start_date: Optional[date] = Query(None, description="Start date filter"),
+    end_date: Optional[date] = Query(None, description="End date filter"),
+    user_type: Optional[str] = Query("all", description="User type filter"),
+    user_id: Optional[str] = Query(None, description="Specific user ID filter"),
+    analytics_data_service: AnalyticsDataService = Depends(get_analytics_data_service),
+    _: None = Depends(verify_internal_api_key),
+) -> Dict[str, Any]:
+    """
+    Get comprehensive analytics summary including period totals and detailed breakdowns.
+    """
+    if not settings.analytics.enabled:
+        raise HTTPException(status_code=404, detail="Analytics not enabled")
+
+    try:
+        summary = await analytics_data_service.get_comprehensive_summary(
+            start_date=start_date, end_date=end_date, user_type=user_type or "all", user_id=user_id
+        )
+        return {"success": True, "data": summary}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get comprehensive summary: {str(e)}"
+        )
+
+
+@router.get("/dashboard/users-active-today")
+async def get_users_active_today(
+    analytics_data_service: AnalyticsDataService = Depends(get_analytics_data_service),
+    _: None = Depends(verify_internal_api_key),
+) -> Dict[str, Any]:
+    """
+    Get count of users active in the last 24 hours.
+    """
+    if not settings.analytics.enabled:
+        raise HTTPException(status_code=404, detail="Analytics not enabled")
+
+    try:
+        data = await analytics_data_service.get_users_active_today()
+        return {"success": True, "data": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get active users today: {str(e)}")
