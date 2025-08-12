@@ -76,16 +76,47 @@ def process_authentication(pathname, local_data, theme_store):
     # Check if unauthenticated mode is enabled
     if settings.auth.unauthenticated_mode:
         logger.debug("Unauthenticated mode is enabled")
+        logger.debug(f"Local data received: {local_data}")
+        logger.debug(f"Local data keys: {list(local_data.keys()) if local_data else 'None'}")
 
-        # Check if we already have valid local_data (e.g. temporary user session)
-        if local_data and local_data.get("access_token") and local_data.get("logged_in"):
+        # Check if we already have valid local_data (e.g. temporary user session or anonymous user)
+        if local_data and local_data.get("access_token"):
             logger.debug(
                 "Found existing session data in local store - using it instead of anonymous"
             )
 
             try:
+                # If user has valid session data, they should be treated as authenticated
+                # Check what type of user they are to determine proper behavior
+                from depictio.dash.api_calls import api_call_fetch_user_from_token
+
+                try:
+                    user = api_call_fetch_user_from_token(local_data["access_token"])
+                    if user:
+                        # Check if user is on /auth with valid session
+                        if pathname == "/auth":
+                            if hasattr(user, "is_anonymous") and user.is_anonymous:
+                                # Anonymous user on /auth - show login panel so they can upgrade
+                                logger.debug(
+                                    "Anonymous user on /auth - showing login panel for upgrade"
+                                )
+                                return handle_unauthenticated_user(pathname)
+                            else:
+                                # Real authenticated user on /auth - redirect to dashboards
+                                logger.debug(
+                                    "Real authenticated user on /auth - redirecting to /dashboards"
+                                )
+                                pathname = "/dashboards"
+                    else:
+                        # Invalid user token - redirect to auth
+                        logger.debug("Invalid user token - redirecting to auth")
+                        return handle_unauthenticated_user("/auth")
+                except Exception as e:
+                    logger.error(f"Error checking user in auth flow: {e}")
+                    return handle_unauthenticated_user("/auth")
+
                 # Default to /dashboards if pathname is None or "/"
-                if pathname is None or pathname == "/" or pathname == "/auth":
+                if pathname is None or pathname == "/":
                     logger.debug("Pathname is None or / - redirect to /dashboards")
                     pathname = "/dashboards"
 
@@ -106,8 +137,24 @@ def process_authentication(pathname, local_data, theme_store):
                 # Fetch the real anonymous user and their permanent token
                 anonymous_local_data = get_anonymous_user_session()
 
+                # Check if anonymous user is on /auth - they want to login
+                if pathname == "/auth":
+                    logger.debug(
+                        "Anonymous user on /auth - showing login panel with preserved session"
+                    )
+                    # Preserve anonymous session data for temporary user upgrade functionality
+                    header = handle_unauthenticated_user(pathname)[
+                        1
+                    ]  # Get header from unauthenticated handler
+                    return (
+                        handle_unauthenticated_user(pathname)[0],  # Get page content
+                        header,
+                        "/auth",
+                        anonymous_local_data,  # Keep the anonymous session data instead of wiping it
+                    )
+
                 # Default to /dashboards if pathname is None or "/"
-                if pathname is None or pathname == "/" or pathname == "/auth":
+                if pathname is None or pathname == "/":
                     logger.debug("Pathname is None or / - redirect to /dashboards")
                     pathname = "/dashboards"
 
@@ -200,8 +247,11 @@ def process_authentication(pathname, local_data, theme_store):
         logger.error(f"Error in token validation: {e}")
         return handle_unauthenticated_user(pathname)
 
+    # At this point, user has valid tokens and has passed validation
+    # The /auth handling was already done earlier in the flow, so no need to check again
+
     # Default to /dashboards if pathname is None or "/"
-    if pathname is None or pathname == "/" or pathname == "/auth":
+    if pathname is None or pathname == "/":
         logger.debug("Pathname is None or / - redirect to /dashboards")
         pathname = "/dashboards"
 
