@@ -1,0 +1,52 @@
+# =====================================================
+# Google Analytics Configuration Example
+# =====================================================
+# This values file demonstrates how to enable Google Analytics
+# tracking for your Depictio deployment.
+#
+# Usage:
+#   helm upgrade depictio ./helm-charts/depictio \
+#     -f values.yaml \
+#     -f examples/values-google-analytics.yaml
+
+# Backend configuration
+backend:
+  env:
+    # Enable Google Analytics tracking
+    DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
+
+    # Set your GA4 Measurement ID (get from Google Analytics dashboard)
+    DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-XXXXXXXXXX"
+
+# Frontend configuration
+frontend:
+  env:
+    # Enable Google Analytics tracking in the Dash frontend
+    DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
+
+    # Set your GA4 Measurement ID (must match backend)
+    DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-XXXXXXXXXX"
+
+# =====================================================
+# Getting Your Google Analytics Tracking ID
+# =====================================================
+#
+# 1. Go to Google Analytics (https://analytics.google.com)
+# 2. Create a new GA4 property for your domain
+# 3. Navigate to Admin → Property → Data Streams
+# 4. Create or select a web stream for your Depictio instance
+# 5. Copy the Measurement ID (starts with G-)
+# 6. Replace "G-XXXXXXXXXX" above with your actual ID
+#
+# =====================================================
+# Features
+# =====================================================
+#
+# When enabled, Google Analytics will track:
+# - Page views and navigation events
+# - User types (authenticated, anonymous, temporary)
+# - Custom events for dashboard interactions
+# - Session duration and engagement metrics
+#
+# This works alongside Depictio's internal analytics system
+# providing both detailed behavioral data and standard web metrics.
