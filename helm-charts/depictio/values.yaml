@@ -112,8 +112,8 @@ backend:
       memory: "1Gi"
       cpu: "0.5"
     limits:
-      memory: "8Gi"
-      cpu: "4"
+      memory: "4Gi"
+      cpu: "2"
   service:
     type: ClusterIP
     httpPort: 80
@@ -142,11 +142,17 @@ backend:
     DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "24"
 
     # Analytics configuration
-    DEPICTIO_ANALYTICS_ENABLED: "true"
+    DEPICTIO_ANALYTICS_ENABLED: "false"
     DEPICTIO_ANALYTICS_SESSION_TIMEOUT_MINUTES: "30"
     DEPICTIO_ANALYTICS_CLEANUP_DAYS: "90"
     DEPICTIO_ANALYTICS_TRACK_ANONYMOUS_USERS: "true"
     DEPICTIO_ANALYTICS_CLEANUP_ENABLED: "true"
+
+    # Google Analytics configuration (GA4)
+    # Enable to track page views, user interactions, and engagement metrics
+    # Get your tracking ID from Google Analytics dashboard (Property → Data Streams)
+    DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "false"
+    # DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-XXXXXXXXXX"
 
   podSecurityContext:
     runAsUser: 1000
@@ -175,8 +181,8 @@ frontend:
       memory: "1Gi"
       cpu: "0.5"
     limits:
-      memory: "8Gi"
-      cpu: "4"
+      memory: "4Gi"
+      cpu: "2"
   service:
     type: ClusterIP
     httpPort: 80
@@ -194,6 +200,15 @@ frontend:
 
     # Performance - Reduced workers for better stability with multiple replicas
     DEPICTIO_DASH_WORKERS: "4"
+
+    # Analytics configuration
+    DEPICTIO_ANALYTICS_ENABLED: "false"
+
+    # Google Analytics configuration (GA4)
+    # Enable to track page views, user interactions, and engagement metrics
+    # Get your tracking ID from Google Analytics dashboard (Property → Data Streams)
+    DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "false"
+    # DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-XXXXXXXXXX"
 
   podSecurityContext:
     runAsUser: 1000
