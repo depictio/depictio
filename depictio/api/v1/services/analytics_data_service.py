@@ -63,8 +63,8 @@ class AnalyticsDataService:
                 {
                     "user_id": pl.Series([], dtype=pl.String),
                     "session_id": pl.Series([], dtype=pl.String),
-                    "start_time": pl.Series([], dtype=pl.String),
-                    "end_time": pl.Series([], dtype=pl.String),
+                    "start_time": pl.Series([], dtype=pl.Datetime),
+                    "end_time": pl.Series([], dtype=pl.Datetime),
                     "duration_minutes": pl.Series([], dtype=pl.Float64),
                     "page_views": pl.Series([], dtype=pl.Int64),
                     "api_calls": pl.Series([], dtype=pl.Int64),
@@ -74,22 +74,36 @@ class AnalyticsDataService:
                 }
             )
 
-        # Transform to Polars DataFrame
+        # Transform to Polars DataFrame with explicit data types
         df = pl.DataFrame(
             {
-                "user_id": [s.user_id for s in sessions],
-                "session_id": [s.session_id for s in sessions],
+                "user_id": [str(s.user_id) for s in sessions],
+                "session_id": [str(s.session_id) for s in sessions],
                 "start_time": [s.start_time for s in sessions],
                 "end_time": [s.end_time for s in sessions],
                 "duration_minutes": [
-                    s.duration_seconds / 60 if s.duration_seconds else 0 for s in sessions
+                    float(s.duration_seconds / 60) if s.duration_seconds else 0.0 for s in sessions
                 ],
-                "page_views": [s.page_views for s in sessions],
-                "api_calls": [s.api_calls for s in sessions],
-                "is_anonymous": [s.is_anonymous for s in sessions],
-                "ip_address": [s.ip_address for s in sessions],
-                "user_agent": [s.user_agent[:100] for s in sessions],  # Truncate long user agents
-            }
+                "page_views": [int(s.page_views) for s in sessions],
+                "api_calls": [int(s.api_calls) for s in sessions],
+                "is_anonymous": [bool(s.is_anonymous) for s in sessions],
+                "ip_address": [str(s.ip_address) for s in sessions],
+                "user_agent": [
+                    str(s.user_agent)[:100] for s in sessions
+                ],  # Truncate long user agents
+            },
+            schema={
+                "user_id": pl.String,
+                "session_id": pl.String,
+                "start_time": pl.Datetime,
+                "end_time": pl.Datetime,
+                "duration_minutes": pl.Float64,
+                "page_views": pl.Int64,
+                "api_calls": pl.Int64,
+                "is_anonymous": pl.Boolean,
+                "ip_address": pl.String,
+                "user_agent": pl.String,
+            },
         )
 
         return await self.enrich_user_data(df)
@@ -212,7 +226,15 @@ class AnalyticsDataService:
                 ]
             )
             .with_columns(
-                [pl.lit(datetime.utcnow()).alias("generated_at"), pl.lit(days).alias("period_days")]
+                [
+                    # Ensure consistent data types for aggregation columns
+                    pl.col("total_sessions").cast(pl.Int64),
+                    pl.col("total_page_views").cast(pl.Int64),
+                    pl.col("total_api_calls").cast(pl.Int64),
+                    pl.col("total_time_minutes").cast(pl.Float64),
+                    pl.lit(datetime.utcnow()).alias("generated_at"),
+                    pl.lit(days).alias("period_days"),
+                ]
             )
         )
 
@@ -935,4 +957,88 @@ class AnalyticsDataService:
             },
             "user_breakdown": user_breakdown,
             "activity_summary": activity_summary,
+        }
+
+    async def get_unique_connections_analytics(
+        self,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+    ) -> Dict[str, Any]:
+        """Get analytics for unique IP addresses and connections."""
+        # Set date range
+        if end_date is None:
+            end_datetime = datetime.utcnow()
+        else:
+            end_datetime = datetime.combine(end_date, datetime.max.time())
+
+        if start_date is None:
+            start_datetime = end_datetime - timedelta(days=30)  # Default last 30 days
+        else:
+            start_datetime = datetime.combine(start_date, datetime.min.time())
+
+        # Extract sessions data with IP addresses
+        sessions_df = await self.extract_user_sessions(start_datetime, end_datetime)
+
+        if sessions_df.height == 0:
+            return {
+                "unique_ip_addresses": 0,
+                "ip_to_user_mapping": [],
+                "top_ip_addresses": [],
+                "connection_summary": {
+                    "total_connections": 0,
+                    "authenticated_connections": 0,
+                    "anonymous_connections": 0,
+                },
+            }
+
+        # Get unique IP addresses
+        unique_ips = sessions_df.select("ip_address").unique()
+        unique_ip_count = unique_ips.height
+
+        # Create IP to user mapping (shows how many users per IP and session counts)
+        ip_user_mapping = (
+            sessions_df.group_by("ip_address")
+            .agg(
+                [
+                    pl.n_unique("user_id").alias("unique_users"),
+                    pl.count("session_id").alias("total_sessions"),
+                    pl.sum("page_views").cast(pl.Int64).alias("total_page_views"),
+                    pl.sum("api_calls").cast(pl.Int64).alias("total_api_calls"),
+                    pl.first("is_anonymous").alias("is_anonymous"),
+                    pl.col("user_id").first().alias("primary_user_id"),
+                ]
+            )
+            .sort("total_sessions", descending=True)
+        )
+
+        # Convert to list for JSON serialization
+        ip_mapping_data = []
+        for row in ip_user_mapping.iter_rows(named=True):
+            ip_mapping_data.append(
+                {
+                    "ip_address": row["ip_address"],
+                    "unique_users": row["unique_users"],
+                    "total_sessions": row["total_sessions"],
+                    "total_page_views": row["total_page_views"],
+                    "total_api_calls": row["total_api_calls"],
+                    "is_anonymous": row["is_anonymous"],
+                    "primary_user_id": row["primary_user_id"],
+                }
+            )
+
+        # Get top IP addresses by activity
+        top_ips = ip_mapping_data[:10]  # Top 10 most active IPs
+
+        # Connection summary
+        connection_summary = {
+            "total_connections": unique_ip_count,
+            "authenticated_connections": sum(1 for ip in ip_mapping_data if not ip["is_anonymous"]),
+            "anonymous_connections": sum(1 for ip in ip_mapping_data if ip["is_anonymous"]),
+        }
+
+        return {
+            "unique_ip_addresses": unique_ip_count,
+            "ip_to_user_mapping": ip_mapping_data,
+            "top_ip_addresses": top_ips,
+            "connection_summary": connection_summary,
         }

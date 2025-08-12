@@ -267,6 +267,51 @@ def create_user_type_distribution() -> dmc.Card:
     )
 
 
+def create_unique_connections_card() -> dmc.Card:
+    """Create IP analytics card showing unique connections and IP addresses."""
+    return dmc.Card(
+        [
+            dmc.Group(
+                [
+                    dmc.Group(
+                        [
+                            dmc.ThemeIcon(
+                                DashIconify(icon="mdi:ip-network-outline", width=20),
+                                size="md",
+                                variant="light",
+                                color="indigo",
+                            ),
+                            dmc.Text("Unique Connections", fw="bold", size="lg"),
+                        ]
+                    ),
+                    dmc.ActionIcon(
+                        DashIconify(icon="mdi:refresh", width=16),
+                        id="refresh-unique-connections",
+                        variant="subtle",
+                        color="gray",
+                    ),
+                ],
+                justify="space-between",
+                mb="md",
+            ),
+            dcc.Loading(
+                id="loading-unique-connections",
+                children=[
+                    html.Div(id="unique-connections-content", children="Loading IP analytics..."),
+                ],
+                type="dot",
+                color="var(--mantine-color-indigo-6)",
+            ),
+        ],
+        withBorder=True,
+        shadow="sm",
+        radius="md",
+        p="md",
+        id="unique-connections-card",
+        style={"height": "350px", "overflow": "auto"},
+    )
+
+
 def create_users_active_today_card() -> dmc.Card:
     """Create users active today metrics card."""
     return dmc.Card(
@@ -425,12 +470,19 @@ def create_analytics_dashboard_layout() -> html.Div:
                 ],
                 mb="lg",
             ),
-            # Cards row
+            # Cards row 1 - Analytics cards
             dmc.Grid(
                 [
                     dmc.GridCol(create_users_active_today_card(), span=4),
                     dmc.GridCol(create_recent_activity_table(), span=4),
-                    dmc.GridCol(create_top_pages_card(), span=4),
+                    dmc.GridCol(create_unique_connections_card(), span=4),
+                ],
+                mb="md",
+            ),
+            # Cards row 2 - Most Consulted Pages (full width for better visibility)
+            dmc.Grid(
+                [
+                    dmc.GridCol(create_top_pages_card(), span=12),
                 ],
                 mb="lg",
             ),

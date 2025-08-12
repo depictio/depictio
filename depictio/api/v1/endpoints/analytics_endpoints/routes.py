@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from pymongo import DESCENDING
 
 from depictio.api.v1.configs.config import settings
+from depictio.api.v1.services.analytics_data_service import AnalyticsDataService
 from depictio.api.v1.services.analytics_service import AnalyticsService
 from depictio.models.models.analytics import (
     AnalyticsSummary,
@@ -407,3 +408,99 @@ async def track_client_pageview(
         # Don't let analytics errors break the frontend
         print(f"Client analytics error: {e}")
         return {"success": False, "error": str(e)}
+
+
+def get_analytics_data_service() -> AnalyticsDataService:
+    """Dependency to get analytics data service."""
+    return AnalyticsDataService()
+
+
+@router.get("/unique-connections")
+async def get_unique_connections_analytics(
+    start_date: Optional[str] = Query(None, description="Start date in YYYY-MM-DD format"),
+    end_date: Optional[str] = Query(None, description="End date in YYYY-MM-DD format"),
+    data_service: AnalyticsDataService = Depends(get_analytics_data_service),
+    _: None = Depends(verify_internal_api_key),
+):
+    """
+    Get analytics for unique IP addresses and connections.
+
+    Returns information about unique connections, IP-to-user mapping,
+    and connection patterns for identifying unique visitors.
+    """
+    if not settings.analytics.enabled:
+        raise HTTPException(status_code=404, detail="Analytics not enabled")
+
+    try:
+        # Parse dates if provided
+        parsed_start_date = None
+        parsed_end_date = None
+
+        if start_date:
+            try:
+                parsed_start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+            except ValueError:
+                raise HTTPException(
+                    status_code=400, detail="Invalid start_date format. Use YYYY-MM-DD"
+                )
+
+        if end_date:
+            try:
+                parsed_end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+            except ValueError:
+                raise HTTPException(
+                    status_code=400, detail="Invalid end_date format. Use YYYY-MM-DD"
+                )
+
+        # Get unique connections analytics
+        result = await data_service.get_unique_connections_analytics(
+            start_date=parsed_start_date,
+            end_date=parsed_end_date,
+        )
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in unique connections analytics: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get unique connections analytics: {str(e)}"
+        )
+
+
+@router.post("/admin/consolidate-sessions")
+async def consolidate_duplicate_sessions(
+    analytics_service: AnalyticsService = Depends(get_analytics_service),
+    _: None = Depends(verify_internal_api_key),
+):
+    """
+    Consolidate duplicate sessions from the same IP address.
+
+    This endpoint fixes legacy data where multiple sessions exist per IP
+    due to different user agents creating separate anonymous user IDs.
+    """
+    if not settings.analytics.enabled:
+        raise HTTPException(status_code=404, detail="Analytics not enabled")
+
+    try:
+        result = await analytics_service.consolidate_duplicate_sessions()
+
+        if result["success"]:
+            return {
+                "success": True,
+                "message": "Session consolidation completed",
+                "details": {
+                    "consolidated_ips": result["consolidated_ips"],
+                    "removed_sessions": result["removed_sessions"],
+                    "total_duplicate_ips": result["total_duplicate_ips"],
+                },
+            }
+        else:
+            raise HTTPException(status_code=500, detail=f"Consolidation failed: {result['error']}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in session consolidation: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to consolidate sessions: {str(e)}")

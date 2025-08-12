@@ -9,7 +9,6 @@ from depictio.dash.api_calls import api_call_fetch_user_from_token, purge_expire
 # Analytics tracking
 from depictio.dash.components.analytics_tracker import (
     create_analytics_tracker,
-    inject_analytics_script,
 )
 from depictio.dash.layouts.dashboards_management import layout as dashboards_management_layout
 
@@ -541,8 +540,6 @@ def create_app_layout():
             ),
             # Analytics tracking components
             create_analytics_tracker(),
-            # Inject analytics JavaScript
-            inject_analytics_script(),
             dcc.Store(
                 id="sidebar-collapsed",
                 storage_type="local",  # Changed to local storage to persist user preference

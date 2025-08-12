@@ -31,11 +31,15 @@ class AnalyticsService:
         """
         Get existing session or create a new one.
         For authenticated users, extracts the MongoDB ObjectId from the auth token.
-        For anonymous users, creates a stable hash-based user_id.
+        For anonymous users, creates a stable user_id based on IP only to consolidate sessions.
         """
         # Extract session info from request
         ip_address = self.get_client_ip(request)
         user_agent = request.headers.get("user-agent", "Unknown")
+
+        # Skip analytics for internal Docker/container traffic
+        if self.is_internal_ip(ip_address):
+            return await self.create_minimal_session(ip_address, user_agent)
 
         # Try to get authenticated user ID from token if user_id not provided
         if not user_id:
@@ -43,8 +47,9 @@ class AnalyticsService:
             if authenticated_user_id:
                 user_id = authenticated_user_id  # Use MongoDB ObjectId
             else:
-                # For anonymous users, create a stable user_id based on IP + User-Agent hash
-                user_id = f"anon_{hash(f'{ip_address}_{user_agent}') % 1000000:06d}"
+                # For anonymous users, use IP-only hash to consolidate sessions from same IP
+                # This prevents multiple sessions from different browsers/user-agents on same IP
+                user_id = f"anon_{hash(ip_address) % 1000000:06d}"
 
         # Try to find existing active session
         session = await self.find_active_session(user_id, ip_address)
@@ -397,3 +402,115 @@ class AnalyticsService:
             )
             for session in sessions
         ]
+
+    def is_internal_ip(self, ip_address: str) -> bool:
+        """
+        Check if IP address is internal/container traffic that should be excluded from analytics.
+        """
+        if not ip_address:
+            return False
+
+        # Common internal IP ranges
+        internal_ranges = [
+            "172.",  # Docker default bridge network (172.17.0.0/16, 172.18.0.0/16, etc.)
+            "10.",  # Private network (10.0.0.0/8)
+            "192.168.",  # Private network (192.168.0.0/16)
+            "127.",  # Loopback (127.0.0.0/8)
+            "169.254.",  # Link-local (169.254.0.0/16)
+        ]
+
+        return any(ip_address.startswith(prefix) for prefix in internal_ranges)
+
+    async def create_minimal_session(self, ip_address: str, user_agent: str) -> UserSession:
+        """
+        Create a minimal session for internal traffic (not saved to DB).
+        This allows the analytics middleware to continue working without cluttering analytics data.
+        """
+        session_id = str(uuid.uuid4())
+        return UserSession(
+            user_id=f"internal_{hash(ip_address) % 1000:03d}",
+            session_id=session_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            start_time=datetime.utcnow(),
+            last_activity=datetime.utcnow(),
+            is_anonymous=True,
+            page_views=0,
+            api_calls=0,
+        )
+
+    async def consolidate_duplicate_sessions(self) -> dict:
+        """
+        Consolidate duplicate sessions from the same IP address.
+        This addresses legacy data where multiple sessions exist per IP.
+        """
+        try:
+            # Get all anonymous sessions
+            all_sessions = await UserSession.find(UserSession.user_id.startswith("anon_")).to_list()
+
+            # Group sessions by IP address
+            sessions_by_ip = {}
+            for session in all_sessions:
+                if session.ip_address:
+                    if session.ip_address not in sessions_by_ip:
+                        sessions_by_ip[session.ip_address] = []
+                    sessions_by_ip[session.ip_address].append(session)
+
+            # Find IPs with multiple sessions
+            duplicate_ips = {
+                ip: sessions for ip, sessions in sessions_by_ip.items() if len(sessions) > 1
+            }
+
+            consolidated_count = 0
+            removed_count = 0
+
+            for ip, sessions in duplicate_ips.items():
+                if len(sessions) <= 1:
+                    continue
+
+                # Sort sessions by start_time (keep the earliest)
+                sessions.sort(key=lambda s: s.start_time)
+                primary_session = sessions[0]
+                duplicate_sessions = sessions[1:]
+
+                # Calculate new user_id (IP-only hash as per new logic)
+                new_user_id = f"anon_{hash(ip) % 1000000:06d}"
+
+                # Update primary session with consolidated data
+                total_page_views = sum(s.page_views for s in sessions)
+                total_api_calls = sum(s.api_calls for s in sessions)
+                latest_activity = max(s.last_activity for s in sessions)
+
+                primary_session.user_id = new_user_id
+                primary_session.page_views = total_page_views
+                primary_session.api_calls = total_api_calls
+                primary_session.last_activity = latest_activity
+                await primary_session.save()
+
+                # Update activities to point to primary session
+                for dup_session in duplicate_sessions:
+                    activities = await UserActivity.find(
+                        UserActivity.session_id == dup_session.session_id
+                    ).to_list()
+
+                    for activity in activities:
+                        activity.session_id = primary_session.session_id
+                        activity.user_id = new_user_id
+                        await activity.save()
+
+                # Delete duplicate sessions
+                for dup_session in duplicate_sessions:
+                    await dup_session.delete()
+                    removed_count += 1
+
+                consolidated_count += 1
+
+            return {
+                "success": True,
+                "consolidated_ips": consolidated_count,
+                "removed_sessions": removed_count,
+                "total_duplicate_ips": len(duplicate_ips),
+            }
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}

@@ -356,7 +356,7 @@ class BackupConfig(BaseSettings):
 class AnalyticsConfig(BaseSettings):
     """Configuration for analytics tracking."""
 
-    enabled: bool = Field(default=True, description="Enable analytics tracking")
+    enabled: bool = Field(default=False, description="Enable analytics tracking")
     session_timeout_minutes: int = Field(
         default=30,
         description="Session timeout in minutes",
@@ -381,6 +381,23 @@ class AnalyticsConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_ANALYTICS_")
 
 
+class GoogleAnalyticsConfig(BaseSettings):
+    """Configuration for Google Analytics tracking."""
+
+    enabled: bool = Field(default=False, description="Enable Google Analytics tracking")
+    tracking_id: Optional[str] = Field(
+        default=None,
+        description="Google Analytics tracking ID (GA4 measurement ID)",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_GOOGLE_ANALYTICS_")
+
+    @property
+    def is_configured(self) -> bool:
+        """Check if Google Analytics is properly configured."""
+        return self.enabled and self.tracking_id is not None
+
+
 class Settings(BaseSettings):
     context: str = Field(default="server")
     fastapi: FastAPIConfig = Field(default_factory=FastAPIConfig)
@@ -393,5 +410,6 @@ class Settings(BaseSettings):
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
     backup: BackupConfig = Field(default_factory=BackupConfig)
     analytics: AnalyticsConfig = Field(default_factory=AnalyticsConfig)
+    google_analytics: GoogleAnalyticsConfig = Field(default_factory=GoogleAnalyticsConfig)
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_")

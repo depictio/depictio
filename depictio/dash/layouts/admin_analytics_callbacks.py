@@ -865,3 +865,116 @@ def register_admin_analytics_callbacks(app):
         except Exception as e:
             print(f"Failed to fetch comprehensive summary: {e}")
             return dmc.Text("Failed to load comprehensive summary", c="red")
+
+    @app.callback(
+        Output("unique-connections-content", "children"),
+        [
+            Input("analytics-auto-refresh", "n_intervals"),
+            Input("refresh-unique-connections", "n_clicks"),
+        ],
+        State("local-store", "data"),
+        prevent_initial_call=False,
+    )
+    def update_unique_connections(n_intervals, refresh_clicks, local_data):
+        """Update unique connections and IP address analytics."""
+        try:
+            headers = {"X-Api-Key": settings.auth.internal_api_key}
+            if local_data and local_data.get("access_token"):
+                headers["Authorization"] = f"Bearer {local_data['access_token']}"
+
+            # Call the unique connections endpoint
+            response = requests.get(
+                f"{settings.fastapi.url}/depictio/api/v1/analytics/unique-connections",
+                headers=headers,
+                timeout=10,
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                print("DEBUG: Successfully fetched unique connections data")
+            else:
+                print(
+                    f"Unique connections API returned status {response.status_code}: {response.text}"
+                )
+                return dmc.Text(f"API Error {response.status_code}", c="red", ta="center")
+
+        except Exception as e:
+            print(f"Failed to fetch unique connections: {e}")
+            import traceback
+
+            traceback.print_exc()
+            return dmc.Text("Failed to load IP analytics", c="red", ta="center")
+
+        try:
+            # Extract connection summary
+            conn_summary = data.get("connection_summary", {})
+            top_ips = data.get("top_ip_addresses", [])
+
+            # Create summary metrics
+            summary_stack = dmc.Stack(
+                [
+                    dmc.Group(
+                        [
+                            dmc.Text("Unique IPs:", size="sm", fw="bold"),
+                            dmc.Badge(
+                                str(data.get("unique_ip_addresses", 0)),
+                                color="indigo",
+                                variant="light",
+                            ),
+                        ],
+                        justify="space-between",
+                    ),
+                    dmc.Group(
+                        [
+                            dmc.Text("Authenticated:", size="sm"),
+                            dmc.Text(
+                                str(conn_summary.get("authenticated_connections", 0)), c="green"
+                            ),
+                        ],
+                        justify="space-between",
+                    ),
+                    dmc.Group(
+                        [
+                            dmc.Text("Anonymous:", size="sm"),
+                            dmc.Text(str(conn_summary.get("anonymous_connections", 0)), c="orange"),
+                        ],
+                        justify="space-between",
+                    ),
+                ],
+                gap="xs",
+            )
+
+            # Create top IPs list (show top 3)
+            ip_items = []
+            for i, ip_data in enumerate(top_ips[:3], 1):
+                ip_items.append(
+                    dmc.Group(
+                        [
+                            dmc.Text(f"{i}. {ip_data['ip_address']}", size="xs", fw="bold"),
+                            dmc.Badge(
+                                f"{ip_data['total_sessions']} sessions",
+                                size="xs",
+                                color="cyan" if not ip_data.get("is_anonymous") else "gray",
+                                variant="outline",
+                            ),
+                        ],
+                        justify="space-between",
+                        gap="xs",
+                    )
+                )
+
+            return dmc.Stack(
+                [
+                    summary_stack,
+                    dmc.Divider(size="xs"),
+                    dmc.Text("Top IP Addresses", size="sm", fw="bold", c="dark"),
+                    dmc.Stack(ip_items, gap="xs")
+                    if ip_items
+                    else dmc.Text("No data", size="sm", c="gray"),
+                ],
+                gap="sm",
+            )
+
+        except Exception as e:
+            print(f"Error rendering unique connections: {e}")
+            return dmc.Text("Error processing IP analytics", c="red", ta="center")
