@@ -7,7 +7,7 @@ from pydantic import validate_call
 
 import dash
 from dash import ALL, MATCH, Input, Output, State, ctx, html
-from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, api_create_group
 from depictio.dash.layouts.layouts_toolbox import create_delete_confirmation_modal
@@ -1160,5 +1160,18 @@ def register_admin_callbacks(app):
             except Exception as e:
                 logger.error(f"Error fetching projects: {e}")
                 return html.P(f"Error fetching projects: {str(e)}"), {"display": "none"}
+        elif active_tab == "analytics":
+            # Import analytics dashboard layout
+            from depictio.dash.layouts.admin_analytics import (
+                create_analytics_dashboard_404,
+                create_analytics_dashboard_layout,
+            )
+
+            # Check if analytics is enabled
+            if not settings.analytics.enabled:
+                return create_analytics_dashboard_404(), {"display": "none"}
+
+            # Return analytics dashboard layout
+            return create_analytics_dashboard_layout(), {"display": "none"}
         else:
             return html.P("Under construction."), {"display": "none"}

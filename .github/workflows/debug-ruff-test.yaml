@@ -1,10 +1,10 @@
 name: "Debug Ruff Import Sorting Test"
 
 on:
-  push:
-    branches: [fix/dynamic-joining-rows-nb-issue]
-  pull_request:
-    branches: [main]
+  # push:
+  #   branches: [fix/dynamic-joining-rows-nb-issue]
+  # pull_request:
+  #   branches: [main]
   workflow_dispatch:
 
 jobs:

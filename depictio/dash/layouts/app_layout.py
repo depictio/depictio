@@ -5,6 +5,11 @@ from dash_iconify import DashIconify
 from dash import dcc, html
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, purge_expired_tokens
+
+# Analytics tracking
+from depictio.dash.components.analytics_tracker import (
+    create_analytics_tracker,
+)
 from depictio.dash.layouts.dashboards_management import layout as dashboards_management_layout
 
 # from depictio.dash.layouts.draggable_scenarios.add_component import register_callbacks_add_component
@@ -324,6 +329,15 @@ def create_admin_header(text):
                                             # value="dashboards",
                                             # component=dcc.Link("Dashboards", href="/admin/dashboards", style={"textDecoration": "none", "color": "inherit"})
                                         ),
+                                        dmc.TabsTab(  # type: ignore[unresolved-attribute]
+                                            "Analytics",
+                                            leftSection=DashIconify(
+                                                icon="mdi:chart-line",
+                                                width=20,
+                                                height=20,
+                                            ),
+                                            value="analytics",
+                                        ),
                                         dmc.TabsPanel(
                                             children=[],
                                             value="users",
@@ -343,6 +357,11 @@ def create_admin_header(text):
                                             children=[],
                                             value="dashboards",
                                             id="admin-tabs-dashboards",
+                                        ),
+                                        dmc.TabsPanel(
+                                            children=[],
+                                            value="analytics",
+                                            id="admin-tabs-analytics",
                                         ),
                                     ]
                                 ),
@@ -519,6 +538,8 @@ def create_app_layout():
                 storage_type="memory",
                 data={"theme": "light", "timestamp": 0},  # Bridge for theme updates
             ),
+            # Analytics tracking components
+            create_analytics_tracker(),
             dcc.Store(
                 id="sidebar-collapsed",
                 storage_type="local",  # Changed to local storage to persist user preference

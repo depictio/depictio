@@ -8,6 +8,7 @@ import dash_bootstrap_components as dbc
 
 import dash
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.components.google_analytics import integrate_google_analytics
 
 # Set environment context
 os.environ["DEPICTIO_CONTEXT"] = "server"
@@ -60,5 +61,8 @@ def create_dash_app():
     static_folder = os.path.join(dash_root_path, "static")
     server.static_folder = static_folder  # type: ignore[invalid-assignment]
     server.static_url_path = "/static"  # type: ignore[invalid-assignment]
+
+    # Integrate Google Analytics via index_string
+    integrate_google_analytics(app, title="Depictio")
 
     return app, dev_mode
