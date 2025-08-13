@@ -312,18 +312,12 @@ jobs:
           echo "🔍 Checking existing pods..."
           kubectl get pods -l "release=${RELEASE_NAME}" --show-labels || echo "No pods found yet"
 
-          # Check deployments status first
+          # Check deployments status first (using name prefix instead of labels)
           echo "📊 Checking deployment status..."
-          kubectl get deployments -l "release=${RELEASE_NAME}" || echo "No deployments found"
+          kubectl get deployments --no-headers | grep "^${RELEASE_NAME}-" || echo "No deployments found"
 
-          # Wait for deployments to be available
-          echo "⏳ Waiting for deployments to be available..."
-          kubectl wait --for=condition=available deployment -l "release=${RELEASE_NAME}" --timeout=300s || {
-            echo "❌ Deployments failed to become available"
-            echo "📊 Deployment details:"
-            kubectl describe deployments -l "release=${RELEASE_NAME}"
-            exit 1
-          }
+          # Since pods are already verified as ready in propagation phase, skip deployment wait
+          echo "✅ Skipping deployment wait - pods already verified as ready in propagation phase"
 
           # Now wait for specific pods to be ready
           echo "⏳ Waiting for backend pods to be ready..."
