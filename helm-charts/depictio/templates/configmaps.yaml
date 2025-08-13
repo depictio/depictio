@@ -28,6 +28,8 @@ data:
   DEPICTIO_ANALYTICS_CLEANUP_DAYS: {{ .Values.backend.env.DEPICTIO_ANALYTICS_CLEANUP_DAYS | default "90" | quote }}
   DEPICTIO_ANALYTICS_TRACK_ANONYMOUS_USERS: {{ .Values.backend.env.DEPICTIO_ANALYTICS_TRACK_ANONYMOUS_USERS | default "true" | quote }}
   DEPICTIO_ANALYTICS_CLEANUP_ENABLED: {{ .Values.backend.env.DEPICTIO_ANALYTICS_CLEANUP_ENABLED | default "true" | quote }}
+  DEPICTIO_GOOGLE_ANALYTICS_ENABLED: {{ .Values.backend.env.DEPICTIO_GOOGLE_ANALYTICS_ENABLED | default "false" | quote }}
+  DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: {{ .Values.backend.env.DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID | default "G-XXXXXXXXXX" | quote }}
   # MinIO/S3 configuration
   DEPICTIO_MINIO_ROOT_USER: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_USER | default "minio" | quote }}
   DEPICTIO_MINIO_ROOT_PASSWORD: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_PASSWORD | default "minio123" | quote }}
@@ -65,6 +67,14 @@ data:
   DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.backend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | default "24" | quote }}
   # Performance
   DEPICTIO_DASH_WORKERS: {{ .Values.frontend.env.DEPICTIO_DASH_WORKERS | quote }}
+  # Analytics
+  DEPICTIO_ANALYTICS_ENABLED: {{ .Values.frontend.env.DEPICTIO_ANALYTICS_ENABLED | default "true" | quote }}
+  DEPICTIO_ANALYTICS_SESSION_TIMEOUT_MINUTES: {{ .Values.frontend.env.DEPICTIO_ANALYTICS_SESSION_TIMEOUT_MINUTES | default "30" | quote }}
+  DEPICTIO_ANALYTICS_CLEANUP_DAYS: {{ .Values.frontend.env.DEPICTIO_ANALYTICS_CLEANUP_DAYS | default "90" | quote }}
+  DEPICTIO_ANALYTICS_TRACK_ANONYMOUS_USERS: {{ .Values.frontend.env.DEPICTIO_ANALYTICS_TRACK_ANONYMOUS_USERS | default "true" | quote }}
+  DEPICTIO_ANALYTICS_CLEANUP_ENABLED: {{ .Values.frontend.env.DEPICTIO_ANALYTICS_CLEANUP_ENABLED | default "true" | quote }}
+  DEPICTIO_GOOGLE_ANALYTICS_ENABLED: {{ .Values.frontend.env.DEPICTIO_GOOGLE_ANALYTICS_ENABLED | default "false" | quote }}
+  DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: {{ .Values.frontend.env.DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID | default "G-XXXXXXXXXX" | quote }}
   # MinIO/S3 configuration
   DEPICTIO_MINIO_ROOT_USER: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_USER | default "minio" | quote }}
   DEPICTIO_MINIO_ROOT_PASSWORD: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_PASSWORD | default "minio123" | quote }}

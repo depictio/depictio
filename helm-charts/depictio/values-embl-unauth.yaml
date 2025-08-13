@@ -41,7 +41,7 @@ backend:
       memory: "4Gi"     # Further increased for data processing
       cpu: "1"          # More CPU for intensive S3 operations
     limits:
-      memory: "12Gi"    # Much higher memory for large datasets
+      memory: "8Gi"    # Much higher memory for large datasets
       cpu: "6"          # More CPU headroom for concurrent data processing
 
   env:
@@ -70,11 +70,11 @@ frontend:
 
   resources:
     requests:
-      memory: "2Gi"     # Increased for single replica with 8 workers
-      cpu: "400m"       # More CPU for 8 workers
+      memory: "4Gi"     # Increased for single replica with 8 workers
+      cpu: "1"       # More CPU for 8 workers
     limits:
-      memory: "6Gi"     # Higher memory for single replica handling all frontend load
-      cpu: "3"          # More CPU headroom for 8 concurrent workers
+      memory: "8Gi"     # Higher memory for single replica handling all frontend load
+      cpu: "6"          # More CPU headroom for 8 concurrent workers
 
   env:
     # Enable unauthenticated mode (allows anonymous access)
