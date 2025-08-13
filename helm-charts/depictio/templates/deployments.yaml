@@ -352,7 +352,26 @@ spec:
         # STEP 1: Wait for backend service to be available (network check)
         - name: wait-for-backend
           image: busybox:1.35
-          command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-depictio-backend {{ .Values.backend.service.httpPort }}; do echo "Waiting for backend service..."; sleep 2; done']
+          command: ['sh', '-c']
+          args:
+            - |
+              echo "⏳ Waiting for backend service to be available..."
+              echo "🎯 Target: {{ .Release.Name }}-depictio-backend:{{ .Values.backend.service.httpPort }}"
+              timeout=300  # 5 minutes timeout
+              elapsed=0
+
+              while [ $elapsed -lt $timeout ]; do
+                if nc -z {{ .Release.Name }}-depictio-backend {{ .Values.backend.service.httpPort }}; then
+                  echo "✅ Backend service {{ .Release.Name }}-depictio-backend:{{ .Values.backend.service.httpPort }} is accepting connections"
+                  exit 0
+                fi
+                echo "⏳ Backend service {{ .Release.Name }}-depictio-backend:{{ .Values.backend.service.httpPort }} not ready... (${elapsed}s/${timeout}s)"
+                sleep 5
+                elapsed=$((elapsed + 5))
+              done
+
+              echo "❌ Timeout waiting for backend service {{ .Release.Name }}-depictio-backend:{{ .Values.backend.service.httpPort }}"
+              exit 1
           securityContext:
             {{- toYaml .Values.frontend.securityContext | nindent 12 }}
           resources:
