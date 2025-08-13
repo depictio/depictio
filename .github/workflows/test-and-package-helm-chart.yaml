@@ -190,6 +190,50 @@ jobs:
           echo "📊 Checking initial state..."
           kubectl get all -l "release=${{ steps.release-info.outputs.release_name }}"
 
+      - name: Wait for Kubernetes Resources to Propagate
+        run: |
+          echo "⏳ Waiting for Kubernetes resources to propagate..."
+          RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
+
+          # Initial wait for resource creation
+          echo "🕐 Initial 30-second wait for resource creation..."
+          sleep 30
+
+          # Poll for expected deployments to be created
+          echo "🔍 Waiting for deployments to be created..."
+          timeout=180  # 3 minutes total timeout
+          elapsed=0
+          expected_deployments=4  # mongo, minio, backend, frontend
+
+          while [ $elapsed -lt $timeout ]; do
+            deployment_count=$(kubectl get deployments -l "release=${RELEASE_NAME}" --no-headers 2>/dev/null | wc -l || echo "0")
+            echo "📊 Found $deployment_count deployments (expecting $expected_deployments)"
+
+            if [ "$deployment_count" -ge "$expected_deployments" ]; then
+              echo "✅ All expected deployments have been created"
+              break
+            fi
+
+            echo "⏳ Waiting for more deployments... (${elapsed}s/${timeout}s)"
+            sleep 10
+            elapsed=$((elapsed + 10))
+          done
+
+          if [ $elapsed -ge $timeout ]; then
+            echo "❌ Timeout waiting for deployments to be created"
+            echo "📊 Final deployment status:"
+            kubectl get deployments -l "release=${RELEASE_NAME}" || echo "No deployments found"
+            echo "📊 All resources with release label:"
+            kubectl get all -l "release=${RELEASE_NAME}"
+            exit 1
+          fi
+
+          # List all created deployments for verification
+          echo "📋 Created deployments:"
+          kubectl get deployments -l "release=${RELEASE_NAME}"
+
+          echo "✅ Resource propagation complete"
+
       - name: Test Inter-Service Connectivity
         run: |
           echo "🔗 Testing inter-service connectivity..."
