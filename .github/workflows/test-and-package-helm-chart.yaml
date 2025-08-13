@@ -235,7 +235,72 @@ jobs:
           echo "📋 Created deployments:"
           kubectl get deployments --no-headers | grep "^${RELEASE_NAME}-" || echo "No deployments found"
 
-          echo "✅ Resource propagation complete"
+          echo ""
+          echo "🔍 Detailed pod status monitoring for troubleshooting frontend..."
+
+          # Monitor pods every 30 seconds for 3 minutes to see what's happening
+          monitor_timeout=180  # 3 minutes
+          monitor_elapsed=0
+
+          while [ $monitor_elapsed -lt $monitor_timeout ]; do
+            echo ""
+            echo "======================================="
+            echo "📊 Pod Status Check (${monitor_elapsed}s/${monitor_timeout}s)"
+            echo "======================================="
+
+            echo "🔍 All pods with details:"
+            kubectl get pods -l "release=${RELEASE_NAME}" -o wide --show-labels
+
+            echo ""
+            echo "🔍 Frontend pod detailed status:"
+            FRONTEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-frontend" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+            if [ -n "$FRONTEND_POD" ]; then
+              echo "📋 Frontend pod: $FRONTEND_POD"
+              kubectl describe pod $FRONTEND_POD | grep -A 10 -E "(Conditions:|Init Containers:|Containers:)"
+
+              echo ""
+              echo "📋 Frontend init container logs (last 20 lines):"
+              kubectl logs $FRONTEND_POD --all-containers=true --tail=20 2>/dev/null || echo "❌ No logs available yet"
+
+              # Check if frontend is ready
+              FRONTEND_READY=$(kubectl get pod $FRONTEND_POD -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "Unknown")
+              if [ "$FRONTEND_READY" = "True" ]; then
+                echo "✅ Frontend pod is now ready!"
+                break
+              else
+                echo "⏳ Frontend pod not ready yet (Ready: $FRONTEND_READY)"
+              fi
+            else
+              echo "❌ Frontend pod not found"
+            fi
+
+            echo ""
+            echo "🔍 Backend pod status for comparison:"
+            BACKEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-backend" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+            if [ -n "$BACKEND_POD" ]; then
+              BACKEND_READY=$(kubectl get pod $BACKEND_POD -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "Unknown")
+              echo "📋 Backend pod: $BACKEND_POD (Ready: $BACKEND_READY)"
+
+              if [ "$BACKEND_READY" = "True" ]; then
+                echo "✅ Backend is ready and should be accepting connections"
+
+                # Test backend connectivity from within cluster
+                echo "🧪 Testing backend connectivity from cluster:"
+                kubectl run test-backend-connectivity --image=busybox:1.35 --rm -i --restart=Never -- sh -c "nc -z ${RELEASE_NAME}-depictio-backend 80 && echo 'Backend service accessible' || echo 'Backend service not accessible'" || echo "Test failed"
+              else
+                echo "⏳ Backend not ready yet"
+              fi
+            else
+              echo "❌ Backend pod not found"
+            fi
+
+            # Wait 30 seconds before next check
+            sleep 30
+            monitor_elapsed=$((monitor_elapsed + 30))
+          done
+
+          echo ""
+          echo "✅ Resource propagation monitoring complete"
 
       - name: Test Inter-Service Connectivity
         run: |
