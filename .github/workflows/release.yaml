@@ -46,8 +46,15 @@ jobs:
       - name: Generate changelog
         id: changelog
         run: |
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          bash .github/scripts/changelog_generator.sh $PREVIOUS_TAG ${{ github.ref_name }} > CHANGELOG.md
+          # Get the previous release tag (excluding the current tag being released)
+          CURRENT_TAG="${{ github.ref_name }}"
+          PREVIOUS_TAG=$(git tag -l --sort=-version:refname | grep -v "^${CURRENT_TAG}$" | head -1)
+          if [ -z "$PREVIOUS_TAG" ]; then
+            echo "No previous tag found, generating full changelog"
+            PREVIOUS_TAG=""
+          fi
+          echo "Generating changelog from $PREVIOUS_TAG to $CURRENT_TAG"
+          bash .github/scripts/changelog_generator.sh "$PREVIOUS_TAG" "$CURRENT_TAG" > CHANGELOG.md
 
           # Convert to GitHub Actions output
           CHANGELOG=$(cat CHANGELOG.md)

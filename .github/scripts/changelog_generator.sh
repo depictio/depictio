@@ -5,8 +5,18 @@
 # echo "" # Add an extra blank line before the version header for spacing
 
 # Get range (can be tag, commit, or branch names)
-PREVIOUS_TAG=${1:-$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")}
+PREVIOUS_TAG=${1:-""}
 CURRENT_REF=${2:-HEAD}
+
+# If no previous tag provided, try to find the last release tag (excluding current)
+if [ -z "$PREVIOUS_TAG" ] && [ "$CURRENT_REF" != "HEAD" ]; then
+  PREVIOUS_TAG=$(git tag -l --sort=-version:refname | grep -v "^${CURRENT_REF}$" | head -1)
+fi
+
+# Final fallback to git describe if still no tag found
+if [ -z "$PREVIOUS_TAG" ]; then
+  PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+fi
 CURRENT_VERSION=${CURRENT_REF#v}
 
 # echo "## $CURRENT_VERSION" # Version header
