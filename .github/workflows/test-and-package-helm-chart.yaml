@@ -206,7 +206,8 @@ jobs:
           expected_deployments=4  # mongo, minio, backend, frontend
 
           while [ $elapsed -lt $timeout ]; do
-            deployment_count=$(kubectl get deployments -l "release=${RELEASE_NAME}" --no-headers 2>/dev/null | wc -l || echo "0")
+            # Count deployments by their names (since label selectors aren't matching properly)
+            deployment_count=$(kubectl get deployments --no-headers 2>/dev/null | grep -c "^${RELEASE_NAME}-" || echo "0")
             echo "📊 Found $deployment_count deployments (expecting $expected_deployments)"
 
             if [ "$deployment_count" -ge "$expected_deployments" ]; then
@@ -222,7 +223,9 @@ jobs:
           if [ $elapsed -ge $timeout ]; then
             echo "❌ Timeout waiting for deployments to be created"
             echo "📊 Final deployment status:"
-            kubectl get deployments -l "release=${RELEASE_NAME}" || echo "No deployments found"
+            kubectl get deployments --no-headers | grep "^${RELEASE_NAME}-" || echo "No deployments found with prefix ${RELEASE_NAME}-"
+            echo "📊 All deployments:"
+            kubectl get deployments
             echo "📊 All resources with release label:"
             kubectl get all -l "release=${RELEASE_NAME}"
             exit 1
@@ -230,7 +233,7 @@ jobs:
 
           # List all created deployments for verification
           echo "📋 Created deployments:"
-          kubectl get deployments -l "release=${RELEASE_NAME}"
+          kubectl get deployments --no-headers | grep "^${RELEASE_NAME}-" || echo "No deployments found"
 
           echo "✅ Resource propagation complete"
 
