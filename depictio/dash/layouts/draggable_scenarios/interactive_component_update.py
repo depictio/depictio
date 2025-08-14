@@ -229,8 +229,8 @@ def render_raw_children(
     #     logger.info(f"Processing card component: {component}")
 
     # Add theme to component if it's a figure
-    if comp_type == "figure":
-        component["theme"] = theme
+    component["theme"] = theme
+    logger.info(f"INTERACTIVE - Using theme: {theme} for component {comp_type}")
 
     # Build the component using the helpers_mapping
     try:
@@ -463,9 +463,9 @@ def update_interactive_component(
             component["access_token"] = TOKEN
 
             # Add theme to component if it's a figure
-            if component["component_type"] == "figure":
-                component["theme"] = theme
-                # logger.info(f"GRAPH COMPONENT - {component}")
+            # if component["component_type"] == "figure":
+            component["theme"] = theme
+            # logger.info(f"GRAPH COMPONENT - {component}")
 
             # Debug: Log component data for text components before calling helper
             if component["component_type"] == "text":

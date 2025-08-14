@@ -97,9 +97,8 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
         # logger.info(f"build_function : {build_function.__name__}")
 
         # Add theme to child metadata for figure generation
-        if component_type == "figure":
-            child_metadata["theme"] = theme
-            logger.info(f"Using theme: {theme} for figure component")
+        child_metadata["theme"] = theme
+        logger.info(f"Using theme: {theme} for component {component_type}")
 
         # Build the child using the appropriate function and kwargs
         child = build_function(**child_metadata)
