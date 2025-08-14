@@ -1,0 +1,1138 @@
+{
+  "json_parse_errors": [],
+  "empty_extractions": [],
+  "unknown_patterns": [
+    {
+      "anchor": "somalier_relatedness_heatmap_plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "quast_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "gtdbtk-first-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "xenome-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "isoseq_refine_boxplot_threelen",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "vcftools-relatedness2-heatmap-2",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "cellranger-gex-stats-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "prinseplusplus-filtered-reads-violin",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "dragen-cov-metrics-own-section-qc-coverage-region-1-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "nanoq_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "somalier_relatedness_plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "isoseq_refine_bargraph",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "Sample_Stat_Read_Length",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "rna_seqc_correlation_heatmap",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "fastqc_top_overrepresented_sequences_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "sequali_top_overrepresented_sequences_table_read1",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "idhist_bbm_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "gatk_ask_stats",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "peddy_het_check_plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "gatk-base-recalibrator-reported-empirical-plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "cellranger-vdj-annot-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "peddy_relatedness_plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "dragen-trimmer-metrics-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "picard_validatesamfile_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "qhist_bbm_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "mvcf-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "multiqc_lima_counts",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "sexdeterrmine-rate-plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "cellranger-arc-warnings-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "happy_snp_plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "nanostat_fastq_stats_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "nanostat_aligned_stats_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "somalier_ancestry_pca_plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "mgi_lane_stats_plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "dragen-cov-metrics-own-section-qc-coverage-region-2-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "bclconvert-sample-stats-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "samtools-stats-dp",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "run_metrics_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "nanostat_fasta_stats_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "spaceranger-count-warnings",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "hops-heatmap",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "picard-crosscheckfingerprints-heatmap",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "nextclade_run_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "rna_seqc_bam_stat_violin",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "deeptools_estimate_read_filtering_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "vcftools-relatedness2-heatmap-1",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "qc3C_bam_runtime_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "ihist_bbm_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "cellranger-antibody-stats-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "picard-illumina-lane-metrics-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "well_metrics_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "samtools-flagstat-pct-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "goleft_indexcov-bin-plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "deeptools_fragmentlengths_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "clusterflow-pipelines-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "interop-indexmetrics-summary-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "picard-crosscheckfingerprints-sample-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "mgi_lane_ambiguous_plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "dragen-cov-metrics-own-section-wgs-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "dragen-cov-metrics-own-section-target-bed-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "somalier_het_check_plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "rseqc_bam_stat",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "stats_bbm_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "sourmash-compare-heatmap-gut_compare",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "librarian-library-type-plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "minionqc-stats-qFilt-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "isoseq_refine_boxplot_insertlen",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "dragen-mapping-metrics-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "cellranger-vdj-stats-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "qc3C_kmer_runtime_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "minionqc-stats-qAll-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "cellranger-count-stats-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "verifybamid-results",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "fastp_top_overrepresented_sequences_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "sequali_most_common_adapters_read_2",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "gstacks_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "slamdunk_pca",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "clusterflow-commands-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "deeptools_pca_plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "dragen_ploidy_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "cellranger-atac-stats-table2",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "deeptools_coverage_metrics_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "vg_stats_violin",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "peddy_pca_plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "checkm2-first-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "bustools_summary",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "peddy_sex_check_plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "vep-general-stats",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "gffcompare_accuracy_plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "spaceranger-count-stats",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "cellranger-atac-stats-table1",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "nanostat_seq_summary_stats_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "supernova_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "purple_summary",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "deeptools_correlation_plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "samtools-coverage-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "samtools-markdup-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "dragen-gvcf-metrics-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "biscuit_seq_depth",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "xengsort-summary-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "qc3C_kmer_signal_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "isoseq_refine_boxplot_polyAlen",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "interop-runmetrics-summary-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "sumstats_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "batch_metrics_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "ngsderive_instruments_plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "umicollapse_stats_violin",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "sequali_adapter_content_from_overlap_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "cellranger-vdj-warnings-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "pycoqc_stats_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "longranger_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "picard_variantcallingmetrics_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "checkm-first-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "qahist_bbm_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "samtools-ampliconclip-pct-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "ngsbits_mappingqc_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "bcl2fastq-lane-stats-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "interop-runmetrics-detail-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "deeptools_readlengths_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "odgi_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "star_summary_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "gchist_bbm_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "somalier_sex_check_plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "picard-crosscheckfingerprints-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "glimpse-err-spl-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "ngsbits_readqc_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "sourmash-compare-heatmap-gut_compare_2",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "samtools-flagstat-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "kat-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "bamdst-coverage-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "dragen-gc-metrics-summary-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "bamtools-stats-plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "general_stats_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "samplegender",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "umitools_stats_violin",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "cellranger-count-warnings-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "picard_hsmetrics_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "bclconvert-lane-stats-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "whatshap-stats-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "kraken-top-duplication_plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "interop-indexmetrics-details-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "gatk_compare_overlap",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "happy_indel_plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "slamdunk_filtering_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "haplocheck-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "ivar-primer-count-heatmap",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "ganon-stats-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "dragen-vc-metrics-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "bismark-methylation-dp",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "megahit-stats-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "nonpareil-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "fastqc-status-check-heatmap",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "sample_qc_metric_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "mosaicatcher-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "samtools-ampliconclip-table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "somalier_stats",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "isoseq_refine_boxplot_fivelen",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "truvari-bench-pre-rec-plot",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "pangolin_run_table",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    },
+    {
+      "anchor": "sequali_most_common_adapters_read_1",
+      "structure_info": {
+        "raw_type": "dict"
+      },
+      "rows": 1
+    }
+  ],
+  "no_samples": [],
+  "analysis_summary": {
+    "total_plot_input_anchors": 565,
+    "successful_extractions": 405,
+    "success_rate": "71.7%",
+    "json_parse_errors": 0,
+    "empty_extractions": 0,
+    "unknown_patterns": 160,
+    "no_samples_extracted": 0,
+    "total_tabular_anchors": 50,
+    "tabular_success_rate": "100%"
+  }
+}
