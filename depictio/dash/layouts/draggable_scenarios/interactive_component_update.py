@@ -10,8 +10,6 @@ from depictio.api.v1.deltatables_utils import (
     return_joins_dict,
 )
 from depictio.dash.component_metadata import get_build_functions
-
-# Import parallel processing function from restore_dashboard
 from depictio.dash.layouts.edit import enable_box_edit_mode
 from depictio.dash.modules.jbrowse_component.utils import (
     build_jbrowse_df_mapping_dict,
@@ -140,7 +138,7 @@ def group_interactive_components(interactive_components_dict):
     return grouped
 
 
-# Get helpers mapping from centralized metadata - use sync functions for sync context
+# Get helpers mapping from centralized metadata
 helpers_mapping = get_build_functions()
 
 
@@ -231,8 +229,8 @@ def render_raw_children(
     #     logger.info(f"Processing card component: {component}")
 
     # Add theme to component if it's a figure
-    if comp_type == "figure":
-        component["theme"] = theme
+    component["theme"] = theme
+    logger.info(f"INTERACTIVE - Using theme: {theme} for component {comp_type}")
 
     # Build the component using the helpers_mapping
     try:
@@ -287,55 +285,7 @@ def render_raw_children(
     return child, index
 
 
-def update_interactive_component_sync(
-    stored_metadata_raw,
-    interactive_components_dict,
-    current_draggable_children,
-    switch_state,
-    TOKEN,
-    dashboard_id,
-    theme="light",  # Add theme parameter with default
-):
-    """
-    Synchronous version for update_interactive_component (async functionality disabled).
-    """
-    logger.info("🔄 SYNC INTERACTIVE: Processing interactive components synchronously")
-
-    return _update_interactive_component_core(
-        stored_metadata_raw,
-        interactive_components_dict,
-        current_draggable_children,
-        switch_state,
-        TOKEN,
-        dashboard_id,
-        theme,
-    )
-
-
-def update_interactive_component_async(
-    stored_metadata_raw,
-    interactive_components_dict,
-    current_draggable_children,
-    switch_state,
-    TOKEN,
-    dashboard_id,
-    theme="light",  # Add theme parameter with default
-):
-    """
-    Async wrapper disabled - now calls sync version directly.
-    """
-    return update_interactive_component_sync(
-        stored_metadata_raw,
-        interactive_components_dict,
-        current_draggable_children,
-        switch_state,
-        TOKEN,
-        dashboard_id,
-        theme,
-    )
-
-
-def _update_interactive_component_core(
+def update_interactive_component(
     stored_metadata_raw,
     interactive_components_dict,
     current_draggable_children,
@@ -484,15 +434,7 @@ def _update_interactive_component_core(
 
     # logger.info(f"df_dict_processed - {df_dict_processed}")
 
-    # 🔨 PERFORMANCE: Use sequential processing for interactive component updates (async disabled)
-    logger.info(
-        f"🔨 INTERACTIVE SEQUENTIAL: Starting sequential build of {len(stored_metadata)} components for interactive update"
-    )
-
-    # Separate components that need processing from those that can be reused
-    components_to_build = []
-    reused_children = []
-
+    # Add or update the non-interactive components
     for component in stored_metadata:
         logger.info(f"DEBUG - interactive_component_update - Processing component: {component}")
 
@@ -515,117 +457,104 @@ def _update_interactive_component_core(
                         f"Component {component['index']} not found in interactive_components_dict, preserving existing value: {component.get('value', 'None')}"
                     )
 
-            # PERFORMANCE OPTIMIZATION: Skip rebuilding non-interactive components
-            # Figure components don't need to be rebuilt unless they depend on interactive filters
-            if (
-                component["component_type"] in ["figure", "card", "table"]
-                and not interactive_components_dict
-            ):
-                # No interactive components to process - reuse existing child from current_draggable_children
-                logger.info(
-                    f"⚡ SKIPPING REBUILD: {component['component_type']} component {component['index']} - no interactive dependencies"
-                )
-                # Find the existing child component and reuse it
-                existing_child = None
-                for existing_child_candidate in current_draggable_children:
-                    try:
-                        # Extract the component index from the existing child
-                        if (
-                            hasattr(existing_child_candidate, "children")
-                            and existing_child_candidate.children
-                        ):
-                            child_id = (
-                                existing_child_candidate.children[0].id
-                                if hasattr(existing_child_candidate.children[0], "id")
-                                else None
-                            )
-                            if child_id and child_id.get("index") == component["index"]:
-                                existing_child = existing_child_candidate
-                                break
-                    except (AttributeError, IndexError, TypeError):
-                        continue
-
-                if existing_child:
-                    reused_children.append(
-                        (existing_child, component["component_type"], component["index"])
-                    )
-                    logger.info(
-                        f"✅ REUSED: Existing {component['component_type']} component {component['index']}"
-                    )
-                    continue
-                else:
-                    logger.warning(
-                        f"⚠️ FALLBACK: Could not find existing child for {component['component_type']} {component['index']}, rebuilding"
-                    )
-
-            # Add to components that need parallel building
+            # Set component parameters to use pre-loaded data
             component["build_frame"] = True
             component["refresh"] = False
             component["access_token"] = TOKEN
 
             # Add theme to component if it's a figure
-            if component["component_type"] == "figure":
-                component["theme"] = theme
-                logger.info(
-                    f"🔄 REBUILDING: Figure component {component['index']} due to interactive dependencies"
-                )
+            # if component["component_type"] == "figure":
+            component["theme"] = theme
+            # logger.info(f"GRAPH COMPONENT - {component}")
 
-            components_to_build.append(component)
+            # Debug: Log component data for text components before calling helper
+            if component["component_type"] == "text":
+                logger.info(f"DEBUG - Calling build_text with component data: {component}")
+
+            child = helpers_mapping[component["component_type"]](**component)
+
+            # Debug: Log component type for verification
+            if component["component_type"] == "figure":
+                logger.info(f"Figure component child type: {type(child)}")
+                # Check if Loading component is preserved (native component check)
+                if hasattr(child, "type") and child.type == "Loading":
+                    logger.info(
+                        "✅ Loading component preserved in figure during interactive update"
+                    )
+                elif hasattr(child, "__class__") and "Loading" in str(child.__class__):
+                    logger.info(
+                        "✅ Loading component preserved in figure during interactive update"
+                    )
+                else:
+                    logger.info(
+                        f"ℹ️ Figure component type: {getattr(child, 'type', 'Unknown')} (may still have loading)"
+                    )
+            # Debug: Log card component info if needed
+            # if component["component_type"] == "card":
+            #     logger.debug(f"Card component type: {type(child)}")
+
+            # Process component as native Dash component (no JSON conversion)
+            # try:
+            logger.info(
+                f"DEBUG update_interacteive - {component['component_type']} component as native Dash component"
+            )
+
+            # Pass the native component directly - preserves Loading wrappers and improves performance
+            child = enable_box_edit_mode(
+                child,  # Native Dash component
+                switch_state=switch_state,
+                dashboard_id=dashboard_id,
+                TOKEN=TOKEN,
+            )
+
+            if component["component_type"] == "text":
+                logger.info(f"DEBUG text component {child.id} with content: {child}")
+
+            # except Exception as e:
+            #     logger.error(
+            #         f"Error processing {component['component_type']} component (line 460 path): {e}"
+            #     )
+            #     # Fallback to prevent dashboard failure
+            #     fallback_child = {
+            #         "type": "Div",
+            #         "props": {
+            #             "id": {"index": component.get("index", "unknown")},
+            #             "children": f"Error loading {component['component_type']} component",
+            #         },
+            #     }
+            #     child = enable_box_edit_mode(
+            #         fallback_child,
+            #         switch_state=switch_state,
+            #         dashboard_id=dashboard_id,
+            #         TOKEN=TOKEN,
+            #     )
+            children.append(child)
 
         elif component["component_type"] == "jbrowse":
-            # Handle jbrowse separately as it's not optimized for parallel processing yet
             component["stored_metadata_jbrowse"] = stored_metadata_jbrowse_components
             component["refresh"] = True
             component["access_token"] = TOKEN
             component["dashboard_id"] = dashboard_id
 
+            # Add theme to component if it's a figure (though jbrowse shouldn't need it)
+            if component["component_type"] == "figure":
+                component["theme"] = theme
+
             child = helpers_mapping[component["component_type"]](**component)
+
             logger.debug(f"JBROWSE CHILD - {child}")
 
             # Process jbrowse component as native Dash component
             child = enable_box_edit_mode(
-                child,
+                child,  # Native Dash component (no JSON conversion needed)
                 switch_state=switch_state,
                 dashboard_id=dashboard_id,
                 TOKEN=TOKEN,
             )
 
             children.append(child)
+        # logger.info(f"ITERATIVE - len(children) - {len(children)}")
 
-    # 🚀 Build components in parallel if we have any to build
-    if components_to_build:
-        logger.info(
-            f"🔨 INTERACTIVE SEQUENTIAL: Building {len(components_to_build)} components sequentially"
-        )
-
-        # Use the sequential processing from restore_dashboard (async disabled)
-        from depictio.dash.layouts.draggable_scenarios.restore_dashboard import (
-            build_components_sequential,
-        )
-
-        built_components = build_components_sequential(components_to_build, {}, theme, TOKEN)
-
-        # Process built components through enable_box_edit_mode
-        for built_component, component_type in built_components:
-            processed_child = enable_box_edit_mode(
-                built_component,
-                switch_state=switch_state,
-                dashboard_id=dashboard_id,
-                TOKEN=TOKEN,
-            )
-            children.append(processed_child)
-            logger.info(f"✅ SEQUENTIAL BUILD: Processed {component_type} component")
-
-    # Add reused components to the children list
-    for reused_child, component_type, component_index in reused_children:
-        children.append(reused_child)
-        logger.info(f"✅ REUSED: Added {component_type} component {component_index} to children")
-
-    logger.info(
-        f"🏁 INTERACTIVE SEQUENTIAL: Total children: {len(children)} ({len([c for c, _, _ in reused_children])} reused + {len(components_to_build)} rebuilt)"
-    )
+    # logger.info(f"Len children - {len(children)}")
+    # logger.info(f"Children - {children}")
     return children
-
-
-# Backward compatibility alias - points to sync version for regular callbacks
-update_interactive_component = update_interactive_component_sync

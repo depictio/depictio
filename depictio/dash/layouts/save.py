@@ -70,53 +70,54 @@ def validate_and_clean_orphaned_layouts(stored_layout_data, stored_metadata):
 
 def register_callbacks_save(app):
     @app.callback(
-        Input("save-button-dashboard", "n_clicks"),
-        Input("draggable", "currentLayout"),
-        Input(
-            {
-                "type": "stored-metadata-component",
-                "index": ALL,
-            },
-            "data",
-        ),
-        State("stored-edit-dashboard-mode-button", "data"),
-        Input("unified-edit-mode-button", "checked"),
-        State("stored-add-button", "data"),
-        State({"type": "interactive-component-value", "index": ALL}, "value"),
-        Input({"type": "text-store", "index": ALL}, "data"),
-        Input("notes-editor-store", "data"),
-        State("url", "pathname"),
-        State("local-store", "data"),
-        State("user-cache-store", "data"),
-        Input(
-            {
-                "type": "btn-done",
-                "index": ALL,
-            },
-            "n_clicks",
-        ),
-        Input(
-            {
-                "type": "btn-done-edit",
-                "index": ALL,
-            },
-            "n_clicks",
-        ),
-        Input(
-            {
-                "type": "duplicate-box-button",
-                "index": ALL,
-            },
-            "n_clicks",
-        ),
-        Input(
-            {"type": "remove-box-button", "index": ALL},
-            "n_clicks",
-        ),
-        Input("remove-all-components-button", "n_clicks"),
-        Input({"type": "interactive-component-value", "index": ALL}, "value"),
+        inputs=[
+            Input("save-button-dashboard", "n_clicks"),
+            Input("draggable", "currentLayout"),
+            Input(
+                {
+                    "type": "stored-metadata-component",
+                    "index": ALL,
+                },
+                "data",
+            ),
+            State("stored-edit-dashboard-mode-button", "data"),
+            Input("unified-edit-mode-button", "checked"),
+            State("stored-add-button", "data"),
+            State({"type": "interactive-component-value", "index": ALL}, "value"),
+            Input({"type": "text-store", "index": ALL}, "data"),
+            Input("notes-editor-store", "data"),
+            State("url", "pathname"),
+            State("local-store", "data"),
+            State("user-cache-store", "data"),
+            Input(
+                {
+                    "type": "btn-done",
+                    "index": ALL,
+                },
+                "n_clicks",
+            ),
+            Input(
+                {
+                    "type": "btn-done-edit",
+                    "index": ALL,
+                },
+                "n_clicks",
+            ),
+            Input(
+                {
+                    "type": "duplicate-box-button",
+                    "index": ALL,
+                },
+                "n_clicks",
+            ),
+            Input(
+                {"type": "remove-box-button", "index": ALL},
+                "n_clicks",
+            ),
+            Input("remove-all-components-button", "n_clicks"),
+            Input({"type": "interactive-component-value", "index": ALL}, "value"),
+        ],
         prevent_initial_call=True,
-        allow_optional=True,  # Allow optional inputs for components that may not exist
     )
     def save_data_dashboard(
         n_clicks,
@@ -174,7 +175,7 @@ def register_callbacks_save(app):
         # Early return if user is not logged in
         if not local_store:
             logger.warning("User not logged in.")
-            return
+            raise dash.exceptions.PreventUpdate
 
         # Validate user authentication using consolidated cache
         from depictio.models.models.users import UserContext
@@ -187,7 +188,7 @@ def register_callbacks_save(app):
             current_user_api = api_call_fetch_user_from_token(TOKEN)
             if not current_user_api:
                 logger.warning("User not found.")
-                return
+                raise dash.exceptions.PreventUpdate
             # Create UserContext from API response for consistency
             current_user = UserContext(
                 id=str(current_user_api.id),
@@ -205,13 +206,13 @@ def register_callbacks_save(app):
         dashboard_data = api_call_get_dashboard(dashboard_id, TOKEN)
         if not dashboard_data:
             logger.error(f"Failed to fetch dashboard data for {dashboard_id}")
-            return
+            raise dash.exceptions.PreventUpdate
 
         # Check user permissions
         owner_ids = [str(e["id"]) for e in dashboard_data.get("permissions", {}).get("owners", [])]
         if str(current_user.id) not in owner_ids:
             logger.warning("User does not have permission to edit & save this dashboard.")
-            return
+            raise dash.exceptions.PreventUpdate
 
         # Determine trigger context
         from dash import ctx
@@ -239,7 +240,7 @@ def register_callbacks_save(app):
             not any(trigger in triggered_id for trigger in save_triggers)
             or not unified_edit_mode_button_checked
         ):
-            return
+            raise dash.exceptions.PreventUpdate
 
         # Deduplicate and clean metadata - prioritize complete metadata entries
         unique_metadata = []
@@ -687,7 +688,7 @@ def register_callbacks_save(app):
             if not screenshot_success:
                 logger.warning(f"Failed to save dashboard screenshot for {dashboard_id}")
 
-        return
+        # Pure side-effect callback - no return needed
 
     @app.callback(
         Output("success-modal-dashboard", "is_open"),

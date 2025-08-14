@@ -123,18 +123,18 @@ def apply_ag_grid_sorting(df: pl.DataFrame, sort_model: list) -> pl.DataFrame:
 
 
 def register_callbacks_table_component(app):
-    @app.callback(
-        Output({"type": "table-aggrid", "index": MATCH}, "className"),
-        Input("theme-store", "data"),
-        prevent_initial_call=False,
-    )
-    def update_table_ag_grid_theme(theme_data):
-        """Update AG Grid theme class based on current theme."""
-        theme = theme_data or "light"
-        if theme == "dark":
-            return "ag-theme-alpine-dark"
-        else:
-            return "ag-theme-alpine"
+    # @app.callback(
+    #     Output({"type": "table-aggrid", "index": MATCH}, "className"),
+    #     Input("theme-store", "data"),
+    #     prevent_initial_call=False,
+    # )
+    # def update_table_ag_grid_theme(theme_data):
+    #     """Update AG Grid theme class based on current theme."""
+    #     theme = theme_data or "light"
+    #     if theme == "dark":
+    #         return "ag-theme-alpine-dark"
+    #     else:
+    #         return "ag-theme-alpine"
 
     @app.callback(
         Output({"type": "table-aggrid", "index": MATCH}, "getRowsResponse"),
@@ -528,24 +528,25 @@ def register_callbacks_table_component(app):
             partial_df = df[start_row:end_row]
             actual_rows_returned = partial_df.shape[0]
 
-            # Convert to format expected by AG Grid using efficient Polars serialization
+            # Convert to format expected by AG Grid
+            pandas_df = partial_df.to_pandas()
+
             # Transform column names to replace dots with underscores for AgGrid compatibility
             column_mapping = {}
-            for col in partial_df.columns:
+            for col in pandas_df.columns:
                 if "." in col:
                     new_col = col.replace(".", "_")
                     column_mapping[col] = new_col
                     logger.debug(f"🔍 DEBUG: Renaming column '{col}' to '{new_col}' for AgGrid")
 
             if column_mapping:
-                partial_df = partial_df.rename(column_mapping)
-                logger.debug(f"🔍 DEBUG: Transformed columns: {list(partial_df.columns)}")
+                pandas_df = pandas_df.rename(columns=column_mapping)
+                logger.debug(f"🔍 DEBUG: Transformed columns: {list(pandas_df.columns)}")
 
-            # Add ID field for SpinnerCellRenderer using Polars operations
-            partial_df = partial_df.with_row_index("ID", offset=start_row)
-
-            # Use efficient Polars serialization instead of pandas conversion
-            row_data = partial_df.to_dicts()
+            # Add ID field for SpinnerCellRenderer (following documentation example)
+            pandas_df.reset_index(drop=True, inplace=True)
+            pandas_df["ID"] = range(start_row, start_row + len(pandas_df))
+            row_data = pandas_df.to_dict("records")
 
             # LOGGING: Track successful data delivery
             logger.info(
@@ -677,7 +678,7 @@ def register_callbacks_table_component(app):
             "build_frame": True,  # Use frame for editing with loading
             "theme": theme,
         }
-        logger.info(f"🔧 Building table with kwargs: {table_kwargs}")
+        logger.info(f"🔄 Building table with kwargs: {table_kwargs}")
         new_table = build_table(**table_kwargs)
         return new_table
 
