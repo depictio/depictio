@@ -36,6 +36,23 @@ from depictio.models.models.base import convert_objectid_to_str
 # GROUP_OPTIONS = []  # Disabled for user-only permissions
 
 
+def _get_ag_grid_theme_class(theme: str) -> str:
+    """Get the appropriate AG Grid theme class based on the theme.
+
+    Args:
+        theme: Theme name ("light", "dark", or other)
+
+    Returns:
+        AG Grid CSS theme class name
+    """
+    # Handle case where theme is empty dict, None, or other falsy value
+    if not theme or theme == {} or theme == "{}":
+        theme = "light"
+
+    logger.debug(f"PROJECTWISE USER MANAGEMENT - Using theme: {theme} for AG Grid")
+    return "ag-theme-alpine-dark" if theme == "dark" else "ag-theme-alpine"
+
+
 def extract_project_id_from_pathname(pathname: str) -> str:
     """
     Extract project ID from pathname, handling both regular project pages and sub-pages like permissions.
@@ -292,149 +309,156 @@ text_table_header = dmc.Text("Project Permissions", size="xl", fw="bold")
 # Main Layout Definition
 # -----------------------------------------------------------------------------
 
-layout = dmc.Container(
-    [
-        # Modals and Store
-        user_exists_modal,
-        cannot_delete_owner_modal,
-        make_project_public_modal,
-        cannot_change_last_owner_modal,
-        store_make_project_public_modal,
-        user_permissions_store,
-        # Project header and permissions grid
-        dmc.Box(id="permissions-manager-project-header"),
-        text_table_header,
-        dcc.Store(id="permissions-manager-grid-store", storage_type="memory"),
-        dag.AgGrid(
-            id="permissions-manager-grid",
-            columnDefs=create_column_defs(
-                is_admin=False, is_owner=False
-            ),  # Default to no permissions, will be updated by callback
-            defaultColDef={
-                "flex": 1,
-                "editable": False,  # Default to non-editable, will be controlled by column definitions
-                "resizable": True,
-                "sortable": True,
-            },
-            dashGridOptions={
-                "animateRows": True,
-                "pagination": True,
-                "paginationAutoPageSize": True,
-                "getRowId": "params.data.id",
-                "suppressClickEdit": True,  # Disable all click editing by default
-                "readOnlyEdit": True,  # Make grid read-only by default
-                "suppressCellSelection": True,  # Disable cell selection
-            },
-            className="ag-theme-alpine",
-            style={"height": "400px"},
-            columnSize="sizeToFit",
-        ),
-        # Controls for adding permissions
-        html.Hr(),
-        dmc.Card(
-            [
-                dmc.Grid(
-                    [
-                        dmc.Title("Add permissions section", order=3),
-                        dmc.GridCol(
-                            [
-                                html.Div(
-                                    [
-                                        dmc.Text("Permissions", fw="bold", size="sm"),
-                                        dmc.Group(
-                                            [
-                                                dmc.Checkbox(
-                                                    id="permissions-manager-checkbox-owner",
-                                                    label="Owner",
-                                                    value="Owner",
-                                                ),
-                                                dmc.Checkbox(
-                                                    id="permissions-manager-checkbox-editor",
-                                                    label="Editor",
-                                                    value="Editor",
-                                                ),
-                                                dmc.Checkbox(
-                                                    id="permissions-manager-checkbox-viewer",
-                                                    label="Viewer",
-                                                    value="Viewer",
-                                                ),
-                                            ],
-                                            gap="md",
-                                        ),
-                                    ]
-                                )
-                            ],
-                            span=12,
-                        ),
-                        # DISABLED: Group management section removed for user-only permissions
-                        # dmc.Col(
-                        #     [
-                        #         dmc.Group(
-                        #             [
-                        #                 dmc.Select(
-                        #                     id="permissions-manager-input-group",
-                        #                     label="Group",
-                        #                     placeholder="Select group",
-                        #                     data=[],  # Updated via callback
-                        #                     searchable=True,
-                        #                     clearable=True,
-                        #                     nothingFound="No group found",
-                        #                     style={"width": "300px"},
-                        #                 ),
-                        #                 dmc.Button(
-                        #                     "Add Group",
-                        #                     id="permissions-manager-btn-add-group",
-                        #                     color="green",
-                        #                     disabled=True,
-                        #                 ),
-                        #             ],
-                        #             position="left",
-                        #             align="flex-end",
-                        #             style={"width": "100%"},
-                        #         ),
-                        #     ],
-                        #     span=12,
-                        # ),
-                        dmc.GridCol(
-                            [
-                                dmc.Group(
-                                    [
-                                        dmc.MultiSelect(
-                                            id="permissions-manager-input-email",
-                                            label="Select Users",
-                                            placeholder="Select users by email",
-                                            data=[],  # Updated via callback
-                                            searchable=True,
-                                            clearable=True,
-                                            nothingFoundMessage="No users found",
-                                            style={"width": "400px"},
-                                        ),
-                                        dmc.Button(
-                                            "Add Users",
-                                            id="permissions-manager-btn-add-user",
-                                            color="blue",
-                                            disabled=True,
-                                        ),
-                                    ],
-                                    justify="flex-start",
-                                    align="flex-end",
-                                    style={"width": "100%"},
-                                ),
-                            ],
-                            span=12,
-                        ),
-                    ],
-                    align="flex-end",
-                )
-            ],
-            withBorder=True,
-            shadow="sm",
-            radius="md",
-            mt=20,
-            style={"overflow": "visible"},
-        ),
-    ]
-)
+
+def create_layout(theme="light"):
+    """Create the main layout with theme support."""
+    return dmc.Container(
+        [
+            # Modals and Store
+            user_exists_modal,
+            cannot_delete_owner_modal,
+            make_project_public_modal,
+            cannot_change_last_owner_modal,
+            store_make_project_public_modal,
+            user_permissions_store,
+            # Project header and permissions grid
+            dmc.Box(id="permissions-manager-project-header"),
+            text_table_header,
+            dcc.Store(id="permissions-manager-grid-store", storage_type="memory"),
+            dag.AgGrid(
+                id="permissions-manager-grid",
+                columnDefs=create_column_defs(
+                    is_admin=False, is_owner=False
+                ),  # Default to no permissions, will be updated by callback
+                defaultColDef={
+                    "flex": 1,
+                    "editable": False,  # Default to non-editable, will be controlled by column definitions
+                    "resizable": True,
+                    "sortable": True,
+                },
+                dashGridOptions={
+                    "animateRows": True,
+                    "pagination": True,
+                    "paginationAutoPageSize": True,
+                    "getRowId": "params.data.id",
+                    "suppressClickEdit": True,  # Disable all click editing by default
+                    "readOnlyEdit": True,  # Make grid read-only by default
+                    "suppressCellSelection": True,  # Disable cell selection
+                },
+                className=_get_ag_grid_theme_class(theme),
+                style={"height": "400px"},
+                columnSize="sizeToFit",
+            ),
+            # Controls for adding permissions
+            html.Hr(),
+            dmc.Card(
+                [
+                    dmc.Grid(
+                        [
+                            dmc.Title("Add permissions section", order=3),
+                            dmc.GridCol(
+                                [
+                                    html.Div(
+                                        [
+                                            dmc.Text("Permissions", fw="bold", size="sm"),
+                                            dmc.Group(
+                                                [
+                                                    dmc.Checkbox(
+                                                        id="permissions-manager-checkbox-owner",
+                                                        label="Owner",
+                                                        value="Owner",
+                                                    ),
+                                                    dmc.Checkbox(
+                                                        id="permissions-manager-checkbox-editor",
+                                                        label="Editor",
+                                                        value="Editor",
+                                                    ),
+                                                    dmc.Checkbox(
+                                                        id="permissions-manager-checkbox-viewer",
+                                                        label="Viewer",
+                                                        value="Viewer",
+                                                    ),
+                                                ],
+                                                gap="md",
+                                            ),
+                                        ]
+                                    )
+                                ],
+                                span=12,
+                            ),
+                            # DISABLED: Group management section removed for user-only permissions
+                            # dmc.Col(
+                            #     [
+                            #         dmc.Group(
+                            #             [
+                            #                 dmc.Select(
+                            #                     id="permissions-manager-input-group",
+                            #                     label="Group",
+                            #                     placeholder="Select group",
+                            #                     data=[],  # Updated via callback
+                            #                     searchable=True,
+                            #                     clearable=True,
+                            #                     nothingFound="No group found",
+                            #                     style={"width": "300px"},
+                            #                 ),
+                            #                 dmc.Button(
+                            #                     "Add Group",
+                            #                     id="permissions-manager-btn-add-group",
+                            #                     color="green",
+                            #                     disabled=True,
+                            #                 ),
+                            #             ],
+                            #             position="left",
+                            #             align="flex-end",
+                            #             style={"width": "100%"},
+                            #         ),
+                            #     ],
+                            #     span=12,
+                            # ),
+                            dmc.GridCol(
+                                [
+                                    dmc.Group(
+                                        [
+                                            dmc.MultiSelect(
+                                                id="permissions-manager-input-email",
+                                                label="Select Users",
+                                                placeholder="Select users by email",
+                                                data=[],  # Updated via callback
+                                                searchable=True,
+                                                clearable=True,
+                                                nothingFoundMessage="No users found",
+                                                style={"width": "400px"},
+                                            ),
+                                            dmc.Button(
+                                                "Add Users",
+                                                id="permissions-manager-btn-add-user",
+                                                color="blue",
+                                                disabled=True,
+                                            ),
+                                        ],
+                                        justify="flex-start",
+                                        align="flex-end",
+                                        style={"width": "100%"},
+                                    ),
+                                ],
+                                span=12,
+                            ),
+                        ],
+                        align="flex-end",
+                    )
+                ],
+                withBorder=True,
+                shadow="sm",
+                radius="md",
+                mt=20,
+                style={"overflow": "visible"},
+            ),
+        ]
+    )
+
+
+# Create default layout for backward compatibility
+layout = create_layout()
 
 # -----------------------------------------------------------------------------
 # Helper Functions for Callbacks
@@ -1223,8 +1247,4 @@ def register_projectwise_user_management_callbacks(app):
     )
     def update_ag_grid_theme(theme_data):
         """Update AG Grid theme class based on current theme."""
-        theme = theme_data or "light"
-        if theme == "dark":
-            return "ag-theme-alpine-dark"
-        else:
-            return "ag-theme-alpine"
+        return _get_ag_grid_theme_class(theme_data)
