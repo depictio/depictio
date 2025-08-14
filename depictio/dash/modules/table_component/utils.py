@@ -73,6 +73,24 @@ def build_table_frame(index, children=None):
         )
 
 
+def _get_theme_template(theme: str) -> str:
+    """Get the appropriate Plotly template based on the theme.
+
+    Args:
+        theme: Theme name ("light", "dark", or other)
+
+    Returns:
+        Plotly template name
+    """
+    # Handle case where theme is empty dict, None, or other falsy value
+    if not theme or theme == {} or theme == "{}":
+        theme = "light"
+
+    logger.info(f"TABLE COMPONENT - Using theme: {theme} for Plotly template")
+    # Use actual available Plotly templates
+    return "ag-theme-alpine-dark" if theme == "dark" else "ag-theme-alpine"
+
+
 def build_table(**kwargs):
     logger.info("build_table")
     # def build_card(index, title, wf_id, dc_id, dc_config, column_name, column_type, aggregation, v, build_frame=False):
@@ -81,6 +99,7 @@ def build_table(**kwargs):
     dc_id = kwargs.get("dc_id")
     dc_config = kwargs.get("dc_config")
     cols = kwargs.get("cols_json")
+    theme = kwargs.get("theme", "light")  # Default to light theme
     build_frame = kwargs.get("build_frame", False)
 
     df = kwargs.get("df", pl.DataFrame())
@@ -203,6 +222,9 @@ def build_table(**kwargs):
     logger.info(f"📊 Table {index}: Using INFINITE row model with interactive component support")
     logger.info("🔄 Interactive filters and pagination handled by infinite scroll callback")
 
+    logger.info(f"Using theme: {theme} for AG Grid template")
+    aggrid_theme = _get_theme_template(theme)  # Get the appropriate theme template
+
     # Always use infinite scroll configuration
     table_aggrid = dag.AgGrid(
         id={"type": value_div_type, "index": str(index)},
@@ -239,7 +261,7 @@ def build_table(**kwargs):
             "filter": True,
         },
         style={"width": "100%"},
-        className="ag-theme-alpine",  # Default theme, will be updated by callback
+        className=aggrid_theme,
     )
 
     logger.info(f"✅ Table {index}: Infinite row model configured with interactive support")
