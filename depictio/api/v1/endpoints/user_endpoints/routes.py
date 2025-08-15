@@ -125,19 +125,46 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
     """
     logger.debug(f"Login attempt for user: {login_request.username}")
 
+    # In unauthenticated mode, still allow real user login with valid credentials
     if settings.auth.unauthenticated_mode:
-        anon = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
-        token = await TokenBeanie.find_one({"user_id": anon.id, "token_lifetime": "permanent"})
-        if not token:
-            token = await _create_permanent_token(anon)
-        return token
-
-    if settings.auth.unauthenticated_mode:
-        anon = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
-        token = await TokenBeanie.find_one({"user_id": anon.id, "token_lifetime": "permanent"})
-        if not token:
-            token = await _create_permanent_token(anon)
-        return token
+        # Check if user provided valid credentials for a real user
+        try:
+            password_check = await _check_password(login_request.username, login_request.password)
+            if password_check:
+                # Valid user credentials - create token for real user
+                logger.info(
+                    f"Valid credentials for real user in unauthenticated mode: {login_request.username}"
+                )
+                token_name = f"{login_request.username}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                user = await _async_fetch_user_from_email(login_request.username)
+                token_data = TokenData(name=token_name, token_lifetime="short-lived", sub=user.id)
+                token = await _add_token(token_data)
+                if token is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Token with the same name already exists",
+                    )
+                return token
+            else:
+                # Invalid credentials - fallback to anonymous token
+                logger.info(
+                    "Invalid credentials in unauthenticated mode - returning anonymous token"
+                )
+                anon = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
+                token = await TokenBeanie.find_one(
+                    {"user_id": anon.id, "token_lifetime": "permanent"}
+                )
+                if not token:
+                    token = await _create_permanent_token(anon)
+                return token
+        except Exception as e:
+            # Error checking credentials - fallback to anonymous token
+            logger.warning(f"Error checking credentials in unauthenticated mode: {e}")
+            anon = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
+            token = await TokenBeanie.find_one({"user_id": anon.id, "token_lifetime": "permanent"})
+            if not token:
+                token = await _create_permanent_token(anon)
+            return token
 
     _ = await _check_password(login_request.username, login_request.password)
     if not _:
