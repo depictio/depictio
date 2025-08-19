@@ -457,6 +457,47 @@ def update_interactive_component(
                         f"Component {component['index']} not found in interactive_components_dict, preserving existing value: {component.get('value', 'None')}"
                     )
 
+            # PERFORMANCE OPTIMIZATION: Skip rebuilding non-interactive components
+            # Figure components don't need to be rebuilt unless they depend on interactive filters
+            if (
+                component["component_type"] in ["figure", "card", "table"]
+                and not interactive_components_dict
+            ):
+                # No interactive components to process - reuse existing child from current_draggable_children
+                logger.info(
+                    f"⚡ SKIPPING REBUILD: {component['component_type']} component {component['index']} - no interactive dependencies"
+                )
+                # Find the existing child component and reuse it
+                existing_child = None
+                for existing_child_candidate in current_draggable_children:
+                    try:
+                        # Extract the component index from the existing child
+                        if (
+                            hasattr(existing_child_candidate, "children")
+                            and existing_child_candidate.children
+                        ):
+                            child_id = (
+                                existing_child_candidate.children[0].id
+                                if hasattr(existing_child_candidate.children[0], "id")
+                                else None
+                            )
+                            if child_id and child_id.get("index") == component["index"]:
+                                existing_child = existing_child_candidate
+                                break
+                    except (AttributeError, IndexError, TypeError):
+                        continue
+
+                if existing_child:
+                    children.append(existing_child)
+                    logger.info(
+                        f"✅ REUSED: Existing {component['component_type']} component {component['index']}"
+                    )
+                    continue
+                else:
+                    logger.warning(
+                        f"⚠️ FALLBACK: Could not find existing child for {component['component_type']} {component['index']}, rebuilding"
+                    )
+
             # Set component parameters to use pre-loaded data
             component["build_frame"] = True
             component["refresh"] = False
@@ -465,7 +506,9 @@ def update_interactive_component(
             # Add theme to component if it's a figure
             if component["component_type"] == "figure":
                 component["theme"] = theme
-                # logger.info(f"GRAPH COMPONENT - {component}")
+                logger.info(
+                    f"🔄 REBUILDING: Figure component {component['index']} due to interactive dependencies"
+                )
 
             # Debug: Log component data for text components before calling helper
             if component["component_type"] == "text":
