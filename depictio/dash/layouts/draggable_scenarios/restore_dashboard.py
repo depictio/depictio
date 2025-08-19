@@ -77,11 +77,72 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
         f"📊 RESTORE DEBUG - After cleaning, metadata count: {len(stored_metadata) if stored_metadata else 0}"
     )
 
+    # PERFORMANCE OPTIMIZATION: Pre-fetch all component data in bulk
+    component_ids = [metadata.get("index") for metadata in stored_metadata if metadata.get("index")]
+    component_ids = [cid for cid in component_ids if cid is not None]  # Filter out None values
+
+    # CACHE STATUS: Simple check for page refresh monitoring
+    try:
+        from depictio.api.v1.deltatables_utils import _dataframe_memory_cache
+
+        cache_count = len(_dataframe_memory_cache)
+        logger.info(
+            f"📊 PAGE REFRESH: {cache_count} DataFrames already cached before loading dashboard {dashboard_id}"
+        )
+    except Exception:
+        pass  # Don't break if cache import fails
+
+    logger.info(
+        f"🚀 BULK PRE-FETCH: Loading {len(component_ids)} components in bulk for dashboard {dashboard_id}"
+    )
+    logger.info(f"📋 COMPONENT IDS: {component_ids}")  # Debug: show which components we're fetching
+
+    # Import bulk function
+    from depictio.dash.utils import bulk_get_component_data
+
+    # Pre-fetch all component data in one API call
+    bulk_component_data = {}
+    if component_ids:
+        try:
+            logger.info(
+                f"🔄 BULK ATTEMPT: About to call bulk_get_component_data with {len(component_ids)} components"
+            )
+            bulk_component_data = bulk_get_component_data(component_ids, dashboard_id, TOKEN)
+            logger.info(f"✅ BULK SUCCESS: Pre-fetched {len(bulk_component_data)} components")
+            logger.info(
+                f"📊 BULK DATA KEYS: {list(bulk_component_data.keys())}"
+            )  # Show what we got back
+        except Exception as e:
+            logger.error(f"❌ BULK FAILED: {type(e).__name__}: {e}")
+            logger.error(
+                f"🔍 BULK FAILURE DETAILS: dashboard_id={dashboard_id}, component_count={len(component_ids)}"
+            )
+            import traceback
+
+            logger.error(f"📚 BULK TRACEBACK: {traceback.format_exc()}")
+            bulk_component_data = {}
+    else:
+        logger.warning("⚠️ NO COMPONENT IDS: Skipping bulk fetch for empty component list")
+
     children = list()
 
     for child_metadata in stored_metadata:
         child_metadata["build_frame"] = True
         child_metadata["access_token"] = TOKEN
+
+        # PERFORMANCE OPTIMIZATION: Pass pre-fetched component data to avoid individual API calls
+        component_index = child_metadata.get("index")
+        if component_index in bulk_component_data:
+            child_metadata["_bulk_component_data"] = bulk_component_data[component_index]
+            logger.info(
+                f"✅ BULK ATTACH: Attached pre-fetched data for component {component_index}"
+            )
+        else:
+            logger.warning(
+                f"⚠️ NO BULK DATA: Component {component_index} will fetch individually (performance hit)"
+            )
+            if bulk_component_data:
+                logger.warning(f"🔍 AVAILABLE BULK KEYS: {list(bulk_component_data.keys())}")
         # logger.info(child_metadata)
         # logger.info(f"type of child_metadata : {type(child_metadata)}")
 
