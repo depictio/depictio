@@ -6,7 +6,11 @@ import os
 
 import dash_bootstrap_components as dbc
 
+# Import Celery background callback manager (Dash v3)
+from celery import Celery
+
 import dash
+from dash import CeleryManager
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.components.google_analytics import integrate_google_analytics
 
@@ -34,7 +38,43 @@ def create_dash_app():
     # assets_folder = os.path.join(dash_root_path, "assets/debug")
     assets_folder = os.path.join(dash_root_path, "assets")
 
-    # Start the app
+    # Setup Celery background callback manager
+    logger.info("🔧 DASH: Setting up Celery background callback manager...")
+
+    # Import settings after context is set
+    from depictio.api.v1.configs.config import settings
+
+    # Reuse the backend Celery app instead of creating a new one
+    try:
+        from depictio.api.celery_app import celery_app
+
+        logger.info("🔄 DASH: Reusing backend Celery app for background callbacks")
+    except ImportError:
+        logger.warning("⚠️ DASH: Backend Celery app not available, creating standalone app")
+        # Fallback: create standalone app
+        celery_app = Celery(
+            "dash_background_callbacks",
+            broker=settings.celery.broker_url,
+            backend=settings.celery.result_backend_url,
+        )
+
+        celery_app.conf.update(
+            task_serializer="json",
+            accept_content=["json"],
+            result_serializer="json",
+            timezone="UTC",
+            enable_utc=True,
+            result_expires=settings.celery.result_expires,
+            task_soft_time_limit=settings.celery.task_soft_time_limit,
+            task_time_limit=settings.celery.task_time_limit,
+        )
+
+    # Create the callback manager (Dash v3)
+    background_callback_manager = CeleryManager(celery_app)
+
+    logger.info("✅ DASH: Background callback manager configured")
+
+    # Start the app with background callback manager
     app = dash.Dash(
         __name__,  # Use the current module name
         requests_pathname_prefix="/",
@@ -49,6 +89,7 @@ def create_dash_app():
         title="Depictio",
         assets_folder=assets_folder,
         assets_url_path="/assets",  # Explicitly set the assets URL path
+        background_callback_manager=background_callback_manager,  # Enable background callbacks
     )
 
     # Configure Flask's logger to use custom logging settings

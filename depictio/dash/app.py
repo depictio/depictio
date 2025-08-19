@@ -31,10 +31,24 @@ register_static_routes(server)
 if __name__ == "__main__":
     # This block won't be executed when run with Gunicorn
     # It's here for potential direct execution
+    print(
+        f"Starting Dash server on {settings.dash.host}:{settings.dash.external_port} with {settings.dash.workers} workers"
+    )
+    # Configure process and thread settings properly
+    if settings.profiling.enabled:
+        # Profiling mode: single process for proper profiling
+        processes = 1
+        threaded = False
+    else:
+        # Normal mode: use threaded for better performance, no processes
+        processes = None  # Let Werkzeug handle this properly
+        threaded = True
+
     app.run(
         host=settings.dash.host,
         port=settings.dash.external_port,
         debug=dev_mode,
-        processes=1 if settings.profiling.enabled else None,
-        threaded=not settings.profiling.enabled,
+        threaded=threaded,
+        # Don't pass processes=None to avoid Werkzeug comparison error
+        **({"processes": processes} if processes is not None else {}),
     )
