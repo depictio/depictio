@@ -43,6 +43,7 @@ dependencies:
   - python-jose==3.3.0
   - python-multipart
   - pyyaml
+  - redis-py==6.4.0
   - restrictedpython>=8.0
   - rich
   - tomli
@@ -50,6 +51,7 @@ dependencies:
   - typeguard
   - umap-learn
   - uvicorn==0.34.0
+  - werkzeug
   - pip:
     # - dash-draggable==0.1.2
     - dash-cytoscape==1.0.2

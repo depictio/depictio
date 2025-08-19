@@ -283,7 +283,58 @@ class PerformanceConfig(BaseSettings):
     connection_pool_size: int = Field(default=10)
     max_keepalive_connections: int = Field(default=5)
 
+    # Loading spinner optimization settings
+    disable_loading_spinners: bool = Field(
+        default=True, description="Disable all loading spinners for maximum performance"
+    )
+
+    # Animation optimization settings
+    disable_animations: bool = Field(
+        default=True, description="Disable SVG and CSS animations for maximum performance"
+    )
+
+    disable_theme_animations: bool = Field(
+        default=True, description="Disable theme CSS injection and complex theme operations"
+    )
+
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_PERFORMANCE_")
+
+
+class CacheConfig(BaseSettings):
+    """Redis cache configuration settings."""
+
+    # Redis connection settings
+    redis_host: str = Field(default="redis", description="Redis server hostname")
+    redis_port: int = Field(default=6379, description="Redis server port")
+    redis_password: str = Field(default="depictio_cache_2024", description="Redis password")
+    redis_db: int = Field(default=0, description="Redis database number")
+    redis_ssl: bool = Field(default=False, description="Use SSL for Redis connection")
+
+    # Cache behavior settings
+    enable_redis_cache: bool = Field(
+        default=True, description="Enable Redis caching for DataFrames"
+    )
+    fallback_to_memory: bool = Field(
+        default=True, description="Fallback to in-memory cache if Redis fails"
+    )
+
+    # Cache expiration settings
+    default_ttl: int = Field(default=3600, description="Default cache TTL in seconds (1 hour)")
+    dataframe_ttl: int = Field(
+        default=1800, description="DataFrame cache TTL in seconds (30 minutes)"
+    )
+
+    # Cache limits
+    max_dataframe_size_mb: int = Field(
+        default=100, description="Maximum DataFrame size to cache (MB)"
+    )
+    redis_max_memory_mb: int = Field(default=1024, description="Redis max memory limit (MB)")
+
+    # Cache key settings
+    cache_key_prefix: str = Field(default="depictio:df:", description="Prefix for cache keys")
+    cache_version: str = Field(default="v1", description="Cache version for key namespacing")
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_CACHE_")
 
 
 class BackupConfig(BaseSettings):
@@ -398,6 +449,48 @@ class GoogleAnalyticsConfig(BaseSettings):
         return self.enabled and self.tracking_id is not None
 
 
+class ProfilingConfig(BaseSettings):
+    """Configuration for application profiling."""
+
+    enabled: bool = Field(default=False, description="Enable application profiling")
+    profile_dir: str = Field(default="./prof_files", description="Directory to save profile files")
+    sort_by: str = Field(default="cumtime,tottime", description="Profile sorting criteria")
+    restrictions: int = Field(default=50, description="Number of top functions to show in reports")
+    memory_profiling: bool = Field(default=False, description="Enable memory usage profiling")
+
+    # Werkzeug-specific options
+    werkzeug_enabled: bool = Field(default=True, description="Enable Werkzeug request profiling")
+    werkzeug_stream: bool = Field(default=False, description="Stream profiling output to terminal")
+    werkzeug_safe_mode: bool = Field(
+        default=True, description="Enable safe mode to prevent profiler conflicts"
+    )
+
+    # Callback profiling options
+    profile_callbacks: bool = Field(
+        default=False, description="Enable automatic callback profiling"
+    )
+    profile_slow_callbacks_only: bool = Field(
+        default=True, description="Only profile callbacks slower than threshold"
+    )
+    slow_callback_threshold: float = Field(
+        default=0.1, description="Threshold in seconds for slow callbacks"
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_PROFILING_")
+
+    @computed_field
+    @property
+    def sort_criteria(self) -> tuple[str, ...]:
+        """Parse sort criteria string into tuple."""
+        return tuple(s.strip() for s in self.sort_by.split(","))
+
+    @computed_field
+    @property
+    def profile_path(self) -> Path:
+        """Get resolved profile directory path."""
+        return Path(self.profile_dir).resolve()
+
+
 class Settings(BaseSettings):
     context: str = Field(default="server")
     fastapi: FastAPIConfig = Field(default_factory=FastAPIConfig)
@@ -408,8 +501,10 @@ class Settings(BaseSettings):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     jbrowse: JBrowseConfig = Field(default_factory=JBrowseConfig)
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
+    cache: CacheConfig = Field(default_factory=CacheConfig)
     backup: BackupConfig = Field(default_factory=BackupConfig)
     analytics: AnalyticsConfig = Field(default_factory=AnalyticsConfig)
     google_analytics: GoogleAnalyticsConfig = Field(default_factory=GoogleAnalyticsConfig)
+    profiling: ProfilingConfig = Field(default_factory=ProfilingConfig)
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_")
