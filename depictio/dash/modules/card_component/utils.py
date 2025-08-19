@@ -5,6 +5,7 @@ import pandas as pd
 from dash_iconify import DashIconify
 
 from dash import dcc, html
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 
 
@@ -228,6 +229,10 @@ def build_card_frame(index, children=None, show_border=False):
 
 
 def build_card(**kwargs):
+    # DUPLICATION TRACKING: Log card component builds
+    logger.info(
+        f"🔍 BUILD CARD CALLED - Index: {kwargs.get('index', 'UNKNOWN')}, Stepper: {kwargs.get('stepper', False)}"
+    )
     # def build_card(index, title, wf_id, dc_id, dc_config, column_name, column_type, aggregation, v, build_frame=False):
 
     index = kwargs.get("index")
@@ -594,13 +599,20 @@ def build_card(**kwargs):
 
             # NUCLEAR: Remove intermediate wrapper div that breaks flex chain
             # Return card_component directly with loading wrapper only
-            return dcc.Loading(
-                children=card_component,
-                custom_spinner=create_skeleton_component("card"),
-                # delay_show=50,  # Minimal delay to prevent flashing
-                # delay_hide=100,  # Quick dismissal
-                id={"index": index},  # Move the id to the loading component
-            )
+
+            # PERFORMANCE OPTIMIZATION: Conditional loading spinner
+            if settings.performance.disable_loading_spinners:
+                logger.info("🚀 PERFORMANCE MODE: Card loading spinners disabled")
+                return card_component  # Return content directly, no loading wrapper
+            else:
+                # Optimized loading with fast delays
+                return dcc.Loading(
+                    children=card_component,
+                    custom_spinner=create_skeleton_component("card"),
+                    delay_show=5,  # Fast delay for better UX
+                    delay_hide=25,  # Quick hide for performance
+                    id={"index": index},
+                )
         else:
             # Build the card component for stepper mode
             card_component = build_card_frame(

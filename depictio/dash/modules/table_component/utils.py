@@ -4,6 +4,9 @@ import polars as pl
 from bson import ObjectId
 
 from dash import dcc, html
+
+# PERFORMANCE OPTIMIZATION: Use centralized config
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.dash.modules.figure_component.utils import stringify_id
@@ -144,8 +147,14 @@ def build_table(**kwargs):
                     cols[c]["filter"] = "agDateColumnFilter"
                     cols[c]["floatingFilter"] = True
 
-    # Add ID column for SpinnerCellRenderer (following documentation example exactly)
-    columnDefs = [{"field": "ID", "maxWidth": 100, "cellRenderer": "SpinnerCellRenderer"}]
+    # PERFORMANCE OPTIMIZATION: Conditionally add ID column based on loading spinner setting
+    if settings.performance.disable_loading_spinners:
+        # Performance mode: Simple ID column without spinner renderer
+        columnDefs = [{"field": "ID", "maxWidth": 100}]
+        logger.info("🚀 PERFORMANCE MODE: Ag-grid loading spinners disabled for ID column")
+    else:
+        # Add ID column for SpinnerCellRenderer (following documentation example exactly)
+        columnDefs = [{"field": "ID", "maxWidth": 100, "cellRenderer": "SpinnerCellRenderer"}]
 
     # Add data columns with enhanced filtering and sorting support
     if cols:
@@ -295,17 +304,20 @@ def build_table(**kwargs):
             target_id = stringify_id(graph_id_dict)
             logger.debug(f"Target ID for loading: {target_id}")
 
-            return dcc.Loading(
-                children=table_component,
-                custom_spinner=create_skeleton_component("table"),
-                # target_components={f'{{"index":"{index}","type":"table-aggrid"}}': "rowData"},
-                target_components={target_id: "rowData"},
-                # delay_show=50,  # Minimal delay to prevent flashing
-                # delay_hide=100,  # Quick dismissal
-                delay_show=50,  # Minimal delay to prevent flashing
-                delay_hide=300,  #
-                id={"index": index},  # Move the id to the loading component
-            )
+            # PERFORMANCE OPTIMIZATION: Conditional loading spinner
+            if settings.performance.disable_loading_spinners:
+                logger.info("🚀 PERFORMANCE MODE: Table loading spinners disabled")
+                return table_component  # Return content directly, no loading wrapper
+            else:
+                # Optimized loading with fast delays
+                return dcc.Loading(
+                    children=table_component,
+                    custom_spinner=create_skeleton_component("table"),
+                    target_components={target_id: "rowData"},
+                    delay_show=5,  # Fast delay for better UX
+                    delay_hide=25,  # Quick hide for performance
+                    id={"index": index},
+                )
 
         else:
             # For stepper mode without loading

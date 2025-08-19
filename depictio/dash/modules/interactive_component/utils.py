@@ -8,6 +8,9 @@ import polars as pl
 from bson import ObjectId
 
 from dash import dcc, html
+
+# PERFORMANCE OPTIMIZATION: Use centralized config
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
@@ -547,6 +550,11 @@ def apply_log_transformation(series, shift=1e-6):
 
 
 def build_interactive(**kwargs):
+    # DUPLICATION TRACKING: Log interactive component builds
+    logger.info(
+        f"🔍 BUILD INTERACTIVE CALLED - Index: {kwargs.get('index', 'UNKNOWN')}, Stepper: {kwargs.get('stepper', False)}"
+    )
+
     index = kwargs.get("index")
     title = kwargs.get("title")  # Example of default parameter
     wf_id = kwargs.get("wf_id")
@@ -1316,16 +1324,22 @@ def build_interactive(**kwargs):
                 create_skeleton_component,
             )
 
-            return dcc.Loading(
-                children=interactive_component,
-                custom_spinner=create_skeleton_component("interactive"),
-                target_components={
-                    f'{{"index":"{index}","type":"interactive-component-value"}}': "value"
-                },
-                # delay_show=50,  # Minimal delay to prevent flashing
-                # delay_hide=100,  # Quick dismissal
-                id={"index": index},  # Move the id to the loading component
-            )
+            # PERFORMANCE OPTIMIZATION: Conditional loading spinner
+            if settings.performance.disable_loading_spinners:
+                logger.info("🚀 PERFORMANCE MODE: Interactive loading spinners disabled")
+                return interactive_component  # Return content directly, no loading wrapper
+            else:
+                # Optimized loading with fast delays
+                return dcc.Loading(
+                    children=interactive_component,
+                    custom_spinner=create_skeleton_component("interactive"),
+                    target_components={
+                        f'{{"index":"{index}","type":"interactive-component-value"}}': "value"
+                    },
+                    delay_show=5,  # Fast delay for better UX
+                    delay_hide=25,  # Quick hide for performance
+                    id={"index": index},
+                )
         else:
             return interactive_component
 
