@@ -65,4 +65,9 @@ def create_dash_app():
     # Integrate Google Analytics via index_string
     integrate_google_analytics(app, title="Depictio")
 
+    # Setup profiling if enabled
+    from depictio.dash.profiling import setup_profiling
+
+    app = setup_profiling(app)
+
     return app, dev_mode

@@ -35,4 +35,6 @@ if __name__ == "__main__":
         host=settings.dash.host,
         port=settings.dash.external_port,
         debug=dev_mode,
+        processes=1 if settings.profiling.enabled else None,
+        threaded=not settings.profiling.enabled,
     )
