@@ -11,7 +11,7 @@ if [ "$DEV_MODE" = "true" ]; then
     # Development mode with reload
     # Debug mode is passed to Dash in app.py
     export DEV_MODE=true
-    echo "Running in development mode on $DASH_HOST:$DASH_PORT"
+    echo "Running in development mode on $DASH_HOST:$DASH_PORT" with "$DASH_WORKERS" workers
     python depictio/dash/app.py
     # gunicorn --workers=2 --reload --bind="$DASH_HOST:$DASH_PORT" --timeout=120 depictio.dash.app:server
 else
