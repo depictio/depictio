@@ -17,6 +17,12 @@ pip install -e ".[dev]"
 # Note: The project uses Python 3.12 in CI to ensure consistent type checking behavior
 ```
 
+### Python Environment
+
+**Default Python Path**: `/Users/tweber/Gits/workspaces/depictio-workspace/depictio/depictio-venv-dash-v3/bin/python`
+
+Use this Python environment for all development commands, testing, and code execution in this project.
+
 ### Testing
 
 ```bash
