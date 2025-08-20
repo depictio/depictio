@@ -8,7 +8,7 @@ import httpx
 from dash_iconify import DashIconify
 
 import dash
-from dash import ALL, MATCH, Input, Output, State, dcc, html
+from dash import ALL, MATCH, Input, Output, Patch, State, dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
@@ -1810,6 +1810,25 @@ def register_callbacks_figure_component(app):
             button_text = "Hide Code Examples" if new_is_opened else "Show Code Examples"
             return new_is_opened, button_text
         raise dash.exceptions.PreventUpdate
+
+    @app.callback(
+        Output({"type": "figure", "index": MATCH}, "figure", allow_duplicate=True),
+        Input("theme-store", "data"),
+        prevent_initial_call=True,
+    )
+    def update_theme_figure(theme_data):
+        """Update figure theme based on current theme."""
+        logger.info(f"Figure theme update triggered with theme_data: {theme_data}")
+        import plotly.io as pio
+
+        template = (
+            pio.templates["mantine_light"]
+            if theme_data == "light"
+            else pio.templates["mantine_dark"]
+        )
+        patch = Patch()
+        patch.layout.template = template
+        return patch
 
 
 def design_figure(id, component_data=None):
