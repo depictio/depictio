@@ -306,7 +306,7 @@ class CacheConfig(BaseSettings):
     # Redis connection settings
     redis_host: str = Field(default="redis", description="Redis server hostname")
     redis_port: int = Field(default=6379, description="Redis server port")
-    redis_password: str = Field(default="depictio_cache_2024", description="Redis password")
+    redis_password: str | None = Field(default=None, description="Redis password")
     redis_db: int = Field(default=0, description="Redis database number")
     redis_ssl: bool = Field(default=False, description="Use SSL for Redis connection")
 
