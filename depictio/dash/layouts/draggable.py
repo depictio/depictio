@@ -620,10 +620,10 @@ def register_callbacks_draggable(app):
         State("url", "pathname"),
         State("local-store", "data"),
         State("theme-store", "data"),
-        # Input("dashboard-title", "style"),  # Indirect trigger for theme changes
+        # Input("dashboard-title", "style"),  # REMOVED: This was causing expensive rebuilds on theme change
         # Input("height-store", "data"),
         prevent_initial_call=True,
-        background=True,  # Enable background processing
+        # background=True,  # Enable background processing
         # running=[
         #     # Disable interactions during dashboard loading
         #     (Output("unified-edit-mode-button", "disabled"), True, False),
@@ -665,7 +665,7 @@ def register_callbacks_draggable(app):
         #     Output("dashboard-loading-status", "data")
         # ],
     )
-    async def populate_draggable(
+    def populate_draggable(
         # set_progress,  # Background callback progress function
         btn_done_clicks,
         btn_done_edit_clicks,
@@ -697,8 +697,7 @@ def register_callbacks_draggable(app):
         input_unified_edit_mode_button,
         pathname,
         local_data,
-        theme_store,  # Now an Input parameter - triggers callback when theme changes
-        # dashboard_title_style,  # Indirect trigger for theme changes
+        theme_store,  # State parameter for theme data
         # height_store,
     ):
         if not local_data:
@@ -815,7 +814,9 @@ def register_callbacks_draggable(app):
         # logger.info(f"Theme store: {theme_store}")
 
         # Extract theme safely from theme store with improved fallback handling
-        theme = "light"  # Default
+        # Check localStorage directly if theme_store is not populated yet (race condition fix)
+        theme = "light"  # Default fallback
+
         if theme_store:
             if isinstance(theme_store, dict):
                 # Handle empty dict case
@@ -830,6 +831,17 @@ def register_callbacks_draggable(app):
                     f"Invalid theme_store value: {theme_store}, using default light theme"
                 )
                 theme = "light"
+        else:
+            # RACE CONDITION FIX: theme_store not populated yet, fallback to light theme
+            # The theme detection callback should run immediately (prevent_initial_call=False)
+            # so this should rarely happen, but we handle it gracefully
+            logger.warning(
+                "Theme store not populated during dashboard render, using light theme fallback"
+            )
+            logger.warning(
+                "This may indicate a timing issue - figures may render with incorrect theme initially"
+            )
+            theme = "light"
         logger.info(f"Using theme: {theme}")
         logger.info(f"Dashboard callback triggered by: {triggered_input}")
         logger.info(f"Theme store value: {theme_store}")
@@ -1042,7 +1054,7 @@ def register_callbacks_draggable(app):
                         if visu_type.lower() == "scatter":
                             logger.info(f"Reset scatter plot: {ctx_triggered_prop_id_index}")
 
-                new_children = await update_interactive_component_sync(
+                new_children = update_interactive_component_sync(
                     stored_metadata,
                     interactive_components_dict,
                     draggable_children,
@@ -1190,9 +1202,14 @@ def register_callbacks_draggable(app):
                 "interactive-component" in triggered_input
                 and toggle_interactivity_button
                 or triggered_input == "theme-store"
+                or triggered_input == "dashboard-title"
             ):
                 if triggered_input == "theme-store":
                     logger.info("Theme store triggered - updating all components with new theme")
+                elif triggered_input == "dashboard-title":
+                    logger.info(
+                        "Dashboard title style changed - updating all components with new theme"
+                    )
                 else:
                     logger.info("Interactive component triggered")
 
@@ -1216,7 +1233,7 @@ def register_callbacks_draggable(app):
 
                 logger.info(f"Updating components with theme: {theme}")
 
-                new_children = await update_interactive_component_sync(
+                new_children = update_interactive_component_sync(
                     stored_metadata,
                     interactive_components_dict,
                     draggable_children,
@@ -2546,6 +2563,7 @@ def design_draggable(
     local_data: dict,
     theme: str = "light",
     edit_dashboard_mode_button: bool = False,
+    cached_project_data: dict | None = None,
 ):
     # logger.info("design_draggable - Initializing draggable layout")
     # logger.info(f"design_draggable - Dashboard ID: {dashboard_id}")
@@ -2556,33 +2574,72 @@ def design_draggable(
 
     # TODO: if required, check if data was registered for the project
     TOKEN = local_data["access_token"]
-    project = httpx.get(
-        f"{API_BASE_URL}/depictio/api/v1/projects/get/from_dashboard_id/{dashboard_id}",
-        headers={"Authorization": f"Bearer {TOKEN}"},
-    ).json()
-    # logger.info(f"design_draggable - Project: {project}")
+
+    # Use cached project data if available, otherwise fallback to HTTP call
+    if cached_project_data and cached_project_data.get("cache_key") == f"project_{dashboard_id}":
+        logger.info(f"🚀 DESIGN_DRAGGABLE: Using cached project data for dashboard {dashboard_id}")
+        project_json = cached_project_data["project"]
+    else:
+        logger.warning(
+            f"⚠️  DESIGN_DRAGGABLE: Cache miss, falling back to HTTP call for dashboard {dashboard_id}"
+        )
+        project_json = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/projects/get/from_dashboard_id/{dashboard_id}",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+        ).json()
+
+    # logger.info(f"design_draggable - Project: {project_json}")
     from depictio.models.models.projects import Project
 
-    project = Project.from_mongo(project)
+    project = Project.from_mongo(project_json)
     # logger.info(f"design_draggable - Project: {project}")
     workflows = project.workflows
     delta_table_locations = []
+
+    # Collect all data collection IDs for batch checking
+    all_dc_ids = []
     for wf in workflows:
         for dc in wf.data_collections:
-            # print(dc)
-            # Check if deltatable exists
-            response = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{str(dc.id)}",
+            all_dc_ids.append(str(dc.id))
+
+    if all_dc_ids:
+        # Single batch API call to check deltatable existence
+        logger.info(f"🚀 DESIGN_DRAGGABLE: Batch checking {len(all_dc_ids)} deltatables")
+        try:
+            batch_response = httpx.post(
+                f"{API_BASE_URL}/depictio/api/v1/deltatables/batch/exists",
                 headers={"Authorization": f"Bearer {TOKEN}"},
+                json=all_dc_ids,
             )
-            if response.status_code == 200:
-                delta_table_location = response.json()["delta_table_location"]
-                logger.info(f"Delta table location: {delta_table_location}")
-                delta_table_locations.append(delta_table_location)
-            else:
-                logger.error(
-                    f"Error retrieving deltatable for data collection '{dc.id}': {response.text}"
+            if batch_response.status_code == 200:
+                batch_results = batch_response.json()
+                for dc_id, result in batch_results.items():
+                    if result.get("exists") and result.get("delta_table_location"):
+                        delta_table_locations.append(result["delta_table_location"])
+                        logger.info(f"✅ Delta table found: {result['delta_table_location']}")
+                    else:
+                        logger.warning(f"⚠️  No deltatable found for data collection '{dc_id}'")
+                logger.info(
+                    f"✅ Batch check complete: {len(delta_table_locations)} deltatables found"
                 )
+            else:
+                logger.error(f"❌ Batch deltatable check failed: {batch_response.text}")
+        except Exception as e:
+            logger.error(f"❌ Batch deltatable check exception: {e}")
+            # Fallback to individual checks if batch fails
+            logger.warning("🔄 Falling back to individual deltatable checks")
+            for wf in workflows:
+                for dc in wf.data_collections:
+                    try:
+                        response = httpx.get(
+                            f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{str(dc.id)}",
+                            headers={"Authorization": f"Bearer {TOKEN}"},
+                        )
+                        if response.status_code == 200:
+                            delta_table_location = response.json()["delta_table_location"]
+                            delta_table_locations.append(delta_table_location)
+                    except Exception as fallback_e:
+                        logger.error(f"❌ Fallback check failed for {dc.id}: {fallback_e}")
     # logger.info(f"Delta table locations: {delta_table_locations}")
 
     if len(delta_table_locations) == 0:

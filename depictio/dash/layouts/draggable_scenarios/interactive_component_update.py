@@ -297,37 +297,11 @@ def update_interactive_component_sync(
     theme="light",  # Add theme parameter with default
 ):
     """
-    Synchronous version for update_interactive_component.
-    Used by non-background callbacks that can't handle async functions directly.
-    This version performs the necessary interactive component updates without async calls.
+    Synchronous version for update_interactive_component (async functionality disabled).
     """
     logger.info("🔄 SYNC INTERACTIVE: Processing interactive components synchronously")
 
-    # For now, return the children as-is since the initial dashboard loading
-    # doesn't require complex interactive component filtering/updates
-    # This prevents coroutine serialization issues in synchronous loading
-
-    # The interactive component updates will be handled properly when components
-    # are actually interacted with through the dashboard callbacks
-    logger.info(
-        f"✅ SYNC INTERACTIVE: Returning {len(current_draggable_children)} children without async processing"
-    )
-    return current_draggable_children
-
-
-async def update_interactive_component_async(
-    stored_metadata_raw,
-    interactive_components_dict,
-    current_draggable_children,
-    switch_state,
-    TOKEN,
-    dashboard_id,
-    theme="light",  # Add theme parameter with default
-):
-    """
-    Async version of update_interactive_component for background callbacks.
-    """
-    return await _update_interactive_component_core(
+    return _update_interactive_component_core(
         stored_metadata_raw,
         interactive_components_dict,
         current_draggable_children,
@@ -338,7 +312,30 @@ async def update_interactive_component_async(
     )
 
 
-async def _update_interactive_component_core(
+def update_interactive_component_async(
+    stored_metadata_raw,
+    interactive_components_dict,
+    current_draggable_children,
+    switch_state,
+    TOKEN,
+    dashboard_id,
+    theme="light",  # Add theme parameter with default
+):
+    """
+    Async wrapper disabled - now calls sync version directly.
+    """
+    return update_interactive_component_sync(
+        stored_metadata_raw,
+        interactive_components_dict,
+        current_draggable_children,
+        switch_state,
+        TOKEN,
+        dashboard_id,
+        theme,
+    )
+
+
+def _update_interactive_component_core(
     stored_metadata_raw,
     interactive_components_dict,
     current_draggable_children,
@@ -487,9 +484,9 @@ async def _update_interactive_component_core(
 
     # logger.info(f"df_dict_processed - {df_dict_processed}")
 
-    # 🚀 PERFORMANCE OPTIMIZATION: Use parallel processing for interactive component updates
+    # 🔨 PERFORMANCE: Use sequential processing for interactive component updates (async disabled)
     logger.info(
-        f"🚀 INTERACTIVE PARALLEL: Starting parallel build of {len(stored_metadata)} components for interactive update"
+        f"🔨 INTERACTIVE SEQUENTIAL: Starting sequential build of {len(stored_metadata)} components for interactive update"
     )
 
     # Separate components that need processing from those that can be reused
@@ -598,15 +595,15 @@ async def _update_interactive_component_core(
     # 🚀 Build components in parallel if we have any to build
     if components_to_build:
         logger.info(
-            f"🚀 INTERACTIVE PARALLEL: Building {len(components_to_build)} components in parallel"
+            f"🔨 INTERACTIVE SEQUENTIAL: Building {len(components_to_build)} components sequentially"
         )
 
-        # Use the parallel processing from restore_dashboard (import here to avoid circular import)
+        # Use the sequential processing from restore_dashboard (async disabled)
         from depictio.dash.layouts.draggable_scenarios.restore_dashboard import (
-            build_components_parallel,
+            build_components_sequential,
         )
 
-        built_components = await build_components_parallel(components_to_build, {}, theme, TOKEN)
+        built_components = build_components_sequential(components_to_build, {}, theme, TOKEN)
 
         # Process built components through enable_box_edit_mode
         for built_component, component_type in built_components:
@@ -617,7 +614,7 @@ async def _update_interactive_component_core(
                 TOKEN=TOKEN,
             )
             children.append(processed_child)
-            logger.info(f"✅ PARALLEL BUILD: Processed {component_type} component")
+            logger.info(f"✅ SEQUENTIAL BUILD: Processed {component_type} component")
 
     # Add reused components to the children list
     for reused_child, component_type, component_index in reused_children:
@@ -625,7 +622,7 @@ async def _update_interactive_component_core(
         logger.info(f"✅ REUSED: Added {component_type} component {component_index} to children")
 
     logger.info(
-        f"🏁 INTERACTIVE PARALLEL: Total children: {len(children)} ({len([c for c, _, _ in reused_children])} reused + {len(components_to_build)} rebuilt)"
+        f"🏁 INTERACTIVE SEQUENTIAL: Total children: {len(children)} ({len([c for c, _, _ in reused_children])} reused + {len(components_to_build)} rebuilt)"
     )
     return children
 
