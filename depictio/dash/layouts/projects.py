@@ -121,7 +121,7 @@ def create_project_modal(opened=False):
     modal_id = "project-creation-modal"
 
     modal = dmc.Modal(
-        opened=opened,
+        opened=False,  # Always start closed to prevent flashing
         id=modal_id,
         centered=True,
         withCloseButton=True,
@@ -519,7 +519,8 @@ def return_deltatable_for_view(workflow_id: str, dc: DataCollection, token: str)
         workflow_id=ObjectId(workflow_id),
         data_collection_id=ObjectId(str(dc.id)),
         TOKEN=token,
-        limit_rows=100,
+        limit_rows=1000,
+        load_for_preview=True,
     )
     logger.info(
         f"df shape: {df.shape} for {workflow_id}/{dc.id} with name {dc.data_collection_tag}"
@@ -1569,6 +1570,9 @@ def register_projects_callbacks(app):
     )
     def toggle_project_modal(create_clicks, local_data, user_cache):
         """Toggle the project creation modal and reset states."""
+        if not create_clicks:
+            return False, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
         from depictio.models.models.users import UserContext
 
         ctx = dash.callback_context
@@ -1966,7 +1970,7 @@ def register_workflows_callbacks(app):
             Input("url", "pathname"),
             Input("local-store", "data"),
         ],
-        prevent_initial_call=False,
+        prevent_initial_call=True,
     )
     def update_projects_content(pathname, local_store):
         """Update the projects list based on the current path and user token."""
@@ -2003,17 +2007,8 @@ def register_workflows_callbacks(app):
             return render_projects_list(projects=projects, admin_UI=False, token=token)
         return dash.no_update
 
-    # Ensure modal stays closed on initial page load
-    @app.callback(
-        Output("project-creation-modal", "opened", allow_duplicate=True),
-        Input("url", "pathname"),
-        prevent_initial_call="initial_duplicate",
-    )
-    def ensure_modal_closed_on_load(pathname):
-        """Ensure modal is closed when navigating to projects page."""
-        if pathname == "/projects":
-            return False
-        return dash.no_update
+    # Removed URL-based modal close callback to prevent flashing during page navigation
+    # The modal should only open/close based on user actions, not URL changes
 
     # Project management callbacks
     @app.callback(

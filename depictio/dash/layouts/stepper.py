@@ -321,9 +321,10 @@ def register_callbacks_stepper(app):
             Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
         ],
         State("local-store", "data"),
+        State("theme-store", "data"),
         prevent_initial_call=True,
     )
-    def update_stepper_data_preview(workflow_id, data_collection_id, local_data):
+    def update_stepper_data_preview(workflow_id, data_collection_id, local_data, theme):
         """Update data preview in stepper when workflow/data collection changes."""
         if not workflow_id or not data_collection_id or not local_data:
             return html.Div()
@@ -337,6 +338,7 @@ def register_callbacks_stepper(app):
                 data_collection_id=data_collection_id,
                 TOKEN=TOKEN,
                 limit_rows=100,  # Default preview size for stepper
+                load_for_preview=True,  # Use separate cache for preview data
             )
 
             if df is None or df.height == 0:
@@ -403,7 +405,7 @@ def register_callbacks_stepper(app):
                     "suppressMenuHide": True,
                 },
                 style={"height": "350px", "width": "100%"},
-                className="ag-theme-alpine",
+                className="ag-theme-alpine" if theme == "light" else "ag-theme-alpine-dark",
             )
 
             # Create summary and controls

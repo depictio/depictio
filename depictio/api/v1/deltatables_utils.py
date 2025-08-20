@@ -197,6 +197,7 @@ def _load_joined_deltatable(
     TOKEN: str | None = None,
     limit_rows: int | None = None,
     load_for_options: bool = False,
+    load_for_preview: bool = False,
 ) -> pl.DataFrame:
     """
     Load and join data collections based on a joined data collection ID.
@@ -249,6 +250,7 @@ def _load_joined_deltatable(
         TOKEN=TOKEN,
         limit_rows=None,  # Don't limit individual DFs before join
         load_for_options=load_for_options,
+        load_for_preview=load_for_preview,
     )
 
     logger.debug(f"Loading DataFrame for DC2: {dc2_id}")
@@ -259,6 +261,7 @@ def _load_joined_deltatable(
         TOKEN=TOKEN,
         limit_rows=None,  # Don't limit individual DFs before join
         load_for_options=load_for_options,
+        load_for_preview=load_for_preview,
     )
 
     # Perform the join
@@ -343,6 +346,7 @@ def load_deltatable_lite(
     TOKEN: str | None = None,
     limit_rows: int | None = None,
     load_for_options: bool = False,  # New parameter to load unfiltered data for component options
+    load_for_preview: bool = False,  # New parameter to separate preview cache from full data cache
 ) -> pl.DataFrame:
     """
     Load a Delta table with adaptive memory management based on DataFrame size.
@@ -373,7 +377,13 @@ def load_deltatable_lite(
         # Handle joined data collection - use original logic for now
         logger.info(f"Loading joined data collection: {data_collection_id}")
         return _load_joined_deltatable(
-            workflow_id, data_collection_id, metadata, TOKEN, limit_rows, load_for_options
+            workflow_id,
+            data_collection_id,
+            metadata,
+            TOKEN,
+            limit_rows,
+            load_for_options,
+            load_for_preview,
         )
 
     # Convert ObjectId to string for regular data collections
@@ -399,7 +409,9 @@ def load_deltatable_lite(
         )
 
     # PERFORMANCE OPTIMIZATION: Early cache check to skip expensive operations
-    base_cache_key = f"{workflow_id_str}_{data_collection_id_str}_base"
+    # Separate cache keys for preview vs full data to prevent conflicts
+    cache_suffix = "preview" if load_for_preview else "base"
+    base_cache_key = f"{workflow_id_str}_{data_collection_id_str}_{cache_suffix}"
 
     # REDIS INTEGRATION: Check Redis cache first, then fallback to memory
     try:
