@@ -26,15 +26,12 @@ from typing import Literal
 from depictio.dash.colors import colors
 
 # Import build functions for centralized registration
-from depictio.dash.modules.card_component.utils import build_card, build_card_async
-from depictio.dash.modules.figure_component.utils import build_figure, build_figure_async
-from depictio.dash.modules.interactive_component.utils import (
-    build_interactive,
-    build_interactive_async,
-)
+from depictio.dash.modules.card_component.utils import build_card
+from depictio.dash.modules.figure_component.utils import build_figure
+from depictio.dash.modules.interactive_component.utils import build_interactive
 from depictio.dash.modules.jbrowse_component.utils import build_jbrowse
-from depictio.dash.modules.table_component.utils import build_table, build_table_async
-from depictio.dash.modules.text_component.utils import build_text, build_text_async
+from depictio.dash.modules.table_component.utils import build_table
+from depictio.dash.modules.text_component.utils import build_text
 
 # Component metadata dictionary - centralized configuration
 COMPONENT_METADATA = {
@@ -215,23 +212,14 @@ def get_build_functions() -> dict:
 
 def get_async_build_functions() -> dict:
     """
-    Get a dictionary mapping component types to their async build functions.
-    Used for background callbacks where async execution is needed.
+    DEPRECATED: Use get_build_functions() instead. Async functionality has been disabled.
+    This function now returns the same sync functions as get_build_functions().
 
     Returns:
-        dict: Dictionary with component types as keys and async build functions as values
+        dict: Dictionary with component types as keys and sync build functions as values
     """
-    # All build functions are now async-compatible except jbrowse
-    async_functions = {
-        "card": build_card_async,  # Uses async wrapper for sync function
-        "figure": build_figure_async,  # Uses async wrapper for sync function
-        "table": build_table_async,  # Uses async wrapper for sync function
-        "interactive": build_interactive_async,  # Uses async wrapper for sync function
-        "text": build_text_async,  # Uses async wrapper for sync function
-        "jbrowse": build_jbrowse,  # Stays synchronous as requested
-    }
-
-    return async_functions
+    # Return sync functions instead of async to disable async functionality
+    return get_build_functions()
 
 
 def get_component_dimensions_dict() -> dict:
