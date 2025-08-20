@@ -16,9 +16,7 @@ from depictio.dash.layouts.dashboards_management import layout as dashboards_man
 from depictio.dash.layouts.draggable import design_draggable
 
 # Depictio utils imports
-from depictio.dash.layouts.draggable_scenarios.restore_dashboard import (
-    load_depictio_data_sync as load_depictio_data,
-)
+from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data_sync
 from depictio.dash.layouts.header import design_header
 from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
 from depictio.dash.layouts.notes_footer import create_notes_footer
@@ -97,7 +95,7 @@ def handle_unauthenticated_user(pathname):
     )
 
 
-def handle_authenticated_user(pathname, local_data, theme="light"):
+def handle_authenticated_user(pathname, local_data, theme="light", cached_project_data=None):
     logger.info(f"User logged in: {local_data.get('email', 'Unknown')}")
     # logger.info(f"Local data: {local_data}")
 
@@ -110,8 +108,13 @@ def handle_authenticated_user(pathname, local_data, theme="light"):
         # Load dashboard data and create layout directly
         logger.info(f"🔄 DASHBOARD NAVIGATION: Loading dashboard {dashboard_id}")
 
+        logger.info(f"🔄 DASHBOARD NAVIGATION: theme - {theme}")
         # Load dashboard data synchronously
-        depictio_dash_data = load_depictio_data(dashboard_id=dashboard_id, local_data=local_data)
+        depictio_dash_data = load_depictio_data_sync(
+            dashboard_id=dashboard_id,
+            local_data=local_data,
+            theme=theme,
+        )
 
         # Create dashboard layout
         if depictio_dash_data:
@@ -124,6 +127,7 @@ def handle_authenticated_user(pathname, local_data, theme="light"):
                 local_data=local_data,
                 backend_components=backend_components,
                 theme=theme,
+                cached_project_data=cached_project_data,
             )
 
             return dashboard_layout, header_content, pathname, local_data
@@ -451,6 +455,7 @@ def create_dashboard_layout(
     local_data=None,
     backend_components=None,
     theme="light",
+    cached_project_data=None,
 ):
     # Init layout and children if depictio_dash_data is available, else set to empty
     if depictio_dash_data and isinstance(depictio_dash_data, dict):
@@ -473,7 +478,13 @@ def create_dashboard_layout(
     # Generate draggable layout
     # Ensure local_data is a dict
     local_data = local_data or {}
-    core = design_draggable(init_layout, init_children, dashboard_id, local_data)
+    core = design_draggable(
+        init_layout,
+        init_children,
+        dashboard_id,
+        local_data,
+        cached_project_data=cached_project_data,
+    )
 
     # Add progressive loading components if we have metadata
     progressive_loading_components = []
@@ -569,6 +580,12 @@ def create_app_layout():
             # Server status cache
             dcc.Store(
                 id="server-status-cache",
+                storage_type="memory",
+                data=None,  # Will be populated by consolidated callback
+            ),
+            # Project data cache (dashboard-specific)
+            dcc.Store(
+                id="project-cache-store",
                 storage_type="memory",
                 data=None,  # Will be populated by consolidated callback
             ),
