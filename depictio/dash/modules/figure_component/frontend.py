@@ -9,7 +9,7 @@ from dash_iconify import DashIconify
 
 import dash
 from dash import ALL, MATCH, Input, Output, Patch, State, dcc, html
-from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
 from depictio.dash.modules.figure_component.code_mode import (
@@ -165,7 +165,7 @@ def register_callbacks_figure_component(app):
             State("local-store", "data"),
             State("url", "pathname"),
         ],
-        prevent_initial_call=True,  # Prevent initial call to avoid loops
+        prevent_initial_call=False,  # Prevent initial call to avoid loops
     )
     def build_parameter_interface(
         _n_clicks_edit,  # Prefixed with _ to indicate unused
@@ -633,14 +633,20 @@ def register_callbacks_figure_component(app):
             {columns_specs_reformatted[v["type"]].append(k) for k, v in columns_json.items()}
 
             # Check if we need to set default parameters for the specific visualization type
+            # Only auto-generate parameters if the setting is enabled
             needs_defaults = _needs_default_parameters(visu_type, dict_kwargs)
 
-            if needs_defaults:
+            if needs_defaults and settings.dash.auto_generate_figures:
                 logger.info(f"Setting default parameters for {visu_type} visualization")
                 default_params = _get_default_parameters(visu_type, columns_specs_reformatted)
 
                 # Update dict_kwargs with defaults (preserve existing params)
                 dict_kwargs = {**default_params, **dict_kwargs}
+            elif needs_defaults and not settings.dash.auto_generate_figures:
+                logger.info(
+                    f"Auto-generate figures disabled, skipping default parameter assignment for {visu_type}"
+                )
+                # Don't auto-assign parameters, but allow manual ones to proceed
 
         except Exception as e:
             logger.error(f"Failed to get column information: {e}")
@@ -750,6 +756,13 @@ def register_callbacks_figure_component(app):
         logger.info(f"Has workflow_id: {bool(workflow_id)}")
         logger.info(f"Has data_collection_id: {bool(data_collection_id)}")
         logger.info(f"Has local_data: {bool(local_data)}")
+
+        # Check auto_generate_figures setting
+        if not settings.dash.auto_generate_figures:
+            logger.info(
+                "Auto-generate figures disabled, skipping automatic parameter initialization"
+            )
+            raise dash.exceptions.PreventUpdate
 
         # Check if we need to prevent update to avoid race conditions
         ctx = dash.callback_context
@@ -887,6 +900,11 @@ def register_callbacks_figure_component(app):
         workflow_id, data_collection_id, current_kwargs, visu_type_label, local_data
     ):
         """Auto-initialize default parameters when workflow/datacollection are set."""
+        # Check auto_generate_figures setting
+        if not settings.dash.auto_generate_figures:
+            logger.info("Auto-generate figures disabled, skipping auto-initialization on load")
+            raise dash.exceptions.PreventUpdate
+
         # Only trigger if we have empty kwargs and all required data
         if current_kwargs or not workflow_id or not data_collection_id or not local_data:
             raise dash.exceptions.PreventUpdate
@@ -960,6 +978,23 @@ def register_callbacks_figure_component(app):
             logger.info("Skipping default figure generation - in code mode")
             raise dash.exceptions.PreventUpdate
 
+        # Check auto_generate_figures setting - but allow if this is an edit mode (parent_index exists)
+        # Edit mode should always show existing figures, only new figures are controlled by the setting
+        if not settings.dash.auto_generate_figures and not parent_index:
+            logger.info(
+                "Auto-generate figures disabled and not in edit mode, skipping default figure generation"
+            )
+            # raise dash.exceptions.PreventUpdate
+            return dmc.Stack(
+                dmc.Center(
+                    dmc.Text(
+                        "Select a visualization type and core parameters to start generating a figure."
+                    )
+                ),
+                align="center",
+                gap="md",
+            )
+
         # Get existing component data
         component_data = None
         if parent_index:
@@ -1020,16 +1055,25 @@ def register_callbacks_figure_component(app):
             if visu_type_label:
                 visu_type = visu_type_label.lower()
 
-            # If no parameters set, generate defaults
+            # If no parameters set, generate defaults (only if auto_generate_figures is enabled)
             if not dict_kwargs or dict_kwargs in [{}, {"x": None, "y": None}]:
-                columns_json = get_columns_from_data_collection(
-                    workflow_id, data_collection_id, TOKEN
-                )
-                columns_specs_reformatted = defaultdict(list)
-                {columns_specs_reformatted[v["type"]].append(k) for k, v in columns_json.items()}
+                if settings.dash.auto_generate_figures:
+                    columns_json = get_columns_from_data_collection(
+                        workflow_id, data_collection_id, TOKEN
+                    )
+                    columns_specs_reformatted = defaultdict(list)
+                    {
+                        columns_specs_reformatted[v["type"]].append(k)
+                        for k, v in columns_json.items()
+                    }
 
-                dict_kwargs = _get_default_parameters(visu_type, columns_specs_reformatted)
-                logger.info(f"Generated default parameters for {visu_type}: {dict_kwargs}")
+                    dict_kwargs = _get_default_parameters(visu_type, columns_specs_reformatted)
+                    logger.info(f"Generated default parameters for {visu_type}: {dict_kwargs}")
+                else:
+                    logger.info(
+                        f"Auto-generate figures disabled, not generating default parameters for {visu_type}"
+                    )
+                    # Don't generate defaults, use empty dict
 
             if not dict_kwargs:
                 raise dash.exceptions.PreventUpdate
@@ -1938,6 +1982,7 @@ def design_figure(id, component_data=None):
                         "verticalAlign": "top",
                         "marginRight": "2%",
                         "minHeight": "400px",  # Provide reasonable minimum
+                        "border": "1px solid #eee",
                     },
                 ),
                 # Right side - Mode-specific controls
@@ -2040,7 +2085,7 @@ def design_figure(id, component_data=None):
                                                 "type": "collapse",
                                                 "index": id["index"],
                                             },
-                                            is_open=False,
+                                            is_open=True,
                                             style={
                                                 "overflowY": "auto",
                                                 # "maxHeight": "35vh",
