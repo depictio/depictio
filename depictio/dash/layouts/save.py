@@ -70,7 +70,6 @@ def validate_and_clean_orphaned_layouts(stored_layout_data, stored_metadata):
 
 def register_callbacks_save(app):
     @app.callback(
-        Output("dummy-output", "children"),
         Input("save-button-dashboard", "n_clicks"),
         Input("draggable", "currentLayout"),
         Input(
@@ -117,6 +116,7 @@ def register_callbacks_save(app):
         Input("remove-all-components-button", "n_clicks"),
         Input({"type": "interactive-component-value", "index": ALL}, "value"),
         prevent_initial_call=True,
+        allow_optional=True,  # Allow optional inputs for components that may not exist
     )
     def save_data_dashboard(
         n_clicks,
@@ -174,7 +174,7 @@ def register_callbacks_save(app):
         # Early return if user is not logged in
         if not local_store:
             logger.warning("User not logged in.")
-            return dash.no_update
+            return
 
         # Validate user authentication using consolidated cache
         from depictio.models.models.users import UserContext
@@ -187,7 +187,7 @@ def register_callbacks_save(app):
             current_user_api = api_call_fetch_user_from_token(TOKEN)
             if not current_user_api:
                 logger.warning("User not found.")
-                return dash.no_update
+                return
             # Create UserContext from API response for consistency
             current_user = UserContext(
                 id=str(current_user_api.id),
@@ -205,13 +205,13 @@ def register_callbacks_save(app):
         dashboard_data = api_call_get_dashboard(dashboard_id, TOKEN)
         if not dashboard_data:
             logger.error(f"Failed to fetch dashboard data for {dashboard_id}")
-            return dash.no_update
+            return
 
         # Check user permissions
         owner_ids = [str(e["id"]) for e in dashboard_data.get("permissions", {}).get("owners", [])]
         if str(current_user.id) not in owner_ids:
             logger.warning("User does not have permission to edit & save this dashboard.")
-            return dash.no_update
+            return
 
         # Determine trigger context
         from dash import ctx
@@ -239,7 +239,7 @@ def register_callbacks_save(app):
             not any(trigger in triggered_id for trigger in save_triggers)
             or not unified_edit_mode_button_checked
         ):
-            return dash.no_update
+            return
 
         # Deduplicate and clean metadata - prioritize complete metadata entries
         unique_metadata = []
@@ -687,7 +687,7 @@ def register_callbacks_save(app):
             if not screenshot_success:
                 logger.warning(f"Failed to save dashboard screenshot for {dashboard_id}")
 
-        return dash.no_update
+        return
 
     @app.callback(
         Output("success-modal-dashboard", "is_open"),
