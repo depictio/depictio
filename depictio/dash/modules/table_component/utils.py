@@ -322,3 +322,23 @@ def build_table(**kwargs):
         else:
             # For stepper mode without loading
             return table_component
+
+
+# Async wrapper for background callbacks (following card component pattern)
+async def build_table_async(**kwargs):
+    """
+    Async wrapper for build_table function.
+    Used in background callbacks where async execution is needed.
+    """
+    logger.info(
+        f"🔄 ASYNC TABLE: Building table component asynchronously - Index: {kwargs.get('index', 'UNKNOWN')}"
+    )
+
+    # Call the synchronous build_table function
+    # In the future, this could run in a thread pool if needed for true parallelism
+    result = build_table(**kwargs)
+
+    logger.info(
+        f"✅ ASYNC TABLE: Table component built successfully - Index: {kwargs.get('index', 'UNKNOWN')}"
+    )
+    return result

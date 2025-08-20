@@ -314,7 +314,6 @@ def render_figure(
         Plotly figure object
     """
     # PERFORMANCE OPTIMIZATION: Check figure result cache first
-    import time
 
     # Generate cache key from all inputs
     df_hash = str(hash(str(df.hash_rows()) if not df.is_empty() else "empty"))
@@ -324,16 +323,19 @@ def render_figure(
         dict_kwargs, visu_type, df_hash, cutoff, selected_point_clean, theme
     )
 
-    # Clean cache and check for existing result
-    _clean_figure_cache()
-    if cache_key in _figure_result_cache:
-        cached_figure, timestamp = _figure_result_cache[cache_key]
-        logger.info(
-            f"🚀 FIGURE CACHE HIT: Using cached figure for {visu_type} (saved {int((time.time() - timestamp) * 1000)}ms ago)"
-        )
-        return cached_figure
+    # TEMPORARY: Disable figure cache to test async rendering performance
+    logger.info(f"🚧 CACHE DISABLED: Generating fresh {visu_type} figure for performance testing")
 
-    logger.info(f"📊 FIGURE CACHE MISS: Generating new {visu_type} figure")
+    # Clean cache and check for existing result
+    # _clean_figure_cache()
+    # if cache_key in _figure_result_cache:
+    #     cached_figure, timestamp = _figure_result_cache[cache_key]
+    #     logger.info(
+    #         f"🚀 FIGURE CACHE HIT: Using cached figure for {visu_type} (saved {int((time.time() - timestamp) * 1000)}ms ago)"
+    #     )
+    #     return cached_figure
+
+    # logger.info(f"📊 FIGURE CACHE MISS: Generating new {visu_type} figure")
 
     # Check if it's a clustering visualization
     is_clustering = visu_type.lower() in ["umap"]
@@ -514,11 +516,9 @@ def render_figure(
         if selected_point and "x" in cleaned_kwargs and "y" in cleaned_kwargs:
             _highlight_selected_point(figure, df, cleaned_kwargs, selected_point)
 
-        # PERFORMANCE OPTIMIZATION: Cache the generated figure
-        _figure_result_cache[cache_key] = (figure, time.time())
-        logger.info(
-            f"💾 FIGURE CACHED: Stored {visu_type} figure in cache (key: {cache_key[:8]}...)"
-        )
+        # TEMPORARY: Disable figure cache writing for performance testing
+        # _figure_result_cache[cache_key] = (figure, time.time())
+        logger.info(f"🚧 CACHE DISABLED: Skipping figure cache storage for {visu_type}")
 
         return figure
 
@@ -530,9 +530,9 @@ def render_figure(
             title=f"Error: {str(e)}",
         )
 
-        # Cache the fallback figure too to avoid repeated error processing
-        _figure_result_cache[cache_key] = (fallback_figure, time.time())
-        logger.info("💾 FIGURE CACHED: Stored fallback figure in cache")
+        # TEMPORARY: Disable fallback figure cache writing for performance testing
+        # _figure_result_cache[cache_key] = (fallback_figure, time.time())
+        logger.info("🚧 CACHE DISABLED: Skipping fallback figure cache storage")
 
         return fallback_figure
 
@@ -1101,6 +1101,26 @@ def create_stepper_figure_button(n, disabled=False):
         storage_type="memory",
     )
     return button, store
+
+
+# Async wrapper for background callbacks (following card component pattern)
+async def build_figure_async(**kwargs):
+    """
+    Async wrapper for build_figure function.
+    Used in background callbacks where async execution is needed.
+    """
+    logger.info(
+        f"🔄 ASYNC FIGURE: Building figure component asynchronously - Index: {kwargs.get('index', 'UNKNOWN')}"
+    )
+
+    # Call the synchronous build_figure function
+    # In the future, this could run in a thread pool if needed for true parallelism
+    result = build_figure(**kwargs)
+
+    logger.info(
+        f"✅ ASYNC FIGURE: Figure component built successfully - Index: {kwargs.get('index', 'UNKNOWN')}"
+    )
+    return result
 
 
 # Legacy exports for backward compatibility

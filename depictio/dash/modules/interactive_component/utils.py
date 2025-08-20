@@ -1424,3 +1424,23 @@ agg_functions = {
         "description": "Text or mixed numeric or non-numeric values",
     },
 }
+
+
+# Async wrapper for background callbacks (following card component pattern)
+async def build_interactive_async(**kwargs):
+    """
+    Async wrapper for build_interactive function.
+    Used in background callbacks where async execution is needed.
+    """
+    logger.info(
+        f"🔄 ASYNC INTERACTIVE: Building interactive component asynchronously - Index: {kwargs.get('index', 'UNKNOWN')}"
+    )
+
+    # Call the synchronous build_interactive function
+    # In the future, this could run in a thread pool if needed for true parallelism
+    result = build_interactive(**kwargs)
+
+    logger.info(
+        f"✅ ASYNC INTERACTIVE: Interactive component built successfully - Index: {kwargs.get('index', 'UNKNOWN')}"
+    )
+    return result
