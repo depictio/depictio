@@ -16,21 +16,3 @@ dagcomponentfuncs.Button = function (props) {
         props.value
     );
 };
-
-// SpinnerCellRenderer for loading states in AG Grid tables
-dagcomponentfuncs.SpinnerCellRenderer = function (props) {
-    return React.createElement(
-        'div',
-        {
-            style: {
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '100%',
-                fontSize: '12px',
-                color: '#666'
-            }
-        },
-        props.value || 'Loading...'
-    );
-};

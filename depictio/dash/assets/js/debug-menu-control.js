@@ -5,24 +5,24 @@
     const maxAttempts = 20;
 
     function logDebugInfo() {
-        console.debug('=== DASH DEBUG MENU CONTROL ===');
-        console.debug('Looking for debug menu...');
+        console.log('=== DASH DEBUG MENU CONTROL ===');
+        console.log('Looking for debug menu...');
 
         const debugMenu = document.querySelector('.dash-debug-menu__outer');
-        console.debug('Debug menu found:', !!debugMenu);
+        console.log('Debug menu found:', !!debugMenu);
 
         if (debugMenu) {
-            console.debug('Debug menu classes:', debugMenu.className);
+            console.log('Debug menu classes:', debugMenu.className);
 
             const toggleButton = debugMenu.querySelector('.dash-debug-menu__toggle');
-            console.debug('Toggle button found:', !!toggleButton);
+            console.log('Toggle button found:', !!toggleButton);
 
             if (toggleButton) {
-                console.debug('Toggle button classes:', toggleButton.className);
+                console.log('Toggle button classes:', toggleButton.className);
             }
 
             const isExpanded = debugMenu.classList.contains('dash-debug-menu__outer--expanded');
-            console.debug('Is expanded:', isExpanded);
+            console.log('Is expanded:', isExpanded);
         }
 
         // Also try alternative selectors
@@ -35,9 +35,9 @@
         alternativeSelectors.forEach(selector => {
             const elements = document.querySelectorAll(selector);
             if (elements.length > 0) {
-                console.debug(`Found ${elements.length} elements with selector:`, selector);
+                console.log(`Found ${elements.length} elements with selector:`, selector);
                 elements.forEach((el, i) => {
-                    console.debug(`  Element ${i}:`, el.className);
+                    console.log(`  Element ${i}:`, el.className);
                 });
             }
         });
@@ -45,7 +45,7 @@
 
     function tryCollapseDebugMenu() {
         attempts++;
-        console.debug(`Attempt ${attempts}/${maxAttempts} to collapse debug menu`);
+        console.log(`Attempt ${attempts}/${maxAttempts} to collapse debug menu`);
 
         if (hasBeenCollapsed || attempts > maxAttempts) {
             return;
@@ -64,7 +64,7 @@
         for (const selector of selectors) {
             debugMenu = document.querySelector(selector);
             if (debugMenu) {
-                console.debug('Found debug menu with selector:', selector);
+                console.log('Found debug menu with selector:', selector);
                 break;
             }
         }
@@ -73,7 +73,7 @@
             const isExpanded = debugMenu.classList.contains('dash-debug-menu__outer--expanded') ||
                              debugMenu.className.includes('expanded');
 
-            console.debug('Debug menu expanded state:', isExpanded);
+            console.log('Debug menu expanded state:', isExpanded);
 
             if (isExpanded) {
                 // Try multiple toggle button selectors
@@ -87,27 +87,27 @@
                 for (const selector of toggleSelectors) {
                     toggleButton = debugMenu.querySelector(selector);
                     if (toggleButton) {
-                        console.debug('Found toggle button with selector:', selector);
+                        console.log('Found toggle button with selector:', selector);
                         break;
                     }
                 }
 
                 if (toggleButton) {
-                    console.debug('Clicking toggle button to collapse menu');
+                    console.log('Clicking toggle button to collapse menu');
                     toggleButton.click();
                     hasBeenCollapsed = true;
-                    console.debug('Debug menu collapse attempted');
+                    console.log('Debug menu collapse attempted');
                     return;
                 } else {
-                    console.debug('No toggle button found');
+                    console.log('No toggle button found');
                 }
             } else {
-                console.debug('Debug menu already collapsed or not expanded');
+                console.log('Debug menu already collapsed or not expanded');
                 hasBeenCollapsed = true;
                 return;
             }
         } else {
-            console.debug('Debug menu not found yet');
+            console.log('Debug menu not found yet');
         }
 
         // Continue trying if we haven't succeeded
@@ -136,23 +136,14 @@
             mutations.forEach(function(mutation) {
                 if (mutation.type === 'childList') {
                     const addedNodes = Array.from(mutation.addedNodes);
-                    const hasDebugMenu = addedNodes.some(node => {
-                        if (node.nodeType !== 1) return false; // Only check element nodes
-
-                        // Safely check className - it can be string or DOMTokenList
-                        const hasDebugClass = node.className &&
-                            (typeof node.className === 'string'
-                                ? node.className.includes('dash-debug-menu')
-                                : node.className.toString().includes('dash-debug-menu'));
-
-                        const hasDebugChild = node.querySelector &&
-                            node.querySelector('[class*="dash-debug-menu"]');
-
-                        return hasDebugClass || hasDebugChild;
-                    });
+                    const hasDebugMenu = addedNodes.some(node =>
+                        node.nodeType === 1 &&
+                        (node.className && node.className.includes('dash-debug-menu') ||
+                         node.querySelector && node.querySelector('[class*="dash-debug-menu"]'))
+                    );
 
                     if (hasDebugMenu && !hasBeenCollapsed) {
-                        console.debug('Debug menu detected via MutationObserver');
+                        console.log('Debug menu detected via MutationObserver');
                         setTimeout(tryCollapseDebugMenu, 100);
                     }
                 }

@@ -1,5 +1,6 @@
 /* Make the container div behave like figure components */
-.react-grid-item:has(.ag-theme-alpine) div:has(.ag-theme-alpine) {
+.react-grid-item:has(.ag-theme-alpine) div:has(.ag-theme-alpine),
+.react-grid-item:has(.ag-theme-alpine-dark) div:has(.ag-theme-alpine-dark) {
     width: 100% !important;
     height: 100% !important;
     flex: 1 !important;
@@ -8,7 +9,8 @@
 }
 
 /* AG Grid needs explicit height - use flex-basis instead of height */
-.react-grid-item:has(.ag-theme-alpine) .ag-theme-alpine {
+.react-grid-item:has(.ag-theme-alpine) .ag-theme-alpine,
+.react-grid-item:has(.ag-theme-alpine-dark) .ag-theme-alpine-dark {
     flex: 1 1 200px !important;
     min-height: 200px !important;
 }
@@ -23,19 +25,22 @@
    Solution: Ensure popup doesn't interfere with table content visibility */
 
 /* Ensure AG Grid popup menus don't interfere with table content or layout */
-.ag-theme-alpine.ag-popup {
+.ag-theme-alpine.ag-popup,
+.ag-theme-alpine-dark.ag-popup {
     z-index: 2000 !important; /* Higher than any draggable grid elements */
     position: fixed !important; /* Remove from document flow to prevent pushing */
 }
 
 /* Ensure the popup is properly positioned and doesn't affect table layout */
-.ag-theme-alpine .ag-menu {
+.ag-theme-alpine .ag-menu,
+.ag-theme-alpine-dark .ag-menu {
     z-index: 2001 !important;
     position: absolute !important; /* Absolute positioning within fixed parent */
 }
 
 /* Prevent popup from hiding table content and interfering with layout */
-.ag-theme-alpine .ag-popup-child {
+.ag-theme-alpine .ag-popup-child,
+.ag-theme-alpine-dark .ag-popup-child {
     z-index: 2002 !important;
     position: relative !important; /* Maintain positioning within absolute parent */
 }
@@ -43,23 +48,29 @@
 /* Critical: Prevent popup from affecting the main table's flex layout */
 .ag-theme-alpine.ag-popup,
 .ag-theme-alpine .ag-menu,
-.ag-theme-alpine .ag-popup-child {
+.ag-theme-alpine .ag-popup-child,
+.ag-theme-alpine-dark.ag-popup,
+.ag-theme-alpine-dark .ag-menu,
+.ag-theme-alpine-dark .ag-popup-child {
     /* Remove from layout flow completely */
     pointer-events: auto !important; /* Keep interactive */
     display: block !important; /* Ensure visible */
 }
 
 /* Ensure table content remains visible when popup is shown - without affecting layout */
-.react-grid-item:has(.ag-theme-alpine) .ag-theme-alpine:not(.ag-popup) {
+.react-grid-item:has(.ag-theme-alpine) .ag-theme-alpine:not(.ag-popup),
+.react-grid-item:has(.ag-theme-alpine-dark) .ag-theme-alpine-dark:not(.ag-popup) {
     /* Remove z-index override that was affecting layout */
     width: 100% !important;
     height: 100% !important;
     flex: 1 !important;
     display: flex !important;
-    flex-direction: column !important;}
+    flex-direction: column !important;
+}
 
 /* Force table body to stay visible regardless of popup state - CRITICAL: Don't override AG Grid's internal scrolling */
-.react-grid-item .ag-theme-alpine .ag-body-viewport {
+.react-grid-item .ag-theme-alpine .ag-body-viewport,
+.react-grid-item .ag-theme-alpine-dark .ag-body-viewport {
     width: 100% !important;
     /* REMOVE: height: 100% !important; - Let AG Grid manage viewport height for infinite scroll */
     /* REMOVE: flex: 1 !important; - AG Grid viewport needs block layout, not flex */
