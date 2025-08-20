@@ -8,6 +8,7 @@ which is battle-tested and maintained by the Zope Foundation.
 import traceback
 from typing import Any, Dict, Tuple
 
+import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import polars as pl
@@ -54,6 +55,9 @@ class SimpleCodeExecutor:
             # Visualization libraries only - no data import/export
             "px": px,
             "go": go,
+            # Polars & Pandas
+            "pl": pl,
+            "pd": pd,
             # Safe builtins
             "__builtins__": safe_builtins,
             # Guards for dataframe operations
