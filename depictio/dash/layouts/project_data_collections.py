@@ -300,6 +300,23 @@ def create_workflow_card(workflow, selected_workflow_id=None):
     )
 
 
+def _get_ag_grid_theme_class(theme: str) -> str:
+    """Get the appropriate AG Grid theme class based on the theme.
+
+    Args:
+        theme: Theme name ("light", "dark", or other)
+
+    Returns:
+        AG Grid CSS theme class name
+    """
+    # Handle case where theme is empty dict, None, or other falsy value
+    if not theme or theme == {} or theme == "{}":
+        theme = "light"
+
+    logger.debug(f"PROJECT DATA COLLECTIONS - Using theme: {theme} for AG Grid")
+    return "ag-theme-alpine-dark" if theme == "dark" else "ag-theme-alpine"
+
+
 def create_workflows_manager_section(workflows, selected_workflow_id=None):
     """
     Create the workflows manager section.
@@ -864,7 +881,7 @@ def create_data_collections_manager_section(workflow=None):
 
 
 def create_data_collection_viewer_content(
-    data_collection=None, delta_info=None, workflow_info=None
+    data_collection=None, delta_info=None, workflow_info=None, theme="light"
 ):
     """
     Create the content for the data collection viewer section.
@@ -873,6 +890,7 @@ def create_data_collection_viewer_content(
         data_collection: Selected data collection object or data
         delta_info: Delta table information from API
         workflow_info: Workflow information containing registration_time
+        theme: Current theme ("light" or "dark") for AG Grid styling
 
     Returns:
         html.Div: Data collection viewer content
@@ -1319,10 +1337,13 @@ def register_project_data_collections_callbacks(app):
             dash.State("selected-data-collection-store", "data"),
             dash.State("project-data-store", "data"),
             dash.State("local-store", "data"),
+            dash.State("theme-store", "data"),
         ],
         prevent_initial_call=True,
     )
-    def load_dc_viewer_data(n_clicks, row_limit, selected_dc_data, project_data, local_data):
+    def load_dc_viewer_data(
+        n_clicks, row_limit, selected_dc_data, project_data, local_data, theme_data
+    ):
         """Load and display data in the data collection viewer using AG Grid."""
         if not n_clicks or not selected_dc_data:
             return dmc.Center(
@@ -1337,6 +1358,7 @@ def register_project_data_collections_callbacks(app):
                 py="xl",
             )
 
+        theme = theme_data or "light"
         try:
             # selected_dc_data is the selected_dc_tag (string), not the DC ID
             # We need to find the actual DC ID from project_data using the tag
@@ -1471,7 +1493,7 @@ def register_project_data_collections_callbacks(app):
                     "animateRows": True,
                 },
                 style={"height": "400px", "width": "100%"},
-                className="ag-theme-alpine",
+                className=_get_ag_grid_theme_class(theme),
             )
 
             # Create summary info
@@ -1812,14 +1834,16 @@ def register_project_data_collections_callbacks(app):
     @app.callback(
         Output("data-collection-viewer-content", "children", allow_duplicate=True),
         [Input("url", "pathname")],
+        [dash.State("theme-store", "data")],
         prevent_initial_call=True,
     )
-    def initialize_data_collection_viewer(pathname):
+    def initialize_data_collection_viewer(pathname, theme_data):
         """Initialize the data collection viewer with empty state."""
         if not pathname or not pathname.startswith("/project/") or not pathname.endswith("/data"):
             return dash.no_update
 
-        return create_data_collection_viewer_content(None, None, None)
+        theme = theme_data or "light"
+        return create_data_collection_viewer_content(None, None, None, theme)
 
     @app.callback(
         [
@@ -1831,10 +1855,13 @@ def register_project_data_collections_callbacks(app):
             dash.State("project-data-store", "data"),
             dash.State("selected-workflow-store", "data"),
             dash.State("local-store", "data"),
+            dash.State("theme-store", "data"),
         ],
         prevent_initial_call=True,
     )
-    def handle_data_collection_selection(dc_clicks, project_data, selected_workflow_id, local_data):
+    def handle_data_collection_selection(
+        dc_clicks, project_data, selected_workflow_id, local_data, theme_data
+    ):
         """Handle data collection card selection and populate viewer."""
         if not any(dc_clicks) or not project_data:
             return dash.no_update, dash.no_update
@@ -1882,8 +1909,9 @@ def register_project_data_collections_callbacks(app):
                 logger.error(f"Error fetching delta table info: {e}")
 
         # Create viewer content with delta information
+        theme = theme_data or "light"
         viewer_content = create_data_collection_viewer_content(
-            selected_dc, delta_info, workflow_info
+            selected_dc, delta_info, workflow_info, theme
         )
 
         return selected_dc_tag, viewer_content

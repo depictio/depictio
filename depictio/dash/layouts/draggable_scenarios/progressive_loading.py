@@ -466,7 +466,7 @@ def register_progressive_loading_callbacks(app):
             return window.dash_clientside.no_update;
         }
         """,
-        Output("dummy-output", "children", allow_duplicate=True),
+        # Output("progress-monitor", "data"),
         Input("url", "pathname"),
         prevent_initial_call=True,
     )
