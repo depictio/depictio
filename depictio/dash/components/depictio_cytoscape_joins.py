@@ -797,7 +797,7 @@ def register_joins_callbacks(app):
     from dash import Input, Output, callback
 
     @callback(
-        Output("depictio-joins-selection-info", "children"),
+        Output("depictio-joins-selection-info", "children", allow_duplicate=True),
         [
             Input("depictio-cytoscape-joins", "selectedNodeData"),
             Input("depictio-cytoscape-joins", "selectedEdgeData"),
