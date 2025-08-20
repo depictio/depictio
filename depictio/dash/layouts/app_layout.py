@@ -16,7 +16,9 @@ from depictio.dash.layouts.dashboards_management import layout as dashboards_man
 from depictio.dash.layouts.draggable import design_draggable
 
 # Depictio utils imports
-from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data
+from depictio.dash.layouts.draggable_scenarios.restore_dashboard import (
+    load_depictio_data_sync as load_depictio_data,
+)
 from depictio.dash.layouts.header import design_header
 from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
 from depictio.dash.layouts.notes_footer import create_notes_footer
@@ -104,24 +106,37 @@ def handle_authenticated_user(pathname, local_data, theme="light"):
     # Map the pathname to the appropriate content and header
     if pathname.startswith("/dashboard/"):
         dashboard_id = pathname.split("/")[-1]
-        depictio_dash_data = load_depictio_data(dashboard_id, local_data, theme=theme)
-        # logger.info(f"Depictio dash data: {depictio_dash_data}")
-        header_content, backend_components = design_header(
-            data=depictio_dash_data, local_store=local_data
-        )
-        dashboard_id = pathname.split("/")[-1]
-        return (
-            create_dashboard_layout(
+
+        # Load dashboard data and create layout directly
+        logger.info(f"🔄 DASHBOARD NAVIGATION: Loading dashboard {dashboard_id}")
+
+        # Load dashboard data synchronously
+        depictio_dash_data = load_depictio_data(dashboard_id=dashboard_id, local_data=local_data)
+
+        # Create dashboard layout
+        if depictio_dash_data:
+            header_content, backend_components = design_header(depictio_dash_data, local_data)
+
+            # Create dashboard layout
+            dashboard_layout = create_dashboard_layout(
                 depictio_dash_data=depictio_dash_data,
                 dashboard_id=dashboard_id,
                 local_data=local_data,
                 backend_components=backend_components,
                 theme=theme,
-            ),
-            header_content,
-            pathname,
-            local_data,
-        )
+            )
+
+            return dashboard_layout, header_content, pathname, local_data
+        else:
+            # Dashboard not found or error
+            header_content = create_default_header("Dashboard Not Found")
+            error_layout = html.Div(
+                [
+                    html.H3("Dashboard not found or you don't have access"),
+                    html.P(f"Dashboard ID: {dashboard_id}"),
+                ]
+            )
+            return error_layout, header_content, pathname, local_data
 
     elif pathname == "/dashboards":
         user = api_call_fetch_user_from_token(local_data["access_token"])
