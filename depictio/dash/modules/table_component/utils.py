@@ -85,7 +85,7 @@ def build_table(**kwargs):
     dc_config = kwargs.get("dc_config")
     cols = kwargs.get("cols_json")
     build_frame = kwargs.get("build_frame", False)
-
+    theme = kwargs.get("theme", "light")
     df = kwargs.get("df", pl.DataFrame())
     TOKEN = kwargs.get("access_token")
     stepper = kwargs.get("stepper", False)
@@ -212,6 +212,8 @@ def build_table(**kwargs):
     logger.info(f"📊 Table {index}: Using INFINITE row model with interactive component support")
     logger.info("🔄 Interactive filters and pagination handled by infinite scroll callback")
 
+    logger.info(f"Table {index}: Building AG Grid with theme {theme}")
+
     # Always use infinite scroll configuration
     table_aggrid = dag.AgGrid(
         id={"type": value_div_type, "index": str(index)},
@@ -248,7 +250,7 @@ def build_table(**kwargs):
             "filter": True,
         },
         style={"width": "100%"},
-        className="ag-theme-alpine",  # Default theme, will be updated by callback
+        className="ag-theme-alpine" if theme == "light" else "ag-theme-alpine-dark",
     )
 
     logger.info(f"✅ Table {index}: Infinite row model configured with interactive support")
