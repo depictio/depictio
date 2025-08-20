@@ -5,6 +5,7 @@ from dash_iconify import DashIconify
 
 import dash
 from dash import Input, Output
+from depictio.api.v1.configs.logging_init import logger
 
 
 def create_theme_switch():
@@ -44,6 +45,17 @@ def create_theme_controls():
 
 def register_theme_callbacks(app):
     """Register theme-related callbacks"""
+
+    # PERFORMANCE OPTIMIZATION: Check settings to control theme animations
+    from depictio.api.v1.configs.settings_models import Settings
+
+    settings = Settings()
+    DISABLE_THEME_ANIMATIONS = settings.performance.disable_theme_animations
+
+    if DISABLE_THEME_ANIMATIONS:
+        logger.info(
+            "⚡ PERFORMANCE: Theme animations disabled via settings.performance.disable_theme_animations"
+        )
 
     # Add Mantine figure templates for Plotly when theme system initializes
     dmc.add_figure_templates()  # type: ignore[unresolved-attribute]
@@ -429,8 +441,12 @@ def register_theme_callbacks(app):
     )
 
     # Update Plotly figure templates when theme changes using Mantine templates
-    app.clientside_callback(
-        """
+    # PERFORMANCE OPTIMIZATION: Skip expensive Plotly updates if disabled
+    if DISABLE_THEME_ANIMATIONS:
+        logger.info("⚡ PERFORMANCE: Plotly theme updates disabled")
+    else:
+        app.clientside_callback(
+            """
         function(theme_data) {
             console.log('📊 === PLOTLY MANTINE THEME UPDATE ===');
             console.log('Theme data received:', theme_data);
@@ -513,30 +529,44 @@ def register_theme_callbacks(app):
             }
         }
         """,
-        Output("dummy-plotly-output", "children", allow_duplicate=True),
-        Input("theme-store", "data"),
-        prevent_initial_call=True,
-    )
+            Output("dummy-plotly-output", "children", allow_duplicate=True),
+            Input("theme-store", "data"),
+            prevent_initial_call=True,
+        )
 
     # Client-side callback for theme updates - single modular callback with working NavLink icon handling
-    app.clientside_callback(
-        """
-        function(theme_data) {
-            // === MODULAR JAVASCRIPT FUNCTIONS ===
-
-            // Function to safely apply styles with error handling
-            function safeApplyStyles(element, styles) {
-                if (!element) return false;
-                try {
-                    Object.keys(styles).forEach(prop => {
-                        element.style.setProperty(prop, styles[prop], 'important');
-                    });
-                    return true;
-                } catch (error) {
-                    console.error('Error applying styles:', error);
-                    return false;
-                }
+    # PERFORMANCE OPTIMIZATION: Skip expensive theme operations if disabled
+    if DISABLE_THEME_ANIMATIONS:
+        app.clientside_callback(
+            """
+            function(theme_data) {
+                console.log('⚡ PERFORMANCE: Theme CSS operations disabled for optimization');
+                return window.dash_clientside.no_update;
             }
+            """,
+            Output("page-content", "style", allow_duplicate=True),
+            Input("theme-store", "data"),
+            prevent_initial_call=True,
+        )
+    else:
+        app.clientside_callback(
+            """
+            function(theme_data) {
+                // === MODULAR JAVASCRIPT FUNCTIONS ===
+
+                // Function to safely apply styles with error handling
+                function safeApplyStyles(element, styles) {
+                    if (!element) return false;
+                    try {
+                        Object.keys(styles).forEach(prop => {
+                            element.style.setProperty(prop, styles[prop], 'important');
+                        });
+                        return true;
+                    } catch (error) {
+                        console.error('Error applying styles:', error);
+                        return false;
+                    }
+                }
 
             // Function to handle NavLink icon theming (from working debug app)
             function updateNavLinkIcons(theme) {
@@ -868,10 +898,10 @@ def register_theme_callbacks(app):
             }
         }
         """,
-        Output("page-content", "style", allow_duplicate=True),
-        Input("theme-store", "data"),
-        prevent_initial_call=True,
-    )
+            Output("page-content", "style", allow_duplicate=True),
+            Input("theme-store", "data"),
+            prevent_initial_call=True,
+        )
 
     # Dedicated callback for dashboard-title to trigger draggable updates
     app.clientside_callback(
