@@ -369,16 +369,14 @@ def render_figure(
 
     logger.info("=== FIGURE RENDER DEBUG ===")
     logger.info(f"Visualization: {visu_type}")
-    logger.info(f"Theme: {theme}")
-    logger.info(f"Template: {dict_kwargs.get('template')}")
+    logger.warning(f"🎨 THEME: {theme} -> TEMPLATE: {dict_kwargs.get('template')}")
     logger.info(f"Data shape: {df.shape if df is not None else 'None'}")
     logger.info(f"Selected point: {selected_point is not None}")
     logger.info(f"Parameters: {list(dict_kwargs.keys())}")
-    logger.info(f"Full dict_kwargs: {dict_kwargs}")  # Show full parameters for debugging
-    logger.info(
+    logger.debug(f"Full dict_kwargs: {dict_kwargs}")  # Reduced to debug level
+    logger.debug(
         f"Boolean parameters in dict_kwargs: {[(k, v, type(v)) for k, v in dict_kwargs.items() if isinstance(v, bool)]}"
     )
-    # logger.info(f"Available columns in df: {df.columns if df is not None else 'None'}")  # Reduced logging
 
     # Handle empty or invalid data
     if df is None or df.is_empty():
@@ -469,8 +467,8 @@ def render_figure(
                 figure = clustering_function(sampled_df, **cleaned_kwargs)
             else:
                 # Use full dataset
-                pandas_df = df.to_pandas()
-                figure = clustering_function(pandas_df, **cleaned_kwargs)
+                # pandas_df = df.to_pandas()
+                figure = clustering_function(df, **cleaned_kwargs)
         else:
             # Handle standard Plotly visualizations
             plot_function = PLOTLY_FUNCTIONS[visu_type.lower()]
@@ -480,30 +478,34 @@ def render_figure(
                 cache_key = f"{id(df)}_{cutoff}_{hash(str(cleaned_kwargs))}"
 
                 if cache_key not in _sampling_cache:
-                    sampled_df = df.sample(n=cutoff, seed=0).to_pandas()
+                    sampled_df = df.sample(n=cutoff, seed=0)
                     _sampling_cache[cache_key] = sampled_df
                     logger.info(f"Cached sampled data: {cutoff} points from {df.height}")
                 else:
                     sampled_df = _sampling_cache[cache_key]
                     logger.info(f"Using cached sampled data: {cutoff} points")
 
-                logger.info("=== CALLING PLOTLY FUNCTION ===")
+                logger.info("=== CALLING PLOTLY FUNCTION (SAMPLED DATA) ===")
                 logger.info(f"Function: {plot_function.__name__}")
-                logger.info(f"Parameters: {cleaned_kwargs}")
-                logger.info(
-                    f"Boolean params: {[(k, v) for k, v in cleaned_kwargs.items() if isinstance(v, bool)]}"
-                )
+                logger.warning(f"🚨 SAMPLED DATA SIZE: {sampled_df.shape[0]:,} rows")
+
+                # PERFORMANCE: Time the Plotly function call
+                import time
+
+                plot_start = time.time()
                 figure = plot_function(sampled_df, **cleaned_kwargs)
+                plot_end = time.time()
+                logger.warning(f"🕐 PLOTLY FUNCTION TIME: {(plot_end - plot_start) * 1000:.0f}ms")
             else:
                 # Use full dataset
-                pandas_df = df.to_pandas()
+                # pandas_df = df.to_pandas()
                 logger.info("=== CALLING PLOTLY FUNCTION ===")
                 logger.info(f"Function: {plot_function.__name__}")
                 logger.info(f"Parameters: {cleaned_kwargs}")
                 logger.info(
                     f"Boolean params: {[(k, v) for k, v in cleaned_kwargs.items() if isinstance(v, bool)]}"
                 )
-                figure = plot_function(pandas_df, **cleaned_kwargs)
+                figure = plot_function(df, **cleaned_kwargs)
 
         # Apply responsive sizing - FORCE for vertical growing
         figure.update_layout(
@@ -897,6 +899,18 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     # Validate and clean parameters
     validated_kwargs = validate_parameters(visu_type, dict_kwargs)
 
+    # THEME RESTORATION FIX: Ensure template is populated for dashboard restore
+    # This fixes the issue where figures don't pick up correct theme during restore
+    # when template is empty in the database
+    template_value = validated_kwargs.get("template")
+    if not template_value or template_value == "":
+        validated_kwargs["template"] = _get_theme_template(theme)
+        logger.info(
+            f"🎨 RESTORE FIX: Populated empty template with {validated_kwargs['template']} for theme {theme}"
+        )
+    else:
+        logger.info(f"🎨 RESTORE: Using existing template: {template_value}")
+
     # Handle data loading
     if df.is_empty() and kwargs.get("refresh", True):
         if wf_id and dc_id:
@@ -1103,18 +1117,16 @@ def create_stepper_figure_button(n, disabled=False):
     return button, store
 
 
-# Async wrapper for background callbacks (following card component pattern)
+# Async wrapper for background callbacks - now calls sync version
 async def build_figure_async(**kwargs):
     """
-    Async wrapper for build_figure function.
-    Used in background callbacks where async execution is needed.
+    Async wrapper for build_figure function - async functionality disabled, calls sync version.
     """
     logger.info(
-        f"🔄 ASYNC FIGURE: Building figure component asynchronously - Index: {kwargs.get('index', 'UNKNOWN')}"
+        f"🔄 ASYNC FIGURE: Building figure component (using sync) - Index: {kwargs.get('index', 'UNKNOWN')}"
     )
 
     # Call the synchronous build_figure function
-    # In the future, this could run in a thread pool if needed for true parallelism
     result = build_figure(**kwargs)
 
     logger.info(

@@ -867,18 +867,16 @@ agg_functions = {
 }
 
 
-# Async wrapper for background callbacks
+# Async wrapper for background callbacks - now calls sync version
 async def build_card_async(**kwargs):
     """
-    Async wrapper for build_card function.
-    Used in background callbacks where async execution is needed.
+    Async wrapper for build_card function - async functionality disabled, calls sync version.
     """
     logger.info(
-        f"🔄 ASYNC CARD: Building card component asynchronously - Index: {kwargs.get('index', 'UNKNOWN')}"
+        f"🔄 ASYNC CARD: Building card component (using sync) - Index: {kwargs.get('index', 'UNKNOWN')}"
     )
 
     # Call the synchronous build_card function
-    # In the future, this could run in a thread pool if needed for true parallelism
     result = build_card(**kwargs)
 
     logger.info(

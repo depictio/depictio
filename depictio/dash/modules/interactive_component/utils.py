@@ -1426,14 +1426,13 @@ agg_functions = {
 }
 
 
-# Async wrapper for background callbacks (following card component pattern)
+# Async wrapper for background callbacks - now calls sync version
 async def build_interactive_async(**kwargs):
     """
-    Async wrapper for build_interactive function.
-    Used in background callbacks where async execution is needed.
+    Async wrapper for build_interactive function - async functionality disabled, calls sync version.
     """
     logger.info(
-        f"🔄 ASYNC INTERACTIVE: Building interactive component asynchronously - Index: {kwargs.get('index', 'UNKNOWN')}"
+        f"🔄 ASYNC INTERACTIVE: Building interactive component (using sync) - Index: {kwargs.get('index', 'UNKNOWN')}"
     )
 
     # Call the synchronous build_interactive function
