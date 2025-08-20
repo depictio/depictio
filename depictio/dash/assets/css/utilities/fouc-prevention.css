@@ -3,7 +3,9 @@
    Flash of unstyled content prevention and loading state management
    ============================================================================= */
 
-/* Aggressive FOUC prevention - hide header/navbar by default on initial load */
+/* TEMPORARILY DISABLED FOR PERFORMANCE OPTIMIZATION
+   FOUC prevention - hide header/navbar by default on initial load */
+/*
 #header-content,
 #sidebar,
 .mantine-AppShell-navbar,
@@ -11,11 +13,23 @@
     opacity: 0 !important;
     transition: opacity 0.1s ease !important;
 }
+*/
 
 /* Show header/navbar only when page is fully loaded and NOT auth page */
+/*
 body.page-loaded:not(.auth-page) #header-content,
 body.page-loaded:not(.auth-page) #sidebar,
 body.page-loaded:not(.auth-page) .mantine-AppShell-navbar,
 body.page-loaded:not(.auth-page) .mantine-AppShell-header {
     opacity: 1 !important;
+}
+*/
+
+/* PERFORMANCE OPTIMIZATION: Show all elements immediately */
+#header-content,
+#sidebar,
+.mantine-AppShell-navbar,
+.mantine-AppShell-header {
+    opacity: 1 !important;
+    transition: none !important;
 }

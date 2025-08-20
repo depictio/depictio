@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Autofill ID Sanitizer Test</title>
+    <script src="../js/00-autofill-id-sanitizer.js"></script>
+</head>
+<body>
+    <h1>Autofill ID Sanitizer Test</h1>
+
+    <!-- Test elements with problematic JSON IDs -->
+    <div id='{"type":"interactive-component-value","index":"test-123"}'>Interactive Component</div>
+    <input id='{"type":"edit-input","index":"test-456"}' value="Edit Input" />
+    <label for='{"type":"edit-input","index":"test-456"}'>Label for Input</label>
+
+    <script>
+        console.log('=== AUTOFILL TEST ===');
+
+        // Test 1: Check if elements exist
+        const elements = document.querySelectorAll('[id*="type"]');
+        console.log('Elements with "type" in ID:', elements.length);
+
+        // Test 2: Try the problematic selector that causes autofill errors
+        try {
+            const problematicSelector = 'label[for="{\\"type\\":\\"edit-input\\",\\"index\\":\\"test-456\\"}"]';
+            const result = document.querySelectorAll(problematicSelector);
+            console.log('✅ Problematic selector worked:', result.length);
+        } catch (e) {
+            console.log('❌ Problematic selector failed:', e.message);
+        }
+
+        // Test 3: Check if IDs were sanitized
+        setTimeout(() => {
+            console.log('=== After sanitization ===');
+            document.querySelectorAll('[id]').forEach(el => {
+                console.log('Element ID:', el.id);
+            });
+        }, 2000);
+    </script>
+</body>
+</html>

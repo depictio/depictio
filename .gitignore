@@ -262,3 +262,5 @@ benchmark_datasets/
 # Sensitive Helm values files
 helm-charts/depictio/values-*-secrets.yaml
 helm-charts/depictio/*secrets*.yaml
+dev/dev-multiqc-parquet/detailed_extraction_reports/
+prof_files/
