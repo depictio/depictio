@@ -10,6 +10,9 @@ from bson import ObjectId
 from dash_iconify import DashIconify
 
 from dash import dcc, html
+
+# PERFORMANCE OPTIMIZATION: Use centralized config
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
@@ -175,6 +178,11 @@ _config = ComponentConfig()
 # Cache for sampled data to avoid re-sampling large datasets
 _sampling_cache = {}
 
+# PERFORMANCE OPTIMIZATION: Figure result cache to avoid redundant Plotly generation
+_figure_result_cache = {}
+FIGURE_CACHE_TTL = 300  # 5 minutes
+FIGURE_CACHE_MAX_SIZE = 100
+
 
 # Plotly Express function mapping - dynamically get all available functions
 def _get_plotly_functions():
@@ -243,6 +251,47 @@ def _get_required_parameters(visu_type: str) -> List[str]:
         return ["x", "y"]
 
 
+def _get_figure_cache_key(
+    dict_kwargs: dict, visu_type: str, df_hash: str, cutoff: int, selected_point: dict, theme: str
+) -> str:
+    """Generate cache key for figure results."""
+    import hashlib
+
+    # Create a deterministic hash from all input parameters
+    cache_data = {
+        "dict_kwargs": dict_kwargs,
+        "visu_type": visu_type,
+        "df_hash": df_hash,
+        "cutoff": cutoff,
+        "selected_point": selected_point,
+        "theme": theme,
+    }
+    cache_str = str(cache_data)
+    return hashlib.md5(cache_str.encode()).hexdigest()
+
+
+def _clean_figure_cache():
+    """Remove expired entries from figure cache."""
+    import time
+
+    current_time = time.time()
+    expired_keys = [
+        key
+        for key, (_, timestamp) in _figure_result_cache.items()
+        if current_time - timestamp > FIGURE_CACHE_TTL
+    ]
+    for key in expired_keys:
+        del _figure_result_cache[key]
+
+    # If cache is still too large, remove oldest entries
+    if len(_figure_result_cache) > FIGURE_CACHE_MAX_SIZE:
+        # Sort by timestamp and remove oldest entries
+        sorted_items = sorted(_figure_result_cache.items(), key=lambda x: x[1][1])
+        excess_count = len(_figure_result_cache) - FIGURE_CACHE_MAX_SIZE
+        for key, _ in sorted_items[:excess_count]:
+            del _figure_result_cache[key]
+
+
 def render_figure(
     dict_kwargs: Dict[str, Any],
     visu_type: str,
@@ -251,7 +300,7 @@ def render_figure(
     selected_point: Optional[Dict] = None,
     theme: str = "light",
 ) -> Any:
-    """Render a Plotly figure with robust parameter handling.
+    """Render a Plotly figure with robust parameter handling and result caching.
 
     Args:
         dict_kwargs: Figure parameters
@@ -264,6 +313,30 @@ def render_figure(
     Returns:
         Plotly figure object
     """
+    # PERFORMANCE OPTIMIZATION: Check figure result cache first
+
+    # Generate cache key from all inputs
+    df_hash = str(hash(str(df.hash_rows()) if not df.is_empty() else "empty"))
+    selected_point_clean = selected_point or {}
+
+    cache_key = _get_figure_cache_key(
+        dict_kwargs, visu_type, df_hash, cutoff, selected_point_clean, theme
+    )
+
+    # TEMPORARY: Disable figure cache to test async rendering performance
+    logger.info(f"🚧 CACHE DISABLED: Generating fresh {visu_type} figure for performance testing")
+
+    # Clean cache and check for existing result
+    # _clean_figure_cache()
+    # if cache_key in _figure_result_cache:
+    #     cached_figure, timestamp = _figure_result_cache[cache_key]
+    #     logger.info(
+    #         f"🚀 FIGURE CACHE HIT: Using cached figure for {visu_type} (saved {int((time.time() - timestamp) * 1000)}ms ago)"
+    #     )
+    #     return cached_figure
+
+    # logger.info(f"📊 FIGURE CACHE MISS: Generating new {visu_type} figure")
+
     # Check if it's a clustering visualization
     is_clustering = visu_type.lower() in ["umap"]
 
@@ -296,16 +369,14 @@ def render_figure(
 
     logger.info("=== FIGURE RENDER DEBUG ===")
     logger.info(f"Visualization: {visu_type}")
-    logger.info(f"Theme: {theme}")
-    logger.info(f"Template: {dict_kwargs.get('template')}")
+    logger.warning(f"🎨 THEME: {theme} -> TEMPLATE: {dict_kwargs.get('template')}")
     logger.info(f"Data shape: {df.shape if df is not None else 'None'}")
     logger.info(f"Selected point: {selected_point is not None}")
     logger.info(f"Parameters: {list(dict_kwargs.keys())}")
-    logger.info(f"Full dict_kwargs: {dict_kwargs}")  # Show full parameters for debugging
-    logger.info(
+    logger.debug(f"Full dict_kwargs: {dict_kwargs}")  # Reduced to debug level
+    logger.debug(
         f"Boolean parameters in dict_kwargs: {[(k, v, type(v)) for k, v in dict_kwargs.items() if isinstance(v, bool)]}"
     )
-    # logger.info(f"Available columns in df: {df.columns if df is not None else 'None'}")  # Reduced logging
 
     # Handle empty or invalid data
     if df is None or df.is_empty():
@@ -335,10 +406,11 @@ def render_figure(
             ):
                 cleaned_kwargs[k] = v
 
-    logger.info("=== CLEANED PARAMETERS DEBUG ===")
-    logger.info(f"Original dict_kwargs: {dict_kwargs}")
-    logger.info(f"Cleaned kwargs: {cleaned_kwargs}")
-    logger.info(
+    # PERFORMANCE OPTIMIZATION: Reduce verbose logging in production
+    logger.debug("=== CLEANED PARAMETERS DEBUG ===")
+    logger.debug(f"Original dict_kwargs: {dict_kwargs}")
+    logger.debug(f"Cleaned kwargs: {cleaned_kwargs}")
+    logger.debug(
         f"Boolean parameters in cleaned_kwargs: {[(k, v, type(v)) for k, v in cleaned_kwargs.items() if isinstance(v, bool)]}"
     )
 
@@ -395,8 +467,8 @@ def render_figure(
                 figure = clustering_function(sampled_df, **cleaned_kwargs)
             else:
                 # Use full dataset
-                pandas_df = df.to_pandas()
-                figure = clustering_function(pandas_df, **cleaned_kwargs)
+                # pandas_df = df.to_pandas()
+                figure = clustering_function(df, **cleaned_kwargs)
         else:
             # Handle standard Plotly visualizations
             plot_function = PLOTLY_FUNCTIONS[visu_type.lower()]
@@ -406,30 +478,34 @@ def render_figure(
                 cache_key = f"{id(df)}_{cutoff}_{hash(str(cleaned_kwargs))}"
 
                 if cache_key not in _sampling_cache:
-                    sampled_df = df.sample(n=cutoff, seed=0).to_pandas()
+                    sampled_df = df.sample(n=cutoff, seed=0)
                     _sampling_cache[cache_key] = sampled_df
                     logger.info(f"Cached sampled data: {cutoff} points from {df.height}")
                 else:
                     sampled_df = _sampling_cache[cache_key]
                     logger.info(f"Using cached sampled data: {cutoff} points")
 
-                logger.info("=== CALLING PLOTLY FUNCTION ===")
+                logger.info("=== CALLING PLOTLY FUNCTION (SAMPLED DATA) ===")
                 logger.info(f"Function: {plot_function.__name__}")
-                logger.info(f"Parameters: {cleaned_kwargs}")
-                logger.info(
-                    f"Boolean params: {[(k, v) for k, v in cleaned_kwargs.items() if isinstance(v, bool)]}"
-                )
+                logger.warning(f"🚨 SAMPLED DATA SIZE: {sampled_df.shape[0]:,} rows")
+
+                # PERFORMANCE: Time the Plotly function call
+                import time
+
+                plot_start = time.time()
                 figure = plot_function(sampled_df, **cleaned_kwargs)
+                plot_end = time.time()
+                logger.warning(f"🕐 PLOTLY FUNCTION TIME: {(plot_end - plot_start) * 1000:.0f}ms")
             else:
                 # Use full dataset
-                pandas_df = df.to_pandas()
+                # pandas_df = df.to_pandas()
                 logger.info("=== CALLING PLOTLY FUNCTION ===")
                 logger.info(f"Function: {plot_function.__name__}")
                 logger.info(f"Parameters: {cleaned_kwargs}")
                 logger.info(
                     f"Boolean params: {[(k, v) for k, v in cleaned_kwargs.items() if isinstance(v, bool)]}"
                 )
-                figure = plot_function(pandas_df, **cleaned_kwargs)
+                figure = plot_function(df, **cleaned_kwargs)
 
         # Apply responsive sizing - FORCE for vertical growing
         figure.update_layout(
@@ -442,15 +518,25 @@ def render_figure(
         if selected_point and "x" in cleaned_kwargs and "y" in cleaned_kwargs:
             _highlight_selected_point(figure, df, cleaned_kwargs, selected_point)
 
+        # TEMPORARY: Disable figure cache writing for performance testing
+        # _figure_result_cache[cache_key] = (figure, time.time())
+        logger.info(f"🚧 CACHE DISABLED: Skipping figure cache storage for {visu_type}")
+
         return figure
 
     except Exception as e:
         logger.error(f"Error creating figure: {e}")
         # Return fallback figure
-        return px.scatter(
+        fallback_figure = px.scatter(
             template=dict_kwargs.get("template", _get_theme_template(theme)),
             title=f"Error: {str(e)}",
         )
+
+        # TEMPORARY: Disable fallback figure cache writing for performance testing
+        # _figure_result_cache[cache_key] = (fallback_figure, time.time())
+        logger.info("🚧 CACHE DISABLED: Skipping fallback figure cache storage")
+
+        return fallback_figure
 
 
 def _create_umap_placeholder(df: pl.DataFrame, dict_kwargs: Dict[str, Any], theme: str) -> Any:
@@ -669,9 +755,40 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     Returns:
         Figure component as HTML div
     """
-    logger.info("=== BUILD FIGURE CALLED ===")
-    logger.info(f"All kwargs: {kwargs}")
-    logger.info(f"All kwargs keys: {list(kwargs.keys())}")
+    # DUPLICATION TRACKING: Enhanced logging to find source of duplicate builds
+    import inspect
+    import traceback
+
+    caller_info = "UNKNOWN"
+    try:
+        # Get the calling function details
+        frame = inspect.currentframe()
+        if frame and frame.f_back:
+            caller_frame = frame.f_back
+            caller_info = f"{caller_frame.f_code.co_filename}:{caller_frame.f_lineno} in {caller_frame.f_code.co_name}()"
+    except Exception:
+        pass
+
+    logger.info("=" * 60)
+    logger.info("🔍 BUILD FIGURE CALLED - DUPLICATION TRACKING")
+    logger.info(f"📍 CALLER: {caller_info}")
+    logger.info(f"🏷️  INDEX: {kwargs.get('index', 'UNKNOWN')}")
+    logger.info(f"🎯 STEPPER: {kwargs.get('stepper', False)}")
+    logger.info(f"🔧 BUILD_FRAME: {kwargs.get('build_frame', False)}")
+    logger.info(f"👤 PARENT_INDEX: {kwargs.get('parent_index', 'NONE')}")
+
+    # Check for bulk data availability
+    if "_bulk_component_data" in kwargs:
+        logger.info("✅ BULK DATA: Pre-fetched data available")
+    else:
+        logger.warning("⚠️ NO BULK DATA: Will fetch individually - potential performance hit")
+
+    # Print condensed call stack to see the path
+    logger.info("📚 CALL STACK (condensed):")
+    stack = traceback.extract_stack()
+    for i, frame in enumerate(stack[-5:-1]):  # Last 4 frames before this one
+        logger.info(f"   {i + 1}. {frame.filename.split('/')[-1]}:{frame.lineno} in {frame.name}()")
+    logger.info("=" * 60)
 
     index = kwargs.get("index")
     dict_kwargs = kwargs.get("dict_kwargs", {})
@@ -739,37 +856,60 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
 
     # Ensure dc_config is available for build_figure
     if not dc_config and wf_id and dc_id:
-        logger.warning(f"dc_config missing for figure {index}, attempting to fetch")
-        try:
-            import httpx
-
-            from depictio.api.v1.configs.config import API_BASE_URL
-
-            headers = {"Authorization": f"Bearer {TOKEN}"} if TOKEN else {}
-            # Handle joined data collection IDs
-            if isinstance(dc_id, str) and "--" in dc_id:
-                # For joined data collections, create synthetic specs
-                dc_specs = {
-                    "config": {"type": "table", "metatype": "joined"},
-                    "data_collection_tag": f"Joined data collection ({dc_id})",
-                    "description": "Virtual joined data collection",
-                    "_id": dc_id,
-                }
-            else:
-                # Regular data collection - fetch from API
-                dc_specs = httpx.get(
-                    f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_id}",
-                    headers=headers,
-                ).json()
-            dc_config = dc_specs.get("config", {})
+        # PERFORMANCE OPTIMIZATION: Check bulk data first to avoid individual API calls
+        bulk_component_data = kwargs.get("_bulk_component_data")
+        if bulk_component_data and "dc_config" in bulk_component_data:
+            logger.info(f"✅ BULK DATA: Using pre-fetched dc_config for figure {index}")
+            dc_config = bulk_component_data["dc_config"]
             store_component_data["dc_config"] = dc_config
-            logger.info(f"Successfully fetched dc_config for figure {index}")
-        except Exception as e:
-            logger.error(f"Failed to fetch dc_config for figure {index}: {e}")
-            dc_config = {}
+        else:
+            logger.warning(
+                f"⚠️ INDIVIDUAL FETCH: dc_config missing for figure {index}, fetching from API"
+            )
+            try:
+                import httpx
+
+                from depictio.api.v1.configs.config import API_BASE_URL
+
+                headers = {"Authorization": f"Bearer {TOKEN}"} if TOKEN else {}
+                # Handle joined data collection IDs
+                if isinstance(dc_id, str) and "--" in dc_id:
+                    # For joined data collections, create synthetic specs
+                    dc_specs = {
+                        "config": {"type": "table", "metatype": "joined"},
+                        "data_collection_tag": f"Joined data collection ({dc_id})",
+                        "description": "Virtual joined data collection",
+                        "_id": dc_id,
+                    }
+                else:
+                    # Regular data collection - fetch from API
+                    dc_specs = httpx.get(
+                        f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_id}",
+                        headers=headers,
+                    ).json()
+                dc_config = dc_specs.get("config", {})
+                store_component_data["dc_config"] = dc_config
+                logger.info(f"📡 INDIVIDUAL SUCCESS: Fetched dc_config for figure {index}")
+            except Exception as e:
+                logger.error(
+                    f"❌ INDIVIDUAL FAILED: Failed to fetch dc_config for figure {index}: {e}"
+                )
+                dc_config = {}
 
     # Validate and clean parameters
     validated_kwargs = validate_parameters(visu_type, dict_kwargs)
+
+    # THEME RESTORATION FIX: Ensure template is populated for dashboard restore
+    # This fixes the issue where figures don't pick up correct theme during restore
+    # when template is empty in the database
+    template_value = validated_kwargs.get("template")
+    if not template_value or template_value == "":
+        validated_kwargs["template"] = _get_theme_template(theme)
+        logger.info(
+            f"🎨 RESTORE FIX: Populated empty template with {validated_kwargs['template']} for theme {theme}"
+        )
+    else:
+        logger.info(f"🎨 RESTORE: Using existing template: {template_value}")
 
     # Handle data loading
     if df.is_empty() and kwargs.get("refresh", True):
@@ -867,14 +1007,20 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
 
             logger.info(f"🎯 Using stringify_id for target_components: {target_id}")
 
-            return dcc.Loading(
-                children=figure_component,
-                custom_spinner=create_skeleton_component("figure"),
-                target_components={target_id: "figure"},
-                delay_show=50,  # Minimal delay to prevent flashing
-                delay_hide=300,  # Extended delay for complex operations
-                id={"type": "figure-loading", "index": index},
-            )
+            # PERFORMANCE OPTIMIZATION: Conditional loading spinner
+            if settings.performance.disable_loading_spinners:
+                logger.info("🚀 PERFORMANCE MODE: Loading spinners disabled")
+                return figure_component  # Return content directly, no loading wrapper
+            else:
+                # Optimized loading with fast delays
+                return dcc.Loading(
+                    children=figure_component,
+                    custom_spinner=create_skeleton_component("figure"),
+                    target_components={target_id: "figure"},
+                    delay_show=5,  # Fast delay for better UX
+                    delay_hide=25,  # Quick hide for performance
+                    id={"type": "figure-loading", "index": index},
+                )
         else:
             return figure_div  # Return content directly for stepper mode
 
@@ -969,6 +1115,24 @@ def create_stepper_figure_button(n, disabled=False):
         storage_type="memory",
     )
     return button, store
+
+
+# Async wrapper for background callbacks - now calls sync version
+async def build_figure_async(**kwargs):
+    """
+    Async wrapper for build_figure function - async functionality disabled, calls sync version.
+    """
+    logger.info(
+        f"🔄 ASYNC FIGURE: Building figure component (using sync) - Index: {kwargs.get('index', 'UNKNOWN')}"
+    )
+
+    # Call the synchronous build_figure function
+    result = build_figure(**kwargs)
+
+    logger.info(
+        f"✅ ASYNC FIGURE: Figure component built successfully - Index: {kwargs.get('index', 'UNKNOWN')}"
+    )
+    return result
 
 
 # Legacy exports for backward compatibility

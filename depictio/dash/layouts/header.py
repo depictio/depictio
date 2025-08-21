@@ -149,9 +149,9 @@ def _get_user_permissions(current_user, data):
 # =============================================================================
 
 
-def _create_action_icon(icon, button_id, disabled=False, n_clicks=0, **kwargs):
-    """Create a standardized action icon button."""
-    return dmc.ActionIcon(
+def _create_action_icon(icon, button_id, disabled=False, n_clicks=0, tooltip=None, **kwargs):
+    """Create a standardized action icon button with optional tooltip."""
+    button = dmc.ActionIcon(
         DashIconify(icon=icon, width=35, color="gray"),
         id=button_id,
         size="xl",
@@ -163,10 +163,21 @@ def _create_action_icon(icon, button_id, disabled=False, n_clicks=0, **kwargs):
         **kwargs,
     )
 
+    if tooltip:
+        return dmc.Tooltip(
+            label=tooltip,
+            position="bottom",
+            withArrow=True,
+            openDelay=800,
+            children=button,
+        )
+
+    return button
+
 
 def _create_reset_filters_button():
     """Create the reset all filters button with consistent styling."""
-    return dmc.ActionIcon(
+    button = dmc.ActionIcon(
         DashIconify(icon="bx:reset", width=35, color="gray"),
         id="reset-all-filters-button",
         size="xl",
@@ -176,6 +187,14 @@ def _create_reset_filters_button():
         style=BUTTON_STYLE,
         disabled=False,
         n_clicks=0,
+    )
+
+    return dmc.Tooltip(
+        label="Reset all applied filters\nto their default values",
+        position="bottom",
+        withArrow=True,
+        openDelay=800,
+        children=button,
     )
 
 
@@ -557,22 +576,32 @@ def design_header(data, local_store):
     # Create header components
     card_section = dbc.Row([_create_info_badges(data, project_name)])
 
-    # Create action buttons
+    # Create action buttons with tooltips
     add_new_component_button = _create_action_icon(
         "material-symbols:add",
         "add-button",
         disabled=disabled,
         n_clicks=init_nclicks_add_button["count"],
+        tooltip="Add a new component\nto your dashboard",
     )
 
     save_button = _create_action_icon(
-        "ic:baseline-save", "save-button-dashboard", disabled=disabled
+        "ic:baseline-save",
+        "save-button-dashboard",
+        disabled=disabled,
+        tooltip="Save current dashboard\nconfiguration and layout",
     )
 
-    notes_button = _create_action_icon("material-symbols:edit-note", "toggle-notes-button")
+    notes_button = _create_action_icon(
+        "material-symbols:edit-note",
+        "toggle-notes-button",
+        tooltip="Toggle notes footer",
+    )
 
     open_offcanvas_parameters_button = _create_action_icon(
-        "ic:baseline-settings", "open-offcanvas-parameters-button"
+        "ic:baseline-settings",
+        "open-offcanvas-parameters-button",
+        tooltip="Open dashboard settings\nand configuration panel",
     )
 
     reset_filters_button = _create_reset_filters_button()
@@ -676,28 +705,7 @@ def design_header(data, local_store):
         class_name="dashboard-offcanvas",  # Add class for theme targeting
     )
 
-    notes_button = dmc.ActionIcon(
-        DashIconify(icon="material-symbols:edit-note", width=35, color="gray"),
-        id="toggle-notes-button",
-        size="xl",
-        radius="xl",
-        variant="subtle",
-        style=BUTTON_STYLE,
-        n_clicks=0,
-    )
-
-    open_offcanvas_parameters_button = dmc.ActionIcon(
-        DashIconify(icon="ic:baseline-settings", width=35, color="gray"),
-        id="open-offcanvas-parameters-button",
-        size="xl",
-        radius="xl",
-        # color="gray",
-        # variant="filled",
-        variant="subtle",
-        style=BUTTON_STYLE,
-        # FIXME: Add sx for hover effect
-        # sx=sx,
-    )
+    # notes_button and open_offcanvas_parameters_button are now created above with tooltips
 
     # These dummy outputs are created in _create_backend_components
     # dummy_output = html.Div(id="dummy-output", style={"display": "none"})

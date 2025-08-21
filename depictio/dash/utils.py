@@ -1,6 +1,8 @@
 import collections
 import sys
+import time
 import uuid
+from typing import Any, Dict, Optional
 
 import httpx
 import numpy as np
@@ -58,40 +60,226 @@ def get_size(obj, seen=None):
     return size
 
 
-# Cache for component data to avoid redundant API calls
-_component_data_cache: dict = dict()
+# PERFORMANCE OPTIMIZATION: Enhanced component data caching
+
+_component_data_cache: Dict[
+    str, Dict[str, Any]
+] = {}  # cache_key -> {data, timestamp, access_count}
+_cache_stats = {"hits": 0, "misses": 0, "evictions": 0, "total_requests": 0}
+
+# Cache configuration
+COMPONENT_CACHE_TTL_SECONDS = 600  # 10 minutes (longer than figure cache)
+COMPONENT_CACHE_MAX_SIZE = 200  # More components than figures
+COMPONENT_CACHE_ACCESS_THRESHOLD = 5  # Keep frequently accessed items longer
+
+# PERFORMANCE OPTIMIZATION: Batch component data fetching
+_batch_fetch_queue: dict = dict()  # dashboard_id -> {component_ids: set, callbacks: list}
+_batch_fetch_timer: dict = dict()  # dashboard_id -> timer_id
 
 
-def get_component_data(input_id, dashboard_id, TOKEN):
+def _get_cache_key(dashboard_id: str, input_id: str, TOKEN: str) -> str:
+    """Generate consistent cache key for component data."""
+    return f"{dashboard_id}_{input_id}_{hash(TOKEN) % 10000 if TOKEN else 'none'}"
+
+
+def _get_cached_component_data(cache_key: str) -> Optional[Any]:
+    """Get component data from cache with TTL and access tracking."""
+    if cache_key not in _component_data_cache:
+        _cache_stats["misses"] += 1
+        return None
+
+    cached_item = _component_data_cache[cache_key]
+    current_time = time.time()
+
+    # Check TTL expiration
+    if current_time - cached_item["timestamp"] > COMPONENT_CACHE_TTL_SECONDS:
+        del _component_data_cache[cache_key]
+        _cache_stats["misses"] += 1
+        logger.debug(f"⏰ Cache expired for component: {cache_key}")
+        return None
+
+    # Update access tracking
+    cached_item["access_count"] += 1
+    cached_item["last_access"] = current_time
+
+    _cache_stats["hits"] += 1
+    logger.debug(f"🚀 CACHE HIT: component {cache_key} (accessed {cached_item['access_count']}x)")
+    return cached_item["data"]
+
+
+def _cache_component_data(cache_key: str, data: Any):
+    """Cache component data with intelligent eviction policy."""
+    current_time = time.time()
+
+    # Eviction policy: Remove oldest, least accessed items first
+    while len(_component_data_cache) >= COMPONENT_CACHE_MAX_SIZE:
+        # Find item to evict (oldest with low access count)
+        evict_key = min(
+            _component_data_cache.keys(),
+            key=lambda k: (
+                _component_data_cache[k]["access_count"] < COMPONENT_CACHE_ACCESS_THRESHOLD,
+                _component_data_cache[k]["timestamp"],
+            ),
+        )
+
+        del _component_data_cache[evict_key]
+        _cache_stats["evictions"] += 1
+        logger.debug(f"🗑️  Evicted cached component: {evict_key}")
+
+    # Cache the data
+    _component_data_cache[cache_key] = {
+        "data": data,
+        "timestamp": current_time,
+        "last_access": current_time,
+        "access_count": 1,
+    }
+    logger.debug(f"💾 CACHED: component {cache_key}")
+
+
+def get_component_cache_stats() -> dict:
+    """Get cache performance statistics for monitoring."""
+    total = _cache_stats["hits"] + _cache_stats["misses"]
+    hit_rate = (_cache_stats["hits"] / total * 100) if total > 0 else 0
+
+    return {
+        **_cache_stats,
+        "hit_rate_percent": hit_rate,
+        "cache_size": len(_component_data_cache),
+        "max_cache_size": COMPONENT_CACHE_MAX_SIZE,
+        "ttl_seconds": COMPONENT_CACHE_TTL_SECONDS,
+    }
+
+
+def clear_component_cache():
+    """Clear all cached component data."""
+    _component_data_cache.clear()
+    _cache_stats.update({"hits": 0, "misses": 0, "evictions": 0, "total_requests": 0})
+    logger.info("🧹 Cleared component data cache")
+
+
+def bulk_get_component_data(component_ids: list, dashboard_id: str, TOKEN: str) -> dict:
     """
-    Get component data with caching to improve edit operation performance.
+    PERFORMANCE OPTIMIZATION: Fetch multiple component data in a single API call.
+
+    Args:
+        component_ids: List of component IDs to fetch
+        dashboard_id: Dashboard ID
+        TOKEN: Authorization token
+
+    Returns:
+        Dict mapping component_id -> component_data
     """
-    # Create cache key combining dashboard, component, and token hash
-    cache_key = f"{dashboard_id}_{input_id}_{hash(TOKEN) % 10000 if TOKEN else 'none'}"
+    logger.info(f"🚀 BATCH FETCH: Getting {len(component_ids)} components in one request")
 
-    # Check cache first
-    if cache_key in _component_data_cache:
-        logger.debug(f"Using cached component data for {input_id} in dashboard {dashboard_id}")
-        return _component_data_cache[cache_key]
+    # Check enhanced cache for each component first
+    results = {}
+    uncached_ids = []
 
-    logger.debug(f"Fetching component data for {input_id} in dashboard {dashboard_id}")
+    _cache_stats["total_requests"] += len(component_ids)
+
+    for input_id in component_ids:
+        cache_key = _get_cache_key(dashboard_id, input_id, TOKEN)
+        cached_data = _get_cached_component_data(cache_key)
+
+        if cached_data is not None:
+            results[input_id] = cached_data
+        else:
+            uncached_ids.append(input_id)
+
+    # Fetch uncached components in bulk
+    if uncached_ids:
+        logger.info(f"📡 BULK API: Fetching {len(uncached_ids)} uncached components")
+
+        # Make bulk API request
+        bulk_url = f"{API_BASE_URL}/depictio/api/v1/dashboards/bulk_component_data/{dashboard_id}"
+        payload = {"component_ids": uncached_ids}
+
+        try:
+            response = httpx.post(
+                bulk_url, json=payload, headers={"Authorization": f"Bearer {TOKEN}"}, timeout=10.0
+            )
+
+            if response.status_code == 200:
+                bulk_data = response.json()
+
+                # Cache and add to results using enhanced caching
+                for input_id, component_data in bulk_data.items():
+                    cache_key = _get_cache_key(dashboard_id, input_id, TOKEN)
+                    _cache_component_data(cache_key, component_data)
+                    results[input_id] = component_data
+
+                logger.info(f"✅ BULK SUCCESS: Cached {len(bulk_data)} components")
+            else:
+                logger.warning(
+                    f"❌ BULK FAILED: {response.status_code}, falling back to individual requests"
+                )
+                # Fallback to individual requests
+                for input_id in uncached_ids:
+                    results[input_id] = get_component_data_individual(input_id, dashboard_id, TOKEN)
+
+        except Exception as e:
+            logger.error(f"❌ BULK ERROR: {e}, falling back to individual requests")
+            # Fallback to individual requests
+            for input_id in uncached_ids:
+                results[input_id] = get_component_data_individual(input_id, dashboard_id, TOKEN)
+
+    return results
+
+
+def get_component_data_individual(input_id, dashboard_id, TOKEN):
+    """Original individual component data fetching (used as fallback)."""
+    logger.debug(f"📡 INDIVIDUAL: Fetching component data for {input_id}")
 
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/dashboards/get_component_data/{dashboard_id}/{input_id}",
         headers={"Authorization": f"Bearer {TOKEN}"},
+        timeout=5.0,
     )
-    # logger.info(f"Code: {response.status_code}")
-    # logger.info(f"Response: {response.json()}")
 
     if response.status_code == 200:
         component_data = response.json()
-        # Cache the result
-        _component_data_cache[cache_key] = component_data
-        logger.debug(f"Cached component data for {input_id}")
+        # Cache using enhanced caching system
+        cache_key = _get_cache_key(dashboard_id, input_id, TOKEN)
+        _cache_component_data(cache_key, component_data)
         return component_data
     else:
-        logger.warning(f"Failed to fetch component data for {input_id}: {response.status_code}")
+        logger.warning(f"❌ FAILED: component {input_id} - {response.status_code}")
         return None
+
+
+def get_component_data(input_id, dashboard_id, TOKEN, _bulk_data=None):
+    """
+    Get component data with caching and performance optimization.
+
+    Args:
+        input_id: Component ID to fetch
+        dashboard_id: Dashboard ID
+        TOKEN: Authorization token
+        _bulk_data: Pre-fetched bulk data (optimization)
+
+    For backward compatibility, this still works as individual calls,
+    but with improved caching and error handling.
+    """
+    _cache_stats["total_requests"] += 1
+
+    # PERFORMANCE OPTIMIZATION: Use pre-fetched bulk data if available
+    if _bulk_data is not None:
+        logger.info(f"🚀 BULK HIT: Using pre-fetched data for component {input_id}")
+        return _bulk_data
+
+    # Check enhanced cache first
+    cache_key = _get_cache_key(dashboard_id, input_id, TOKEN)
+    cached_data = _get_cached_component_data(cache_key)
+
+    if cached_data is not None:
+        logger.debug(f"📦 CACHED: Component data cache hit for {input_id}")
+        return cached_data
+
+    # Use the individual fetching function
+    logger.info(
+        f"📡 INDIVIDUAL FETCH: Fetching component data for {input_id} (no bulk/cache available)"
+    )
+    return get_component_data_individual(input_id, dashboard_id, TOKEN)
 
 
 def load_depictio_data_mongo(dashboard_id: str, TOKEN: str):

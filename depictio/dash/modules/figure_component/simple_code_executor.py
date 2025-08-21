@@ -8,9 +8,9 @@ which is battle-tested and maintained by the Zope Foundation.
 import traceback
 from typing import Any, Dict, Tuple
 
-import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import polars as pl
 from RestrictedPython import compile_restricted
 from RestrictedPython.Guards import safe_builtins, safe_globals
 
@@ -51,14 +51,12 @@ class SimpleCodeExecutor:
         # Create safe execution environment
         self.safe_globals = {
             **safe_globals,
-            # Data manipulation libraries
-            "pd": pd,
-            "pandas": pd,
+            # Visualization libraries only - no data import/export
             "px": px,
             "go": go,
             # Safe builtins
             "__builtins__": safe_builtins,
-            # Guards for pandas operations
+            # Guards for dataframe operations
             "_getitem_": safe_getitem,
             "_getattr_": safe_getattr,
             "_write_": safe_setitem,
@@ -97,7 +95,7 @@ class SimpleCodeExecutor:
 
         return True, ""
 
-    def execute_code(self, code: str, dataframe: pd.DataFrame) -> Tuple[bool, Any, str]:
+    def execute_code(self, code: str, dataframe: pl.DataFrame) -> Tuple[bool, Any, str]:
         """
         Execute user code safely using RestrictedPython.
 
@@ -126,7 +124,7 @@ class SimpleCodeExecutor:
 
             # Prepare execution environment
             execution_globals = self.safe_globals.copy()
-            execution_globals["df"] = dataframe.copy()  # Provide DataFrame copy
+            execution_globals["df"] = dataframe.clone()  # Provide DataFrame copy
             execution_locals: Dict[str, Any] = {}
 
             # Execute the compiled code

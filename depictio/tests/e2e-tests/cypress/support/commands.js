@@ -528,3 +528,70 @@ Cypress.Commands.add('typePassword', (selector, password, options = {}) => {
   cy.log(`🔒 Robust password typing into ${selector}`);
   return cy.typeRobust(selector, password, finalOptions);
 });
+
+/**
+ * Robust logout functionality that waits for elements and handles timing issues
+ * This addresses the common race condition where logout button may not be loaded yet
+ * @param {object} options - Configuration options
+ * @param {number} options.timeout - Timeout for finding elements (default: 15000)
+ * @param {boolean} options.visitProfile - Whether to visit profile page first (default: true)
+ * @param {boolean} options.verifyLogout - Whether to verify logout completed (default: true)
+ */
+Cypress.Commands.add('logoutRobust', (options = {}) => {
+  const { timeout = 15000, visitProfile = true, verifyLogout = true } = options;
+
+  cy.log('🚪 Starting robust logout process');
+
+  if (visitProfile) {
+    cy.log('👤 Visiting profile page');
+    cy.visit('/profile');
+    cy.wait(2000);
+  }
+
+  cy.log('⏳ Waiting for profile page elements to load...');
+
+  // Wait for user info placeholder to be populated (indicates page loaded)
+  cy.get('[id="user-info-placeholder"]', { timeout })
+    .should('exist')
+    .and('not.be.empty');
+
+  // Wait specifically for logout button using correct selector
+  cy.log('🔍 Looking for logout button...');
+  cy.get('button[id="logout-button"]', { timeout })
+    .should('exist')
+    .and('be.visible')
+    .and('not.be.disabled')
+    .and('contain.text', 'Logout');
+
+  cy.log('👆 Clicking logout button');
+  cy.get('button[id="logout-button"]')
+    .click({ force: true });
+
+  cy.wait(2000); // Give logout time to process
+
+  if (verifyLogout) {
+    cy.log('✅ Verifying logout completed...');
+
+    // Check that we're redirected away from protected pages
+    cy.url().should('not.include', '/dashboards');
+
+    // Verify localStorage state
+    cy.window().then((win) => {
+      const localStore = win.localStorage.getItem('local-store');
+      if (localStore) {
+        const parsed = JSON.parse(localStore);
+        expect(parsed.logged_in).to.be.false;
+        cy.log('✅ LocalStorage updated - user logged out');
+      } else {
+        cy.log('✅ LocalStorage cleared - user logged out');
+      }
+    });
+
+    // Additional verification: try to access protected route
+    cy.visit('/dashboards');
+    cy.wait(1000);
+    cy.url().should('not.include', '/dashboards');
+  }
+
+  cy.log('🎉 Logout process completed successfully');
+});

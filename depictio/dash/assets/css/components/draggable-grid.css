@@ -81,10 +81,10 @@
     box-shadow: none !important;
     outline: none !important;
 }
-.react-grid-item:hover .mantine-ActionIcon-root[id*="remove-box-button"],
-.react-grid-item:hover .mantine-ActionIcon-root[id*="edit-box-button"],
-.react-grid-item:hover .mantine-ActionIcon-root[id*="duplicate-box-button"],
-.react-grid-item:hover .mantine-ActionIcon-root[id*="reset-selection-graph-button"] {
+.react-grid-item:hover .mantine-ActionIcon-root[id*="remove_box_button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="edit_box_button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="duplicate_box_button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="reset_selection_graph_button"] {
     opacity: 1 !important;
     pointer-events: auto !important;
 }
@@ -113,16 +113,16 @@
 /* Hide all action buttons and drag handles completely when edit mode is disabled */
 .drag-handles-hidden .mantine-ActionIconGroup-root,
 .drag-handles-hidden .mantine-ActionIcon-root[id*="drag-handle"],
-.drag-handles-hidden .mantine-ActionIcon-root[id*="remove-box-button"],
-.drag-handles-hidden .mantine-ActionIcon-root[id*="edit-box-button"],
-.drag-handles-hidden .mantine-ActionIcon-root[id*="duplicate-box-button"],
-.drag-handles-hidden .mantine-ActionIcon-root[id*="alignment-menu-btn"] {
+.drag-handles-hidden .mantine-ActionIcon-root[id*="remove_box_button"],
+.drag-handles-hidden .mantine-ActionIcon-root[id*="edit_box_button"],
+.drag-handles-hidden .mantine-ActionIcon-root[id*="duplicate_box_button"],
+.drag-handles-hidden .mantine-ActionIcon-root[id*="alignment_menu_btn"] {
     display: none !important;
     visibility: hidden !important;
 }
 
 /* Exception: Keep reset button visible in non-edit mode for scatter plots and interactive components */
-.drag-handles-hidden .mantine-ActionIcon-root[id*="reset-selection-graph-button"] {
+.drag-handles-hidden .mantine-ActionIcon-root[id*="reset_selection_graph_button"] {
     display: flex !important;
     visibility: visible !important;
     opacity: 0 !important;
@@ -131,18 +131,18 @@
 }
 
 /* Show reset button on component hover (consistent with edit mode behavior) */
-.drag-handles-hidden .react-grid-item:hover .mantine-ActionIcon-root[id*="reset-selection-graph-button"] {
+.drag-handles-hidden .react-grid-item:hover .mantine-ActionIcon-root[id*="reset_selection_graph_button"] {
     opacity: 1 !important;
 }
 
 /* ALWAYS show orange reset buttons (when filters are active) - override hover-only behavior */
 /* Try multiple attribute selectors to catch different DMC implementations */
-.react-grid-item .mantine-ActionIcon-root[id*="reset-selection-graph-button"][data-color="orange"],
-.react-grid-item .mantine-ActionIcon-root[id*="reset-selection-graph-button"][color="orange"],
-.react-grid-item .mantine-ActionIcon-root[id*="reset-selection-graph-button"].mantine-ActionIcon-filled,
-.drag-handles-hidden .mantine-ActionIcon-root[id*="reset-selection-graph-button"][data-color="orange"],
-.drag-handles-hidden .mantine-ActionIcon-root[id*="reset-selection-graph-button"][color="orange"],
-.drag-handles-hidden .mantine-ActionIcon-root[id*="reset-selection-graph-button"].mantine-ActionIcon-filled {
+.react-grid-item .mantine-ActionIcon-root[id*="reset_selection_graph_button"][data-color="orange"],
+.react-grid-item .mantine-ActionIcon-root[id*="reset_selection_graph_button"][color="orange"],
+.react-grid-item .mantine-ActionIcon-root[id*="reset_selection_graph_button"].mantine-ActionIcon-filled,
+.drag-handles-hidden .mantine-ActionIcon-root[id*="reset_selection_graph_button"][data-color="orange"],
+.drag-handles-hidden .mantine-ActionIcon-root[id*="reset_selection_graph_button"][color="orange"],
+.drag-handles-hidden .mantine-ActionIcon-root[id*="reset_selection_graph_button"].mantine-ActionIcon-filled {
     opacity: 1 !important;
     pointer-events: auto !important;
     display: flex !important;
@@ -150,9 +150,9 @@
 }
 
 /* Ensure orange reset buttons stay visible in edit mode too */
-.react-grid-item .mantine-ActionIcon-root[id*="reset-selection-graph-button"][data-color="orange"],
-.react-grid-item .mantine-ActionIcon-root[id*="reset-selection-graph-button"][color="orange"],
-.react-grid-item .mantine-ActionIcon-root[id*="reset-selection-graph-button"].mantine-ActionIcon-filled {
+.react-grid-item .mantine-ActionIcon-root[id*="reset_selection_graph_button"][data-color="orange"],
+.react-grid-item .mantine-ActionIcon-root[id*="reset_selection_graph_button"][color="orange"],
+.react-grid-item .mantine-ActionIcon-root[id*="reset_selection_graph_button"].mantine-ActionIcon-filled {
     opacity: 1 !important;
     pointer-events: auto !important;
 }
@@ -301,11 +301,20 @@
 /* Individual action button base styling
    Purpose: Hide specific action buttons by default
    Targets: remove, edit, duplicate, reset buttons, alignment menu button */
-.react-grid-item .mantine-ActionIcon-root[id*="remove-box-button"],
-.react-grid-item .mantine-ActionIcon-root[id*="edit-box-button"],
-.react-grid-item .mantine-ActionIcon-root[id*="duplicate-box-button"],
-.react-grid-item .mantine-ActionIcon-root[id*="reset-selection-graph-button"],
-.react-grid-item .mantine-ActionIcon-root[id*="alignment-menu-btn"] {
+.react-grid-item .mantine-ActionIcon-root[id*="remove_box_button"],
+.react-grid-item .mantine-ActionIcon-root[id*="edit_box_button"],
+.react-grid-item .mantine-ActionIcon-root[id*="duplicate_box_button"],
+.react-grid-item .mantine-ActionIcon-root[id*="reset_selection_graph_button"],
+.react-grid-item .mantine-ActionIcon-root[id*="alignment_menu_btn"] {
+    opacity: 0 !important;
+    transition: opacity 0.2s ease !important; /* POTENTIAL PERFORMANCE ISSUE */
+    pointer-events: none !important;
+}
+.react-grid-item .mantine-ActionIcon-root[id*="remove_box_button"],
+.react-grid-item .mantine-ActionIcon-root[id*="edit_box_button"],
+.react-grid-item .mantine-ActionIcon-root[id*="duplicate_box_button"],
+.react-grid-item .mantine-ActionIcon-root[id*="reset_selection_graph_button"],
+.react-grid-item .mantine-ActionIcon-root[id*="alignment_menu_btn"] {
     opacity: 0 !important;
     transition: opacity 0.2s ease !important; /* POTENTIAL PERFORMANCE ISSUE */
     pointer-events: none !important;
@@ -319,11 +328,11 @@
 }
 
 /* Show individual action buttons on component hover */
-.react-grid-item:hover .mantine-ActionIcon-root[id*="remove-box-button"],
-.react-grid-item:hover .mantine-ActionIcon-root[id*="edit-box-button"],
-.react-grid-item:hover .mantine-ActionIcon-root[id*="duplicate-box-button"],
-.react-grid-item:hover .mantine-ActionIcon-root[id*="reset-selection-graph-button"],
-.react-grid-item:hover .mantine-ActionIcon-root[id*="alignment-menu-btn"] {
+.react-grid-item:hover .mantine-ActionIcon-root[id*="remove_box_button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="edit_box_button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="duplicate_box_button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="reset_selection_graph_button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="alignment_menu_btn"] {
     opacity: 1 !important;
     pointer-events: auto !important;
 }

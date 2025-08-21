@@ -548,6 +548,7 @@ def scan_files_for_workflow(
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
             TaskProgressColumn(),
+            TextColumn("({task.completed}/{task.total} collections)"),
             console=None,
         ) as progress:
             task_id = progress.add_task(
@@ -555,9 +556,12 @@ def scan_files_for_workflow(
             )
 
             for dc in data_collections:
-                progress.update(
-                    task_id, description=f"📋 Loading files for {dc.data_collection_tag}"
-                )
+                # Format data collection tag to consistent width to avoid line changes
+                formatted_dc_tag = f"{dc.data_collection_tag:<25}"[
+                    :25
+                ]  # Left-align and pad/truncate to 25 chars
+                # Total description length: 45 chars to match run scanning
+                progress.update(task_id, description=f"📋 Loading files for {formatted_dc_tag}")
                 response = api_get_files_by_dc_id(dc_id=str(dc.id), CLI_config=CLI_config)
                 if response.status_code == 200:
                     existing_files = response.json()
@@ -684,7 +688,10 @@ def scan_files_for_workflow(
                             progress.advance(task_id)
                             continue
 
-                        progress.update(task_id, description=f"🔍 Scanning run: {run}")
+                        # Format run name to consistent width to avoid line changes
+                        # Need 29 chars for run name to match total description length of 45 chars
+                        formatted_run = f"{run:<29}"[:29]  # Left-align and pad/truncate to 29 chars
+                        progress.update(task_id, description=f"🔍 Scanning run: {formatted_run}")
 
                         workflow_run = scan_run_for_multiple_data_collections(
                             run_location=run_path,

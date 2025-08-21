@@ -34,7 +34,24 @@ def create_dash_app():
     # assets_folder = os.path.join(dash_root_path, "assets/debug")
     assets_folder = os.path.join(dash_root_path, "assets")
 
-    # Start the app
+    # Setup Celery background callback manager
+    logger.info("🔧 DASH: Setting up Celery background callback manager...")
+
+    # Import the Dash-side Celery app
+    # from depictio.dash.celery_app import celery_app
+
+    # background_callback_manager = CeleryManager(celery_app, cache_by=[lambda: uuid4()])
+
+    # import diskcache
+    # cache = diskcache.Cache("/app/cache")
+    # background_callback_manager = DiskcacheManager(cache)
+    # logger.info(
+    #     f"Diskcache background callback manager configured with cache path: {cache.directory}"
+    # )
+
+    # logger.info("✅ DASH: Background callback manager configured")
+
+    # Start the app with background callback manager
     app = dash.Dash(
         __name__,  # Use the current module name
         requests_pathname_prefix="/",
@@ -49,6 +66,7 @@ def create_dash_app():
         title="Depictio",
         assets_folder=assets_folder,
         assets_url_path="/assets",  # Explicitly set the assets URL path
+        # background_callback_manager=background_callback_manager,  # Enable background callbacks
     )
 
     # Configure Flask's logger to use custom logging settings
@@ -64,5 +82,10 @@ def create_dash_app():
 
     # Integrate Google Analytics via index_string
     integrate_google_analytics(app, title="Depictio")
+
+    # Setup profiling if enabled
+    from depictio.dash.profiling import setup_profiling
+
+    app = setup_profiling(app)
 
     return app, dev_mode

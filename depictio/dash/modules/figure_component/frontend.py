@@ -8,7 +8,7 @@ import httpx
 from dash_iconify import DashIconify
 
 import dash
-from dash import ALL, MATCH, Input, Output, State, dcc, html
+from dash import ALL, MATCH, Input, Output, Patch, State, dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
@@ -1347,19 +1347,13 @@ def register_callbacks_figure_component(app):
 
         try:
             # Get dataset from actual data collection
-            import pandas as pd
-
             if workflow_id and data_collection_id:
                 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
                 TOKEN = local_data["access_token"]
                 loaded_df = load_deltatable_lite(workflow_id, data_collection_id, TOKEN=TOKEN)
-                # Convert Polars DataFrame to Pandas DataFrame
-                df = (
-                    loaded_df.to_pandas()
-                    if hasattr(loaded_df, "to_pandas")
-                    else pd.DataFrame(loaded_df)
-                )
+                # Use Polars DataFrame directly - Plotly Express now supports Polars natively
+                df = loaded_df
             else:
                 return (
                     None,
@@ -1679,36 +1673,32 @@ def register_callbacks_figure_component(app):
             TOKEN = local_data["access_token"]
             loaded_df = load_deltatable_lite(workflow_id, data_collection_id, TOKEN=TOKEN)
 
-            # Convert to pandas to get column info
-            import pandas as pd
+            # Use Polars DataFrame directly to get column info - no pandas conversion needed
+            df = loaded_df
 
-            df = (
-                loaded_df.to_pandas()
-                if hasattr(loaded_df, "to_pandas")
-                else pd.DataFrame(loaded_df)
-            )
-
-            if df.empty:
+            if df.height == 0:
                 return "No data available in the selected data collection."
 
-            # Create formatted column information
+            # Create formatted column information using Polars schema
             columns_info = []
-            for col in df.columns:
-                dtype = str(df[col].dtype)
-                # Simplify dtype names
-                if dtype.startswith("int"):
-                    dtype = "integer"
-                elif dtype.startswith("float"):
-                    dtype = "float"
-                elif dtype == "object":
-                    dtype = "text"
-                elif dtype.startswith("datetime"):
-                    dtype = "datetime"
+            for col, dtype in df.schema.items():
+                dtype_str = str(dtype)
+                # Simplify dtype names for Polars dtypes
+                if "Int" in dtype_str or "UInt" in dtype_str:
+                    display_type = "integer"
+                elif "Float" in dtype_str:
+                    display_type = "float"
+                elif "String" in dtype_str or "Utf8" in dtype_str:
+                    display_type = "text"
+                elif "Date" in dtype_str or "Time" in dtype_str:
+                    display_type = "datetime"
+                else:
+                    display_type = dtype_str.lower()
 
-                columns_info.append(f"• {col} ({dtype})")
+                columns_info.append(f"• {col} ({display_type})")
 
             columns_text = (
-                f"DataFrame shape: {df.shape[0]} rows × {df.shape[1]} columns\n\n"
+                f"DataFrame shape: {df.height} rows × {df.width} columns\n\n"
                 + "\n".join(columns_info)
             )
             return dmc.Text(columns_text, style={"whiteSpace": "pre-line", "fontSize": "12px"})
@@ -1810,6 +1800,25 @@ def register_callbacks_figure_component(app):
             button_text = "Hide Code Examples" if new_is_opened else "Show Code Examples"
             return new_is_opened, button_text
         raise dash.exceptions.PreventUpdate
+
+    @app.callback(
+        Output({"type": "figure", "index": MATCH}, "figure", allow_duplicate=True),
+        Input("theme-store", "data"),
+        prevent_initial_call=True,
+    )
+    def update_theme_figure(theme_data):
+        """Update figure theme based on current theme."""
+        logger.info(f"Figure theme update triggered with theme_data: {theme_data}")
+        import plotly.io as pio
+
+        template = (
+            pio.templates["mantine_light"]
+            if theme_data == "light"
+            else pio.templates["mantine_dark"]
+        )
+        patch = Patch()
+        patch.layout.template = template
+        return patch
 
 
 def design_figure(id, component_data=None):

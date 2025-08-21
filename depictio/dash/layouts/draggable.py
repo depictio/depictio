@@ -19,7 +19,8 @@ from depictio.dash.layouts.draggable_scenarios.graphs_interactivity import (
 )
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import (
     render_raw_children,
-    update_interactive_component,
+    # update_interactive_component_async,
+    update_interactive_component_sync,
 )
 from depictio.dash.layouts.draggable_scenarios.restore_dashboard import render_dashboard
 
@@ -619,11 +620,53 @@ def register_callbacks_draggable(app):
         State("url", "pathname"),
         State("local-store", "data"),
         State("theme-store", "data"),
-        # Input("dashboard-title", "style"),  # Indirect trigger for theme changes
+        # Input("dashboard-title", "style"),  # REMOVED: This was causing expensive rebuilds on theme change
         # Input("height-store", "data"),
         prevent_initial_call=True,
+        # background=True,  # Enable background processing
+        # running=[
+        #     # Disable interactions during dashboard loading
+        #     (Output("unified-edit-mode-button", "disabled"), True, False),
+        #     (Output("save-button-dashboard", "disabled"), True, False),
+        #     (Output("reset-all-filters-button", "disabled"), True, False),
+        #     (Output("add-button", "disabled"), True, False),
+        #     (Output("toggle-notes-button", "disabled"), True, False),
+        #     (
+        #         Output("draggable", "style"),
+        #         {"visibility": "hidden"},
+        #         {"visibility": "visible"},
+        #     ),
+        #     (
+        #         Output("progress_bar", "style"),
+        #         {
+        #             "position": "fixed",
+        #             "top": "50%",
+        #             "left": "50%",
+        #             "transform": "translate(-50%, -50%)",
+        #             "zIndex": 9999,
+        #             "visibility": "visible",
+        #         },
+        #         {
+        #             "position": "fixed",
+        #             "top": "50%",
+        #             "left": "50%",
+        #             "transform": "translate(-50%, -50%)",
+        #             "zIndex": 9999,
+        #             "visibility": "hidden",
+        #         },
+        #     ),
+        # ],
+        # progress=[Output("progress_bar", "value")],
+        # progress=[Output("progress_bar", "value"), Output("progress_bar", "max")],
+        # progress_default=make_progress_graph(0, 10),
+        # progress=[
+        #     # Show progress during loading
+        #     Output("dashboard-loading-progress", "children"),
+        #     Output("dashboard-loading-status", "data")
+        # ],
     )
     def populate_draggable(
+        # set_progress,  # Background callback progress function
         btn_done_clicks,
         btn_done_edit_clicks,
         interactive_component_ids,
@@ -654,8 +697,7 @@ def register_callbacks_draggable(app):
         input_unified_edit_mode_button,
         pathname,
         local_data,
-        theme_store,  # Now an Input parameter - triggers callback when theme changes
-        # dashboard_title_style,  # Indirect trigger for theme changes
+        theme_store,  # State parameter for theme data
         # height_store,
     ):
         if not local_data:
@@ -673,7 +715,7 @@ def register_callbacks_draggable(app):
         logger.info("\n===== DRAGGABLE CALLBACK TRIGGERED =====\n")
 
         logger.info("CTX: {}".format(ctx))
-        logger.info("CTX triggered: {}".format(ctx.triggered))
+        # logger.info("CTX triggered: {}".format(ctx.triggered))
         logger.info("CTX triggered_id: {}".format(ctx.triggered_id))
         # logger.info("TYPE CTX triggered_id: {}".format(type(ctx.triggered_id)))
         # logger.info("CTX triggered_props_id: {}".format(ctx.triggered_prop_ids))
@@ -684,11 +726,11 @@ def register_callbacks_draggable(app):
         # logger.debug("CTX states_list: {}".format(ctx.states_list))
 
         # logger.info(f"Input draggable layouts: {input_draggable_layouts}")
-        logger.info(f"Draggable layout : {draggable_layouts}")
+        # logger.info(f"Draggable layout : {draggable_layouts}")
         # logger.info(f"Stored draggable layouts: {state_stored_draggable_layouts}")
         # logger.info(f"Stored draggable children: {state_stored_draggable_children}")
         # logger.info(f"Input stored draggable children: {input_stored_draggable_children}")
-        logger.info(f"Stored metadata: {stored_metadata}")
+        # logger.info(f"Stored metadata: {stored_metadata}")
         logger.info("\n")
 
         # Extract dashboard_id from the pathname
@@ -719,7 +761,7 @@ def register_callbacks_draggable(app):
 
                 # Clean any corrupted layouts and normalize properties
                 cleaned_layouts = clean_layout_data(raw_layouts)
-                logger.info(f"Cleaned layouts: {cleaned_layouts}")
+                # logger.info(f"Cleaned layouts: {cleaned_layouts}")
 
                 # CRITICAL: Remove orphaned layouts that don't have corresponding components
                 if draggable_children:
@@ -765,14 +807,16 @@ def register_callbacks_draggable(app):
             triggered_input_dict = None
 
         # Add comprehensive callback tracking
-        callback_id = id(ctx) if ctx else "NO_CTX"
-        logger.info(f"🚀 CALLBACK START - ID: {callback_id}")
-        logger.info(f"Triggered input: {triggered_input}")
-        logger.debug(f"🚀 CALLBACK DEBUG - ctx.triggered: {ctx.triggered if ctx else 'NO_CTX'}")
+        # callback_id = id(ctx) if ctx else "NO_CTX"
+        # logger.info(f"🚀 CALLBACK START - ID: {callback_id}")
+        # logger.info(f"Triggered input: {triggered_input}")
+        # logger.debug(f"🚀 CALLBACK DEBUG - ctx.triggered: {ctx.triggered if ctx else 'NO_CTX'}")
         # logger.info(f"Theme store: {theme_store}")
 
         # Extract theme safely from theme store with improved fallback handling
-        theme = "light"  # Default
+        # Check localStorage directly if theme_store is not populated yet (race condition fix)
+        theme = "light"  # Default fallback
+
         if theme_store:
             if isinstance(theme_store, dict):
                 # Handle empty dict case
@@ -787,6 +831,17 @@ def register_callbacks_draggable(app):
                     f"Invalid theme_store value: {theme_store}, using default light theme"
                 )
                 theme = "light"
+        else:
+            # RACE CONDITION FIX: theme_store not populated yet, fallback to light theme
+            # The theme detection callback should run immediately (prevent_initial_call=False)
+            # so this should rarely happen, but we handle it gracefully
+            logger.warning(
+                "Theme store not populated during dashboard render, using light theme fallback"
+            )
+            logger.warning(
+                "This may indicate a timing issue - figures may render with incorrect theme initially"
+            )
+            theme = "light"
         logger.info(f"Using theme: {theme}")
         logger.info(f"Dashboard callback triggered by: {triggered_input}")
         logger.info(f"Theme store value: {theme_store}")
@@ -999,7 +1054,7 @@ def register_callbacks_draggable(app):
                         if visu_type.lower() == "scatter":
                             logger.info(f"Reset scatter plot: {ctx_triggered_prop_id_index}")
 
-                new_children = update_interactive_component(
+                new_children = update_interactive_component_sync(
                     stored_metadata,
                     interactive_components_dict,
                     draggable_children,
@@ -1147,9 +1202,14 @@ def register_callbacks_draggable(app):
                 "interactive-component" in triggered_input
                 and toggle_interactivity_button
                 or triggered_input == "theme-store"
+                or triggered_input == "dashboard-title"
             ):
                 if triggered_input == "theme-store":
                     logger.info("Theme store triggered - updating all components with new theme")
+                elif triggered_input == "dashboard-title":
+                    logger.info(
+                        "Dashboard title style changed - updating all components with new theme"
+                    )
                 else:
                     logger.info("Interactive component triggered")
 
@@ -1173,7 +1233,7 @@ def register_callbacks_draggable(app):
 
                 logger.info(f"Updating components with theme: {theme}")
 
-                new_children = update_interactive_component(
+                new_children = update_interactive_component_sync(
                     stored_metadata,
                     interactive_components_dict,
                     draggable_children,
@@ -1209,8 +1269,29 @@ def register_callbacks_draggable(app):
                 # logger.info(f"Input draggable layouts: {input_draggable_layouts}")
                 # logger.info(f"State stored draggable layouts: {state_stored_draggable_layouts}")
 
+                # set_progress(str(0))
+
                 if state_stored_draggable_layouts:
                     if dashboard_id in state_stored_draggable_layouts:
+                        # Skip expensive render_dashboard for empty dashboards
+                        current_layouts = state_stored_draggable_layouts[dashboard_id]
+
+                        # Ensure layouts are in list format
+                        if isinstance(current_layouts, dict):
+                            current_layouts = current_layouts.get("lg", [])
+
+                        # If no layouts (empty dashboard), return early without rendering
+                        if not current_layouts or len(current_layouts) == 0:
+                            logger.info("Empty dashboard detected - skipping render_dashboard call")
+                            return (
+                                [],  # Empty children for empty dashboard
+                                current_layouts,  # Empty layouts
+                                dash.no_update,
+                                state_stored_draggable_layouts,
+                                dash.no_update,
+                            )
+
+                        # Only render dashboard if there are actual components
                         children = render_dashboard(
                             stored_metadata,
                             unified_edit_mode_button,
@@ -1219,13 +1300,6 @@ def register_callbacks_draggable(app):
                             TOKEN,
                         )
                         logger.info(f"render_dashboard called with theme: {theme}")
-
-                        # Ensure we're using the stored layouts
-                        current_layouts = state_stored_draggable_layouts[dashboard_id]
-
-                        # Ensure layouts are in list format
-                        if isinstance(current_layouts, dict):
-                            current_layouts = current_layouts.get("lg", [])
 
                         return (
                             children,
@@ -1978,7 +2052,7 @@ def register_callbacks_draggable(app):
         if add_button_nclicks is None:
             logger.info("No clicks detected")
             # return dash.no_update, dash.no_update, True, dash.no_update
-            return dash.no_update, dash.no_update, True
+            return dash.no_update, dash.no_update, dash.no_update
 
         # if edit_button_nclicks is None:
         #     logger.info("No clicks detected")
@@ -2010,7 +2084,7 @@ def register_callbacks_draggable(app):
         #     return current_draggable_children, stored_add_button, dash.no_update, True
         else:
             logger.warning(f"Unexpected triggered_input: {triggered_input}")
-            return dash.no_update, dash.no_update, True, True
+            return dash.no_update, dash.no_update, dash.no_update
 
     @app.callback(
         Output("interactive-values-store", "data"),
@@ -2489,6 +2563,7 @@ def design_draggable(
     local_data: dict,
     theme: str = "light",
     edit_dashboard_mode_button: bool = False,
+    cached_project_data: dict | None = None,
 ):
     # logger.info("design_draggable - Initializing draggable layout")
     # logger.info(f"design_draggable - Dashboard ID: {dashboard_id}")
@@ -2499,33 +2574,72 @@ def design_draggable(
 
     # TODO: if required, check if data was registered for the project
     TOKEN = local_data["access_token"]
-    project = httpx.get(
-        f"{API_BASE_URL}/depictio/api/v1/projects/get/from_dashboard_id/{dashboard_id}",
-        headers={"Authorization": f"Bearer {TOKEN}"},
-    ).json()
-    # logger.info(f"design_draggable - Project: {project}")
+
+    # Use cached project data if available, otherwise fallback to HTTP call
+    if cached_project_data and cached_project_data.get("cache_key") == f"project_{dashboard_id}":
+        logger.info(f"🚀 DESIGN_DRAGGABLE: Using cached project data for dashboard {dashboard_id}")
+        project_json = cached_project_data["project"]
+    else:
+        logger.warning(
+            f"⚠️  DESIGN_DRAGGABLE: Cache miss, falling back to HTTP call for dashboard {dashboard_id}"
+        )
+        project_json = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/projects/get/from_dashboard_id/{dashboard_id}",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+        ).json()
+
+    # logger.info(f"design_draggable - Project: {project_json}")
     from depictio.models.models.projects import Project
 
-    project = Project.from_mongo(project)
+    project = Project.from_mongo(project_json)
     # logger.info(f"design_draggable - Project: {project}")
     workflows = project.workflows
     delta_table_locations = []
+
+    # Collect all data collection IDs for batch checking
+    all_dc_ids = []
     for wf in workflows:
         for dc in wf.data_collections:
-            # print(dc)
-            # Check if deltatable exists
-            response = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{str(dc.id)}",
+            all_dc_ids.append(str(dc.id))
+
+    if all_dc_ids:
+        # Single batch API call to check deltatable existence
+        logger.info(f"🚀 DESIGN_DRAGGABLE: Batch checking {len(all_dc_ids)} deltatables")
+        try:
+            batch_response = httpx.post(
+                f"{API_BASE_URL}/depictio/api/v1/deltatables/batch/exists",
                 headers={"Authorization": f"Bearer {TOKEN}"},
+                json=all_dc_ids,
             )
-            if response.status_code == 200:
-                delta_table_location = response.json()["delta_table_location"]
-                logger.info(f"Delta table location: {delta_table_location}")
-                delta_table_locations.append(delta_table_location)
-            else:
-                logger.error(
-                    f"Error retrieving deltatable for data collection '{dc.id}': {response.text}"
+            if batch_response.status_code == 200:
+                batch_results = batch_response.json()
+                for dc_id, result in batch_results.items():
+                    if result.get("exists") and result.get("delta_table_location"):
+                        delta_table_locations.append(result["delta_table_location"])
+                        logger.info(f"✅ Delta table found: {result['delta_table_location']}")
+                    else:
+                        logger.warning(f"⚠️  No deltatable found for data collection '{dc_id}'")
+                logger.info(
+                    f"✅ Batch check complete: {len(delta_table_locations)} deltatables found"
                 )
+            else:
+                logger.error(f"❌ Batch deltatable check failed: {batch_response.text}")
+        except Exception as e:
+            logger.error(f"❌ Batch deltatable check exception: {e}")
+            # Fallback to individual checks if batch fails
+            logger.warning("🔄 Falling back to individual deltatable checks")
+            for wf in workflows:
+                for dc in wf.data_collections:
+                    try:
+                        response = httpx.get(
+                            f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{str(dc.id)}",
+                            headers={"Authorization": f"Bearer {TOKEN}"},
+                        )
+                        if response.status_code == 200:
+                            delta_table_location = response.json()["delta_table_location"]
+                            delta_table_locations.append(delta_table_location)
+                    except Exception as fallback_e:
+                        logger.error(f"❌ Fallback check failed for {dc.id}: {fallback_e}")
     # logger.info(f"Delta table locations: {delta_table_locations}")
 
     if len(delta_table_locations) == 0:
@@ -2622,8 +2736,23 @@ def design_draggable(
         },
     )
 
+    # Simple centered loading spinner
+    # progress = html.Div(
+    #     dmc.Loader(size="lg", type="dots", color="blue"),
+    #     id="progress_bar",
+    #     style={
+    #         "position": "fixed",
+    #         "top": "50%",
+    #         "left": "50%",
+    #         "transform": "translate(-50%, -50%)",
+    #         "zIndex": 9999,
+    #         "visibility": "hidden",  # Hidden by default
+    #     },
+    # )
+
     # Add draggable to the core children list whether it's visible or not
     core_children.append(draggable)
+    # core_children.append(progress)
 
     # The core Div contains all elements, managing visibility as needed
     core = html.Div(core_children)

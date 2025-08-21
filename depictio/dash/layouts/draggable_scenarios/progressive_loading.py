@@ -9,6 +9,7 @@ import os
 import dash_mantine_components as dmc
 
 from dash import Input, Output, dcc, get_app, html
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import (
     get_component_display_name,
@@ -136,6 +137,15 @@ def create_inline_svg_logo():
 
 def create_loading_progress_display(dashboard_id: str):
     """Create a loading display with animated Depictio logo, real-time loading status and fade transitions."""
+
+    # PERFORMANCE OPTIMIZATION: Return empty div if animations disabled
+    if settings.performance.disable_animations:
+        logger.info("⚡ PERFORMANCE: Loading progress display creation skipped")
+        return html.Div(
+            id={"type": "loading-progress-container", "dashboard": dashboard_id},
+            style={"display": "none"},
+        )
+
     # CSS for fade animations
     fade_css = """
     @keyframes fadeIn {
@@ -211,6 +221,13 @@ def register_progressive_loading_callbacks(app):
     """Register simple progressive loading visual effects - just like the prototype."""
 
     logger.info("Registering simple progressive loading callbacks")
+
+    # PERFORMANCE OPTIMIZATION: Check settings to control animations
+    if settings.performance.disable_animations:
+        logger.info(
+            "⚡ PERFORMANCE: SVG animations disabled via settings.performance.disable_animations"
+        )
+        return
 
     # Clientside callback for SVG logo animation
     # Prepare SVG content with proper escaping for f-string
@@ -354,6 +371,11 @@ def register_progressive_loading_callbacks(app):
     )
 
     # Smart callback to hide loading progress when components are actually loaded
+    # PERFORMANCE OPTIMIZATION: Skip loading progress if animations disabled
+    if settings.performance.disable_animations:
+        logger.info("⚡ PERFORMANCE: Loading progress display disabled")
+        return
+
     app.clientside_callback(
         """
         function(pathname) {

@@ -1204,7 +1204,7 @@ def create_data_collection_viewer_content(
                         [
                             dmc.Group(
                                 [
-                                    dmc.Text("Rows to load:", size="sm", c="gray"),
+                                    # dmc.Text("Rows to load:", size="sm", c="gray"),
                                     dmc.NumberInput(
                                         id="dc-viewer-row-limit",
                                         value=1000,
@@ -1212,6 +1212,7 @@ def create_data_collection_viewer_content(
                                         max=10000,
                                         step=100,
                                         w="120px",
+                                        style={"display": "none"},
                                     ),
                                     dmc.Button(
                                         "Load Data",

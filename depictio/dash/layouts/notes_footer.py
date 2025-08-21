@@ -28,7 +28,7 @@ def register_callbacks_notes_footer(app):
                     body #notes-footer-content, html #notes-footer-content {
                         height: 0px !important;
                         overflow: hidden !important;
-                        transition: height 0.3s ease, opacity 0.3s ease, left 0.3s ease !important;
+                        transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), left 0.3s ease, visibility 0s linear 0.4s !important;
                         opacity: 0 !important;
                         position: fixed !important;
                         bottom: 0 !important;
@@ -57,13 +57,13 @@ def register_callbacks_notes_footer(app):
                         opacity: 1 !important;
                         overflow: visible !important;
                         visibility: visible !important;  /* Override hidden visibility */
-                        transition: height 0.3s ease, opacity 0.3s ease, visibility 0s ease !important;
+                        transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s ease !important;
                     }
 
                     /* Full screen mode - covers entire page-content area - ONLY when explicitly toggled */
                     body #notes-footer-content.footer-fullscreen, html #notes-footer-content.footer-fullscreen {
                         position: fixed !important;
-                        top: 60px !important; /* Account for header */
+                        top: calc(var(--app-shell-header-height, 87px)) !important; /* Account for app header */
                         left: 0px !important;
                         right: 0px !important;
                         bottom: 0px !important;
@@ -75,7 +75,9 @@ def register_callbacks_notes_footer(app):
                         visibility: visible !important;  /* Override hidden visibility */
                         background: var(--app-bg-color, #ffffff) !important;
                         border: none !important;
-                        transition: all 0.3s ease !important;
+                        display: flex !important;
+                        flex-direction: column !important;
+                        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
                     }
 
                     /* Hide page content when notes is in full screen - ONLY when body has notes-fullscreen class */
@@ -85,8 +87,15 @@ def register_callbacks_notes_footer(app):
 
                     /* Adjust editor height for full screen - ONLY when footer has fullscreen class */
                     #notes-footer-content.footer-fullscreen .mantine-RichTextEditor-root {
-                        height: calc(100vh - 160px) !important;
+                        height: calc(100vh - var(--app-shell-header-height, 87px) - 48px - 20px) !important;
                         max-height: none !important;
+                    }
+
+                    /* Ensure editor container takes full remaining space */
+                    #notes-footer-content.footer-fullscreen #notes-editor-container {
+                        flex: 1 !important;
+                        display: flex !important;
+                        flex-direction: column !important;
                     }
 
                     /* Override any conflicting transitions - High specificity */
@@ -161,6 +170,7 @@ def register_callbacks_notes_footer(app):
         ],
         [
             Input("toggle-notes-button", "n_clicks"),
+            Input("collapse-notes-button", "n_clicks"),
             Input("fullscreen-notes-button", "n_clicks"),
         ],
         [
@@ -170,7 +180,7 @@ def register_callbacks_notes_footer(app):
         prevent_initial_call=True,
     )
     def toggle_notes_footer(
-        toggle_clicks, fullscreen_clicks, current_footer_class, current_page_class
+        toggle_clicks, collapse_clicks, fullscreen_clicks, current_footer_class, current_page_class
     ):
         """Toggle footer visibility and fullscreen mode when buttons are clicked."""
         from dash import callback_context
@@ -181,7 +191,9 @@ def register_callbacks_notes_footer(app):
 
         trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
         logger.info(f"Notes footer triggered by: {trigger_id}")
-        logger.info(f"Toggle clicks: {toggle_clicks}, Fullscreen clicks: {fullscreen_clicks}")
+        logger.info(
+            f"Toggle clicks: {toggle_clicks}, Collapse clicks: {collapse_clicks}, Fullscreen clicks: {fullscreen_clicks}"
+        )
 
         current_footer_class = current_footer_class or ""
         current_page_class = current_page_class or ""
@@ -205,6 +217,21 @@ def register_callbacks_notes_footer(app):
                     f"Showing footer in normal mode. New classes: footer='footer-visible', page='{current_page_class}'"
                 )
                 return "footer-visible", current_page_class
+
+        elif trigger_id == "collapse-notes-button" and collapse_clicks:
+            # Collapse button always hides the footer if it's visible
+            if (
+                "footer-visible" in current_footer_class
+                or "footer-fullscreen" in current_footer_class
+            ):
+                # Hide footer completely
+                new_page_class = current_page_class.replace("notes-fullscreen", "").strip()
+                logger.info(f"Collapsing footer. New classes: footer='', page='{new_page_class}'")
+                return "", new_page_class
+            else:
+                # If footer is not visible, do nothing
+                logger.info("Footer already collapsed, no action needed")
+                return current_footer_class, current_page_class
 
         elif trigger_id == "fullscreen-notes-button" and fullscreen_clicks:
             if "footer-fullscreen" in current_footer_class:
@@ -247,6 +274,7 @@ def register_callbacks_notes_footer(app):
     @app.callback(
         [
             Output("toggle-notes-button", "children"),
+            Output("collapse-notes-button", "children"),
             Output("fullscreen-notes-button", "children"),
         ],
         Input("notes-footer-content", "className"),
@@ -256,11 +284,14 @@ def register_callbacks_notes_footer(app):
         """Update button icons based on footer visibility and fullscreen state."""
         footer_class = footer_class or ""
 
-        # Toggle button icon
+        # Toggle button icon (for the main toggle button in the UI)
         if "footer-visible" in footer_class or "footer-fullscreen" in footer_class:
-            toggle_icon = DashIconify(icon="material-symbols:expand-less", width=35, color="gray")
+            toggle_icon = DashIconify(icon="material-symbols:expand-more", width=35, color="gray")
         else:
             toggle_icon = DashIconify(icon="material-symbols:edit-note", width=35, color="gray")
+
+        # Collapse button icon (points down when footer is open, indicating collapse action)
+        collapse_icon = DashIconify(icon="material-symbols:expand-more", width=20, color="gray")
 
         # Fullscreen button icon
         if "footer-fullscreen" in footer_class:
@@ -272,7 +303,7 @@ def register_callbacks_notes_footer(app):
                 icon="material-symbols:fullscreen", width=20, color="gray"
             )
 
-        return toggle_icon, fullscreen_icon
+        return toggle_icon, collapse_icon, fullscreen_icon
 
 
 def create_notes_footer(dashboard_data=None):
@@ -306,16 +337,33 @@ def create_notes_footer(dashboard_data=None):
                                 gap="xs",
                                 align="center",
                             ),
-                            # Right side - Fullscreen button
-                            dmc.ActionIcon(
-                                DashIconify(
-                                    icon="material-symbols:fullscreen", width=20, color="gray"
-                                ),
-                                id="fullscreen-notes-button",
-                                variant="subtle",
-                                color="gray",
-                                size="sm",
-                                # n_clicks=0,
+                            # Right side - Toggle collapse and Fullscreen buttons
+                            dmc.Group(
+                                [
+                                    dmc.ActionIcon(
+                                        DashIconify(
+                                            icon="material-symbols:expand-more",
+                                            width=20,
+                                            color="gray",
+                                        ),
+                                        id="collapse-notes-button",
+                                        variant="subtle",
+                                        color="gray",
+                                        size="sm",
+                                    ),
+                                    dmc.ActionIcon(
+                                        DashIconify(
+                                            icon="material-symbols:fullscreen",
+                                            width=20,
+                                            color="gray",
+                                        ),
+                                        id="fullscreen-notes-button",
+                                        variant="subtle",
+                                        color="gray",
+                                        size="sm",
+                                    ),
+                                ],
+                                gap="xs",
                             ),
                         ],
                         justify="space-between",
