@@ -126,52 +126,19 @@ describe('Authentication - Account Management', () => {
       // Fast token-based login for test setup
       cy.loginWithTokenAsTestUser('testUser')
 
-      // Navigate to dashboards
+      // Navigate to dashboards first to verify login
       cy.visit('/dashboards')
       cy.wait(2000)
 
       // Check if the login was successful
       cy.url().should('include', '/dashboards')
 
-      // Go to profile page
-      cy.visit('/profile')
-      cy.wait(2000)
-
-      // Find and click the logout button - try multiple possible selectors
-      cy.get('body').then(($body) => {
-        // Try different possible logout button selectors
-        const logoutSelectors = [
-          '[data-testid="logout-button"]',
-          'button:contains("Logout")',
-          'a:contains("Logout")',
-          '[data-cy="logout"]',
-          '.logout-button'
-        ]
-
-        let found = false
-        for (const selector of logoutSelectors) {
-          if ($body.find(selector).length > 0 && !found) {
-            cy.get(selector).first().click({ force: true })
-            found = true
-            break
-          }
-        }
-
-        if (!found) {
-          // If no standard logout button found, look for any element containing "logout"
-          cy.contains(/logout/i).first().click({ force: true })
-        }
+      // Use the robust logout command that handles all timing issues
+      cy.logoutRobust({
+        timeout: 15000,
+        visitProfile: true,
+        verifyLogout: true
       })
-
-      cy.wait(2000)
-
-      // Verify logout succeeded - we should be redirected away from protected pages
-      cy.url().should('not.include', '/dashboards')
-
-      // Alternatively, verify we can't access protected content without re-authentication
-      cy.visit('/dashboards')
-      // Should be redirected to auth or see login prompt
-      cy.url().should('not.include', '/dashboards')
     })
   })
 
