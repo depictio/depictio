@@ -26,7 +26,7 @@ initContainerResources:
 
 ## SecurityContext
 backend:
-  replicas: 1  # Single replica for state consistency
+  replicas: 2  # Multiple replicas for high availability with anti-affinity
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000
@@ -38,11 +38,11 @@ backend:
       type: RuntimeDefault
   resources:
     requests:
-      memory: "4Gi"     # Further increased for data processing
-      cpu: "1"          # More CPU for intensive S3 operations
+      memory: "2Gi"     # Balanced for multiple replicas
+      cpu: "500m"       # Balanced CPU allocation
     limits:
-      memory: "8Gi"    # Much higher memory for large datasets
-      cpu: "6"          # More CPU headroom for concurrent data processing
+      memory: "4Gi"     # Reasonable limit for multiple replicas
+      cpu: "2"          # Balanced CPU limit
 
   env:
     # Enable unauthenticated mode (allows anonymous access)
@@ -52,12 +52,12 @@ backend:
     DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
     DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
 
-    # Performance - Increased workers to compensate for single replica
-    DEPICTIO_FASTAPI_WORKERS: "8"
+    # Performance - Balanced workers for multiple replicas
+    DEPICTIO_FASTAPI_WORKERS: "4"
 
 
 frontend:
-  replicas: 1  # Single replica for state consistency
+  replicas: 2  # Multiple replicas for high availability with anti-affinity
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000
@@ -70,11 +70,11 @@ frontend:
 
   resources:
     requests:
-      memory: "4Gi"     # Increased for single replica with 8 workers
-      cpu: "1"       # More CPU for 8 workers
+      memory: "2Gi"     # Balanced for multiple replicas
+      cpu: "500m"       # Balanced CPU allocation
     limits:
-      memory: "8Gi"     # Higher memory for single replica handling all frontend load
-      cpu: "6"          # More CPU headroom for 8 concurrent workers
+      memory: "4Gi"     # Reasonable limit for multiple replicas
+      cpu: "2"          # Balanced CPU limit
 
   env:
     # Enable unauthenticated mode (allows anonymous access)
@@ -84,12 +84,20 @@ frontend:
     DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
     DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
 
-    # Performance - Increased workers to compensate for single replica
-    DEPICTIO_DASH_WORKERS: "8"
+    # Performance - Balanced workers for multiple replicas
+    DEPICTIO_DASH_WORKERS: "4"
 
 mongo:
+  replicas: 1  # Temporarily single replica to get system working
   image:
     pullPolicy: Always
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1"
   securityContext:
     runAsNonRoot: true
     runAsUser: 999
@@ -137,14 +145,14 @@ ingress:
 
   # Host configuration for split frontend/backend setup
   hosts:
-    - host: "demo.depictio.embl.org"
+    - host: "dev.demo.depictio.embl.org"
       paths:
         - path: /
           pathType: Prefix
           service:
             name: depictio-frontend
             portName: http
-    - host: "api.demo.depictio.embl.org"
+    - host: "dev.api.demo.depictio.embl.org"
       paths:
         - path: /
           pathType: Prefix
@@ -162,8 +170,8 @@ ingress:
   # TLS configuration
   tls:
     - hosts:
-        - "demo.depictio.embl.org"
-        - "api.demo.depictio.embl.org"
+        - "dev.demo.depictio.embl.org"
+        - "dev.api.demo.depictio.embl.org"
         # - "minio.demo.depictio.embl.org"
       secretName: demo-depictio-tls
 

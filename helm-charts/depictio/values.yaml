@@ -52,6 +52,7 @@ mongo:
     repository: mongo # Added repository for MongoDB
     tag: latest
     pullPolicy: IfNotPresent
+  replicas: 1 # Set to 3 for high availability replica set
   resources:
     requests:
       memory: "1Gi"

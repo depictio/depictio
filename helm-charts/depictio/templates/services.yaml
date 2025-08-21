@@ -1,3 +1,4 @@
+# MongoDB Regular Service
 apiVersion: v1
 kind: Service
 metadata:
@@ -7,6 +8,24 @@ metadata:
   #   app: mongo
 spec:
   type: {{ .Values.mongo.service.type }}
+  ports:
+    - name: db
+      port: {{ .Values.mongo.service.port }}
+      targetPort: {{ .Values.mongo.service.port }}
+  selector:
+    release: {{ .Release.Name }}
+    app: mongo
+    project: {{ .Values.project.slug }}
+    type: app
+---
+# MongoDB Headless Service (for StatefulSet replica set discovery)
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-mongo-headless
+  namespace: {{ .Release.Namespace }}
+spec:
+  clusterIP: None
   ports:
     - name: db
       port: {{ .Values.mongo.service.port }}
