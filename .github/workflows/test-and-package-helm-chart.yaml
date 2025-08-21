@@ -199,41 +199,53 @@ jobs:
           echo "🕐 Initial 30-second wait for resource creation..."
           sleep 30
 
-          # Poll for expected deployments to be created
-          echo "🔍 Waiting for deployments to be created..."
+          # Poll for expected workloads to be created (deployments + statefulsets)
+          echo "🔍 Waiting for workloads to be created..."
           timeout=180  # 3 minutes total timeout
           elapsed=0
-          expected_deployments=4  # mongo, minio, backend, frontend
+          expected_deployments=3  # minio, backend, frontend (mongo is a StatefulSet)
+          expected_statefulsets=1  # mongo
 
           while [ $elapsed -lt $timeout ]; do
-            # Count deployments by their names (since label selectors aren't matching properly)
+            # Count deployments by their names
             deployment_count=$(kubectl get deployments --no-headers 2>/dev/null | grep -c "^${RELEASE_NAME}-" || echo "0")
-            echo "📊 Found $deployment_count deployments (expecting $expected_deployments)"
+            # Count statefulsets by their names
+            statefulset_count=$(kubectl get statefulsets --no-headers 2>/dev/null | grep -c "^${RELEASE_NAME}-" || echo "0")
+            total_workloads=$((deployment_count + statefulset_count))
+            expected_total=$((expected_deployments + expected_statefulsets))
 
-            if [ "$deployment_count" -ge "$expected_deployments" ]; then
-              echo "✅ All expected deployments have been created"
+            echo "📊 Found $deployment_count deployments, $statefulset_count statefulsets (total: $total_workloads, expecting: $expected_total)"
+
+            if [ "$deployment_count" -ge "$expected_deployments" ] && [ "$statefulset_count" -ge "$expected_statefulsets" ]; then
+              echo "✅ All expected workloads have been created"
               break
             fi
 
-            echo "⏳ Waiting for more deployments... (${elapsed}s/${timeout}s)"
+            echo "⏳ Waiting for more workloads... (${elapsed}s/${timeout}s)"
             sleep 10
             elapsed=$((elapsed + 10))
           done
 
           if [ $elapsed -ge $timeout ]; then
-            echo "❌ Timeout waiting for deployments to be created"
+            echo "❌ Timeout waiting for workloads to be created"
             echo "📊 Final deployment status:"
             kubectl get deployments --no-headers | grep "^${RELEASE_NAME}-" || echo "No deployments found with prefix ${RELEASE_NAME}-"
+            echo "📊 Final statefulset status:"
+            kubectl get statefulsets --no-headers | grep "^${RELEASE_NAME}-" || echo "No statefulsets found with prefix ${RELEASE_NAME}-"
             echo "📊 All deployments:"
             kubectl get deployments
+            echo "📊 All statefulsets:"
+            kubectl get statefulsets
             echo "📊 All resources with release label:"
             kubectl get all -l "release=${RELEASE_NAME}"
             exit 1
           fi
 
-          # List all created deployments for verification
+          # List all created workloads for verification
           echo "📋 Created deployments:"
           kubectl get deployments --no-headers | grep "^${RELEASE_NAME}-" || echo "No deployments found"
+          echo "📋 Created statefulsets:"
+          kubectl get statefulsets --no-headers | grep "^${RELEASE_NAME}-" || echo "No statefulsets found"
 
           echo ""
           echo "🔍 Detailed pod status monitoring for troubleshooting frontend..."

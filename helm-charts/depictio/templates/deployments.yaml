@@ -1,21 +1,20 @@
-# MongoDB Deployment
+# MongoDB StatefulSet (for high availability with replica set)
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ .Release.Name }}-mongo
   namespace: {{ .Release.Namespace }}
   labels:
     app: mongo
 spec:
-  replicas: 1
+  serviceName: {{ .Release.Name }}-mongo-headless
+  replicas: {{ .Values.mongo.replicas | default 1 }}
   selector:
     matchLabels:
       release: {{ .Release.Name }}
       app: mongo
       project: {{ .Values.project.slug }}
       type: app
-  strategy:
-    type: Recreate
   template:
     metadata:
       labels:
@@ -24,18 +23,49 @@ spec:
         project: {{ .Values.project.slug }}
         type: app
     spec:
+      {{- if gt (.Values.mongo.replicas | default 1 | int) 1 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - mongo
+                - key: release
+                  operator: In
+                  values:
+                  - {{ .Release.Name }}
+              topologyKey: kubernetes.io/hostname
+      {{- end }}
+      # No init containers - let MongoDB start normally first
       containers:
         - name: mongo
           image: "{{ .Values.mongo.image.repository }}:{{ .Values.mongo.image.tag }}"
           imagePullPolicy: {{ .Values.mongo.image.pullPolicy }}
           securityContext:
             {{- toYaml .Values.mongo.securityContext | nindent 12 }}
+          # Remove lifecycle hook to prevent container startup blocking
           args:
             - "mongod"
             - "--dbpath"
             - "/data/depictioDB"
             - "--port"
             - "27018"
+            - "--setParameter"
+            - "diagnosticDataCollectionEnabled=false"
+            - "--setParameter"
+            - "logLevel=1"
+            {{- if gt (.Values.mongo.replicas | default 1 | int) 1 }}
+            - "--replSet"
+            - "rs0"
+            - "--bind_ip_all"
+            {{- else }}
+            - "--noauth"
+            {{- end }}
           ports:
             - containerPort: {{ .Values.mongo.service.port }}
           resources:
@@ -43,10 +73,37 @@ spec:
           volumeMounts:
             - name: mongo-storage
               mountPath: /data/depictioDB
-      volumes:
-        - name: mongo-storage
-          persistentVolumeClaim:
-            claimName: {{ .Release.Name }}-mongo-pvc
+          readinessProbe:
+            exec:
+              command:
+                - mongosh
+                - --port
+                - "27018"
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - mongosh
+                - --port
+                - "27018"
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+  volumeClaimTemplates:
+  - metadata:
+      name: mongo-storage
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: {{ .Values.storageClass }}
+      resources:
+        requests:
+          storage: {{ .Values.persistence.mongo.size }}
 ---
 # MinIO Deployment (S3-compatible storage)
 {{- if .Values.minio.enabled }}
@@ -135,9 +192,61 @@ spec:
         project: {{ .Values.project.slug }}
         type: app
     spec:
+      {{- if gt (.Values.backend.replicas | int) 1 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - depictio-backend
+                - key: release
+                  operator: In
+                  values:
+                  - {{ .Release.Name }}
+              topologyKey: kubernetes.io/hostname
+      {{- end }}
       securityContext:
         {{- toYaml .Values.backend.podSecurityContext | nindent 8 }}
       initContainers:
+        # Generate new ObjectId and create updated config files in writable volume
+        - name: update-iris-configs
+          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          command: ["/bin/sh"]
+          args:
+          - -c
+          - |
+            echo "Creating updated iris dataset configs with new ObjectId..."
+
+            # Generate a new ObjectId to replace the hardcoded one
+            old_id="646b0f3c1e4a2d7f8e5b8c9c"
+            new_id=$(python3 -c "from bson import ObjectId; print(str(ObjectId()))")
+
+            echo "Replacing $old_id with $new_id"
+
+            # Copy the entire iris_dataset directory to writable volume
+            cp -r /app/depictio/api/v1/configs/iris_dataset /iris-config/
+
+            # Update the ObjectIds in the copied files
+            sed -i "s/$old_id/$new_id/g" /iris-config/iris_dataset/initial_dashboard.json
+            sed -i "s/$old_id/$new_id/g" /iris-config/iris_dataset/initial_project.yaml
+
+            echo "Updated iris configs created in /iris-config/ with ObjectId: $new_id"
+            echo "Files updated:"
+            echo "  - /iris-config/iris_dataset/initial_dashboard.json"
+            echo "  - /iris-config/iris_dataset/initial_project.yaml"
+          securityContext:
+            {{- toYaml .Values.backend.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
+          volumeMounts:
+            - name: iris-config-volume
+              mountPath: /iris-config
         {{- if .Values.local_development }}
         - name: fix-permissions
           image: busybox:1.35
@@ -254,6 +363,9 @@ spec:
               mountPath: /app/depictio/.depictio
             - name: depictio-uploads
               mountPath: /tmp/depictio-uploads
+            - name: iris-config-volume
+              mountPath: /app/depictio/api/v1/configs/iris_dataset
+              subPath: iris_dataset
             {{- if .Values.local_development }}
             # DEV ONLY: mount the depictio source code for development
             ## Use minikube mount or similar to mount the local source code
@@ -273,6 +385,8 @@ spec:
         - name: depictio-uploads
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-depictio-uploads-pvc
+        - name: iris-config-volume
+          emptyDir: {}
         {{- if .Values.local_development }}
         # DEV ONLY: mount the depictio source code for development
         ## Use minikube mount or similar to mount the local source code
@@ -308,6 +422,24 @@ spec:
         project: {{ .Values.project.slug }}
         type: app
     spec:
+      {{- if gt (.Values.frontend.replicas | int) 1 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - depictio-frontend
+                - key: release
+                  operator: In
+                  values:
+                  - {{ .Release.Name }}
+              topologyKey: kubernetes.io/hostname
+      {{- end }}
       initContainers:
         # STEP 0: Fix permissions for mounted volumes (always run for frontend)
         - name: fix-permissions-frontend
