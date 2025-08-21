@@ -19,6 +19,7 @@ from depictio.dash.api_calls import (
     api_call_register_user,
 )
 from depictio.dash.colors import colors  # Import Depictio color palette
+from depictio.dash.layouts.upgrade_modal import upgrade_layout
 
 event = {"event": "keydown", "props": ["key"]}
 
@@ -175,6 +176,58 @@ def render_login_form():
                 ],
                 gap="0.5rem",
                 style={"display": "block" if settings.auth.google_oauth_enabled else "none"},
+            ),
+            # Temporary User Login Section (only in unauthenticated mode)
+            dmc.Stack(
+                [
+                    dmc.Divider(
+                        label="Or",
+                        labelPosition="center",
+                        style={
+                            "margin": "1rem 0",
+                            "display": "block" if settings.auth.unauthenticated_mode else "none",
+                        },
+                    ),
+                    dmc.Button(
+                        [
+                            DashIconify(
+                                icon="mdi:account-arrow-up",
+                                width=20,
+                                height=20,
+                                style={"marginRight": "10px"},
+                            ),
+                            "Login as temporary user",
+                        ],
+                        id="upgrade-to-temporary-button",
+                        radius="md",
+                        variant="outline",
+                        fullWidth=True,
+                        style={
+                            "display": "block" if settings.auth.unauthenticated_mode else "none",
+                            "borderColor": "var(--app-border-color, #ddd)",
+                            "backgroundColor": "var(--app-surface-color, #ffffff)",
+                            "color": "var(--app-text-color, #000000)",
+                            "fontWeight": "500",
+                            "padding": "12px 16px",
+                            "height": "48px",
+                            "fontSize": "14px",
+                            "transition": "all 0.2s ease",
+                            "boxShadow": "0 1px 2px rgba(0, 0, 0, 0.05)",
+                        },
+                        styles={
+                            "root": {
+                                "&:hover": {
+                                    "backgroundColor": "var(--app-surface-color, #f8f9fa)",
+                                    "borderColor": colors["blue"],
+                                    "boxShadow": "0 2px 4px rgba(59, 130, 246, 0.1)",
+                                    "transform": "translateY(-1px)",
+                                }
+                            }
+                        },
+                    ),
+                ],
+                gap="0.5rem",
+                style={"display": "block" if settings.auth.unauthenticated_mode else "none"},
             ),
         ],
         gap="1rem",
@@ -339,7 +392,39 @@ def validate_login(login_email, login_password):
 
         # return "Login successful!", False,
         logger.info(f"Login successful for user: {user.email}")
-        return "Login successful!", False, login_user(user.email), token_data
+
+        # Merge login_user data with token_data to create complete session
+        session_data = login_user(user.email)
+        session_data.update(token_data)
+
+        # CRITICAL: Ensure logged_in is True for successful login
+        # The token_data might have logged_in: False by default
+        session_data["logged_in"] = True
+
+        # Ensure we have all required fields for token validation
+        # Map API response fields to expected session fields if needed
+        if "access_token" in session_data and "refresh_token" not in session_data:
+            # Some APIs might not provide refresh tokens, use access token as fallback
+            session_data["refresh_token"] = session_data["access_token"]
+
+        # Add missing datetime fields if not present
+        if "expire_datetime" not in session_data:
+            from datetime import datetime, timedelta
+
+            # Default to 1 hour expiry if not specified
+            session_data["expire_datetime"] = datetime.utcnow() + timedelta(hours=1)
+
+        if "refresh_expire_datetime" not in session_data:
+            from datetime import datetime, timedelta
+
+            # Default to 7 days refresh expiry if not specified
+            session_data["refresh_expire_datetime"] = datetime.utcnow() + timedelta(days=7)
+
+        # Add user_id if not present
+        if "user_id" not in session_data:
+            session_data["user_id"] = str(user.id)
+
+        return "Login successful!", False, session_data, session_data
 
     logger.error("Password verification failed.")
     return "Invalid email or password.", True, dash.no_update, dash.no_update
@@ -647,6 +732,8 @@ layout = html.Div(
                     target="_self",
                     style={"display": "none"},
                 ),
+                # Upgrade modal components
+                upgrade_layout,
             ]
         ),
     ]
@@ -661,9 +748,13 @@ def register_callbacks_users_management(app):
         State("login-button", "disabled"),
     )
     def trigger_save_on_enter(n_events, e, disabled):
+        logger.info(
+            f"🎯 Enter key trigger - Events: {n_events}, Key: {e.get('key') if e else None}, Disabled: {disabled}"
+        )
         if e is None or e["key"] != "Enter" or disabled:
             raise PreventUpdate()
 
+        logger.info("⌨️ Enter key pressed - simulating login button click")
         return 1  # Simulate a click on the save button
 
     @app.callback(
@@ -789,6 +880,22 @@ def register_callbacks_users_management(app):
             return True, content, dash.no_update, modal_state, True, dash.no_update
 
         elif button_id == "login-button":
+            logger.info(
+                f"🔑 Login button clicked - Email: {login_email}, Password: {'*' * len(login_password) if login_password else 'None'}"
+            )
+
+            # Prevent processing if fields are empty (shouldn't happen due to button disabled state)
+            if not login_email or not login_password:
+                logger.warning("🚫 Login attempted with empty fields - ignoring")
+                return (
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                )
+
             feedback_message, modal_open_new, session_data, local_data_new = validate_login(
                 login_email, login_password
             )
@@ -873,6 +980,114 @@ def register_callbacks_users_management(app):
             dash.no_update,
             dash.no_update,
         )
+
+    # Simple direct callback for temporary user upgrade
+    @app.callback(
+        [
+            Output("local-store", "data", allow_duplicate=True),
+            Output("url", "pathname", allow_duplicate=True),
+        ],
+        [Input("upgrade-to-temporary-button", "n_clicks")],
+        [State("local-store", "data")],
+        prevent_initial_call=True,
+    )
+    def upgrade_to_temporary_direct(n_clicks, local_data):
+        """Direct upgrade to temporary user - simple and straightforward."""
+        logger.info(f"🔵 Temporary user button clicked: {n_clicks}")
+        logger.info(f"🔍 Local data received: {local_data}")
+        logger.info(f"🔍 Local data type: {type(local_data)}")
+        if local_data:
+            logger.info(f"🔍 Local data keys: {list(local_data.keys())}")
+            logger.info(f"🔍 Has access_token: {'access_token' in local_data}")
+            if "access_token" in local_data and local_data["access_token"]:
+                logger.info(f"🔍 Access token preview: {local_data['access_token'][:20]}...")
+            else:
+                logger.info(f"🔍 Access token is: {local_data.get('access_token')}")
+
+        if n_clicks is None:
+            return dash.no_update, dash.no_update
+
+        if not settings.auth.unauthenticated_mode:
+            logger.warning("❌ Upgrade not available - not in unauthenticated mode")
+            return dash.no_update, dash.no_update
+
+        # In unauthenticated mode on /auth page, user appears "not logged in"
+        # but we still need to get the anonymous session for upgrade
+        if not local_data or not local_data.get("access_token"):
+            logger.info("📝 No session data in local-store (expected on /auth page)")
+            logger.info("🔄 Getting anonymous session for temporary user upgrade")
+
+            try:
+                from depictio.dash.core.auth import get_anonymous_user_session
+
+                anonymous_session = get_anonymous_user_session()
+                if not anonymous_session or not anonymous_session.get("access_token"):
+                    logger.error("❌ Failed to get anonymous session")
+                    return dash.no_update, dash.no_update
+
+                local_data = anonymous_session
+                logger.info(f"✅ Got anonymous session: {local_data['access_token'][:20]}...")
+            except Exception as e:
+                logger.error(f"❌ Error getting anonymous session: {e}")
+                return dash.no_update, dash.no_update
+
+        try:
+            from depictio.dash.api_calls import api_call_upgrade_to_temporary_user
+
+            access_token = local_data.get("access_token")
+            logger.info(
+                f"🚀 Calling upgrade API with existing session token: {access_token[:20]}..."
+            )
+
+            upgrade_result = api_call_upgrade_to_temporary_user(
+                access_token,
+                expiry_hours=settings.auth.temporary_user_expiry_hours,
+            )
+
+            if upgrade_result:
+                logger.info(
+                    "✅ Successfully upgraded to temporary user - redirecting to dashboards"
+                )
+                return upgrade_result, "/dashboards"
+            else:
+                logger.warning("⚠️ Upgrade failed or user already temporary")
+                return dash.no_update, dash.no_update
+
+        except Exception as e:
+            logger.error(f"❌ Error during upgrade: {e}")
+            return dash.no_update, dash.no_update
+
+    # Automatically open modal when user lands on /auth page
+    @app.callback(
+        [
+            Output("auth-modal", "opened", allow_duplicate=True),
+            Output("modal-content", "children", allow_duplicate=True),
+            Output("modal-state-store", "data", allow_duplicate=True),
+        ],
+        [Input("url", "pathname")],
+        [State("local-store", "data")],
+        prevent_initial_call=True,
+    )
+    def auto_open_auth_modal_on_auth_page(pathname, local_data):
+        """Automatically open the auth modal when user navigates to /auth page."""
+        logger.info(
+            f"🔍 Auto-modal callback triggered - Pathname: {pathname}, Local data: {local_data}"
+        )
+
+        if pathname != "/auth":
+            logger.info("🚫 Not /auth page, skipping modal open")
+            return dash.no_update, dash.no_update, dash.no_update
+
+        # Check if user is already logged in - don't show modal for authenticated users
+        if local_data and local_data.get("logged_in", False):
+            logger.info("🔐 User already logged in, not opening modal")
+            return False, dash.no_update, dash.no_update
+
+        logger.info("🔓 Auto-opening auth modal for /auth page")
+
+        # Open modal with login form
+        content = render_login_form()
+        return True, content, "login"
 
 
 # Google OAuth callback using server-side callback
