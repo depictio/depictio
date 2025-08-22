@@ -5,7 +5,7 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, api_call_get_dashboard
 from depictio.dash.component_metadata import get_build_functions
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import (
-    update_interactive_component,
+    update_interactive_component_sync,
 )
 from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
     create_skeleton_component,
@@ -183,7 +183,7 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
     children = processed_children
     # logger.info(f"Children: {children}")
 
-    children = update_interactive_component(
+    children = update_interactive_component_sync(
         stored_metadata,
         interactive_components_dict,
         children,
@@ -262,7 +262,7 @@ def get_loading_delay_for_component(component_type, index_in_list):
     return base_delay + positional_delay
 
 
-def load_depictio_data(dashboard_id, local_data, theme="light"):
+def load_depictio_data_sync(dashboard_id, local_data, theme="light"):
     """Load the dashboard data from the API and render it.
     Args:
         dashboard_id (str): The ID of the dashboard to load.

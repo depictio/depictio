@@ -285,7 +285,7 @@ def render_raw_children(
     return child, index
 
 
-def update_interactive_component(
+def update_interactive_component_sync(
     stored_metadata_raw,
     interactive_components_dict,
     current_draggable_children,
