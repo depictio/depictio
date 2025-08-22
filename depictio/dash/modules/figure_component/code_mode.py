@@ -135,7 +135,7 @@ def create_code_mode_interface(component_index: str) -> html.Div:
                                             "minHeight": "200px",
                                             "borderRadius": "0 0 8px 8px",
                                         },
-                                        placeholder="# Enter your Python/Plotly code here...\n# Available: df (DataFrame), px (plotly.express), pd (pandas), pl (polars)\n# Example:\n# fig = px.scatter(df, x='your_x_column', y='your_y_column', color='your_color_column')",
+                                        placeholder="# Enter your Python/Plotly code here...\n# Available: df (DataFrame), px (plotly.express), pd (pandas), pl (polars)\n# \n# CONSTRAINT: Use 'df_modified' for data preprocessing (single line):\n# df_modified = df.to_pandas().groupby('column').sum().reset_index()\n# fig = px.pie(df_modified, values='value_col', names='name_col')\n# \n# Simple example (no preprocessing):\n# fig = px.scatter(df, x='your_x_column', y='your_y_column', color='your_color_column')",
                                     ),
                                 ],
                                 style={
@@ -206,15 +206,21 @@ def create_code_mode_interface(component_index: str) -> html.Div:
                         title="Dataset & Figure Usage",
                         color="blue",
                         children=[
-                            dmc.Text(
-                                "Use 'df' for dataset operations and 'fig' for your final figure:"
-                            ),
+                            dmc.Text("Code Constraints and Usage:"),
                             dmc.List(
                                 [
-                                    dmc.ListItem("df - Your dataset (Polars DataFrame)"),
-                                    dmc.ListItem("fig - Your final Plotly figure"),
                                     dmc.ListItem(
-                                        "Operations: Both pandas (.to_pandas()) and polars methods allowed"
+                                        "df - Your dataset (Polars DataFrame) - READ ONLY"
+                                    ),
+                                    dmc.ListItem(
+                                        "df_modified - Use for preprocessing (single line only)"
+                                    ),
+                                    dmc.ListItem("fig - Your final Plotly figure (required)"),
+                                    dmc.ListItem(
+                                        "✅ Valid: fig = px.scatter(df, ...) or fig = px.pie(df_modified, ...)"
+                                    ),
+                                    dmc.ListItem(
+                                        "❌ Invalid: Multiple preprocessing lines or wrong variable names"
                                     ),
                                 ],
                                 size="sm",
@@ -372,6 +378,89 @@ def convert_ui_params_to_code(dict_kwargs: Dict[str, Any], visu_type: str) -> st
     return "\n".join(code_lines)
 
 
+def analyze_constrained_code(code: str) -> dict[str, Any]:
+    """
+    Analyze code with df_modified constraint.
+
+    Expects code format:
+    - Optional: df_modified = df.some_processing_chain()
+    - Required: fig = px.function(df or df_modified, ...)
+
+    Args:
+        code: Python code string
+
+    Returns:
+        Dictionary with analysis results
+    """
+    if not code or not code.strip():
+        return {
+            "has_preprocessing": False,
+            "preprocessing_code": None,
+            "figure_code": None,
+            "uses_modified_df": False,
+            "is_valid": False,
+            "error_message": "Empty code",
+        }
+
+    lines = [
+        line.strip()
+        for line in code.split("\n")
+        if line.strip() and not line.strip().startswith("#")
+    ]
+
+    preprocessing_line = None
+    figure_line = None
+    uses_modified_df = False
+
+    for line in lines:
+        if line.startswith("df_modified =") or line.startswith("df_modified="):
+            preprocessing_line = line
+        elif line.startswith("fig =") or line.startswith("fig="):
+            figure_line = line
+            uses_modified_df = "df_modified" in line
+
+    # Validation
+    if not figure_line:
+        return {
+            "has_preprocessing": preprocessing_line is not None,
+            "preprocessing_code": preprocessing_line,
+            "figure_code": figure_line,
+            "uses_modified_df": uses_modified_df,
+            "is_valid": False,
+            "error_message": 'Code must contain a line starting with "fig = px.function(...)"',
+        }
+
+    # Check for invalid patterns
+    if preprocessing_line and not uses_modified_df:
+        return {
+            "has_preprocessing": True,
+            "preprocessing_code": preprocessing_line,
+            "figure_code": figure_line,
+            "uses_modified_df": uses_modified_df,
+            "is_valid": False,
+            "error_message": "If df_modified is created, it must be used in the fig = px.function() call",
+        }
+
+    if uses_modified_df and not preprocessing_line:
+        return {
+            "has_preprocessing": False,
+            "preprocessing_code": preprocessing_line,
+            "figure_code": figure_line,
+            "uses_modified_df": uses_modified_df,
+            "is_valid": False,
+            "error_message": "df_modified is used but not defined. Add: df_modified = df.some_processing()",
+        }
+
+    return {
+        "has_preprocessing": preprocessing_line is not None,
+        "preprocessing_code": preprocessing_line,
+        "figure_code": figure_line,
+        "uses_modified_df": uses_modified_df,
+        "is_valid": True,
+        "error_message": None,
+    }
+
+
 def extract_visualization_type_from_code(code: str) -> str:
     """Extract visualization type from Python code"""
     import re
@@ -400,11 +489,12 @@ def extract_params_from_code(code: str) -> Dict[str, Any]:
     import re
 
     # Look for px.scatter, px.line, etc. function calls OR clustering functions
-    plotly_call_pattern = r"(px\.\w+\(df(?:,\s*(.+?))?\)|create_\w+_plot\(df(?:,\s*(.+?))?\))"
+    # Updated to handle df_modified, df_new, etc.
+    plotly_call_pattern = r"(px\.\w+\(df\w*(?:,\s*(.+?))?\)|create_\w+_plot\(df\w*(?:,\s*(.+?))?\))"
     match = re.search(plotly_call_pattern, code, re.DOTALL)
 
-    if match and match.group(1):
-        params_str = match.group(1)
+    if match and match.group(2):
+        params_str = match.group(2)
 
         # Extract individual parameters (enhanced approach)
         param_patterns = [
@@ -413,6 +503,8 @@ def extract_params_from_code(code: str) -> Dict[str, Any]:
             (r"y\s*=\s*['\"]([^'\"]+)['\"]", "y"),
             (r"color\s*=\s*['\"]([^'\"]+)['\"]", "color"),
             (r"size\s*=\s*['\"]([^'\"]+)['\"]", "size"),
+            (r"values\s*=\s*['\"]([^'\"]+)['\"]", "values"),
+            (r"names\s*=\s*['\"]([^'\"]+)['\"]", "names"),
             (r"title\s*=\s*['\"]([^'\"]+)['\"]", "title"),
             (r"facet_col\s*=\s*['\"]([^'\"]+)['\"]", "facet_col"),
             (r"facet_row\s*=\s*['\"]([^'\"]+)['\"]", "facet_row"),
