@@ -127,6 +127,7 @@ def create_code_mode_interface(component_index: str) -> html.Div:
                                             "wrap": True,  # Enable word wrapping
                                             "fontFamily": "Fira Code, JetBrains Mono, Monaco, Consolas, Courier New, monospace",
                                             "printMargin": 55,  # Set print margin at ~55 characters
+                                            "enableResize": True,  # Enable the resize handle
                                         },
                                         style={
                                             "width": "100%",
@@ -134,16 +135,19 @@ def create_code_mode_interface(component_index: str) -> html.Div:
                                             "minHeight": "200px",
                                             "borderRadius": "0 0 8px 8px",
                                         },
-                                        placeholder="# Enter your Python/Plotly code here...\n# Available: df (DataFrame), px (plotly.express), go (plotly.graph_objects), pd (pandas), np (numpy)\n# Example:\n# fig = px.scatter(df, x='your_x_column', y='your_y_column', color='your_color_column')",
+                                        placeholder="# Enter your Python/Plotly code here...\n# Available: df (DataFrame), px (plotly.express), pd (pandas), pl (polars)\n# Example:\n# fig = px.scatter(df, x='your_x_column', y='your_y_column', color='your_color_column')",
                                     ),
                                 ],
                                 style={
                                     "width": "100%",
                                     "flex": "1",  # Take available space
                                     "minHeight": "200px",
+                                    "maxHeight": "600px",  # Set max height for resize
                                     "display": "flex",
                                     "flexDirection": "column",
                                     "borderRadius": "0 0 8px 8px",
+                                    "resize": "vertical",
+                                    "overflow": "auto",
                                 },
                             ),
                         ],
@@ -199,9 +203,25 @@ def create_code_mode_interface(component_index: str) -> html.Div:
                     # Data info (show basic info about the loaded dataframe)
                     dmc.Alert(
                         id={"type": "data-info", "index": component_index},
-                        title="Dataset Information",
+                        title="Dataset & Figure Usage",
                         color="blue",
-                        children="DataFrame loaded from selected data collection will be available as 'df' variable.",
+                        children=[
+                            dmc.Text(
+                                "Use 'df' for dataset operations and 'fig' for your final figure:"
+                            ),
+                            dmc.List(
+                                [
+                                    dmc.ListItem("df - Your dataset (Polars DataFrame)"),
+                                    dmc.ListItem("fig - Your final Plotly figure"),
+                                    dmc.ListItem(
+                                        "Operations: Both pandas (.to_pandas()) and polars methods allowed"
+                                    ),
+                                ],
+                                size="sm",
+                                withPadding=True,
+                                style={"marginTop": "8px"},
+                            ),
+                        ],
                         withCloseButton=False,
                         icon=DashIconify(
                             icon="mdi:database",
@@ -211,7 +231,7 @@ def create_code_mode_interface(component_index: str) -> html.Div:
                     ),
                     # Code examples section - separate from dataset info
                     dmc.Alert(
-                        title="Code Examples",
+                        title="Code Examples (Iris Dataset)",
                         color="teal",
                         children=[
                             dmc.Button(
