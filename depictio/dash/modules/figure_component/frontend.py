@@ -505,36 +505,9 @@ def register_callbacks_figure_component(app):
         prevent_initial_call=True,
     )
     def show_loading_state(dict_kwargs, visu_type_label):
-        """Show loading spinner when figure inputs change."""
-        loading_content = dmc.Stack(
-            [
-                dmc.Loader(type="dots", color="gray", size="lg"),
-                dmc.Text(
-                    "Generating figure...",
-                    size="sm",
-                    c="gray",
-                    style={"color": "var(--app-text-color, gray)"},
-                ),
-            ],
-            align="center",
-            gap="md",
-        )
-
-        # Show the loading overlay
-        loading_style = {
-            "position": "absolute",
-            "top": "0",
-            "left": "0",
-            "width": "100%",
-            "height": "100%",
-            "display": "flex",  # Show the loading overlay
-            "alignItems": "center",
-            "justifyContent": "center",
-            "backgroundColor": "var(--app-surface-color, #ffffff)",
-            "zIndex": "1000",
-        }
-
-        return loading_content, loading_style
+        """Show loading spinner when figure inputs change - DISABLED."""
+        # Disabled loading state to prevent infinite "Generating figure" issue
+        return html.Div(), {"display": "none"}
 
     @app.callback(
         [
@@ -985,14 +958,23 @@ def register_callbacks_figure_component(app):
                 "Auto-generate figures disabled and not in edit mode, skipping default figure generation"
             )
             # raise dash.exceptions.PreventUpdate
-            return dmc.Stack(
+            return html.Div(
                 dmc.Center(
                     dmc.Text(
-                        "Select a visualization type and core parameters to start generating a figure."
+                        "Select a visualization type and core parameters to start generating a figure.",
+                        ta="center",
+                        c="gray",
+                        size="md",
                     )
                 ),
-                align="center",
-                gap="md",
+                style={
+                    "height": "100%",
+                    "minHeight": "300px",
+                    "display": "flex",
+                    "alignItems": "center",
+                    "justifyContent": "center",
+                    "width": "100%",
+                },
             )
 
         # Get existing component data
@@ -1355,6 +1337,7 @@ def register_callbacks_figure_component(app):
             Output({"type": "code-status", "index": MATCH}, "children"),
             Output({"type": "code-status", "index": MATCH}, "color"),
             Output({"type": "code-status", "index": MATCH}, "title"),
+            Output({"type": "dict_kwargs", "index": MATCH}, "data", allow_duplicate=True),
             # Output(
             #     {"type": "stored-metadata-component", "index": MATCH}, "data", allow_duplicate=True
             # ),
@@ -1379,7 +1362,7 @@ def register_callbacks_figure_component(app):
         )
         if not n_clicks or not code:
             logger.info("Skipping execution: no clicks or no code")
-            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         if not local_data:
             return (
@@ -1387,6 +1370,7 @@ def register_callbacks_figure_component(app):
                 "Authentication required to execute code",
                 "red",
                 "Error",
+                dash.no_update,
             )
 
         try:
@@ -1404,6 +1388,7 @@ def register_callbacks_figure_component(app):
                     "Please select a workflow and data collection",
                     "orange",
                     "Warning",
+                    dash.no_update,
                 )
 
             # Execute code securely
@@ -1411,6 +1396,10 @@ def register_callbacks_figure_component(app):
             success, result, message = executor.execute_code(code, df)
 
             if success and result:
+                # Extract parameters from executed code for dict_kwargs
+                extracted_params = extract_params_from_code(code)
+                logger.info(f"Extracted parameters from executed code: {extracted_params}")
+
                 # Store the figure data with metadata for further processing
                 figure_data = {
                     "figure": result.to_dict(),
@@ -1421,17 +1410,20 @@ def register_callbacks_figure_component(app):
                 logger.info(
                     f"Code execution successful, storing figure data with keys: {list(figure_data.keys())}"
                 )
-                # logger.info(f"Existing stored metadata: {stored_metadata}")
-                return (figure_data, "Code executed successfully!", "green", "Success")
-                # return (figure_data, "Code executed successfully!", "green", "Success", stored_metadata)
+                return (
+                    figure_data,
+                    "Code executed successfully!",
+                    "green",
+                    "Success",
+                    extracted_params,
+                )
             else:
-                return (None, message, "red", "Error")
-                # return (None, message, "red", "Error", stored_metadata)
+                return (None, message, "red", "Error", dash.no_update)
 
         except Exception as e:
             error_msg = f"Unexpected error: {str(e)}"
             logger.error(f"Code execution error: {error_msg}")
-            return (None, error_msg, "red", "Error")
+            return (None, error_msg, "red", "Error", dash.no_update)
 
     # Update figure when code is executed successfully
     @app.callback(
@@ -1927,6 +1919,16 @@ def design_figure(id, component_data=None):
         # Use the visualization name (lowercase) as value
         default_value = component_data["visu_type"].lower()
 
+    # Set initial mode based on component_data mode field
+    initial_mode = "ui"  # Default to UI mode
+    if component_data and component_data.get("mode") == "code":
+        initial_mode = "code"
+        logger.info(
+            f"Setting initial mode to code for component {id['index']} based on stored metadata"
+        )
+    else:
+        logger.info(f"Setting initial mode to UI for component {id['index']}")
+
     # Create layout optimized for fullscreen modal
     figure_row = [
         # Mode toggle (central and prominent)
@@ -1942,20 +1944,36 @@ def design_figure(id, component_data=None):
                                     DashIconify(icon="tabler:eye", width=16),
                                     html.Span("UI Mode"),
                                 ],
-                                style={"gap": 10},
+                                style={
+                                    "gap": 10,
+                                    "width": "250px",
+                                    # "display": "flex",
+                                    # "justifyContent": "center",
+                                    # "alignItems": "center"
+                                },
                             ),
                         },
                         {
                             "value": "code",
                             "label": dmc.Center(
-                                [DashIconify(icon="tabler:code", width=16), html.Span("Code Mode")],
-                                style={"gap": 10},
+                                [
+                                    DashIconify(icon="tabler:code", width=16),
+                                    html.Span("Code Mode (Beta)"),
+                                ],
+                                style={
+                                    "gap": 10,
+                                    "width": "250px",
+                                    # "display": "flex",
+                                    # "justifyContent": "center",
+                                    # "alignItems": "center"
+                                },
                             ),
                         },
                     ],
-                    value="ui",  # Default to UI mode
-                    size="sm",
+                    value=initial_mode,  # Use initial_mode based on component_data
+                    size="lg",
                     style={"marginBottom": "15px"},
+                    # style={"marginBottom": "15px", "width": "520px"},
                 )
             ]
         ),
@@ -1996,7 +2014,7 @@ def design_figure(id, component_data=None):
                                         # Visualization and Edit button row (2/3 + 1/3 layout)
                                         html.Div(
                                             [
-                                                # Visualization section (2/3 width)
+                                                # Visualization section (full width)
                                                 html.Div(
                                                     [
                                                         dmc.Group(
@@ -2038,48 +2056,25 @@ def design_figure(id, component_data=None):
                                                         ),
                                                     ],
                                                     style={
-                                                        "width": "65%",
-                                                        "display": "inline-block",
-                                                        "verticalAlign": "top",
-                                                        "marginRight": "5%",
-                                                    },
-                                                ),
-                                                # Edit button section (1/3 width)
-                                                html.Div(
-                                                    [
-                                                        dmc.Text(
-                                                            " ",  # Empty space to align with label
-                                                            fw="bold",
-                                                            size="sm",
-                                                            style={"marginBottom": "8px"},
-                                                        ),
-                                                        dmc.Button(
-                                                            "Edit",
-                                                            id={
-                                                                "type": "edit-button",
-                                                                "index": id["index"],
-                                                            },
-                                                            n_clicks=0,
-                                                            size="sm",
-                                                            leftSection=DashIconify(
-                                                                icon="mdi:cog", width=16
-                                                            ),
-                                                            variant="outline",
-                                                            color="blue",
-                                                            fullWidth=True,
-                                                        ),
-                                                    ],
-                                                    style={
-                                                        "width": "30%",
-                                                        "display": "inline-block",
-                                                        # "verticalAlign": "top",
-                                                        "marginTop": "20px",
+                                                        "width": "100%",
                                                     },
                                                 ),
                                             ],
                                             style={"marginBottom": "20px"},
                                         ),
-                                        # Edit panel
+                                        # Hidden edit button for callback compatibility
+                                        html.Div(
+                                            dmc.Button(
+                                                "Edit",
+                                                id={
+                                                    "type": "edit-button",
+                                                    "index": id["index"],
+                                                },
+                                                n_clicks=1,  # Start clicked to show parameters
+                                                style={"display": "none"},
+                                            )
+                                        ),
+                                        # Edit panel (always open)
                                         dbc.Collapse(
                                             id={
                                                 "type": "collapse",
