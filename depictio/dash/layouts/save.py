@@ -152,13 +152,13 @@ def register_callbacks_save(app):
         #         )
         #         if elem:
         #             logger.info(
+        #                 f"📊 SAVE DEBUG - Raw metadata {i}: mode={elem.get('mode', 'MISSING')}"
+        #             )
+        #             logger.info(
+        #                 f"📊 SAVE DEBUG - Raw metadata {i}: code_content={'YES' if elem.get('code_content') else 'NO'} ({len(elem.get('code_content', '')) if elem.get('code_content') else 0} chars)"
+        #             )
+        #             logger.info(
         #                 f"📊 SAVE DEBUG - Raw metadata {i}: dict_kwargs={elem.get('dict_kwargs', 'MISSING')}"
-        #             )
-        #             logger.info(
-        #                 f"📊 SAVE DEBUG - Raw metadata {i}: wf_id={elem.get('wf_id', 'MISSING')}, workflow_id={elem.get('workflow_id', 'MISSING')}"
-        #             )
-        #             logger.info(
-        #                 f"📊 SAVE DEBUG - Raw metadata {i}: dc_id={elem.get('dc_id', 'MISSING')}"
         #             )
 
         stored_metadata_for_logging = [
