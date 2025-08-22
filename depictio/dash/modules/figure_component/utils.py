@@ -228,27 +228,44 @@ def _get_required_parameters(visu_type: str) -> List[str]:
 
         # If no required parameters found in definition, use common fallbacks
         if not required_params:
-            # Basic fallbacks for common visualization types
-            if visu_type.lower() in ["histogram", "box", "violin"]:
-                required_params = ["x"] if visu_type.lower() == "histogram" else ["y"]
+            # Specific visualization requirements
+            if visu_type.lower() == "histogram":
+                required_params = ["x"]  # Histogram only needs X
+            elif visu_type.lower() in ["box", "violin"]:
+                required_params = ["y"]  # Box/violin plots need Y (distribution)
             elif visu_type.lower() in ["pie", "sunburst", "treemap"]:
-                required_params = ["values"]
+                required_params = ["values"]  # Hierarchical charts need values
             elif visu_type.lower() in ["timeline"]:
-                required_params = ["x_start"]
-            elif visu_type.lower() in ["umap"]:
+                required_params = ["x_start"]  # Timeline needs start time
+            elif visu_type.lower() in ["umap", "clustering"]:
                 # Clustering visualizations don't have required parameters
-                # They can work without explicit parameters (will use all numeric columns)
                 required_params = []
+            elif visu_type.lower() in ["bar", "line", "area"]:
+                # These can work with either X or Y, but need at least one
+                required_params = []  # Let them work without strict validation
+            elif visu_type.lower() in ["scatter", "density_contour", "density_heatmap"]:
+                # Scatter-like plots typically need both, but can work with just one
+                required_params = []  # More flexible - let plotly handle it
             else:
-                required_params = ["x", "y"]  # Default for most plots
+                # For unknown visualization types, don't enforce strict requirements
+                # This allows new visualization types to work without code changes
+                required_params = []
 
         return required_params
 
     except Exception:
-        # Fallback if visualization definition not found
-        if visu_type.lower() in ["umap"]:
-            return []  # Clustering visualizations don't require specific parameters
-        return ["x", "y"]
+        # Fallback if visualization definition not found - be more permissive
+        if visu_type.lower() == "histogram":
+            return ["x"]
+        elif visu_type.lower() in ["box", "violin"]:
+            return ["y"]
+        elif visu_type.lower() in ["pie", "sunburst", "treemap"]:
+            return ["values"]
+        elif visu_type.lower() in ["umap", "clustering"]:
+            return []
+        else:
+            # Default: no strict requirements for unknown visualizations
+            return []
 
 
 def _get_figure_cache_key(
@@ -299,6 +316,7 @@ def render_figure(
     cutoff: int = 100000,
     selected_point: Optional[Dict] = None,
     theme: str = "light",
+    skip_validation: bool = False,
 ) -> Any:
     """Render a Plotly figure with robust parameter handling and result caching.
 
@@ -414,19 +432,34 @@ def render_figure(
         f"Boolean parameters in cleaned_kwargs: {[(k, v, type(v)) for k, v in cleaned_kwargs.items() if isinstance(v, bool)]}"
     )
 
-    # Check if required parameters are missing for the visualization type
-    required_params = _get_required_parameters(visu_type.lower())
-    missing_params = [param for param in required_params if param not in cleaned_kwargs]
+    # Check if required parameters are missing for the visualization type (skip in code mode)
+    if not skip_validation:
+        required_params = _get_required_parameters(visu_type.lower())
 
-    if missing_params:
-        logger.warning(
-            f"Missing required parameters for {visu_type}: {missing_params}. Available columns: {df.columns}"
-        )
-        # Create a fallback figure with helpful message
-        title = f"Please select {', '.join(missing_params).upper()} column(s) to create {visu_type} plot"
-        return px.scatter(
-            template=dict_kwargs.get("template", _get_theme_template(theme)), title=title
-        )
+        # Smart validation: For most plots, allow either X or Y (not require both)
+        if required_params == ["x"] and visu_type.lower() in ["bar", "line", "scatter", "area"]:
+            # These plots can work with either X or Y, check if at least one is present
+            if "x" not in cleaned_kwargs and "y" not in cleaned_kwargs:
+                logger.warning(
+                    f"Missing required parameters for {visu_type}: need either X or Y. Available columns: {df.columns}"
+                )
+                title = f"Please select X or Y column to create {visu_type} plot"
+                return px.scatter(
+                    template=dict_kwargs.get("template", _get_theme_template(theme)), title=title
+                )
+        else:
+            # Standard validation for specific requirements (pie: values, box: y, etc.)
+            missing_params = [param for param in required_params if param not in cleaned_kwargs]
+            if missing_params:
+                logger.warning(
+                    f"Missing required parameters for {visu_type}: {missing_params}. Available columns: {df.columns}"
+                )
+                title = f"Please select {', '.join(missing_params).upper()} column(s) to create {visu_type} plot"
+                return px.scatter(
+                    template=dict_kwargs.get("template", _get_theme_template(theme)), title=title
+                )
+    else:
+        logger.info(f"🚀 CODE MODE: Skipping parameter validation for {visu_type}")
 
     # Special handling for hierarchical charts (sunburst, treemap)
     if visu_type.lower() in ["sunburst", "treemap"]:
@@ -839,6 +872,12 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     # Clean the component index
     store_index = index.replace("-tmp", "") if index else "unknown"
 
+    # Check if this is a code mode component
+    is_code_mode = kwargs.get("mode") == "code" or kwargs.get("code_content") is not None
+    logger.info(
+        f"🔍 MODE DETECTION: is_code_mode={is_code_mode}, mode={kwargs.get('mode')}, has_code_content={kwargs.get('code_content') is not None}"
+    )
+
     # Create component metadata
     store_component_data = {
         "index": str(store_index),
@@ -851,6 +890,7 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         "parent_index": parent_index,
         "filter_applied": filter_applied,
         "last_updated": datetime.now().isoformat(),
+        "mode": kwargs.get("mode", "ui"),  # Store the mode in component metadata
     }
     logger.info(f"Component metadata: {store_component_data}")
 
@@ -935,9 +975,45 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     logger.info(f"  visu_type: {visu_type}")
     logger.info(f"  df shape: {df.shape if df is not None else 'None'}")
     logger.info(f"  theme: {theme}")
+    logger.info(f"  is_code_mode: {is_code_mode}")
 
     try:
-        figure = render_figure(validated_kwargs, visu_type, df, theme=theme)
+        # Handle code mode with potential preprocessing
+        if is_code_mode:
+            df_for_figure = df  # Default to original dataframe
+            code_content = kwargs.get("code_content", "")
+
+            if code_content:
+                from .code_mode import analyze_constrained_code
+
+                analysis = analyze_constrained_code(code_content)
+
+                if analysis["is_valid"] and analysis["has_preprocessing"]:
+                    logger.info("🔄 CODE MODE: Executing preprocessing step for build_figure")
+
+                    # Execute preprocessing using SimpleCodeExecutor
+                    try:
+                        from .simple_code_executor import SimpleCodeExecutor
+
+                        executor = SimpleCodeExecutor()
+                        success, df_for_figure, message = executor.execute_preprocessing_only(
+                            code_content, df
+                        )
+                        logger.info(f"CODE MODE: Preprocessing message: {message}")
+                        logger.info(f"CODE MODE: Preprocessing success: {success}")
+                        logger.info(f"CODE MODE: Preprocessing dataframe: {df_for_figure.head()}")
+
+                    except Exception as e:
+                        logger.error(
+                            f"❌ CODE MODE: Preprocessing execution failed: {e}, using original df"
+                        )
+
+            figure = render_figure(
+                validated_kwargs, visu_type, df_for_figure, theme=theme, skip_validation=True
+            )
+        else:
+            figure = render_figure(validated_kwargs, visu_type, df, theme=theme)
+
         logger.info(f"render_figure SUCCESS: figure type = {type(figure)}")
     except Exception as e:
         logger.error(f"Failed to render figure: {e}")
