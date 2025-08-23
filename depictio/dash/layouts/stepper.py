@@ -603,6 +603,7 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
         withCloseButton=True,
         closeOnClickOutside=True,
         closeOnEscape=True,
+        trapFocus=False,  # Fix DMC Switch clickability in modals
         styles={
             "title": {
                 "fontSize": "1.8rem",
@@ -868,6 +869,7 @@ def create_stepper_output(n, active):
                 withCloseButton=True,
                 closeOnClickOutside=True,
                 closeOnEscape=True,
+                trapFocus=False,  # Fix DMC Switch clickability in modals
                 fullScreen=True,
                 styles={
                     "title": {
