@@ -424,6 +424,21 @@ def render_figure(
             ):
                 cleaned_kwargs[k] = v
 
+    # Parse JSON string parameters that Plotly expects as Python objects
+    json_params = ["color_discrete_map", "color_discrete_sequence", "category_orders", "labels"]
+    for param_name in json_params:
+        if param_name in cleaned_kwargs and isinstance(cleaned_kwargs[param_name], str):
+            try:
+                parsed_value = json.loads(cleaned_kwargs[param_name])
+                cleaned_kwargs[param_name] = parsed_value
+                logger.debug(f"Parsed JSON parameter {param_name}: {cleaned_kwargs[param_name]}")
+            except json.JSONDecodeError as e:
+                logger.warning(
+                    f"Invalid JSON for parameter {param_name}: {cleaned_kwargs[param_name]} - {e}"
+                )
+                # Remove invalid JSON parameter to avoid Plotly errors
+                del cleaned_kwargs[param_name]
+
     # PERFORMANCE OPTIMIZATION: Reduce verbose logging in production
     logger.debug("=== CLEANED PARAMETERS DEBUG ===")
     logger.debug(f"Original dict_kwargs: {dict_kwargs}")
