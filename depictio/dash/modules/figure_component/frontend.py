@@ -377,13 +377,15 @@ def register_callbacks_figure_component(app):
         [
             # This Input will match ANY parameter component dynamically
             Input({"type": ALL, "index": MATCH}, "value"),
+            # Add support for DMC Switch 'checked' property
+            Input({"type": ALL, "index": MATCH}, "checked"),
         ],
         [
             State({"type": "dict_kwargs", "index": MATCH}, "data"),
         ],
         prevent_initial_call=True,
     )
-    def extract_parameters_universal(all_values, existing_kwargs):
+    def extract_parameters_universal(all_values, all_checked_values, existing_kwargs):
         """Universal parameter extraction using pattern matching."""
 
         # Get the callback context to understand what triggered this
@@ -421,19 +423,25 @@ def register_callbacks_figure_component(app):
                 if isinstance(input_id, dict) and input_id.get("type", "").startswith("param-"):
                     param_name = input_id["type"].replace("param-", "")
 
-                    # Get value from the triggered values
+                    # Get value from the triggered values - try both 'value' and 'checked'
                     value = input_item.get("value")
+                    checked = input_item.get("checked")
+
+                    # Use checked for DMC Switch components (boolean parameters), value for others
+                    actual_value = checked if checked is not None else value
 
                     # Include non-empty values
-                    if value is not None and value != "" and value != []:
+                    if actual_value is not None and actual_value != "" and actual_value != []:
                         # Convert string values back to their original types
-                        converted_value = _convert_parameter_value(param_name, value)
+                        converted_value = _convert_parameter_value(param_name, actual_value)
                         parameters[param_name] = converted_value
-                    elif isinstance(value, bool):  # Include boolean False
-                        parameters[param_name] = value
-                    elif value == "":  # Include empty string for optional parameters like parents
+                    elif isinstance(actual_value, bool):  # Include boolean False
+                        parameters[param_name] = actual_value
+                    elif (
+                        actual_value == ""
+                    ):  # Include empty string for optional parameters like parents
                         # For hierarchical charts (sunburst, treemap), empty string is valid for parents
-                        parameters[param_name] = value
+                        parameters[param_name] = actual_value
 
         logger.info(f"Extracted parameters: {parameters}")
         logger.info(f"Parameter count: {len(parameters)}")
