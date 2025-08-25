@@ -4,6 +4,7 @@ import polars as pl
 from bson import ObjectId
 
 from dash import dcc, html
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.dash.modules.figure_component.utils import stringify_id
@@ -163,8 +164,8 @@ def build_table(**kwargs):
                     cols[c]["filter"] = "agDateColumnFilter"
                     cols[c]["floatingFilter"] = True
 
-    # Add ID column for SpinnerCellRenderer (following documentation example exactly)
-    columnDefs = [{"field": "ID", "maxWidth": 100, "cellRenderer": "SpinnerCellRenderer"}]
+    # Add ID column (removed SpinnerCellRenderer to avoid AG Grid error)
+    columnDefs = [{"field": "ID", "maxWidth": 100}]
 
     # Add data columns with enhanced filtering and sorting support
     if cols:
@@ -316,6 +317,10 @@ def build_table(**kwargs):
             graph_id_dict = {"type": "table-aggrid", "index": str(index)}
             target_id = stringify_id(graph_id_dict)
             logger.debug(f"Target ID for loading: {target_id}")
+
+            if settings.performance.disable_loading_spinners:
+                logger.info("🚀 PERFORMANCE MODE: Table loading spinners disabled")
+                return table_component
 
             return dcc.Loading(
                 children=table_component,
