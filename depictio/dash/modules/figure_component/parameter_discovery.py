@@ -27,8 +27,18 @@ class ParameterInspector:
 
     # Core parameters that are essential for most visualizations
     CORE_PARAMETERS = {
-        "x": {"type": ParameterType.COLUMN, "required": True, "description": "X-axis column"},
-        "y": {"type": ParameterType.COLUMN, "required": False, "description": "Y-axis column"},
+        "x": {
+            "type": ParameterType.COLUMN,
+            "required": False,
+            "label": "x*",
+            "description": "X-axis column (at least one * parameter is required)",
+        },
+        "y": {
+            "type": ParameterType.COLUMN,
+            "required": False,
+            "label": "y*",
+            "description": "Y-axis column (at least one * parameter is required)",
+        },
         "color": {
             "type": ParameterType.COLUMN,
             "required": False,
@@ -37,25 +47,14 @@ class ParameterInspector:
         "z": {
             "type": ParameterType.COLUMN,
             "required": False,
-            "description": "Z-axis column (for 3D plots)",
+            "label": "z*",
+            "description": "Z-axis column for 3D plots (at least one * parameter is required)",
         },
     }
 
     # Common parameters shared across many visualizations
     COMMON_PARAMETERS = {
         "title": {"type": ParameterType.STRING, "description": "Figure title"},
-        "width": {
-            "type": ParameterType.INTEGER,
-            "min_value": 100,
-            "max_value": 2000,
-            "description": "Figure width in pixels",
-        },
-        "height": {
-            "type": ParameterType.INTEGER,
-            "min_value": 100,
-            "max_value": 2000,
-            "description": "Figure height in pixels",
-        },
         "template": {
             "type": ParameterType.SELECT,
             "options": [
@@ -93,14 +92,52 @@ class ParameterInspector:
             "description": "Custom data for interactions",
             "options": [],  # Will be populated with column names by component builder
         },
-        "labels": {"type": ParameterType.STRING, "description": "Axis labels mapping"},
-        "color_discrete_sequence": {
+        "labels": {
             "type": ParameterType.STRING,
-            "description": "Discrete color sequence",
+            "description": 'Custom axis labels dictionary. Format: {"column": "Custom Label"} or JSON string. Example: {"x": "Time (hours)", "y": "Temperature (°C)"}',
+        },
+        "color_discrete_sequence": {
+            "type": ParameterType.SELECT,
+            "options": [
+                "Plotly",
+                "Set1",
+                "Set2",
+                "Set3",
+                "Pastel1",
+                "Pastel2",
+                "Dark2",
+                "Vivid",
+                "Custom",
+            ],
+            "description": "Discrete color sequence for categorical data. Choose from predefined palettes or select 'Custom' to enter a list like ['red', 'blue', 'green']",
         },
         "color_continuous_scale": {
+            "type": ParameterType.SELECT,
+            "options": [
+                "Viridis",
+                "Plasma",
+                "Inferno",
+                "Magma",
+                "Cividis",
+                "Blues",
+                "Greens",
+                "Reds",
+                "RdBu",
+                "RdYlBu",
+                "RdYlGn",
+                "Spectral",
+                "Turbo",
+                "Custom",
+            ],
+            "description": "Continuous color scale for numerical data. Choose from predefined scales or select 'Custom' to enter a scale name",
+        },
+        "category_orders": {
             "type": ParameterType.STRING,
-            "description": "Continuous color scale",
+            "description": 'Category ordering dictionary. Format: {"column": ["value1", "value2"]} or JSON string. Example: {"day": ["Mon", "Tue", "Wed"]}',
+        },
+        "color_discrete_map": {
+            "type": ParameterType.STRING,
+            "description": 'Color mapping for discrete values. Format: {"value": "color"} or JSON string. Example: {"A": "red", "B": "blue"}',
         },
     }
 
@@ -118,10 +155,11 @@ class ParameterInspector:
         },
         "range_x": {"type": ParameterType.RANGE, "description": "X-axis range"},
         "range_y": {"type": ParameterType.RANGE, "description": "Y-axis range"},
-        "category_orders": {"type": ParameterType.STRING, "description": "Category ordering"},
-        "color_discrete_map": {
-            "type": ParameterType.STRING,
-            "description": "Color mapping for discrete values",
+        "boxmode": {
+            "type": ParameterType.SELECT,
+            "options": ["group", "overlay"],
+            "description": "Box plot display mode. 'group': boxes are placed beside each other, 'overlay': boxes are drawn on top of one another",
+            "default": "group",
         },
         "animation_frame": {
             "type": ParameterType.COLUMN,
@@ -141,43 +179,99 @@ class ParameterInspector:
         "orientation": {
             "type": ParameterType.SELECT,
             "options": ["v", "h"],
-            "description": "Plot orientation",
+            "description": "Plot orientation. 'v': vertical (default), 'h': horizontal. Swaps X and Y axes",
             "default": "v",
         },
         "barmode": {
             "type": ParameterType.SELECT,
             "options": ["relative", "group", "overlay", "stack"],
-            "description": "Bar display mode",
+            "description": "Bar display mode. 'group': bars are placed beside each other, 'stack': bars are stacked on top of each other, 'overlay': bars overlap, 'relative': bars are stacked with negative values below zero",
             "default": "relative",
         },
         "histnorm": {
             "type": ParameterType.SELECT,
             "options": ["", "percent", "probability", "density", "probability density"],
-            "description": "Histogram normalization",
+            "description": "Histogram normalization mode. '': count, 'percent': percentage, 'probability': probability, 'density': density, 'probability density': probability density",
             "default": "",
         },
         "points": {
             "type": ParameterType.SELECT,
             "options": ["outliers", "suspectedoutliers", "all", False],
-            "description": "Show individual points",
+            "description": "Show individual points in box/violin plots. 'outliers': show only outliers, 'suspectedoutliers': show suspected outliers, 'all': show all points, False: hide all points",
             "default": "outliers",
         },
         "violinmode": {
             "type": ParameterType.SELECT,
             "options": ["group", "overlay"],
-            "description": "Violin display mode",
+            "description": "Violin plot display mode. 'group': violins are placed beside each other, 'overlay': violins are drawn on top of one another",
             "default": "group",
         },
         "line_shape": {
             "type": ParameterType.SELECT,
             "options": ["linear", "spline", "vhv", "hvh", "vh", "hv"],
-            "description": "Line shape",
+            "description": "Line shape interpolation. 'linear': straight lines, 'spline': smooth curved lines, 'vhv': vertical-horizontal-vertical, 'hvh': horizontal-vertical-horizontal, 'vh': vertical-horizontal, 'hv': horizontal-vertical",
             "default": "linear",
         },
         "trendline": {
             "type": ParameterType.SELECT,
             "options": ["ols", "lowess", "rolling", "expanding", "ewm"],
-            "description": "Trendline type",
+            "description": "Trendline type. 'ols': ordinary least squares regression, 'lowess': locally weighted regression, 'rolling': rolling average, 'expanding': expanding window average, 'ewm': exponentially weighted moving average",
+        },
+        "marginal_x": {
+            "type": ParameterType.SELECT,
+            "options": ["histogram", "rug", "box", "violin"],
+            "description": "Marginal plot type for X-axis. Adds a small plot above the main plot showing the distribution of X values",
+        },
+        "marginal_y": {
+            "type": ParameterType.SELECT,
+            "options": ["histogram", "rug", "box", "violin"],
+            "description": "Marginal plot type for Y-axis. Adds a small plot to the right of the main plot showing the distribution of Y values",
+        },
+        "size_max": {
+            "type": ParameterType.INTEGER,
+            "min_value": 1,
+            "max_value": 100,
+            "description": "Maximum marker size when using size mapping in scatter plots",
+            "default": 20,
+        },
+        "mode": {
+            "type": ParameterType.SELECT,
+            "options": [
+                "lines",
+                "markers",
+                "lines+markers",
+                "text",
+                "lines+text",
+                "markers+text",
+                "lines+markers+text",
+            ],
+            "description": "Line plot display mode. 'lines': show only lines, 'markers': show only points, 'lines+markers': show both lines and points",
+            "default": "lines",
+        },
+        "symbol": {
+            "type": ParameterType.SELECT,
+            "options": [
+                "circle",
+                "square",
+                "diamond",
+                "cross",
+                "x",
+                "triangle-up",
+                "triangle-down",
+                "triangle-left",
+                "triangle-right",
+                "pentagon",
+                "hexagon",
+                "star",
+            ],
+            "description": "Marker symbol for scatter plots",
+            # "default": "circle",
+        },
+        "line_dash": {
+            "type": ParameterType.SELECT,
+            "options": ["solid", "dot", "dash", "longdash", "dashdot", "longdashdot"],
+            "description": "Line dash pattern for line plots",
+            "default": "solid",
         },
     }
 
@@ -275,10 +369,10 @@ class ParameterInspector:
         ):
             return ParameterType.BOOLEAN
 
-        # Numeric parameters
+        # Numeric parameters (excluding width and height which we want to disable)
         if any(
-            keyword in param_name for keyword in ["width", "height", "size", "opacity", "nbins"]
-        ):
+            keyword in param_name for keyword in ["size", "opacity", "nbins"]
+        ) and param_name not in ["width", "height"]:
             if "size" in param_name and "max" in param_name:
                 return ParameterType.INTEGER
             return ParameterType.FLOAT if "opacity" in param_name else ParameterType.INTEGER
@@ -292,6 +386,8 @@ class ParameterInspector:
             "violinmode",
             "line_shape",
             "trendline",
+            "marginal_x",
+            "marginal_y",
         ]:
             return ParameterType.SELECT
 
@@ -369,20 +465,20 @@ class ParameterInspector:
     def _create_violin_parameters(self) -> List[ParameterDefinition]:
         """Create proper parameters for violin plots."""
         return [
-            # Core parameters
+            # Core parameters - y is semi-required for violin plots
             ParameterDefinition(
                 name="y",
                 type=ParameterType.COLUMN,
                 category=ParameterCategory.CORE,
-                label="Y Axis",
-                description="Values for violin plot distribution",
-                required=True,
+                label="y*",
+                description="Values for violin plot distribution (at least one * parameter is required)",
+                required=False,  # Semi-required
             ),
             ParameterDefinition(
                 name="x",
                 type=ParameterType.COLUMN,
                 category=ParameterCategory.CORE,
-                label="X Axis",
+                label="x",
                 description="Categories for grouping violins",
                 required=False,
             ),
@@ -390,7 +486,7 @@ class ParameterInspector:
                 name="color",
                 type=ParameterType.COLUMN,
                 category=ParameterCategory.CORE,
-                label="Color",
+                label="color",
                 description="Column for color encoding",
                 required=False,
             ),
@@ -401,7 +497,7 @@ class ParameterInspector:
                 name="box",
                 type=ParameterType.BOOLEAN,
                 category=ParameterCategory.SPECIFIC,
-                label="Show Box",
+                label="box",
                 description="Whether to show box plot inside violin",
                 default=False,
                 required=False,
@@ -410,7 +506,7 @@ class ParameterInspector:
                 name="points",
                 type=ParameterType.SELECT,
                 category=ParameterCategory.SPECIFIC,
-                label="Points",
+                label="points",
                 description="How to display points",
                 options=["outliers", "suspectedoutliers", "all", False],
                 default=False,
@@ -544,23 +640,23 @@ class ParameterInspector:
                 name="values",
                 type=ParameterType.COLUMN,
                 category=ParameterCategory.CORE,
-                label="Values",
-                description="Values for each slice size",
-                required=True,
+                label="values*",
+                description="Values for each slice size (at least one * parameter is required)",
+                required=False,  # Semi-required
             ),
             ParameterDefinition(
                 name="names",
                 type=ParameterType.COLUMN,
                 category=ParameterCategory.CORE,
-                label="Names",
-                description="Names for each slice",
-                required=False,
+                label="names*",
+                description="Names for each slice (at least one * parameter is required)",
+                required=False,  # Semi-required
             ),
             ParameterDefinition(
                 name="color",
                 type=ParameterType.COLUMN,
                 category=ParameterCategory.CORE,
-                label="Color",
+                label="color",
                 description="Column for color encoding",
                 required=False,
             ),
@@ -627,35 +723,15 @@ class ParameterInspector:
                 name="title",
                 type=ParameterType.STRING,
                 category=ParameterCategory.COMMON,
-                label="Title",
+                label="title",
                 description="Plot title",
-                required=False,
-            ),
-            ParameterDefinition(
-                name="width",
-                type=ParameterType.INTEGER,
-                category=ParameterCategory.COMMON,
-                label="Width",
-                description="Figure width in pixels",
-                min_value=100,
-                max_value=2000,
-                required=False,
-            ),
-            ParameterDefinition(
-                name="height",
-                type=ParameterType.INTEGER,
-                category=ParameterCategory.COMMON,
-                label="Height",
-                description="Figure height in pixels",
-                min_value=100,
-                max_value=2000,
                 required=False,
             ),
             ParameterDefinition(
                 name="hover_name",
                 type=ParameterType.COLUMN,
                 category=ParameterCategory.COMMON,
-                label="Hover Name",
+                label="hover_name",
                 description="Column for hover tooltip names",
                 required=False,
             ),
@@ -663,7 +739,7 @@ class ParameterInspector:
                 name="hover_data",
                 type=ParameterType.MULTI_SELECT,
                 category=ParameterCategory.COMMON,
-                label="Hover Data",
+                label="hover_data",
                 description="Columns to show on hover",
                 required=False,
                 options=[],
@@ -695,8 +771,8 @@ class ParameterInspector:
         parameters = []
 
         for param_name, param in signature.parameters.items():
-            # Skip special parameters
-            if param_name in ["data_frame", "kwargs", "args"]:
+            # Skip special parameters and disabled parameters
+            if param_name in ["data_frame", "kwargs", "args", "width", "height"]:
                 continue
 
             # Get parameter metadata
@@ -713,7 +789,9 @@ class ParameterInspector:
                 name=param_name,
                 type=param_type,
                 category=category,
-                label=param_name.replace("_", " ").title(),
+                label=metadata.get(
+                    "label", param_name
+                ),  # Use label from metadata or parameter name
                 description=metadata.get("description", f"Parameter: {param_name}"),
                 default=metadata.get(
                     "default", param.default if param.default != inspect.Parameter.empty else None
@@ -791,11 +869,10 @@ def get_available_plotly_functions() -> List[str]:
 def get_visualization_group(func_name: str) -> VisualizationGroup:
     """Determine the group for a visualization function."""
     # Core/Standard visualizations
-    core_viz = {"scatter", "line", "bar", "histogram", "box", "pie", "area"}
+    core_viz = {"scatter", "line", "bar", "histogram", "box", "violin", "area"}
 
     # Advanced statistical plots
     advanced_viz = {
-        "violin",
         "density_contour",
         "density_heatmap",
         "parallel_coordinates",
@@ -808,6 +885,7 @@ def get_visualization_group(func_name: str) -> VisualizationGroup:
         "funnel_area",
         "icicle",
         "timeline",
+        "pie",  # Moved pie to advanced (though it will be disabled)
     }
 
     # 3D visualizations
@@ -888,6 +966,10 @@ def discover_all_visualizations() -> Dict[str, VisualizationDefinition]:
         "parallel_coordinates",
         "strip",
         "umap",  # Disabled UMAP visualization
+        "pie",  # Disabled pie charts
+        "sunburst",  # Disabled sunburst charts
+        "timeline",  # Disabled timeline charts
+        "treemap",  # Disabled treemap charts
     }
 
     visualizations = {}

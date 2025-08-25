@@ -5,26 +5,16 @@ from dash_iconify import DashIconify
 
 import dash
 from dash import Input, Output
-from depictio.api.v1.configs.logging_init import logger
 
 
 def create_theme_switch():
-    """Create the theme switch component with conditional disabling"""
-    return dmc.Tooltip(
-        label="Theme switching is temporarily disabled on dashboard pages\nfor performance optimization.\nAvailable on all other pages.",
-        position="bottom",
-        withArrow=True,
-        openDelay=500,
-        disabled=True,  # Will be enabled via callback when on dashboard pages
-        children=dmc.Switch(
-            id="theme-switch",
-            size="lg",
-            onLabel=DashIconify(icon="ph:sun-fill", width=16),  # Dark mode ON = show sun
-            offLabel=DashIconify(icon="ph:moon-fill", width=16),  # Light mode OFF = show moon
-            style={"marginBottom": "10px"},
-            disabled=False,  # Will be controlled via callback
-        ),
-        id="theme-switch-tooltip",
+    """Create the theme switch component"""
+    return dmc.Switch(
+        id="theme-switch",
+        size="lg",
+        onLabel=DashIconify(icon="ph:sun-fill", width=16),  # Dark mode ON = show sun
+        offLabel=DashIconify(icon="ph:moon-fill", width=16),  # Light mode OFF = show moon
+        style={"marginBottom": "10px"},
     )
 
 
@@ -55,138 +45,32 @@ def create_theme_controls():
 def register_theme_callbacks(app):
     """Register theme-related callbacks"""
 
-    # PERFORMANCE OPTIMIZATION: Check settings to control theme animations
-    from depictio.api.v1.configs.settings_models import Settings
-
-    settings = Settings()
-    DISABLE_THEME_ANIMATIONS = settings.performance.disable_theme_animations
-
-    if DISABLE_THEME_ANIMATIONS:
-        logger.info(
-            "⚡ PERFORMANCE: Theme animations disabled via settings.performance.disable_theme_animations"
-        )
-
     # Add Mantine figure templates for Plotly when theme system initializes
     dmc.add_figure_templates()  # type: ignore[unresolved-attribute]
 
-    # Enhanced automatic theme detection with system preference monitoring (DISABLED)
-    # app.clientside_callback(
-    #     """
-    #     function(triggerId) {
-    #         console.log('🎨 === AUTOMATIC THEME DETECTION START ===');
-    #         console.log('Theme detection trigger ID:', triggerId);
-    #         console.log('⏰ Timestamp:', new Date().toISOString());
+    # Disable theme switch on dashboard pages only
+    @app.callback(
+        Output("theme-switch", "disabled"),
+        Input("url", "pathname"),
+        prevent_initial_call=False,
+    )
+    def disable_theme_switch_on_dashboard(pathname):
+        """Disable theme switch only when on dashboard pages (/dashboard/{dashboard_id})"""
+        # Disable if on a dashboard page, enable for all other pages
+        return pathname and pathname.startswith("/dashboard/")
 
-    #         // Early detection to set theme immediately
-    #         if (!triggerId) {
-    #             console.log('🎨 No trigger ID, running early theme detection');
-    #         }
-
-    #         // Manage page classes for FOUC prevention
-    #         const body = document.body;
-
-    #         // Check if this is an auth page
-    #         const isAuthPage = window.location.pathname === '/auth' || document.getElementById('auth-background');
-
-    #         if (isAuthPage) {
-    #             body.classList.add('auth-page');
-    #             body.classList.remove('page-loaded');
-    #         } else {
-    #             body.classList.remove('auth-page');
-    #             // Small delay to ensure content is loaded
-    #             setTimeout(() => {
-    #                 body.classList.add('page-loaded');
-    #             }, 50);
-    #         }
-
-    #         // Function to detect current system theme
-    #         function getSystemTheme() {
-    #             const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    #             return prefersDark ? 'dark' : 'light';
-    #         }
-
-    #         // Check for saved theme preference first
-    #         const savedTheme = localStorage.getItem('depictio-theme');
-    #         console.log('Saved theme preference:', savedTheme);
-
-    #         // Get current system theme
-    #         const systemTheme = getSystemTheme();
-    #         console.log('System theme preference:', systemTheme);
-
-    #         // Determine final theme
-    #         let finalTheme;
-    #         if (savedTheme) {
-    #             // User has explicitly set a preference
-    #             finalTheme = savedTheme;
-    #             console.log('Using saved theme:', finalTheme);
-    #         } else {
-    #             // No saved preference, use system theme
-    #             finalTheme = systemTheme;
-    #             console.log('Using system theme:', finalTheme);
-
-    #             // Save the detected system theme as the initial preference
-    #             localStorage.setItem('depictio-theme', finalTheme);
-    #         }
-
-    #         // Set up automatic system theme change listener
-    #         const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-
-    #         // Remove any existing listener to avoid duplicates
-    #         if (window.depictioThemeListener) {
-    #             mediaQuery.removeListener(window.depictioThemeListener);
-    #         }
-
-    #         // Create new listener for system theme changes
-    #         window.depictioThemeListener = function(e) {
-    #             console.log('🎨 System theme changed to:', e.matches ? 'dark' : 'light');
-
-    #             // Only auto-update if user hasn't manually overridden the theme
-    #             const currentSaved = localStorage.getItem('depictio-theme');
-    #             const currentSystem = e.matches ? 'dark' : 'light';
-
-    #             // Check if current saved theme matches the previous system preference
-    #             // If so, update to new system preference
-    #             const wasPreviouslyAuto = !localStorage.getItem('depictio-theme-manual-override');
-
-    #             if (wasPreviouslyAuto) {
-    #                 console.log('Auto-updating theme to match system:', currentSystem);
-    #                 localStorage.setItem('depictio-theme', currentSystem);
-
-    #                 // Trigger theme update by dispatching a custom event
-    #                 window.dispatchEvent(new CustomEvent('depictio-theme-changed', {
-    #                     detail: { theme: currentSystem, source: 'system-auto' }
-    #                 }));
-    #             } else {
-    #                 console.log('Theme manual override detected, not auto-updating');
-    #             }
-    #         };
-
-    #         // Add the listener
-    #         mediaQuery.addListener(window.depictioThemeListener);
-
-    #         console.log('🎨 === AUTOMATIC THEME DETECTION END ===');
-    #         console.log('Final theme:', finalTheme);
-    #         console.log('⏰ Detection complete at:', new Date().toISOString());
-
-    #         // Store the theme completion state for other callbacks to check
-    #         window.depictioThemeDetectionComplete = true;
-    #         window.depictioCurrentTheme = finalTheme;
-
-    #         return finalTheme;
-    #     }
-    #     """,
-    #     Output("theme-store", "data"),
-    #     Input("theme-detection-trigger", "id"),  # Use theme-detection-trigger to run immediately
-    #     prevent_initial_call=False,
-    # )
-
-    # Simplified theme detection without system preference monitoring (ACTIVE)
+    # Enhanced automatic theme detection with system preference monitoring
     app.clientside_callback(
         """
         function(triggerId) {
-            console.log('🎨 === THEME DETECTION START ===');
+            console.log('🎨 === AUTOMATIC THEME DETECTION START ===');
             console.log('Theme detection trigger ID:', triggerId);
             console.log('⏰ Timestamp:', new Date().toISOString());
+
+            // Early detection to set theme immediately
+            if (!triggerId) {
+                console.log('🎨 No trigger ID, running early theme detection');
+            }
 
             // Manage page classes for FOUC prevention
             const body = document.body;
@@ -205,40 +89,85 @@ def register_theme_callbacks(app):
                 }, 50);
             }
 
-            // DASHBOARD RESTORE FIX: Ensure theme is immediately available for figure rendering
-            // Check for saved theme preference, default to light if none
+            // Function to detect current system theme
+            function getSystemTheme() {
+                const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                return prefersDark ? 'dark' : 'light';
+            }
+
+            // Check for saved theme preference first
             const savedTheme = localStorage.getItem('depictio-theme');
             console.log('Saved theme preference:', savedTheme);
 
+            // Get current system theme
+            const systemTheme = getSystemTheme();
+            console.log('System theme preference:', systemTheme);
+
+            // Determine final theme
             let finalTheme;
-            if (savedTheme && (savedTheme === 'light' || savedTheme === 'dark')) {
-                // User has a valid saved preference
+            if (savedTheme) {
+                // User has explicitly set a preference
                 finalTheme = savedTheme;
                 console.log('Using saved theme:', finalTheme);
             } else {
-                // No saved preference or invalid preference, default to light theme
-                finalTheme = 'light';
-                console.log('No valid saved theme, defaulting to light theme');
+                // No saved preference, use system theme
+                finalTheme = systemTheme;
+                console.log('Using system theme:', finalTheme);
 
-                // Save the default as preference
+                // Save the detected system theme as the initial preference
                 localStorage.setItem('depictio-theme', finalTheme);
             }
 
-            // CRITICAL: Set global theme immediately so dashboard components can access it
-            window.depictioCurrentTheme = finalTheme;
-            window.depictioThemeDetectionComplete = true;
+            // Set up automatic system theme change listener
+            const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
-            console.log('🎨 === THEME DETECTION END ===');
+            // Remove any existing listener to avoid duplicates
+            if (window.depictioThemeListener) {
+                mediaQuery.removeListener(window.depictioThemeListener);
+            }
+
+            // Create new listener for system theme changes
+            window.depictioThemeListener = function(e) {
+                console.log('🎨 System theme changed to:', e.matches ? 'dark' : 'light');
+
+                // Only auto-update if user hasn't manually overridden the theme
+                const currentSaved = localStorage.getItem('depictio-theme');
+                const currentSystem = e.matches ? 'dark' : 'light';
+
+                // Check if current saved theme matches the previous system preference
+                // If so, update to new system preference
+                const wasPreviouslyAuto = !localStorage.getItem('depictio-theme-manual-override');
+
+                if (wasPreviouslyAuto) {
+                    console.log('Auto-updating theme to match system:', currentSystem);
+                    localStorage.setItem('depictio-theme', currentSystem);
+
+                    // Trigger theme update by dispatching a custom event
+                    window.dispatchEvent(new CustomEvent('depictio-theme-changed', {
+                        detail: { theme: currentSystem, source: 'system-auto' }
+                    }));
+                } else {
+                    console.log('Theme manual override detected, not auto-updating');
+                }
+            };
+
+            // Add the listener
+            mediaQuery.addListener(window.depictioThemeListener);
+
+            console.log('🎨 === AUTOMATIC THEME DETECTION END ===');
             console.log('Final theme:', finalTheme);
-            console.log('Global theme set:', window.depictioCurrentTheme);
             console.log('⏰ Detection complete at:', new Date().toISOString());
+
+            // Store the theme completion state for other callbacks to check
+            window.depictioThemeDetectionComplete = true;
+            window.depictioCurrentTheme = finalTheme;
 
             return finalTheme;
         }
         """,
         Output("theme-store", "data"),
         Input("theme-detection-trigger", "id"),  # Use theme-detection-trigger to run immediately
-        prevent_initial_call=False,  # CRITICAL: Must run immediately to set theme before dashboard render
+        prevent_initial_call=False,
     )
 
     # Update switch state based on theme store
@@ -250,36 +179,10 @@ def register_theme_callbacks(app):
     def sync_switch_state(theme_data):
         return theme_data == "dark"
 
-    # Disable theme switch on dashboard pages for performance
-    @app.callback(
-        [
-            Output("theme-switch", "disabled"),
-            Output("theme-switch-tooltip", "disabled"),
-        ],
-        Input("url", "pathname"),
-        prevent_initial_call=False,
-    )
-    def control_theme_switch_availability(pathname):
-        """Disable theme switch on dashboard pages to prevent performance issues"""
-        is_dashboard_page = pathname and "/dashboard/" in pathname
-
-        if is_dashboard_page:
-            logger.info(f"🚫 Theme switch disabled on dashboard page: {pathname}")
-            return True, False  # Switch disabled, tooltip enabled
-        else:
-            logger.info(f"✅ Theme switch enabled on page: {pathname}")
-            return False, True  # Switch enabled, tooltip disabled
-
     # Handle manual theme switch toggle with override tracking
     app.clientside_callback(
         """
-        function(checked, disabled) {
-            // Don't process if switch is disabled (on dashboard pages)
-            if (disabled) {
-                console.log('🚫 Theme switch is disabled, ignoring change');
-                return window.dash_clientside.no_update;
-            }
-
+        function(checked) {
             const theme = checked ? 'dark' : 'light';
 
             console.log('🎨 === MANUAL THEME SWITCH ===');
@@ -299,7 +202,7 @@ def register_theme_callbacks(app):
         }
         """,
         Output("theme-store", "data", allow_duplicate=True),
-        [Input("theme-switch", "checked"), Input("theme-switch", "disabled")],
+        Input("theme-switch", "checked"),
         prevent_initial_call=True,
     )
 
@@ -537,132 +440,114 @@ def register_theme_callbacks(app):
     )
 
     # Update Plotly figure templates when theme changes using Mantine templates
-    # PERFORMANCE OPTIMIZATION: Skip expensive Plotly updates if disabled
-    # if DISABLE_THEME_ANIMATIONS:
-    #     logger.info("⚡ PERFORMANCE: Plotly theme updates disabled")
-    # else:
-    #     app.clientside_callback(
-    #         """
-    #     function(theme_data) {
-    #         console.log('📊 === PLOTLY MANTINE THEME UPDATE ===');
-    #         console.log('Theme data received:', theme_data);
+    app.clientside_callback(
+        """
+        function(theme_data) {
+            console.log('📊 === PLOTLY MANTINE THEME UPDATE ===');
+            console.log('Theme data received:', theme_data);
 
-    #         try {
-    #             const theme = theme_data || 'light';
-    #             const template = theme === 'dark' ? 'mantine_dark' : 'mantine_light';
-    #             console.log('Using Mantine template:', template);
+            try {
+                const theme = theme_data || 'light';
+                const template = theme === 'dark' ? 'mantine_dark' : 'mantine_light';
+                console.log('Using Mantine template:', template);
 
-    #             // Check if Plotly is available
-    #             if (!window.Plotly) {
-    #                 console.log('Plotly not available, skipping update');
-    #                 return window.dash_clientside.no_update;
-    #             }
+                // Check if Plotly is available
+                if (!window.Plotly) {
+                    console.log('Plotly not available, skipping update');
+                    return window.dash_clientside.no_update;
+                }
 
-    #             console.log('Plotly available, proceeding with Mantine template update');
+                console.log('Plotly available, proceeding with Mantine template update');
 
-    #             // Find graphs and force complete redraw
-    #             const graphs = document.querySelectorAll('.js-plotly-plot');
-    #             console.log('Found', graphs.length, 'Plotly graphs');
+                // Find graphs and force complete redraw
+                const graphs = document.querySelectorAll('.js-plotly-plot');
+                console.log('Found', graphs.length, 'Plotly graphs');
 
-    #             if (graphs.length === 0) {
-    #                 console.log('No graphs found, skipping update');
-    #                 return window.dash_clientside.no_update;
-    #             }
+                if (graphs.length === 0) {
+                    console.log('No graphs found, skipping update');
+                    return window.dash_clientside.no_update;
+                }
 
-    #             // Use minimal delay to ensure graphs are ready but keep it responsive
-    #             setTimeout(() => {
-    #                 graphs.forEach(async (graph, index) => {
-    #                     console.log(`Processing graph ${index} with template: ${template}`);
+                // Use minimal delay to ensure graphs are ready but keep it responsive
+                setTimeout(() => {
+                    graphs.forEach(async (graph, index) => {
+                        console.log(`Processing graph ${index} with template: ${template}`);
 
-    #                     try {
-    #                         // Get current data and layout
-    #                         const currentData = graph.data || [];
-    #                         const currentLayout = graph.layout || {};
+                        try {
+                            // Get current data and layout
+                            const currentData = graph.data || [];
+                            const currentLayout = graph.layout || {};
 
-    #                         // Create new layout with Mantine template
-    #                         const newLayout = {
-    #                             ...currentLayout,
-    #                             template: template,
-    #                             // Let Mantine templates handle the colors
-    #                         };
+                            // Create new layout with Mantine template
+                            const newLayout = {
+                                ...currentLayout,
+                                template: template,
+                                // Let Mantine templates handle the colors
+                            };
 
-    #                         console.log(`New layout for graph ${index}:`, newLayout);
+                            console.log(`New layout for graph ${index}:`, newLayout);
 
-    #                         // Use newPlot for complete recreation with Mantine template
-    #                         await window.Plotly.newPlot(graph, currentData, newLayout, {
-    #                             responsive: true,
-    #                             displayModeBar: true
-    #                         });
+                            // Use newPlot for complete recreation with Mantine template
+                            await window.Plotly.newPlot(graph, currentData, newLayout, {
+                                responsive: true,
+                                displayModeBar: true
+                            });
 
-    #                         console.log(`✅ Plotly.newPlot completed for graph ${index} with ${template}`);
+                            console.log(`✅ Plotly.newPlot completed for graph ${index} with ${template}`);
 
-    #                         // Verify the update worked
-    #                         console.log('Final layout template:', graph.layout?.template);
+                            // Verify the update worked
+                            console.log('Final layout template:', graph.layout?.template);
 
-    #                     } catch (err) {
-    #                         console.error(`❌ Error updating graph ${index}:`, err);
+                        } catch (err) {
+                            console.error(`❌ Error updating graph ${index}:`, err);
 
-    #                         // Fallback: try simpler relayout approach
-    #                         try {
-    #                             console.log(`Trying fallback relayout for graph ${index}`);
-    #                             await window.Plotly.relayout(graph, {
-    #                                 'template': template
-    #                             });
-    #                             console.log(`✅ Fallback relayout completed for graph ${index}`);
-    #                         } catch (fallbackErr) {
-    #                             console.error(`❌ Fallback also failed for graph ${index}:`, fallbackErr);
-    #                         }
-    #                     }
-    #                 });
-    #             }, 10); // Small delay to ensure DOM is ready
+                            // Fallback: try simpler relayout approach
+                            try {
+                                console.log(`Trying fallback relayout for graph ${index}`);
+                                await window.Plotly.relayout(graph, {
+                                    'template': template
+                                });
+                                console.log(`✅ Fallback relayout completed for graph ${index}`);
+                            } catch (fallbackErr) {
+                                console.error(`❌ Fallback also failed for graph ${index}:`, fallbackErr);
+                            }
+                        }
+                    });
+                }, 10); // Small delay to ensure DOM is ready
 
-    #             console.log('📊 === PLOTLY MANTINE THEME UPDATE END ===');
-    #             return window.dash_clientside.no_update;
+                console.log('📊 === PLOTLY MANTINE THEME UPDATE END ===');
+                return window.dash_clientside.no_update;
 
-    #         } catch (error) {
-    #             console.error('❌ Plotly theme callback error:', error);
-    #             return window.dash_clientside.no_update;
-    #         }
-    #     }
-    #     """,
-    #         Output("dummy-plotly-output", "children", allow_duplicate=True),
-    #         Input("theme-store", "data"),
-    #         prevent_initial_call=True,
-    #     )
-
-    # Client-side callback for theme updates - single modular callback with working NavLink icon handling
-    # PERFORMANCE OPTIMIZATION: Skip expensive theme operations if disabled
-    if DISABLE_THEME_ANIMATIONS:
-        app.clientside_callback(
-            """
-            function(theme_data) {
-                console.log('⚡ PERFORMANCE: Theme CSS operations disabled for optimization');
+            } catch (error) {
+                console.error('❌ Plotly theme callback error:', error);
                 return window.dash_clientside.no_update;
             }
-            """,
-            Output("page-content", "style", allow_duplicate=True),
-            Input("theme-store", "data"),
-            prevent_initial_call=True,
-        )
-    else:
-        app.clientside_callback(
-            """
-            function(theme_data) {
-                // === MODULAR JAVASCRIPT FUNCTIONS ===
+        }
+        """,
+        Output("dummy-plotly-output", "children", allow_duplicate=True),
+        Input("theme-store", "data"),
+        prevent_initial_call=True,
+    )
 
-                // Function to safely apply styles with error handling
-                function safeApplyStyles(element, styles) {
-                    if (!element) return false;
-                    try {
-                        Object.keys(styles).forEach(prop => {
-                            element.style.setProperty(prop, styles[prop], 'important');
-                        });
-                        return true;
-                    } catch (error) {
-                        console.error('Error applying styles:', error);
-                        return false;
-                    }
+    # Client-side callback for theme updates - single modular callback with working NavLink icon handling
+    app.clientside_callback(
+        """
+        function(theme_data) {
+            // === MODULAR JAVASCRIPT FUNCTIONS ===
+
+            // Function to safely apply styles with error handling
+            function safeApplyStyles(element, styles) {
+                if (!element) return false;
+                try {
+                    Object.keys(styles).forEach(prop => {
+                        element.style.setProperty(prop, styles[prop], 'important');
+                    });
+                    return true;
+                } catch (error) {
+                    console.error('Error applying styles:', error);
+                    return false;
                 }
+            }
 
             // Function to handle NavLink icon theming (from working debug app)
             function updateNavLinkIcons(theme) {
@@ -994,10 +879,10 @@ def register_theme_callbacks(app):
             }
         }
         """,
-            Output("page-content", "style", allow_duplicate=True),
-            Input("theme-store", "data"),
-            prevent_initial_call=True,
-        )
+        Output("page-content", "style", allow_duplicate=True),
+        Input("theme-store", "data"),
+        prevent_initial_call=True,
+    )
 
     # Dedicated callback for dashboard-title to trigger draggable updates
     app.clientside_callback(
