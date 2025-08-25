@@ -294,7 +294,7 @@ class PerformanceConfig(BaseSettings):
     )
 
     disable_theme_animations: bool = Field(
-        default=False, description="Disable theme CSS injection and complex theme operations"
+        default=True, description="Disable theme CSS injection and complex theme operations"
     )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_PERFORMANCE_")
