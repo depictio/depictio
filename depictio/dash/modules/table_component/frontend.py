@@ -543,7 +543,7 @@ def register_callbacks_table_component(app):
                 pandas_df = pandas_df.rename(columns=column_mapping)
                 logger.debug(f"🔍 DEBUG: Transformed columns: {list(pandas_df.columns)}")
 
-            # Add ID field for SpinnerCellRenderer (following documentation example)
+            # Add ID field for row indexing
             pandas_df.reset_index(drop=True, inplace=True)
             pandas_df["ID"] = range(start_row, start_row + len(pandas_df))
             row_data = pandas_df.to_dict("records")
