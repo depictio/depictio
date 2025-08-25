@@ -6,35 +6,32 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.4.0-b1</summary>
+<summary>Click to expand the changelog for 0.4.0-b2</summary>
 
 ### Changes 📜
 
-#### New Features ✨
+#### Bug Fixes 🐛
 
-* feat: Add JSON parsing for specific parameters in render_figure to enhance compatibility with Plotly [5895ed8c]
-* feat: Update CORE_PARAMETERS and COMMON_PARAMETERS for improved parameter handling and validation [dd2eb48d]
-* feat: Remove width and height parameters from COMMON_PARAMETERS for simplification [edf9a1f1]
-* feat: Add support for DMC Switch 'checked' property in parameter extraction [dda77979]
-* feat: Replace boolean switch with checkbox for improved compatibility [773a8d05]
-* feat: Enhance parameter validation and add code mode preprocessing support in build_figure [d24dcc81]
-* feat: Enhance SimpleCodeExecutor with preprocessing support and additional safe functions [a4bcddd4]
-* feat: Enhance code mode with constraints for df_modified and improve usage instructions [658fb5fa]
-* feat: Enhance code mode interface with resizing and updated placeholder information [162f3988]
-* feat: Implement theme support for AG Grid across project data collections and user management modules [4b134f06]
-* feat: Refactor theme handling in components and disable theme switch on dashboard pages [d7e7f125]
-* feat: Refactor theme handling in components and disable theme switch on dashboard pages [8feb5817]
-* feat: Implement robust logout command to handle timing issues and improve reliability [cacb2043]
-* feat: Increase replicas + use anti affinity + update MongoDB deployment to StatefulSet with replica set initialization and headless service + change dyncamically example iris dataset ID for bucket sharing [74f014dd]
-* feat: Add fresh profiling analysis tool to identify performance bottlenecks [bb10ad96]
-* feat: Implement conditional theme switch disabling on dashboard pages for performance optimization [f9e49ba7]
-* feat: Update worker count to 1 for FastAPI and Dash configurations; change default for theme animations in PerformanceConfig [c52c44b2]
-* feat: Add batch existence check for deltatables and enhance authentication process with cached project data [51a4eb72]
-* feat: Enhance action icon creation with optional tooltips for improved user guidance [9f4026ee]
-* feat: Add collapse functionality to notes footer with updated button icons and transitions [6bd5c33d]
-* feat: Add load_for_preview parameter to data loading functions and update related logic for improved data handling [c4249b3b]
-* feat: Disable async functionality across multiple components, switching to synchronous processing for improved performance and stability [8bdc3378]
-* feat: Update data handling to use Polars DataFrame directly, removing unnecessary Pandas conversions [795d4e24]
+* fix: update comments for clarity and remove SpinnerCellRenderer to prevent AG Grid error [ef2ba9ca]
+* fix: ensure className is a string before checking for dash-debug-menu in MutationObserver [371892ae]
+* fix: change default value of disable_theme_animations to True in PerformanceConfig [a2e13b59]
+* fix: update tag pattern for stable releases in multi-arch build workflow [2691f934]
+* fix: remove commented-out sed command for updating helm chart version [7751d5d6]
+
+#### Other Changes 📝
+
+* Bump version: 0.4.0-b1 → 0.4.0-b2 [845c84e3]
+* Update CHANGELOG.md for v0.4.0-b1 [6ef6a68f]
+* Bump version: 0.3.2 → 0.4.0-b1 [667050b7]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+ecessary Pandas conversions [795d4e24]
 * feat: Disable async functionality in build_card, build_figure, and build_interactive wrappers, switching to synchronous calls [94fdf80b]
 * feat: Optimize AG Grid data handling with Polars and add theme support for table rendering [e46a0178]
 * feat: Refactor consolidated API callbacks to use async tasks for user and server data fetching [b9d37806]
