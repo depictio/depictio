@@ -8,11 +8,11 @@ from pathlib import Path
 
 import dash_dock
 import dash_mantine_components as dmc
-from flask import Flask, abort, send_from_directory
 import polars as pl
+from flask import Flask, abort, send_from_directory
 
 import dash
-from dash import Input, Output, State, callback, dcc, html, clientside_callback, ClientsideFunction
+from dash import ClientsideFunction, Input, Output, State, callback, clientside_callback, dcc, html
 
 # Initialize Flask server for serving external HTML files
 server = Flask(__name__)
@@ -117,16 +117,16 @@ tab_components = [
         id="multiqc-tab",
         children=[
             html.Div([
-                html.H4("MultiQC Report Viewer", 
-                       style={'margin': '10px', 'color': '#333', 'textAlign': 'center'}),
-                html.Div([
-                    html.A("🔗 Test Flask Route", href="/test", target="_blank", 
-                           style={'marginRight': '20px', 'color': 'blue'}),
-                    html.A("📊 Direct MultiQC Link", 
-                           href="/external/multiqc_output_fastqc_v1_30_0/multiqc_report.html", 
-                           target="_blank", style={'color': 'green'})
-                ], style={'textAlign': 'center', 'margin': '10px'}),
-                html.Hr(),
+                # html.H4("MultiQC Report Viewer", 
+                #        style={'margin': '10px', 'color': '#333', 'textAlign': 'center'}),
+                # html.Div([
+                #     html.A("🔗 Test Flask Route", href="/test", target="_blank", 
+                #            style={'marginRight': '20px', 'color': 'blue'}),
+                #     html.A("📊 Direct MultiQC Link", 
+                #            href="/external/multiqc_output_fastqc_v1_30_0/multiqc_report.html", 
+                #            target="_blank", style={'color': 'green'})
+                # ], style={'textAlign': 'center', 'margin': '10px'}),
+                # html.Hr(),
                 html.Iframe(
                     id="multiqc-iframe",
                     src="/external/multiqc_output_fastqc_v1_30_0/multiqc_report.html",
@@ -151,22 +151,23 @@ app.layout = dmc.MantineProvider(
     theme={"colorScheme": "light"},
     children=[
     html.Div([
-        html.H1("🧪 Minimal Dash-Dock + MultiQC Test", 
+        html.H1("🧪 Minimal Depictio x MultiQC interface prototype", 
                style={'textAlign': 'center', 'margin': '20px', 'color': '#2c3e50'}),
         
-        html.Div([
-            "✅ Flask serving external HTML files",
-            html.Br(),
-            "✅ Single dash-dock tab with iframe", 
-            html.Br(),
-            "✅ Tab floating enabled (tabEnableFloat: True)",
-        ], style={
-            'backgroundColor': '#e8f5e8', 
-            'padding': '15px', 
-            'margin': '20px',
-            'borderRadius': '8px',
-            'border': '1px solid #4CAF50'
-        }),
+        # html.Div([
+        #     "✅ Flask serving external HTML files",
+        #     html.Br(),
+        #     "✅ Single dash-dock tab with iframe", 
+        #     html.Br(),
+        #     "✅ Tab floating enabled (tabEnableFloat: True)",
+        # ], style={
+        #     'backgroundColor': '#e8f5e8', 
+        #     'padding': '15px', 
+        #     'margin': '20px',
+        #     'borderRadius': '8px',
+        #     'border': '1px solid #4CAF50'
+        # })
+        # ,
         
         # MultiQC Toolbox Automation Panel
         html.Div([
@@ -253,29 +254,48 @@ app.layout = dmc.MantineProvider(
             }),
             
             # DEBUG SECTION (collapsible)
-            html.Details([
-                html.Summary("🔧 Debug Controls", style={'cursor': 'pointer', 'fontWeight': 'bold', 'color': '#666'}),
-                html.Div([
-                    dmc.Button("Inspect MultiQC", id="inspect-highlight-btn", variant="outline", size="xs", style={'margin': '3px'}),
-                    dmc.Button("Test Pattern Input", id="test-sample-input-btn", variant="outline", size="xs", style={'margin': '3px'}),
-                    dmc.Button("Test + Button", id="simulate-plus-btn", variant="outline", size="xs", style={'margin': '3px'}),
-                    dmc.Button("Test Apply", id="simulate-apply-btn", variant="outline", size="xs", style={'margin': '3px'}),
-                    dmc.Button("Test Enter", id="simulate-enter-btn", variant="outline", size="xs", style={'margin': '3px'}),
-                ], style={'display': 'flex', 'flexWrap': 'wrap', 'marginTop': '10px'})
-            ], style={'margin': '10px 0'}),
+            dmc.Accordion(
+                children=[
+                    dmc.AccordionItem([
+                        dmc.AccordionControl("🔧 Debug Controls"),
+                        dmc.AccordionPanel([
+                            dmc.Group([
+                                dmc.Button("Inspect MultiQC", id="inspect-highlight-btn", variant="outline", size="xs"),
+                                dmc.Button("Test Pattern Input", id="test-sample-input-btn", variant="outline", size="xs"),
+                                dmc.Button("Test + Button", id="simulate-plus-btn", variant="outline", size="xs"),
+                                dmc.Button("Test Apply", id="simulate-apply-btn", variant="outline", size="xs"),
+                                dmc.Button("Test Enter", id="simulate-enter-btn", variant="outline", size="xs"),
+                            ], gap="xs", style={'flexWrap': 'wrap'})
+                        ])
+                    ], value="debug-controls")
+                ],
+                style={'margin': '10px 0'}
+            ),
             
-            # OUTPUT AREA
-            html.Pre(id="investigation-output", style={
-                'backgroundColor': '#f8f9fa', 
-                'padding': '10px', 
-                'margin': '10px 0',
-                'borderRadius': '4px',
-                'border': '1px solid #ddd',
-                'fontSize': '12px',
-                'maxHeight': '300px',
-                'overflow': 'auto',
-                'whiteSpace': 'pre-wrap'
-            })
+            # OUTPUT AREA (collapsible)
+            dmc.Accordion(
+                children=[
+                    dmc.AccordionItem([
+                        dmc.AccordionControl("📋 Debug Console Output"),
+                        dmc.AccordionPanel([
+                            html.Pre(id="investigation-output", style={
+                                'backgroundColor': '#f8f9fa', 
+                                'padding': '10px', 
+                                'margin': '0',
+                                'borderRadius': '4px',
+                                'border': '1px solid #ddd',
+                                'fontSize': '12px',
+                                'maxHeight': '300px',
+                                'overflow': 'auto',
+                                'whiteSpace': 'pre-wrap'
+                            })
+                        ])
+                    ], value="debug-output")
+                ],
+                value=["debug-output"],  # Start with output expanded
+                multiple=True,
+                style={'margin': '10px 0'}
+            )
         ], style={
             'backgroundColor': '#fff', 
             'padding': '20px', 
