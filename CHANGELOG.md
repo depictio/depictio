@@ -6,16 +6,114 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.3.2</summary>
+<summary>Click to expand the changelog for 0.4.0-b1</summary>
 
 ### Changes 📜
 
 #### New Features ✨
 
-* feat: Enhance analytics session management and cleanup for anonymous sessions [956d35f3]
-* feat: Add Google Analytics configuration example and update backend/frontend settings [554cfe86]
-* feat: Add Google Analytics configuration example and update backend/frontend settings [5a7c65f6]
-* feat: Add Google Analytics integration and unique connections analytics to the dashboard [146e042a]
+* feat: Add JSON parsing for specific parameters in render_figure to enhance compatibility with Plotly [5895ed8c]
+* feat: Update CORE_PARAMETERS and COMMON_PARAMETERS for improved parameter handling and validation [dd2eb48d]
+* feat: Remove width and height parameters from COMMON_PARAMETERS for simplification [edf9a1f1]
+* feat: Add support for DMC Switch 'checked' property in parameter extraction [dda77979]
+* feat: Replace boolean switch with checkbox for improved compatibility [773a8d05]
+* feat: Enhance parameter validation and add code mode preprocessing support in build_figure [d24dcc81]
+* feat: Enhance SimpleCodeExecutor with preprocessing support and additional safe functions [a4bcddd4]
+* feat: Enhance code mode with constraints for df_modified and improve usage instructions [658fb5fa]
+* feat: Enhance code mode interface with resizing and updated placeholder information [162f3988]
+* feat: Implement theme support for AG Grid across project data collections and user management modules [4b134f06]
+* feat: Refactor theme handling in components and disable theme switch on dashboard pages [d7e7f125]
+* feat: Refactor theme handling in components and disable theme switch on dashboard pages [8feb5817]
+* feat: Implement robust logout command to handle timing issues and improve reliability [cacb2043]
+* feat: Increase replicas + use anti affinity + update MongoDB deployment to StatefulSet with replica set initialization and headless service + change dyncamically example iris dataset ID for bucket sharing [74f014dd]
+* feat: Add fresh profiling analysis tool to identify performance bottlenecks [bb10ad96]
+* feat: Implement conditional theme switch disabling on dashboard pages for performance optimization [f9e49ba7]
+* feat: Update worker count to 1 for FastAPI and Dash configurations; change default for theme animations in PerformanceConfig [c52c44b2]
+* feat: Add batch existence check for deltatables and enhance authentication process with cached project data [51a4eb72]
+* feat: Enhance action icon creation with optional tooltips for improved user guidance [9f4026ee]
+* feat: Add collapse functionality to notes footer with updated button icons and transitions [6bd5c33d]
+* feat: Add load_for_preview parameter to data loading functions and update related logic for improved data handling [c4249b3b]
+* feat: Disable async functionality across multiple components, switching to synchronous processing for improved performance and stability [8bdc3378]
+* feat: Update data handling to use Polars DataFrame directly, removing unnecessary Pandas conversions [795d4e24]
+* feat: Disable async functionality in build_card, build_figure, and build_interactive wrappers, switching to synchronous calls [94fdf80b]
+* feat: Optimize AG Grid data handling with Polars and add theme support for table rendering [e46a0178]
+* feat: Refactor consolidated API callbacks to use async tasks for user and server data fetching [b9d37806]
+* feat: Add autofill ID sanitizer and enhance debug menu control with improved logging [e0948e53]
+* feat: Refactor Celery background callback setup and enhance dashboard data loading process [3cea1fcd]
+* feat: Add logging to avatar and admin link callbacks for improved debugging [1e9f5285]
+* feat: Enhance save callbacks by allowing optional inputs and removing unnecessary updates [a02143b7]
+* feat: Implement dynamic dropdowns with callback for adding filters in the dashboard [f87fdb2e]
+* feat: Allow duplicate outputs in joins selection info callback for enhanced data handling [97e4e5d8]
+* feat: Optimize performance by conditionally disabling animations in loading and theme components [96ebcc4e]
+* feat: Add redis dependency for improved caching support [b5de59fe]
+* feat: Implement async and sync versions of interactive component updates and enhance dashboard rendering with parallel processing [10ef563b]
+* feat: Add callback to update figure theme based on current theme selection [95a8377a]
+* feat: Add async wrappers for background callbacks in card, figure, interactive, table, and text components [4270e7a7]
+* feat: Add Celery application for background task processing with health check task [61a08915]
+* feat: Update redis_password field to allow None value for optional configuration [a526158e]
+* feat: Update Redis image version and add Celery worker service to Docker Compose [8acb2a6a]
+* feat: Add run_celery_worker.sh script and enhance run_dash.sh and run_fastapi.sh with worker count information [6431e245]
+* feat: Add Celery integration for background task processing and optimize server configurations [1b80668e]
+* feat: Implement figure caching and performance optimizations for rendering and data retrieval [d2930ff8]
+* feat: Implement performance optimizations with conditional loading spinners and logging for card, interactive, and table components [1b2849aa]
+* feat: Implement bulk pre-fetching of component data for performance optimization [e5a30f71]
+* feat: Optimize component update process by skipping rebuilds for non-interactive components [15ea04b7]
+* feat: Enhance component data caching and implement batch fetching for performance optimization [97458def]
+* feat: Add bulk component data retrieval endpoint for performance optimization [d4550a1d]
+* feat: Add performance profiling utilities for the Depictio Dash application [27f3b1eb]
+* feat: Implement Simple Redis caching for DataFrames with memory fallback [df4ec227]
+* feat: Integrate Redis caching for DataFrame loading and enhance memory management [92988d8d]
+* feat: Add Redis service to Docker Compose with healthcheck and environment configuration [ef9fbc71]
+* feat: Implement theme support for AG Grid across project data collections and user management modules [6215c548]
+* feat: Refactor theme handling in components and disable theme switch on dashboard pages [e4ad6300]
+* feat: Add detailed pod status monitoring for frontend and backend during resource propagation [df592313]
+* feat: Enhance wait step for backend service availability with improved logging and timeout handling [7d6d2a3c]
+* feat: Add wait step for Kubernetes resources propagation in Helm chart workflow [ff37df73]
+* feat: Enhance Helm chart installation and debugging output for better visibility and error handling [519776ac]
+* feat: Add Google Analytics configuration options and adjust resource limits for backend and MinIO [d2ceeaed]
+
+#### Bug Fixes 🐛
+
+* fix: Disable trapFocus in modals to improve DMC Switch clickability [2db5403f]
+* fix: Disable automatic figure generation by default in DashConfig [3f01b810]
+* fix: Update workload monitoring in Helm chart workflow to include statefulsets and improve logging [8d73555d]
+* fix: Disable automatic figure generation by default in DashConfig [9d5f3e13]
+* fix: Remove template from dashboard configuration to allow default settings [34059fd4]
+* fix: Optimize deployment status checks and skip wait for already verified pods [a5c81356]
+* fix: Improve deployment counting and logging for Helm chart resource propagation [1e3c7205]
+
+#### Improvements 🚀
+
+* refactor: reorganize .gitignore for development environment clarity [f5f22efa]
+* refactor: Update debug logging in register_callbacks_save for improved clarity [0fb71185]
+* refactor: Disable loading state to prevent infinite spinner issue and improve UI responsiveness [38112c70]
+* refactor: Improve component selection logic in register_callbacks_stepper_part_one [66c2cd52]
+* refactor: Rename update_interactive_component to update_interactive_component_sync for consistency [6498d074]
+* refactor: Comment out celery worker service in docker-compose for clarity [9aa74c8d]
+* refactor: Update CSS selectors for action buttons and improve debug menu logging [cbd2185f]
+* refactor: Remove async build functions and update documentation to reflect synchronous functionality [b25d3ee7]
+
+#### Documentation Updates 📚
+
+* docs: Add default Python path and usage instructions to CLAUDE.md [c60eac69]
+
+#### Other Changes 📝
+
+* Bump version: 0.3.2 → 0.4.0-b1 [7d351c08]
+* Implement code changes to enhance functionality and improve performance [5ec2c1df]
+* Implement code changes to enhance functionality and improve performance [8fe4971f]
+* cli: Enhance progress display in scan_files_for_workflow with formatted descriptions for data collections and runs [392bd9d1]
+* Update CHANGELOG.md for v0.3.2 [2d83969b]
+* Bump version: 0.3.1 → 0.3.2 [f33b9639]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+ections analytics to the dashboard [146e042a]
 * feat: Enhance analytics data service with user ID validation and filtering [41061497]
 * feat: Implement Admin Analytics Dashboard and related functionalities [8837a4fd]
 * feat: Implement analytics tracking and middleware [c29c37ab]
