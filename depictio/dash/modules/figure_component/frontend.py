@@ -9,7 +9,7 @@ from dash_iconify import DashIconify
 
 import dash
 from dash import ALL, MATCH, Input, Output, Patch, State, dcc, html
-from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
 from depictio.dash.modules.figure_component.code_mode import (
@@ -165,7 +165,7 @@ def register_callbacks_figure_component(app):
             State("local-store", "data"),
             State("url", "pathname"),
         ],
-        prevent_initial_call=True,  # Prevent initial call to avoid loops
+        prevent_initial_call=False,  # Prevent initial call to avoid loops
     )
     def build_parameter_interface(
         _n_clicks_edit,  # Prefixed with _ to indicate unused
@@ -377,13 +377,15 @@ def register_callbacks_figure_component(app):
         [
             # This Input will match ANY parameter component dynamically
             Input({"type": ALL, "index": MATCH}, "value"),
+            # Add support for DMC Switch 'checked' property
+            Input({"type": ALL, "index": MATCH}, "checked"),
         ],
         [
             State({"type": "dict_kwargs", "index": MATCH}, "data"),
         ],
         prevent_initial_call=True,
     )
-    def extract_parameters_universal(all_values, existing_kwargs):
+    def extract_parameters_universal(all_values, all_checked_values, existing_kwargs):
         """Universal parameter extraction using pattern matching."""
 
         # Get the callback context to understand what triggered this
@@ -421,19 +423,25 @@ def register_callbacks_figure_component(app):
                 if isinstance(input_id, dict) and input_id.get("type", "").startswith("param-"):
                     param_name = input_id["type"].replace("param-", "")
 
-                    # Get value from the triggered values
+                    # Get value from the triggered values - try both 'value' and 'checked'
                     value = input_item.get("value")
+                    checked = input_item.get("checked")
+
+                    # Use checked for DMC Switch components (boolean parameters), value for others
+                    actual_value = checked if checked is not None else value
 
                     # Include non-empty values
-                    if value is not None and value != "" and value != []:
+                    if actual_value is not None and actual_value != "" and actual_value != []:
                         # Convert string values back to their original types
-                        converted_value = _convert_parameter_value(param_name, value)
+                        converted_value = _convert_parameter_value(param_name, actual_value)
                         parameters[param_name] = converted_value
-                    elif isinstance(value, bool):  # Include boolean False
-                        parameters[param_name] = value
-                    elif value == "":  # Include empty string for optional parameters like parents
+                    elif isinstance(actual_value, bool):  # Include boolean False
+                        parameters[param_name] = actual_value
+                    elif (
+                        actual_value == ""
+                    ):  # Include empty string for optional parameters like parents
                         # For hierarchical charts (sunburst, treemap), empty string is valid for parents
-                        parameters[param_name] = value
+                        parameters[param_name] = actual_value
 
         logger.info(f"Extracted parameters: {parameters}")
         logger.info(f"Parameter count: {len(parameters)}")
@@ -505,36 +513,9 @@ def register_callbacks_figure_component(app):
         prevent_initial_call=True,
     )
     def show_loading_state(dict_kwargs, visu_type_label):
-        """Show loading spinner when figure inputs change."""
-        loading_content = dmc.Stack(
-            [
-                dmc.Loader(type="dots", color="gray", size="lg"),
-                dmc.Text(
-                    "Generating figure...",
-                    size="sm",
-                    c="gray",
-                    style={"color": "var(--app-text-color, gray)"},
-                ),
-            ],
-            align="center",
-            gap="md",
-        )
-
-        # Show the loading overlay
-        loading_style = {
-            "position": "absolute",
-            "top": "0",
-            "left": "0",
-            "width": "100%",
-            "height": "100%",
-            "display": "flex",  # Show the loading overlay
-            "alignItems": "center",
-            "justifyContent": "center",
-            "backgroundColor": "var(--app-surface-color, #ffffff)",
-            "zIndex": "1000",
-        }
-
-        return loading_content, loading_style
+        """Show loading spinner when figure inputs change - DISABLED."""
+        # Disabled loading state to prevent infinite "Generating figure" issue
+        return html.Div(), {"display": "none"}
 
     @app.callback(
         [
@@ -633,14 +614,20 @@ def register_callbacks_figure_component(app):
             {columns_specs_reformatted[v["type"]].append(k) for k, v in columns_json.items()}
 
             # Check if we need to set default parameters for the specific visualization type
+            # Only auto-generate parameters if the setting is enabled
             needs_defaults = _needs_default_parameters(visu_type, dict_kwargs)
 
-            if needs_defaults:
+            if needs_defaults and settings.dash.auto_generate_figures:
                 logger.info(f"Setting default parameters for {visu_type} visualization")
                 default_params = _get_default_parameters(visu_type, columns_specs_reformatted)
 
                 # Update dict_kwargs with defaults (preserve existing params)
                 dict_kwargs = {**default_params, **dict_kwargs}
+            elif needs_defaults and not settings.dash.auto_generate_figures:
+                logger.info(
+                    f"Auto-generate figures disabled, skipping default parameter assignment for {visu_type}"
+                )
+                # Don't auto-assign parameters, but allow manual ones to proceed
 
         except Exception as e:
             logger.error(f"Failed to get column information: {e}")
@@ -750,6 +737,13 @@ def register_callbacks_figure_component(app):
         logger.info(f"Has workflow_id: {bool(workflow_id)}")
         logger.info(f"Has data_collection_id: {bool(data_collection_id)}")
         logger.info(f"Has local_data: {bool(local_data)}")
+
+        # Check auto_generate_figures setting
+        if not settings.dash.auto_generate_figures:
+            logger.info(
+                "Auto-generate figures disabled, skipping automatic parameter initialization"
+            )
+            raise dash.exceptions.PreventUpdate
 
         # Check if we need to prevent update to avoid race conditions
         ctx = dash.callback_context
@@ -887,6 +881,11 @@ def register_callbacks_figure_component(app):
         workflow_id, data_collection_id, current_kwargs, visu_type_label, local_data
     ):
         """Auto-initialize default parameters when workflow/datacollection are set."""
+        # Check auto_generate_figures setting
+        if not settings.dash.auto_generate_figures:
+            logger.info("Auto-generate figures disabled, skipping auto-initialization on load")
+            raise dash.exceptions.PreventUpdate
+
         # Only trigger if we have empty kwargs and all required data
         if current_kwargs or not workflow_id or not data_collection_id or not local_data:
             raise dash.exceptions.PreventUpdate
@@ -960,6 +959,32 @@ def register_callbacks_figure_component(app):
             logger.info("Skipping default figure generation - in code mode")
             raise dash.exceptions.PreventUpdate
 
+        # Check auto_generate_figures setting - but allow if this is an edit mode (parent_index exists)
+        # Edit mode should always show existing figures, only new figures are controlled by the setting
+        if not settings.dash.auto_generate_figures and not parent_index:
+            logger.info(
+                "Auto-generate figures disabled and not in edit mode, skipping default figure generation"
+            )
+            # raise dash.exceptions.PreventUpdate
+            return html.Div(
+                dmc.Center(
+                    dmc.Text(
+                        "Select a visualization type and core parameters to start generating a figure.",
+                        ta="center",
+                        c="gray",
+                        size="md",
+                    )
+                ),
+                style={
+                    "height": "100%",
+                    "minHeight": "300px",
+                    "display": "flex",
+                    "alignItems": "center",
+                    "justifyContent": "center",
+                    "width": "100%",
+                },
+            )
+
         # Get existing component data
         component_data = None
         if parent_index:
@@ -1020,16 +1045,25 @@ def register_callbacks_figure_component(app):
             if visu_type_label:
                 visu_type = visu_type_label.lower()
 
-            # If no parameters set, generate defaults
+            # If no parameters set, generate defaults (only if auto_generate_figures is enabled)
             if not dict_kwargs or dict_kwargs in [{}, {"x": None, "y": None}]:
-                columns_json = get_columns_from_data_collection(
-                    workflow_id, data_collection_id, TOKEN
-                )
-                columns_specs_reformatted = defaultdict(list)
-                {columns_specs_reformatted[v["type"]].append(k) for k, v in columns_json.items()}
+                if settings.dash.auto_generate_figures:
+                    columns_json = get_columns_from_data_collection(
+                        workflow_id, data_collection_id, TOKEN
+                    )
+                    columns_specs_reformatted = defaultdict(list)
+                    {
+                        columns_specs_reformatted[v["type"]].append(k)
+                        for k, v in columns_json.items()
+                    }
 
-                dict_kwargs = _get_default_parameters(visu_type, columns_specs_reformatted)
-                logger.info(f"Generated default parameters for {visu_type}: {dict_kwargs}")
+                    dict_kwargs = _get_default_parameters(visu_type, columns_specs_reformatted)
+                    logger.info(f"Generated default parameters for {visu_type}: {dict_kwargs}")
+                else:
+                    logger.info(
+                        f"Auto-generate figures disabled, not generating default parameters for {visu_type}"
+                    )
+                    # Don't generate defaults, use empty dict
 
             if not dict_kwargs:
                 raise dash.exceptions.PreventUpdate
@@ -1311,6 +1345,7 @@ def register_callbacks_figure_component(app):
             Output({"type": "code-status", "index": MATCH}, "children"),
             Output({"type": "code-status", "index": MATCH}, "color"),
             Output({"type": "code-status", "index": MATCH}, "title"),
+            Output({"type": "dict_kwargs", "index": MATCH}, "data", allow_duplicate=True),
             # Output(
             #     {"type": "stored-metadata-component", "index": MATCH}, "data", allow_duplicate=True
             # ),
@@ -1335,7 +1370,7 @@ def register_callbacks_figure_component(app):
         )
         if not n_clicks or not code:
             logger.info("Skipping execution: no clicks or no code")
-            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         if not local_data:
             return (
@@ -1343,6 +1378,7 @@ def register_callbacks_figure_component(app):
                 "Authentication required to execute code",
                 "red",
                 "Error",
+                dash.no_update,
             )
 
         try:
@@ -1360,6 +1396,7 @@ def register_callbacks_figure_component(app):
                     "Please select a workflow and data collection",
                     "orange",
                     "Warning",
+                    dash.no_update,
                 )
 
             # Execute code securely
@@ -1367,6 +1404,10 @@ def register_callbacks_figure_component(app):
             success, result, message = executor.execute_code(code, df)
 
             if success and result:
+                # Extract parameters from executed code for dict_kwargs
+                extracted_params = extract_params_from_code(code)
+                logger.info(f"Extracted parameters from executed code: {extracted_params}")
+
                 # Store the figure data with metadata for further processing
                 figure_data = {
                     "figure": result.to_dict(),
@@ -1377,17 +1418,20 @@ def register_callbacks_figure_component(app):
                 logger.info(
                     f"Code execution successful, storing figure data with keys: {list(figure_data.keys())}"
                 )
-                # logger.info(f"Existing stored metadata: {stored_metadata}")
-                return (figure_data, "Code executed successfully!", "green", "Success")
-                # return (figure_data, "Code executed successfully!", "green", "Success", stored_metadata)
+                return (
+                    figure_data,
+                    "Code executed successfully!",
+                    "green",
+                    "Success",
+                    extracted_params,
+                )
             else:
-                return (None, message, "red", "Error")
-                # return (None, message, "red", "Error", stored_metadata)
+                return (None, message, "red", "Error", dash.no_update)
 
         except Exception as e:
             error_msg = f"Unexpected error: {str(e)}"
             logger.error(f"Code execution error: {error_msg}")
-            return (None, error_msg, "red", "Error")
+            return (None, error_msg, "red", "Error", dash.no_update)
 
     # Update figure when code is executed successfully
     @app.callback(
@@ -1883,6 +1927,16 @@ def design_figure(id, component_data=None):
         # Use the visualization name (lowercase) as value
         default_value = component_data["visu_type"].lower()
 
+    # Set initial mode based on component_data mode field
+    initial_mode = "ui"  # Default to UI mode
+    if component_data and component_data.get("mode") == "code":
+        initial_mode = "code"
+        logger.info(
+            f"Setting initial mode to code for component {id['index']} based on stored metadata"
+        )
+    else:
+        logger.info(f"Setting initial mode to UI for component {id['index']}")
+
     # Create layout optimized for fullscreen modal
     figure_row = [
         # Mode toggle (central and prominent)
@@ -1898,20 +1952,36 @@ def design_figure(id, component_data=None):
                                     DashIconify(icon="tabler:eye", width=16),
                                     html.Span("UI Mode"),
                                 ],
-                                style={"gap": 10},
+                                style={
+                                    "gap": 10,
+                                    "width": "250px",
+                                    # "display": "flex",
+                                    # "justifyContent": "center",
+                                    # "alignItems": "center"
+                                },
                             ),
                         },
                         {
                             "value": "code",
                             "label": dmc.Center(
-                                [DashIconify(icon="tabler:code", width=16), html.Span("Code Mode")],
-                                style={"gap": 10},
+                                [
+                                    DashIconify(icon="tabler:code", width=16),
+                                    html.Span("Code Mode (Beta)"),
+                                ],
+                                style={
+                                    "gap": 10,
+                                    "width": "250px",
+                                    # "display": "flex",
+                                    # "justifyContent": "center",
+                                    # "alignItems": "center"
+                                },
                             ),
                         },
                     ],
-                    value="ui",  # Default to UI mode
-                    size="sm",
+                    value=initial_mode,  # Use initial_mode based on component_data
+                    size="lg",
                     style={"marginBottom": "15px"},
+                    # style={"marginBottom": "15px", "width": "520px"},
                 )
             ]
         ),
@@ -1938,6 +2008,7 @@ def design_figure(id, component_data=None):
                         "verticalAlign": "top",
                         "marginRight": "2%",
                         "minHeight": "400px",  # Provide reasonable minimum
+                        "border": "1px solid #eee",
                     },
                 ),
                 # Right side - Mode-specific controls
@@ -1951,7 +2022,7 @@ def design_figure(id, component_data=None):
                                         # Visualization and Edit button row (2/3 + 1/3 layout)
                                         html.Div(
                                             [
-                                                # Visualization section (2/3 width)
+                                                # Visualization section (full width)
                                                 html.Div(
                                                     [
                                                         dmc.Group(
@@ -1993,54 +2064,31 @@ def design_figure(id, component_data=None):
                                                         ),
                                                     ],
                                                     style={
-                                                        "width": "65%",
-                                                        "display": "inline-block",
-                                                        "verticalAlign": "top",
-                                                        "marginRight": "5%",
-                                                    },
-                                                ),
-                                                # Edit button section (1/3 width)
-                                                html.Div(
-                                                    [
-                                                        dmc.Text(
-                                                            " ",  # Empty space to align with label
-                                                            fw="bold",
-                                                            size="sm",
-                                                            style={"marginBottom": "8px"},
-                                                        ),
-                                                        dmc.Button(
-                                                            "Edit",
-                                                            id={
-                                                                "type": "edit-button",
-                                                                "index": id["index"],
-                                                            },
-                                                            n_clicks=0,
-                                                            size="sm",
-                                                            leftSection=DashIconify(
-                                                                icon="mdi:cog", width=16
-                                                            ),
-                                                            variant="outline",
-                                                            color="blue",
-                                                            fullWidth=True,
-                                                        ),
-                                                    ],
-                                                    style={
-                                                        "width": "30%",
-                                                        "display": "inline-block",
-                                                        # "verticalAlign": "top",
-                                                        "marginTop": "20px",
+                                                        "width": "100%",
                                                     },
                                                 ),
                                             ],
                                             style={"marginBottom": "20px"},
                                         ),
-                                        # Edit panel
+                                        # Hidden edit button for callback compatibility
+                                        html.Div(
+                                            dmc.Button(
+                                                "Edit",
+                                                id={
+                                                    "type": "edit-button",
+                                                    "index": id["index"],
+                                                },
+                                                n_clicks=1,  # Start clicked to show parameters
+                                                style={"display": "none"},
+                                            )
+                                        ),
+                                        # Edit panel (always open)
                                         dbc.Collapse(
                                             id={
                                                 "type": "collapse",
                                                 "index": id["index"],
                                             },
-                                            is_open=False,
+                                            is_open=True,
                                             style={
                                                 "overflowY": "auto",
                                                 # "maxHeight": "35vh",

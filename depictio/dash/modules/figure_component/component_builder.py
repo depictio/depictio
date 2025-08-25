@@ -233,14 +233,14 @@ class ComponentBuilder:
 
     def _build_boolean_switch(
         self, param: ParameterDefinition, component_id: Dict, value: Any, disabled: bool
-    ) -> dmc.Switch:
-        """Build boolean switch."""
-        return dmc.Switch(
+    ) -> dmc.Checkbox:
+        """Build boolean checkbox (using Checkbox instead of Switch for better compatibility)."""
+        return dmc.Checkbox(
             id=component_id,
             checked=bool(value) if value is not None else False,
             disabled=disabled,
             label=param.label,
-            size="sm",
+            size="md",
         )
 
     def _build_range_input(

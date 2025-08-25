@@ -4,9 +4,6 @@ import polars as pl
 from bson import ObjectId
 
 from dash import dcc, html
-
-# PERFORMANCE OPTIMIZATION: Use centralized config
-from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.dash.modules.figure_component.utils import stringify_id
@@ -76,6 +73,24 @@ def build_table_frame(index, children=None):
         )
 
 
+def _get_theme_template(theme: str) -> str:
+    """Get the appropriate Plotly template based on the theme.
+
+    Args:
+        theme: Theme name ("light", "dark", or other)
+
+    Returns:
+        Plotly template name
+    """
+    # Handle case where theme is empty dict, None, or other falsy value
+    if not theme or theme == {} or theme == "{}":
+        theme = "light"
+
+    logger.info(f"TABLE COMPONENT - Using theme: {theme} for Plotly template")
+    # Use actual available Plotly templates
+    return "ag-theme-alpine-dark" if theme == "dark" else "ag-theme-alpine"
+
+
 def build_table(**kwargs):
     logger.info("build_table")
     # def build_card(index, title, wf_id, dc_id, dc_config, column_name, column_type, aggregation, v, build_frame=False):
@@ -84,8 +99,9 @@ def build_table(**kwargs):
     dc_id = kwargs.get("dc_id")
     dc_config = kwargs.get("dc_config")
     cols = kwargs.get("cols_json")
+    theme = kwargs.get("theme", "light")  # Default to light theme
     build_frame = kwargs.get("build_frame", False)
-    theme = kwargs.get("theme", "light")
+
     df = kwargs.get("df", pl.DataFrame())
     TOKEN = kwargs.get("access_token")
     stepper = kwargs.get("stepper", False)
@@ -147,14 +163,8 @@ def build_table(**kwargs):
                     cols[c]["filter"] = "agDateColumnFilter"
                     cols[c]["floatingFilter"] = True
 
-    # PERFORMANCE OPTIMIZATION: Conditionally add ID column based on loading spinner setting
-    if settings.performance.disable_loading_spinners:
-        # Performance mode: Simple ID column without spinner renderer
-        columnDefs = [{"field": "ID", "maxWidth": 100}]
-        logger.info("🚀 PERFORMANCE MODE: Ag-grid loading spinners disabled for ID column")
-    else:
-        # Add ID column for SpinnerCellRenderer (following documentation example exactly)
-        columnDefs = [{"field": "ID", "maxWidth": 100, "cellRenderer": "SpinnerCellRenderer"}]
+    # Add ID column for SpinnerCellRenderer (following documentation example exactly)
+    columnDefs = [{"field": "ID", "maxWidth": 100, "cellRenderer": "SpinnerCellRenderer"}]
 
     # Add data columns with enhanced filtering and sorting support
     if cols:
@@ -212,7 +222,8 @@ def build_table(**kwargs):
     logger.info(f"📊 Table {index}: Using INFINITE row model with interactive component support")
     logger.info("🔄 Interactive filters and pagination handled by infinite scroll callback")
 
-    logger.info(f"Table {index}: Building AG Grid with theme {theme}")
+    logger.info(f"Using theme: {theme} for AG Grid template")
+    aggrid_theme = _get_theme_template(theme)  # Get the appropriate theme template
 
     # Always use infinite scroll configuration
     table_aggrid = dag.AgGrid(
@@ -250,7 +261,7 @@ def build_table(**kwargs):
             "filter": True,
         },
         style={"width": "100%"},
-        className="ag-theme-alpine" if theme == "light" else "ag-theme-alpine-dark",
+        className=aggrid_theme,
     )
 
     logger.info(f"✅ Table {index}: Infinite row model configured with interactive support")
@@ -306,41 +317,18 @@ def build_table(**kwargs):
             target_id = stringify_id(graph_id_dict)
             logger.debug(f"Target ID for loading: {target_id}")
 
-            # PERFORMANCE OPTIMIZATION: Conditional loading spinner
-            if settings.performance.disable_loading_spinners:
-                logger.info("🚀 PERFORMANCE MODE: Table loading spinners disabled")
-                return table_component  # Return content directly, no loading wrapper
-            else:
-                # Optimized loading with fast delays
-                return dcc.Loading(
-                    children=table_component,
-                    custom_spinner=create_skeleton_component("table"),
-                    target_components={target_id: "rowData"},
-                    delay_show=5,  # Fast delay for better UX
-                    delay_hide=25,  # Quick hide for performance
-                    id={"index": index},
-                )
+            return dcc.Loading(
+                children=table_component,
+                custom_spinner=create_skeleton_component("table"),
+                # target_components={f'{{"index":"{index}","type":"table-aggrid"}}': "rowData"},
+                target_components={target_id: "rowData"},
+                # delay_show=50,  # Minimal delay to prevent flashing
+                # delay_hide=100,  # Quick dismissal
+                delay_show=50,  # Minimal delay to prevent flashing
+                delay_hide=300,  #
+                id={"index": index},  # Move the id to the loading component
+            )
 
         else:
             # For stepper mode without loading
             return table_component
-
-
-# Async wrapper for background callbacks (following card component pattern)
-async def build_table_async(**kwargs):
-    """
-    Async wrapper for build_table function.
-    Used in background callbacks where async execution is needed.
-    """
-    logger.info(
-        f"🔄 ASYNC TABLE: Building table component asynchronously - Index: {kwargs.get('index', 'UNKNOWN')}"
-    )
-
-    # Call the synchronous build_table function
-    # In the future, this could run in a thread pool if needed for true parallelism
-    result = build_table(**kwargs)
-
-    logger.info(
-        f"✅ ASYNC TABLE: Table component built successfully - Index: {kwargs.get('index', 'UNKNOWN')}"
-    )
-    return result
