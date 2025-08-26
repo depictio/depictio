@@ -255,63 +255,151 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
             }
         },
 
-        // Add multiple patterns as separate filters
-        addMultiplePatterns: function(patterns) {
-            const results = [`🚀 ADDING ${patterns.length} SEPARATE PATTERNS: [${patterns.join(', ')}]`];
+        // Get existing filter patterns from MultiQC
+        getExistingFilterPatterns: function() {
+            const access = this.getIframeAccess();
+            if (!access.success) {
+                return [];
+            }
+            
+            const iframeDoc = access.doc;
+            const filterList = iframeDoc.querySelector('#mqc_col_filters');
+            if (!filterList) {
+                return [];
+            }
+            
+            const inputs = filterList.querySelectorAll('input.f_text');
+            return Array.from(inputs).map(input => input.value).filter(value => value.trim() !== '');
+        },
+
+        // Remove specific filter by pattern value
+        removeFilterByPattern: function(pattern) {
+            const access = this.getIframeAccess();
+            if (!access.success) {
+                return { success: false, message: access.error };
+            }
+            
+            const iframeDoc = access.doc;
+            const filterList = iframeDoc.querySelector('#mqc_col_filters');
+            if (!filterList) {
+                return { success: false, message: 'Filter list not found' };
+            }
+            
+            // Find the input with matching value
+            const inputs = filterList.querySelectorAll('input.f_text');
+            for (let input of inputs) {
+                if (input.value === pattern) {
+                    // Find the close button in the same <li> element
+                    const listItem = input.closest('li');
+                    if (listItem) {
+                        const closeButton = listItem.querySelector('button.close');
+                        if (closeButton) {
+                            closeButton.click();
+                            return { success: true, message: `✅ Removed filter: "${pattern}"` };
+                        }
+                    }
+                }
+            }
+            
+            return { success: false, message: `❌ Filter not found: "${pattern}"` };
+        },
+
+        // Add single pattern as filter
+        addSinglePattern: function(pattern) {
+            const setResult = this.setPattern(pattern);
+            if (setResult.success) {
+                setTimeout(() => {
+                    this.clickPlusButton();
+                }, 50);
+                return { success: true, message: `✅ Added filter: "${pattern}"` };
+            }
+            return { success: false, message: setResult.message };
+        },
+
+        // Differential update: only add/remove changed patterns
+        updateFiltersIncremental: function(newPatterns) {
+            const results = [`🚀 INCREMENTAL UPDATE: [${newPatterns.join(', ')}]`];
             
             try {
-                // Step 0: Clear existing filters first
-                const clearResult = this.clearHighlightFilters();
-                if (clearResult.success) {
-                    results.push('✅ Step 0: ' + clearResult.message);
-                }
+                // Get current state
+                const existingPatterns = this.getExistingFilterPatterns();
+                results.push(`📋 Current filters: [${existingPatterns.join(', ')}]`);
                 
-                // Step 1-N: Add each pattern as a separate filter
-                let addedCount = 0;
-                const addNextPattern = (index) => {
-                    if (index >= patterns.length) {
-                        // All patterns added, now apply
-                        setTimeout(() => {
-                            this.clickApplyButton();
-                        }, 100);
+                // Find differences
+                const toAdd = newPatterns.filter(p => !existingPatterns.includes(p));
+                const toRemove = existingPatterns.filter(p => !newPatterns.includes(p));
+                
+                results.push(`➕ To add: [${toAdd.join(', ')}]`);
+                results.push(`➖ To remove: [${toRemove.join(', ')}]`);
+                
+                let operationCount = 0;
+                
+                // Remove filters that are no longer needed
+                toRemove.forEach(pattern => {
+                    const removeResult = this.removeFilterByPattern(pattern);
+                    if (removeResult.success) {
+                        results.push(removeResult.message);
+                        operationCount++;
+                    }
+                });
+                
+                // Add new filters
+                let addIndex = 0;
+                const addNextFilter = () => {
+                    if (addIndex >= toAdd.length) {
+                        // All operations done, apply changes if any were made
+                        if (operationCount > 0 || toAdd.length > 0) {
+                            setTimeout(() => {
+                                this.clickApplyButton();
+                            }, 100);
+                        }
                         return;
                     }
                     
-                    const pattern = patterns[index];
-                    const setResult = this.setPattern(pattern);
-                    if (setResult.success) {
-                        // Pattern set, now click Plus to add it as a filter
-                        setTimeout(() => {
-                            this.clickPlusButton();
-                            addedCount++;
-                            // Recursively add the next pattern
-                            setTimeout(() => {
-                                addNextPattern(index + 1);
-                            }, 100);
-                        }, 100);
+                    const pattern = toAdd[addIndex];
+                    const addResult = this.addSinglePattern(pattern);
+                    if (addResult.success) {
+                        results.push(addResult.message);
+                        operationCount++;
                     }
+                    
+                    addIndex++;
+                    setTimeout(() => {
+                        addNextFilter();
+                    }, 150);
                 };
                 
-                // Start adding patterns
-                addNextPattern(0);
+                // Start adding new filters
+                if (toAdd.length > 0) {
+                    setTimeout(() => {
+                        addNextFilter();
+                    }, 100);
+                } else if (operationCount > 0) {
+                    // Only removals, apply immediately
+                    setTimeout(() => {
+                        this.clickApplyButton();
+                    }, 100);
+                }
                 
-                results.push(`⏳ Adding each pattern as separate filter...`);
-                results.push(`⏳ Final step: Apply all ${patterns.length} filters`);
-                results.push('🎯 MultiQC charts will show each sample highlighted separately');
+                if (toAdd.length === 0 && toRemove.length === 0) {
+                    results.push('✅ No changes needed');
+                } else {
+                    results.push('⏳ Applying changes...');
+                }
                 
                 return results.join('\n');
                 
             } catch (error) {
-                return `❌ Automation Error: ${error.message}`;
+                return `❌ Incremental Update Error: ${error.message}`;
             }
         },
 
         // Full automation: Single pattern (kept for backward compatibility)
         fullAutomation: function(pattern) {
-            return this.addMultiplePatterns([pattern]);
+            return this.updateFiltersIncremental([pattern]);
         },
 
-        // Handle highlight pattern changes from Dash dropdown
+        // Handle highlight pattern changes from Dash dropdown (SCALABLE VERSION)
         handleHighlightPatternChange: function(highlight_pattern) {
             // Handle TagsInput array format
             let patterns = [];
@@ -321,17 +409,8 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                 patterns = [highlight_pattern];
             }
             
-            if (patterns.length === 0) {
-                // Clear all existing filters when dropdown is empty
-                this.clearHighlightFilters();
-                setTimeout(() => {
-                    this.clickApplyButton();
-                }, 100);
-                return '🎯 All highlight patterns cleared from MultiQC';
-            }
-            
-            // Add each pattern as a separate filter
-            return this.addMultiplePatterns(patterns);
+            // Use incremental updates - only add/remove what changed
+            return this.updateFiltersIncremental(patterns);
         },
 
         // Handle show/hide pattern changes from Dash dropdown  
