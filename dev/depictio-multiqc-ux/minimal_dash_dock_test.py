@@ -90,12 +90,27 @@ def load_multiqc_samples():
 # Load available samples
 AVAILABLE_SAMPLES = load_multiqc_samples()
 
-# Define dock configuration - minimal single tab
+# Define dock configuration with collapsible side menu (explorer-style)
 dock_config = {
     "global": {
         "tabEnableClose": False,
         "tabEnableFloat": True
     },
+    "borders": [
+        {
+            "type": "border",
+            "location": "left",
+            "size": 350,
+            "children": [
+                {
+                    "type": "tab",
+                    "name": "MultiQC Controls",
+                    "component": "text",
+                    "id": "multiqc-controls-tab"
+                }
+            ]
+        }
+    ],
     "layout": {
         "type": "row", 
         "children": [
@@ -117,34 +132,165 @@ dock_config = {
 
 # Create tab content
 tab_components = [
+    # New MultiQC Controls tab for the left sidebar
+    dash_dock.Tab(
+        id="multiqc-controls-tab",
+        children=[
+            html.Div([
+                html.H4("🧪 MultiQC Toolbox", style={'margin': '0 0 20px 0', 'color': '#2c3e50'}),
+                
+                # HIGHLIGHT SAMPLES SECTION
+                html.Div([
+                    html.H5("🎨 Highlight Samples", style={'margin': '0 0 10px 0', 'color': '#1976d2'}),
+                    html.Div([
+                        # TagsInput for sample patterns with autocomplete
+                        dmc.TagsInput(
+                            id="highlight-pattern-input",
+                            label="Sample Patterns",
+                            placeholder="Type or select samples (supports regex)",
+                            value=[],
+                            data=AVAILABLE_SAMPLES,
+                            maxDropdownHeight=300,
+                            limit=10,
+                            clearable=True,
+                            searchValue="",
+                            style={'width': '100%', 'marginBottom': '10px'}
+                        ),
+                        # Regex toggle
+                        dmc.Switch(
+                            id="highlight-regex-switch",
+                            label="Use Regex",
+                            checked=False,
+                            style={'marginBottom': '10px'}
+                        ),
+                        # Action buttons
+                        dmc.Button("Clear All", id="highlight-clear-btn", variant="outline", color="red", size="sm", style={'width': '100%'}),
+                    ], style={'display': 'flex', 'flexDirection': 'column', 'gap': '10px'})
+                ], style={
+                    'backgroundColor': '#e3f2fd', 
+                    'padding': '15px', 
+                    'margin': '10px 0',
+                    'borderRadius': '8px',
+                    'border': '2px solid #1976d2'
+                }),
+                
+                # SHOW/HIDE SAMPLES SECTION
+                html.Div([
+                    html.H5("👁️ Show/Hide Samples", style={'margin': '0 0 10px 0', 'color': '#388e3c'}),
+                    html.Div([
+                        # TagsInput for sample patterns with autocomplete
+                        dmc.TagsInput(
+                            id="showhide-pattern-input",
+                            label="Sample Patterns",
+                            placeholder="Type or select samples (supports regex)",
+                            value=[],
+                            data=AVAILABLE_SAMPLES,
+                            maxDropdownHeight=300,
+                            limit=10,
+                            clearable=True,
+                            searchValue="",
+                            style={'width': '100%', 'marginBottom': '10px'}
+                        ),
+                        # Regex toggle
+                        dmc.Switch(
+                            id="showhide-regex-switch",
+                            label="Use Regex",
+                            checked=False,
+                            style={'marginBottom': '10px'}
+                        ),
+                        # Show/Hide mode toggle
+                        dmc.SegmentedControl(
+                            id="showhide-mode-control",
+                            value="show",
+                            data=[
+                                {"label": "👁️ Show Only", "value": "show"},
+                                {"label": "🙈 Hide", "value": "hide"}
+                            ],
+                            style={'marginBottom': '10px', 'width': '100%'}
+                        ),
+                        # Action buttons
+                        dmc.Button("Clear All", id="showhide-clear-btn", variant="outline", color="red", size="sm", style={'width': '100%'}),
+                    ], style={'display': 'flex', 'flexDirection': 'column', 'gap': '10px'})
+                ], style={
+                    'backgroundColor': '#e8f5e9', 
+                    'padding': '15px', 
+                    'margin': '10px 0',
+                    'borderRadius': '8px',
+                    'border': '2px solid #388e3c'
+                }),
+                
+                # DEBUG SECTION (collapsible)
+                dmc.Accordion(
+                    children=[
+                        dmc.AccordionItem([
+                            dmc.AccordionControl("🔧 Debug Controls"),
+                            dmc.AccordionPanel([
+                                dmc.Stack([
+                                    dmc.Button("Inspect MultiQC", id="inspect-highlight-btn", variant="outline", size="xs", fullWidth=True),
+                                    dmc.Button("Inspect Show/Hide", id="inspect-showhide-btn", variant="outline", size="xs", fullWidth=True),
+                                    dmc.Button("Test Pattern Input", id="test-sample-input-btn", variant="outline", size="xs", fullWidth=True),
+                                    dmc.Button("Test + Button", id="simulate-plus-btn", variant="outline", size="xs", fullWidth=True),
+                                    dmc.Button("Test Apply", id="simulate-apply-btn", variant="outline", size="xs", fullWidth=True),
+                                    dmc.Button("Test Hide + Button", id="test-hide-plus-btn", variant="outline", size="xs", fullWidth=True),
+                                    dmc.Button("Test Hide Apply", id="test-hide-apply-btn", variant="outline", size="xs", fullWidth=True),
+                                    dmc.Button("Test Enter", id="simulate-enter-btn", variant="outline", size="xs", fullWidth=True),
+                                ], gap="xs")
+                            ])
+                        ], value="debug-controls")
+                    ],
+                    style={'margin': '10px 0'}
+                ),
+                
+                # OUTPUT AREA (collapsible)
+                dmc.Accordion(
+                    children=[
+                        dmc.AccordionItem([
+                            dmc.AccordionControl("📋 Debug Console Output"),
+                            dmc.AccordionPanel([
+                                html.Pre(id="investigation-output", style={
+                                    'backgroundColor': '#f8f9fa', 
+                                    'padding': '10px', 
+                                    'margin': '0',
+                                    'borderRadius': '4px',
+                                    'border': '1px solid #ddd',
+                                    'fontSize': '12px',
+                                    'maxHeight': '300px',
+                                    'overflow': 'auto',
+                                    'whiteSpace': 'pre-wrap'
+                                })
+                            ])
+                        ], value="debug-output")
+                    ],
+                    value=["debug-output"],  # Start with output expanded
+                    multiple=True,
+                    style={'margin': '10px 0'}
+                )
+            ], style={
+                'height': '100%', 
+                'padding': '10px',
+                'backgroundColor': '#fff',
+                'overflowY': 'auto'
+            })
+        ]
+    ),
+    # MultiQC Report tab (main content area)
     dash_dock.Tab(
         id="multiqc-tab",
         children=[
             html.Div([
-                # html.H4("MultiQC Report Viewer", 
-                #        style={'margin': '10px', 'color': '#333', 'textAlign': 'center'}),
-                # html.Div([
-                #     html.A("🔗 Test Flask Route", href="/test", target="_blank", 
-                #            style={'marginRight': '20px', 'color': 'blue'}),
-                #     html.A("📊 Direct MultiQC Link", 
-                #            href="/external/multiqc_output_fastqc_v1_30_0/multiqc_report.html", 
-                #            target="_blank", style={'color': 'green'})
-                # ], style={'textAlign': 'center', 'margin': '10px'}),
-                # html.Hr(),
                 html.Iframe(
                     id="multiqc-iframe",
                     src="/external/multiqc_output_fastqc_v1_30_0/multiqc_report.html",
                     style={
                         'width': '100%',
-                        'height': 'calc(100vh - 200px)', 
-                        'border': '2px solid #ddd',
-                        'borderRadius': '8px'
+                        'height': 'calc(100vh - 100px)', 
+                        'border': 'none'
                     }
                 )
             ], style={
                 'height': '100%', 
-                'padding': '15px',
-                'backgroundColor': '#f9f9f9'
+                'padding': '0',
+                'backgroundColor': '#fff'
             })
         ]
     )
@@ -155,7 +301,7 @@ app.layout = dmc.MantineProvider(
     theme={"colorScheme": "light"},
     children=[
     html.Div([
-        html.H1("🧪 Minimal Depictio x MultiQC interface prototype", 
+        html.H1("🧪 Depictio x MultiQC Interface", 
                style={'textAlign': 'center', 'margin': '20px', 'color': '#2c3e50'}),
         
         # html.Div([
@@ -173,145 +319,6 @@ app.layout = dmc.MantineProvider(
         # })
         # ,
         
-        # MultiQC Toolbox Automation Panel
-        html.Div([
-            html.H4("🔍 MultiQC Toolbox Automation"),
-            
-            # HIGHLIGHT SAMPLES SECTION
-            html.Div([
-                html.H5("🎨 Highlight Samples", style={'margin': '0 0 10px 0', 'color': '#1976d2'}),
-                html.Div([
-                    # TagsInput for sample patterns with autocomplete
-                    dmc.TagsInput(
-                        id="highlight-pattern-input",
-                        label="Sample Patterns",
-                        placeholder="Type or select samples (supports regex)",
-                        value=[],
-                        data=AVAILABLE_SAMPLES,
-                        maxDropdownHeight=300,
-                        limit=10,
-                        clearable=True,
-                        searchValue="",
-                        style={'width': '280px', 'marginRight': '10px'}
-                    ),
-                    # Regex toggle
-                    dmc.Switch(
-                        id="highlight-regex-switch",
-                        label="Use Regex",
-                        checked=False,
-                        style={'marginRight': '15px'}
-                    ),
-                    # Action buttons
-                    dmc.Button("Clear All", id="highlight-clear-btn", variant="outline", color="red", size="sm", style={'margin': '0 5px'}),
-                ], style={'display': 'flex', 'alignItems': 'end', 'flexWrap': 'wrap', 'gap': '10px'})
-            ], style={
-                'backgroundColor': '#e3f2fd', 
-                'padding': '15px', 
-                'margin': '10px 0',
-                'borderRadius': '8px',
-                'border': '2px solid #1976d2'
-            }),
-            
-            # SHOW/HIDE SAMPLES SECTION
-            html.Div([
-                html.H5("👁️ Show/Hide Samples", style={'margin': '0 0 10px 0', 'color': '#388e3c'}),
-                html.Div([
-                    # TagsInput for sample patterns with autocomplete
-                    dmc.TagsInput(
-                        id="showhide-pattern-input",
-                        label="Sample Patterns",
-                        placeholder="Type or select samples (supports regex)",
-                        value=[],
-                        data=AVAILABLE_SAMPLES,
-                        maxDropdownHeight=300,
-                        limit=10,
-                        clearable=True,
-                        searchValue="",
-                        style={'width': '280px', 'marginRight': '10px'}
-                    ),
-                    # Regex toggle
-                    dmc.Switch(
-                        id="showhide-regex-switch",
-                        label="Use Regex",
-                        checked=False,
-                        style={'marginRight': '15px'}
-                    ),
-                    # Show/Hide mode toggle
-                    dmc.SegmentedControl(
-                        id="showhide-mode-control",
-                        value="show",
-                        data=[
-                            {"label": "👁️ Show Only", "value": "show"},
-                            {"label": "🙈 Hide", "value": "hide"}
-                        ],
-                        style={'marginRight': '15px'}
-                    ),
-                    # Action buttons
-                    dmc.Button("Clear All", id="showhide-clear-btn", variant="outline", color="red", size="sm", style={'margin': '0 5px'}),
-                ], style={'display': 'flex', 'alignItems': 'end', 'flexWrap': 'wrap', 'gap': '10px'})
-            ], style={
-                'backgroundColor': '#e8f5e9', 
-                'padding': '15px', 
-                'margin': '10px 0',
-                'borderRadius': '8px',
-                'border': '2px solid #388e3c'
-            }),
-            
-            # DEBUG SECTION (collapsible)
-            dmc.Accordion(
-                children=[
-                    dmc.AccordionItem([
-                        dmc.AccordionControl("🔧 Debug Controls"),
-                        dmc.AccordionPanel([
-                            dmc.Group([
-                                dmc.Button("Inspect MultiQC", id="inspect-highlight-btn", variant="outline", size="xs"),
-                                dmc.Button("Inspect Show/Hide", id="inspect-showhide-btn", variant="outline", size="xs"),
-                                dmc.Button("Test Pattern Input", id="test-sample-input-btn", variant="outline", size="xs"),
-                                dmc.Button("Test + Button", id="simulate-plus-btn", variant="outline", size="xs"),
-                                dmc.Button("Test Apply", id="simulate-apply-btn", variant="outline", size="xs"),
-                                dmc.Button("Test Hide + Button", id="test-hide-plus-btn", variant="outline", size="xs"),
-                                dmc.Button("Test Hide Apply", id="test-hide-apply-btn", variant="outline", size="xs"),
-                                dmc.Button("Test Enter", id="simulate-enter-btn", variant="outline", size="xs"),
-                            ], gap="xs", style={'flexWrap': 'wrap'})
-                        ])
-                    ], value="debug-controls")
-                ],
-                style={'margin': '10px 0'}
-            ),
-            
-            # OUTPUT AREA (collapsible)
-            dmc.Accordion(
-                children=[
-                    dmc.AccordionItem([
-                        dmc.AccordionControl("📋 Debug Console Output"),
-                        dmc.AccordionPanel([
-                            html.Pre(id="investigation-output", style={
-                                'backgroundColor': '#f8f9fa', 
-                                'padding': '10px', 
-                                'margin': '0',
-                                'borderRadius': '4px',
-                                'border': '1px solid #ddd',
-                                'fontSize': '12px',
-                                'maxHeight': '300px',
-                                'overflow': 'auto',
-                                'whiteSpace': 'pre-wrap'
-                            })
-                        ])
-                    ], value="debug-output")
-                ],
-                value=["debug-output"],  # Start with output expanded
-                multiple=True,
-                style={'margin': '10px 0'}
-            )
-        ], style={
-            'backgroundColor': '#fff', 
-            'padding': '20px', 
-            'margin': '20px',
-            'borderRadius': '12px',
-            'border': '1px solid #ddd',
-            'boxShadow': '0 2px 8px rgba(0,0,0,0.1)'
-        }),
-        
         # Dock container
         html.Div([
             dash_dock.DashDock(
@@ -327,18 +334,18 @@ app.layout = dmc.MantineProvider(
                 }
             )
         ], style={
-            'height': '70vh',
-            'width': '95%',
-            'margin': '20px auto',
-            'border': '3px solid #3498db',
-            'borderRadius': '10px',
+            'height': '85vh',
+            'width': '100%',
+            'margin': '0 auto',
+            'border': '1px solid #ddd',
+            'borderRadius': '8px',
             'backgroundColor': 'white'
         }, id='dock-container'),
         
         # Hidden components for clientside functionality
         dcc.Interval(id='inject-fullscreen-btn', interval=300, n_intervals=0, max_intervals=1),
         html.Div(id='fullscreen-trigger', style={'display': 'none'})
-    ], style={'minHeight': '100vh', 'backgroundColor': '#ecf0f1'})
+    ], style={'minHeight': '100vh', 'backgroundColor': '#f5f5f5'})
     ]
 )
 
