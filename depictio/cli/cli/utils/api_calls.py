@@ -28,17 +28,27 @@ def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
         json=depictio_CLI_config,
     )
     if response.status_code == 200:
-        logger.info("Depictio CLI configuration is valid.")
-        rich_print_checked_statement("Depictio CLI configuration is valid.", "success")
+        logger.info("Depictio CLI configuration is model-compliant.")
+        rich_print_checked_statement("Depictio CLI configuration is model-compliant.", "success")
         response_data = response.json()
         logger.debug(f"Response data: {response_data}")
-        return {
-            "success": True,
-            "CLI_config": depictio_CLI_config,
-            "is_admin": response_data.get("is_admin", False),
-            "user_id": response_data.get("user_id"),
-            "email": response_data.get("email"),
-        }
+        if response_data.get("success"):
+            return {
+                "success": True,
+                "CLI_config": depictio_CLI_config,
+                "is_admin": response_data.get("is_admin", False),
+                "user_id": response_data.get("user_id"),
+                "email": response_data.get("email"),
+            }
+        else:
+            logger.error(
+                f"Depictio CLI configuration was not validated by the server: {response.text}"
+            )
+            rich_print_checked_statement(
+                f"Depictio CLI configuration was not validated by the server: {response.text}",
+                "error",
+            )
+            return {"success": False}
     else:
         logger.error(f"Depictio CLI configuration is invalid: {response.text}")
         rich_print_checked_statement(
