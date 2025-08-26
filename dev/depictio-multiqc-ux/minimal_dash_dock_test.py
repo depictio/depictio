@@ -265,9 +265,12 @@ app.layout = dmc.MantineProvider(
                         dmc.AccordionPanel([
                             dmc.Group([
                                 dmc.Button("Inspect MultiQC", id="inspect-highlight-btn", variant="outline", size="xs"),
+                                dmc.Button("Inspect Show/Hide", id="inspect-showhide-btn", variant="outline", size="xs"),
                                 dmc.Button("Test Pattern Input", id="test-sample-input-btn", variant="outline", size="xs"),
                                 dmc.Button("Test + Button", id="simulate-plus-btn", variant="outline", size="xs"),
                                 dmc.Button("Test Apply", id="simulate-apply-btn", variant="outline", size="xs"),
+                                dmc.Button("Test Hide + Button", id="test-hide-plus-btn", variant="outline", size="xs"),
+                                dmc.Button("Test Hide Apply", id="test-hide-apply-btn", variant="outline", size="xs"),
                                 dmc.Button("Test Enter", id="simulate-enter-btn", variant="outline", size="xs"),
                             ], gap="xs", style={'flexWrap': 'wrap'})
                         ])
@@ -368,9 +371,12 @@ clientside_callback(
     Output('investigation-output', 'children'),
     [# Debug buttons - Inputs
      Input('inspect-highlight-btn', 'n_clicks'),
+     Input('inspect-showhide-btn', 'n_clicks'),
      Input('test-sample-input-btn', 'n_clicks'),
      Input('simulate-plus-btn', 'n_clicks'),
      Input('simulate-apply-btn', 'n_clicks'),
+     Input('test-hide-plus-btn', 'n_clicks'),
+     Input('test-hide-apply-btn', 'n_clicks'),
      Input('simulate-enter-btn', 'n_clicks'),
      # Clear buttons - Inputs
      Input('highlight-clear-btn', 'n_clicks'),
