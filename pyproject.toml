@@ -59,6 +59,7 @@ dependencies = [
   "dash-dynamic-grid-layout",
   "playwright>=1.52.0",
   "restrictedpython>=8.0",
+  "dash-dock>=0.0.1",
 ]
 authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
 urls = { Homepage = "http://github.com/depictio/depictio" }
