@@ -1277,12 +1277,50 @@ jobs:
           path: backup-${{ matrix.backup_strategy }}-logs.txt
           retention-days: 7
 
-  e2e-tests:
+  # Build matrix of Cypress specs for parallel execution
+  build-e2e-matrix:
     needs: [docker-build]
+    runs-on: ubuntu-22.04
+    outputs:
+      authenticated-specs: ${{ steps.set-authenticated-specs.outputs.specs }}
+      unauthenticated-specs: ${{ steps.set-unauthenticated-specs.outputs.specs }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "16"
+
+      - name: Get authenticated test specs
+        id: set-authenticated-specs
+        run: |
+          cd depictio/tests/e2e-tests
+          # Get all specs excluding unauthenticated directory
+          SPECS=$(node scripts/get-cypress-specs.js | jq -c '[.[] | select(. | startswith("unauthenticated/") | not)]')
+          echo "specs=$SPECS" >> $GITHUB_OUTPUT
+          echo "Found authenticated specs: $SPECS"
+
+      - name: Get unauthenticated test specs
+        id: set-unauthenticated-specs
+        run: |
+          cd depictio/tests/e2e-tests
+          # Get only unauthenticated specs
+          SPECS=$(node scripts/get-cypress-specs.js | jq -c '[.[] | select(. | startswith("unauthenticated/"))]')
+          echo "specs=$SPECS" >> $GITHUB_OUTPUT
+          echo "Found unauthenticated specs: $SPECS"
+
+  e2e-tests:
+    needs: [docker-build, build-e2e-matrix]
     runs-on: ubuntu-22.04
     permissions:
       contents: read
       packages: read
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        spec: ${{ fromJson(needs.build-e2e-matrix.outputs.authenticated-specs) }}
     steps:
       - uses: actions/checkout@v4
 
@@ -1328,24 +1366,24 @@ jobs:
             npm ci
           fi
 
-      - name: Run Cypress tests
+      - name: Run Cypress test (${{ matrix.spec }})
         run: |
           cd depictio/tests/e2e-tests
           export CYPRESS_UNAUTHENTICATED_MODE=false
           # Set Chrome flags for better CI rendering and stability
           export CYPRESS_BROWSER_ARGS="--disable-gpu --no-sandbox --disable-dev-shm-usage --disable-extensions --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
-          # Run Chrome in headless mode for CI with improved stability
+          # Run individual spec in parallel
           npx cypress run \
             --browser chrome \
             --headless \
             --config screenshotsFolder=cypress/screenshots,videosFolder=cypress/videos,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false \
-            --spec "cypress/e2e/!(unauthenticated)/**/*.cy.js"
+            --spec "cypress/e2e/${{ matrix.spec }}"
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: cypress-screenshots
+          name: cypress-screenshots-${{ matrix.spec }}
           path: depictio/tests/e2e-tests/cypress/screenshots
           retention-days: 30
 
@@ -1353,16 +1391,21 @@ jobs:
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: cypress-videos
+          name: cypress-videos-${{ matrix.spec }}
           path: depictio/tests/e2e-tests/cypress/videos
           retention-days: 7
 
   e2e-tests-unauthenticated:
-    needs: [docker-build]
+    needs: [docker-build, build-e2e-matrix]
     runs-on: ubuntu-22.04
     permissions:
       contents: read
       packages: read
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        spec: ${{ fromJson(needs.build-e2e-matrix.outputs.unauthenticated-specs) }}
     steps:
       - uses: actions/checkout@v4
 
@@ -1444,24 +1487,25 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
 
-      - name: Run Cypress unauthenticated tests
+      - name: Run Cypress unauthenticated test (${{ matrix.spec }})
         run: |
           cd depictio/tests/e2e-tests
           # Set environment variable for cypress to know it's unauthenticated mode
           export CYPRESS_UNAUTHENTICATED_MODE=true
           # Set Chrome flags for better CI rendering and stability
           export CYPRESS_BROWSER_ARGS="--disable-gpu --no-sandbox --disable-dev-shm-usage --disable-extensions --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
+          # Run individual unauthenticated spec in parallel
           npx cypress run \
             --browser chrome \
             --headless \
             --config screenshotsFolder=cypress/screenshots-unauthenticated,videosFolder=cypress/videos-unauthenticated,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false \
-            --spec "cypress/e2e/unauthenticated/**/*.cy.js"
+            --spec "cypress/e2e/${{ matrix.spec }}"
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: cypress-screenshots-unauthenticated
+          name: cypress-screenshots-unauthenticated-${{ matrix.spec }}
           path: depictio/tests/e2e-tests/cypress/screenshots-unauthenticated
           retention-days: 30
 
@@ -1469,6 +1513,6 @@ jobs:
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: cypress-videos-unauthenticated
+          name: cypress-videos-unauthenticated-${{ matrix.spec }}
           path: depictio/tests/e2e-tests/cypress/videos-unauthenticated
           retention-days: 7
