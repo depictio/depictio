@@ -146,8 +146,8 @@ jobs:
           cd depictio/tests/e2e-tests
           # Install cypress-parallel
           npm install --save-dev cypress-parallel
-          # Add a script to package.json for cypress-parallel to use, override baseUrl to prevent localhost connection
-          npm pkg set scripts.cy:run="cypress run --browser chrome --headless --config-file false --config video=false,screenshotOnRunFailure=false"
+          # Add a script to package.json for cypress-parallel to use with validation-specific config
+          npm pkg set scripts.cy:run="cypress run --browser chrome --headless --config-file cypress.validation.config.js"
           # Run simple validation tests in parallel
           npx cypress-parallel \
             -s cy:run \
