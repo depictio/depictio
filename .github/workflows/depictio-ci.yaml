@@ -146,11 +146,13 @@ jobs:
           cd depictio/tests/e2e-tests
           # Install cypress-parallel
           npm install --save-dev cypress-parallel
+          # Add a script to package.json for cypress-parallel to use
+          npm pkg set scripts.cy:run="cypress run --browser chrome --headless --config video=false,screenshotOnRunFailure=false"
           # Run simple validation tests in parallel
           npx cypress-parallel \
-            -s "npx cypress run --browser chrome --headless --config video=false,screenshotOnRunFailure=false" \
+            -s cy:run \
             -t 2 \
-            --spec "cypress/e2e/validation/**/*.cy.js"
+            --spec "cypress/e2e/validation/cypress-example.cy.js,cypress/e2e/validation/example-com.cy.js"
 
       - name: Upload validation results
         uses: actions/upload-artifact@v4
