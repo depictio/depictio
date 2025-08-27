@@ -595,3 +595,93 @@ Cypress.Commands.add('logoutRobust', (options = {}) => {
 
   cy.log('🎉 Logout process completed successfully');
 });
+
+/**
+ * Clean up test dashboards via API to prevent test pollution
+ * Uses the same token mechanism as loginWithTokenAsTestUser
+ * @param {string} userType - Type of user for authentication (default: 'adminUser')
+ * @param {string} titlePattern - Pattern to match dashboard titles (default: 'Simple Test Dashboard')
+ */
+Cypress.Commands.add('cleanupTestDashboards', (userType = 'adminUser', titlePattern = 'Simple Test Dashboard') => {
+  cy.log(`🧹 Starting cleanup of test dashboards matching: "${titlePattern}"`);
+
+  // Login to get token (same approach as loginWithTokenAsTestUser)
+  cy.fixture('test-credentials.json').then((credentials) => {
+    const user = credentials[userType];
+
+    if (!user) {
+      cy.log(`❌ User type '${userType}' not found in credentials. Skipping cleanup.`);
+      return;
+    }
+
+    cy.log(`🔑 Authenticating as ${user.email} for cleanup`);
+
+    // Get token via API login
+    cy.request({
+      method: 'POST',
+      url: 'http://localhost:8058/depictio/api/v1/auth/login',
+      form: true,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: {
+        username: user.email,
+        password: user.password,
+        grant_type: 'password'
+      },
+      failOnStatusCode: false
+    }).then((loginResponse) => {
+      if (loginResponse.status !== 200) {
+        cy.log(`⚠️ Authentication failed for cleanup. Status: ${loginResponse.status}`);
+        cy.log(`⚠️ Skipping dashboard cleanup due to auth failure`);
+        return;
+      }
+
+      const token = loginResponse.body.access_token;
+      cy.log(`✅ Authentication successful for cleanup`);
+
+      // Get all dashboards
+      cy.request({
+        method: 'GET',
+        url: 'http://localhost:8058/depictio/api/v1/dashboards/list_all',
+        headers: { 'Authorization': `Bearer ${token}` },
+        failOnStatusCode: false
+      }).then((dashboardsResponse) => {
+        if (dashboardsResponse.status !== 200) {
+          cy.log(`⚠️ Failed to fetch dashboards for cleanup. Status: ${dashboardsResponse.status}`);
+          return;
+        }
+
+        // Filter dashboards matching the pattern
+        const testDashboards = dashboardsResponse.body.filter(dashboard =>
+          dashboard.title && dashboard.title.includes(titlePattern)
+        );
+
+        cy.log(`🔍 Found ${testDashboards.length} dashboards matching pattern "${titlePattern}"`);
+
+        if (testDashboards.length === 0) {
+          cy.log(`✅ No test dashboards found to clean up`);
+          return;
+        }
+
+        // Delete each matching dashboard
+        testDashboards.forEach((dashboard, index) => {
+          cy.log(`🗑️ Deleting dashboard ${index + 1}/${testDashboards.length}: "${dashboard.title}"`);
+
+          cy.request({
+            method: 'DELETE',
+            url: `http://localhost:8058/depictio/api/v1/dashboards/delete/${dashboard.dashboard_id}`,
+            headers: { 'Authorization': `Bearer ${token}` },
+            failOnStatusCode: false // Don't fail cleanup if individual delete fails
+          }).then((deleteResponse) => {
+            if (deleteResponse.status === 200) {
+              cy.log(`✅ Successfully deleted: "${dashboard.title}"`);
+            } else {
+              cy.log(`⚠️ Failed to delete "${dashboard.title}" (Status: ${deleteResponse.status})`);
+            }
+          });
+        });
+
+        cy.log(`🧹 Cleanup completed for ${testDashboards.length} test dashboards`);
+      });
+    });
+  });
+});
