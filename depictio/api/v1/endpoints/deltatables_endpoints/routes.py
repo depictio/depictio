@@ -293,6 +293,58 @@ async def get_deltatable(
     # return convert_objectid_to_str(deltatables)
 
 
+@deltatables_endpoint_router.post("/batch/exists")
+async def batch_check_deltatables_exist(
+    data_collection_ids: list[PyObjectId],
+    current_user: str = Depends(get_user_or_anonymous),
+):
+    """
+    Check existence of multiple deltatables in a single call.
+
+    This endpoint eliminates the N+1 query pattern in design_draggable()
+    by allowing batch checking of deltatable existence.
+
+    Args:
+        data_collection_ids: List of data collection IDs to check
+        current_user: Current authenticated user
+
+    Returns:
+        Dict mapping data collection ID to existence status and location
+    """
+    logger.info(
+        f"Batch checking deltatable existence for {len(data_collection_ids)} data collections"
+    )
+
+    # Single query to find all deltatables
+    query = {"data_collection_id": {"$in": data_collection_ids}}
+    deltatable_cursor = deltatables_collection.find(
+        query, {"data_collection_id": 1, "delta_table_location": 1}
+    )
+
+    # Create mapping of found deltatables
+    found_deltatables = {}
+    for deltatable in deltatable_cursor:
+        dc_id = str(deltatable["data_collection_id"])
+        found_deltatables[dc_id] = deltatable.get("delta_table_location")
+
+    # Build results for all requested IDs
+    results = {}
+    for dc_id in data_collection_ids:
+        dc_id_str = str(dc_id)
+        if dc_id_str in found_deltatables:
+            results[dc_id_str] = {
+                "exists": True,
+                "delta_table_location": found_deltatables[dc_id_str],
+            }
+        else:
+            results[dc_id_str] = {"exists": False, "delta_table_location": None}
+
+    logger.info(
+        f"Batch check complete: {sum(1 for r in results.values() if r['exists'])} of {len(data_collection_ids)} deltatables exist"
+    )
+    return results
+
+
 @deltatables_endpoint_router.get("/specs/{data_collection_id}")
 async def specs(
     data_collection_id: PyObjectId,

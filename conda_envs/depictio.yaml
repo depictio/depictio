@@ -9,13 +9,13 @@ dependencies:
   - bleach
   - boto3==1.36.21
   - bson==0.5.10
+  - celery==5.5.3
   - colorlog
   - curl
   - dash-bootstrap-components==1.7.1
   - dash-extensions==1.0.1
   - dash-iconify==0.1.2
   - dash-mantine-components==2.1.0
-  - dash==3.1.1
   - deltalake==0.24.0
   - devtools
   - fastapi==0.115.8
@@ -43,6 +43,7 @@ dependencies:
   - python-jose==3.3.0
   - python-multipart
   - pyyaml
+  - redis-py==6.4.0
   - restrictedpython>=8.0
   - rich
   - tomli
@@ -50,8 +51,10 @@ dependencies:
   - typeguard
   - umap-learn
   - uvicorn==0.34.0
+  - werkzeug
   - pip:
     # - dash-draggable==0.1.2
+    - dash[async,celery,diskcache]==3.2.0
     - dash-cytoscape==1.0.2
     - dash-ag-grid==31.3.1
     - dash-ace==0.2.1

@@ -1,0 +1,103 @@
+# MongoDB Replica Set Initialization Job
+# Runs as a separate job after StatefulSet is ready
+{{- if gt (.Values.mongo.replicas | default 1 | int) 1 }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-mongo-init
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mongo-init
+    release: {{ .Release.Name }}
+spec:
+  template:
+    metadata:
+      labels:
+        app: mongo-init
+        release: {{ .Release.Name }}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mongo-init
+          image: "{{ .Values.mongo.image.repository }}:{{ .Values.mongo.image.tag }}"
+          command:
+            - bash
+            - -c
+            - |
+              echo "MongoDB replica set initialization starting..."
+
+              # Wait for all MongoDB pods to be ready
+              echo "Waiting for MongoDB pods to be ready..."
+              for i in $(seq 0 $(({{ .Values.mongo.replicas }}-1))); do
+                MEMBER_HOST="{{ .Release.Name }}-mongo-$i.{{ .Release.Name }}-mongo-headless.{{ .Release.Namespace }}.svc.cluster.local"
+                echo "Waiting for member $i: $MEMBER_HOST"
+
+                timeout 600 bash -c "
+                  until mongosh --host $MEMBER_HOST --port 27018 --eval 'db.adminCommand(\"ping\")' >/dev/null 2>&1; do
+                    echo 'Waiting for member $i...'
+                    sleep 10
+                  done
+                "
+
+                if [ $? -ne 0 ]; then
+                  echo "ERROR: Member $i failed to become ready"
+                  exit 1
+                fi
+                echo "Member $i is ready"
+              done
+
+              # Check if replica set is already initialized
+              PRIMARY_HOST="{{ .Release.Name }}-mongo-0.{{ .Release.Name }}-mongo-headless.{{ .Release.Namespace }}.svc.cluster.local"
+              echo "Checking replica set status..."
+
+              if ! timeout 30 mongosh --host $PRIMARY_HOST --port 27018 --eval "rs.status()" >/dev/null 2>&1; then
+                echo "Replica set not initialized. Initializing..."
+
+                # Initialize replica set
+                mongosh --host $PRIMARY_HOST --port 27018 --eval "
+                  rs.initiate({
+                    _id: 'rs0',
+                    members: [
+                      {{- range $i := until (.Values.mongo.replicas | int) }}
+                      {_id: {{ $i }}, host: '{{ $.Release.Name }}-mongo-{{ $i }}.{{ $.Release.Name }}-mongo-headless.{{ $.Release.Namespace }}.svc.cluster.local:27018'}{{ if ne $i (sub ($.Values.mongo.replicas | int) 1) }},{{ end }}
+                      {{- end }}
+                    ]
+                  })
+                "
+
+                if [ $? -eq 0 ]; then
+                  echo "Replica set initialized successfully"
+
+                  # Wait for primary election
+                  echo "Waiting for primary election..."
+                  timeout 300 bash -c "
+                    until mongosh --host $PRIMARY_HOST --port 27018 --eval 'rs.isMaster().ismaster' --quiet | grep -q true; do
+                      echo 'Waiting for primary...'
+                      sleep 10
+                    done
+                  "
+
+                  if [ $? -eq 0 ]; then
+                    echo "Primary elected successfully"
+                  else
+                    echo "WARNING: Primary election timeout"
+                  fi
+                else
+                  echo "ERROR: Failed to initialize replica set"
+                  exit 1
+                fi
+              else
+                echo "Replica set already initialized"
+              fi
+
+              echo "MongoDB replica set initialization completed"
+          securityContext:
+            {{- toYaml .Values.mongo.securityContext | nindent 12 }}
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+{{- end }}

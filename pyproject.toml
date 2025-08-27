@@ -1,6 +1,6 @@
 [project]
 name = "depictio"
-version = "0.3.2"
+version = "0.4.0-b2"
 description = "Depictio API & Frontend"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -10,6 +10,7 @@ dependencies = [
   "bleach",
   "beanie>=2.0.0",
   "boto3==1.36.21",
+  "celery==5.5.3",
   # "bson==0.5.10",
   "cryptography",
   "colorlog",
@@ -20,9 +21,10 @@ dependencies = [
   "dash-extensions==1.0.1",
   "dash-iconify==0.1.2",
   "dash-mantine-components==2.1.0",
-  "dash==3.1.1",
+  "dash[async]==3.2.0",
   "deltalake==0.24.0",
   "devtools",
+  "diskcache",
   "fastapi==0.115.8",
   "fastparquet",
   "httpx==0.28.1",
@@ -47,6 +49,7 @@ dependencies = [
   "python-jose==3.3.0",
   "python-multipart",
   "pyyaml",
+  "redis==5.2.1",
   "uvicorn==0.34.0",
   # "dash-draggable==0.1.2",
   "dash-ag-grid==31.3.1",
@@ -56,6 +59,7 @@ dependencies = [
   "dash-dynamic-grid-layout",
   "playwright>=1.52.0",
   "restrictedpython>=8.0",
+  "dash-dock>=0.0.1",
 ]
 authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
 urls = { Homepage = "http://github.com/depictio/depictio" }

@@ -7,6 +7,9 @@ def main():
     """
     Entry point for running the Depictio API server.
     """
+    print(
+        f"Starting FastAPI server on {settings.fastapi.host}:{settings.fastapi.external_port} with {settings.fastapi.workers} workers"
+    )
     uvicorn.run(
         "depictio.api.main:app",
         host=settings.fastapi.host,

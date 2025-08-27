@@ -2,7 +2,7 @@ import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
 
-from dash import Input, Output, html
+from dash import Input, html
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.layouts.header import _is_different_from_default
 from depictio.dash.layouts.stepper import create_stepper_output_edit
@@ -122,9 +122,9 @@ def register_reset_button_callbacks(app):
             }
         }
         """,
-        Output("reset-button-dummy-output", "children"),
+        # Output("button-style-tracker", "data"),
         [
-            Input("interactive-values-store", "data"),
+            Input("interactive-values-store", "data", allow_optional=True),
             Input("url", "pathname"),  # Also trigger when page changes
         ],
         prevent_initial_call=True,

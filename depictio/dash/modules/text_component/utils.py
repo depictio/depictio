@@ -362,3 +362,25 @@ def build_text(**kwargs):
             text_component,
             id={"index": store_index},  # Preserve the expected id structure
         )
+
+
+# Async wrapper for background callbacks (following card component pattern)
+async def build_text_async(**kwargs):
+    """
+    Async wrapper for build_text function.
+    Used in background callbacks where async execution is needed.
+    """
+    from depictio.api.v1.configs.logging_init import logger
+
+    logger.info(
+        f"🔄 ASYNC TEXT: Building text component asynchronously - Index: {kwargs.get('index', 'UNKNOWN')}"
+    )
+
+    # Call the synchronous build_text function
+    # In the future, this could run in a thread pool if needed for true parallelism
+    result = build_text(**kwargs)
+
+    logger.info(
+        f"✅ ASYNC TEXT: Text component built successfully - Index: {kwargs.get('index', 'UNKNOWN')}"
+    )
+    return result

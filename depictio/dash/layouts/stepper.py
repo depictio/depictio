@@ -25,6 +25,23 @@ max_step = 3
 active = 0
 
 
+def _get_ag_grid_theme_class(theme: str) -> str:
+    """Get the appropriate AG Grid theme class based on the theme.
+
+    Args:
+        theme: Theme name ("light", "dark", or other)
+
+    Returns:
+        AG Grid CSS theme class name
+    """
+    # Handle case where theme is empty dict, None, or other falsy value
+    if not theme or theme == {} or theme == "{}":
+        theme = "light"
+
+    logger.debug(f"STEPPER - Using theme: {theme} for AG Grid")
+    return "ag-theme-alpine-dark" if theme == "dark" else "ag-theme-alpine"
+
+
 def register_callbacks_stepper(app):
     # Register callbacks from modular parts
     register_callbacks_stepper_part_one(app)
@@ -320,10 +337,13 @@ def register_callbacks_stepper(app):
             Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
             Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
         ],
-        State("local-store", "data"),
+        [
+            State("local-store", "data"),
+            State("theme-store", "data"),
+        ],
         prevent_initial_call=True,
     )
-    def update_stepper_data_preview(workflow_id, data_collection_id, local_data):
+    def update_stepper_data_preview(workflow_id, data_collection_id, local_data, theme):
         """Update data preview in stepper when workflow/data collection changes."""
         if not workflow_id or not data_collection_id or not local_data:
             return html.Div()
@@ -403,7 +423,7 @@ def register_callbacks_stepper(app):
                     "suppressMenuHide": True,
                 },
                 style={"height": "350px", "width": "100%"},
-                className="ag-theme-alpine",
+                className=_get_ag_grid_theme_class(theme),
             )
 
             # Create summary and controls
@@ -583,6 +603,7 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
         withCloseButton=True,
         closeOnClickOutside=True,
         closeOnEscape=True,
+        trapFocus=False,  # Fix DMC Switch clickability in modals
         styles={
             "title": {
                 "fontSize": "1.8rem",
@@ -848,6 +869,7 @@ def create_stepper_output(n, active):
                 withCloseButton=True,
                 closeOnClickOutside=True,
                 closeOnEscape=True,
+                trapFocus=False,  # Fix DMC Switch clickability in modals
                 fullScreen=True,
                 styles={
                     "title": {
@@ -939,8 +961,4 @@ def update_modal_size_regular(opened):
 )
 def update_ag_grid_theme(theme_data):
     """Update AG Grid theme class based on current theme."""
-    theme = theme_data or "light"
-    if theme == "dark":
-        return "ag-theme-alpine-dark"
-    else:
-        return "ag-theme-alpine"
+    return _get_ag_grid_theme_class(theme_data)

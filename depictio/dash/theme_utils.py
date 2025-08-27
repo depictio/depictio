@@ -48,6 +48,17 @@ def register_theme_callbacks(app):
     # Add Mantine figure templates for Plotly when theme system initializes
     dmc.add_figure_templates()  # type: ignore[unresolved-attribute]
 
+    # Disable theme switch on dashboard pages only
+    @app.callback(
+        Output("theme-switch", "disabled"),
+        Input("url", "pathname"),
+        prevent_initial_call=False,
+    )
+    def disable_theme_switch_on_dashboard(pathname):
+        """Disable theme switch only when on dashboard pages (/dashboard/{dashboard_id})"""
+        # Disable if on a dashboard page, enable for all other pages
+        return pathname and pathname.startswith("/dashboard/")
+
     # Enhanced automatic theme detection with system preference monitoring
     app.clientside_callback(
         """

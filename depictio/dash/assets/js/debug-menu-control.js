@@ -138,7 +138,7 @@
                     const addedNodes = Array.from(mutation.addedNodes);
                     const hasDebugMenu = addedNodes.some(node =>
                         node.nodeType === 1 &&
-                        (node.className && node.className.includes('dash-debug-menu') ||
+                        (node.className && typeof node.className === 'string' && node.className.includes('dash-debug-menu') ||
                          node.querySelector && node.querySelector('[class*="dash-debug-menu"]'))
                     );
 
