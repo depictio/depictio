@@ -113,6 +113,53 @@ jobs:
           source venv/bin/activate
           python -m pytest -xvs -n auto
 
+  # Quick validation of cypress-parallel setup
+  cypress-parallel-validation:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+
+      - name: Install Chrome
+        run: |
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
+      - name: Install Cypress dependencies
+        run: |
+          cd depictio/tests/e2e-tests
+          if [ ! -f "package.json" ]; then
+            npm init -y
+            npm install cypress --save-dev
+          else
+            npm ci
+          fi
+
+      - name: Test cypress-parallel with simple validation tests
+        run: |
+          cd depictio/tests/e2e-tests
+          # Install cypress-parallel
+          npm install --save-dev cypress-parallel
+          # Run simple validation tests in parallel
+          npx cypress-parallel \
+            -s "npx cypress run --browser chrome --headless --config video=false,screenshotOnRunFailure=false" \
+            -t 2 \
+            --spec "cypress/e2e/validation/**/*.cy.js"
+
+      - name: Upload validation results
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: cypress-parallel-validation-failure
+          path: depictio/tests/e2e-tests/cypress/screenshots
+          retention-days: 7
+
   docker-build:
     needs: quality
     runs-on: ubuntu-22.04
