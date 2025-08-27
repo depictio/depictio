@@ -1496,17 +1496,26 @@ jobs:
 
           echo "📋 Found $TEST_FILE_COUNT test files in cypress/e2e/${{ matrix.directory }}"
 
-          # List test files for debugging
+          # List test files for debugging and create spec list
           echo "📋 Test files:"
           find "cypress/e2e/${{ matrix.directory }}" -name "*.cy.js" -type f
 
-          # Install cypress-parallel and configure npm scripts with explicit spec pattern
-          npm install --save-dev cypress-parallel
-          npm pkg set scripts.cy:run:auth="cypress run --browser chrome --headless --config screenshotsFolder=cypress/screenshots-${{ matrix.directory }},videosFolder=cypress/videos-${{ matrix.directory }},trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false,specPattern='cypress/e2e/${{ matrix.directory }}/**/*.cy.js'"
+          # Create a comma-separated list of test files (cypress-parallel format)
+          SPEC_LIST=$(find "cypress/e2e/${{ matrix.directory }}" -name "*.cy.js" -type f | tr '\n' ',' | sed 's/,$//')
+          echo "📋 Spec list for cypress-parallel: $SPEC_LIST"
 
-          # Run tests in parallel within this directory using cypress-parallel
+          if [ -z "$SPEC_LIST" ]; then
+            echo "⚠️ No valid spec files found after filtering, skipping"
+            exit 0
+          fi
+
+          # Install cypress-parallel and configure npm scripts
+          npm install --save-dev cypress-parallel
+          npm pkg set scripts.cy:run:auth="cypress run --browser chrome --headless --config screenshotsFolder=cypress/screenshots-${{ matrix.directory }},videosFolder=cypress/videos-${{ matrix.directory }},trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false"
+
+          # Run tests in parallel using explicit spec list (not directory)
           echo "🚀 Running tests in cypress/e2e/${{ matrix.directory }} with cypress-parallel (4 threads)"
-          npx cypress-parallel -s cy:run:auth -t 4 -d "cypress/e2e/${{ matrix.directory }}"
+          npx cypress-parallel -s cy:run:auth -t 4 --spec "$SPEC_LIST"
 
       - name: Upload screenshots - ${{ matrix.directory }}
         uses: actions/upload-artifact@v4
@@ -1639,17 +1648,26 @@ jobs:
 
           echo "📋 Found $TEST_FILE_COUNT test files in cypress/e2e/${{ matrix.directory }}"
 
-          # List test files for debugging
+          # List test files for debugging and create spec list
           echo "📋 Test files:"
           find "cypress/e2e/${{ matrix.directory }}" -name "*.cy.js" -type f
 
-          # Install cypress-parallel and configure npm scripts with explicit spec pattern
-          npm install --save-dev cypress-parallel
-          npm pkg set scripts.cy:run:unauth="cypress run --browser chrome --headless --config screenshotsFolder=cypress/screenshots-${{ matrix.directory }},videosFolder=cypress/videos-${{ matrix.directory }},trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false,specPattern='cypress/e2e/${{ matrix.directory }}/**/*.cy.js'"
+          # Create a comma-separated list of test files (cypress-parallel format)
+          SPEC_LIST=$(find "cypress/e2e/${{ matrix.directory }}" -name "*.cy.js" -type f | tr '\n' ',' | sed 's/,$//')
+          echo "📋 Spec list for cypress-parallel: $SPEC_LIST"
 
-          # Run tests in parallel within this directory using cypress-parallel
+          if [ -z "$SPEC_LIST" ]; then
+            echo "⚠️ No valid spec files found after filtering, skipping"
+            exit 0
+          fi
+
+          # Install cypress-parallel and configure npm scripts
+          npm install --save-dev cypress-parallel
+          npm pkg set scripts.cy:run:unauth="cypress run --browser chrome --headless --config screenshotsFolder=cypress/screenshots-${{ matrix.directory }},videosFolder=cypress/videos-${{ matrix.directory }},trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false"
+
+          # Run tests in parallel using explicit spec list (not directory)
           echo "🚀 Running tests in cypress/e2e/${{ matrix.directory }} with cypress-parallel (4 threads)"
-          npx cypress-parallel -s cy:run:unauth -t 4 -d "cypress/e2e/${{ matrix.directory }}"
+          npx cypress-parallel -s cy:run:unauth -t 4 --spec "$SPEC_LIST"
 
       - name: Upload screenshots - ${{ matrix.directory }}
         uses: actions/upload-artifact@v4
