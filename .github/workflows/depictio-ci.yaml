@@ -148,11 +148,11 @@ jobs:
           npm install --save-dev cypress-parallel
           # Add a script to package.json for cypress-parallel to use with validation-specific config
           npm pkg set scripts.cy:run="cypress run --browser chrome --headless --config-file cypress.validation.config.js"
-          # Run simple validation tests in parallel
+          # Run simple validation tests in parallel using directory
           npx cypress-parallel \
             -s cy:run \
             -t 2 \
-            --spec "cypress/e2e/validation/cypress-example.cy.js,cypress/e2e/validation/example-com.cy.js"
+            -d "cypress/e2e/validation"
 
       - name: Upload validation results
         uses: actions/upload-artifact@v4
