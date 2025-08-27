@@ -1309,7 +1309,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: "16"
+          node-version: "20"
 
       - name: Install Chrome
         run: |
@@ -1336,11 +1336,11 @@ jobs:
           export CYPRESS_BROWSER_ARGS="--disable-gpu --no-sandbox --disable-dev-shm-usage --disable-extensions --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
           # Install cypress-parallel for running tests in parallel
           npm install --save-dev cypress-parallel
-          # Run authenticated tests in parallel, specifying all directories except unauthenticated
+          # Run authenticated tests in parallel, running each directory separately and combining
           npx cypress-parallel \
             -s "npx cypress run --browser chrome --headless --config screenshotsFolder=cypress/screenshots,videosFolder=cypress/videos,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false" \
             -t 4 \
-            -d "cypress/e2e/{auth,dashboard_creation,dashboards_management,pages,projects_management,ui}"
+            --spec "cypress/e2e/auth/**/*.cy.js,cypress/e2e/dashboard_creation/**/*.cy.js,cypress/e2e/dashboards_management/**/*.cy.js,cypress/e2e/pages/**/*.cy.js,cypress/e2e/projects_management/**/*.cy.js,cypress/e2e/ui/**/*.cy.js"
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
@@ -1426,7 +1426,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: "16"
+          node-version: "20"
 
       - name: Install Cypress dependencies
         run: |
@@ -1458,7 +1458,7 @@ jobs:
           npx cypress-parallel \
             -s "npx cypress run --browser chrome --headless --config screenshotsFolder=cypress/screenshots-unauthenticated,videosFolder=cypress/videos-unauthenticated,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false" \
             -t 4 \
-            -d "cypress/e2e/unauthenticated"
+            --spec "cypress/e2e/unauthenticated/**/*.cy.js"
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
