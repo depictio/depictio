@@ -20,10 +20,15 @@ def register_main_callback(app):
         Output("header-content", "children"),
         Output("url", "pathname"),
         Output("local-store", "data", allow_duplicate=True),
-        [Input("url", "pathname"), Input("local-store", "data"), State("theme-store", "data")],
+        [
+            Input("url", "pathname"),
+            Input("local-store", "data"),
+            State("theme-store", "data"),
+            State("project-cache-store", "data"),
+        ],
         prevent_initial_call=True,
     )
-    def display_page(pathname, local_data, theme_store):
+    def display_page(pathname, local_data, theme_store, cached_project_data):
         """
         Main callback for handling page routing and authentication.
 
@@ -37,8 +42,24 @@ def register_main_callback(app):
         trigger = ctx.triggered_id
         logger.debug(f"Trigger: {trigger}")
 
+        # PERFORMANCE DEBUG: Log data sizes to identify serialization bottlenecks
+        import sys
+
+        local_data_size = sys.getsizeof(str(local_data)) if local_data else 0
+        theme_store_size = sys.getsizeof(str(theme_store)) if theme_store else 0
+        cached_project_size = sys.getsizeof(str(cached_project_data)) if cached_project_data else 0
+
+        logger.info(
+            f"🔍 CALLBACK DATA SIZES: local_data={local_data_size:,}B, theme_store={theme_store_size:,}B, cached_project={cached_project_size:,}B"
+        )
+
+        if cached_project_size > 100000:  # > 100KB
+            logger.warning(
+                f"⚠️ LARGE PROJECT CACHE: {cached_project_size:,} bytes - potential performance bottleneck!"
+            )
+
         # Process authentication and return appropriate content
-        return process_authentication(pathname, local_data, theme_store)
+        return process_authentication(pathname, local_data, theme_store, cached_project_data)
 
     @app.callback(
         Output("app-shell", "header"),
@@ -88,9 +109,9 @@ def register_all_callbacks(app):
         register_progressive_loading_callbacks,
     )
     from depictio.dash.layouts.edit import register_reset_button_callbacks
-    from depictio.dash.theme_utils import register_theme_bridge_callback
+    # from depictio.dash.theme_utils import register_theme_bridge_callback
 
-    register_theme_bridge_callback(app)
+    # register_theme_bridge_callback(app)
     register_progressive_loading_callbacks(app)
     register_reset_button_callbacks(app)
 

@@ -123,18 +123,18 @@ def apply_ag_grid_sorting(df: pl.DataFrame, sort_model: list) -> pl.DataFrame:
 
 
 def register_callbacks_table_component(app):
-    @app.callback(
-        Output({"type": "table-aggrid", "index": MATCH}, "className"),
-        Input("theme-store", "data"),
-        prevent_initial_call=False,
-    )
-    def update_table_ag_grid_theme(theme_data):
-        """Update AG Grid theme class based on current theme."""
-        theme = theme_data or "light"
-        if theme == "dark":
-            return "ag-theme-alpine-dark"
-        else:
-            return "ag-theme-alpine"
+    # @app.callback(
+    #     Output({"type": "table-aggrid", "index": MATCH}, "className"),
+    #     Input("theme-store", "data"),
+    #     prevent_initial_call=False,
+    # )
+    # def update_table_ag_grid_theme(theme_data):
+    #     """Update AG Grid theme class based on current theme."""
+    #     theme = theme_data or "light"
+    #     if theme == "dark":
+    #         return "ag-theme-alpine-dark"
+    #     else:
+    #         return "ag-theme-alpine"
 
     @app.callback(
         Output({"type": "table-aggrid", "index": MATCH}, "getRowsResponse"),
@@ -543,7 +543,7 @@ def register_callbacks_table_component(app):
                 pandas_df = pandas_df.rename(columns=column_mapping)
                 logger.debug(f"🔍 DEBUG: Transformed columns: {list(pandas_df.columns)}")
 
-            # Add ID field for SpinnerCellRenderer (following documentation example)
+            # Add ID field for row indexing
             pandas_df.reset_index(drop=True, inplace=True)
             pandas_df["ID"] = range(start_row, start_row + len(pandas_df))
             row_data = pandas_df.to_dict("records")
@@ -614,10 +614,11 @@ def register_callbacks_table_component(app):
             Input({"type": "btn-table", "index": MATCH}, "n_clicks"),
             Input({"type": "btn-table", "index": MATCH}, "id"),
             State("local-store", "data"),
+            State("theme-store", "data"),
         ],
         prevent_initial_call=True,
     )
-    def design_table_component(workflow_id, data_collection_id, n_clicks, id, data):
+    def design_table_component(workflow_id, data_collection_id, n_clicks, id, data, theme):
         """
         Callback to update card body based on the selected column and aggregation
         """
@@ -675,7 +676,9 @@ def register_callbacks_table_component(app):
             "access_token": TOKEN,
             "stepper": True,
             "build_frame": True,  # Use frame for editing with loading
+            "theme": theme,
         }
+        logger.info(f"🔄 Building table with kwargs: {table_kwargs}")
         new_table = build_table(**table_kwargs)
         return new_table
 

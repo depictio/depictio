@@ -3,7 +3,7 @@ import uuid
 import dash
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import (
-    update_interactive_component,
+    update_interactive_component_sync,
 )
 from depictio.dash.utils import get_columns_from_data_collection
 
@@ -336,7 +336,7 @@ def refresh_children_based_on_click_data(
                 metadata["filter_applied"] = True
         logger.info(f"TMP Stored metadata: {stored_metadata}")
 
-        new_children = update_interactive_component(
+        new_children = update_interactive_component_sync(
             stored_metadata,
             updated_interactive_components,
             draggable_children,
@@ -405,7 +405,7 @@ def refresh_children_based_on_selected_data(
             if metadata["index"] == ctx_triggered_prop_id_index:
                 metadata["filter_applied"] = True
 
-        new_children = update_interactive_component(
+        new_children = update_interactive_component_sync(
             stored_metadata,
             updated_interactive_components,
             draggable_children,

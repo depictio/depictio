@@ -1,18 +1,6 @@
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ .Release.Name }}-mongo-pvc
-  namespace: {{ .Release.Namespace }}
-  labels:
-    app: mongo
-spec:
-  storageClassName: {{ .Values.storageClass }}
-  accessModes:
-    - {{ .Values.persistence.mongo.accessMode }}
-  resources:
-    requests:
-      storage: {{ .Values.persistence.mongo.size }}
----
+# MongoDB PVC is now handled by StatefulSet volumeClaimTemplates
+# No manual PVC needed for StatefulSet
+
 {{- if .Values.minio.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim

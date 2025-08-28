@@ -25,7 +25,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
 fi
 
 # Update helm chart version with date and quotes
-# sed -i '' 's/^version: .*/version: "'"$(date +%Y%m%d)"'.1"/' helm-charts/depictio/Chart.yaml
+sed -i '' 's/^version: .*/version: "'"$(date +%Y%m%d)"'.1"/' helm-charts/depictio/Chart.yaml
 
 # Add and amend commit if bump2version created one
 if git log -1 --pretty=%B | grep -q "Bump version"; then

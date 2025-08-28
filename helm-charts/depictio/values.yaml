@@ -52,6 +52,7 @@ mongo:
     repository: mongo # Added repository for MongoDB
     tag: latest
     pullPolicy: IfNotPresent
+  replicas: 1 # Set to 3 for high availability replica set
   resources:
     requests:
       memory: "1Gi"
@@ -104,7 +105,7 @@ minio:
 backend:
   image:
     repository: ghcr.io/depictio/depictio # Corrected repository path with .io
-    tag: "0.3.2"
+    tag: "0.4.0-b2"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
   resources:
@@ -173,7 +174,7 @@ backend:
 frontend:
   image:
     repository: ghcr.io/depictio/depictio # Corrected repository path with .io
-    tag: "0.3.2"
+    tag: "0.4.0-b2"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
   resources:

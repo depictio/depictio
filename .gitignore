@@ -178,21 +178,6 @@ depictio/keys/internal_api_key.pem
 depictio/.depictio/
 depictio/.depictio/*.yaml
 
-# Development Environment
-## Dev directories
-bak/
-# dev/
-dev/jbrowse_dev/assets/multiqc/
-dev/jbrowse_dev/assets/
-dev/flask-login/.env
-dev/token/private_key.pem
-dev/token/public_key.pem
-dev/token/token.txt
-dev/celery/jobs.json
-dev/dev_design_visu/data/
-dev/dev_delta/
-dev/dev_minio/
-!dev/multiqc_parser
 
 ## Screenshots
 screenshot_*.png
@@ -262,4 +247,21 @@ benchmark_datasets/
 # Sensitive Helm values files
 helm-charts/depictio/values-*-secrets.yaml
 helm-charts/depictio/*secrets*.yaml
+
+# Profiling
+prof_files/
+
+# Development Environment
+## Dev directories
+dev/jbrowse_dev/assets/multiqc/
+dev/jbrowse_dev/assets/
+dev/flask-login/.env
+dev/token/private_key.pem
+dev/token/public_key.pem
+dev/token/token.txt
+dev/celery/jobs.json
+dev/dev_design_visu/data/
+dev/dev_delta/
+dev/dev_minio/
+!dev/multiqc_parser
 dev/dev-multiqc-parquet/detailed_extraction_reports/

@@ -210,6 +210,18 @@ def get_build_functions() -> dict:
     }
 
 
+def get_async_build_functions() -> dict:
+    """
+    DEPRECATED: Use get_build_functions() instead. Async functionality has been disabled.
+    This function now returns the same sync functions as get_build_functions().
+
+    Returns:
+        dict: Dictionary with component types as keys and sync build functions as values
+    """
+    # Return sync functions instead of async to disable async functionality
+    return get_build_functions()
+
+
 def get_component_dimensions_dict() -> dict:
     """
     Get a dictionary mapping all component types to their default dimensions.

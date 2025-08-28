@@ -14,6 +14,7 @@ from depictio.cli.cli.utils.rich_utils import (
     rich_print_command_usage,
     rich_print_json,
 )
+from depictio.cli.cli_logging import logger
 from depictio.models.s3_utils import S3_storage_checks
 from depictio.models.utils import convert_model_to_dict
 
@@ -57,7 +58,25 @@ def check_server_accessibility(
     """
     rich_print_command_usage("check_server_accessibility")
     try:
-        api_login(CLI_config_path)
+        login_result = api_login(CLI_config_path)
+        logger.info(f"Login result: {login_result}")
+        if login_result.get("success"):
+            user_info = []
+            if login_result.get("email"):
+                user_info.append(f"User: {login_result['email']}")
+            if login_result.get("is_admin"):
+                user_info.append("Admin privileges: Yes")
+
+            if user_info:
+                rich_print_checked_statement(
+                    f"Login successful - {', '.join(user_info)}", "success"
+                )
+            else:
+                rich_print_checked_statement("Login successful", "success")
+        else:
+            rich_print_checked_statement(
+                "Login failed - Invalid credentials or token expired", "error"
+            )
     except Exception as e:
         rich_print_checked_statement(f"Unable to access server - {e}", "error")
 
