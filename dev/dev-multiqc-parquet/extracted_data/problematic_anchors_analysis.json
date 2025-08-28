@@ -1,0 +1,17 @@
+{
+  "json_parse_errors": [],
+  "empty_extractions": [],
+  "unknown_patterns": [],
+  "no_samples": [],
+  "analysis_summary": {
+    "total_plot_input_anchors": 565,
+    "successful_extractions": 565,
+    "success_rate": "100.0%",
+    "json_parse_errors": 0,
+    "empty_extractions": 0,
+    "unknown_patterns": 0,
+    "no_samples_extracted": 0,
+    "total_tabular_anchors": 50,
+    "tabular_success_rate": "100%"
+  }
+}
