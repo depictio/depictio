@@ -2,13 +2,12 @@
 from collections import defaultdict
 from typing import Any, Dict, List
 
-import dash_bootstrap_components as dbc
+import dash
 import dash_mantine_components as dmc
 import httpx
+from dash import ALL, MATCH, Input, Output, Patch, State, dcc, html
 from dash_iconify import DashIconify
 
-import dash
-from dash import ALL, MATCH, Input, Output, Patch, State, dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
@@ -454,7 +453,7 @@ def register_callbacks_figure_component(app):
                 "type": "collapse",
                 "index": MATCH,
             },
-            "is_open",
+            "opened",
         ),
         [
             Input(
@@ -471,7 +470,7 @@ def register_callbacks_figure_component(app):
                     "type": "collapse",
                     "index": MATCH,
                 },
-                "is_open",
+                "opened",
             )
         ],
         # prevent_initial_call=True,
@@ -2083,12 +2082,12 @@ def design_figure(id, component_data=None):
                                             )
                                         ),
                                         # Edit panel (always open)
-                                        dbc.Collapse(
+                                        dmc.Collapse(
                                             id={
                                                 "type": "collapse",
                                                 "index": id["index"],
                                             },
-                                            is_open=True,
+                                            opened=True,
                                             style={
                                                 "overflowY": "auto",
                                                 # "maxHeight": "35vh",
@@ -2195,21 +2194,19 @@ def create_stepper_figure_button(n, disabled=None):
     if disabled is None:
         disabled = not is_enabled("figure")
 
-    button = dbc.Col(
-        dmc.Button(
-            "Figure",
-            id={
-                "type": "btn-option",
-                "index": n,
-                "value": "Figure",
-            },
-            n_clicks=0,
-            style=UNSELECTED_STYLE,
-            size="xl",
-            color=get_dmc_button_color("figure"),
-            leftSection=DashIconify(icon="mdi:graph-box", color="white"),
-            disabled=disabled,
-        )
+    button = dmc.Button(
+        "Figure",
+        id={
+            "type": "btn-option",
+            "index": n,
+            "value": "Figure",
+        },
+        n_clicks=0,
+        style=UNSELECTED_STYLE,
+        size="xl",
+        color=get_dmc_button_color("figure"),
+        leftSection=DashIconify(icon="mdi:graph-box", color="white"),
+        disabled=disabled,
     )
     store = dcc.Store(
         id={

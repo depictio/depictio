@@ -7,11 +7,9 @@ for figure parameters, replacing the fragile nested dictionary approach.
 
 from typing import Any, Dict, List, Optional, Union
 
-import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash_iconify import DashIconify
-
 from dash import html
+from dash_iconify import DashIconify
 
 from .models import FigureComponentState, ParameterDefinition, ParameterType
 
@@ -51,7 +49,7 @@ class ComponentBuilder:
 
     def build_parameter_input(
         self, param: ParameterDefinition, value: Any = None, disabled: bool = False
-    ) -> Union[dmc.Select, dmc.MultiSelect, dbc.Input, dmc.Switch, html.Div]:
+    ) -> Union[dmc.Select, dmc.MultiSelect, dmc.TextInput, dmc.Switch, html.Div]:
         """Build input component for a parameter.
 
         Args:
@@ -199,28 +197,24 @@ class ComponentBuilder:
 
     def _build_text_input(
         self, param: ParameterDefinition, component_id: Dict, value: Any, disabled: bool
-    ) -> dbc.Input:
+    ) -> dmc.TextInput:
         """Build text input."""
-        return dbc.Input(
+        return dmc.TextInput(
             id=component_id,
-            type="text",
             value=value or "",
             placeholder=param.label,
             disabled=disabled,
             style={"width": "100%"},
-            autoComplete="off",  # Prevent autofill CSS selector issues
         )
 
     def _build_numeric_input(
         self, param: ParameterDefinition, component_id: Dict, value: Any, disabled: bool
-    ) -> dbc.Input:
+    ) -> dmc.NumberInput:
         """Build numeric input."""
-        input_type = "number"
         step = 1 if param.type == ParameterType.INTEGER else 0.1
 
-        return dbc.Input(
+        return dmc.NumberInput(
             id=component_id,
-            type=input_type,
             value=value,
             placeholder=param.label,
             disabled=disabled,
@@ -228,7 +222,6 @@ class ComponentBuilder:
             max=param.max_value,
             step=step,
             style={"width": "100%"},
-            autoComplete="off",  # Prevent autofill CSS selector issues
         )
 
     def _build_boolean_switch(
@@ -256,54 +249,51 @@ class ComponentBuilder:
 
         return html.Div(
             [
-                dbc.Row(
+                dmc.Group(
                     [
-                        dbc.Col(
+                        dmc.Stack(
                             [
-                                dbc.Label("Min", size="sm"),
-                                dbc.Input(
+                                dmc.Text("Min", size="sm"),
+                                dmc.NumberInput(
                                     id=min_id,
-                                    type="number",
                                     value=min_val,
                                     placeholder="Min",
                                     disabled=disabled,
                                     size="sm",
-                                    autoComplete="off",  # Prevent autofill CSS selector issues
+                                    style={"width": "120px"},
                                 ),
                             ],
-                            width=6,
+                            gap="xs",
                         ),
-                        dbc.Col(
+                        dmc.Stack(
                             [
-                                dbc.Label("Max", size="sm"),
-                                dbc.Input(
+                                dmc.Text("Max", size="sm"),
+                                dmc.NumberInput(
                                     id=max_id,
-                                    type="number",
                                     value=max_val,
                                     placeholder="Max",
                                     disabled=disabled,
                                     size="sm",
-                                    autoComplete="off",  # Prevent autofill CSS selector issues
+                                    style={"width": "120px"},
                                 ),
                             ],
-                            width=6,
+                            gap="xs",
                         ),
-                    ]
+                    ],
+                    grow=True,
                 )
             ]
         )
 
     def _build_color_picker(
         self, param: ParameterDefinition, component_id: Dict, value: Any, disabled: bool
-    ) -> dbc.Input:
+    ) -> dmc.ColorInput:
         """Build color picker input."""
-        return dbc.Input(
+        return dmc.ColorInput(
             id=component_id,
-            type="color",
             value=value or "#1f77b4",
             disabled=disabled,
-            style={"width": "100%", "height": "38px"},
-            autoComplete="off",  # Prevent autofill CSS selector issues
+            style={"width": "100%"},
         )
 
 

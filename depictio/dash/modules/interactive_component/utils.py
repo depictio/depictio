@@ -1,12 +1,10 @@
 import math
 
-import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import numpy as np
 import pandas as pd
 import polars as pl
 from bson import ObjectId
-
 from dash import dcc, html
 
 # PERFORMANCE OPTIMIZATION: Use centralized config
@@ -22,75 +20,81 @@ def build_interactive_frame(index, children=None, show_border=False):
     Note: Border is now always shown regardless of show_border parameter for better UX.
     """
     if not children:
-        return dbc.Card(
-            dbc.CardBody(
+        return dmc.Paper(
+            children=[
                 html.Div(
-                    "Configure your interactive component using the edit menu",
-                    style={
-                        "textAlign": "center",
-                        "color": "var(--app-text-color, #999)",  # Use theme-aware text color
-                        "fontSize": "14px",
-                        "fontStyle": "italic",
+                    html.Div(
+                        "Configure your interactive component using the edit menu",
+                        style={
+                            "textAlign": "center",
+                            "color": "var(--app-text-color, #999)",
+                            "fontSize": "14px",
+                            "fontStyle": "italic",
+                        },
+                    ),
+                    id={
+                        "type": "input-body",
+                        "index": index,
                     },
-                ),
-                id={
-                    "type": "input-body",
-                    "index": index,
-                },
-                style={
-                    "padding": "20px",
-                    "display": "flex",
-                    "flexDirection": "column",
-                    "justifyContent": "center",
-                    "alignItems": "center",
-                    "minHeight": "150px",  # Ensure minimum height
-                    "height": "100%",
-                },
-            ),
+                    style={
+                        "padding": "20px",
+                        "display": "flex",
+                        "flexDirection": "column",
+                        "justifyContent": "center",
+                        "alignItems": "center",
+                        "minHeight": "150px",
+                        "height": "100%",
+                    },
+                )
+            ],
+            id={
+                "type": "interactive-component",
+                "index": index,
+            },
             style={
                 "width": "100%",
                 "height": "100%",
                 "padding": "0",
                 "margin": "0",
-                "boxShadow": "none",
+                "backgroundColor": "var(--app-surface-color, #ffffff)",
+                "color": "var(--app-text-color, #000000)",
                 "border": "1px solid var(--app-border-color, #ddd)",
-                "borderRadius": "4px",
-                "backgroundColor": "var(--app-surface-color, transparent)",  # Use theme-aware background
-            },
-            id={
-                "type": "interactive-component",
-                "index": index,
+                "borderRadius": "0.375rem",
             },
         )
     else:
-        return dbc.Card(
-            dbc.CardBody(
-                children=children,
-                id={
-                    "type": "input-body",
-                    "index": index,
-                },
-                style={
-                    "display": "flex",
-                    "flexDirection": "column",
-                    "overflow": "visible",  # Allow dropdown to overflow
-                    "height": "100%",
-                    "position": "relative",  # Ensure positioning context
-                },
-            ),
-            style={
-                "width": "100%",
-                "height": "100%",  # Ensure the card fills the container's height
-                "padding": "0",
-                "overflow": "visible",  # Allow dropdown to overflow
-                "position": "relative",  # Ensure positioning context
-                "border": "1px solid var(--app-border-color, #ddd)",
-                "borderRadius": "4px",
-                "backgroundColor": "var(--app-surface-color, transparent)",  # Use theme-aware background
-            },
+        return dmc.Paper(
+            children=[
+                html.Div(
+                    children=children,
+                    id={
+                        "type": "input-body",
+                        "index": index,
+                    },
+                    style={
+                        "display": "flex",
+                        "flexDirection": "column",
+                        "overflow": "visible",
+                        "height": "100%",
+                        "position": "relative",
+                    },
+                )
+            ],
             id={
                 "type": "interactive-component",
                 "index": index,
+            },
+            style={
+                "width": "100%",
+                "height": "100%",
+                "padding": "0",
+                "overflow": "visible",
+                "position": "relative",
+                "margin": "0",
+                "backgroundColor": "var(--app-surface-color, #ffffff)",
+                "color": "var(--app-text-color, #000000)",
+                "border": "1px solid var(--app-border-color, #ddd)",
+                "borderRadius": "0.375rem",
             },
         )
 

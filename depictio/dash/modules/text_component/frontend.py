@@ -1,10 +1,8 @@
 # Import necessary libraries
-import dash_bootstrap_components as dbc
-import dash_mantine_components as dmc
-from dash_iconify import DashIconify
-
 import dash
+import dash_mantine_components as dmc
 from dash import MATCH, Input, Output, State, callback_context, dcc, html
+from dash_iconify import DashIconify
 
 # Depictio imports
 from depictio.api.v1.configs.logging_init import logger
@@ -581,21 +579,19 @@ def create_stepper_text_button(n, disabled=None):
     logger.info(f"Text button color: {color}")
 
     # Create the text button
-    button = dbc.Col(
-        dmc.Button(
-            "Text",
-            id={
-                "type": "btn-option",
-                "index": n,
-                "value": "Text",
-            },
-            n_clicks=0,
-            style=UNSELECTED_STYLE,
-            size="xl",
-            color=get_dmc_button_color("text"),
-            leftSection=DashIconify(icon="mdi:text-box-edit", color="white"),
-            disabled=disabled,
-        )
+    button = dmc.Button(
+        "Text",
+        id={
+            "type": "btn-option",
+            "index": n,
+            "value": "Text",
+        },
+        n_clicks=0,
+        style=UNSELECTED_STYLE,
+        size="xl",
+        color=get_dmc_button_color("text"),
+        leftSection=DashIconify(icon="mdi:text-box-edit", color="white"),
+        disabled=disabled,
     )
     store = dcc.Store(
         id={

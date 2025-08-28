@@ -1,9 +1,8 @@
-import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import httpx
+from dash import dcc, html
 from dash_iconify import DashIconify
 
-from dash import dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 
@@ -122,79 +121,83 @@ def build_text_frame(index, children=None, show_border=False):
         show_border: Whether to show border (for editing mode)
 
     Returns:
-        dbc.Card: Text component frame
+        dmc.Paper: Text component frame
     """
     if not children:
-        return dbc.Card(
-            dbc.CardBody(
+        return dmc.Paper(
+            children=[
                 html.Div(
-                    "Configure your text component using the edit menu",
-                    style={
-                        "textAlign": "center",
-                        "color": "var(--app-text-color, #999)",
-                        "fontSize": "14px",
-                        "fontStyle": "italic",
+                    html.Div(
+                        "Configure your text component using the edit menu",
+                        style={
+                            "textAlign": "center",
+                            "color": "var(--app-text-color, #999)",
+                            "fontSize": "14px",
+                            "fontStyle": "italic",
+                        },
+                    ),
+                    id={
+                        "type": "text-body",
+                        "index": index,
                     },
-                ),
-                id={
-                    "type": "text-body",
-                    "index": index,
-                },
-                style={
-                    "padding": "20px",
-                    "display": "flex",
-                    "flexDirection": "column",
-                    "justifyContent": "center",
-                    "alignItems": "center",
-                    "minHeight": "150px",  # Ensure minimum height
-                    "height": "100%",
-                    "minWidth": "150px",  # Ensure minimum width
-                },
-            ),
+                    style={
+                        "padding": "20px",
+                        "display": "flex",
+                        "flexDirection": "column",
+                        "justifyContent": "center",
+                        "alignItems": "center",
+                        "minHeight": "150px",
+                        "height": "100%",
+                        "minWidth": "150px",
+                    },
+                )
+            ],
+            id={
+                "type": "text-component",
+                "index": index,
+            },
             style={
                 "width": "100%",
                 "height": "100%",
                 "padding": "0",
                 "margin": "0",
-                "boxShadow": "none",
-                "border": "1px solid var(--app-border-color, #ddd)",  # Always show border for draggable delimitation
-                "borderRadius": "4px",
                 "backgroundColor": "var(--app-surface-color, #ffffff)",
-            },
-            id={
-                "type": "text-component",
-                "index": index,
+                "color": "var(--app-text-color, #000000)",
+                "border": "1px solid var(--app-border-color, #ddd)",
+                "borderRadius": "0.375rem",
             },
         )
     else:
-        return dbc.Card(
-            dbc.CardBody(
-                children=children,
-                id={
-                    "type": "text-body",
-                    "index": index,
-                },
-                style={
-                    "padding": "5px",  # Reduce padding inside the card body
-                    "display": "flex",
-                    "flexDirection": "column",
-                    "justifyContent": "flex-start",  # Align text to top
-                    "height": "100%",  # Make sure it fills the parent container
-                },
-            ),
-            style={
-                "width": "100%",
-                "height": "100%",  # Ensure the card fills the container's height
-                "padding": "0",  # Remove default padding
-                "margin": "0",  # Remove default margin
-                "boxShadow": "none",  # Remove shadow for a cleaner look
-                "border": f"1px solid {'var(--app-border-color, #ddd)' if show_border else 'transparent'}",  # Conditional border
-                "borderRadius": "4px",
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
-            },
+        return dmc.Paper(
+            children=[
+                html.Div(
+                    children=children,
+                    id={
+                        "type": "text-body",
+                        "index": index,
+                    },
+                    style={
+                        "padding": "5px",
+                        "display": "flex",
+                        "flexDirection": "column",
+                        "justifyContent": "flex-start",
+                        "height": "100%",
+                    },
+                )
+            ],
             id={
                 "type": "text-component",
                 "index": index,
+            },
+            style={
+                "width": "100%",
+                "height": "100%",
+                "padding": "0",
+                "margin": "0",
+                "backgroundColor": "var(--app-surface-color, #ffffff)",
+                "color": "var(--app-text-color, #000000)",
+                "border": f"1px solid {'var(--app-border-color, #ddd)' if show_border else 'transparent'}",
+                "borderRadius": "0.375rem",
             },
         )
 

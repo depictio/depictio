@@ -1,9 +1,9 @@
 import dash_ag_grid as dag
-import dash_bootstrap_components as dbc
+import dash_mantine_components as dmc
 import polars as pl
 from bson import ObjectId
-
 from dash import dcc, html
+
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
@@ -12,64 +12,68 @@ from depictio.dash.modules.figure_component.utils import stringify_id
 
 def build_table_frame(index, children=None):
     if not children:
-        return dbc.Card(
-            dbc.CardBody(
-                id={
-                    "type": "table-body",
-                    "index": index,
-                },
-                style={
-                    "padding": "5px",  # Reduce padding inside the card body
-                    "display": "flex",
-                    "flexDirection": "column",
-                    "justifyContent": "center",
-                    "height": "100%",  # Make sure it fills the parent container
-                },
-            ),
-            style={
-                "width": "100%",
-                "height": "100%",  # Ensure the card fills the container's height
-                "padding": "0",  # Remove default padding
-                "margin": "0",  # Remove default margin
-                "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
-                # "border": "1px solid #ddd",  # Optional: Add a light border
-                # "borderRadius": "4px",  # Optional: Slightly round the corners
-                "border": "1px solid var(--app-border-color, #ddd)",  # Always show border for draggable delimitation  # Optional: Remove border
-            },
+        return dmc.Paper(
+            children=[
+                html.Div(
+                    id={
+                        "type": "table-body",
+                        "index": index,
+                    },
+                    style={
+                        "padding": "5px",
+                        "display": "flex",
+                        "flexDirection": "column",
+                        "justifyContent": "center",
+                        "height": "100%",
+                    },
+                )
+            ],
             id={
                 "type": "table-component",
                 "index": index,
+            },
+            style={
+                "width": "100%",
+                "height": "100%",
+                "padding": "0",
+                "margin": "0",
+                "backgroundColor": "var(--app-surface-color, #ffffff)",
+                "color": "var(--app-text-color, #000000)",
+                "border": "1px solid var(--app-border-color, #ddd)",
+                "borderRadius": "0.375rem",
             },
         )
     else:
-        return dbc.Card(
-            dbc.CardBody(
-                children=children,
-                id={
-                    "type": "table-body",
-                    "index": index,
-                },
-                style={
-                    "padding": "5px",  # Reduce padding inside the card body
-                    "display": "flex",
-                    "flexDirection": "column",
-                    "justifyContent": "center",
-                    "height": "100%",  # Make sure it fills the parent container
-                },
-            ),
-            style={
-                "width": "100%",
-                "height": "100%",  # Ensure the card fills the container's height
-                "padding": "0",  # Remove default padding
-                "margin": "0",  # Remove default margin
-                "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
-                # "border": "1px solid #ddd",  # Optional: Add a light border
-                # "borderRadius": "4px",  # Optional: Slightly round the corners
-                "border": "1px solid var(--app-border-color, #ddd)",  # Always show border for draggable delimitation  # Optional: Remove border
-            },
+        return dmc.Paper(
+            children=[
+                html.Div(
+                    children=children,
+                    id={
+                        "type": "table-body",
+                        "index": index,
+                    },
+                    style={
+                        "padding": "5px",
+                        "display": "flex",
+                        "flexDirection": "column",
+                        "justifyContent": "center",
+                        "height": "100%",
+                    },
+                )
+            ],
             id={
                 "type": "table-component",
                 "index": index,
+            },
+            style={
+                "width": "100%",
+                "height": "100%",
+                "padding": "0",
+                "margin": "0",
+                "backgroundColor": "var(--app-surface-color, #ffffff)",
+                "color": "var(--app-text-color, #000000)",
+                "border": "1px solid var(--app-border-color, #ddd)",
+                "borderRadius": "0.375rem",
             },
         )
 

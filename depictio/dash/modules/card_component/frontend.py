@@ -1,9 +1,9 @@
 # Import necessary libraries
 import dash_mantine_components as dmc
 import httpx
+from dash import MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
-from dash import MATCH, Input, Output, State, dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
@@ -574,28 +574,24 @@ def create_stepper_card_button(n, disabled=None):
         disabled (bool, optional): Override enabled state. If None, uses metadata.
     """
 
-    import dash_bootstrap_components as dbc
-
     # Use metadata enabled field if disabled not explicitly provided
     if disabled is None:
         disabled = not is_enabled("card")
 
     # Create the card button
-    button = dbc.Col(
-        dmc.Button(
-            "Card",
-            id={
-                "type": "btn-option",
-                "index": n,
-                "value": "Card",
-            },
-            n_clicks=0,
-            style=UNSELECTED_STYLE,
-            size="xl",
-            color=get_dmc_button_color("card"),
-            leftSection=DashIconify(icon="formkit:number", color="white"),
-            disabled=disabled,
-        )
+    button = dmc.Button(
+        "Card",
+        id={
+            "type": "btn-option",
+            "index": n,
+            "value": "Card",
+        },
+        n_clicks=0,
+        style=UNSELECTED_STYLE,
+        size="xl",
+        color=get_dmc_button_color("card"),
+        leftSection=DashIconify(icon="formkit:number", color="white"),
+        disabled=disabled,
     )
     store = dcc.Store(
         id={

@@ -1,9 +1,9 @@
 # Import necessary libraries
 import dash_mantine_components as dmc
 import httpx
+from dash import MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
-from dash import MATCH, Input, Output, State, dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 
@@ -807,27 +807,24 @@ def create_stepper_interactive_button(n, disabled=None):
         n (_type_): _description_
         disabled (bool, optional): Override enabled state. If None, uses metadata.
     """
-    import dash_bootstrap_components as dbc
 
     # Use metadata enabled field if disabled not explicitly provided
     if disabled is None:
         disabled = not is_enabled("interactive")
 
-    button = dbc.Col(
-        dmc.Button(
-            "Interactive",
-            id={
-                "type": "btn-option",
-                "index": n,
-                "value": "Interactive",
-            },
-            n_clicks=0,
-            style=UNSELECTED_STYLE,
-            size="xl",
-            color=get_dmc_button_color("interactive"),
-            leftSection=DashIconify(icon="bx:slider-alt", color="white"),
-            disabled=disabled,
-        )
+    button = dmc.Button(
+        "Interactive",
+        id={
+            "type": "btn-option",
+            "index": n,
+            "value": "Interactive",
+        },
+        n_clicks=0,
+        style=UNSELECTED_STYLE,
+        size="xl",
+        color=get_dmc_button_color("interactive"),
+        leftSection=DashIconify(icon="bx:slider-alt", color="white"),
+        disabled=disabled,
     )
     store = dcc.Store(
         id={

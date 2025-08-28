@@ -1,10 +1,9 @@
-import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import numpy as np
 import pandas as pd
+from dash import dcc, html
 from dash_iconify import DashIconify
 
-from dash import dcc, html
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 
@@ -144,86 +143,88 @@ def compute_value(data, column_name, aggregation):
 
 def build_card_frame(index, children=None, show_border=False):
     if not children:
-        return dbc.Card(
-            dbc.CardBody(
+        return dmc.Paper(
+            children=[
                 html.Div(
-                    "Configure your card using the edit menu",
-                    style={
-                        "textAlign": "center",
-                        "color": "#999",
-                        "fontSize": "14px",
-                        "fontStyle": "italic",
+                    html.Div(
+                        "Configure your card using the edit menu",
+                        style={
+                            "textAlign": "center",
+                            "color": "var(--app-text-color, #999)",
+                            "fontSize": "14px",
+                            "fontStyle": "italic",
+                        },
+                    ),
+                    id={
+                        "type": "card-body",
+                        "index": index,
                     },
-                ),
-                id={
-                    "type": "card-body",
-                    "index": index,
-                },
-                style={
-                    "padding": "20px",
-                    "display": "flex",
-                    "flexDirection": "column",
-                    "justifyContent": "center",
-                    "alignItems": "center",
-                    "minHeight": "150px",  # Ensure minimum height
-                    "height": "100%",
-                    "minWidth": "150px",  # Ensure minimum width
-                    "flex": "1",  # Allow growth to fill container
-                },
-            ),
+                    style={
+                        "padding": "20px",
+                        "display": "flex",
+                        "flexDirection": "column",
+                        "justifyContent": "center",
+                        "alignItems": "center",
+                        "minHeight": "150px",
+                        "height": "100%",
+                        "minWidth": "150px",
+                        "flex": "1",
+                    },
+                )
+            ],
+            id={
+                "type": "card-component",
+                "index": index,
+            },
             style={
                 "width": "100%",
                 "height": "100%",
                 "padding": "0",
                 "margin": "0",
-                "boxShadow": "none",
-                "border": "none",  # Remove conflicting border - parent handles styling
-                "borderRadius": "4px",
-                "backgroundColor": "transparent",  # Let parent handle theme colors
-                # Critical flexbox properties for vertical growing
+                "backgroundColor": "var(--app-surface-color, #ffffff)",
+                "color": "var(--app-text-color, #000000)",
+                "border": "1px solid var(--app-border-color, #dee2e6)",
+                "borderRadius": "0.375rem",
                 "display": "flex",
                 "flexDirection": "column",
                 "flex": "1",
-            },
-            id={
-                "type": "card-component",
-                "index": index,
             },
         )
     else:
-        return dbc.Card(
-            dbc.CardBody(
-                children=children,
-                id={
-                    "type": "card-body",
-                    "index": index,
-                },
-                style={
-                    "padding": "5px",  # Reduce padding inside the card body
-                    "display": "flex",
-                    "flexDirection": "column",
-                    "height": "100%",  # Make sure it fills the parent container
-                    "flex": "1",  # Allow growth to fill container
-                    "minHeight": "0",  # Critical: Allow shrinking below content size
-                },
-            ),
-            style={
-                "width": "100%",
-                "height": "100%",  # Ensure the card fills the container's height
-                "padding": "0",  # Remove default padding
-                "margin": "0",  # Remove default margin
-                "boxShadow": "none",  # Remove shadow for a cleaner look
-                "border": "none",  # Remove conflicting border - parent handles styling
-                "borderRadius": "4px",
-                "backgroundColor": "transparent",  # Let parent handle theme colors
-                # Critical flexbox properties for vertical growing
-                "display": "flex",
-                "flexDirection": "column",
-                "flex": "1",
-            },
+        return dmc.Paper(
+            children=[
+                html.Div(
+                    children=children,
+                    id={
+                        "type": "card-body",
+                        "index": index,
+                    },
+                    style={
+                        "padding": "5px",
+                        "display": "flex",
+                        "flexDirection": "column",
+                        "height": "100%",
+                        "flex": "1",
+                        "minHeight": "0",
+                    },
+                )
+            ],
             id={
                 "type": "card-component",
                 "index": index,
+            },
+            style={
+                "width": "100%",
+                "height": "100%",
+                "padding": "0",
+                "margin": "0",
+                "backgroundColor": "var(--app-surface-color, #ffffff)",
+                "color": "var(--app-text-color, #000000)",
+                "border": "1px solid var(--app-border-color, #dee2e6)",
+                "borderRadius": "0.375rem",
+                "display": "flex",
+                "flexDirection": "column",
+                "flex": "1",
             },
         )
 

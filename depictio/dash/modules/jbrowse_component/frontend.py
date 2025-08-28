@@ -1,10 +1,9 @@
 # Import necessary libraries
-import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import httpx
+from dash import MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
-from dash import MATCH, Input, Output, State, dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
@@ -80,22 +79,20 @@ def register_callbacks_jbrowse_component(app):
 
 def design_jbrowse(id):
     row = [
-        dbc.Row(
-            dmc.Center(
-                dmc.Button(
-                    "Display JBrowse",
-                    id={"type": "btn-jbrowse", "index": id["index"]},
-                    n_clicks=0,
-                    style=UNSELECTED_STYLE,
-                    size="xl",
-                    color="yellow",
-                    leftSection=DashIconify(
-                        icon="material-symbols:table-rows-narrow-rounded", color="white"
-                    ),
+        dmc.Center(
+            dmc.Button(
+                "Display JBrowse",
+                id={"type": "btn-jbrowse", "index": id["index"]},
+                n_clicks=0,
+                style=UNSELECTED_STYLE,
+                size="xl",
+                color="yellow",
+                leftSection=DashIconify(
+                    icon="material-symbols:table-rows-narrow-rounded", color="white"
                 ),
             ),
         ),
-        dbc.Row(
+        html.Div(
             html.Div(
                 build_jbrowse_frame(index=id["index"]),
                 id={"type": "component-container", "index": id["index"]},
@@ -130,23 +127,19 @@ def create_stepper_jbrowse_button(n, disabled=None):
     if disabled is None:
         disabled = not is_enabled("jbrowse")
 
-    button = dbc.Col(
-        dmc.Button(
-            "JBrowse (Beta)",
-            id={
-                "type": "btn-option",
-                "index": n,
-                "value": "JBrowse2",
-            },
-            n_clicks=0,
-            style=UNSELECTED_STYLE,
-            size="xl",
-            color=get_dmc_button_color("jbrowse"),
-            leftSection=DashIconify(
-                icon="material-symbols:table-rows-narrow-rounded", color="white"
-            ),
-            disabled=disabled,
-        )
+    button = dmc.Button(
+        "JBrowse (Beta)",
+        id={
+            "type": "btn-option",
+            "index": n,
+            "value": "JBrowse2",
+        },
+        n_clicks=0,
+        style=UNSELECTED_STYLE,
+        size="xl",
+        color=get_dmc_button_color("jbrowse"),
+        leftSection=DashIconify(icon="material-symbols:table-rows-narrow-rounded", color="white"),
+        disabled=disabled,
     )
     store = dcc.Store(
         id={

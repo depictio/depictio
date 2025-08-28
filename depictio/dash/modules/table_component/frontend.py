@@ -1,11 +1,10 @@
 # Import necessary libraries
-import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import httpx
 import polars as pl
+from dash import MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
-from dash import MATCH, Input, Output, State, dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL
 
 # Depictio imports
@@ -162,8 +161,8 @@ def register_callbacks_table_component(app):
         - Cache invalidation when interactive values change
         """
         from bson import ObjectId
-
         from dash import ctx, no_update
+
         from depictio.api.v1.deltatables_utils import (
             iterative_join,
             load_deltatable_lite,
@@ -685,22 +684,20 @@ def register_callbacks_table_component(app):
 
 def design_table(id):
     row = [
-        dbc.Row(
-            dmc.Center(
-                dmc.Button(
-                    "Display Table",
-                    id={"type": "btn-table", "index": id["index"]},
-                    n_clicks=1,
-                    style=UNSELECTED_STYLE,
-                    size="xl",
-                    color="green",
-                    leftSection=DashIconify(
-                        icon="material-symbols:table-rows-narrow-rounded", color="white"
-                    ),
-                )
-            ),
+        dmc.Center(
+            dmc.Button(
+                "Display Table",
+                id={"type": "btn-table", "index": id["index"]},
+                n_clicks=1,
+                style=UNSELECTED_STYLE,
+                size="xl",
+                color="green",
+                leftSection=DashIconify(
+                    icon="material-symbols:table-rows-narrow-rounded", color="white"
+                ),
+            )
         ),
-        dbc.Row(
+        html.Div(
             html.Div(
                 build_table_frame(index=id["index"]),
                 # dbc.CardBody(
@@ -764,21 +761,19 @@ def create_stepper_table_button(n, disabled=None):
     logger.info(f"Table button color: {color}")
 
     # Create the table button
-    button = dbc.Col(
-        dmc.Button(
-            "Table",
-            id={
-                "type": "btn-option",
-                "index": n,
-                "value": "Table",
-            },
-            n_clicks=0,
-            style=UNSELECTED_STYLE,
-            size="xl",
-            color=get_dmc_button_color("table"),
-            leftSection=DashIconify(icon="octicon:table-24", color="white"),
-            disabled=disabled,
-        )
+    button = dmc.Button(
+        "Table",
+        id={
+            "type": "btn-option",
+            "index": n,
+            "value": "Table",
+        },
+        n_clicks=0,
+        style=UNSELECTED_STYLE,
+        size="xl",
+        color=get_dmc_button_color("table"),
+        leftSection=DashIconify(icon="octicon:table-24", color="white"),
+        disabled=disabled,
     )
     store = dcc.Store(
         id={
