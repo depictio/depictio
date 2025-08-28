@@ -138,6 +138,59 @@ class MultiQCExtractor:
         
         return extracted_data
     
+    def extract_plot_input_row_data(self) -> List[ExtractedData]:
+        """Extract plot_input_row type data (DataTables)."""
+        plot_row_df = self.df.filter(pl.col("type") == "plot_input_row")
+        
+        if plot_row_df.shape[0] == 0:
+            return []
+        
+        extracted_data = []
+        unique_anchors = plot_row_df.select("anchor").unique().to_series().to_list()
+        
+        for anchor in unique_anchors:
+            anchor_df = plot_row_df.filter(pl.col("anchor") == anchor)
+            
+            # Extract samples and data points directly from the rows
+            samples = []
+            data_points = []
+            
+            for row in anchor_df.to_dicts():
+                sample = row['sample']
+                metric = row['metric'] 
+                value = row['val_raw']
+                
+                if sample and metric:
+                    # Include all data points, even with nan/null values
+                    if sample not in samples:
+                        samples.append(sample)
+                    
+                    data_points.append({
+                        "sample": sample,
+                        "metric": metric,
+                        "value": value,
+                        "type": "datatable_cell"
+                    })
+            
+            if len(samples) > 0 and len(data_points) > 0:
+                data_type = DataType.TABLE_DATA
+            else:
+                data_type = DataType.UNKNOWN
+            
+            extracted_data.append(ExtractedData(
+                anchor=anchor,
+                data_type=data_type,
+                sample_names=samples,
+                data_points=data_points,
+                metadata={
+                    "total_rows": anchor_df.shape[0],
+                    "structure_type": "plot_input_row",
+                    "datatable": True
+                }
+            ))
+        
+        return extracted_data
+    
     def _analyze_json_structure(self, data: Any) -> Tuple[DataType, Dict[str, Any]]:
         """Analyze JSON structure to determine data type and extract patterns."""
         
@@ -147,6 +200,20 @@ class MultiQCExtractor:
                 # This is a MultiQC plot structure - analyze the inner data
                 inner_data = data['data']
                 return self._analyze_json_structure(inner_data)
+            
+            # Pattern: Heatmap data with rows, xcats, ycats
+            if 'rows' in data and 'xcats' in data and 'ycats' in data:
+                rows = data['rows']
+                xcats = data['xcats'] 
+                ycats = data['ycats']
+                if isinstance(rows, list) and isinstance(xcats, list) and isinstance(ycats, list):
+                    return DataType.HISTOGRAM_BAR, {  # Use HISTOGRAM_BAR for heatmap data
+                        "heatmap_matrix": True,
+                        "rows_count": len(rows),
+                        "xcats_count": len(xcats),
+                        "ycats_count": len(ycats),
+                        "structure": "heatmap_matrix"
+                    }
             
             # Pattern: somalier_relatedness_plot style with 'datasets' dict
             if 'datasets' in data:
@@ -164,15 +231,48 @@ class MultiQCExtractor:
                             }
             
             # Pattern: Sample-based data (sample names as keys)
-            sample_like_keys = [k for k in data.keys() if isinstance(k, str) and not k.startswith('_')]
+            sample_like_keys = [k for k in data.keys() if isinstance(k, str) and not k.startswith('_') and k not in ['anchor', 'creation_date', 'plot_type', 'pconfig']]
             if len(sample_like_keys) > 0:
-                # Check if values are numeric or structured data (histogram/bar data)
+                # Check values to determine data type
                 sample_values = [data[k] for k in sample_like_keys[:3]]
-                if all(isinstance(v, (int, float, dict)) for v in sample_values):
+                
+                if all(isinstance(v, dict) for v in sample_values):
+                    # Table-like structure: sample -> {metric: value}
+                    return DataType.TABLE_DATA, {
+                        "samples": sample_like_keys,
+                        "value_types": [type(v).__name__ for v in sample_values[:3]],
+                        "structure": "sample_metrics_table"
+                    }
+                elif all(isinstance(v, (int, float)) for v in sample_values):
+                    # Simple sample values
                     return DataType.HISTOGRAM_BAR, {
                         "samples": sample_like_keys,
                         "value_types": [type(v).__name__ for v in sample_values[:3]],
                         "structure": "sample_keyed_dict"
+                    }
+                elif all(isinstance(v, list) for v in sample_values):
+                    # Check if lists contain coordinate data
+                    first_list = sample_values[0]
+                    if len(first_list) > 0 and isinstance(first_list[0], dict):
+                        if 'x' in first_list[0] and 'y' in first_list[0]:
+                            # Coordinate data (PCA, scatter)
+                            return DataType.LINE_SCATTER, {
+                                "samples": sample_like_keys,
+                                "coordinate_data": True,
+                                "structure": "sample_coordinate_lists"
+                            }
+                    # Regular array data
+                    return DataType.HISTOGRAM_BAR, {
+                        "samples": sample_like_keys,
+                        "value_types": ["list"],
+                        "structure": "sample_array_data"
+                    }
+                elif any(isinstance(v, (dict, list)) for v in sample_values):
+                    # Mixed structure - could be table data
+                    return DataType.TABLE_DATA, {
+                        "samples": sample_like_keys,
+                        "value_types": [type(v).__name__ for v in sample_values[:3]],
+                        "structure": "mixed_sample_data"
                     }
         
         elif isinstance(data, list):
@@ -365,6 +465,165 @@ class MultiQCExtractor:
                         "type": "table_record",
                         **record
                     })
+        
+        # Handle heatmap data (detected as HISTOGRAM_BAR)
+        elif data_type == DataType.HISTOGRAM_BAR and isinstance(actual_data, dict):
+            # Check for heatmap pattern (rows, xcats, ycats)
+            if 'rows' in actual_data and 'xcats' in actual_data and 'ycats' in actual_data:
+                # Pattern: Heatmap data with rows matrix
+                rows = actual_data['rows']
+                xcats = actual_data['xcats'] 
+                ycats = actual_data['ycats']
+                
+                if isinstance(rows, list) and isinstance(xcats, list) and isinstance(ycats, list):
+                    for row_idx, row_data in enumerate(rows):
+                        if row_idx < len(ycats) and isinstance(row_data, list):
+                            sample_name = ycats[row_idx]
+                            samples.append(sample_name)
+                            
+                            for col_idx, value in enumerate(row_data):
+                                if col_idx < len(xcats) and value is not None:
+                                    metric_name = xcats[col_idx]
+                                    data_points.append({
+                                        "sample": sample_name,
+                                        "metric": metric_name,
+                                        "value": value,
+                                        "type": "heatmap_cell"
+                                    })
+            
+        
+        # NEW PATTERN: Handle DataTable dt.section_by_id.*.rows_by_sgroup structure
+        if isinstance(actual_data, dict) and 'dt' in actual_data:
+            dt_data = actual_data['dt']
+            if isinstance(dt_data, dict) and 'section_by_id' in dt_data:
+                section_by_id = dt_data['section_by_id']
+                if isinstance(section_by_id, dict):
+                    for table_id, table_data in section_by_id.items():
+                        if isinstance(table_data, dict) and 'rows_by_sgroup' in table_data:
+                            rows_by_sgroup = table_data['rows_by_sgroup']
+                            if isinstance(rows_by_sgroup, dict):
+                                # Extract sample data from rows_by_sgroup structure
+                                for sample_key, sample_list in rows_by_sgroup.items():
+                                    if isinstance(sample_list, list) and len(sample_list) > 0:
+                                        sample_entry = sample_list[0]  # First entry contains sample data
+                                        if isinstance(sample_entry, dict):
+                                            # Get actual sample name from the entry
+                                            sample_name = sample_entry.get('sample', sample_key)
+                                            samples.append(sample_name)
+                                            
+                                            # Extract all metrics from data field
+                                            if 'data' in sample_entry and isinstance(sample_entry['data'], dict):
+                                                data_dict = sample_entry['data']
+                                                for metric_name, metric_data in data_dict.items():
+                                                    if isinstance(metric_data, dict) and 'raw' in metric_data:
+                                                        # Use raw value for actual data
+                                                        raw_value = metric_data['raw']
+                                                        data_points.append({
+                                                            "sample": sample_name,
+                                                            "metric": metric_name,
+                                                            "value": raw_value,
+                                                            "type": "datatable_metric",
+                                                            "formatted": metric_data.get('fmt', ''),
+                                                            "modified": metric_data.get('mod', raw_value)
+                                                        })
+                                # If we found data in dt structure, return early
+                                if samples and data_points:
+                                    return list(set(samples)), data_points
+        
+        # NEW PATTERNS: Handle direct table-like data structures
+        elif data_type == DataType.UNKNOWN and isinstance(actual_data, dict):
+            # Pattern 4: Direct table data (not nested under 'data' or 'datasets')
+            # Check if this looks like sample->metrics table data
+            sample_like_keys = [k for k in actual_data.keys() if not k.startswith('_') and k not in ['anchor', 'creation_date', 'plot_type', 'pconfig']]
+            
+            if len(sample_like_keys) > 0:
+                # Sample a few keys to check structure
+                sample_values = [actual_data[k] for k in sample_like_keys[:3]]
+                
+                # Check if values are dicts (table structure) or simple values
+                if all(isinstance(v, dict) for v in sample_values):
+                    # Table-like structure: sample -> {metric: value}
+                    for sample_key in sample_like_keys:
+                        if isinstance(actual_data[sample_key], dict):
+                            samples.append(sample_key)
+                            for metric, metric_value in actual_data[sample_key].items():
+                                data_points.append({
+                                    "sample": sample_key,
+                                    "metric": metric,
+                                    "value": metric_value,
+                                    "type": "table_cell"
+                                })
+                
+                elif all(isinstance(v, (int, float)) for v in sample_values):
+                    # Simple sample values: sample -> number
+                    for sample_key in sample_like_keys:
+                        if isinstance(actual_data[sample_key], (int, float)):
+                            samples.append(sample_key)
+                            data_points.append({
+                                "sample": sample_key,
+                                "value": actual_data[sample_key],
+                                "type": "sample_value"
+                            })
+                
+                elif all(isinstance(v, list) for v in sample_values):
+                    # Array data: sample -> [values]
+                    for sample_key in sample_like_keys:
+                        if isinstance(actual_data[sample_key], list):
+                            samples.append(sample_key)
+                            
+                            # Check if list contains coordinate data (PCA/scatter)
+                            sample_list = actual_data[sample_key]
+                            if len(sample_list) > 0 and isinstance(sample_list[0], dict):
+                                # List of coordinate objects
+                                for point in sample_list:
+                                    if isinstance(point, dict) and 'x' in point and 'y' in point:
+                                        data_points.append({
+                                            "sample": sample_key,
+                                            "x": point.get('x'),
+                                            "y": point.get('y'), 
+                                            "name": point.get('name', sample_key),
+                                            "type": "coordinate_point",
+                                            **{k: v for k, v in point.items() if k not in ['x', 'y', 'name']}
+                                        })
+                                    else:
+                                        # Generic record in list
+                                        data_points.append({
+                                            "sample": sample_key,
+                                            "type": "list_record",
+                                            **point
+                                        })
+                            else:
+                                # Simple array values
+                                for i, value in enumerate(sample_list):
+                                    data_points.append({
+                                        "sample": sample_key,
+                                        "index": i,
+                                        "value": value,
+                                        "type": "array_item"
+                                    })
+        
+        # Pattern 5: Handle top-level coordinate data (PCA plots, scatter plots)
+        elif data_type == DataType.UNKNOWN and isinstance(actual_data, dict):
+            # Check for coordinate-like keys at top level
+            coord_keys = [k for k in actual_data.keys() if not k.startswith('_')]
+            if len(coord_keys) > 0:
+                # Check if values contain coordinate data
+                for key in coord_keys[:10]:  # Sample first 10 keys
+                    value = actual_data[key]
+                    if isinstance(value, list) and len(value) > 0:
+                        if isinstance(value[0], dict) and 'x' in value[0] and 'y' in value[0]:
+                            # This looks like coordinate data
+                            samples.append(key)
+                            for point in value:
+                                if isinstance(point, dict):
+                                    data_points.append({
+                                        "sample": key,
+                                        "x": point.get('x'),
+                                        "y": point.get('y'),
+                                        "name": point.get('name', key),
+                                        "type": "scatter_coordinate",
+                                        **{k: v for k, v in point.items() if k not in ['x', 'y', 'name']}
+                                    })
         
         return list(set(samples)), data_points
     

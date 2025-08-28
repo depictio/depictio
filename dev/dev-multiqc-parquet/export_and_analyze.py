@@ -17,7 +17,10 @@ def analyze_problematic_anchors(extractor: MultiQCExtractor) -> Dict[str, Any]:
     
     # Get extraction results
     plot_data = extractor.extract_plot_input_data()
-    row_data = extractor.extract_plot_input_row_data()
+    datatable_data = extractor.extract_plot_input_row_data()
+    
+    # Combine all data for analysis
+    all_data = plot_data + datatable_data
     
     problems = {
         "json_parse_errors": [],
@@ -27,8 +30,8 @@ def analyze_problematic_anchors(extractor: MultiQCExtractor) -> Dict[str, Any]:
         "analysis_summary": {}
     }
     
-    # Analyze plot_input data issues
-    for data in plot_data:
+    # Analyze all data issues (both plot_input and datatable)
+    for data in all_data:
         metadata = data.metadata
         
         # JSON parsing errors
@@ -76,8 +79,8 @@ def analyze_problematic_anchors(extractor: MultiQCExtractor) -> Dict[str, Any]:
         "empty_extractions": len(problems["empty_extractions"]),
         "unknown_patterns": len(problems["unknown_patterns"]),
         "no_samples_extracted": len(problems["no_samples"]),
-        "total_tabular_anchors": len(row_data),
-        "tabular_success_rate": "100%" if row_data else "0%"
+        "total_tabular_anchors": len(datatable_data),
+        "tabular_success_rate": "100%" if datatable_data else "0%"
     }
     
     return problems
@@ -126,7 +129,11 @@ def export_successful_data_to_csv(extractor: MultiQCExtractor, output_dir: str):
     # 2. Export Plot Input Data (successful extractions only)
     print("  - Exporting plot input data...")
     plot_data = extractor.extract_plot_input_data()
-    successful_plot_data = [d for d in plot_data if len(d.sample_names) > 0]
+    datatable_data = extractor.extract_plot_input_row_data()
+    
+    # Combine both types of data
+    all_plot_data = plot_data + datatable_data
+    successful_plot_data = [d for d in all_plot_data if len(d.sample_names) > 0]
     
     for data in successful_plot_data:
         if data.data_points:
@@ -176,48 +183,8 @@ def export_successful_data_to_csv(extractor: MultiQCExtractor, output_dir: str):
                 })
                 print(f"    ✅ Saved: {csv_file} ({len(df)} rows)")
     
-    # 3. Export Tabular Data
-    print("  - Exporting tabular data...")
-    row_data = extractor.extract_plot_input_row_data()
-    
-    for data in row_data:
-        if data.data_points and len(data.sample_names) > 0:
-            df_data = []
-            
-            for point in data.data_points:
-                df_data.append({
-                    "anchor": data.anchor,
-                    "sample": point.get("sample", ""),
-                    "metric": point.get("metric", ""),
-                    "value": point.get("value", ""),
-                    "value_type": point.get("value_type", ""),
-                    "formatted_value": point.get("formatted_value", ""),
-                    "dt_anchor": point.get("dt_anchor", ""),
-                    "section_key": point.get("section_key", "")
-                })
-            
-            if df_data:
-                # Handle mixed data types by converting everything to string first
-                for row in df_data:
-                    for key, value in row.items():
-                        if value is not None:
-                            row[key] = str(value)
-                        else:
-                            row[key] = ""
-                
-                df = pl.DataFrame(df_data)
-                safe_anchor = data.anchor.replace("/", "_").replace(":", "_")
-                csv_file = output_path / f"tabular_{safe_anchor}.csv"
-                df.write_csv(csv_file)
-                export_summary["files_created"].append(str(csv_file))
-                export_summary["tabular_data"].append({
-                    "anchor": data.anchor,
-                    "file": str(csv_file),
-                    "rows": len(df),
-                    "samples": len(data.sample_names),
-                    "metrics": data.metadata.get("unique_metrics", 0)
-                })
-                print(f"    ✅ Saved: {csv_file} ({len(df)} rows)")
+    # 3. Export Tabular Data (already included in the combined extraction above)
+    # DataTables are now part of the all_plot_data, so no separate export needed
     
     return export_summary
 
