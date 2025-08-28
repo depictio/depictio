@@ -1,12 +1,11 @@
-import dash_bootstrap_components as dbc
+import dash
 import dash_mantine_components as dmc
 import yaml
+from dash import ALL, ctx, dcc
+from dash.exceptions import PreventUpdate
 from dash_extensions.enrich import Input, Output, State, html
 from dash_iconify import DashIconify
 
-import dash
-from dash import ALL, ctx, dcc
-from dash.exceptions import PreventUpdate
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import (
@@ -168,8 +167,10 @@ def render_tokens_list(tokens):
     )
 
 
-layout = dbc.Container(
-    [
+layout = dmc.Container(
+    size="lg",
+    p="md",
+    children=[
         dcc.Store(id="delete-token-id-store", storage_type="memory"),
         # Header section with improved styling
         dmc.Center(
@@ -393,8 +394,6 @@ layout = dbc.Container(
             children=[html.Div(id="display-agent")],
         ),
     ],
-    fluid=True,
-    className="py-4",
 )
 
 

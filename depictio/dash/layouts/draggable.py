@@ -1,12 +1,12 @@
 import copy
 
+import dash
 import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
 import httpx
+from dash import ALL, Input, Output, State, ctx, dcc, html
 from dash_iconify import DashIconify
 
-import dash
-from dash import ALL, Input, Output, State, ctx, dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 

@@ -1,10 +1,9 @@
 """Theme utilities for Depictio Dash application"""
 
-import dash_mantine_components as dmc
-from dash_iconify import DashIconify
-
 import dash
+import dash_mantine_components as dmc
 from dash import Input, Output
+from dash_iconify import DashIconify
 
 
 def create_theme_switch():

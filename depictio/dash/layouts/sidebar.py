@@ -1,9 +1,9 @@
-import dash_mantine_components as dmc
-from dash_iconify import DashIconify
-
 import dash
+import dash_mantine_components as dmc
 from dash import ALL, Input, Output, State, dcc, html
 from dash.exceptions import PreventUpdate
+from dash_iconify import DashIconify
+
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.theme_utils import create_theme_controls
 

@@ -7,13 +7,12 @@ Includes modular components for buttons, badges, modals, and responsive layout m
 
 import datetime
 
-import dash_bootstrap_components as dbc
+import dash
 import dash_mantine_components as dmc
 import httpx
+from dash import Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
-import dash
-from dash import Input, Output, State, dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, api_call_get_dashboard
@@ -309,24 +308,34 @@ def _create_title_section(data):
 
 def _create_backend_components():
     """Create backend components (stores, modals, etc.)."""
-    modal_save_button = dbc.Modal(
-        [
-            dbc.ModalHeader(
-                html.H1("Success!", className="text-success"),
-            ),
-            dbc.ModalBody(
-                html.H5(
-                    "Your amazing dashboard was successfully saved!",
-                    className="text-success",
-                ),
-                style={"background-color": "#F0FFF0"},
-            ),
+    modal_save_button = dmc.Modal(
+        children=[
+            dmc.Stack(
+                [
+                    dmc.Text(
+                        "Your amazing dashboard was successfully saved!",
+                        size="lg",
+                        c="green",
+                        ta="center",
+                    )
+                ],
+                gap="md",
+                style={"padding": "20px", "backgroundColor": "var(--app-success-bg, #F0FFF0)"},
+            )
         ],
         id="success-modal-dashboard",
-        is_open=False,
+        opened=False,
         centered=True,
-        backdrop=True,  # Allow clicking outside to close
-        keyboard=True,  # Allow Escape key to close
+        closeOnClickOutside=True,
+        closeOnEscape=True,
+        title=dmc.Group(
+            [
+                DashIconify(icon="material-symbols:check-circle", width=24, color="green"),
+                dmc.Text("Success!", size="xl", fw="bold", c="green"),
+            ],
+            gap="xs",
+            justify="center",
+        ),
     )
 
     backend_stores = html.Div(
@@ -574,7 +583,11 @@ def design_header(data, local_store):
     )
 
     # Create header components
-    card_section = dbc.Row([_create_info_badges(data, project_name)])
+    card_section = dmc.Group(
+        [_create_info_badges(data, project_name)],
+        justify="center",
+        align="center",
+    )
 
     # Create action buttons with tooltips
     add_new_component_button = _create_action_icon(
@@ -696,13 +709,16 @@ def design_header(data, local_store):
         ]
     )
 
-    offcanvas_parameters = dbc.Offcanvas(
+    offcanvas_parameters = dmc.Drawer(
         id="offcanvas-parameters",
         title="Parameters",
-        placement="end",
-        backdrop=True,
-        children=[toggle_switches_group, buttons_group],
-        class_name="dashboard-offcanvas",  # Add class for theme targeting
+        position="right",
+        opened=False,
+        closeOnClickOutside=True,
+        closeOnEscape=True,
+        children=dmc.Stack([toggle_switches_group, buttons_group], gap="md"),
+        size="400px",
+        styles={"content": {"backgroundColor": "var(--app-surface-color, #ffffff)"}},
     )
 
     # notes_button and open_offcanvas_parameters_button are now created above with tooltips

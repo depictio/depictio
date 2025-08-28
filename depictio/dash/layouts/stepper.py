@@ -1,11 +1,9 @@
+import dash
 import dash_ag_grid as dag
-import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import httpx
-from dash_iconify import DashIconify
-
-import dash
 from dash import ALL, MATCH, Input, Output, State, callback, ctx, html
+from dash_iconify import DashIconify
 
 # Depictio imports
 from depictio.api.v1.configs.config import API_BASE_URL
@@ -484,48 +482,36 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
     #     TOKEN=TOKEN,
     # )
 
-    select_row = dbc.Row(
-        [
-            dbc.Col(
-                # Workflow selection dropdown
-                dmc.Select(
-                    id={"type": "workflow-selection-label", "index": n},
-                    # value=workflow_selection,
-                    value=component_data["wf_id"],
-                    label=html.H4(
-                        [
-                            DashIconify(icon="flat-color-icons:workflow"),
-                            "Workflow selection",
-                        ]
-                    ),
-                    style={
-                        "height": "100%",
-                        "display": "none",
-                        "width": "100%",
-                    },
-                )
+    select_row = dmc.SimpleGrid(
+        cols=2,
+        spacing="md",
+        children=[
+            dmc.Select(
+                id={"type": "workflow-selection-label", "index": n},
+                value=component_data["wf_id"],
+                label=dmc.Group(
+                    [
+                        DashIconify(icon="flat-color-icons:workflow", width=20),
+                        dmc.Text("Workflow selection", fw="bold", size="md"),
+                    ],
+                    gap="xs",
+                ),
+                placeholder="Select workflow...",
             ),
-            dbc.Col(
-                # Data collection selection dropdown
-                dmc.Select(
-                    id={
-                        "type": "datacollection-selection-label",
-                        "index": n,
-                    },
-                    # value=datacollection_selection,
-                    value=component_data["dc_id"],
-                    label=html.H4(
-                        [
-                            DashIconify(icon="bxs:data"),
-                            "Data collection selection",
-                        ]
-                    ),
-                    style={
-                        "height": "100%",
-                        "width": "100%",
-                        "display": "none",
-                    },
-                )
+            dmc.Select(
+                id={
+                    "type": "datacollection-selection-label",
+                    "index": n,
+                },
+                value=component_data["dc_id"],
+                label=dmc.Group(
+                    [
+                        DashIconify(icon="bxs:data", width=20),
+                        dmc.Text("Data collection selection", fw="bold", size="md"),
+                    ],
+                    gap="xs",
+                ),
+                placeholder="Select data collection...",
             ),
         ],
         style={"display": "none"},
@@ -550,13 +536,12 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
     card = return_design_component(component_selected=component_selected, id=id, df=df)
     # logger.info(f"Card: {card}")
 
-    # Use html.Div instead of dbc.Row to avoid Bootstrap grid constraints
-    modal_body = [select_row, html.Div(card, style={"width": "100%"})]
+    modal_body = dmc.Stack([select_row, card], gap="md", style={"width": "100%"})
 
     modal = dmc.Modal(
         id={"type": "modal-edit", "index": n},
         children=[
-            html.Div(
+            dmc.Stack(
                 [
                     html.Div(
                         modal_body,
@@ -581,6 +566,7 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
                     ),
                 ],
                 style=MODAL_CONTENT_STYLE,
+                gap=0,
             )
         ],
         title=html.Div(
@@ -633,7 +619,7 @@ def create_stepper_output(n, active):
 
     stepper_dropdowns = html.Div(
         [
-            html.Hr(),
+            dmc.Divider(),
             dmc.Center(
                 [
                     dmc.Title(
@@ -658,51 +644,39 @@ def create_stepper_output(n, active):
             ),
             # html.Hr(),
             dmc.Space(h=20),
-            dbc.Row(
-                [
-                    dbc.Col(
-                        # Workflow selection dropdown
-                        dmc.Select(
-                            id={"type": "workflow-selection-label", "index": n},
-                            # value=workflow_selection,
-                            label=html.H4(
-                                [
-                                    DashIconify(icon="flat-color-icons:workflow"),
-                                    "Workflow selection",
-                                ]
-                            ),
-                            style={
-                                "height": "100%",
-                                "display": "inline-block",
-                                "width": "100%",
-                            },
-                        )
+            dmc.SimpleGrid(
+                cols=2,
+                spacing="md",
+                children=[
+                    dmc.Select(
+                        id={"type": "workflow-selection-label", "index": n},
+                        label=dmc.Group(
+                            [
+                                DashIconify(icon="flat-color-icons:workflow", width=20),
+                                dmc.Text("Workflow selection", fw="bold", size="md"),
+                            ],
+                            gap="xs",
+                        ),
+                        placeholder="Select workflow...",
                     ),
-                    dbc.Col(
-                        # Data collection selection dropdown
-                        dmc.Select(
-                            id={
-                                "type": "datacollection-selection-label",
-                                "index": n,
-                            },
-                            # value=datacollection_selection,
-                            label=html.H4(
-                                [
-                                    DashIconify(icon="bxs:data"),
-                                    "Data collection selection",
-                                ]
-                            ),
-                            style={
-                                "height": "100%",
-                                "width": "100%",
-                                "display": "inline-block",
-                            },
-                        )
+                    dmc.Select(
+                        id={
+                            "type": "datacollection-selection-label",
+                            "index": n,
+                        },
+                        label=dmc.Group(
+                            [
+                                DashIconify(icon="bxs:data", width=20),
+                                dmc.Text("Data collection selection", fw="bold", size="md"),
+                            ],
+                            gap="xs",
+                        ),
+                        placeholder="Select data collection...",
                     ),
                 ],
             ),
-            html.Hr(),
-            dbc.Row(html.Div(id={"type": "dropdown-output", "index": n})),
+            dmc.Divider(),
+            html.Div(id={"type": "dropdown-output", "index": n}),
             # Data preview section
             html.Div(id={"type": "stepper-data-preview", "index": n}, style={"margin-top": "20px"}),
         ],
@@ -817,21 +791,8 @@ def create_stepper_output(n, active):
             dmc.Modal(
                 id={"type": "modal", "index": n},
                 children=[
-                    html.Div(
+                    dmc.Stack(
                         [
-                            # html.H3(
-                            #     "Design your new dashboard component",
-                            #     style={
-                            #         "marginBottom": "0",
-                            #         "marginTop": "0",
-                            #         "textAlign": "center",
-                            #         "flexShrink": "0",
-                            #         "padding": "5px 1rem 5px 1rem",
-                            #         "fontSize": "1.4rem",
-                            #         "backgroundColor": "#f8f9fa",
-                            #         "borderBottom": "1px solid #e0e0e0",
-                            #     },
-                            # ),
                             html.Div(
                                 stepper,
                                 style=MODAL_BODY_STYLE,
@@ -845,6 +806,7 @@ def create_stepper_output(n, active):
                             **MODAL_CONTENT_STYLE,
                             "marginTop": "-7px",  # Negative margin to move title closer to top
                         },
+                        gap=0,
                     )
                 ],
                 title=html.Div(
