@@ -6,9 +6,7 @@
 /* Core styles */
 @import url('./core/typography.css');
 
-/* Theme system */
-@import url('./theme/theme-variables.css');
-@import url('./theme/auto-theme.css');
+/* Theme system - Now handled by DMC MantineProvider natively */
 
 /* Animations */
 @import url('./animations/animations.css');
@@ -25,6 +23,6 @@
 @import url('./components/table-component-vertical-growing.css');
 
 /* Utilities */
-@import url('./utilities/fouc-prevention.css');
+/* @import url('./utilities/fouc-prevention.css'); */
 @import url('./utilities/performance.css');
 @import url('./utilities/accessibility.css');

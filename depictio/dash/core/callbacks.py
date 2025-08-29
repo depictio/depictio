@@ -15,6 +15,7 @@ def register_main_callback(app):
     Args:
         app (dash.Dash): The Dash application instance
     """
+    logger.info("🔥 REGISTERING MAIN CALLBACK for page routing and authentication")
 
     @app.callback(
         Output("page-content", "children"),
@@ -27,7 +28,7 @@ def register_main_callback(app):
             State("theme-store", "data"),
             State("project-cache-store", "data"),
         ],
-        prevent_initial_call=True,
+        prevent_initial_call="initial_duplicate",
     )
     def display_page(pathname, local_data, theme_store, cached_project_data):
         """
@@ -41,7 +42,7 @@ def register_main_callback(app):
             tuple: (page_content, header, pathname, local_data)
         """
         trigger = ctx.triggered_id
-        logger.debug(f"Trigger: {trigger}")
+        logger.info(f"🔥 MAIN CALLBACK TRIGGERED: {trigger}, pathname={pathname}")
 
         # PERFORMANCE DEBUG: Log data sizes to identify serialization bottlenecks
         import sys
@@ -60,7 +61,13 @@ def register_main_callback(app):
             )
 
         # Process authentication and return appropriate content
-        return process_authentication(pathname, local_data, theme_store, cached_project_data)
+        result = process_authentication(pathname, local_data, theme_store, cached_project_data)
+        logger.info(
+            f"🔥 MAIN CALLBACK RESULT: page_content={'<content>' if result[0] else 'None'}, header_content={'<header>' if result[1] else 'None'}, pathname={result[2]}"
+        )
+        return result
+
+    logger.info("🔥 MAIN CALLBACK REGISTERED SUCCESSFULLY")
 
     @app.callback(
         Output("app-shell", "header"),
@@ -77,6 +84,7 @@ def register_main_callback(app):
         Returns:
             dict or None: header_config - None value hides the component
         """
+        logger.info(f"🔥 HEADER VISIBILITY CALLBACK: pathname={pathname}")
         if pathname == "/auth":
             # Hide header on auth page
             return None
@@ -142,7 +150,7 @@ def register_layout_callbacks(app):
     # from depictio.dash.layouts.stepper_parts.part_one import register_callbacks_stepper_part_one
     # from depictio.dash.layouts.stepper_parts.part_three import register_callbacks_stepper_part_three
     # from depictio.dash.layouts.stepper_parts.part_two import register_callbacks_stepper_part_two
-    from depictio.dash.theme_utils import register_theme_callbacks
+    from depictio.dash.simple_theme import register_simple_theme_system
 
     # Register consolidated API callbacks first (highest priority)
     register_consolidated_api_callbacks(app)
@@ -157,7 +165,7 @@ def register_layout_callbacks(app):
     register_sidebar_callbacks(app)
     register_callbacks_notes_footer(app)
     register_callbacks_save(app)
-    register_theme_callbacks(app)
+    register_simple_theme_system(app)
 
 
 def register_component_callbacks(app):

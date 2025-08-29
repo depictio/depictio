@@ -5,7 +5,7 @@ from dash.exceptions import PreventUpdate
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.theme_utils import create_theme_controls
+from depictio.dash.simple_theme import create_theme_controls
 
 
 def register_sidebar_callbacks(app):
