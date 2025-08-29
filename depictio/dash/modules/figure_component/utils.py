@@ -2,11 +2,12 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import plotly.express as px
 import polars as pl
 from bson import ObjectId
-from dash import dcc
+from dash import dcc, html
 from dash_iconify import DashIconify
 
 # PERFORMANCE OPTIMIZATION: Use centralized config
@@ -55,68 +56,117 @@ def _get_theme_template(theme: str) -> str:
 
 def build_figure_frame(index, children=None):
     if not children:
-        return dmc.Paper(
-            children=[
-                dmc.Center(
-                    dmc.Text(
-                        "Configure your figure using the edit menu",
-                        size="sm",
-                        fs="italic",
-                        ta="center",
-                    ),
+        return dbc.Card(
+            [
+                dbc.CardBody(
                     id={
                         "type": "figure-body",
                         "index": index,
                     },
                     style={
-                        "minHeight": "150px",
-                        "height": "100%",
-                        "minWidth": "150px",
+                        "padding": "5px",  # Reduce padding inside the card body
+                        "display": "flex",
+                        "flexDirection": "column",
+                        "flex": "1",  # Allow growth to fill container
+                        "height": "100%",  # Make sure it fills the parent container
+                        "minHeight": "150px",  # Reduce from 400px for better flexibility
+                        "backgroundColor": "transparent",  # Fix white background
                     },
-                )
+                ),
+                html.Div(
+                    id={
+                        "type": "figure-loading",
+                        "index": index,
+                    },
+                    style={
+                        "position": "absolute",
+                        "top": "0",
+                        "left": "0",
+                        "width": "100%",
+                        "height": "100%",
+                        "display": "none",  # Hidden by default
+                        "alignItems": "center",
+                        "justifyContent": "center",
+                        "backgroundColor": "var(--app-surface-color, #ffffff)",
+                        "zIndex": "1000",
+                    },
+                ),
             ],
+            style={
+                "position": "relative",
+                "width": "100%",
+                "height": "100%",  # Ensure the card fills the container's height
+                "padding": "0",  # Remove default padding
+                "margin": "0",  # Remove default margin
+                "boxShadow": "none",  # Remove shadow for a cleaner look
+                "border": "none",  # Remove conflicting border - parent handles styling
+                "backgroundColor": "transparent",  # Let parent handle theme colors
+                # Critical flexbox properties for vertical growing
+                "display": "flex",
+                "flexDirection": "column",
+                "flex": "1",
+            },
             id={
                 "type": "figure-component",
                 "index": index,
             },
-            withBorder=True,
-            radius="sm",
-            p="md",
-            style={
-                "width": "100%",
-                "height": "100%",
-                "margin": "0",
-                "position": "relative",
-            },
         )
     else:
-        return dmc.Paper(
-            children=[
-                dmc.Stack(
+        return dbc.Card(
+            [
+                dbc.CardBody(
                     children=children,
                     id={
                         "type": "figure-body",
                         "index": index,
                     },
-                    gap="xs",
                     style={
-                        "height": "100%",
+                        "padding": "5px",  # Reduce padding inside the card body
+                        "display": "flex",
+                        "flexDirection": "column",
+                        "flex": "1",  # Allow growth to fill container
+                        "height": "100%",  # Make sure it fills the parent container
+                        "minHeight": "150px",  # Reduce from 400px for better flexibility
+                        "backgroundColor": "transparent",  # Fix white background
                     },
-                )
+                ),
+                html.Div(
+                    id={
+                        "type": "figure-loading",
+                        "index": index,
+                    },
+                    style={
+                        "position": "absolute",
+                        "top": "0",
+                        "left": "0",
+                        "width": "100%",
+                        "height": "100%",
+                        "display": "none",  # Hidden by default
+                        "alignItems": "center",
+                        "justifyContent": "center",
+                        "backgroundColor": "var(--app-surface-color, #ffffff)",
+                        "zIndex": "1000",
+                    },
+                ),
             ],
+            style={
+                "position": "relative",
+                "overflowX": "hidden",
+                "width": "100%",
+                "height": "100%",  # Ensure the card fills the container's height
+                "padding": "0",  # Remove default padding
+                "margin": "0",  # Remove default margin
+                "boxShadow": "none",  # Remove shadow for a cleaner look
+                "border": "none",  # Remove conflicting border - parent handles styling
+                "backgroundColor": "transparent",  # Let parent handle theme colors
+                # Critical flexbox properties for vertical growing
+                "display": "flex",
+                "flexDirection": "column",
+                "flex": "1",
+            },
             id={
                 "type": "figure-component",
                 "index": index,
-            },
-            withBorder=True,
-            radius="sm",
-            p="xs",
-            style={
-                "width": "100%",
-                "height": "100%",
-                "margin": "0",
-                "position": "relative",
-                "overflowX": "hidden",
             },
         )
 
@@ -743,7 +793,7 @@ def validate_parameters(visu_type: str, parameters: Dict[str, Any]) -> Dict[str,
             return {}
 
 
-def build_figure(**kwargs) -> dmc.Stack | dcc.Loading:
+def build_figure(**kwargs) -> html.Div | dcc.Loading:
     """Build figure component with robust parameter handling.
 
     Args:
@@ -986,8 +1036,8 @@ def build_figure(**kwargs) -> dmc.Stack | dcc.Loading:
     # Create info badges
     badges = _create_info_badges(index or "unknown", df, visu_type, filter_applied, build_frame)
 
-    # Create figure component using DMC
-    figure_div = dmc.Stack(
+    # Create figure component
+    figure_div = html.Div(
         [
             badges,
             dcc.Graph(
@@ -1000,19 +1050,28 @@ def build_figure(**kwargs) -> dmc.Stack | dcc.Loading:
                     "displayModeBar": True,
                 },
                 className="responsive-graph",  # Add responsive graph class for vertical growing
+                # style={
+                #     "width": "100%",
+                #     "height": "100%",  # FIXED: Use full height for vertical growing
+                #     "flex": "1",  # Critical for vertical growing
+                #     "backgroundColor": "transparent",  # Fix white background issue
+                #     # "minHeight": "200px",  # Minimum height for usability
+                # },
             ),
             dcc.Store(
                 data=store_component_data,
                 id={"type": "stored-metadata-component", "index": store_index},
             ),
         ],
-        id={"type": "figure-content", "index": index},
-        w="100%",
-        h="100%",
-        gap="0",
-        style={
-            "flex": "1",
-        },
+        # style={
+        #     "width": "100%",
+        #     "height": "100%",
+        #     "flex": "1",  # Critical for vertical growing
+        #     "display": "flex",
+        #     "flexDirection": "column",
+        #     # "minHeight": "200px",  # Reduce from 400px for better flexibility
+        #     "backgroundColor": "transparent",
+        # },
     )
 
     if not build_frame:
@@ -1024,7 +1083,10 @@ def build_figure(**kwargs) -> dmc.Stack | dcc.Loading:
 
         # For stepper mode with loading
         if not stepper:
-            # Dashboard mode - return figure directly without extra wrapper
+            # Build the figure component with frame
+            figure_component = build_figure_frame(index=index, children=figure_div)
+
+            # Add targeted loading for the graph component specifically
             from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
                 create_skeleton_component,
             )
@@ -1038,11 +1100,11 @@ def build_figure(**kwargs) -> dmc.Stack | dcc.Loading:
             # PERFORMANCE OPTIMIZATION: Conditional loading spinner
             if settings.performance.disable_loading_spinners:
                 logger.info("🚀 PERFORMANCE MODE: Loading spinners disabled")
-                return figure_div  # Return content directly, no loading wrapper
+                return figure_component  # Return content directly, no loading wrapper
             else:
                 # Optimized loading with fast delays
                 return dcc.Loading(
-                    children=figure_div,
+                    children=figure_component,
                     custom_spinner=create_skeleton_component("figure"),
                     target_components={target_id: "figure"},
                     delay_show=5,  # Fast delay for better UX
@@ -1055,10 +1117,10 @@ def build_figure(**kwargs) -> dmc.Stack | dcc.Loading:
 
 def _create_info_badges(
     index: str, df: pl.DataFrame, visu_type: str, filter_applied: bool, build_frame: bool
-) -> dmc.Stack | dmc.Group:
+) -> html.Div:
     """Create informational badges for the figure."""
     if not build_frame:
-        return dmc.Stack([])
+        return html.Div()
 
     badges = []
     cutoff = _config.max_data_points
@@ -1100,9 +1162,9 @@ def _create_info_badges(
         badges.append(filter_badge)
 
     if badges:
-        return dmc.Group(badges, gap="md", style={"margin-left": "12px"})
+        return html.Div(dbc.Row(dmc.Group(badges, gap="md", style={"margin-left": "12px"})))
 
-    return dmc.Stack([])
+    return html.Div()
 
 
 def create_stepper_figure_button(n, disabled=False):
@@ -1117,19 +1179,21 @@ def create_stepper_figure_button(n, disabled=False):
     """
     from depictio.dash.utils import UNSELECTED_STYLE
 
-    button = dmc.Button(
-        "Figure",
-        id={
-            "type": "btn-option",
-            "index": n,
-            "value": "Figure",
-        },
-        n_clicks=0,
-        style=UNSELECTED_STYLE,
-        size="xl",
-        color="grape",
-        leftSection=DashIconify(icon="mdi:graph-box", color="white"),
-        disabled=disabled,
+    button = dbc.Col(
+        dmc.Button(
+            "Figure",
+            id={
+                "type": "btn-option",
+                "index": n,
+                "value": "Figure",
+            },
+            n_clicks=0,
+            style=UNSELECTED_STYLE,
+            size="xl",
+            color="grape",
+            leftSection=DashIconify(icon="mdi:graph-box", color="white"),
+            disabled=disabled,
+        )
     )
     store = dcc.Store(
         id={
