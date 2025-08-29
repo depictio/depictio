@@ -344,11 +344,11 @@
 /* Disable drag handle transitions during active drag operations
    Purpose: Prevent CSS transitions from interfering with drag performance
    Trigger: Applied when any grid item has .react-grid-item-dragging class
-   Browser Support: Uses :has() selector (modern browsers only) */
+   Browser Support: Uses :has() selector (modern browsers only)
 .react-grid-layout:has(.react-grid-item-dragging) .mantine-ActionIcon-root.react-grid-dragHandle {
     transition: none !important;
 }
-
+ */
 /* =============================================================================
    7. GRID PLACEHOLDER (Drop Preview)
    ============================================================================= */
@@ -356,16 +356,18 @@
 /* Grid placeholder styling for drop preview
    Purpose: Visual feedback showing where component will be placed
    Appearance: Light red background with dashed border
-   Behavior: Appears during drag operations */
+   Behavior: Appears during drag operations
+*/
 .react-grid-layout .react-grid-placeholder {
-    transition-duration: 0s !important;
-    animation-duration: 0s !important;
-    transition-property: none !important;
+    /* transition-duration: 0s !important;
+    animation-duration: 0s !important; */
+    /* transition-property: none !important; */
+    /* background adjusted to theme */
     background: rgba(0, 0, 0, 0.2) !important;
-    border: 2px dashed #737373 !important;
+    border: 4px dashed #737373 !important;
     border-radius: 4px !important;
-    opacity: 1 !important;
-    z-index: 2 !important;
+    /* opacity: 1 !important; */
+    /* z-index: 2 !important; */
 }
 
 

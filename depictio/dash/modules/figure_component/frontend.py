@@ -1845,9 +1845,9 @@ def register_callbacks_figure_component(app):
         raise dash.exceptions.PreventUpdate
 
     @app.callback(
-        Output({"type": "figure", "index": MATCH}, "figure", allow_duplicate=True),
+        Output({"type": "figure", "index": MATCH}, "figure"),
         Input("theme-store", "data"),
-        prevent_initial_call=True,
+        # prevent_initial_call=True,
     )
     def update_theme_figure(theme_data):
         """Update figure theme based on current theme."""

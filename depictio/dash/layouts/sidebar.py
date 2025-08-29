@@ -95,7 +95,7 @@ def register_sidebar_callbacks(app):
         Output("app-shell", "navbar"),
         Input("url", "pathname"),
         State("sidebar-collapsed", "data"),
-        prevent_initial_call=True,
+        prevent_initial_call=False,
     )
     def handle_navbar_url_changes(pathname, is_collapsed):
         # Check if we're on the auth page - if so, hide the navbar completely

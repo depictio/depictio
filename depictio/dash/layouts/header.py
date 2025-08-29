@@ -443,9 +443,9 @@ def register_callbacks_header(app):
         return is_open
 
     @app.callback(
-        Output("offcanvas-parameters", "is_open"),
+        Output("offcanvas-parameters", "opened"),
         Input("open-offcanvas-parameters-button", "n_clicks"),
-        State("offcanvas-parameters", "is_open"),
+        State("offcanvas-parameters", "opened"),
         prevent_initial_call=True,
     )
     def toggle_offcanvas_parameters(n_clicks, is_open):
@@ -718,7 +718,6 @@ def design_header(data, local_store):
         closeOnEscape=True,
         children=dmc.Stack([toggle_switches_group, buttons_group], gap="md"),
         size="400px",
-        styles={"content": {"backgroundColor": "var(--app-surface-color, #ffffff)"}},
     )
 
     # notes_button and open_offcanvas_parameters_button are now created above with tooltips

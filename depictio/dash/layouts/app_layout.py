@@ -615,12 +615,7 @@ def create_app_layout():
             html.Div(id="admin-password-warning-trigger", style={"display": "none"}),
             dmc.AppShell(
                 id="app-shell",  # Add ID for callback targeting
-                navbar={
-                    "width": 220,
-                    "breakpoint": "sm",
-                    "collapsed": {"mobile": True, "desktop": False},
-                },
-                header={"height": 87},
+                # navbar and header will be set by callbacks
                 layout="alt",  # Use alternative layout where header stops at navbar
                 style={
                     "height": "100vh",

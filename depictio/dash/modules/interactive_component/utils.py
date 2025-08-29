@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import polars as pl
 from bson import ObjectId
-from dash import dcc, html
+from dash import dcc
 
 # PERFORMANCE OPTIMIZATION: Use centralized config
 from depictio.api.v1.configs.config import settings
@@ -22,26 +22,19 @@ def build_interactive_frame(index, children=None, show_border=False):
     if not children:
         return dmc.Paper(
             children=[
-                html.Div(
-                    html.Div(
+                dmc.Center(
+                    dmc.Text(
                         "Configure your interactive component using the edit menu",
-                        style={
-                            "textAlign": "center",
-                            "color": "var(--app-text-color, #999)",
-                            "fontSize": "14px",
-                            "fontStyle": "italic",
-                        },
+                        size="sm",
+                        fs="italic",
+                        ta="center",
                     ),
                     id={
                         "type": "input-body",
                         "index": index,
                     },
+                    p="xl",
                     style={
-                        "padding": "20px",
-                        "display": "flex",
-                        "flexDirection": "column",
-                        "justifyContent": "center",
-                        "alignItems": "center",
                         "minHeight": "150px",
                         "height": "100%",
                     },
@@ -51,29 +44,21 @@ def build_interactive_frame(index, children=None, show_border=False):
                 "type": "interactive-component",
                 "index": index,
             },
-            style={
-                "width": "100%",
-                "height": "100%",
-                "padding": "0",
-                "margin": "0",
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
-                "color": "var(--app-text-color, #000000)",
-                "border": "1px solid var(--app-border-color, #ddd)",
-                "borderRadius": "0.375rem",
-            },
+            w="100%",
+            h="100%",
+            p="0",
+            radius="md",
         )
     else:
         return dmc.Paper(
             children=[
-                html.Div(
+                dmc.Center(
                     children=children,
                     id={
                         "type": "input-body",
                         "index": index,
                     },
                     style={
-                        "display": "flex",
-                        "flexDirection": "column",
                         "overflow": "visible",
                         "height": "100%",
                         "position": "relative",
@@ -84,17 +69,13 @@ def build_interactive_frame(index, children=None, show_border=False):
                 "type": "interactive-component",
                 "index": index,
             },
+            w="100%",
+            h="100%",
+            p="0",
+            radius="md",
             style={
-                "width": "100%",
-                "height": "100%",
-                "padding": "0",
                 "overflow": "visible",
                 "position": "relative",
-                "margin": "0",
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
-                "color": "var(--app-text-color, #000000)",
-                "border": "1px solid var(--app-border-color, #ddd)",
-                "borderRadius": "0.375rem",
             },
         )
 
@@ -1234,10 +1215,9 @@ def build_interactive(**kwargs):
     else:
         logger.info(f"Interactive - component value: {value}")
 
-    # Apply custom color if specified, otherwise use theme-aware color
+    # Apply custom color if specified, otherwise let Mantine handle theming
     title_style = {
         "marginBottom": "0.5rem",
-        "color": "var(--app-text-color, #000000)",  # Default to theme-aware text color
     }
     if color:
         title_style["color"] = color
@@ -1245,9 +1225,9 @@ def build_interactive(**kwargs):
         store_data["custom_color"] = color
         logger.info(f"Applied custom color: {color}")
     else:
-        logger.debug("Using theme-aware text color for title")
+        logger.debug("Using Mantine's native theming for title")
 
-    card_title_h5 = html.H5(card_title, style=title_style)
+    card_title_h5 = dmc.Text(card_title, size="md", fw="bold", style=title_style)
 
     # Generate default state information for the component
     # For select-type components, pass unique values if available
@@ -1293,23 +1273,20 @@ def build_interactive(**kwargs):
         storage_type="memory",
     )
 
-    # Create wrapper with constrained sizing to prevent slider stretching
-    new_interactive_component = html.Div(
+    # Create wrapper with proper sizing for interactive components
+    new_interactive_component = dmc.Stack(
         [card_title_h5, interactive_component, store_component],
-        # className="interactive-component-wrapper",  # Add class for CSS targeting
+        gap="xs",
         style={
             "width": "100%",
-            "height": "auto !important",  # Use natural height
-            "maxWidth": "500px !important",  # Constrain width to reasonable size
+            "height": "auto",  # Use natural height, don't force 100%
+            "maxWidth": "500px",
             "padding": "10px",
             "boxSizing": "border-box",
-            "backgroundColor": "var(--app-surface-color, transparent)",  # Use theme-aware background
-            "color": "var(--app-text-color, #000000)",  # Use theme-aware text color
-            # Prevent vertical stretching with !important
-            "flex": "none !important",
-            "flexGrow": "0 !important",
-            "flexShrink": "0 !important",
-            "alignSelf": "flex-start !important",
+            # Center the stack within its container
+            "margin": "0 auto",
+            # Allow components to grow horizontally but not vertically
+            "alignSelf": "flex-start",
         },
     )
 

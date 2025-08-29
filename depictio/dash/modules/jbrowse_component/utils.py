@@ -54,26 +54,25 @@ def build_jbrowse_frame(index, children=None):
     if not children:
         return dmc.Paper(
             children=[
-                html.Div(
+                dmc.Stack(
+                    [],
                     id={
                         "type": "jbrowse-body",
                         "index": index,
-                    }
+                    },
                 )
             ],
             id={
                 "type": "jbrowse-component",
                 "index": index,
             },
+            withBorder=True,
+            radius="md",
             style={
                 "width": "100%",
                 "height": "100%",
                 "padding": "0",
                 "margin": "0",
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
-                "color": "var(--app-text-color, #000000)",
-                "border": "1px solid var(--app-border-color, #ddd)",
-                "borderRadius": "0.375rem",
             },
         )
     else:
@@ -91,15 +90,13 @@ def build_jbrowse_frame(index, children=None):
                 "type": "jbrowse-component",
                 "index": index,
             },
+            withBorder=True,
+            radius="md",
             style={
                 "width": "100%",
                 "height": "100%",
                 "padding": "0",
                 "margin": "0",
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
-                "color": "var(--app-text-color, #000000)",
-                "border": "1px solid var(--app-border-color, #ddd)",
-                "borderRadius": "0.375rem",
             },
         )
 

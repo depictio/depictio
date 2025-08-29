@@ -1,7 +1,7 @@
 import dash_mantine_components as dmc
 import numpy as np
 import pandas as pd
-from dash import dcc, html
+from dash import dcc
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import settings
@@ -145,30 +145,22 @@ def build_card_frame(index, children=None, show_border=False):
     if not children:
         return dmc.Paper(
             children=[
-                html.Div(
-                    html.Div(
+                dmc.Center(
+                    dmc.Text(
                         "Configure your card using the edit menu",
-                        style={
-                            "textAlign": "center",
-                            "color": "var(--app-text-color, #999)",
-                            "fontSize": "14px",
-                            "fontStyle": "italic",
-                        },
+                        size="sm",
+                        c="gray",
+                        fs="italic",
+                        ta="center",
                     ),
                     id={
                         "type": "card-body",
                         "index": index,
                     },
                     style={
-                        "padding": "20px",
-                        "display": "flex",
-                        "flexDirection": "column",
-                        "justifyContent": "center",
-                        "alignItems": "center",
                         "minHeight": "150px",
                         "height": "100%",
                         "minWidth": "150px",
-                        "flex": "1",
                     },
                 )
             ],
@@ -176,36 +168,27 @@ def build_card_frame(index, children=None, show_border=False):
                 "type": "card-component",
                 "index": index,
             },
+            withBorder=show_border,
+            radius="sm",
+            p="md",
             style={
                 "width": "100%",
                 "height": "100%",
-                "padding": "0",
                 "margin": "0",
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
-                "color": "var(--app-text-color, #000000)",
-                "border": "1px solid var(--app-border-color, #dee2e6)",
-                "borderRadius": "0.375rem",
-                "display": "flex",
-                "flexDirection": "column",
-                "flex": "1",
             },
         )
     else:
         return dmc.Paper(
             children=[
-                html.Div(
+                dmc.Stack(
                     children=children,
                     id={
                         "type": "card-body",
                         "index": index,
                     },
+                    gap="xs",
                     style={
-                        "padding": "5px",
-                        "display": "flex",
-                        "flexDirection": "column",
                         "height": "100%",
-                        "flex": "1",
-                        "minHeight": "0",
                     },
                 )
             ],
@@ -213,18 +196,13 @@ def build_card_frame(index, children=None, show_border=False):
                 "type": "card-component",
                 "index": index,
             },
+            withBorder=show_border,
+            radius="sm",
+            p="xs",
             style={
                 "width": "100%",
                 "height": "100%",
-                "padding": "0",
                 "margin": "0",
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
-                "color": "var(--app-text-color, #000000)",
-                "border": "1px solid var(--app-border-color, #dee2e6)",
-                "borderRadius": "0.375rem",
-                "display": "flex",
-                "flexDirection": "column",
-                "flex": "1",
             },
         )
 
@@ -525,8 +503,14 @@ def build_card(**kwargs):
         value_text_props["c"] = value_color
 
     card_content = [
-        dmc.Text(card_title, size="sm", c=title_color, fw="normal"),
-        dmc.Text(**value_text_props),
+        dmc.Text(
+            card_title,
+            size="md",
+            c=title_color,
+            fw="bold",
+            style={"margin": "0", "marginLeft": "-2px"},
+        ),
+        dmc.Text(**value_text_props, style={"margin": "0", "marginLeft": "-2px"}),
     ]
 
     # Add comparison text if available
@@ -544,23 +528,13 @@ def build_card(**kwargs):
                         size="xs",
                         c=ensure_string_color(comparison_color),
                         fw="normal",
+                        style={"margin": "0"},
                     ),  # type: ignore
                 ],
                 gap="xs",
                 align="center",
-            )
-        )
-
-    # Add filter badge if data is filtered
-    if is_filtered_data:
-        card_content.append(
-            dmc.Badge(
-                "Filtered Data",
-                size="xs",
-                color="orange",
-                variant="light",
-                leftSection=DashIconify(icon="mdi:filter", width=12),
-                style={"marginTop": "8px"},
+                justify="flex-start",
+                style={"margin": "0", "marginLeft": "-2px"},
             )
         )
 
@@ -569,15 +543,14 @@ def build_card(**kwargs):
     # Create the modern card body using DMC Card component
     new_card_body = dmc.Card(
         children=card_content,
-        withBorder=True,
-        shadow="sm",
-        radius="md",
-        p="md",
+        withBorder=False,
+        # shadow="sm",
+        # radius="md",
         style={
+            "boxSizing": "content-box",
             "height": "100%",
             "minHeight": "120px",
-            "backgroundColor": "var(--app-surface-color, #ffffff)",
-            "borderColor": "var(--app-border-color, #ddd)",
+            "padding": "0",
         },
         id={
             "type": "card",
@@ -588,27 +561,19 @@ def build_card(**kwargs):
         return new_card_body
     else:
         if not stepper:
-            # Show border only when in stepper mode (editing)
+            # Dashboard mode - return card directly without extra wrapper
             from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
                 create_skeleton_component,
             )
 
-            # Build the card component
-            card_component = build_card_frame(
-                index=index, children=new_card_body, show_border=stepper
-            )
-
-            # NUCLEAR: Remove intermediate wrapper div that breaks flex chain
-            # Return card_component directly with loading wrapper only
-
             # PERFORMANCE OPTIMIZATION: Conditional loading spinner
             if settings.performance.disable_loading_spinners:
                 logger.info("🚀 PERFORMANCE MODE: Card loading spinners disabled")
-                return card_component  # Return content directly, no loading wrapper
+                return new_card_body  # Return content directly, no loading wrapper
             else:
                 # Optimized loading with fast delays
                 return dcc.Loading(
-                    children=card_component,
+                    children=new_card_body,
                     custom_spinner=create_skeleton_component("card"),
                     delay_show=5,  # Fast delay for better UX
                     delay_hide=25,  # Quick hide for performance

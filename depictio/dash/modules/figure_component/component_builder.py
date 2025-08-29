@@ -359,7 +359,7 @@ class AccordionBuilder:
                             label_text,
                             size="sm",
                             fw="bold",
-                            c="red" if param.required else "dark",
+                            # c="red" if param.required else "dark",
                             style={
                                 "cursor": "help",
                                 "textDecoration": "underline dotted"
@@ -377,7 +377,7 @@ class AccordionBuilder:
                     label_text,
                     size="sm",
                     fw="bold",
-                    c="red" if param.required else "dark",
+                    # c="red" if param.required else None,
                     style={
                         "minWidth": "120px",
                         "display": "flex",

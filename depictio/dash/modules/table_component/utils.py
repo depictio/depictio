@@ -2,7 +2,7 @@ import dash_ag_grid as dag
 import dash_mantine_components as dmc
 import polars as pl
 from bson import ObjectId
-from dash import dcc, html
+from dash import dcc
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -14,17 +14,21 @@ def build_table_frame(index, children=None):
     if not children:
         return dmc.Paper(
             children=[
-                html.Div(
+                dmc.Center(
+                    dmc.Text(
+                        "Configure your table using the edit menu",
+                        size="sm",
+                        fs="italic",
+                        ta="center",
+                    ),
                     id={
                         "type": "table-body",
                         "index": index,
                     },
                     style={
-                        "padding": "5px",
-                        "display": "flex",
-                        "flexDirection": "column",
-                        "justifyContent": "center",
+                        "minHeight": "150px",
                         "height": "100%",
+                        "minWidth": "150px",
                     },
                 )
             ],
@@ -32,49 +36,34 @@ def build_table_frame(index, children=None):
                 "type": "table-component",
                 "index": index,
             },
-            style={
-                "width": "100%",
-                "height": "100%",
-                "padding": "0",
-                "margin": "0",
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
-                "color": "var(--app-text-color, #000000)",
-                "border": "1px solid var(--app-border-color, #ddd)",
-                "borderRadius": "0.375rem",
-            },
+            withBorder=True,
+            radius="sm",
+            p="md",
+            w="100%",
+            h="100%",
         )
     else:
         return dmc.Paper(
             children=[
-                html.Div(
+                dmc.Stack(
                     children=children,
                     id={
                         "type": "table-body",
                         "index": index,
                     },
-                    style={
-                        "padding": "5px",
-                        "display": "flex",
-                        "flexDirection": "column",
-                        "justifyContent": "center",
-                        "height": "100%",
-                    },
+                    gap="xs",
+                    h="100%",
                 )
             ],
             id={
                 "type": "table-component",
                 "index": index,
             },
-            style={
-                "width": "100%",
-                "height": "100%",
-                "padding": "0",
-                "margin": "0",
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
-                "color": "var(--app-text-color, #000000)",
-                "border": "1px solid var(--app-border-color, #ddd)",
-                "borderRadius": "0.375rem",
-            },
+            withBorder=True,
+            radius="sm",
+            p="xs",
+            w="100%",
+            h="100%",
         )
 
 
@@ -298,13 +287,17 @@ def build_table(**kwargs):
 
     # Create the card body - default title is the aggregation value on the selected column
 
-    # Create the card body - simple structure
-    new_card_body = html.Div(
+    # Create the card body - simple structure using DMC
+    new_card_body = dmc.Stack(
         [
             # infinite_scroll_badge,  # Removed as requested
             table_aggrid,
             store_component,
-        ]
+        ],
+        id={"type": "table-content", "index": index},
+        w="100%",
+        h="100%",
+        gap="xs",
     )
     if not build_frame:
         return new_card_body
@@ -313,7 +306,7 @@ def build_table(**kwargs):
         table_component = build_table_frame(index=index, children=new_card_body)
 
         if not stepper:
-            # Add targeted loading for the AG Grid component specifically
+            # Dashboard mode - return table directly without extra wrapper
             from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
                 create_skeleton_component,
             )
@@ -324,18 +317,15 @@ def build_table(**kwargs):
 
             if settings.performance.disable_loading_spinners:
                 logger.info("🚀 PERFORMANCE MODE: Table loading spinners disabled")
-                return table_component
+                return new_card_body
 
             return dcc.Loading(
-                children=table_component,
+                children=new_card_body,
                 custom_spinner=create_skeleton_component("table"),
-                # target_components={f'{{"index":"{index}","type":"table-aggrid"}}': "rowData"},
                 target_components={target_id: "rowData"},
-                # delay_show=50,  # Minimal delay to prevent flashing
-                # delay_hide=100,  # Quick dismissal
                 delay_show=50,  # Minimal delay to prevent flashing
                 delay_hide=300,  #
-                id={"index": index},  # Move the id to the loading component
+                id={"type": "table-loading", "index": index},
             )
 
         else:

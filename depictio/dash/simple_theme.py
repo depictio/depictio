@@ -56,6 +56,8 @@ def register_simple_theme_system(app):
 
     from depictio.api.v1.configs.logging_init import logger
 
+    dmc.add_figure_templates()  # type: ignore[unresolved-attribute]
+
     # Core theme callback - updates MantineProvider directly
     @app.callback(
         Output("mantine-provider", "forceColorScheme"),
@@ -100,61 +102,61 @@ def register_simple_theme_system(app):
     )
 
     # Initialize theme from localStorage or system preference
-    clientside_callback(
-        """
-        function() {
-            console.log('🎨 Simple theme initialization');
+    # clientside_callback(
+    #     """
+    #     function() {
+    #         console.log('🎨 Simple theme initialization');
 
-            // Check saved preference
-            const savedTheme = localStorage.getItem('depictio-theme');
-            if (savedTheme) {
-                console.log('Using saved theme:', savedTheme);
-                return savedTheme;
-            }
+    #         // Check saved preference
+    #         const savedTheme = localStorage.getItem('depictio-theme');
+    #         if (savedTheme) {
+    #             console.log('Using saved theme:', savedTheme);
+    #             return savedTheme;
+    #         }
 
-            // Use system preference
-            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            const systemTheme = prefersDark ? 'dark' : 'light';
-            console.log('Using system theme:', systemTheme);
+    #         // Use system preference
+    #         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    #         const systemTheme = prefersDark ? 'dark' : 'light';
+    #         console.log('Using system theme:', systemTheme);
 
-            // Save as initial preference
-            localStorage.setItem('depictio-theme', systemTheme);
+    #         // Save as initial preference
+    #         localStorage.setItem('depictio-theme', systemTheme);
 
-            return systemTheme;
-        }
-        """,
-        Output("theme-store", "data", allow_duplicate=True),
-        Input("url", "pathname"),  # Trigger on page load
-        prevent_initial_call=True,
-    )
+    #         return systemTheme;
+    #     }
+    #     """,
+    #     Output("theme-store", "data", allow_duplicate=True),
+    #     Input("url", "pathname"),  # Trigger on page load
+    #     prevent_initial_call=True,
+    # )
 
     # Handle auto theme button - reset to system preference
-    clientside_callback(
-        """
-        function(n_clicks) {
-            if (!n_clicks) {
-                return window.dash_clientside.no_update;
-            }
+    # clientside_callback(
+    #     """
+    #     function(n_clicks) {
+    #         if (!n_clicks) {
+    #             return window.dash_clientside.no_update;
+    #         }
 
-            console.log('🎨 Resetting to auto theme');
+    #         console.log('🎨 Resetting to auto theme');
 
-            // Remove manual override
-            localStorage.removeItem('depictio-theme-manual-override');
+    #         // Remove manual override
+    #         localStorage.removeItem('depictio-theme-manual-override');
 
-            // Get system theme
-            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            const systemTheme = prefersDark ? 'dark' : 'light';
+    #         // Get system theme
+    #         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    #         const systemTheme = prefersDark ? 'dark' : 'light';
 
-            // Save system theme
-            localStorage.setItem('depictio-theme', systemTheme);
+    #         // Save system theme
+    #         localStorage.setItem('depictio-theme', systemTheme);
 
-            return systemTheme;
-        }
-        """,
-        Output("theme-store", "data", allow_duplicate=True),
-        Input("auto-theme-button", "n_clicks"),
-        prevent_initial_call=True,
-    )
+    #         return systemTheme;
+    #     }
+    #     """,
+    #     Output("theme-store", "data", allow_duplicate=True),
+    #     Input("auto-theme-button", "n_clicks"),
+    #     prevent_initial_call=True,
+    # )
 
     # Update navbar logo based on theme (minimal styling needed)
     @app.callback(
@@ -173,44 +175,44 @@ def register_simple_theme_system(app):
         return logo_src
 
     # Disable theme switch on dashboard pages only
-    # @app.callback(
-    #     Output("theme-switch", "disabled"),
-    #     Input("url", "pathname"),
-    #     prevent_initial_call=False,
-    # )
-    # def disable_theme_switch_on_dashboard(pathname):
-    #     """Disable theme switch only on dashboard pages."""
-    #     return pathname and pathname.startswith("/dashboard/")
+    @app.callback(
+        Output("theme-switch", "disabled"),
+        Input("url", "pathname"),
+        prevent_initial_call=False,
+    )
+    def disable_theme_switch_on_dashboard(pathname):
+        """Disable theme switch only on dashboard pages."""
+        return pathname and pathname.startswith("/dashboard/")
 
     # Simple Plotly template update (replace complex JS approach)
-    clientside_callback(
-        """
-        function(theme_data) {
-            const theme = theme_data || 'light';
+    # clientside_callback(
+    #     """
+    #     function(theme_data) {
+    #         const theme = theme_data || 'light';
 
-            // Simple Plotly template update
-            if (window.Plotly) {
-                const template = theme === 'dark' ? 'plotly_dark' : 'plotly_white';
+    #         // Simple Plotly template update
+    #         if (window.Plotly) {
+    #             const template = theme === 'dark' ? 'plotly_dark' : 'plotly_white';
 
-                // Find and update all Plotly graphs
-                const graphs = document.querySelectorAll('.js-plotly-plot');
-                graphs.forEach(graph => {
-                    try {
-                        window.Plotly.relayout(graph, {
-                            'template': template
-                        });
-                    } catch (e) {
-                        console.log('Could not update graph template:', e);
-                    }
-                });
-            }
+    #             // Find and update all Plotly graphs
+    #             const graphs = document.querySelectorAll('.js-plotly-plot');
+    #             graphs.forEach(graph => {
+    #                 try {
+    #                     window.Plotly.relayout(graph, {
+    #                         'template': template
+    #                     });
+    #                 } catch (e) {
+    #                     console.log('Could not update graph template:', e);
+    #                 }
+    #             });
+    #         }
 
-            return window.dash_clientside.no_update;
-        }
-        """,
-        Output("dummy-plotly-output", "children", allow_duplicate=True),
-        Input("theme-store", "data"),
-        prevent_initial_call=True,
-    )
+    #         return window.dash_clientside.no_update;
+    #     }
+    #     """,
+    #     Output("dummy-plotly-output", "children", allow_duplicate=True),
+    #     Input("theme-store", "data"),
+    #     prevent_initial_call=True,
+    # )
 
     logger.info("🔥 THEME SYSTEM: Simple DMC-native theme system registered")

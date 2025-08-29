@@ -72,7 +72,7 @@ def register_main_callback(app):
     @app.callback(
         Output("app-shell", "header"),
         Input("url", "pathname"),
-        prevent_initial_call=True,
+        prevent_initial_call=False,
     )
     def toggle_appshell_header_visibility(pathname):
         """
@@ -88,9 +88,38 @@ def register_main_callback(app):
         if pathname == "/auth":
             # Hide header on auth page
             return None
+        elif pathname is None:
+            # On initial load, hide header by default until pathname is determined
+            return None
         else:
             # Show header on all other pages
             return {"height": 87}
+
+    # Add clientside callback to manage body classes for auth page
+    app.clientside_callback(
+        """
+        function(pathname) {
+            // Also check location.pathname for initial load
+            const currentPath = pathname || window.location.pathname;
+
+            // Add a small delay to ensure smooth transitions
+            setTimeout(() => {
+                if (currentPath === '/auth') {
+                    document.body.classList.add('auth-page');
+                    document.body.classList.remove('page-loaded');
+                } else {
+                    document.body.classList.remove('auth-page');
+                    document.body.classList.add('page-loaded');
+                }
+            }, 50); // 50ms delay for smooth transition
+
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("dummy-resize-output", "children", allow_duplicate=True),
+        Input("url", "pathname"),
+        prevent_initial_call="initial_duplicate",
+    )
 
 
 def register_all_callbacks(app):

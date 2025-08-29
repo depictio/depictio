@@ -547,7 +547,7 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
                         modal_body,
                         style=MODAL_BODY_STYLE,
                     ),
-                    html.Div(
+                    dmc.Paper(
                         dmc.Group(
                             [
                                 dmc.Button(
@@ -563,6 +563,7 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
                             justify="center",
                         ),
                         style=MODAL_FOOTER_STYLE,
+                        withBorder=True,
                     ),
                 ],
                 style=MODAL_CONTENT_STYLE,
@@ -797,9 +798,10 @@ def create_stepper_output(n, active):
                                 stepper,
                                 style=MODAL_BODY_STYLE,
                             ),
-                            html.Div(
+                            dmc.Paper(
                                 stepper_footer,
                                 style=MODAL_FOOTER_STYLE,
+                                withBorder=True,
                             ),
                         ],
                         style={
@@ -885,8 +887,6 @@ MODAL_BODY_STYLE = {
 MODAL_FOOTER_STYLE = {
     "flexShrink": "0",
     "padding": "1rem",
-    "borderTop": "1px solid var(--app-border-color, #e0e0e0)",
-    "backgroundColor": "var(--app-surface-color, #f9f9f9)",
     "position": "fixed",  # Fixed to viewport
     "bottom": "0",
     "left": "0",

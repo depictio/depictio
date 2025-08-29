@@ -6,7 +6,7 @@ import dash_mantine_components as dmc
 import plotly.express as px
 import polars as pl
 from bson import ObjectId
-from dash import dcc, html
+from dash import dcc
 from dash_iconify import DashIconify
 
 # PERFORMANCE OPTIMIZATION: Use centralized config
@@ -57,115 +57,66 @@ def build_figure_frame(index, children=None):
     if not children:
         return dmc.Paper(
             children=[
-                html.Div(
+                dmc.Center(
+                    dmc.Text(
+                        "Configure your figure using the edit menu",
+                        size="sm",
+                        fs="italic",
+                        ta="center",
+                    ),
                     id={
                         "type": "figure-body",
                         "index": index,
                     },
                     style={
-                        "padding": "5px",
-                        "display": "flex",
-                        "flexDirection": "column",
-                        "flex": "1",
-                        "height": "100%",
                         "minHeight": "150px",
-                        "backgroundColor": "transparent",
-                    },
-                ),
-                html.Div(
-                    id={
-                        "type": "figure-loading",
-                        "index": index,
-                    },
-                    style={
-                        "position": "absolute",
-                        "top": "0",
-                        "left": "0",
-                        "width": "100%",
                         "height": "100%",
-                        "display": "none",
-                        "alignItems": "center",
-                        "justifyContent": "center",
-                        "backgroundColor": "var(--app-surface-color, #ffffff)",
-                        "zIndex": "1000",
+                        "minWidth": "150px",
                     },
-                ),
+                )
             ],
             id={
                 "type": "figure-component",
                 "index": index,
             },
+            withBorder=True,
+            radius="sm",
+            p="md",
             style={
-                "position": "relative",
                 "width": "100%",
                 "height": "100%",
-                "padding": "0",
                 "margin": "0",
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
-                "color": "var(--app-text-color, #000000)",
-                "border": "1px solid var(--app-border-color, #dee2e6)",
-                "borderRadius": "0.375rem",
-                "display": "flex",
-                "flexDirection": "column",
-                "flex": "1",
+                "position": "relative",
             },
         )
     else:
         return dmc.Paper(
             children=[
-                html.Div(
+                dmc.Stack(
                     children=children,
                     id={
                         "type": "figure-body",
                         "index": index,
                     },
+                    gap="xs",
                     style={
-                        "padding": "5px",
-                        "display": "flex",
-                        "flexDirection": "column",
-                        "flex": "1",
                         "height": "100%",
-                        "minHeight": "150px",
-                        "backgroundColor": "transparent",
                     },
-                ),
-                html.Div(
-                    id={
-                        "type": "figure-loading",
-                        "index": index,
-                    },
-                    style={
-                        "position": "absolute",
-                        "top": "0",
-                        "left": "0",
-                        "width": "100%",
-                        "height": "100%",
-                        "display": "none",
-                        "alignItems": "center",
-                        "justifyContent": "center",
-                        "backgroundColor": "var(--app-surface-color, #ffffff)",
-                        "zIndex": "1000",
-                    },
-                ),
+                )
             ],
             id={
                 "type": "figure-component",
                 "index": index,
             },
+            withBorder=True,
+            radius="sm",
+            p="xs",
             style={
-                "position": "relative",
-                "overflowX": "hidden",
                 "width": "100%",
                 "height": "100%",
-                "padding": "0",
                 "margin": "0",
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
-                "color": "var(--app-text-color, #000000)",
-                "border": "1px solid var(--app-border-color, #dee2e6)",
-                "borderRadius": "0.375rem",
-                "display": "flex",
-                "flexDirection": "column",
-                "flex": "1",
+                "position": "relative",
+                "overflowX": "hidden",
             },
         )
 
@@ -792,7 +743,7 @@ def validate_parameters(visu_type: str, parameters: Dict[str, Any]) -> Dict[str,
             return {}
 
 
-def build_figure(**kwargs) -> html.Div | dcc.Loading:
+def build_figure(**kwargs) -> dmc.Stack | dcc.Loading:
     """Build figure component with robust parameter handling.
 
     Args:
@@ -1035,8 +986,8 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     # Create info badges
     badges = _create_info_badges(index or "unknown", df, visu_type, filter_applied, build_frame)
 
-    # Create figure component
-    figure_div = html.Div(
+    # Create figure component using DMC
+    figure_div = dmc.Stack(
         [
             badges,
             dcc.Graph(
@@ -1049,28 +1000,19 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
                     "displayModeBar": True,
                 },
                 className="responsive-graph",  # Add responsive graph class for vertical growing
-                # style={
-                #     "width": "100%",
-                #     "height": "100%",  # FIXED: Use full height for vertical growing
-                #     "flex": "1",  # Critical for vertical growing
-                #     "backgroundColor": "transparent",  # Fix white background issue
-                #     # "minHeight": "200px",  # Minimum height for usability
-                # },
             ),
             dcc.Store(
                 data=store_component_data,
                 id={"type": "stored-metadata-component", "index": store_index},
             ),
         ],
-        # style={
-        #     "width": "100%",
-        #     "height": "100%",
-        #     "flex": "1",  # Critical for vertical growing
-        #     "display": "flex",
-        #     "flexDirection": "column",
-        #     # "minHeight": "200px",  # Reduce from 400px for better flexibility
-        #     "backgroundColor": "transparent",
-        # },
+        id={"type": "figure-content", "index": index},
+        w="100%",
+        h="100%",
+        gap="0",
+        style={
+            "flex": "1",
+        },
     )
 
     if not build_frame:
@@ -1082,10 +1024,7 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
 
         # For stepper mode with loading
         if not stepper:
-            # Build the figure component with frame
-            figure_component = build_figure_frame(index=index, children=figure_div)
-
-            # Add targeted loading for the graph component specifically
+            # Dashboard mode - return figure directly without extra wrapper
             from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
                 create_skeleton_component,
             )
@@ -1099,11 +1038,11 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
             # PERFORMANCE OPTIMIZATION: Conditional loading spinner
             if settings.performance.disable_loading_spinners:
                 logger.info("🚀 PERFORMANCE MODE: Loading spinners disabled")
-                return figure_component  # Return content directly, no loading wrapper
+                return figure_div  # Return content directly, no loading wrapper
             else:
                 # Optimized loading with fast delays
                 return dcc.Loading(
-                    children=figure_component,
+                    children=figure_div,
                     custom_spinner=create_skeleton_component("figure"),
                     target_components={target_id: "figure"},
                     delay_show=5,  # Fast delay for better UX
@@ -1116,10 +1055,10 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
 
 def _create_info_badges(
     index: str, df: pl.DataFrame, visu_type: str, filter_applied: bool, build_frame: bool
-) -> html.Div:
+) -> dmc.Stack | dmc.Group:
     """Create informational badges for the figure."""
     if not build_frame:
-        return html.Div()
+        return dmc.Stack([])
 
     badges = []
     cutoff = _config.max_data_points
@@ -1161,9 +1100,9 @@ def _create_info_badges(
         badges.append(filter_badge)
 
     if badges:
-        return html.Div(dmc.Group(badges, gap="md", style={"margin-left": "12px"}))
+        return dmc.Group(badges, gap="md", style={"margin-left": "12px"})
 
-    return html.Div()
+    return dmc.Stack([])
 
 
 def create_stepper_figure_button(n, disabled=False):

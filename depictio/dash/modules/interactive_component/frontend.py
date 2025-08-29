@@ -337,8 +337,6 @@ def register_callbacks_interactive_component(app):
             logger.info(f"cols_json type: {type(cols_json)}")
 
             if cols_json:
-                from dash import dash_table
-
                 logger.info("Creating data_columns_df...")
                 try:
                     data_columns_df = [
@@ -351,34 +349,62 @@ def register_callbacks_interactive_component(app):
                     )
 
                     logger.info("Creating DataTable...")
-                    columns_description_df = dash_table.DataTable(
-                        columns=[
-                            {"name": "Column", "id": "column"},
-                            {"name": "Description", "id": "description"},
+                    # Create DMC Table instead of DataTable for better theming
+                    table_rows = []
+                    for row in data_columns_df:
+                        table_rows.append(
+                            dmc.TableTr(
+                                [
+                                    dmc.TableTd(
+                                        row["column"],
+                                        style={
+                                            "textAlign": "center",
+                                            "fontSize": "11px",
+                                            "maxWidth": "150px",
+                                        },
+                                    ),
+                                    dmc.TableTd(
+                                        row["description"],
+                                        style={
+                                            "textAlign": "center",
+                                            "fontSize": "11px",
+                                            "maxWidth": "150px",
+                                        },
+                                    ),
+                                ]
+                            )
+                        )
+
+                    columns_description_df = dmc.Table(
+                        [
+                            dmc.TableThead(
+                                [
+                                    dmc.TableTr(
+                                        [
+                                            dmc.TableTh(
+                                                "Column",
+                                                style={
+                                                    "textAlign": "center",
+                                                    "fontSize": "11px",
+                                                    "fontWeight": "bold",
+                                                },
+                                            ),
+                                            dmc.TableTh(
+                                                "Description",
+                                                style={
+                                                    "textAlign": "center",
+                                                    "fontSize": "11px",
+                                                    "fontWeight": "bold",
+                                                },
+                                            ),
+                                        ]
+                                    )
+                                ]
+                            ),
+                            dmc.TableTbody(table_rows),
                         ],
-                        data=data_columns_df,
-                        # Small font size, helvetica, no border, center text
-                        style_cell={
-                            "fontSize": 11,
-                            "fontFamily": "Helvetica",
-                            "border": "0px",
-                            "textAlign": "center",
-                            "backgroundColor": "var(--app-surface-color, #ffffff)",
-                            "color": "var(--app-text-color, #000000)",
-                            "padding": "4px 8px",
-                            "maxWidth": "150px",
-                            "overflow": "hidden",
-                            "textOverflow": "ellipsis",
-                        },
-                        style_header={
-                            "fontWeight": "bold",
-                            "backgroundColor": "var(--app-surface-color, #ffffff)",
-                            "color": "var(--app-text-color, #000000)",
-                        },
-                        style_data={
-                            "backgroundColor": "var(--app-surface-color, #ffffff)",
-                            "color": "var(--app-text-color, #000000)",
-                        },
+                        striped="odd",
+                        withTableBorder=True,
                     )
                     logger.info("DataTable created successfully")
                 except Exception as e:

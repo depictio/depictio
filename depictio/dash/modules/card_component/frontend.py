@@ -233,42 +233,60 @@ def register_callbacks_card_component(app):
         cols_json = get_columns_from_data_collection(wf_id, dc_id, TOKEN)
         logger.info(f"cols_json: {cols_json}")
 
-        from dash import dash_table
-
         data_columns_df = [
             {"column": c, "description": cols_json[c]["description"]}
             for c in cols_json
             if cols_json[c]["description"] is not None
         ]
 
-        columns_description_df = dash_table.DataTable(
-            columns=[
-                {"name": "Column", "id": "column"},
-                {"name": "Description", "id": "description"},
+        # Create DMC Table instead of DataTable for better theming
+        table_rows = []
+        for row in data_columns_df:
+            table_rows.append(
+                dmc.TableTr(
+                    [
+                        dmc.TableTd(
+                            row["column"],
+                            style={"textAlign": "center", "fontSize": "11px", "maxWidth": "150px"},
+                        ),
+                        dmc.TableTd(
+                            row["description"],
+                            style={"textAlign": "center", "fontSize": "11px", "maxWidth": "150px"},
+                        ),
+                    ]
+                )
+            )
+
+        columns_description_df = dmc.Table(
+            [
+                dmc.TableThead(
+                    [
+                        dmc.TableTr(
+                            [
+                                dmc.TableTh(
+                                    "Column",
+                                    style={
+                                        "textAlign": "center",
+                                        "fontSize": "11px",
+                                        "fontWeight": "bold",
+                                    },
+                                ),
+                                dmc.TableTh(
+                                    "Description",
+                                    style={
+                                        "textAlign": "center",
+                                        "fontSize": "11px",
+                                        "fontWeight": "bold",
+                                    },
+                                ),
+                            ]
+                        )
+                    ]
+                ),
+                dmc.TableTbody(table_rows),
             ],
-            data=data_columns_df,
-            # Small font size, helvetica, no border, center text
-            style_cell={
-                "fontSize": 11,
-                "fontFamily": "Helvetica",
-                "border": "0px",
-                "textAlign": "center",
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
-                "color": "var(--app-text-color, #000000)",
-                "padding": "4px 8px",
-                "maxWidth": "150px",
-                "overflow": "hidden",
-                "textOverflow": "ellipsis",
-            },
-            style_header={
-                "fontWeight": "bold",
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
-                "color": "var(--app-text-color, #000000)",
-            },
-            style_data={
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
-                "color": "var(--app-text-color, #000000)",
-            },
+            striped="odd",
+            withTableBorder=True,
         )
 
         # If any of the input values are None, return an empty list
