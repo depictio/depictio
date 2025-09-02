@@ -1,0 +1,542 @@
+"""
+Minimal Prototype: Draggable Modular System
+Focus: Component-level rendering with MATCH indexing and draggable wrappers
+"""
+
+import time
+from typing import Dict
+
+import dash
+import dash_dynamic_grid_layout as dgl
+import dash_mantine_components as dmc
+import numpy as np
+import pandas as pd
+import plotly.express as px
+from dash import ALL, MATCH, Input, Output, Patch, State, dcc, html
+
+# ============================================================================
+# SAMPLE DATA - No DB connection
+# ============================================================================
+
+# Generate heavy shared dataframe for all components
+print("📊 Generating shared heavy dataset...")
+n_points = 100000  # 100K points for heavy performance testing
+np.random.seed(42)  # Consistent data
+
+SHARED_DATAFRAME = pd.DataFrame(
+    {
+        "x": np.random.randn(n_points),
+        "y": np.random.randn(n_points),
+        "size": np.random.randint(0, 100, n_points),  # Size values 0-100 for filtering
+        "category": np.random.choice(["A", "B", "C", "D"], n_points),
+        "value": np.random.uniform(1000, 50000, n_points),
+        "revenue": np.random.uniform(10000, 200000, n_points),  # For card component
+    }
+)
+
+print(
+    f"📈 Shared dataset created: {SHARED_DATAFRAME.shape} - Memory: ~{SHARED_DATAFRAME.memory_usage(deep=True).sum() / 1024 / 1024:.1f}MB"
+)
+
+DEFAULT_METADATA = [
+    {
+        "index": "card-001",
+        "component_type": "card",
+        "title": "Sample Card 1",
+        "column_name": "revenue",
+        "aggregation": "sum",
+        "value": 125000,
+        "color": "#3498db",
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 4,
+    },
+    {
+        "index": "figure-001",
+        "component_type": "figure",
+        "title": "Sample Scatter Plot",
+        "x": 6,
+        "y": 0,
+        "w": 8,
+        "h": 5,
+    },
+    {
+        "index": "interactive-001",
+        "component_type": "interactive",
+        "title": "Range Slider",
+        "min": 0,
+        "max": 100,
+        "value": [0, 100],
+        "x": 0,
+        "y": 5,
+        "w": 4,
+        "h": 4,
+    },
+]
+
+# ============================================================================
+# COMPONENT BUILDING - Simplified
+# ============================================================================
+
+
+def build_simple_card(metadata: Dict) -> html.Div:
+    """Build a simple card component from metadata."""
+    return dmc.Card(
+        [
+            dmc.Title(metadata.get("title", "Card"), order=4),
+            dmc.Text(f"Column: {metadata.get('column_name', 'N/A')}", size="sm"),
+            dmc.Text(f"Aggregation: {metadata.get('aggregation', 'N/A')}", size="sm"),
+            dmc.Title(
+                str(metadata.get("value", 0)),
+                order=2,
+                style={"color": metadata.get("color", "#000")},
+            ),
+        ],
+        shadow="sm",
+        padding="lg",
+        style={
+            "height": "100%",
+            "border": f"2px solid {metadata.get('color', '#ddd')}",
+        },
+    )
+
+
+def build_simple_figure(metadata: Dict) -> html.Div:
+    """Build a simple scatter plot from metadata."""
+    # Generate simple sample data
+    df = pd.DataFrame({"x": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], "y": [2, 5, 3, 8, 7, 6, 9, 4, 1, 10]})
+
+    fig = px.scatter(df, x="x", y="y", title=metadata.get("title", "Figure"))
+
+    fig.update_layout(height=300, margin=dict(l=20, r=20, t=40, b=20))
+
+    return html.Div(
+        [
+            dcc.Graph(
+                id={"type": "graph", "index": metadata["index"]},  # Separate targetable Graph
+                figure=fig,
+                style={"height": "100%", "width": "100%"},
+            )
+        ]
+    )
+
+
+def build_filtered_card(metadata: Dict, filter_range: list) -> html.Div:
+    """Build a card component that shows filter information using shared dataframe."""
+    # Use shared dataframe for realistic filtering
+    df_filtered = SHARED_DATAFRAME[
+        (SHARED_DATAFRAME["size"] >= filter_range[0])
+        & (SHARED_DATAFRAME["size"] <= filter_range[1])
+    ]
+
+    # Calculate real aggregated values from filtered data
+    original_value = int(SHARED_DATAFRAME["revenue"].sum())
+    filtered_value = int(df_filtered["revenue"].sum())
+    count_filtered = len(df_filtered)
+    count_original = len(SHARED_DATAFRAME)
+
+    return dmc.Card(
+        [
+            dmc.Title(metadata.get("title", "Card"), order=4),
+            dmc.Text(f"Column: {metadata.get('column_name', 'revenue')}", size="sm"),
+            dmc.Text(f"Aggregation: {metadata.get('aggregation', 'sum')}", size="sm"),
+            dmc.Text(f"Filter: {filter_range[0]}-{filter_range[1]}", size="sm", c="blue"),
+            dmc.Text(f"Records: {count_filtered:,} / {count_original:,}", size="sm", c="orange"),
+            dmc.Title(
+                f"${filtered_value:,}",
+                order=2,
+                style={"color": metadata.get("color", "#000")},
+            ),
+            dmc.Text(f"Original: ${original_value:,}", size="xs", c="gray"),
+        ],
+        shadow="sm",
+        padding="lg",
+        style={
+            "height": "100%",
+            "border": f"2px solid {metadata.get('color', '#ddd')}",
+            "backgroundColor": "#f0f8ff",  # Light blue background for filtered state
+        },
+    )
+
+
+def build_simple_interactive(metadata: Dict) -> html.Div:
+    """Build a simple range slider from metadata."""
+    return dmc.Card(
+        [
+            dmc.Title(metadata.get("title", "Interactive"), order=4),
+            html.Br(),
+            dcc.RangeSlider(
+                id={"type": "range-slider", "index": metadata["index"]},
+                min=metadata.get("min", 0),
+                max=metadata.get("max", 100),
+                value=metadata.get("value", [20, 80]),
+                marks={
+                    metadata.get("min", 0): str(metadata.get("min", 0)),
+                    metadata.get("max", 100): str(metadata.get("max", 100)),
+                },
+                tooltip={"placement": "bottom", "always_visible": True},
+            ),
+            html.Br(),
+            html.Div(
+                id={"type": "slider-output", "index": metadata["index"]},
+                children=f"Range: {metadata.get('value', [0, 100])}",
+                style={"textAlign": "center", "marginTop": "10px"},
+            ),
+        ],
+        shadow="sm",
+        padding="lg",
+        style={
+            "height": "100%",
+            "border": "2px solid #9c88ff",
+        },
+    )
+
+
+def update_figure_with_patch(component_id: str, new_data: dict):
+    """Example of how to use Patch() for efficient updates."""
+    patch = Patch()
+    # Add new trace
+    patch["data"].append(
+        {"x": new_data["x"], "y": new_data["y"], "type": "scatter", "mode": "markers"}
+    )
+    # Update title
+    patch["layout"]["title"]["text"] = new_data.get("title", "Updated Figure")
+    return patch
+
+
+# ============================================================================
+# APP LAYOUT
+# ============================================================================
+
+
+def create_app():
+    """Create the minimal prototype app."""
+    app = dash.Dash(__name__)
+
+    print("🚀 Creating app with callbacks...")
+
+    # Create component-specific stores upfront
+    component_stores = []
+    for metadata in DEFAULT_METADATA:
+        # Trigger store
+        component_stores.append(
+            dcc.Store(
+                id={"type": "component-render-trigger", "index": metadata["index"]},
+                data={},
+            )
+        )
+        # Metadata store
+        component_stores.append(
+            dcc.Store(
+                id={"type": "component-metadata", "index": metadata["index"]},
+                data=metadata,
+            )
+        )
+
+    app.layout = dmc.MantineProvider(
+        [
+            dcc.Location(id="url", refresh=False),
+            # Component metadata store (replaces DB)
+            dcc.Store(
+                id="component-metadata-store",
+                data=DEFAULT_METADATA,
+            ),
+            # Component-specific stores
+            html.Div(component_stores, style={"display": "none"}),
+            # Header
+            dmc.Title("Draggable Prototype", order=1, style={"padding": "20px"}),
+            # Main draggable grid
+            dgl.DashGridLayout(
+                id="draggable-grid",
+                items=[],  # Will be populated by callback
+                currentLayout=[],  # Will be populated by callback
+                cols={"lg": 12, "md": 10, "sm": 6, "xs": 4, "xxs": 2},
+                rowHeight=80,
+                style={
+                    "width": "100%",
+                    "height": "calc(100vh - 100px)",
+                    "padding": "20px",
+                },
+            ),
+            # Debug info
+            html.Div(id="debug-output", style={"padding": "20px"}),
+        ]
+    )
+
+    # ============================================================================
+    # CALLBACKS - Registered with app instance
+    # ============================================================================
+
+    @app.callback(
+        Output({"type": "component-render-trigger", "index": ALL}, "data"),
+        [
+            Input("draggable-grid", "items"),  # Wait for containers to be created
+        ],
+        prevent_initial_call=True,  # Don't run until containers exist
+    )
+    def trigger_component_updates(grid_items):
+        """Central trigger - distributes updates to all component-specific triggers."""
+        print(f"🔥 TRIGGER: grid_items={len(grid_items) if grid_items else 0}")
+
+        if not grid_items:
+            return []
+
+        trigger_data = {
+            "timestamp": time.time(),
+            "needs_update": True,
+        }
+
+        # Send same trigger data to all component-specific triggers
+        return [trigger_data] * len(grid_items)
+
+    @app.callback(
+        Output("draggable-grid", "itemLayout"),
+        Input({"type": "component-render-trigger", "index": ALL}, "data"),
+        Input("url", "pathname"),
+        State({"type": "component-metadata", "index": ALL}, "data"),
+        prevent_initial_call=False,
+    )
+    def update_item_layout(trigger, pathname, metadata):
+        """Updates the layout of draggable items based on the grid layout."""
+        print(f"🔄 ITEM LAYOUT: {trigger}, PATHNAME: {pathname}")
+        print(f"Metadata: {metadata}")
+        updated_layout = []
+        for item in metadata:
+            print(f" - {item.get('title')} (ID: {item.get('id')})")
+            layout = {
+                "i": f"box-{item.get("index")}",
+                "x": item.get("x"),
+                "y": item.get("y"),
+                "w": item.get("w"),
+                "h": item.get("h"),
+            }
+            print(f" - Layout for {item.get('title')}: {layout}")
+            updated_layout.append(layout)
+        return updated_layout
+
+    @app.callback(
+        Output({"type": "component", "index": MATCH}, "children"),
+        Input({"type": "component-render-trigger", "index": MATCH}, "data"),
+        State({"type": "component-metadata", "index": MATCH}, "data"),
+        prevent_initial_call=False,
+    )
+    def update_component_content(trigger, metadata):
+        """MATCH-based callback - renders NON-FIGURE components only."""
+        print(f"🎯 COMPONENT CALLBACK: trigger={trigger}, metadata={metadata}")
+
+        if not trigger or not metadata:
+            print("❌ Missing trigger or metadata")
+            return dash.no_update
+
+        component_type = metadata.get("component_type")
+        component_index = metadata.get("index")
+
+        print(f"✅ Building {component_type} for {component_index}")
+
+        # Build the appropriate component
+        if component_type == "card":
+            # Check if filter data is available and modify card accordingly
+            filter_range = None
+            if trigger and isinstance(trigger, dict):
+                filter_range = trigger.get("filter_range")
+
+            if filter_range:
+                # Create modified metadata with filter info
+                card_metadata = metadata.copy()
+                card_metadata["title"] = f"{metadata.get('title', 'Card')} (Filtered)"
+                card_metadata["filter_info"] = f"Range: {filter_range}"
+                component = build_filtered_card(card_metadata, filter_range)
+            else:
+                component = build_simple_card(metadata)
+        elif component_type == "figure":
+            component = build_simple_figure(metadata)  # Create wrapper with Graph
+        elif component_type == "interactive":
+            component = build_simple_interactive(metadata)  # Create range slider
+        else:
+            print(f"❌ Unsupported component type: {component_type}")
+            return html.Div(f"Unsupported: {component_type}")
+
+        # Return the component wrapped in the proper container structure
+        return [html.Div([component], style={"width": "100%", "height": "100%", "padding": "8px"})]
+
+    @app.callback(
+        [Output("draggable-grid", "items"), Output("draggable-grid", "currentLayout")],
+        Input("component-metadata-store", "data"),
+        prevent_initial_call=False,
+    )
+    def create_draggable_containers(metadata_list):
+        """Creates draggable wrapper containers for each component."""
+        print(f"🏗️ CONTAINERS: Creating {len(metadata_list) if metadata_list else 0} containers")
+
+        if not metadata_list:
+            print("⚠️ No metadata - returning empty containers")
+            return [], []
+
+        containers = []
+        layouts = []
+
+        for metadata in metadata_list:
+            component_uuid = metadata["index"]
+            # Create draggable wrapper with direct component targeting
+            wrapper = dgl.DraggableWrapper(
+                id=f"box-{component_uuid}",
+                children=[
+                    html.Div(
+                        "Loading...",
+                        style={"width": "100%", "height": "100%", "padding": "8px"},
+                        id={"type": "component", "index": component_uuid},
+                    )
+                ],
+                handleText="Drag",
+            )
+
+            containers.append(wrapper)
+
+            # Create layout info for dash-dynamic-grid-layout
+            layouts.append(
+                {
+                    "i": f"box-{component_uuid}",
+                    "x": metadata.get("x", 0),
+                    "y": metadata.get("y", 0),
+                    "w": metadata.get("w", 10),
+                    "h": metadata.get("h", 8),
+                }
+            )
+
+        print(f"📦 Returning {len(containers)} containers and {len(layouts)} layouts")
+        return containers, layouts
+
+    # Example: Efficient figure update using Patch
+    @app.callback(
+        Output({"type": "graph", "index": MATCH}, "figure"),
+        Input({"type": "component-render-trigger", "index": MATCH}, "data"),
+        State({"type": "component-metadata", "index": MATCH}, "data"),
+        prevent_initial_call=False,  # Allow initial call to create figures
+    )
+    def update_figure_efficiently(trigger, metadata):
+        """MATCH-based callback - renders and updates FIGURE components only."""
+        print(f"📊 FIGURE CALLBACK: trigger={trigger}, metadata={metadata}")
+
+        if not metadata:
+            print("❌ Figure callback: Missing metadata")
+            return dash.no_update
+
+        component_type = metadata.get("component_type")
+        component_index = metadata.get("index")
+
+        # Only handle figures
+        if component_type != "figure":
+            print(f"⏭️ Skipping {component_type} {component_index} - handled by component callback")
+            return dash.no_update
+
+        print(f"✅ Building/updating figure for {component_index}")
+
+        # Use the shared dataframe
+        df = SHARED_DATAFRAME
+        print(f"📊 Using shared dataframe: {df.shape}")
+
+        # Check if this is a filter update vs initial load
+        filter_range = None
+        if trigger and isinstance(trigger, dict):
+            filter_range = trigger.get("filter_range")
+
+        # If this is a filter update, use Patch for efficiency
+        if filter_range:
+            print(f"📊 Using Patch to apply filter: {filter_range}")
+
+        # Create patch object
+        patched_figure = Patch()
+
+        # Filter the data
+        if filter_range:
+            df_filtered = df[(df["size"] >= filter_range[0]) & (df["size"] <= filter_range[1])]
+        else:
+            df_filtered = df
+
+        #     # Update only the data traces (much more efficient!)
+        #     patched_figure["data"][0]["x"] = df_filtered['x'].tolist()
+        #     patched_figure["data"][0]["y"] = df_filtered['y'].tolist()
+        #     # patched_figure["data"][0]["marker"]["size"] = df_filtered['size'].tolist()
+
+        #     # Update title
+        #     patched_figure["layout"]["title"]["text"] = f"{metadata.get('title', 'Figure')} (Filtered: {filter_range})"
+
+        #     print(f"🎯 Patch applied - showing {len(df_filtered)} of {len(df)} points")
+        #     return patched_figure
+
+        # else:
+        # Initial load: create complete figure
+        print(f"📊 Creating initial figure with {len(df)} points")
+        fig = px.scatter(
+            df_filtered,
+            x="x",
+            y="y",
+            size="size",
+            title=metadata.get("title", "Figure") + " (No Filter)"
+            if not filter_range
+            else f"{metadata.get('title', 'Figure')} (Filtered: {filter_range})",
+        )
+
+        fig.update_layout(height=300, margin=dict(l=20, r=20, t=40, b=20))
+
+        return fig
+
+    # Interactive filtering: Rangeslider changes trigger other components
+    @app.callback(
+        Output({"type": "component-render-trigger", "index": ALL}, "data", allow_duplicate=True),
+        Input({"type": "range-slider", "index": ALL}, "value"),
+        State("component-metadata-store", "data"),
+        prevent_initial_call=True,
+    )
+    def handle_interactive_changes(slider_values, metadata_list):
+        """When interactive components change, trigger updates to filterable components."""
+        print(f"🎛️ INTERACTIVE CHANGE: slider_values={slider_values}")
+
+        if not slider_values or not metadata_list:
+            return dash.no_update
+
+        # Create trigger data with the current filter values
+        trigger_data = {
+            "timestamp": time.time(),
+            "needs_update": True,
+            "filter_range": slider_values[0] if slider_values else None,  # First slider value
+        }
+
+        # Update triggers only for components that should respond to filtering
+        result = []
+        for metadata in metadata_list:
+            component_type = metadata.get("component_type")
+            component_index = metadata.get("index")
+
+            # Only update figure and card components, skip interactive components
+            if component_type in ["figure", "card"]:
+                print(f"🎯 Triggering update for {component_type} {component_index}")
+                result.append(trigger_data)
+            else:
+                print(f"⏭️ Skipping {component_type} {component_index}")
+                result.append(dash.no_update)
+
+        return result
+
+    # Add a simple debug callback to see the state
+    @app.callback(
+        Output("debug-output", "children"),
+        Input("draggable-grid", "items"),
+        prevent_initial_call=True,
+    )
+    def debug_output(items):
+        if items:
+            return f"Debug: Grid has {len(items)} items"
+        return "Debug: No items in grid"
+
+    return app
+
+
+# ============================================================================
+# MAIN
+# ============================================================================
+
+if __name__ == "__main__":
+    app = create_app()
+    app.run(debug=True, host="0.0.0.0", port=8888)
