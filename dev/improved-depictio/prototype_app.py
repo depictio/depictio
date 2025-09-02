@@ -21,10 +21,10 @@ try:
     import datashader as ds
     import datashader.transfer_functions as tf
     import holoviews as hv
+    import panel as pn
     from holoviews import opts
     from holoviews.operation.datashader import datashade
     from holoviews.plotting.plotly.dash import to_dash
-    import panel as pn
     DATASHADER_AVAILABLE = True
     print("📈 Datashader available for high-performance plotting")
     
@@ -350,9 +350,11 @@ def build_simple_interactive(metadata: Dict) -> html.Div:
     )
 
 
-def build_datashader_figure(df: pl.DataFrame, title: str = "Box Plot", filter_range: list = None):
-    """Create a basic plotly express boxplot using Polars natively."""
-    print(f"📊 Building boxplot with {df.height:,} points")
+def build_datashader_figure(df: pl.DataFrame, title: str = "Resampled Scatter", filter_range: list = None):
+    """Create a high-performance scatter plot using plotly-resampler with ScatterGL."""
+    from plotly_resampler import FigureResampler
+    
+    print(f"🚀 Building resampled scattergl with {df.height:,} points")
     
     try:
         # Apply filtering BEFORE creating plot
@@ -365,26 +367,40 @@ def build_datashader_figure(df: pl.DataFrame, title: str = "Box Plot", filter_ra
         else:
             df_filtered = df
         
-        # Create boxplot using plotly express with Polars directly
-        fig = px.box(
-            df_filtered,
-            x="category",
-            y="size",
-            title=f"{title} - {df_filtered.height:,} points",
-            color="category"
+        # Sort by x-axis for plotly-resampler (required for time series aggregation)
+        df_sorted = df_filtered.sort("x")
+        
+        # Create FigureResampler with ScatterGL
+        fig = FigureResampler(default_n_shown_samples=10000)
+        
+        # Add scatter trace using plotly-resampler with sorted data
+        fig.add_scattergl(
+            x=df_sorted["x"],
+            y=df_sorted["y"],
+            mode='markers',
+            marker=dict(
+                size=4,
+                color=df_sorted["size"],
+                colorscale='viridis',
+                showscale=True
+            ),
+            name='Data Points'
         )
         
         fig.update_layout(
+            title=f"{title} - {df_filtered.height:,} points",
             height=400,
+            xaxis_title="X",
+            yaxis_title="Y",
             showlegend=False
         )
         
-        print("✅ Boxplot created successfully")
+        print("✅ Plotly-resampler scattergl created successfully")
         return dcc.Graph(figure=fig, style={"height": "100%", "width": "100%"})
         
     except Exception as e:
-        print(f"❌ Boxplot error: {e}")
-        return html.Div(f"Error creating boxplot: {e}")
+        print(f"❌ Plotly-resampler error: {e}")
+        return html.Div(f"Error creating resampled plot: {e}")
 
 
 def build_regular_scatter(df: pl.DataFrame, title: str = "Scatter Plot", filter_range: list = None) -> dict:
