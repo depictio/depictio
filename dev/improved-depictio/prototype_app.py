@@ -350,16 +350,12 @@ def build_simple_interactive(metadata: Dict) -> html.Div:
     )
 
 
-def build_datashader_figure(df: pl.DataFrame, title: str = "Scatter Plot", filter_range: list = None):
-    """Create a high-performance scatter plot using Datashader for large datasets."""
-    if not DATASHADER_AVAILABLE:
-        print("⚠️ Datashader not available, falling back to regular scatter")
-        return build_regular_scatter(df, title, filter_range)
-    
-    print(f"🔥 Building Datashader figure with {df.height:,} points")
+def build_datashader_figure(df: pl.DataFrame, title: str = "Box Plot", filter_range: list = None):
+    """Create a basic plotly express boxplot using Polars natively."""
+    print(f"📊 Building boxplot with {df.height:,} points")
     
     try:
-        # Apply filtering BEFORE converting to pandas
+        # Apply filtering BEFORE creating plot
         if filter_range:
             print(f"🔍 Applying filter: size between {filter_range[0]} and {filter_range[1]}")
             df_filtered = df.filter(
@@ -369,37 +365,26 @@ def build_datashader_figure(df: pl.DataFrame, title: str = "Scatter Plot", filte
         else:
             df_filtered = df
         
-        # Convert Polars to Pandas for Datashader (it requires Pandas)
-        df_pd = df_filtered.to_pandas()
-        
-        # Create HoloViews Dataset and Scatter like in the example
-        dataset = hv.Dataset(df_pd)
-        
-        # Create the datashaded scatter plot exactly like the example
-        scatter = datashade(
-            hv.Scatter(dataset, kdims=["x"], vdims=["y"])
-        ).opts(
-            title=f"{title} with {len(dataset):,} points",
-            width=800, 
-            height=400
+        # Create boxplot using plotly express with Polars directly
+        fig = px.box(
+            df_filtered,
+            x="category",
+            y="size",
+            title=f"{title} - {df_filtered.height:,} points",
+            color="category"
         )
         
-        # Create a temporary Dash app to get the components (like in the example)
-        temp_app = dash.Dash(__name__)
-        components = to_dash(temp_app, [scatter], reset_button=False)
+        fig.update_layout(
+            height=400,
+            showlegend=False
+        )
         
-        # Extract the plot component from the layout
-        if components and components.children:
-            plot_component = components.children[0]
-            print("✅ Datashader component created successfully")
-            return plot_component
-        else:
-            raise Exception("No components generated from to_dash")
+        print("✅ Boxplot created successfully")
+        return dcc.Graph(figure=fig, style={"height": "100%", "width": "100%"})
         
     except Exception as e:
-        print(f"❌ Error creating datashader figure: {e}")
-        print("🔄 Falling back to regular scatter plot")
-        return build_regular_scatter(df, title, filter_range)
+        print(f"❌ Boxplot error: {e}")
+        return html.Div(f"Error creating boxplot: {e}")
 
 
 def build_regular_scatter(df: pl.DataFrame, title: str = "Scatter Plot", filter_range: list = None) -> dict:
