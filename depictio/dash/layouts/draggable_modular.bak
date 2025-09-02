@@ -1,0 +1,1408 @@
+"""
+Modular Draggable Layout System
+
+This module provides a refactored approach to the draggable layout management
+with separated callbacks for different operations to reduce complexity and
+improve maintainability.
+
+Key principles:
+- Single responsibility per callback
+- One output per callback to reduce callback tree complexity
+- Independent operations that can be composed
+- Compatible with future background/progress callbacks
+- Synchronous operations for now (async-ready design)
+"""
+
+import time
+
+import dash
+from dash import ALL, MATCH, Input, Output, State, callback, callback_context, dcc, html
+
+from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.utils import (
+    generate_unique_index,
+)
+from depictio.models.models.dashboards import ComponentMetadata, validate_component_metadata
+
+
+def _load_dashboard_data_lightweight(dashboard_id: str, access_token: str):
+    """
+    Lightweight dashboard data loader - extracts only essential data without rendering.
+
+    This replaces the heavy load_depictio_data_sync approach with a focused data extraction
+    that only gets what the modular system needs.
+    """
+    from depictio.dash.api_calls import api_call_get_dashboard
+    from depictio.models.models.dashboards import DashboardData
+
+    logger.info(f"🔄 Loading dashboard data (lightweight) for {dashboard_id}")
+
+    if not access_token:
+        logger.warning("No access token provided for dashboard data loading")
+        return None
+
+    # Fetch dashboard data from API
+    dashboard_data_dict = api_call_get_dashboard(dashboard_id, access_token)
+    if not dashboard_data_dict:
+        logger.warning(f"Failed to fetch dashboard data for {dashboard_id}")
+        return None
+
+    # Convert to dashboard model
+    dashboard_data = DashboardData.from_mongo(dashboard_data_dict)
+    logger.info(f"DashboardData: {dashboard_data}")
+    if not dashboard_data:
+        logger.warning(f"Failed to parse dashboard data for {dashboard_id}")
+        return None
+
+    logger.info(f"✅ Dashboard data loaded successfully for {dashboard_id}")
+    return dashboard_data
+
+
+# ============================================================================
+# TRIGGER SYSTEM - Light callbacks for coordination
+# ============================================================================
+
+
+def register_trigger_callbacks(app):
+    """Register lightweight trigger callbacks for component coordination."""
+
+    @app.callback(
+        Output("component-render-trigger", "data"),
+        [
+            Input("url", "pathname"),  # Add URL to trigger component updates on navigation
+            Input({"type": "btn-done", "index": ALL}, "n_clicks"),
+            Input({"type": "btn-done-edit", "index": ALL}, "n_clicks"),
+            Input({"type": "interactive-component-value", "index": ALL}, "value"),
+            Input({"type": "edit-box-button", "index": ALL}, "n_clicks"),
+            Input({"type": "duplicate-box-button", "index": ALL}, "n_clicks"),
+            Input({"type": "remove-box-button", "index": ALL}, "n_clicks"),
+        ],
+        [
+            State({"type": "interactive-component-value", "index": ALL}, "id"),
+            State("stored-component-metadata", "data"),
+        ],
+        prevent_initial_call=False,
+    )
+    def trigger_component_updates(
+        pathname,  # URL pathname parameter
+        btn_clicks,
+        btn_edit_clicks,
+        interactive_values,
+        edit_clicks,
+        duplicate_clicks,
+        remove_clicks,
+        interactive_ids,
+        stored_component_metadata,
+    ):
+        """Light callback - trigger component updates with interactive filtering data."""
+        ctx = callback_context
+        if not ctx.triggered:
+            return dash.no_update
+
+        # DEBUG: Log what's triggering this callback
+        logger.info(f"🔥 TRIGGER_COMPONENT_UPDATES - Triggered by: {ctx.triggered}")
+        logger.info(f"🔥 TRIGGER_COMPONENT_UPDATES - Triggered ID: {ctx.triggered_id}")
+
+        # Collect interactive component values in format compatible with iterative_join
+        interactive_components_dict = {}
+
+        if interactive_values and interactive_ids and stored_component_metadata:
+            logger.info(f"🎛️ Processing {len(interactive_values)} interactive values")
+
+            # Extract current dashboard metadata from stored components
+            current_pathname = pathname.split("/")[-1] if pathname else "default"
+            current_dashboard_metadata = stored_component_metadata.get(current_pathname, {})
+            all_component_metadata = list(current_dashboard_metadata.values())
+
+            for i, value in enumerate(interactive_values):
+                if (
+                    value is not None
+                    and i < len(interactive_ids)
+                    and i < len(all_component_metadata)
+                ):
+                    interactive_id = interactive_ids[i]
+                    component_metadata = all_component_metadata[i]
+
+                    # Only process interactive components
+                    if (
+                        component_metadata
+                        and component_metadata.get("component_type") == "interactive"
+                    ):
+                        component_index = (
+                            interactive_id.get("index")
+                            if isinstance(interactive_id, dict)
+                            else f"interactive-{i}"
+                        )
+
+                        # Create entry compatible with iterative_join format
+                        interactive_components_dict[component_index] = {
+                            "index": component_index,
+                            "value": value,
+                            "metadata": {
+                                "component_type": "interactive",
+                                "interactive_component_type": component_metadata.get(
+                                    "interactive_component_type"
+                                ),
+                                "column_name": component_metadata.get("column_name"),
+                                "wf_id": component_metadata.get("wf_id"),
+                                "dc_id": component_metadata.get("dc_id"),
+                            },
+                        }
+                        logger.info(
+                            f"🎛️   Interactive {component_index} ({component_metadata.get('interactive_component_type')}): {value}"
+                        )
+
+        component_render_trigger_data = {
+            "trigger_id": ctx.triggered_id,
+            "trigger_prop": ctx.triggered[0]["prop_id"],
+            "timestamp": time.time(),
+            "needs_update": True,
+            "interactive_filters": interactive_components_dict,  # Add interactive filtering data
+        }
+        logger.info(
+            f"🔥 TRIGGER_COMPONENT_UPDATES - Component render trigger data: {component_render_trigger_data}"
+        )
+        return component_render_trigger_data
+
+    @app.callback(
+        Output("layout-update-trigger", "data"),
+        [
+            Input("draggable", "currentLayout"),
+            Input("unified-edit-mode-button", "checked"),
+        ],
+        prevent_initial_call=True,
+    )
+    def trigger_layout_updates(current_layout, edit_mode):
+        """Light callback for layout-related changes."""
+        ctx = callback_context
+        if not ctx.triggered:
+            return dash.no_update
+
+        return {
+            "trigger_id": ctx.triggered_id,
+            "timestamp": time.time(),
+            "layout": current_layout,
+            "edit_mode": edit_mode,
+            "needs_update": True,
+        }
+
+
+# ============================================================================
+# LAYOUT MANAGEMENT - Dedicated callback for layout operations
+# ============================================================================
+
+
+def register_layout_callbacks(app):
+    """Register callbacks for layout management operations."""
+
+    @app.callback(
+        Output("stored-draggable-layouts", "data"),
+        [
+            Input("layout-update-trigger", "data"),
+            Input({"type": "btn-done", "index": ALL}, "n_clicks"),
+            Input({"type": "duplicate-box-button", "index": ALL}, "n_clicks"),
+        ],
+        [
+            State("stored-draggable-layouts", "data"),
+            State("url", "pathname"),
+            State("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def update_draggable_layouts(
+        layout_trigger,
+        btn_done_clicks,
+        duplicate_clicks,
+        stored_layouts,
+        pathname,
+        local_data,
+    ):
+        """Handle layout updates - positions, sizes, new components."""
+        if not local_data:
+            return dash.no_update
+
+        ctx = callback_context
+        if not ctx.triggered:
+            return dash.no_update
+
+        # Extract dashboard ID from pathname
+        dashboard_id = pathname.split("/")[-1] if pathname else "default"
+
+        if not stored_layouts:
+            stored_layouts = {}
+
+        # Handle different trigger types
+        triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
+
+        if "layout-update-trigger" in triggered_input:
+            # Direct layout change from draggable component
+            if layout_trigger and layout_trigger.get("needs_update"):
+                new_layout = layout_trigger.get("layout", [])
+                if new_layout:
+                    logger.info(f"📐 Layout updated for dashboard {dashboard_id}")
+                    stored_layouts[dashboard_id] = new_layout
+                    return stored_layouts
+
+        elif "btn-done" in triggered_input:
+            # New component added - layout will be handled by component addition callback
+            return dash.no_update
+
+        elif "duplicate-box-button" in triggered_input:
+            # Component duplicated - update layout with new position
+            trigger_id = ctx.triggered_id
+            if trigger_id and isinstance(trigger_id, dict):
+                parent_index = trigger_id.get("index")
+                if parent_index and stored_metadata:
+                    # Find the component metadata for positioning
+                    component_meta = next(
+                        (meta for meta in stored_metadata if meta.get("index") == parent_index),
+                        None,
+                    )
+                    if component_meta:
+                        # Calculate new position for duplicated component
+                        current_layouts = stored_layouts.get(dashboard_id, [])
+                        new_layout = _calculate_duplicate_layout(current_layouts, parent_index)
+                        if new_layout:
+                            current_layouts.append(new_layout)
+                            stored_layouts[dashboard_id] = current_layouts
+                            logger.info(
+                                f"📐 Layout updated for duplicated component {parent_index}"
+                            )
+                            return stored_layouts
+
+        return dash.no_update
+
+
+# ============================================================================
+# COMPONENT MANAGEMENT - Dedicated callbacks for component operations
+# ============================================================================
+
+
+def register_component_callbacks(app):
+    """Register callbacks for component management operations."""
+
+    @app.callback(
+        Output("stored-component-metadata", "data", allow_duplicate=True),
+        [
+            Input({"type": "btn-done", "index": ALL}, "n_clicks"),
+            Input({"type": "btn-done-edit", "index": ALL}, "n_clicks"),
+            Input({"type": "duplicate-box-button", "index": ALL}, "n_clicks"),
+            Input({"type": "remove-box-button", "index": ALL}, "n_clicks"),
+        ],
+        [
+            State("stored-component-metadata", "data"),
+            State("url", "pathname"),
+            State("local-store", "data"),
+            State("current-edit-parent-index", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def update_component_metadata(
+        btn_done_clicks,
+        btn_edit_clicks,
+        duplicate_clicks,
+        remove_clicks,
+        stored_metadata,
+        pathname,
+        local_data,
+        edit_parent_index,
+    ):
+        """Handle metadata updates - add, edit, duplicate, remove components."""
+        if not local_data:
+            return dash.no_update
+
+        ctx = callback_context
+        if not ctx.triggered:
+            return dash.no_update
+
+        # Extract dashboard ID and TOKEN
+        dashboard_id = pathname.split("/")[-1] if pathname else "default"
+        TOKEN = local_data.get("access_token")
+
+        if not stored_metadata:
+            stored_metadata = {}
+
+        current_metadata = stored_metadata.get(dashboard_id, {})
+
+        # FIXED: Filter out None values (initialization triggers) and find the actual click
+        actual_triggers = [t for t in ctx.triggered if t["value"] is not None]
+        if not actual_triggers:
+            # All triggers have None values - this is initialization, not a real click
+            return dash.no_update
+
+        # Use the first actual trigger (non-None value)
+        triggered_input = actual_triggers[0]["prop_id"].split(".")[0]
+
+        logger.info(f"🔄 Metadata operation triggered: {triggered_input}")
+
+        # CRITICAL DEBUG: Check what actually triggered this callback
+        logger.info(f"🔍 TRIGGER DEBUG - Full context: {ctx.triggered}")
+        logger.info(f"🔍 TRIGGER DEBUG - Triggered ID: {ctx.triggered_id}")
+        logger.info("🔍 TRIGGER DEBUG - All input values:")
+        logger.info(f"  - btn_done_clicks: {btn_done_clicks}")
+        logger.info(f"  - btn_edit_clicks: {btn_edit_clicks}")
+        logger.info(f"  - duplicate_clicks: {duplicate_clicks}")
+        logger.info(f"  - remove_clicks: {remove_clicks}")
+
+        if "btn-done" in triggered_input:
+            # Extract component metadata list from current dashboard metadata
+            component_metadata_list = list(current_metadata.values())
+            return _handle_metadata_addition(
+                ctx, current_metadata, stored_metadata, dashboard_id, TOKEN, component_metadata_list
+            )
+
+        elif "btn-done-edit" in triggered_input:
+            return _handle_metadata_edit(
+                ctx,
+                current_metadata,
+                stored_metadata,
+                dashboard_id,
+                TOKEN,
+                component_metadata_list,
+                edit_parent_index,
+            )
+
+        elif "duplicate-box-button" in triggered_input:
+            # Extract component metadata list from current dashboard metadata
+            component_metadata_list = list(current_metadata.values())
+            return _handle_metadata_duplication(
+                ctx, current_metadata, stored_metadata, dashboard_id, TOKEN, component_metadata_list
+            )
+
+        elif "remove-box-button" in triggered_input:
+            return _handle_metadata_removal(
+                ctx, current_metadata, stored_metadata, dashboard_id, TOKEN
+            )
+
+        return dash.no_update
+
+    # REMOVED: create_component_containers - unnecessary
+    # Components already exist in the DOM via the existing draggable system
+    pass
+
+    @app.callback(
+        Output("stored-metadata-all", "data", allow_duplicate=True),
+        [
+            Input("url", "pathname"),
+        ],
+        [
+            State("local-store", "data"),
+            State("stored-metadata-all", "data"),
+        ],
+        prevent_initial_call="initial_duplicate",
+    )
+    def initialize_metadata_from_database(pathname, local_data, current_stored_metadata):
+        """Initialize component metadata from database on page load - lightweight approach."""
+        logger.info(f"🔄 INIT CALLBACK - pathname: {pathname}")
+
+        if not pathname or not local_data:
+            return dash.no_update
+
+        dashboard_id = pathname.split("/")[-1] if "/" in pathname else pathname
+
+        # Skip if not a dashboard URL
+        if not dashboard_id or dashboard_id == "dashboard":
+            return dash.no_update
+
+        # Skip if we already have metadata for this dashboard
+        if current_stored_metadata and dashboard_id in current_stored_metadata:
+            current_metadata = current_stored_metadata.get(dashboard_id, {})
+            if isinstance(current_metadata, dict) and len(current_metadata) > 0:
+                logger.info(
+                    f"🔍 Session store already has {len(current_metadata)} metadata entries for dashboard {dashboard_id}"
+                )
+                return dash.no_update
+            else:
+                logger.info(
+                    f"🔄 Session store is empty ({current_metadata}) - will reload from MongoDB"
+                )
+
+        # Load from database using lightweight approach
+        try:
+            TOKEN = local_data.get("access_token")
+            if not TOKEN:
+                logger.warning("No access token found for database initialization")
+                return dash.no_update
+
+            dashboard_data = _load_dashboard_data_lightweight(dashboard_id, TOKEN)
+            if not dashboard_data:
+                return dash.no_update
+
+            stored_metadata = getattr(dashboard_data, "stored_metadata", [])
+            if not stored_metadata:
+                logger.info(f"No stored metadata found in database for dashboard {dashboard_id}")
+                return dash.no_update
+
+            # Convert list metadata to dictionary format {component_uuid: validated_metadata}
+            metadata_dict = {}
+            for metadata_item in stored_metadata:
+                # Convert Pydantic models to dictionaries for boundary conversion pattern
+                if hasattr(metadata_item, "model_dump"):
+                    metadata_dict_item = metadata_item.model_dump()
+                elif isinstance(metadata_item, dict):
+                    metadata_dict_item = metadata_item
+                else:
+                    continue
+
+                if "index" in metadata_dict_item:
+                    component_uuid = metadata_dict_item["index"]
+                    # Store as dictionary for consistent boundary conversion pattern
+                    metadata_dict[component_uuid] = metadata_dict_item
+
+            logger.info(f"✅ Loaded {len(metadata_dict)} metadata entries from database")
+
+            # Update session store
+            updated_stored_metadata = (
+                current_stored_metadata.copy() if current_stored_metadata else {}
+            )
+            updated_stored_metadata[dashboard_id] = metadata_dict
+
+            return updated_stored_metadata
+
+        except Exception as e:
+            logger.error(f"❌ Failed to load metadata from database: {e}")
+            return dash.no_update
+
+
+# ============================================================================
+# INTERACTION MANAGEMENT - Dedicated callbacks for component interactions
+# ============================================================================
+
+
+def register_interaction_callbacks(app):
+    """Register callbacks for component interaction management."""
+
+    # @app.callback(
+    #     [
+    #         Input({"type": "interactive-component-value", "index": ALL}, "value"),
+    #         Input({"type": "graph", "index": ALL}, "clickData"),
+    #         Input({"type": "graph", "index": ALL}, "selectedData"),
+    #         Input({"type": "reset-selection-graph-button", "index": ALL}, "n_clicks"),
+    #         Input("reset-all-filters-button", "n_clicks"),
+    #     ],
+    #     [
+    #         State({"type": "interactive-component-value", "index": ALL}, "id"),
+    #         State({"type": "stored-metadata-component", "index": ALL}, "data"),
+    #         State({"type": "graph", "index": ALL}, "id"),
+    #         State("local-store", "data"),
+    #         State("url", "pathname"),
+    #     ],
+    #     prevent_initial_call=True,
+    # )
+    # def update_interaction_store(
+    #     interactive_values,
+    #     graph_click_data,
+    #     graph_selected_data,
+    #     reset_button_clicks,
+    #     reset_all_clicks,
+    #     ids,
+    #     stored_metadata,
+    #     graph_ids,
+    #     local_store,
+    #     pathname,
+    #     current_store_data,
+    # ):
+    #     """Handle all component interactions and update the interaction store."""
+    #     # This is a direct port of the existing interaction logic
+    #     # for now, maintaining the same functionality
+    #     ctx = callback_context
+    #     if not ctx.triggered:
+    #         return dash.no_update
+
+    #     # Maintain existing interaction logic here
+    #     # (This would be the existing update_interactive_values_store logic)
+    #     logger.info("🔄 Updating interaction store")
+
+    #     # For now, return current store to maintain compatibility
+    #     return current_store_data or {}
+
+
+# ============================================================================
+# INDIVIDUAL COMPONENT UPDATES - Template for frontend.py callbacks
+# ============================================================================
+
+
+def register_individual_component_callback_template(app, component_type: str):
+    """
+    Template for individual component update callbacks to be implemented in each frontend.py
+
+    This shows the pattern that each component should follow for direct updates.
+    """
+
+
+# ============================================================================
+# METADATA-BASED HELPER FUNCTIONS
+# ============================================================================
+
+
+# REMOVED: _render_component_from_metadata function
+# In the modular system, individual component callbacks handle their own rendering
+# This function created race conditions with component-specific callbacks
+
+
+def _validate_and_format_metadata(metadata_dict: dict) -> ComponentMetadata:
+    """Validate metadata using the appropriate component model."""
+    try:
+        return validate_component_metadata(metadata_dict)
+    except (ValueError, KeyError) as e:
+        logger.warning(
+            f"Metadata validation failed: {e}, keeping as raw dict for backward compatibility"
+        )
+        return metadata_dict
+
+
+def _handle_metadata_addition(
+    ctx, current_metadata, stored_metadata, dashboard_id, token, component_metadata_list
+):
+    """Handle adding component metadata instead of rendered components."""
+    try:
+        # Extract new component metadata from the triggered component
+        triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
+        import json
+
+        triggered_id = json.loads(triggered_input)
+        triggered_index = triggered_id["index"]
+
+        # Find the metadata for the new component
+        new_component_metadata = None
+        for metadata in component_metadata_list:
+            if metadata and metadata.get("index") == triggered_index:
+                new_component_metadata = metadata
+                break
+
+        if not new_component_metadata:
+            logger.warning(f"No metadata found for new component {triggered_index}")
+            return stored_metadata
+
+        # Store as dictionary for consistent boundary conversion pattern
+        validated_metadata = new_component_metadata
+
+        # Use the actual component index directly (simplified structure)
+        final_index = (
+            triggered_index.replace("-tmp", "") if "-tmp" in triggered_index else triggered_index
+        )
+
+        # Add to current metadata dictionary using component index as key
+        updated_metadata = current_metadata.copy()
+        updated_metadata[final_index] = validated_metadata
+
+        # Sync with MongoDB (convert dict to list for DB)
+        metadata_list = list(updated_metadata.values())
+        _sync_metadata_to_mongodb(dashboard_id, metadata_list, token)
+
+        # Update stored metadata for this dashboard
+        updated_stored = stored_metadata.copy()
+        updated_stored[dashboard_id] = updated_metadata
+
+        logger.info(f"✅ Added component metadata {final_index}")
+        return updated_stored
+
+    except Exception as e:
+        logger.error(f"❌ Error in metadata addition: {e}")
+        return stored_metadata
+
+
+def _handle_metadata_edit(
+    ctx,
+    current_metadata,
+    stored_metadata,
+    dashboard_id,
+    token,
+    component_metadata_list,
+    edit_parent_index,
+):
+    """Handle editing component metadata."""
+    try:
+        # Find and update the edited component metadata
+        triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
+        import json
+
+        triggered_id = json.loads(triggered_input)
+        triggered_index = triggered_id["index"]
+
+        # Find the updated metadata
+        updated_component_metadata = None
+        for metadata in component_metadata_list:
+            if metadata and metadata.get("index") == triggered_index:
+                updated_component_metadata = metadata
+                break
+
+        if not updated_component_metadata:
+            logger.warning(f"No updated metadata found for component {triggered_index}")
+            return stored_metadata
+
+        # Store as dictionary for consistent boundary conversion pattern
+        validated_metadata = updated_component_metadata
+
+        # Update the metadata in the dictionary directly
+        updated_metadata = current_metadata.copy()
+        if edit_parent_index in updated_metadata:
+            updated_metadata[edit_parent_index] = validated_metadata
+            logger.info(f"Updated metadata for component {edit_parent_index}")
+        else:
+            logger.warning(f"Component {edit_parent_index} not found in metadata for editing")
+
+        # Sync with MongoDB (convert dict to list for DB)
+        metadata_list = list(updated_metadata.values())
+        _sync_metadata_to_mongodb(dashboard_id, metadata_list, token)
+
+        # Update stored metadata
+        updated_stored = stored_metadata.copy()
+        updated_stored[dashboard_id] = updated_metadata
+
+        logger.info(f"✅ Updated component metadata {edit_parent_index}")
+        return updated_stored
+
+    except Exception as e:
+        logger.error(f"❌ Error in metadata edit: {e}")
+        return stored_metadata
+
+
+def _handle_metadata_duplication(
+    ctx, current_metadata, stored_metadata, dashboard_id, token, component_metadata_list
+):
+    """Handle duplicating component metadata."""
+    try:
+        triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
+        import json
+
+        triggered_id = json.loads(triggered_input)
+        triggered_index = triggered_id["index"]
+        logger.info(f"Duplicating component metadata from {triggered_index}")
+
+        # Find the source metadata in the dictionary
+        if triggered_index in current_metadata:
+            source_metadata = current_metadata[triggered_index]
+        else:
+            logger.warning(f"Source metadata not found for duplication: {triggered_index}")
+            return stored_metadata
+
+        logger.info(f"Original metadata for duplication: {source_metadata}")
+
+        # Convert source metadata to dict if it's a Pydantic model
+        if hasattr(source_metadata, "model_dump"):
+            source_dict = source_metadata.model_dump()
+        elif hasattr(source_metadata, "dict"):
+            source_dict = source_metadata.dict()
+        else:
+            source_dict = dict(source_metadata)
+
+        # Create new metadata entry with unique index
+        new_index = generate_unique_index()
+        duplicated_dict = source_dict.copy()
+        duplicated_dict["index"] = new_index  # Use the new index directly
+
+        # Store as dictionary for consistent boundary conversion pattern
+        # (validation already happened on the source metadata)
+        duplicated_metadata = duplicated_dict
+
+        # Add to metadata dictionary with new index as key
+        updated_metadata = current_metadata.copy()
+        updated_metadata[new_index] = duplicated_metadata
+
+        logger.info(f"Duplicated metadata: {duplicated_metadata}")
+
+        # Sync with MongoDB (convert dict to list for DB)
+        metadata_list = list(updated_metadata.values())
+        _sync_metadata_to_mongodb(dashboard_id, metadata_list, token)
+
+        # Update stored metadata
+        updated_stored = stored_metadata.copy()
+        updated_stored[dashboard_id] = updated_metadata
+
+        logger.info(f"✅ Duplicated component metadata to {new_index}")
+        return updated_stored
+
+    except Exception as e:
+        logger.error(f"❌ Error in metadata duplication: {e}")
+        return stored_metadata
+
+
+def _handle_metadata_removal(ctx, current_metadata, stored_metadata, dashboard_id, token):
+    """Handle removing component metadata."""
+    try:
+        triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
+        import json
+
+        triggered_id = json.loads(triggered_input)
+        triggered_index = triggered_id["index"]
+
+        # Remove the metadata entry from the dictionary
+        updated_metadata = current_metadata.copy()
+        if triggered_index in updated_metadata:
+            del updated_metadata[triggered_index]
+            logger.info(f"Removed component {triggered_index} from metadata")
+        else:
+            logger.warning(f"Component {triggered_index} not found in metadata")
+
+        # Sync with MongoDB (convert dict back to list format for DB)
+        metadata_list = list(updated_metadata.values())
+        _sync_metadata_to_mongodb(dashboard_id, metadata_list, token)
+
+        # Update stored metadata
+        updated_stored = stored_metadata.copy()
+        updated_stored[dashboard_id] = updated_metadata
+
+        # DETAILED DEBUG: Log the exact store state after removal
+        logger.info("🔍 REMOVAL DEBUG - Store state after removal:")
+        for dash_id, metadata in updated_stored.items():
+            logger.info(
+                f"🔍   Dashboard {dash_id}: {len(metadata)} components - {list(metadata.keys()) if isinstance(metadata, dict) else metadata}"
+            )
+
+        logger.info(f"✅ Removed component metadata {triggered_index}")
+        return updated_stored
+
+    except Exception as e:
+        logger.error(f"❌ Error in metadata removal: {e}")
+        return stored_metadata
+
+
+def _sync_metadata_to_mongodb(dashboard_id, metadata_list, token):
+    """
+    Sync the lightweight metadata to MongoDB's stored_metadata field.
+    This ensures the database stays in sync with the session store.
+    """
+    try:
+        # Convert metadata objects to dictionaries for MongoDB storage
+        db_metadata = []
+        for metadata_item in metadata_list:
+            if hasattr(metadata_item, "model_dump"):
+                # Pydantic model - use model_dump with by_alias=True
+                db_metadata.append(metadata_item.model_dump(by_alias=True))
+            elif hasattr(metadata_item, "dict"):
+                # Legacy Pydantic v1 - use dict()
+                db_metadata.append(metadata_item.dict())
+            elif isinstance(metadata_item, dict):
+                # Already a dictionary
+                db_metadata.append(metadata_item)
+            else:
+                # Try to convert to dict
+                db_metadata.append(dict(metadata_item))
+
+        logger.info(f"🔄 Syncing {len(db_metadata)} metadata entries to MongoDB:")
+        for i, meta in enumerate(db_metadata):
+            logger.info(
+                f"🔄   [{i}] {meta.get('component_type', 'unknown')} - {meta.get('index', 'no-index')}"
+            )
+
+        # Get the current dashboard to preserve existing fields
+        from depictio.dash.api_calls import api_call_get_dashboard
+
+        current_dashboard_data = api_call_get_dashboard(dashboard_id, token)
+
+        if not current_dashboard_data:
+            logger.error(f"❌ Failed to retrieve current dashboard data for {dashboard_id}")
+            return
+
+        # Log what was retrieved from DB to debug the issue
+        existing_metadata = current_dashboard_data.get("stored_metadata", [])
+        logger.info(f"📊 DB SYNC DEBUG - Current DB has {len(existing_metadata)} metadata entries:")
+        for i, meta in enumerate(existing_metadata):
+            if isinstance(meta, dict):
+                logger.info(
+                    f"📊   DB[{i}] {meta.get('component_type', 'unknown')} - {meta.get('index', 'no-index')}"
+                )
+            else:
+                logger.info(f"📊   DB[{i}] {type(meta)} - {meta}")
+
+        # Update only the stored_metadata field with the complete new metadata list
+        current_dashboard_data["stored_metadata"] = db_metadata
+
+        # Import the save function
+        from depictio.dash.api_calls import api_call_save_dashboard
+
+        # Update database with new metadata (send complete dashboard data)
+        success = api_call_save_dashboard(
+            dashboard_id=dashboard_id, dashboard_data=current_dashboard_data, token=token
+        )
+
+        if not success:
+            logger.warning("⚠️ MongoDB sync returned unsuccessful status")
+
+        logger.info(f"💾 Synced {len(db_metadata)} metadata entries to MongoDB")
+
+    except Exception as e:
+        logger.error(f"❌ Failed to sync metadata to MongoDB: {e}")
+
+
+# # ============================================================================
+# # LEGACY HELPER FUNCTIONS (keeping for backward compatibility)
+# # ============================================================================
+
+
+# def _handle_component_addition(
+#     ctx, current_children, stored_children, dashboard_id, TOKEN, stored_metadata
+# ):
+#     """Handle new component addition."""
+#     trigger_id = ctx.triggered_id
+#     if not trigger_id or not isinstance(trigger_id, dict):
+#         return dash.no_update
+
+#     triggered_index = trigger_id.get("index")
+#     if not triggered_index:
+#         return dash.no_update
+
+#     # CRITICAL FIX: Handle tmp index transformation
+#     # When btn-done is clicked, the trigger has the temp index (with -tmp)
+#     # but the stored metadata has the final index (without -tmp)
+#     logger.info(f"🔍 Component addition triggered with index: {triggered_index}")
+
+#     # Find the actual component in stored_metadata using the temp index pattern
+#     matching_metadata = None
+#     if triggered_index.endswith("-tmp"):
+#         # Look for stored metadata where final_index + '-tmp' == triggered_index
+#         for meta in stored_metadata:
+#             if f"{meta['index']}-tmp" == triggered_index:
+#                 matching_metadata = meta
+#                 break
+
+#     if not matching_metadata:
+#         logger.warning(
+#             f"⚠️ No matching stored metadata found for triggered index: {triggered_index}"
+#         )
+#         return dash.no_update
+
+#     final_index = matching_metadata["index"]
+#     logger.info(f"➕ Adding component: {triggered_index} -> {final_index}")
+
+#     # Get component data using the final index
+#     component_data = get_component_data(
+#         input_id=final_index, dashboard_id=dashboard_id, TOKEN=TOKEN
+#     )
+
+#     if component_data:
+#         logger.info(f"➕ Adding new component {final_index} to dashboard {dashboard_id}")
+#         updated_children = list(current_children)
+
+#         # Build the new component
+#         from depictio.dash.layouts.draggable_scenarios.restore_dashboard import (
+#             render_dashboard,  # Import here to avoid circular imports
+#         )
+
+#         new_components = render_dashboard(
+#             stored_metadata=[component_data],
+#             edit_components_button=False,  # Add required parameter
+#             dashboard_id=dashboard_id,
+#             theme="light",  # Add required parameter
+#             TOKEN=TOKEN,
+#         )
+
+#         if new_components:
+#             updated_children.extend(new_components)
+#             stored_children[dashboard_id] = updated_children
+#             return stored_children
+
+#     return dash.no_update
+
+
+# def _handle_component_edit(
+#     ctx, current_children, stored_children, dashboard_id, TOKEN, stored_metadata, edit_parent_index
+# ):
+#     """Handle component editing."""
+#     trigger_id = ctx.triggered_id
+#     if not trigger_id or not isinstance(trigger_id, dict):
+#         return dash.no_update
+
+#     edited_index = trigger_id.get("index")
+#     parent_index = edit_parent_index
+
+#     if not edited_index or not parent_index:
+#         return dash.no_update
+
+#     logger.info(f"✏️ Editing component {parent_index} -> {edited_index} in dashboard {dashboard_id}")
+
+#     # Get updated component data
+#     component_data = get_component_data(
+#         input_id=edited_index, dashboard_id=dashboard_id, TOKEN=TOKEN
+#     )
+
+#     if component_data:
+#         # Find and replace the component in current_children
+#         updated_children = []
+#         for child in current_children:
+#             child_props = child.get("props", {})
+#             child_id = child_props.get("id")
+
+#             if child_id and isinstance(child_id, dict) and child_id.get("index") == parent_index:
+#                 # Replace with updated component
+#                 from depictio.dash.layouts.draggable_scenarios.restore_dashboard import (
+#                     render_dashboard,
+#                 )
+
+#                 new_components = render_dashboard(
+#                     stored_metadata=[component_data],
+#                     edit_components_button=False,  # Add required parameter
+#                     dashboard_id=dashboard_id,
+#                     theme="light",  # Add required parameter
+#                     TOKEN=TOKEN,
+#                 )
+#                 if new_components:
+#                     updated_children.extend(new_components)
+#             else:
+#                 updated_children.append(child)
+
+#         stored_children[dashboard_id] = updated_children
+#         return stored_children
+
+#     return dash.no_update
+
+
+# def _handle_component_duplication(
+#     ctx, current_children, stored_children, dashboard_id, TOKEN, stored_metadata
+# ):
+#     """Handle component duplication."""
+#     trigger_id = ctx.triggered_id
+#     if not trigger_id or not isinstance(trigger_id, dict):
+#         return dash.no_update
+
+#     parent_index = trigger_id.get("index")
+#     if not parent_index:
+#         return dash.no_update
+
+#     logger.info(f"📋 Duplicating component {parent_index} in dashboard {dashboard_id}")
+
+#     # Find the original component metadata
+#     original_metadata = next(
+#         (meta for meta in stored_metadata if meta.get("index") == parent_index), None
+#     )
+#     logger.info(f"Original metadata for duplication: {original_metadata}")
+
+#     if original_metadata:
+#         # Create new metadata with unique index
+#         new_index = generate_unique_index()
+#         duplicated_metadata = dict(original_metadata)
+#         duplicated_metadata["index"] = new_index
+
+#         logger.info(f"Duplicated metadata: {duplicated_metadata}")
+
+#         # Build the duplicated component
+#         from depictio.dash.layouts.draggable_scenarios.restore_dashboard import render_dashboard
+
+#         new_components = render_dashboard(
+#             stored_metadata=[duplicated_metadata],
+#             edit_components_button=False,  # Add required parameter
+#             dashboard_id=dashboard_id,
+#             theme="light",  # Add required parameter
+#             TOKEN=TOKEN,
+#         )
+
+#         if new_components:
+#             updated_children = list(current_children)
+#             updated_children.extend(new_components)
+#             stored_children[dashboard_id] = updated_children
+#             return stored_children
+
+#     return dash.no_update
+
+
+# def _handle_component_removal(ctx, current_children, stored_children, dashboard_id):
+#     """Handle component removal."""
+#     trigger_id = ctx.triggered_id
+#     if not trigger_id or not isinstance(trigger_id, dict):
+#         return dash.no_update
+
+#     remove_index = trigger_id.get("index")
+#     if not remove_index:
+#         return dash.no_update
+
+#     logger.info(f"🗑️ Removing component {remove_index} from dashboard {dashboard_id}")
+
+#     # Filter out the component to remove
+#     updated_children = []
+#     for child in current_children:
+#         child_props = child.get("props", {})
+#         child_id = child_props.get("id")
+
+#         if not (child_id and isinstance(child_id, dict) and child_id.get("index") == remove_index):
+#             updated_children.append(child)
+
+#     stored_children[dashboard_id] = updated_children
+#     return stored_children
+
+
+def _calculate_duplicate_layout(current_layouts, parent_index):
+    """Calculate layout position for a duplicated component."""
+    # Find the parent layout
+    parent_layout = next(
+        (layout for layout in current_layouts if layout.get("i") == f"box-{parent_index}"), None
+    )
+
+    if not parent_layout:
+        return None
+
+    # Generate new unique index for the duplicated component
+    new_index = generate_unique_index()
+
+    # Create new layout with offset position
+    new_layout = dict(parent_layout)
+    new_layout["i"] = f"box-{new_index}"
+
+    # Offset position to avoid overlap
+    new_layout["x"] = (parent_layout.get("x", 0) + 1) % 12  # Wrap at grid width
+    new_layout["y"] = parent_layout.get("y", 0) + 1
+
+    return new_layout
+
+
+def _build_component_sync(component_meta, local_data, metadata, component_type):
+    """
+    Synchronous component building function.
+    This will be the interface for future async compatibility.
+    """
+    # This is a placeholder for the actual component building logic
+    # Each component type will implement this differently in their frontend.py
+    logger.info(f"🔨 Building {component_type} component synchronously")
+
+    # For now, return a placeholder that indicates the component needs to be built
+    # Each frontend.py should implement the actual building logic
+    return f"Component {component_meta.get('index', 'unknown')} needs to be built"
+
+
+# ============================================================================
+# MAIN REGISTRATION FUNCTION
+# ============================================================================
+
+
+def create_modular_dashboard_layout(dashboard_id, local_data=None, theme="light"):
+    """Create dashboard layout with modular component structure."""
+    logger.info(f"🏗️ Creating modular dashboard layout for {dashboard_id}")
+
+    # Core layout components
+    layout_components = [
+        # Hidden stores for component coordination
+        dcc.Store(id="component-render-trigger"),
+        dcc.Store(id="local-store", data=local_data or {}),
+        dcc.Store(id="stored-metadata-all"),
+        dcc.Store(id="interaction-store", data={}),
+        # Main dashboard content area
+        html.Div(
+            id="page-content",
+            children=[
+                html.Div(
+                    id="draggable",
+                    children=[],  # Component containers will be added here by modular callbacks
+                    style={"min-height": "400px", "padding": "10px"},
+                )
+            ],
+        ),
+    ]
+
+    return html.Div(layout_components)
+
+
+def create_component_containers_from_metadata(stored_metadata):
+    """Create empty component containers for modular rendering with ResponsiveWrapper."""
+    logger.info(f"🏗️ Creating {len(stored_metadata)} component containers with ResponsiveWrapper")
+
+    containers = []
+    for metadata in stored_metadata:
+        component_uuid = metadata.get("index", "unknown")
+        component_type = metadata.get("component_type", "unknown")
+        box_uuid = f"box-{component_uuid}"
+
+        # Create metadata store for this component (required by callbacks)
+        # This ensures the store exists before individual callbacks try to access it
+        metadata_store = dcc.Store(
+            id={"type": "stored-metadata-component", "index": component_uuid},
+            data=metadata,
+            storage_type="memory",
+        )
+        
+        # Create component-specific render trigger store
+        component_trigger_store = dcc.Store(
+            id={"type": "component-render-trigger", "index": component_uuid},
+            data={},
+            storage_type="memory",
+        )
+        logger.info(f"Created component trigger store for {component_uuid}")
+
+        # Create inner component container
+        component_container = html.Div(
+            id={"type": "component", "index": component_uuid},
+            # children=f"Loading {component_type} component...",
+            style={"width": "100%", "height": "100%"},
+        )
+
+        # Create content div with proper responsive-content class
+        content_div = html.Div(
+            # [component_container],
+            [component_container, metadata_store, component_trigger_store],
+            id=f"content-{box_uuid}",
+            className="dashboard-component-hover responsive-content",
+            style={
+                "overflow": "visible",
+                "width": "100%",
+                "height": "100%",
+                "boxSizing": "border-box",
+                "padding": "5px",
+                "border": "1px solid transparent",
+                "borderRadius": "8px",
+                "position": "relative",
+                "minHeight": "100px",
+                "transition": "all 0.3s ease",
+                "display": "flex",
+                "flexDirection": "column",
+            },
+        )
+
+        # Import DraggableWrapper
+        import dash_dynamic_grid_layout as dgl
+
+        # Create DraggableWrapper with the UUID as ID (like in edit.py)
+        draggable_wrapper = dgl.DraggableWrapper(
+            id=box_uuid,  # Use UUID as ID for layout tracking
+            children=[content_div],
+            handleText="Drag",  # Handle text for dragging
+        )
+
+        # Wrap with ResponsiveWrapperadmin for dash-dynamic-grid-layout compatibility
+        # responsive_wrapper = html.Div(
+        #     draggable_wrapper,
+        #     id=box_uuid,  # This is the ID that grid layout uses - CRITICAL: Same ID as DraggableWrapper
+        #     className="responsive-wrapper",  # Critical: This class makes it work!
+        #     style={
+        #         "position": "relative",
+        #         "width": "100%",
+        #         "height": "100%",
+        #         "display": "flex",
+        #         "flexDirection": "column",
+        #         "flex": "1",  # Critical: Allow vertical growing
+        #     },
+        # )
+
+        # NOTE: Don't create metadata_store here - component build functions create them
+        # to avoid duplicate stores error
+
+        containers.append(draggable_wrapper)
+
+    logger.info(f"✅ Created {len(containers)} component containers with ResponsiveWrapper")
+    return containers
+
+
+def register_modular_draggable_callbacks(app):
+    """
+    Register all modular draggable callbacks.
+
+    This replaces the monolithic update_draggable callback with
+    a set of focused, single-responsibility callbacks.
+    """
+    logger.info("🔧 Registering modular draggable callback system")
+
+    # Register all callback groups
+    register_trigger_callbacks(app)
+    register_layout_callbacks(app)
+    # register_component_callbacks(app)  # Restored individual component callbacks
+    register_interaction_callbacks(app)
+    _register_component_container_callback(app)
+    _register_centralized_component_callback(app)
+
+    logger.info("✅ Modular draggable callback system registered")
+
+
+def _register_centralized_component_callback(app):
+    """Register single callback to handle both component rendering and metadata updates."""
+
+    @app.callback(
+        Output({"type": "component-render-trigger", "index": ALL}, "data"),
+        Input("component-render-trigger", "data"), 
+        State("stored-component-metadata", "data"),
+        State("url", "pathname"),
+        prevent_initial_call=False
+    )
+    def distribute_trigger_to_components(trigger_data, stored_component_metadata, pathname):
+        """Distribute global trigger to individual component-specific triggers."""
+        logger.info(f"🎯 DISTRIBUTING TRIGGER: Received trigger data: {trigger_data}")
+        
+        # if not trigger_data or not stored_component_metadata:
+        #     logger.info("🎯 DISTRIBUTING TRIGGER: No trigger data or metadata, returning empty list")
+        #     return []
+            
+        # # Extract current dashboard metadata to determine number of components
+        # current_pathname = pathname.split("/")[-1] if pathname else "default"
+        # current_dashboard_metadata = stored_component_metadata.get(current_pathname, {})
+        # num_components = len(current_dashboard_metadata)
+        
+        # if num_components == 0:
+        #     logger.info("🎯 DISTRIBUTING TRIGGER: No components found, returning empty list")
+        #     return []
+            
+        # logger.info(f"🎯 DISTRIBUTING TRIGGER: Sending trigger to {num_components} components")
+        
+        # # Send the same trigger data to all component-specific triggers
+        # return [trigger_data] * num_components
+
+    # @app.callback(
+    #     # [
+    #     #     Output({"type": "component", "index": MATCH}, "children"),
+    #     #     Output(
+    #     #         {"type": "stored-metadata-component", "index": MATCH}, "data", allow_duplicate=True
+    #     #     ),
+    #     # ],
+    #     Input("component-render-trigger", "data"),
+    #     State({"type": "stored-metadata-component", "index": MATCH}, "data"),
+    #     State("local-store", "data"),
+    #     State("url", "pathname"),
+    #     # prevent_initial_call=True,
+    # )
+    # def update_component_and_metadata(trigger, all_metadata, local_data, pathname):
+    #     """Handle both component rendering and metadata updates in single callback."""
+
+    #     logger.info("🎯 CENTRALIZED CALLBACK: Triggered for component update")
+    #     logger.info(f"Trigger data: {trigger}")
+    #     logger.info(f"All metadata: {all_metadata}")
+
+    #     if not trigger or not all_metadata:
+    #         logger.info("🎯 CENTRALIZED CALLBACK: No trigger or metadata, skipping")
+    #         return [dash.no_update] * len(all_metadata), [dash.no_update] * len(all_metadata)
+
+    #     components = []
+    #     metadata_updates = []
+
+    #     for metadata in all_metadata:
+    #         if not metadata:
+    #             components.append(dash.no_update)
+    #             metadata_updates.append(dash.no_update)
+    #             continue
+
+    #     component_type = metadata.get("component_type")
+    #     meta_index = metadata.get("index", "unknown")
+
+    #     logger.info(f"🎯 CENTRALIZED CALLBACK: Updating {component_type} component {meta_index}")
+
+    #     # Route to appropriate build function based on component type
+    #     if component_type == "card":
+    #         from depictio.dash.modules.card_component.utils import build_card
+
+    #         component, store = build_card(
+    #             index=meta_index,
+    #             title=metadata.get("title"),
+    #             wf_id=metadata.get("wf_id"),
+    #             dc_id=metadata.get("dc_id"),
+    #             dc_config=metadata.get("dc_config"),
+    #             column_name=metadata.get("column_name"),
+    #             column_type=metadata.get("column_type"),
+    #             aggregation=metadata.get("aggregation"),
+    #             v=metadata.get("value"),
+    #             access_token=local_data.get("access_token") if local_data else None,
+    #             build_frame=False,
+    #         )
+    #         return component, store.data
+
+    #     elif component_type == "figure":
+    #         from depictio.dash.modules.figure_component.utils import build_figure
+
+    #         component, store = build_figure(
+    #             index=meta_index,
+    #             title=metadata.get("title"),
+    #             wf_id=metadata.get("wf_id"),
+    #             dc_id=metadata.get("dc_id"),
+    #             figure_config=metadata.get("figure_config", {}),
+    #             access_token=local_data.get("access_token") if local_data else None,
+    #             build_frame=False,
+    #         )
+    #         return component, store.data
+
+    #     elif component_type == "table":
+    #         from depictio.dash.modules.table_component.utils import build_table
+
+    #         component, store = build_table(
+    #             index=meta_index,
+    #             title=metadata.get("title"),
+    #             wf_id=metadata.get("wf_id"),
+    #             dc_id=metadata.get("dc_id"),
+    #             cols_json=metadata.get("cols_json", {}),
+    #             access_token=local_data.get("access_token") if local_data else None,
+    #             build_frame=False,
+    #         )
+    #         return component, store.data
+
+    #     elif component_type == "interactive":
+    #         from depictio.dash.modules.interactive_component.utils import build_interactive
+
+    #         component, store = build_interactive(
+    #             index=meta_index,
+    #             title=metadata.get("title"),
+    #             wf_id=metadata.get("wf_id"),
+    #             dc_id=metadata.get("dc_id"),
+    #             column_name=metadata.get("column_name"),
+    #             interactive_component_type=metadata.get("interactive_component_type"),
+    #             access_token=local_data.get("access_token") if local_data else None,
+    #             build_frame=False,
+    #         )
+    #         return component, store.data
+
+    #     elif component_type == "text":
+    #         from depictio.dash.modules.text_component.utils import build_text
+
+    #         component, store = build_text(
+    #             index=meta_index,
+    #             title=metadata.get("title"),
+    #             content=metadata.get("content", ""),
+    #             build_frame=False,
+    #         )
+    #         return component, store.data
+
+    #     elif component_type == "jbrowse":
+    #         from depictio.dash.modules.jbrowse_component.utils import build_jbrowse
+
+    #         component, store = build_jbrowse(
+    #             index=meta_index,
+    #             title=metadata.get("title"),
+    #             wf_id=metadata.get("wf_id"),
+    #             dc_id=metadata.get("dc_id"),
+    #             access_token=local_data.get("access_token") if local_data else None,
+    #             build_frame=False,
+    #         )
+    #         return component, store.data
+
+    #     else:
+    #         logger.warning(f"Unknown component type: {component_type}")
+    #         return f"Unknown component type: {component_type}", metadata
+
+
+def _register_component_container_callback(app):
+    """Register callback to create component containers when metadata is loaded."""
+
+    @app.callback(
+        Output("draggable", "children"),
+        [Input("stored-metadata-all", "data")],
+        [State("url", "pathname")],
+        prevent_initial_call=False,
+    )
+    def update_draggable_containers(metadata_dict, pathname):
+        """Create component containers when metadata is available."""
+        logger.info("🏗️ Updating draggable containers from metadata")
+        logger.info(f"Metadata : {metadata_dict}")
+        logger.info(f"Pathname: {pathname}")
+        dashboard_id = pathname.split("/")[-1]
+        if not metadata_dict:
+            logger.info("No metadata available, returning empty containers")
+            return []
+
+        stored_metadata = (
+            list(metadata_dict[dashboard_id].values()) if dashboard_id in metadata_dict else []
+        )
+        logger.info(f"Stored metadata: {stored_metadata}")
+
+        if not stored_metadata:
+            logger.info("No valid metadata found, returning empty containers")
+            return []
+
+        logger.info(f"Creating containers for {len(stored_metadata)} components")
+        containers = create_component_containers_from_metadata(stored_metadata)
+
+        return containers
+
+
+# ============================================================================
+# MIGRATION UTILITIES
+# ============================================================================
+
+
+def create_hidden_stores_for_triggers():
+    """Create the hidden stores needed for the trigger system."""
+    return [
+        dcc.Store(id="component-render-trigger", data={}),
+        dcc.Store(id="layout-update-trigger", data={}),
+    ]

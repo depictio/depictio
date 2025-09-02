@@ -13,10 +13,9 @@ from depictio.dash.components.analytics_tracker import (
 from depictio.dash.layouts.dashboards_management import layout as dashboards_management_layout
 
 # from depictio.dash.layouts.draggable_scenarios.add_component import register_callbacks_add_component
-from depictio.dash.layouts.draggable import design_draggable
-
+# from depictio.dash.layouts.draggable import design_draggable
 # Depictio utils imports
-from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data_sync
+from depictio.dash.layouts.draggable_modular import _load_dashboard_data_lightweight
 from depictio.dash.layouts.header import design_header
 from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
 from depictio.dash.layouts.notes_footer import create_notes_footer
@@ -109,12 +108,31 @@ def handle_authenticated_user(pathname, local_data, theme="light", cached_projec
         logger.info(f"🔄 DASHBOARD NAVIGATION: Loading dashboard {dashboard_id}")
 
         logger.info(f"🔄 DASHBOARD NAVIGATION: theme - {theme}")
-        # Load dashboard data synchronously
-        depictio_dash_data = load_depictio_data_sync(
-            dashboard_id=dashboard_id,
-            local_data=local_data,
-            theme=theme,
+        # Load dashboard data using lightweight approach - modular system handles rendering
+        dashboard_data = _load_dashboard_data_lightweight(
+            dashboard_id=dashboard_id, access_token=local_data.get("access_token")
         )
+
+        # Convert DashboardData model to dict format for compatibility with existing functions
+        # This maintains type safety while ensuring compatibility
+        if dashboard_data:
+            depictio_dash_data = dashboard_data.model_dump()
+
+            # Ensure required fields exist for header functions
+            if "buttons_data" not in depictio_dash_data:
+                depictio_dash_data["buttons_data"] = {
+                    "unified_edit_mode": True,
+                    "add_button": {"count": 0},
+                }
+            if "stored_add_button" not in depictio_dash_data:
+                depictio_dash_data["stored_add_button"] = {"count": 0}
+        else:
+            depictio_dash_data = None
+
+        logger.info(
+            f"Depictio dash data loaded for dashboard {dashboard_id}: {bool(dashboard_data)}"
+        )
+        logger.info(f"Depictio dash data structure: {depictio_dash_data}")
 
         # Create dashboard layout
         if depictio_dash_data:
@@ -471,19 +489,23 @@ def create_dashboard_layout(
     else:
         init_layout = {}
         init_children = list()
+    logger.info(f"Init children len {len(init_children)}")
+    logger.info(f"Init layouts len {len(init_layout)}")
 
     # logger.info(f"Loaded depictio init_layout: {init_layout}")
     # header, backend_components = design_header(depictio_dash_data)
 
-    # Generate draggable layout
+    # Generate modular draggable layout
     # Ensure local_data is a dict
     local_data = local_data or {}
-    core = design_draggable(
-        init_layout,
-        init_children,
-        dashboard_id,
-        local_data,
-        cached_project_data=cached_project_data,
+
+    # Use modular layout instead of monolithic design_draggable
+    from depictio.dash.layouts.draggable_modular import create_modular_dashboard_layout
+
+    core = create_modular_dashboard_layout(
+        dashboard_id=dashboard_id,
+        local_data=local_data,
+        theme=theme,
     )
 
     # Add progressive loading components if we have metadata

@@ -187,18 +187,18 @@ def register_sidebar_callbacks(app):
     def update_avatar(user_cache):
         from depictio.models.models.users import UserContext
 
-        logger.info(f"🔧 AVATAR CALLBACK: user_cache received: {bool(user_cache)}")
-        if user_cache:
-            logger.info(
-                f"🔧 AVATAR CALLBACK: user_cache keys: {list(user_cache.keys()) if isinstance(user_cache, dict) else 'not dict'}"
-            )
+        # logger.info(f"🔧 AVATAR CALLBACK: user_cache received: {bool(user_cache)}")
+        # if user_cache:
+        #     logger.info(
+        #         f"🔧 AVATAR CALLBACK: user_cache keys: {list(user_cache.keys()) if isinstance(user_cache, dict) else 'not dict'}"
+        #     )
 
         # Get user from consolidated cache
         current_user = UserContext.from_cache(user_cache)
-        logger.info(f"🔧 AVATAR CALLBACK: current_user: {bool(current_user)}")
+        # logger.info(f"🔧 AVATAR CALLBACK: current_user: {bool(current_user)}")
 
         if not current_user or not current_user.email:
-            logger.info("🔧 AVATAR CALLBACK: No user or email, returning empty")
+            # logger.info("🔧 AVATAR CALLBACK: No user or email, returning empty")
             return []
 
         email = current_user.email
@@ -213,7 +213,7 @@ def register_sidebar_callbacks(app):
             href="/profile",
         )
         name_text = dmc.Text(name, size="lg", style={"fontSize": "16px", "marginLeft": "10px"})
-        logger.info(f"✅ AVATAR CALLBACK: Created avatar for {email}")
+        # logger.info(f"✅ AVATAR CALLBACK: Created avatar for {email}")
         return [avatar, name_text]
 
     @app.callback(
@@ -261,21 +261,21 @@ def register_sidebar_callbacks(app):
     def show_admin_link(user_cache):
         from depictio.models.models.users import UserContext
 
-        logger.info(f"🔧 ADMIN LINK CALLBACK: user_cache received: {bool(user_cache)}")
+        # logger.info(f"🔧 ADMIN LINK CALLBACK: user_cache received: {bool(user_cache)}")
 
         # Get user from consolidated cache
         current_user = UserContext.from_cache(user_cache)
         if not current_user:
-            logger.info("🔧 ADMIN LINK CALLBACK: No user, hiding admin link")
+            # logger.info("🔧 ADMIN LINK CALLBACK: No user, hiding admin link")
             return {"padding": "20px", "display": "none"}
 
         if current_user.is_admin:
-            logger.info(f"✅ ADMIN LINK CALLBACK: Showing admin link for {current_user.email}")
+            # logger.info(f"✅ ADMIN LINK CALLBACK: Showing admin link for {current_user.email}")
             return {"padding": "20px"}
         else:
-            logger.info(
-                f"🔧 ADMIN LINK CALLBACK: Hiding admin link for non-admin {current_user.email}"
-            )
+            # logger.info(
+            #     f"🔧 ADMIN LINK CALLBACK: Hiding admin link for non-admin {current_user.email}"
+            # )
             return {"padding": "20px", "display": "none"}
 
     # {"padding": "20px", "display": "none"}

@@ -149,6 +149,74 @@ def _get_default_parameters(visu_type: str, columns_specs: Dict[str, List[str]])
 def register_callbacks_figure_component(app):
     """Register all callbacks for the robust figure component system."""
 
+    # ============================================================================
+    # INDIVIDUAL COMPONENT UPDATE - Modular Draggable System
+    # ============================================================================
+    @dash.callback(
+        Output({"type": "draggable-item", "index": MATCH}, "children", allow_duplicate=True),
+        [
+            Input("component-render-trigger", "data"),
+            Input({"type": "figure-update-trigger", "index": MATCH}, "data"),
+        ],
+        [
+            State({"type": "component-meta", "index": MATCH}, "data"),
+            State("local-store", "data"),
+            State(
+                {"type": "stored-metadata-component", "index": MATCH}, "data", allow_optional=True
+            ),
+            State("url", "pathname"),
+        ],
+        prevent_initial_call=True,
+    )
+    def update_figure_component_direct(
+        trigger, figure_trigger, component_meta, local_data, metadata, pathname
+    ):
+        """Update figure component directly - part of modular draggable system."""
+        if not trigger or not trigger.get("needs_update"):
+            return dash.no_update
+
+        # Check if this trigger is relevant for this component
+        trigger_id = trigger.get("trigger_id")
+        trigger_prop = trigger.get("trigger_prop", "")
+
+        # Interactive component changes should update ALL components (filters affect everything)
+        is_interactive_change = "interactive-component-value" in trigger_prop
+
+        # For non-interactive triggers, only update the specific component
+        if not is_interactive_change and trigger_id and isinstance(trigger_id, dict):
+            component_index = trigger_id.get("index")
+            meta_index = component_meta.get("index") if component_meta else None
+
+            # Only update if this is the triggered component (for direct operations like edit/duplicate)
+            if component_index != meta_index:
+                return dash.no_update
+
+        if not local_data or not metadata:
+            return dash.no_update
+
+        # Extract dashboard info
+        dashboard_id = pathname.split("/")[-1] if pathname else "default"
+        TOKEN = local_data.get("access_token")
+
+        logger.info(f"🔄 Updating figure component {meta_index} directly")
+
+        try:
+            # Build the figure component using existing build_figure function
+            updated_component = build_figure(
+                index=meta_index, stored_metadata=metadata, TOKEN=TOKEN, dashboard_id=dashboard_id
+            )
+
+            if updated_component:
+                logger.info(f"✅ Figure component {meta_index} updated successfully")
+                return updated_component
+            else:
+                logger.warning(f"⚠️ Failed to build figure component {meta_index}")
+                return dash.no_update
+
+        except Exception as e:
+            logger.error(f"❌ Error updating figure component {meta_index}: {e}")
+            return dash.no_update
+
     @dash.callback(
         Output({"type": "collapse", "index": MATCH}, "children"),
         [
@@ -1356,7 +1424,7 @@ def register_callbacks_figure_component(app):
             State({"type": "code-editor", "index": MATCH}, "value"),
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-            # State({"type": "stored-metadata-component", "index": MATCH}, "data"),
+            # State({"type": "stored-metadata-component", "index": MATCH}, "data", allow_optional=True),
             State("local-store", "data"),
         ],
         prevent_initial_call=True,

@@ -1275,7 +1275,7 @@ def build_interactive(**kwargs):
 
     # Create wrapper with proper sizing for interactive components
     new_interactive_component = dmc.Stack(
-        [card_title_h5, interactive_component, store_component],
+        [card_title_h5, interactive_component],
         gap="xs",
         style={
             "width": "100%",
@@ -1291,7 +1291,7 @@ def build_interactive(**kwargs):
     )
 
     if not build_frame:
-        return new_interactive_component
+        return new_interactive_component, store_component
     else:
         # Build the interactive component with frame
         interactive_component = build_interactive_frame(

@@ -39,6 +39,76 @@ def get_centered_title_style(alignment="left", display="block"):
 
 
 def register_callbacks_text_component(app):
+    """Register all callbacks for the text component system."""
+
+    # ============================================================================
+    # INDIVIDUAL COMPONENT UPDATE - Modular Draggable System
+    # ============================================================================
+    @app.callback(
+        Output({"type": "draggable-item", "index": MATCH}, "children", allow_duplicate=True),
+        [
+            Input("component-render-trigger", "data"),
+            Input({"type": "text-update-trigger", "index": MATCH}, "data"),
+        ],
+        [
+            State({"type": "component-meta", "index": MATCH}, "data"),
+            State("local-store", "data"),
+            State(
+                {"type": "stored-metadata-component", "index": MATCH}, "data", allow_optional=True
+            ),
+            State("url", "pathname"),
+        ],
+        prevent_initial_call=True,
+    )
+    def update_text_component_direct(
+        trigger, text_trigger, component_meta, local_data, metadata, pathname
+    ):
+        """Update text component directly - part of modular draggable system."""
+        if not trigger or not trigger.get("needs_update"):
+            return dash.no_update
+
+        # Check if this trigger is relevant for this component
+        trigger_id = trigger.get("trigger_id")
+        trigger_prop = trigger.get("trigger_prop", "")
+
+        # Interactive component changes should update ALL components (filters affect everything)
+        is_interactive_change = "interactive-component-value" in trigger_prop
+
+        # For non-interactive triggers, only update the specific component
+        if not is_interactive_change and trigger_id and isinstance(trigger_id, dict):
+            component_index = trigger_id.get("index")
+            meta_index = component_meta.get("index") if component_meta else None
+
+            # Only update if this is the triggered component (for direct operations like edit/duplicate)
+            if component_index != meta_index:
+                return dash.no_update
+
+        if not local_data or not metadata:
+            return dash.no_update
+
+        # Extract dashboard info
+        dashboard_id = pathname.split("/")[-1] if pathname else "default"
+        TOKEN = local_data.get("access_token")
+
+        logger.info(f"🔄 Updating text component {meta_index} directly")
+
+        try:
+            # Build the text component using existing build_text function
+            updated_component = build_text(
+                index=meta_index, stored_metadata=metadata, TOKEN=TOKEN, dashboard_id=dashboard_id
+            )
+
+            if updated_component:
+                logger.info(f"✅ Text component {meta_index} updated successfully")
+                return updated_component
+            else:
+                logger.warning(f"⚠️ Failed to build text component {meta_index}")
+                return dash.no_update
+
+        except Exception as e:
+            logger.error(f"❌ Error updating text component {meta_index}: {e}")
+            return dash.no_update
+
     # Inline editable text callbacks
 
     # Toggle edit mode when double-clicking on title (triggered via clientside callback)
@@ -259,7 +329,7 @@ def register_callbacks_text_component(app):
     @app.callback(
         Output({"type": "stored-metadata-component", "index": MATCH}, "data"),
         Input({"type": "text-store", "index": MATCH}, "data"),
-        State({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        State({"type": "stored-metadata-component", "index": MATCH}, "data", allow_optional=True),
         prevent_initial_call=False,  # Allow initial call to sync alignment from restored text-store
     )
     def sync_text_content_for_save(text_store_data, stored_metadata):

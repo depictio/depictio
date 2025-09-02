@@ -26,10 +26,18 @@ def validate_and_clean_orphaned_layouts(stored_layout_data, stored_metadata):
     if not stored_layout_data or not stored_metadata:
         return stored_layout_data or []
 
-    # Extract valid component IDs from metadata
-    valid_component_ids = {
-        str(meta.get("index")) for meta in stored_metadata if meta.get("index") is not None
-    }
+    # Extract valid component IDs from metadata (handle both dict and Pydantic models)
+    valid_component_ids = set()
+    for meta in stored_metadata:
+        if hasattr(meta, "index"):
+            # Pydantic model
+            valid_component_ids.add(str(meta.index))
+        elif hasattr(meta, "get") and meta.get("index") is not None:
+            # Dictionary
+            valid_component_ids.add(str(meta.get("index")))
+        elif isinstance(meta, dict) and "index" in meta:
+            # Dictionary (redundant check for safety)
+            valid_component_ids.add(str(meta["index"]))
     logger.info(f"🔍 LAYOUT VALIDATION - Valid component IDs from metadata: {valid_component_ids}")
 
     cleaned_layout_data = []
@@ -162,15 +170,25 @@ def register_callbacks_save(app):
         #                 f"📊 SAVE DEBUG - Raw metadata {i}: dict_kwargs={elem.get('dict_kwargs', 'MISSING')}"
         #             )
 
-        stored_metadata_for_logging = [
-            {
-                "index": elem.get("index"),
-                "component_type": elem.get("component_type"),
-                "wf_id": elem.get("workflow_id"),
-                "dc_id": elem.get("dc_id"),
-            }
-            for elem in stored_metadata
-        ]
+        stored_metadata_for_logging = []
+        for elem in stored_metadata:
+            if hasattr(elem, "index"):
+                # Pydantic model
+                log_entry = {
+                    "index": elem.index,
+                    "component_type": elem.component_type,
+                    "wf_id": getattr(elem, "wf_id", None),
+                    "dc_id": getattr(elem, "dc_id", None),
+                }
+            else:
+                # Dictionary
+                log_entry = {
+                    "index": elem.get("index"),
+                    "component_type": elem.get("component_type"),
+                    "wf_id": elem.get("workflow_id"),
+                    "dc_id": elem.get("dc_id"),
+                }
+            stored_metadata_for_logging.append(log_entry)
         logger.info(f"Stored metadata for logging: {stored_metadata_for_logging}")
 
         # Early return if user is not logged in
@@ -221,12 +239,18 @@ def register_callbacks_save(app):
         triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
         logger.info(f"Triggered ID: {triggered_id}")
 
+        # Skip save for duplicate buttons since duplication handler manages its own save
+        if "duplicate-box-button" in triggered_id:
+            logger.info(
+                "🎯 SAVE DEBUG - Skipping save for duplicate trigger (handled by duplication callback)"
+            )
+            raise dash.exceptions.PreventUpdate
+
         # Define save-triggering conditions
         save_triggers = [
             "save-button-dashboard",
             "btn-done",
             "btn-done-edit",
-            "duplicate-box-button",
             "remove-box-button",
             "remove-all-components-button",
             "edit-components-mode-button",
@@ -250,7 +274,12 @@ def register_callbacks_save(app):
 
         # First pass: collect all metadata entries by index
         for elem in stored_metadata:
-            index = elem["index"]
+            # Handle both Pydantic models and dictionaries
+            if hasattr(elem, "index"):
+                index = elem.index  # Pydantic model
+            else:
+                index = elem["index"]  # Dictionary
+
             if index not in indexed_metadata:
                 indexed_metadata[index] = []
             indexed_metadata[index].append(elem)
@@ -266,11 +295,21 @@ def register_callbacks_save(app):
                 #     f"📊 SAVE DEBUG - Found {len(metadata_list)} duplicate entries for index {index}"
                 # )
 
+                # Helper function to get attribute from both Pydantic models and dicts
+                def get_attr(obj, attr, default=None):
+                    if hasattr(obj, attr):
+                        return getattr(obj, attr, default)
+                    elif hasattr(obj, "get"):
+                        return obj.get(attr, default)
+                    else:
+                        return default
+
                 # Score each metadata entry by completeness
                 def score_metadata(meta):
                     score = 0
+
                     # Highest priority: non-empty dict_kwargs (this is the critical field we need to preserve)
-                    dict_kwargs = meta.get("dict_kwargs", {})
+                    dict_kwargs = get_attr(meta, "dict_kwargs", {})
                     if isinstance(dict_kwargs, dict) and len(dict_kwargs) > 0:
                         score += 1000  # Much higher weight for dict_kwargs
                         # Bonus points for specific important fields in dict_kwargs
@@ -280,19 +319,19 @@ def register_callbacks_save(app):
                                 score += 10
 
                     # Medium priority: component configuration fields
-                    if meta.get("wf_id"):
+                    if get_attr(meta, "wf_id"):
                         score += 100
-                    if meta.get("dc_id"):
+                    if get_attr(meta, "dc_id"):
                         score += 100
-                    if meta.get("visu_type"):
+                    if get_attr(meta, "visu_type"):
                         score += 50
-                    if meta.get("component_type"):
+                    if get_attr(meta, "component_type"):
                         score += 25
 
                     # Low priority: metadata fields
-                    if meta.get("last_updated"):
+                    if get_attr(meta, "last_updated"):
                         score += 1
-                    if meta.get("title"):
+                    if get_attr(meta, "title"):
                         score += 5
 
                     return score
@@ -322,22 +361,25 @@ def register_callbacks_save(app):
 
             # Safety check: ensure we're not accidentally selecting empty metadata when better options exist
             if len(metadata_list) > 1:
-                dict_kwargs = best_metadata.get("dict_kwargs", {})
+                # Use the helper function to get dict_kwargs
+                dict_kwargs = get_attr(best_metadata, "dict_kwargs", {})
                 if not isinstance(dict_kwargs, dict) or len(dict_kwargs) == 0:
                     # Double-check if any other candidate has non-empty dict_kwargs
-                    alternatives = [
-                        meta
-                        for meta in metadata_list
-                        if meta.get("dict_kwargs") and len(meta.get("dict_kwargs", {})) > 0
-                    ]
+                    alternatives = []
+                    for meta in metadata_list:
+                        meta_dict_kwargs = get_attr(meta, "dict_kwargs", {})
+                        if meta_dict_kwargs and len(meta_dict_kwargs) > 0:
+                            alternatives.append(meta)
+
                     if alternatives:
                         logger.warning(
                             f"📊 SAVE DEBUG - SAFETY CHECK: Found {len(alternatives)} alternatives with non-empty dict_kwargs for index {index}"
                         )
                         # Use the first alternative with non-empty dict_kwargs
                         best_metadata = alternatives[0]
+                        alt_dict_kwargs = get_attr(best_metadata, "dict_kwargs", {})
                         logger.warning(
-                            f"📊 SAVE DEBUG - SAFETY CHECK: Switched to alternative with dict_kwargs: {best_metadata.get('dict_kwargs', 'MISSING')}"
+                            f"📊 SAVE DEBUG - SAFETY CHECK: Switched to alternative with dict_kwargs: {alt_dict_kwargs}"
                         )
 
             unique_metadata.append(best_metadata)
@@ -389,12 +431,20 @@ def register_callbacks_save(app):
             original_count = len(unique_metadata)
 
             # Find the component being edited (it will have parent_index set)
-            edited_components = [
-                elem for elem in unique_metadata if elem.get("parent_index") is not None
-            ]
-            non_edited_components = [
-                elem for elem in unique_metadata if elem.get("parent_index") is None
-            ]
+            edited_components = []
+            non_edited_components = []
+
+            for elem in unique_metadata:
+                # Handle both Pydantic models and dictionaries
+                if hasattr(elem, "parent_index"):
+                    parent_index = getattr(elem, "parent_index", None)
+                else:
+                    parent_index = elem.get("parent_index")
+
+                if parent_index is not None:
+                    edited_components.append(elem)
+                else:
+                    non_edited_components.append(elem)
 
             logger.info(
                 f"Found {len(edited_components)} edited components and {len(non_edited_components)} non-edited components"

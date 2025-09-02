@@ -1,10 +1,8 @@
-import copy
-
 import dash
 import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
 import httpx
-from dash import ALL, Input, Output, State, ctx, dcc, html
+from dash import ALL, Input, Output, State, ctx, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
@@ -13,20 +11,9 @@ from depictio.api.v1.configs.logging_init import logger
 # Import centralized component dimensions from metadata
 from depictio.dash.component_metadata import get_component_dimensions_dict
 from depictio.dash.layouts.draggable_scenarios.add_component import add_new_component
-from depictio.dash.layouts.draggable_scenarios.graphs_interactivity import (
-    refresh_children_based_on_click_data,
-    refresh_children_based_on_selected_data,
-)
-from depictio.dash.layouts.draggable_scenarios.interactive_component_update import (
-    render_raw_children,
-    # update_interactive_component_async,
-    update_interactive_component_sync,
-)
-from depictio.dash.layouts.draggable_scenarios.restore_dashboard import render_dashboard
 
 # Depictio layout imports for stepper
 # Depictio layout imports for header
-from depictio.dash.layouts.edit import edit_component, enable_box_edit_mode
 from depictio.dash.utils import (
     generate_unique_index,
     get_component_data,
@@ -268,8 +255,16 @@ def get_component_id(component):
 
 
 def remove_duplicates_by_index(components):
-    unique_components = {}
+    # Convert Pydantic models to dicts at entry for internal processing
+    dict_components = []
     for component in components:
+        if hasattr(component, "model_dump"):
+            dict_components.append(component.model_dump())
+        else:
+            dict_components.append(component)
+
+    unique_components = {}
+    for component in dict_components:
         index = component["index"]
         if index not in unique_components:
             # First occurrence of this index
@@ -319,7 +314,14 @@ def clean_stored_metadata(stored_metadata):
     return stored_metadata
 
 
-def register_callbacks_draggable(app):
+def register_callbacks_draggable_legacy_components(app):
+    """
+    Register only the non-modular legacy callbacks from the draggable system.
+
+    This excludes the main populate_draggable callback which has been replaced
+    by the modular system in draggable_modular.py
+    """
+
     @app.callback(
         Output("local-store-components-metadata", "data"),
         [
@@ -495,6 +497,14 @@ def register_callbacks_draggable(app):
         # logger.debug(f"Components store data after update: {components_store}")
         return components_store
 
+    # ============================================================================
+    # OLD MONOLITHIC CALLBACK - DISABLED (replaced by modular system)
+    # ============================================================================
+    # This entire callback has been replaced by the modular system in draggable_modular.py
+    # Remove after full validation of the new system
+
+    """
+    # OLD MONOLITHIC CALLBACK - START
     @app.callback(
         Output("draggable", "items"),
         Output("draggable", "currentLayout"),
@@ -1624,9 +1634,27 @@ def register_callbacks_draggable(app):
                 )
 
             elif triggered_input == "duplicate-box-button":
-                logger.info("=" * 80)
-                logger.info("🚨 DUPLICATE CALLBACK EXECUTION START")
-                logger.info("=" * 80)
+                logger.info("🎯 OLD CALLBACK - Skipping duplicate trigger (handled by new modular system)")
+                return (
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                )
                 logger.debug(f"🔍 DUPLICATE DEBUG - ctx.triggered: {ctx.triggered}")
                 logger.debug(f"🔍 DUPLICATE DEBUG - ctx.triggered_id: {ctx.triggered_id}")
                 logger.debug(f"🔍 DUPLICATE DEBUG - Total triggered items: {len(ctx.triggered)}")
@@ -2001,6 +2029,8 @@ def register_callbacks_draggable(app):
                 dash.no_update,
                 dash.no_update,
             )
+    # OLD MONOLITHIC CALLBACK - END
+    """
 
     # @app.callback(
     #     Output({"type": "last-button", "index": MATCH}, "data", allow_duplicate=True),
@@ -2097,7 +2127,7 @@ def register_callbacks_draggable(app):
         ],
         [
             State({"type": "interactive-component-value", "index": ALL}, "id"),
-            State({"type": "stored-metadata-component", "index": ALL}, "data"),
+            State({"type": "stored-metadata-component", "index": ALL}, "data", allow_optional=True),
             State({"type": "graph", "index": ALL}, "id"),
             State("local-store", "data"),
             State("url", "pathname"),
@@ -2758,3 +2788,38 @@ def design_draggable(
     core = html.Div(core_children)
 
     return core
+
+
+# ============================================================================
+# NEW MODULAR SYSTEM INTEGRATION
+# ============================================================================
+
+
+def register_callbacks_draggable(app):
+    """
+    Register the new modular draggable callback system.
+
+    This function maintains compatibility with existing code while using
+    the new modular approach from draggable_modular.py
+    """
+    # Import and register the modular system
+    from depictio.dash.layouts.draggable_modular import register_modular_draggable_callbacks
+
+    logger.info("🔧 Registering NEW modular draggable callback system")
+    register_modular_draggable_callbacks(app)
+
+    # Also register the legacy components that aren't handled by the modular system
+    register_callbacks_draggable_legacy_components(app)
+
+    logger.info("✅ Modular draggable system registered successfully")
+
+
+def get_draggable_stores_for_modular_system():
+    """
+    Get the additional stores required for the modular draggable system.
+
+    These stores should be added to your layout to enable the modular system.
+    """
+    from depictio.dash.layouts.draggable_modular import create_hidden_stores_for_triggers
+
+    return create_hidden_stores_for_triggers()

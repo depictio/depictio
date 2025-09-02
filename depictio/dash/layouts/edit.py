@@ -1,6 +1,6 @@
 import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
-from dash import Input, html
+from dash import html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
@@ -12,123 +12,123 @@ from depictio.dash.utils import get_component_data
 def register_reset_button_callbacks(app):
     """Register callbacks to update reset button colors based on filter activity."""
 
-    # Use clientside callback for better performance and direct DOM manipulation
-    app.clientside_callback(
-        """
-        function(interactive_values, pathname) {
-            console.log('🔄 Clientside callback triggered with:', interactive_values);
+    # # Use clientside callback for better performance and direct DOM manipulation
+    # app.clientside_callback(
+    #     """
+    #     function(interactive_values, pathname) {
+    #         console.log('🔄 Clientside callback triggered with:', interactive_values);
 
-            if (!interactive_values) {
-                console.log('No interactive values, skipping update');
-                return '';
-            }
+    #         if (!interactive_values) {
+    #             console.log('No interactive values, skipping update');
+    #             return '';
+    #         }
 
-            // Find all reset buttons
-            const resetButtons = document.querySelectorAll('[id*="reset-selection-graph-button"]');
-            console.log('Found reset buttons:', resetButtons.length);
+    #         // Find all reset buttons
+    #         const resetButtons = document.querySelectorAll('[id*="reset-selection-graph-button"]');
+    #         console.log('Found reset buttons:', resetButtons.length);
 
-            resetButtons.forEach(button => {
-                try {
-                    // Extract component index from button ID
-                    const buttonId = button.id;
-                    console.log('Processing button:', buttonId);
+    #         resetButtons.forEach(button => {
+    #             try {
+    #                 // Extract component index from button ID
+    #                 const buttonId = button.id;
+    #                 console.log('Processing button:', buttonId);
 
-                    // Parse the component index from the ID
-                    let componentIndex = null;
-                    const match = buttonId.match(/index":"([^"]+)"/);
-                    if (match) {
-                        componentIndex = match[1];
-                        console.log('Found component index:', componentIndex);
+    #                 // Parse the component index from the ID
+    #                 let componentIndex = null;
+    #                 const match = buttonId.match(/index":"([^"]+)"/);
+    #                 if (match) {
+    #                     componentIndex = match[1];
+    #                     console.log('Found component index:', componentIndex);
 
-                        // Check if this component has active filters
-                        const hasFilter = checkComponentFilter(interactive_values, componentIndex);
-                        console.log('Component', componentIndex, 'has filter:', hasFilter);
+    #                     // Check if this component has active filters
+    #                     const hasFilter = checkComponentFilter(interactive_values, componentIndex);
+    #                     console.log('Component', componentIndex, 'has filter:', hasFilter);
 
-                        if (hasFilter) {
-                            // Make button orange and always visible
-                            button.setAttribute('data-color', 'orange');
-                            button.classList.add('reset-button-filtered');
-                            button.style.opacity = '1';
-                            button.style.pointerEvents = 'auto';
-                            button.style.display = 'flex';
-                            button.style.visibility = 'visible';
-                            console.log('Set button to orange/visible for component', componentIndex);
-                        } else {
-                            // Make button gray and follow normal hover behavior
-                            button.setAttribute('data-color', 'gray');
-                            button.classList.remove('reset-button-filtered');
-                            console.log('Set button to gray/normal for component', componentIndex);
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error processing button:', error);
-                }
-            });
+    #                     if (hasFilter) {
+    #                         // Make button orange and always visible
+    #                         button.setAttribute('data-color', 'orange');
+    #                         button.classList.add('reset-button-filtered');
+    #                         button.style.opacity = '1';
+    #                         button.style.pointerEvents = 'auto';
+    #                         button.style.display = 'flex';
+    #                         button.style.visibility = 'visible';
+    #                         console.log('Set button to orange/visible for component', componentIndex);
+    #                     } else {
+    #                         // Make button gray and follow normal hover behavior
+    #                         button.setAttribute('data-color', 'gray');
+    #                         button.classList.remove('reset-button-filtered');
+    #                         console.log('Set button to gray/normal for component', componentIndex);
+    #                     }
+    #                 }
+    #             } catch (error) {
+    #                 console.error('Error processing button:', error);
+    #             }
+    #         });
 
-            return 'updated';
+    #         return 'updated';
 
-            function checkComponentFilter(interactive_values, componentIndex) {
-                try {
-                    let interactive_data = [];
+    #         function checkComponentFilter(interactive_values, componentIndex) {
+    #             try {
+    #                 let interactive_data = [];
 
-                    if (interactive_values.interactive_components_values) {
-                        interactive_data = interactive_values.interactive_components_values;
-                    } else if (typeof interactive_values === 'object') {
-                        for (const [key, value] of Object.entries(interactive_values)) {
-                            if (value && typeof value === 'object' && value.value !== undefined) {
-                                interactive_data.push(value);
-                            }
-                        }
-                    }
+    #                 if (interactive_values.interactive_components_values) {
+    #                     interactive_data = interactive_values.interactive_components_values;
+    #                 } else if (typeof interactive_values === 'object') {
+    #                     for (const [key, value] of Object.entries(interactive_values)) {
+    #                         if (value && typeof value === 'object' && value.value !== undefined) {
+    #                             interactive_data.push(value);
+    #                         }
+    #                     }
+    #                 }
 
-                    console.log('Checking', interactive_data.length, 'components for index', componentIndex);
+    #                 console.log('Checking', interactive_data.length, 'components for index', componentIndex);
 
-                    for (const component of interactive_data) {
-                        if (component.metadata && component.metadata.index === componentIndex) {
-                            const currentValue = component.value;
-                            const defaultState = component.metadata.default_state;
+    #                 for (const component of interactive_data) {
+    #                     if (component.metadata && component.metadata.index === componentIndex) {
+    #                         const currentValue = component.value;
+    #                         const defaultState = component.metadata.default_state;
 
-                            console.log('Found component', componentIndex, 'value:', currentValue, 'default:', defaultState);
+    #                         console.log('Found component', componentIndex, 'value:', currentValue, 'default:', defaultState);
 
-                            if (!defaultState || currentValue === null || currentValue === undefined) {
-                                return false;
-                            }
+    #                         if (!defaultState || currentValue === null || currentValue === undefined) {
+    #                             return false;
+    #                         }
 
-                            // Check if different from default
-                            if (defaultState.default_range) {
-                                return JSON.stringify(currentValue) !== JSON.stringify(defaultState.default_range);
-                            } else if (defaultState.default_value !== undefined) {
-                                // Special handling for MultiSelect: both empty array [] and null should be considered equivalent
-                                const isCurrentEmpty = currentValue === null || currentValue === undefined || (Array.isArray(currentValue) && currentValue.length === 0);
-                                const isDefaultEmpty = defaultState.default_value === null || defaultState.default_value === undefined || (Array.isArray(defaultState.default_value) && defaultState.default_value.length === 0);
+    #                         // Check if different from default
+    #                         if (defaultState.default_range) {
+    #                             return JSON.stringify(currentValue) !== JSON.stringify(defaultState.default_range);
+    #                         } else if (defaultState.default_value !== undefined) {
+    #                             // Special handling for MultiSelect: both empty array [] and null should be considered equivalent
+    #                             const isCurrentEmpty = currentValue === null || currentValue === undefined || (Array.isArray(currentValue) && currentValue.length === 0);
+    #                             const isDefaultEmpty = defaultState.default_value === null || defaultState.default_value === undefined || (Array.isArray(defaultState.default_value) && defaultState.default_value.length === 0);
 
-                                if (isCurrentEmpty && isDefaultEmpty) {
-                                    return false; // Both are empty, so no difference
-                                }
+    #                             if (isCurrentEmpty && isDefaultEmpty) {
+    #                                 return false; // Both are empty, so no difference
+    #                             }
 
-                                return currentValue !== defaultState.default_value;
-                            }
+    #                             return currentValue !== defaultState.default_value;
+    #                         }
 
-                            return false;
-                        }
-                    }
+    #                         return false;
+    #                     }
+    #                 }
 
-                    console.log('Component', componentIndex, 'not found in interactive data');
-                    return false;
-                } catch (error) {
-                    console.error('Error checking component filter:', error);
-                    return false;
-                }
-            }
-        }
-        """,
-        # Output("button-style-tracker", "data"),
-        [
-            Input("interactive-values-store", "data", allow_optional=True),
-            Input("url", "pathname"),  # Also trigger when page changes
-        ],
-        prevent_initial_call=True,
-    )
+    #                 console.log('Component', componentIndex, 'not found in interactive data');
+    #                 return false;
+    #             } catch (error) {
+    #                 console.error('Error checking component filter:', error);
+    #                 return false;
+    #             }
+    #         }
+    #     }
+    #     """,
+    #     # Output("button-style-tracker", "data"),
+    #     [
+    #         Input("interactive-values-store", "data", allow_optional=True),
+    #         Input("url", "pathname"),  # Also trigger when page changes
+    #     ],
+    #     prevent_initial_call=True,
+    # )
 
 
 def _check_component_filter_activity(interactive_values, component_index):
@@ -307,6 +307,12 @@ def enable_box_edit_mode(
     # Extract component ID from native Dash component or JSON
     def extract_component_id(component):
         """Extract component ID from native Dash component or JSON representation."""
+
+        # PRIORITY: Try to get ID from component_data first (metadata)
+        if component_data and isinstance(component_data, dict):
+            if "index" in component_data:
+                logger.debug(f"Using component ID from metadata: {component_data['index']}")
+                return component_data["index"]
         # Handle native Dash components
         if hasattr(component, "id") and component.id:
             if isinstance(component.id, dict) and "index" in component.id:
@@ -323,6 +329,15 @@ def enable_box_edit_mode(
 
         # Fallback: generate a unique index
         import uuid
+
+        # DEBUG: Log the component structure to understand why ID extraction failed
+        logger.warning(f"Component ID extraction failed. Component structure: {type(component)}")
+        if isinstance(component, dict):
+            logger.warning(f"Component keys: {list(component.keys())}")
+            if "props" in component:
+                logger.warning(f"Props keys: {list(component.get('props', {}).keys())}")
+                if "id" in component.get("props", {}):
+                    logger.warning(f"ID structure: {component['props']['id']}")
 
         fallback_id = str(uuid.uuid4())
         logger.warning(f"Component missing id, generated fallback: {fallback_id}")

@@ -229,6 +229,9 @@ def build_card(**kwargs):
     filter_applied = kwargs.get("filter_applied", False)
     color = kwargs.get("color", None)  # Custom color from user
     cols_json = kwargs.get("cols_json", {})  # Column specifications for reference values
+    interactive_filters = kwargs.get(
+        "interactive_filters", {}
+    )  # Interactive filtering data from trigger
 
     if stepper:
         index = f"{index}-tmp"
@@ -262,8 +265,42 @@ def build_card(**kwargs):
                     f"Card component {index}: Loading delta table for {wf_id}:{dc_id} (no pre-loaded df)"
                 )
 
+                # Check if we need to apply interactive filtering using iterative_join
+                if interactive_filters and wf_id and dc_id:
+                    logger.info(
+                        f"Card component {index}: Applying interactive filters using iterative_join"
+                    )
+                    try:
+                        from depictio.api.v1.deltatables_utils import (
+                            iterative_join,
+                            return_joins_dict,
+                        )
+
+                        # Get joins dict for the component
+                        joins_dict = return_joins_dict(
+                            str(ObjectId(wf_id)), {}, kwargs.get("access_token")
+                        )
+
+                        # Apply interactive filtering using iterative_join
+                        data = iterative_join(
+                            ObjectId(wf_id),
+                            joins_dict,
+                            interactive_filters,
+                            kwargs.get("access_token"),
+                        )
+                        logger.info(
+                            f"✅ Card {index}: Applied interactive filters, resulting shape: {data.shape}"
+                        )
+
+                    except Exception as e:
+                        logger.error(
+                            f"❌ Failed to apply interactive filtering for card {index}: {e}"
+                        )
+                        # Fallback to regular loading without filtering
+                        data = pl.DataFrame()
+
                 # Validate that we have valid IDs before calling load_deltatable_lite
-                if not wf_id or not dc_id:
+                elif not wf_id or not dc_id:
                     logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
                     data = pl.DataFrame()  # Return empty DataFrame if IDs are missing
                 else:
@@ -538,7 +575,7 @@ def build_card(**kwargs):
             )
         )
 
-    card_content.append(store_component)
+    # card_content.append(store_component)
 
     # Create the modern card body using DMC Card component
     new_card_body = dmc.Card(
@@ -558,7 +595,7 @@ def build_card(**kwargs):
         },
     )
     if not build_frame:
-        return new_card_body
+        return new_card_body, store_component
     else:
         if not stepper:
             # Dashboard mode - return card directly without extra wrapper

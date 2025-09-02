@@ -7,6 +7,8 @@ from dash_iconify import DashIconify
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
+
+# from depictio.dash.layouts.edit import enable_box_edit_mode
 from depictio.dash.modules.card_component.utils import agg_functions, build_card, build_card_frame
 
 # Depictio imports
@@ -19,6 +21,110 @@ from depictio.dash.utils import (
 
 
 def register_callbacks_card_component(app):
+    """Register all callbacks for the card component system."""
+
+    # ============================================================================
+    # MODULAR COMPONENT UPDATE - Uses trigger system + build_card function
+    # ============================================================================
+    # @app.callback(
+    #     [
+    #         Output({"type": "component", "index": MATCH}, "children", allow_duplicate=True),
+    #         Output(
+    #             {"type": "stored-metadata-component", "index": MATCH}, "data", allow_duplicate=True
+    #         ),
+    #     ],
+    #     [
+    #         Input({"type": "component-render-trigger", "index": MATCH}, "data"),
+    #     ],
+    #     [
+    #         State("local-store", "data"),
+    #         State(
+    #             {"type": "stored-metadata-component", "index": MATCH}, "data", allow_optional=True
+    #         ),
+    #         State("url", "pathname"),
+    #     ],
+    #     prevent_initial_call="initial_duplicate",
+    # )
+    # def update_card_component_direct(
+    #     trigger,
+    #     local_data,
+    #     metadata,
+    #     pathname,
+    # ):
+    #     """Update card component directly - uses trigger system for coordination."""
+
+    #     logger.info("=== UPDATE CARD COMPONENT DIRECT CALLBACK TRIGGERED ===")
+    #     logger.info(f"Trigger data: {trigger}")
+    #     logger.info(f"Metadata available: {metadata is not None}")
+    #     logger.info(f"Pathname: {pathname}")
+    #     logger.info(f"Local data available: {local_data is not None}")
+
+    #     if not local_data or not metadata:
+    #         return dash.no_update
+
+    #     # Only process if this is a card component
+    #     if metadata.get("component_type") != "card":
+    #         return dash.no_update
+
+    #     # Extract dashboard info
+    #     dashboard_id = pathname.split("/")[-1] if pathname else "default"
+    #     TOKEN = local_data.get("access_token")
+    #     meta_index = metadata.get("index") if metadata else None
+
+    #     logger.info(f"🔄 Updating card component {meta_index} via trigger system")
+
+    #     try:
+    #         # Extract interactive filtering data from the trigger
+    #         interactive_filters = None
+    #         if trigger and isinstance(trigger, dict):
+    #             interactive_filters = trigger.get("interactive_filters", {})
+    #             if interactive_filters:
+    #                 logger.info(
+    #                     f"🔄 Card {meta_index}: Received {len(interactive_filters)} interactive filters from trigger"
+    #                 )
+    #                 for filter_key, filter_data in interactive_filters.items():
+    #                     logger.info(
+    #                         f"   - {filter_key}: {filter_data.get('value')} ({filter_data.get('metadata', {}).get('interactive_component_type')})"
+    #                     )
+
+    #         # Build the card component - pass interactive_filters to build_card
+    #         # build_card will handle calling iterative_join with these filters
+    #         updated_component, store_component = build_card(
+    #             index=meta_index,
+    #             title=metadata.get("title"),
+    #             wf_id=metadata.get("wf_id"),
+    #             dc_id=metadata.get("dc_id"),
+    #             dc_config=metadata.get("dc_config"),
+    #             column_name=metadata.get("column_name"),
+    #             column_type=metadata.get("column_type"),
+    #             aggregation=metadata.get("aggregation"),
+    #             v=metadata.get("value", metadata.get("v")),
+    #             color=metadata.get("color"),
+    #             cols_json=metadata.get("cols_json", {}),
+    #             interactive_filters=interactive_filters,  # Pass interactive filters from trigger
+    #             access_token=TOKEN,
+    #             dashboard_id=dashboard_id,
+    #         )
+
+    #         if updated_component:
+    #             # TEST
+    #             updated_component = enable_box_edit_mode(
+    #                 box=updated_component,
+    #                 dashboard_id=dashboard_id,
+    #                 component_data=metadata,
+    #                 TOKEN=TOKEN,
+    #             )
+
+    #             logger.info(f"✅ Card component {meta_index} updated successfully")
+    #             return updated_component, store_component
+    #         else:
+    #             logger.warning(f"⚠️ Failed to build card component {meta_index}")
+    #             return dash.no_update
+
+    #     except Exception as e:
+    #         logger.error(f"❌ Error updating card component {meta_index}: {e}")
+    #         return dash.no_update
+
     @app.callback(
         Output({"type": "card-dropdown-aggregation", "index": MATCH}, "data"),
         [

@@ -59,15 +59,19 @@ def add_filter(
 
     elif interactive_component_type == "RangeSlider":
         if value:
-            filter_list.append(
-                (pl.col(column_name) >= value[0]) & (pl.col(column_name) <= value[1])
+            logger.debug(
+                f"RangeSlider filter: column='{column_name}', value={value} (type: {type(value)})"
             )
+            filter_condition = (pl.col(column_name) >= value[0]) & (pl.col(column_name) <= value[1])
+            logger.debug(f"Created RangeSlider filter: {filter_condition}")
+            filter_list.append(filter_condition)
 
 
 # Function to process metadata and build filter list
 def process_metadata_and_filter(metadata):
     filter_list = []
 
+    logger.debug(f"Processing {len(metadata)} components for filtering")
     for i, component in enumerate(metadata):
         if "metadata" in component:
             # logger.info(f"Component {i} does not have metadata key : {component}")
@@ -83,6 +87,10 @@ def process_metadata_and_filter(metadata):
         # logger.info(f"column_name: {column_name}")
         value = component["value"]
 
+        logger.debug(
+            f"Component {i}: type={interactive_component_type}, column={column_name}, value={value}"
+        )
+
         add_filter(
             filter_list,
             interactive_component_type=interactive_component_type,
@@ -91,6 +99,7 @@ def process_metadata_and_filter(metadata):
         )
 
     # Apply the filters to the DataFrame
+    logger.debug(f"Generated {len(filter_list)} filter expressions: {filter_list}")
     return filter_list
 
 
@@ -1312,6 +1321,8 @@ def iterative_join(
         logger.debug(
             f"IterativeJoin: Found {len(filterable_components)} filterable components out of {len(interactive_components_list)} total"
         )
+        logger.debug(f"IterativeJoin: Filterable components details: {filterable_components}")
+        logger.debug(f"IterativeJoin: Before filtering, shape: {merged_df.shape}")
 
         if filterable_components:
             logger.debug(
@@ -1319,11 +1330,23 @@ def iterative_join(
             )
             try:
                 filter_list = process_metadata_and_filter(filterable_components)
+                logger.debug(f"IterativeJoin: Generated filter list: {filter_list}")
                 if filter_list:
                     # Apply all filters to the merged dataframe
-                    for filter_condition in filter_list:
+                    original_shape = merged_df.shape
+                    for i, filter_condition in enumerate(filter_list):
+                        logger.debug(
+                            f"IterativeJoin: Applying filter {i + 1}/{len(filter_list)}: {filter_condition}"
+                        )
                         merged_df = merged_df.filter(filter_condition)
-                    logger.debug(f"IterativeJoin: After filtering, final shape: {merged_df.shape}")
+                        logger.debug(
+                            f"IterativeJoin: After filter {i + 1}, shape: {merged_df.shape}"
+                        )
+                    logger.debug(
+                        f"IterativeJoin: After filtering, final shape: {merged_df.shape} (was {original_shape})"
+                    )
+                else:
+                    logger.debug("IterativeJoin: No filters generated from filterable components")
             except Exception as e:
                 logger.warning(f"IterativeJoin: Failed to apply post-join filtering: {e}")
                 # Continue without filtering if there's an error

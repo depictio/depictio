@@ -47,25 +47,25 @@ def register_consolidated_api_callbacks(app):
         and eliminates redundant project fetching in design_draggable() with cached requests.
         """
 
-        logger.info(
-            f"🚀 CONSOLIDATED CALLBACK TRIGGERED!!! - pathname: {pathname}, local_store: {bool(local_store)}"
-        )
-        logger.info(
-            f"🚀 CONSOLIDATED CALLBACK: local_store keys: {list(local_store.keys()) if local_store and isinstance(local_store, dict) else 'None or not dict'}"
-        )
+        # logger.info(
+        #     f"🚀 CONSOLIDATED CALLBACK TRIGGERED!!! - pathname: {pathname}, local_store: {bool(local_store)}"
+        # )
+        # logger.info(
+        #     f"🚀 CONSOLIDATED CALLBACK: local_store keys: {list(local_store.keys()) if local_store and isinstance(local_store, dict) else 'None or not dict'}"
+        # )
 
         ctx = callback_context
-        if ctx.triggered:
-            logger.info(f"🔧 CONSOLIDATED CALLBACK TRIGGER: {ctx.triggered[0]['prop_id']}")
+        # if ctx.triggered:
+        #     logger.info(f"🔧 CONSOLIDATED CALLBACK TRIGGER: {ctx.triggered[0]['prop_id']}")
 
         # Skip auth page
         if pathname == "/auth":
-            logger.info("🔧 CONSOLIDATED CALLBACK: Skipping auth page")
+            # logger.info("🔧 CONSOLIDATED CALLBACK: Skipping auth page")
             return no_update, no_update, no_update
 
         # Check if we have a valid token
         if not local_store or not local_store.get("access_token"):
-            logger.info("🔧 CONSOLIDATED CALLBACK: No token found, returning None")
+            # logger.info("🔧 CONSOLIDATED CALLBACK: No token found, returning None")
             return None, None, None
 
         access_token = local_store["access_token"]
@@ -101,18 +101,18 @@ def register_consolidated_api_callbacks(app):
 
         # If nothing needs updating, return cached data
         if not update_user and not update_server and not update_project:
-            logger.info("🔧 CONSOLIDATED CALLBACK: Using cached data, no updates needed")
+            # logger.info("🔧 CONSOLIDATED CALLBACK: Using cached data, no updates needed")
             return cached_user, cached_server, cached_project
 
-        logger.info(
-            f"🔄 Consolidated API: Updating user={update_user}, server={update_server}, project={update_project}"
-        )
-        logger.info("🔧 CONSOLIDATED CALLBACK: About to start sync tasks")
+        # logger.info(
+        #     f"🔄 Consolidated API: Updating user={update_user}, server={update_server}, project={update_project}"
+        # )
+        # logger.info("🔧 CONSOLIDATED CALLBACK: About to start sync tasks")
 
         def fetch_user_data(token):
             """Fetch user data with sync timeout (async disabled)."""
             try:
-                logger.info("🔄 Consolidated API: Fetching user data (sync)")
+                # logger.info("🔄 Consolidated API: Fetching user data (sync)")
 
                 # Use httpx.Client for sync HTTP
                 with httpx.Client(timeout=5) as client:

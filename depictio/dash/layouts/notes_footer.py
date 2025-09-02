@@ -6,7 +6,7 @@ The footer respects the collapsible sidebar layout using CSS variables automatic
 """
 
 import dash_mantine_components as dmc
-from dash import Input, Output, State, dcc, html
+from dash import Input, Output, dcc, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
@@ -163,101 +163,101 @@ def register_callbacks_notes_footer(app):
     )
 
     # Toggle notes footer visibility and fullscreen mode
-    @app.callback(
-        [
-            Output("notes-footer-content", "className"),
-            Output("page-content", "className", allow_duplicate=True),
-        ],
-        [
-            Input("toggle-notes-button", "n_clicks"),
-            Input("collapse-notes-button", "n_clicks"),
-            Input("fullscreen-notes-button", "n_clicks"),
-        ],
-        [
-            State("notes-footer-content", "className"),
-            State("page-content", "className"),
-        ],
-        prevent_initial_call=True,
-    )
-    def toggle_notes_footer(
-        toggle_clicks, collapse_clicks, fullscreen_clicks, current_footer_class, current_page_class
-    ):
-        """Toggle footer visibility and fullscreen mode when buttons are clicked."""
-        from dash import callback_context
+    # @app.callback(
+    #     [
+    #         Output("notes-footer-content", "className"),
+    #         Output("page-content", "className", allow_duplicate=True),
+    #     ],
+    #     [
+    #         Input("toggle-notes-button", "n_clicks"),
+    #         Input("collapse-notes-button", "n_clicks"),
+    #         Input("fullscreen-notes-button", "n_clicks"),
+    #     ],
+    #     [
+    #         State("notes-footer-content", "className"),
+    #         State("page-content", "className"),
+    #     ],
+    #     prevent_initial_call=True,
+    # )
+    # def toggle_notes_footer(
+    #     toggle_clicks, collapse_clicks, fullscreen_clicks, current_footer_class, current_page_class
+    # ):
+    #     """Toggle footer visibility and fullscreen mode when buttons are clicked."""
+    #     from dash import callback_context
 
-        ctx = callback_context
-        if not ctx.triggered:
-            return current_footer_class or "", current_page_class or ""
+    #     ctx = callback_context
+    #     if not ctx.triggered:
+    #         return current_footer_class or "", current_page_class or ""
 
-        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
-        logger.info(f"Notes footer triggered by: {trigger_id}")
-        logger.info(
-            f"Toggle clicks: {toggle_clicks}, Collapse clicks: {collapse_clicks}, Fullscreen clicks: {fullscreen_clicks}"
-        )
+    #     trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    #     logger.info(f"Notes footer triggered by: {trigger_id}")
+    #     logger.info(
+    #         f"Toggle clicks: {toggle_clicks}, Collapse clicks: {collapse_clicks}, Fullscreen clicks: {fullscreen_clicks}"
+    #     )
 
-        current_footer_class = current_footer_class or ""
-        current_page_class = current_page_class or ""
+    #     current_footer_class = current_footer_class or ""
+    #     current_page_class = current_page_class or ""
 
-        logger.info(
-            f"Current footer class: '{current_footer_class}', page class: '{current_page_class}'"
-        )
+    #     logger.info(
+    #         f"Current footer class: '{current_footer_class}', page class: '{current_page_class}'"
+    #     )
 
-        if trigger_id == "toggle-notes-button":
-            if (
-                "footer-visible" in current_footer_class
-                or "footer-fullscreen" in current_footer_class
-            ):
-                # Hide footer completely
-                new_page_class = current_page_class.replace("notes-fullscreen", "").strip()
-                logger.info(f"Hiding footer. New classes: footer='', page='{new_page_class}'")
-                return "", new_page_class
-            else:
-                # Show footer in normal mode
-                logger.info(
-                    f"Showing footer in normal mode. New classes: footer='footer-visible', page='{current_page_class}'"
-                )
-                return "footer-visible", current_page_class
+    #     if trigger_id == "toggle-notes-button":
+    #         if (
+    #             "footer-visible" in current_footer_class
+    #             or "footer-fullscreen" in current_footer_class
+    #         ):
+    #             # Hide footer completely
+    #             new_page_class = current_page_class.replace("notes-fullscreen", "").strip()
+    #             logger.info(f"Hiding footer. New classes: footer='', page='{new_page_class}'")
+    #             return "", new_page_class
+    #         else:
+    #             # Show footer in normal mode
+    #             logger.info(
+    #                 f"Showing footer in normal mode. New classes: footer='footer-visible', page='{current_page_class}'"
+    #             )
+    #             return "footer-visible", current_page_class
 
-        elif trigger_id == "collapse-notes-button" and collapse_clicks:
-            # Collapse button always hides the footer if it's visible
-            if (
-                "footer-visible" in current_footer_class
-                or "footer-fullscreen" in current_footer_class
-            ):
-                # Hide footer completely
-                new_page_class = current_page_class.replace("notes-fullscreen", "").strip()
-                logger.info(f"Collapsing footer. New classes: footer='', page='{new_page_class}'")
-                return "", new_page_class
-            else:
-                # If footer is not visible, do nothing
-                logger.info("Footer already collapsed, no action needed")
-                return current_footer_class, current_page_class
+    #     elif trigger_id == "collapse-notes-button" and collapse_clicks:
+    #         # Collapse button always hides the footer if it's visible
+    #         if (
+    #             "footer-visible" in current_footer_class
+    #             or "footer-fullscreen" in current_footer_class
+    #         ):
+    #             # Hide footer completely
+    #             new_page_class = current_page_class.replace("notes-fullscreen", "").strip()
+    #             logger.info(f"Collapsing footer. New classes: footer='', page='{new_page_class}'")
+    #             return "", new_page_class
+    #         else:
+    #             # If footer is not visible, do nothing
+    #             logger.info("Footer already collapsed, no action needed")
+    #             return current_footer_class, current_page_class
 
-        elif trigger_id == "fullscreen-notes-button" and fullscreen_clicks:
-            if "footer-fullscreen" in current_footer_class:
-                # Exit fullscreen, go to normal footer mode
-                new_page_class = current_page_class.replace("notes-fullscreen", "").strip()
-                logger.info(
-                    f"Exiting fullscreen. New classes: footer='footer-visible', page='{new_page_class}'"
-                )
-                return "footer-visible", new_page_class
-            else:
-                # Enter fullscreen mode (only if footer is currently visible)
-                if "footer-visible" in current_footer_class:
-                    new_page_class = f"{current_page_class} notes-fullscreen".strip()
-                    logger.info(
-                        f"Entering fullscreen. New classes: footer='footer-fullscreen', page='{new_page_class}'"
-                    )
-                    return "footer-fullscreen", new_page_class
-                else:
-                    # If footer is not visible, show it first in normal mode
-                    logger.info("Footer not visible, showing in normal mode first")
-                    return "footer-visible", current_page_class
+    #     elif trigger_id == "fullscreen-notes-button" and fullscreen_clicks:
+    #         if "footer-fullscreen" in current_footer_class:
+    #             # Exit fullscreen, go to normal footer mode
+    #             new_page_class = current_page_class.replace("notes-fullscreen", "").strip()
+    #             logger.info(
+    #                 f"Exiting fullscreen. New classes: footer='footer-visible', page='{new_page_class}'"
+    #             )
+    #             return "footer-visible", new_page_class
+    #         else:
+    #             # Enter fullscreen mode (only if footer is currently visible)
+    #             if "footer-visible" in current_footer_class:
+    #                 new_page_class = f"{current_page_class} notes-fullscreen".strip()
+    #                 logger.info(
+    #                     f"Entering fullscreen. New classes: footer='footer-fullscreen', page='{new_page_class}'"
+    #                 )
+    #                 return "footer-fullscreen", new_page_class
+    #             else:
+    #                 # If footer is not visible, show it first in normal mode
+    #                 logger.info("Footer not visible, showing in normal mode first")
+    #                 return "footer-visible", current_page_class
 
-        logger.info(
-            f"No action taken. Returning current classes: footer='{current_footer_class}', page='{current_page_class}'"
-        )
-        return current_footer_class, current_page_class
+    #     logger.info(
+    #         f"No action taken. Returning current classes: footer='{current_footer_class}', page='{current_page_class}'"
+    #     )
+    #     return current_footer_class, current_page_class
 
     # Handle editor content storage
     @app.callback(
