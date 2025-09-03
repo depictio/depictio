@@ -7,9 +7,8 @@ import dash_mantine_components as dmc
 import plotly.express as px
 import polars as pl
 from bson import ObjectId
-from dash_iconify import DashIconify
-
 from dash import dcc, html
+from dash_iconify import DashIconify
 
 # PERFORMANCE OPTIMIZATION: Use centralized config
 from depictio.api.v1.configs.config import settings

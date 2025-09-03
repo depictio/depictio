@@ -1,13 +1,11 @@
 import math
 
-import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import numpy as np
 import pandas as pd
 import polars as pl
 from bson import ObjectId
-
-from dash import dcc, html
+from dash import dcc
 
 # PERFORMANCE OPTIMIZATION: Use centralized config
 from depictio.api.v1.configs.config import settings
@@ -22,75 +20,62 @@ def build_interactive_frame(index, children=None, show_border=False):
     Note: Border is now always shown regardless of show_border parameter for better UX.
     """
     if not children:
-        return dbc.Card(
-            dbc.CardBody(
-                html.Div(
-                    "Configure your interactive component using the edit menu",
-                    style={
-                        "textAlign": "center",
-                        "color": "var(--app-text-color, #999)",  # Use theme-aware text color
-                        "fontSize": "14px",
-                        "fontStyle": "italic",
+        return dmc.Paper(
+            children=[
+                dmc.Center(
+                    dmc.Text(
+                        "Configure your interactive component using the edit menu",
+                        size="sm",
+                        fs="italic",
+                        ta="center",
+                    ),
+                    id={
+                        "type": "input-body",
+                        "index": index,
                     },
-                ),
-                id={
-                    "type": "input-body",
-                    "index": index,
-                },
-                style={
-                    "padding": "20px",
-                    "display": "flex",
-                    "flexDirection": "column",
-                    "justifyContent": "center",
-                    "alignItems": "center",
-                    "minHeight": "150px",  # Ensure minimum height
-                    "height": "100%",
-                },
-            ),
-            style={
-                "width": "100%",
-                "height": "100%",
-                "padding": "0",
-                "margin": "0",
-                "boxShadow": "none",
-                "border": "1px solid var(--app-border-color, #ddd)",
-                "borderRadius": "4px",
-                "backgroundColor": "var(--app-surface-color, transparent)",  # Use theme-aware background
-            },
+                    p="xl",
+                    style={
+                        "minHeight": "150px",
+                        "height": "100%",
+                    },
+                )
+            ],
             id={
                 "type": "interactive-component",
                 "index": index,
             },
+            w="100%",
+            h="100%",
+            p="0",
+            radius="md",
         )
     else:
-        return dbc.Card(
-            dbc.CardBody(
-                children=children,
-                id={
-                    "type": "input-body",
-                    "index": index,
-                },
-                style={
-                    "display": "flex",
-                    "flexDirection": "column",
-                    "overflow": "visible",  # Allow dropdown to overflow
-                    "height": "100%",
-                    "position": "relative",  # Ensure positioning context
-                },
-            ),
-            style={
-                "width": "100%",
-                "height": "100%",  # Ensure the card fills the container's height
-                "padding": "0",
-                "overflow": "visible",  # Allow dropdown to overflow
-                "position": "relative",  # Ensure positioning context
-                "border": "1px solid var(--app-border-color, #ddd)",
-                "borderRadius": "4px",
-                "backgroundColor": "var(--app-surface-color, transparent)",  # Use theme-aware background
-            },
+        return dmc.Paper(
+            children=[
+                dmc.Center(
+                    children=children,
+                    id={
+                        "type": "input-body",
+                        "index": index,
+                    },
+                    style={
+                        "overflow": "visible",
+                        "height": "100%",
+                        "position": "relative",
+                    },
+                )
+            ],
             id={
                 "type": "interactive-component",
                 "index": index,
+            },
+            w="100%",
+            h="100%",
+            p="0",
+            radius="md",
+            style={
+                "overflow": "visible",
+                "position": "relative",
             },
         )
 
@@ -1230,10 +1215,9 @@ def build_interactive(**kwargs):
     else:
         logger.info(f"Interactive - component value: {value}")
 
-    # Apply custom color if specified, otherwise use theme-aware color
+    # Apply custom color if specified, otherwise let Mantine handle theming
     title_style = {
         "marginBottom": "0.5rem",
-        "color": "var(--app-text-color, #000000)",  # Default to theme-aware text color
     }
     if color:
         title_style["color"] = color
@@ -1241,9 +1225,9 @@ def build_interactive(**kwargs):
         store_data["custom_color"] = color
         logger.info(f"Applied custom color: {color}")
     else:
-        logger.debug("Using theme-aware text color for title")
+        logger.debug("Using Mantine's native theming for title")
 
-    card_title_h5 = html.H5(card_title, style=title_style)
+    card_title_h5 = dmc.Text(card_title, size="md", fw="bold", style=title_style)
 
     # Generate default state information for the component
     # For select-type components, pass unique values if available
@@ -1289,28 +1273,25 @@ def build_interactive(**kwargs):
         storage_type="memory",
     )
 
-    # Create wrapper with constrained sizing to prevent slider stretching
-    new_interactive_component = html.Div(
-        [card_title_h5, interactive_component, store_component],
-        # className="interactive-component-wrapper",  # Add class for CSS targeting
+    # Create wrapper with proper sizing for interactive components
+    new_interactive_component = dmc.Stack(
+        [card_title_h5, interactive_component],
+        gap="xs",
         style={
             "width": "100%",
-            "height": "auto !important",  # Use natural height
-            "maxWidth": "500px !important",  # Constrain width to reasonable size
+            "height": "auto",  # Use natural height, don't force 100%
+            "maxWidth": "500px",
             "padding": "10px",
             "boxSizing": "border-box",
-            "backgroundColor": "var(--app-surface-color, transparent)",  # Use theme-aware background
-            "color": "var(--app-text-color, #000000)",  # Use theme-aware text color
-            # Prevent vertical stretching with !important
-            "flex": "none !important",
-            "flexGrow": "0 !important",
-            "flexShrink": "0 !important",
-            "alignSelf": "flex-start !important",
+            # Center the stack within its container
+            "margin": "0 auto",
+            # Allow components to grow horizontally but not vertically
+            "alignSelf": "flex-start",
         },
     )
 
     if not build_frame:
-        return new_interactive_component
+        return new_interactive_component, store_component
     else:
         # Build the interactive component with frame
         interactive_component = build_interactive_frame(

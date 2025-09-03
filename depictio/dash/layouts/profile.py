@@ -1,13 +1,12 @@
-import dash_bootstrap_components as dbc
+import dash
 import dash_mantine_components as dmc
+from dash import Input, Output, State, dcc, html
+from dash.exceptions import PreventUpdate
 from dash_extensions.enrich import Input as enrich_Input
 from dash_extensions.enrich import Output as enrich_Output
 from dash_extensions.enrich import State as enrich_State
 from dash_iconify import DashIconify
 
-import dash
-from dash import Input, Output, State, dcc, html
-from dash.exceptions import PreventUpdate
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _check_password
@@ -39,42 +38,40 @@ password_modal = create_edit_password_modal(
 )
 
 # Main layout with improved styling
-layout = dbc.Container(
-    [
+layout = dmc.Container(
+    size="lg",
+    p="xl",
+    children=[
         dmc.Paper(
             shadow=CARD_SHADOW,
             radius=CARD_RADIUS,
             p=CARD_PADDING,
             withBorder=True,
-            # style={"borderColor": colors["teal"], "borderWidth": "2px"},
             children=[
-                dbc.Row(
-                    [
+                dmc.SimpleGrid(
+                    cols=2,
+                    spacing="xl",
+                    children=[
                         # Left side - Avatar with improved styling
-                        dbc.Col(
-                            dmc.Paper(
-                                radius=CARD_RADIUS,
-                                p="xl",
-                                # withBorder=True,
-                                shadow=CARD_SHADOW,
-                                style={
-                                    "backgroundColor": colors["purple"]
-                                    + "10",  # Light purple background
-                                    # "borderColor": colors["purple"],
-                                    "display": "flex",
-                                    "alignItems": "center",
-                                    "justifyContent": "center",
-                                    "minHeight": "200px",
-                                    "minWidth": "200px",
-                                },
-                                children=[avatar],
-                            ),
-                            width="auto",
-                            className="me-5",
+                        dmc.Paper(
+                            radius=CARD_RADIUS,
+                            p="xl",
+                            shadow=CARD_SHADOW,
+                            style={
+                                "backgroundColor": colors["purple"]
+                                + "10",  # Light purple background
+                                "display": "flex",
+                                "alignItems": "center",
+                                "justifyContent": "center",
+                                "minHeight": "200px",
+                                "minWidth": "200px",
+                            },
+                            children=[avatar],
                         ),
                         # Right side - User info and buttons
-                        dbc.Col(
-                            [
+                        dmc.Stack(
+                            gap="lg",
+                            children=[
                                 # Header with title and decorative line
                                 dmc.Group(
                                     [
@@ -217,10 +214,8 @@ layout = dbc.Container(
                                 # Upgrade feedback area
                                 html.Div(id="upgrade-feedback", style={"marginTop": "1rem"}),
                             ],
-                            width=True,
                         ),
                     ],
-                    align="start",
                 ),
             ],
         ),

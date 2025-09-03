@@ -1,12 +1,14 @@
 # Import necessary libraries
 import dash_mantine_components as dmc
 import httpx
+from dash import MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
-from dash import MATCH, Input, Output, State, dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
+
+# from depictio.dash.layouts.edit import enable_box_edit_mode
 from depictio.dash.modules.card_component.utils import agg_functions, build_card, build_card_frame
 
 # Depictio imports
@@ -19,6 +21,110 @@ from depictio.dash.utils import (
 
 
 def register_callbacks_card_component(app):
+    """Register all callbacks for the card component system."""
+
+    # ============================================================================
+    # MODULAR COMPONENT UPDATE - Uses trigger system + build_card function
+    # ============================================================================
+    # @app.callback(
+    #     [
+    #         Output({"type": "component", "index": MATCH}, "children", allow_duplicate=True),
+    #         Output(
+    #             {"type": "stored-metadata-component", "index": MATCH}, "data", allow_duplicate=True
+    #         ),
+    #     ],
+    #     [
+    #         Input({"type": "component-render-trigger", "index": MATCH}, "data"),
+    #     ],
+    #     [
+    #         State("local-store", "data"),
+    #         State(
+    #             {"type": "stored-metadata-component", "index": MATCH}, "data", allow_optional=True
+    #         ),
+    #         State("url", "pathname"),
+    #     ],
+    #     prevent_initial_call="initial_duplicate",
+    # )
+    # def update_card_component_direct(
+    #     trigger,
+    #     local_data,
+    #     metadata,
+    #     pathname,
+    # ):
+    #     """Update card component directly - uses trigger system for coordination."""
+
+    #     logger.info("=== UPDATE CARD COMPONENT DIRECT CALLBACK TRIGGERED ===")
+    #     logger.info(f"Trigger data: {trigger}")
+    #     logger.info(f"Metadata available: {metadata is not None}")
+    #     logger.info(f"Pathname: {pathname}")
+    #     logger.info(f"Local data available: {local_data is not None}")
+
+    #     if not local_data or not metadata:
+    #         return dash.no_update
+
+    #     # Only process if this is a card component
+    #     if metadata.get("component_type") != "card":
+    #         return dash.no_update
+
+    #     # Extract dashboard info
+    #     dashboard_id = pathname.split("/")[-1] if pathname else "default"
+    #     TOKEN = local_data.get("access_token")
+    #     meta_index = metadata.get("index") if metadata else None
+
+    #     logger.info(f"🔄 Updating card component {meta_index} via trigger system")
+
+    #     try:
+    #         # Extract interactive filtering data from the trigger
+    #         interactive_filters = None
+    #         if trigger and isinstance(trigger, dict):
+    #             interactive_filters = trigger.get("interactive_filters", {})
+    #             if interactive_filters:
+    #                 logger.info(
+    #                     f"🔄 Card {meta_index}: Received {len(interactive_filters)} interactive filters from trigger"
+    #                 )
+    #                 for filter_key, filter_data in interactive_filters.items():
+    #                     logger.info(
+    #                         f"   - {filter_key}: {filter_data.get('value')} ({filter_data.get('metadata', {}).get('interactive_component_type')})"
+    #                     )
+
+    #         # Build the card component - pass interactive_filters to build_card
+    #         # build_card will handle calling iterative_join with these filters
+    #         updated_component, store_component = build_card(
+    #             index=meta_index,
+    #             title=metadata.get("title"),
+    #             wf_id=metadata.get("wf_id"),
+    #             dc_id=metadata.get("dc_id"),
+    #             dc_config=metadata.get("dc_config"),
+    #             column_name=metadata.get("column_name"),
+    #             column_type=metadata.get("column_type"),
+    #             aggregation=metadata.get("aggregation"),
+    #             v=metadata.get("value", metadata.get("v")),
+    #             color=metadata.get("color"),
+    #             cols_json=metadata.get("cols_json", {}),
+    #             interactive_filters=interactive_filters,  # Pass interactive filters from trigger
+    #             access_token=TOKEN,
+    #             dashboard_id=dashboard_id,
+    #         )
+
+    #         if updated_component:
+    #             # TEST
+    #             updated_component = enable_box_edit_mode(
+    #                 box=updated_component,
+    #                 dashboard_id=dashboard_id,
+    #                 component_data=metadata,
+    #                 TOKEN=TOKEN,
+    #             )
+
+    #             logger.info(f"✅ Card component {meta_index} updated successfully")
+    #             return updated_component, store_component
+    #         else:
+    #             logger.warning(f"⚠️ Failed to build card component {meta_index}")
+    #             return dash.no_update
+
+    #     except Exception as e:
+    #         logger.error(f"❌ Error updating card component {meta_index}: {e}")
+    #         return dash.no_update
+
     @app.callback(
         Output({"type": "card-dropdown-aggregation", "index": MATCH}, "data"),
         [
@@ -233,42 +339,60 @@ def register_callbacks_card_component(app):
         cols_json = get_columns_from_data_collection(wf_id, dc_id, TOKEN)
         logger.info(f"cols_json: {cols_json}")
 
-        from dash import dash_table
-
         data_columns_df = [
             {"column": c, "description": cols_json[c]["description"]}
             for c in cols_json
             if cols_json[c]["description"] is not None
         ]
 
-        columns_description_df = dash_table.DataTable(
-            columns=[
-                {"name": "Column", "id": "column"},
-                {"name": "Description", "id": "description"},
+        # Create DMC Table instead of DataTable for better theming
+        table_rows = []
+        for row in data_columns_df:
+            table_rows.append(
+                dmc.TableTr(
+                    [
+                        dmc.TableTd(
+                            row["column"],
+                            style={"textAlign": "center", "fontSize": "11px", "maxWidth": "150px"},
+                        ),
+                        dmc.TableTd(
+                            row["description"],
+                            style={"textAlign": "center", "fontSize": "11px", "maxWidth": "150px"},
+                        ),
+                    ]
+                )
+            )
+
+        columns_description_df = dmc.Table(
+            [
+                dmc.TableThead(
+                    [
+                        dmc.TableTr(
+                            [
+                                dmc.TableTh(
+                                    "Column",
+                                    style={
+                                        "textAlign": "center",
+                                        "fontSize": "11px",
+                                        "fontWeight": "bold",
+                                    },
+                                ),
+                                dmc.TableTh(
+                                    "Description",
+                                    style={
+                                        "textAlign": "center",
+                                        "fontSize": "11px",
+                                        "fontWeight": "bold",
+                                    },
+                                ),
+                            ]
+                        )
+                    ]
+                ),
+                dmc.TableTbody(table_rows),
             ],
-            data=data_columns_df,
-            # Small font size, helvetica, no border, center text
-            style_cell={
-                "fontSize": 11,
-                "fontFamily": "Helvetica",
-                "border": "0px",
-                "textAlign": "center",
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
-                "color": "var(--app-text-color, #000000)",
-                "padding": "4px 8px",
-                "maxWidth": "150px",
-                "overflow": "hidden",
-                "textOverflow": "ellipsis",
-            },
-            style_header={
-                "fontWeight": "bold",
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
-                "color": "var(--app-text-color, #000000)",
-            },
-            style_data={
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
-                "color": "var(--app-text-color, #000000)",
-            },
+            striped="odd",
+            withTableBorder=True,
         )
 
         # If any of the input values are None, return an empty list
@@ -574,28 +698,24 @@ def create_stepper_card_button(n, disabled=None):
         disabled (bool, optional): Override enabled state. If None, uses metadata.
     """
 
-    import dash_bootstrap_components as dbc
-
     # Use metadata enabled field if disabled not explicitly provided
     if disabled is None:
         disabled = not is_enabled("card")
 
     # Create the card button
-    button = dbc.Col(
-        dmc.Button(
-            "Card",
-            id={
-                "type": "btn-option",
-                "index": n,
-                "value": "Card",
-            },
-            n_clicks=0,
-            style=UNSELECTED_STYLE,
-            size="xl",
-            color=get_dmc_button_color("card"),
-            leftSection=DashIconify(icon="formkit:number", color="white"),
-            disabled=disabled,
-        )
+    button = dmc.Button(
+        "Card",
+        id={
+            "type": "btn-option",
+            "index": n,
+            "value": "Card",
+        },
+        n_clicks=0,
+        style=UNSELECTED_STYLE,
+        size="xl",
+        color=get_dmc_button_color("card"),
+        leftSection=DashIconify(icon="formkit:number", color="white"),
+        disabled=disabled,
     )
     store = dcc.Store(
         id={

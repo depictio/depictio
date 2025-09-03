@@ -33,12 +33,12 @@ def return_interactive_components_dict(dashboard_data):
             logger.debug(f"Component type not found in e: {e}")
             continue
 
-        if e["component_type"] == "interactive":
+        if e.get("component_type") == "interactive":
             # logger.debug(f"e: {e}")
-            # logger.debug(f"e['value']: {e['value']}")
-            # logger.debug(f"e['component_type']: {e['component_type']}")
-            interactive_components_dict[e["index"]] = {
-                "value": e["value"],
+            # logger.debug(f"e['value']: {e.get('value', None)}")
+            # logger.debug(f"e['component_type']: {e.get('component_type')}")
+            interactive_components_dict[e.get("index")] = {
+                "value": e.get("value", None),
                 "metadata": e,
             }
 
@@ -58,19 +58,23 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
     # Log the first few raw metadata entries for debugging
     if stored_metadata:
         for i, elem in enumerate(stored_metadata[:3]):  # Only first 3 to avoid spam
-            logger.info(
-                f"📊 RESTORE DEBUG - Raw metadata {i}: keys={list(elem.keys()) if elem else 'None'}"
-            )
+            # Handle both Pydantic models and dictionaries for debugging
+            if hasattr(elem, "model_fields"):
+                fields = list(elem.model_fields.keys())
+                dict_kwargs = getattr(elem, "dict_kwargs", "MISSING")
+                wf_id = getattr(elem, "wf_id", "MISSING")
+                dc_id = getattr(elem, "dc_id", "MISSING")
+            else:
+                fields = list(elem.keys()) if elem else "None"
+                dict_kwargs = elem.get("dict_kwargs", "MISSING") if elem else "MISSING"
+                wf_id = elem.get("wf_id", "MISSING") if elem else "MISSING"
+                dc_id = elem.get("dc_id", "MISSING") if elem else "MISSING"
+
+            logger.info(f"📊 RESTORE DEBUG - Raw metadata {i}: fields={fields}")
             if elem:
-                logger.info(
-                    f"📊 RESTORE DEBUG - Raw metadata {i}: dict_kwargs={elem.get('dict_kwargs', 'MISSING')}"
-                )
-                logger.info(
-                    f"📊 RESTORE DEBUG - Raw metadata {i}: wf_id={elem.get('wf_id', 'MISSING')}"
-                )
-                logger.info(
-                    f"📊 RESTORE DEBUG - Raw metadata {i}: dc_id={elem.get('dc_id', 'MISSING')}"
-                )
+                logger.info(f"📊 RESTORE DEBUG - Raw metadata {i}: dict_kwargs={dict_kwargs}")
+                logger.info(f"📊 RESTORE DEBUG - Raw metadata {i}: wf_id={wf_id}")
+                logger.info(f"📊 RESTORE DEBUG - Raw metadata {i}: dc_id={dc_id}")
 
     stored_metadata = clean_stored_metadata(stored_metadata)
     logger.info(
@@ -80,13 +84,14 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
     children = list()
 
     for child_metadata in stored_metadata:
+        # Set additional fields on the metadata dict
         child_metadata["build_frame"] = True
         child_metadata["access_token"] = TOKEN
         # logger.info(child_metadata)
         # logger.info(f"type of child_metadata : {type(child_metadata)}")
 
-        # Extract the type of the child (assuming there is a type key in the metadata)
-        component_type = child_metadata.get("component_type", None)
+        # Extract the type of the child from the metadata dict
+        component_type = child_metadata.get("component_type")
         # logger.info(f"component_type : {component_type}")
         if component_type not in build_functions:
             logger.warning(f"Unsupported child type: {component_type}")
@@ -101,6 +106,7 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
         logger.info(f"Using theme: {theme} for component {component_type}")
 
         # Build the child using the appropriate function and kwargs
+        # child_metadata is already a dict, so pass it directly
         child = build_function(**child_metadata)
         # logger.debug(f"child : ")
         # Store child with its component type for later processing

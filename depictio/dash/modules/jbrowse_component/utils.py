@@ -2,10 +2,10 @@ import collections
 import json
 import os
 
-import dash_bootstrap_components as dbc
+import dash_mantine_components as dmc
 import httpx
-
 from dash import dcc, html
+
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token
@@ -52,38 +52,51 @@ def build_jbrowse_df_mapping_dict(stored_metadata, df_dict_processed, access_tok
 
 def build_jbrowse_frame(index, children=None):
     if not children:
-        return dbc.Card(
-            dbc.CardBody(
-                id={
-                    "type": "jbrowse-body",
-                    "index": index,
-                }
-            ),
-            style={
-                "width": "100%",
-                "border": "1px solid var(--app-border-color, #ddd)",  # Always show border for draggable delimitation
-            },
+        return dmc.Paper(
+            children=[
+                dmc.Stack(
+                    [],
+                    id={
+                        "type": "jbrowse-body",
+                        "index": index,
+                    },
+                )
+            ],
             id={
                 "type": "jbrowse-component",
                 "index": index,
+            },
+            withBorder=True,
+            radius="md",
+            style={
+                "width": "100%",
+                "height": "100%",
+                "padding": "0",
+                "margin": "0",
             },
         )
     else:
-        return dbc.Card(
-            dbc.CardBody(
-                children=children,
-                id={
-                    "type": "jbrowse-body",
-                    "index": index,
-                },
-            ),
-            style={
-                "width": "100%",
-                "border": "1px solid var(--app-border-color, #ddd)",  # Always show border for draggable delimitation
-            },
+        return dmc.Paper(
+            children=[
+                html.Div(
+                    children=children,
+                    id={
+                        "type": "jbrowse-body",
+                        "index": index,
+                    },
+                )
+            ],
             id={
                 "type": "jbrowse-component",
                 "index": index,
+            },
+            withBorder=True,
+            radius="md",
+            style={
+                "width": "100%",
+                "height": "100%",
+                "padding": "0",
+                "margin": "0",
             },
         )
 

@@ -1,9 +1,8 @@
-import dash_bootstrap_components as dbc
-import dash_mantine_components as dmc
-
 import dash
+import dash_mantine_components as dmc
 from dash import html
 from dash.dependencies import Input, Output
+
 from depictio.dash.colors import color_sequences, colors
 
 
@@ -73,16 +72,7 @@ def create_color_palette_page():
                 style={"overflow": "hidden"},
             )
 
-            color_cards.append(
-                dbc.Col(
-                    color_card,
-                    lg=3,
-                    md=4,
-                    sm=6,
-                    xs=12,
-                    className="mb-4",
-                )
-            )
+            color_cards.append(color_card)
 
         section = html.Div(
             [
@@ -91,7 +81,11 @@ def create_color_palette_page():
                     order=3,
                     style={"marginBottom": "16px", "color": colors["blue"]},
                 ),
-                dbc.Row(color_cards),
+                dmc.SimpleGrid(
+                    cols=4,
+                    spacing="md",
+                    children=color_cards,
+                ),
             ],
             style={"marginBottom": "32px"},
         )
@@ -269,8 +263,10 @@ def create_color_palette_page():
     )
 
     # Putting it all together
-    color_palette_layout = dbc.Container(
-        [
+    color_palette_layout = dmc.Container(
+        size="xl",
+        p="md",
+        children=[
             dmc.Title(
                 "Depictio Color Palette",
                 order=1,
@@ -295,8 +291,6 @@ def create_color_palette_page():
             html.Div(sequence_items),
             button_examples,
         ],
-        fluid=True,
-        className="py-4",
     )
 
     return color_palette_layout
@@ -309,8 +303,10 @@ def create_iframe_palette_page():
     This is the easiest way to directly use a React component in Dash.
     """
     # Add this HTML file to your assets folder
-    iframe_layout = dbc.Container(
-        [
+    iframe_layout = dmc.Container(
+        size="xl",
+        p="md",
+        children=[
             dmc.Title(
                 "Depictio Color Palette",
                 order=1,
@@ -331,8 +327,6 @@ def create_iframe_palette_page():
                 },
             ),
         ],
-        fluid=True,
-        className="py-4",
     )
 
     return iframe_layout

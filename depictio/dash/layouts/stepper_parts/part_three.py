@@ -1,7 +1,7 @@
-import dash_mantine_components as dmc
-
 import dash
+import dash_mantine_components as dmc
 from dash import ALL, MATCH, Input, Output, State, html
+
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
@@ -39,35 +39,33 @@ def return_design_component(component_selected, id, df, btn_component):
         left_content = component_content.children[:-1]  # All items except the preview
         preview_content = component_content.children[-1]  # The preview section
 
-        # Create vertical layout with left and right sections for text component
-        text_layout = html.Div(
+        # Create layout with left and right sections for text component using DMC
+        text_layout = dmc.Paper(
             [
                 # Left section - Instructions/Help (without preview)
-                html.Div(
+                dmc.Paper(
                     dmc.Stack(left_content),
+                    w="45%",
+                    p="xl",
                     style={
-                        "width": "45%",
-                        "padding": "20px",
-                        "borderRight": "1px solid var(--app-border-color, #ddd)",
+                        "borderRight": "1px solid var(--mantine-color-gray-4)",
                     },
                 ),
                 # Right section - Move the good preview here
-                html.Div(
+                dmc.Paper(
                     preview_content,
-                    style={
-                        "width": "45%",
-                        "padding": "20px",
-                    },
+                    w="45%",
+                    p="xl",
                 ),
             ],
+            w="100%",
+            mih=300,
+            withBorder=True,
+            radius="md",
+            p="xs",
             style={
                 "display": "flex",
                 "flexDirection": "row",
-                "width": "100%",
-                "minHeight": "300px",
-                "border": "1px solid var(--app-border-color, #ddd)",
-                "borderRadius": "8px",
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
                 "gap": "10px",
             },
         )

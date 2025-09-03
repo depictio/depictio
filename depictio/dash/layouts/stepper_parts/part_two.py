@@ -1,8 +1,7 @@
-import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
+from dash import ALL, MATCH, Input, Output, State, ctx, dcc, html
 from dash_iconify import DashIconify
 
-from dash import ALL, MATCH, Input, Output, State, ctx, dcc, html
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import is_enabled
 from depictio.dash.modules.card_component.frontend import create_stepper_card_button
@@ -28,26 +27,22 @@ def register_callbacks_stepper_part_two(app):
     def update_button_list(stored_add_button):
         n = stored_add_button["_id"]
 
-        graph_stepper_button = dbc.Col(
-            dmc.Button(
-                "Graph",
-                size="xl",
-                style=UNSELECTED_STYLE,
-                color="orange",
-                leftSection=DashIconify(icon="ph:graph-fill", color="white"),
-                disabled=True,
-            )
+        graph_stepper_button = dmc.Button(
+            "Graph",
+            size="xl",
+            style=UNSELECTED_STYLE,
+            color="orange",
+            leftSection=DashIconify(icon="ph:graph-fill", color="white"),
+            disabled=True,
         )
 
-        map_stepper_button = dbc.Col(
-            dmc.Button(
-                "Map",
-                size="xl",
-                style=UNSELECTED_STYLE,
-                color="red",
-                leftSection=DashIconify(icon="gridicons:globe", color="white"),
-                disabled=True,
-            )
+        map_stepper_button = dmc.Button(
+            "Map",
+            size="xl",
+            style=UNSELECTED_STYLE,
+            color="red",
+            leftSection=DashIconify(icon="gridicons:globe", color="white"),
+            disabled=True,
         )
 
         figure_stepper_button, figure_stepper_button_store = create_stepper_figure_button(
@@ -85,11 +80,25 @@ def register_callbacks_stepper_part_two(app):
             [
                 html.H5("Standard components", style={"margin-top": "20px"}),
                 html.Hr(),
-                dmc.Center(dbc.Row(standard_components)),
+                dmc.Center(
+                    dmc.Group(
+                        standard_components,
+                        justify="center",
+                        align="center",
+                        gap="md",
+                    )
+                ),
                 html.Br(),
                 html.H5("Special components", style={"margin-top": "20px"}),
                 html.Hr(),
-                dmc.Center(dbc.Row(special_components)),
+                dmc.Center(
+                    dmc.Group(
+                        special_components,
+                        justify="center",
+                        align="center",
+                        gap="md",
+                    )
+                ),
             ]
         )
         # logger.info(f"Buttons list: {buttons_list}")

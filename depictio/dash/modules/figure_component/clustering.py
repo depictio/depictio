@@ -12,7 +12,6 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 import plotly.express as px
-from plotly.graph_objects import Figure
 
 from depictio.api.v1.configs.config import settings
 
@@ -41,7 +40,7 @@ def create_umap_plot(
     metric: str = "euclidean",
     random_state: int = 42,
     **kwargs,
-) -> Figure:
+):
     """
     Create a UMAP (Uniform Manifold Approximation and Projection) visualization.
 

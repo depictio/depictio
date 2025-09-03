@@ -1,9 +1,9 @@
 # Import necessary libraries
 import dash_mantine_components as dmc
 import httpx
+from dash import MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
-from dash import MATCH, Input, Output, State, dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 
@@ -22,6 +22,95 @@ from depictio.dash.utils import (
 
 
 def register_callbacks_interactive_component(app):
+    """Register all callbacks for the interactive component system."""
+
+    # # ============================================================================
+    # # INDIVIDUAL COMPONENT UPDATE - Modular Draggable System
+    # # ============================================================================
+    # @app.callback(
+    #     [Output({"type": "component", "index": MATCH}, "children", allow_duplicate=True),
+    #      Output({"type": "stored-metadata-component", "index": MATCH}, "data", allow_duplicate=True)
+    #      ],
+    #     [
+    #         Input("component-render-trigger", "data"),
+    #     ],
+    #     [
+    #         State("local-store", "data"),
+    #         State({"type": "stored-metadata-component", "index": MATCH}, "data", allow_optional=True),
+    #         State("url", "pathname"),
+    #     ],
+    #     prevent_initial_call="initial_duplicate",
+    # )
+    # def update_interactive_component_direct(
+    #     trigger, local_data, metadata, pathname
+    # ):
+    #     """Update interactive component directly - part of modular draggable system."""
+
+    #     logger.info("=== UPDATE INTERACTIVE COMPONENT DIRECT CALLBACK TRIGGERED ===")
+
+    #     if not local_data or not metadata:
+    #         return dash.no_update
+
+    #     # Only process if this is an interactive component
+    #     if metadata.get("component_type") != "interactive":
+    #         return dash.no_update
+    #     if not trigger or not trigger.get("needs_update"):
+    #         return dash.no_update
+
+    #     # Check if this trigger is relevant for this component
+    #     trigger_id = trigger.get("trigger_id")
+    #     trigger_prop = trigger.get("trigger_prop", "")
+
+    #     # Interactive component changes should update ALL components (filters affect everything)
+    #     is_interactive_change = "interactive-component-value" in trigger_prop
+
+    #     # For non-interactive triggers, only update the specific component
+    #     if not is_interactive_change and trigger_id and isinstance(trigger_id, dict):
+    #         component_index = trigger_id.get("index")
+    #         meta_index = metadata.get("index") if metadata else None
+
+    #         # Only update if this is the triggered component (for direct operations like edit/duplicate)
+    #         if component_index != meta_index:
+    #             return dash.no_update
+
+    #     if not local_data or not metadata:
+    #         return dash.no_update
+
+    #     # Extract dashboard info
+    #     dashboard_id = pathname.split("/")[-1] if pathname else "default"
+    #     TOKEN = local_data.get("access_token")
+    #     meta_index = metadata.get("index") if metadata else "unknown"
+
+    #     logger.info(f"🔄 Updating interactive component {meta_index} directly")
+
+    #     try:
+    #         # Build the interactive component using existing build_interactive function
+    #         updated_component, store_component = build_interactive(
+    #             index=meta_index,
+    #             title=metadata.get("title"),
+    #             wf_id=metadata.get("wf_id"),
+    #             dc_id=metadata.get("dc_id"),
+    #             dc_config=metadata.get("dc_config"),
+    #             column_name=metadata.get("column_name"),
+    #             column_type=metadata.get("column_type"),
+    #             interactive_component_type=metadata.get("interactive_component_type"),
+    #             cols_json=metadata.get("cols_json", {}),
+    #             value=metadata.get("value"),
+    #             access_token=TOKEN,
+    #             dashboard_id=dashboard_id,
+    #         )
+
+    #         if updated_component:
+    #             logger.info(f"✅ Interactive component {meta_index} updated successfully")
+    #             return updated_component, store_component
+    #         else:
+    #             logger.warning(f"⚠️ Failed to build interactive component {meta_index}")
+    #             return dash.no_update
+
+    #     except Exception as e:
+    #         logger.error(f"❌ Error updating interactive component {meta_index}: {e}")
+    #         return dash.no_update
+
     # Debug callback to track column selection changes
     @app.callback(
         Output({"type": "debug-interactive-log", "index": MATCH}, "children"),
@@ -337,8 +426,6 @@ def register_callbacks_interactive_component(app):
             logger.info(f"cols_json type: {type(cols_json)}")
 
             if cols_json:
-                from dash import dash_table
-
                 logger.info("Creating data_columns_df...")
                 try:
                     data_columns_df = [
@@ -351,34 +438,62 @@ def register_callbacks_interactive_component(app):
                     )
 
                     logger.info("Creating DataTable...")
-                    columns_description_df = dash_table.DataTable(
-                        columns=[
-                            {"name": "Column", "id": "column"},
-                            {"name": "Description", "id": "description"},
+                    # Create DMC Table instead of DataTable for better theming
+                    table_rows = []
+                    for row in data_columns_df:
+                        table_rows.append(
+                            dmc.TableTr(
+                                [
+                                    dmc.TableTd(
+                                        row["column"],
+                                        style={
+                                            "textAlign": "center",
+                                            "fontSize": "11px",
+                                            "maxWidth": "150px",
+                                        },
+                                    ),
+                                    dmc.TableTd(
+                                        row["description"],
+                                        style={
+                                            "textAlign": "center",
+                                            "fontSize": "11px",
+                                            "maxWidth": "150px",
+                                        },
+                                    ),
+                                ]
+                            )
+                        )
+
+                    columns_description_df = dmc.Table(
+                        [
+                            dmc.TableThead(
+                                [
+                                    dmc.TableTr(
+                                        [
+                                            dmc.TableTh(
+                                                "Column",
+                                                style={
+                                                    "textAlign": "center",
+                                                    "fontSize": "11px",
+                                                    "fontWeight": "bold",
+                                                },
+                                            ),
+                                            dmc.TableTh(
+                                                "Description",
+                                                style={
+                                                    "textAlign": "center",
+                                                    "fontSize": "11px",
+                                                    "fontWeight": "bold",
+                                                },
+                                            ),
+                                        ]
+                                    )
+                                ]
+                            ),
+                            dmc.TableTbody(table_rows),
                         ],
-                        data=data_columns_df,
-                        # Small font size, helvetica, no border, center text
-                        style_cell={
-                            "fontSize": 11,
-                            "fontFamily": "Helvetica",
-                            "border": "0px",
-                            "textAlign": "center",
-                            "backgroundColor": "var(--app-surface-color, #ffffff)",
-                            "color": "var(--app-text-color, #000000)",
-                            "padding": "4px 8px",
-                            "maxWidth": "150px",
-                            "overflow": "hidden",
-                            "textOverflow": "ellipsis",
-                        },
-                        style_header={
-                            "fontWeight": "bold",
-                            "backgroundColor": "var(--app-surface-color, #ffffff)",
-                            "color": "var(--app-text-color, #000000)",
-                        },
-                        style_data={
-                            "backgroundColor": "var(--app-surface-color, #ffffff)",
-                            "color": "var(--app-text-color, #000000)",
-                        },
+                        striped="odd",
+                        withTableBorder=True,
                     )
                     logger.info("DataTable created successfully")
                 except Exception as e:
@@ -807,27 +922,24 @@ def create_stepper_interactive_button(n, disabled=None):
         n (_type_): _description_
         disabled (bool, optional): Override enabled state. If None, uses metadata.
     """
-    import dash_bootstrap_components as dbc
 
     # Use metadata enabled field if disabled not explicitly provided
     if disabled is None:
         disabled = not is_enabled("interactive")
 
-    button = dbc.Col(
-        dmc.Button(
-            "Interactive",
-            id={
-                "type": "btn-option",
-                "index": n,
-                "value": "Interactive",
-            },
-            n_clicks=0,
-            style=UNSELECTED_STYLE,
-            size="xl",
-            color=get_dmc_button_color("interactive"),
-            leftSection=DashIconify(icon="bx:slider-alt", color="white"),
-            disabled=disabled,
-        )
+    button = dmc.Button(
+        "Interactive",
+        id={
+            "type": "btn-option",
+            "index": n,
+            "value": "Interactive",
+        },
+        n_clicks=0,
+        style=UNSELECTED_STYLE,
+        size="xl",
+        color=get_dmc_button_color("interactive"),
+        leftSection=DashIconify(icon="bx:slider-alt", color="white"),
+        disabled=disabled,
     )
     store = dcc.Store(
         id={

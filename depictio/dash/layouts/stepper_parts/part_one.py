@@ -1,9 +1,9 @@
+import dash
 import dash_mantine_components as dmc
 import httpx
+from dash import ALL, MATCH, Input, Output, State, ctx, html
 from dash_iconify import DashIconify
 
-import dash
-from dash import ALL, MATCH, Input, Output, State, ctx, html
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import get_component_metadata_by_display_name

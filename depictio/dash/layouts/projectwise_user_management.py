@@ -12,12 +12,12 @@ The module is organized into:
 - Modular callback functions for handling user interactions
 """
 
+import dash
 import dash_ag_grid as dag
 import dash_mantine_components as dmc
 import httpx
-
-import dash
 from dash import Input, Output, State, ctx, dcc, html
+
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.layouts.api_utils import (
