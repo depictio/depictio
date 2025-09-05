@@ -445,15 +445,39 @@ def register_callbacks_header(app):
 
     @app.callback(
         Output("offcanvas-parameters", "opened"),
+        Output("notes-footer-content", "className", allow_duplicate=True),
+        Output("page-content", "className", allow_duplicate=True),
         Input("open-offcanvas-parameters-button", "n_clicks"),
         State("offcanvas-parameters", "opened"),
+        State("notes-footer-content", "className"),
+        State("page-content", "className"),
         prevent_initial_call=True,
     )
-    def toggle_offcanvas_parameters(n_clicks, is_open):
+    def toggle_offcanvas_parameters(n_clicks, is_open, current_footer_class, current_page_class):
         logger.info(f"toggle_offcanvas_parameters: {n_clicks}, {is_open}")
         if n_clicks:
-            return not is_open
-        return is_open
+            new_drawer_state = not is_open
+
+            # If we're opening the drawer, close the notes footer
+            current_footer_class = current_footer_class or ""
+            current_page_class = current_page_class or ""
+
+            if new_drawer_state and (
+                "footer-visible" in current_footer_class
+                or "footer-fullscreen" in current_footer_class
+            ):
+                # Opening drawer and footer is visible - close footer
+                new_footer_class = ""
+                new_page_class = current_page_class.replace("notes-fullscreen", "").strip()
+                logger.info(
+                    f"Closing notes footer when opening offcanvas drawer. Footer: '{new_footer_class}', Page: '{new_page_class}'"
+                )
+                return new_drawer_state, new_footer_class, new_page_class
+            else:
+                # Either closing drawer or footer already hidden - no footer change needed
+                return new_drawer_state, current_footer_class, current_page_class
+
+        return is_open, current_footer_class, current_page_class
 
     @app.callback(
         [
