@@ -556,7 +556,7 @@ def return_deltatable_for_view(workflow_id: str, dc: DataCollection, token: str)
         defaultColDef={"resizable": True, "sortable": True, "filter": True},
         className="ag-theme-alpine",  # Default theme, will be updated by callback
     )
-    preview_panel = dmc.AccordionPanel(dmc.Paper(grid))
+    preview_panel = dmc.AccordionPanel(dmc.Paper(grid, p="md"))
     preview_control = dmc.AccordionControl(
         dmc.Text("Preview", fw="bold", className="label-text"),
         icon=DashIconify(icon="material-symbols:preview", width=20),
@@ -735,7 +735,7 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
                                                                 children=dcc.Markdown(
                                                                     children=dc_config_md
                                                                 ),
-                                                                className="p-3",
+                                                                p="md",
                                                                 radius="sm",
                                                                 withBorder=True,
                                                                 shadow="xs",
@@ -769,7 +769,7 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
                 ],
             ),
         ],
-        className="p-3",
+        p="md",
         radius="sm",
         withBorder=True,
         shadow="xs",
@@ -864,7 +864,7 @@ def render_workflow_item(wf: Workflow, token: str):
         radius="md",
         withBorder=True,
         shadow="sm",
-        className="p-3",
+        p="md",
     )
 
     # Render data collections if they exist
@@ -874,7 +874,7 @@ def render_workflow_item(wf: Workflow, token: str):
         ]
         data_collections_section = dmc.Paper(
             children=data_collections,
-            className="p-3",
+            p="md",
             radius="md",
             withBorder=True,
             shadow="sm",
@@ -1196,7 +1196,7 @@ def render_project_item(
         radius="md",
         withBorder=True,
         shadow="sm",
-        # className="p-3",
+        p="md",
     )
 
     def create_workflow_section(title, workflows: list[Workflow]):
