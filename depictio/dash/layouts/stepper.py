@@ -536,7 +536,11 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
     card = return_design_component(component_selected=component_selected, id=id, df=df)
     # logger.info(f"Card: {card}")
 
-    modal_body = dmc.Stack([select_row, card], gap="md", style={"width": "100%"})
+    # Handle the fact that design functions return lists, not single components
+    if isinstance(card, list):
+        modal_body = dmc.Stack([select_row] + card, gap="md", style={"width": "100%"})
+    else:
+        modal_body = dmc.Stack([select_row, card], gap="md", style={"width": "100%"})
 
     modal = dmc.Modal(
         id={"type": "modal-edit", "index": n},
