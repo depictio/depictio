@@ -156,6 +156,7 @@ def _create_action_icon(icon, button_id, disabled=False, n_clicks=0, tooltip=Non
         size="xl",
         radius="xl",
         variant="subtle",
+        color="gray",
         style=BUTTON_STYLE,
         disabled=disabled,
         n_clicks=n_clicks,
