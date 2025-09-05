@@ -48,6 +48,7 @@ def build_interactive_frame(index, children=None, show_border=False):
             h="100%",
             p="0",
             radius="md",
+            withBorder=show_border,
         )
     else:
         return dmc.Paper(
@@ -77,6 +78,7 @@ def build_interactive_frame(index, children=None, show_border=False):
                 "overflow": "visible",
                 "position": "relative",
             },
+            withBorder=show_border,
         )
 
 
@@ -676,6 +678,21 @@ def build_interactive(**kwargs):
 
     # If the aggregation value is Select, MultiSelect or SegmentedControl
     if interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
+        # LOG SCHEMA DEBUG INFO FOR SELECT COMPONENTS
+        logger.info("🔍 SELECT COMPONENT SCHEMA DEBUG:")
+        logger.info(f"  - Component type: {interactive_component_type}")
+        logger.info(f"  - Component expects column: '{column_name}'")
+        logger.info(f"  - DataFrame shape: {df.shape}")
+        logger.info(f"  - Available columns: {df.columns}")
+        logger.info(f"  - Column '{column_name}' present: {column_name in df.columns}")
+
+        # Check if column exists before processing
+        if column_name not in df.columns:
+            logger.error(f"❌ SCHEMA MISMATCH: Column '{column_name}' not found in DataFrame")
+            logger.error(f"Available columns: {df.columns}")
+            # Return empty component to prevent crash
+            return dmc.Text(f"Error: Column '{column_name}' not found", color="red")
+
         data = sorted(df[column_name].drop_nulls().unique())[:100]  # Limit to 100 options
 
         # CRITICAL: If DataFrame is empty but we have a preserved value, include those values in options
@@ -937,6 +954,20 @@ def build_interactive(**kwargs):
         # Convert Polars DataFrame to Pandas for processing
         df_pandas = df.to_pandas()
         # logger.info(f"df['{column_name}']: {df_pandas[column_name]}")
+
+        # LOG SCHEMA DEBUG INFO
+        logger.info("🔍 INTERACTIVE COMPONENT SCHEMA DEBUG:")
+        logger.info(f"  - Component expects column: '{column_name}'")
+        logger.info(f"  - DataFrame shape: {df_pandas.shape}")
+        logger.info(f"  - Available columns: {list(df_pandas.columns)}")
+        logger.info(f"  - Column '{column_name}' present: {column_name in df_pandas.columns}")
+
+        # Check if column exists before processing
+        if column_name not in df_pandas.columns:
+            logger.error(f"❌ SCHEMA MISMATCH: Column '{column_name}' not found in DataFrame")
+            logger.error(f"Available columns: {list(df_pandas.columns)}")
+            # Return empty options to prevent crash
+            return []
 
         # Drop NaN, None, and invalid values
         df_pandas = df_pandas[~df_pandas[column_name].isin([None, "None", "nan", "NaN"])]
