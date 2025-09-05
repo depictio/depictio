@@ -229,15 +229,25 @@ def _create_component_buttons(
                 "reset",
             ],  # Interactive components get reset button
         },
-        "table": {"orientation": "horizontal", "buttons": ["drag", "remove", "duplicate"]},
-        "jbrowse": {"orientation": "horizontal", "buttons": ["drag", "remove", "duplicate"]},
+        "card": {
+            "orientation": "horizontal",
+            "buttons": [
+                "drag",
+                "remove",
+                "edit",
+                "duplicate",
+                # "reset",
+            ],  # Interactive components get reset button
+        },
+        "table": {"orientation": "horizontal", "buttons": ["drag", "remove"]},
+        "jbrowse": {"orientation": "horizontal", "buttons": ["drag", "remove"]},
         "text": {
             "orientation": "horizontal",
             "buttons": ["drag", "remove", "duplicate", "alignment"],
         },  # Text components get alignment button (no edit button)
         "default": {
             "orientation": "horizontal",
-            "buttons": ["drag", "remove", "edit", "duplicate"],
+            "buttons": ["drag", "remove"],
         },
     }
 
