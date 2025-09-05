@@ -166,12 +166,12 @@ def create_project_type_indicator(project_type):
         ],
         justify="space-between",
         align="center",
-        style={
-            "padding": "0.5rem 1rem",
-            "backgroundColor": "var(--app-surface-color, #f8f9fa)",
-            "borderRadius": "0.5rem",
-            "border": "1px solid var(--app-border-color, #dee2e6)",
-        },
+        # style={
+        #     "padding": "0.5rem 1rem",
+        #     "backgroundColor": "var(--app-surface-color, #f8f9fa)",
+        #     "borderRadius": "0.5rem",
+        #     "border": "1px solid var(--app-border-color, #dee2e6)",
+        # },
     )
 
 
@@ -187,16 +187,6 @@ def create_workflow_card(workflow, selected_workflow_id=None):
         html.Div: Clickable workflow card component
     """
     is_selected = str(workflow.id) == selected_workflow_id
-    card_style = {
-        "cursor": "pointer",
-        "transition": "all 0.2s ease",
-        "border": f"2px solid {colors['teal']}"
-        if is_selected
-        else "1px solid var(--app-border-color, #ddd)",
-        "backgroundColor": f"rgba({colors['teal']}, 0.05)"
-        if is_selected
-        else "var(--app-surface-color, #ffffff)",
-    }
 
     # Get engine icon
     engine_icons = {
@@ -291,7 +281,14 @@ def create_workflow_card(workflow, selected_workflow_id=None):
                 shadow="sm" if not is_selected else "md",
                 radius="md",
                 p="md",
-                style=card_style,
+                # bg="var(--mantine-color-teal-5)" if is_selected else "var(--app-surface-color)",
+                style={
+                    "cursor": "pointer",
+                    "transition": "all 0.2s ease",
+                    "border": "2px solid var(--mantine-color-teal-6)"
+                    if is_selected
+                    else "1px solid var(--app-border-color)",
+                },
             )
         ],
         id={"type": "workflow-card", "index": str(workflow.id)},
