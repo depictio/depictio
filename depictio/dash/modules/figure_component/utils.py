@@ -332,8 +332,20 @@ def render_figure(
     """
     # PERFORMANCE OPTIMIZATION: Check figure result cache first
 
+    # Safety check: ensure df is not None
+    if df is None:
+        logger.error("DataFrame is None, cannot build figure")
+        return html.Div(
+            dmc.Alert(
+                "Error: No data available to build figure",
+                title="Data Error",
+                color="red",
+            ),
+            style={"height": "400px", "display": "flex", "alignItems": "center"},
+        )
+
     # Generate cache key from all inputs
-    df_hash = str(hash(str(df.hash_rows()) if not df.is_empty() else "empty"))
+    df_hash = str(hash(str(df.hash_rows()) if df is not None and not df.is_empty() else "empty"))
     selected_point_clean = selected_point or {}
 
     cache_key = _get_figure_cache_key(
@@ -857,6 +869,10 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     stepper = kwargs.get("stepper", False)
     parent_index = kwargs.get("parent_index", None)
     df = kwargs.get("df", pl.DataFrame())
+    # Ensure df is never None
+    if df is None:
+        logger.warning("df was None, using empty DataFrame")
+        df = pl.DataFrame()
     TOKEN = kwargs.get("access_token")
     filter_applied = kwargs.get("filter_applied", False)
     theme = kwargs.get("theme", "light")
@@ -906,7 +922,23 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         "last_updated": datetime.now().isoformat(),
         "mode": kwargs.get("mode", "ui"),  # Store the mode in component metadata
     }
+
+    # CRITICAL: Preserve code_content in stored metadata for code mode components
+    if kwargs.get("mode") == "code" and "code_content" in kwargs:
+        store_component_data["code_content"] = kwargs["code_content"]
+        logger.info(
+            f"📝 STORED code_content for component {str(store_index)} (length: {len(kwargs['code_content'])})"
+        )
     logger.info(f"Component metadata: {store_component_data}")
+
+    # Log code mode component details
+    if kwargs.get("mode") == "code":
+        if "code_content" in kwargs:
+            logger.info(
+                f"✅ CODE MODE: code_content present (length: {len(kwargs['code_content'])})"
+            )
+        else:
+            logger.warning("⚠️ CODE MODE: code_content missing - will attempt database recovery")
 
     # Ensure dc_config is available for build_figure
     if not dc_config and wf_id and dc_id:
@@ -966,17 +998,35 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         logger.info(f"🎨 RESTORE: Using existing template: {template_value}")
 
     # Handle data loading
-    if df.is_empty() and kwargs.get("refresh", True):
+    if df is not None and df.is_empty() and kwargs.get("refresh", True):
         if wf_id and dc_id:
             logger.info(f"Loading data for {wf_id}:{dc_id}")
             try:
+                # LOG DETAILED INFO ABOUT DATA LOADING
+                logger.info("🔍 FIGURE COMPONENT DATA LOADING:")
+                logger.info(f"  - Component expects column: {dict_kwargs.get('x', 'N/A')}")
+                logger.info(f"  - Workflow ID: {wf_id}")
+                logger.info(f"  - Data Collection ID: {dc_id}")
+                logger.info(f"  - DC ID type: {type(dc_id)}")
+                logger.info(f"  - Is joined DC: {'--' in str(dc_id) if dc_id else False}")
+
                 # Handle joined data collection IDs - don't convert to ObjectId
                 if isinstance(dc_id, str) and "--" in dc_id:
                     # For joined data collections, pass the DC ID as string
+                    logger.info(f"  - Loading joined data collection: {dc_id}")
                     df = load_deltatable_lite(ObjectId(wf_id), dc_id, TOKEN=TOKEN)
                 else:
                     # Regular data collection - convert to ObjectId
+                    logger.info(f"  - Loading regular data collection: {dc_id}")
                     df = load_deltatable_lite(ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN)
+
+                # LOG THE RESULTING DATAFRAME SCHEMA
+                logger.info("📊 LOADED DATAFRAME SCHEMA:")
+                logger.info(f"  - Shape: {df.shape}")
+                logger.info(f"  - Columns: {df.columns}")
+                logger.info(
+                    f"  - Expected column '{dict_kwargs.get('x', 'N/A')}' present: {dict_kwargs.get('x', 'N/A') in df.columns}"
+                )
             except Exception as e:
                 logger.error(f"Failed to load data: {e}")
                 df = pl.DataFrame()
@@ -1015,12 +1065,39 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
                         )
                         logger.info(f"CODE MODE: Preprocessing message: {message}")
                         logger.info(f"CODE MODE: Preprocessing success: {success}")
-                        logger.info(f"CODE MODE: Preprocessing dataframe: {df_for_figure.head()}")
+
+                        # Safety check: if preprocessing failed or returned None, use original df
+                        if not success or df_for_figure is None:
+                            logger.warning(
+                                "CODE MODE: Preprocessing failed or returned None, using original df"
+                            )
+                            df_for_figure = df
+                        else:
+                            # Additional safety check before calling head()
+                            if df_for_figure is not None:
+                                logger.info(
+                                    f"CODE MODE: Preprocessing dataframe: {df_for_figure.head()}"
+                                )
+                            else:
+                                logger.warning(
+                                    "CODE MODE: df_for_figure is None after preprocessing"
+                                )
+                                df_for_figure = df
 
                     except Exception as e:
                         logger.error(
                             f"❌ CODE MODE: Preprocessing execution failed: {e}, using original df"
                         )
+                        df_for_figure = df  # Fallback to original DataFrame
+            else:
+                # No code content provided for code mode - this indicates a metadata flow issue
+                logger.error(
+                    f"❌ CODE MODE: Component marked as code mode but no code_content provided. "
+                    f"This indicates the component metadata pipeline is not preserving code_content during interactive updates. "
+                    f"Expected columns like '{validated_kwargs.get('y')}' will not exist. "
+                    f"FIX NEEDED: Ensure stored_metadata includes code_content field."
+                )
+                df_for_figure = df
 
             figure = render_figure(
                 validated_kwargs, visu_type, df_for_figure, theme=theme, skip_validation=True
@@ -1034,7 +1111,13 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         figure = px.scatter(title=f"Error: {str(e)}")
 
     # Create info badges
-    badges = _create_info_badges(index or "unknown", df, visu_type, filter_applied, build_frame)
+    badges = _create_info_badges(
+        index or "unknown",
+        df if df is not None else pl.DataFrame(),
+        visu_type,
+        filter_applied,
+        build_frame,
+    )
 
     # Create figure component
     figure_div = html.Div(
@@ -1126,7 +1209,12 @@ def _create_info_badges(
     cutoff = _config.max_data_points
 
     # Partial data badge
-    if visu_type.lower() == "scatter" and not df.is_empty() and df.shape[0] > cutoff:
+    if (
+        visu_type.lower() == "scatter"
+        and df is not None
+        and not df.is_empty()
+        and df.shape[0] > cutoff
+    ):
         partial_badge = dmc.Tooltip(
             children=dmc.Badge(
                 "Partial data displayed",
