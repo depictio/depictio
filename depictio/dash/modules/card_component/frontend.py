@@ -410,7 +410,7 @@ def design_card(id, df):
     left_column = dmc.GridCol(
         dmc.Stack(
             [
-                html.H5("Card edit menu", style={"textAlign": "center"}),
+                dmc.Title("Card edit menu", order=5, style={"textAlign": "center"}),
                 dmc.Card(
                     dmc.CardSection(
                         dmc.Stack(
@@ -507,7 +507,7 @@ def design_card(id, df):
     right_column = dmc.GridCol(
         dmc.Stack(
             [
-                html.H5("Resulting card", style={"textAlign": "center"}),
+                dmc.Title("Resulting card", order=5, style={"textAlign": "center"}),
                 html.Div(
                     build_card_frame(index=id["index"], show_border=True),
                     id={
@@ -542,8 +542,8 @@ def design_card(id, df):
                     ),
                 ),
             ],
-            align="center",
-            justify="center",
+            align="start",
+            justify="start",
             style={"height": "100%"},
         ),
         span="content",

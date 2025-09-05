@@ -613,7 +613,7 @@ def design_interactive(id, df):
     left_column = dmc.GridCol(
         dmc.Stack(
             [
-                html.H5("Interactive edit menu", style={"textAlign": "center"}),
+                dmc.Title("Interactive edit menu", order=5, style={"textAlign": "center"}),
                 dmc.Card(
                     dmc.CardSection(
                         dmc.Stack(
@@ -752,7 +752,9 @@ def design_interactive(id, df):
     right_column = dmc.GridCol(
         dmc.Stack(
             [
-                html.H5("Resulting interactive component", style={"textAlign": "center"}),
+                dmc.Title(
+                    "Resulting interactive component", order=5, style={"textAlign": "center"}
+                ),
                 html.Div(
                     build_interactive_frame(index=id["index"], show_border=True),
                     id={
