@@ -481,74 +481,91 @@ def extract_visualization_type_from_code(code: str) -> str:
 
 
 def extract_params_from_code(code: str) -> Dict[str, Any]:
-    """Extract parameter information from Python code (enhanced parsing)"""
+    """Extract ALL parameter information from Python code dynamically"""
     params = {}
 
-    # Enhanced regex-based extraction for common patterns
+    import ast
     import re
 
-    # Look for px.scatter, px.line, etc. function calls OR clustering functions
-    # Updated to handle df_modified, df_new, etc.
-    plotly_call_pattern = r"(px\.\w+\(df\w*(?:,\s*(.+?))?\)|create_\w+_plot\(df\w*(?:,\s*(.+?))?\))"
-    match = re.search(plotly_call_pattern, code, re.DOTALL)
+    try:
+        # Parse the code to AST for proper parameter extraction
+        tree = ast.parse(code)
 
-    if match and match.group(2):
-        params_str = match.group(2)
+        for node in ast.walk(tree):
+            # Look for function calls (px.function or create_*_plot)
+            if isinstance(node, ast.Call):
+                # Check if it's a px.function call or clustering function
+                is_px_call = (
+                    isinstance(node.func, ast.Attribute)
+                    and isinstance(node.func.value, ast.Name)
+                    and node.func.value.id == "px"
+                )
 
-        # Extract individual parameters (enhanced approach)
-        param_patterns = [
-            # String parameters (quoted)
-            (r"x\s*=\s*['\"]([^'\"]+)['\"]", "x"),
-            (r"y\s*=\s*['\"]([^'\"]+)['\"]", "y"),
-            (r"color\s*=\s*['\"]([^'\"]+)['\"]", "color"),
-            (r"size\s*=\s*['\"]([^'\"]+)['\"]", "size"),
-            (r"values\s*=\s*['\"]([^'\"]+)['\"]", "values"),
-            (r"names\s*=\s*['\"]([^'\"]+)['\"]", "names"),
-            (r"title\s*=\s*['\"]([^'\"]+)['\"]", "title"),
-            (r"facet_col\s*=\s*['\"]([^'\"]+)['\"]", "facet_col"),
-            (r"facet_row\s*=\s*['\"]([^'\"]+)['\"]", "facet_row"),
-            (r"hover_name\s*=\s*['\"]([^'\"]+)['\"]", "hover_name"),
-            (r"animation_frame\s*=\s*['\"]([^'\"]+)['\"]", "animation_frame"),
-            (r"animation_group\s*=\s*['\"]([^'\"]+)['\"]", "animation_group"),
-            (r"template\s*=\s*['\"]([^'\"]+)['\"]", "template"),
-            (r"color_discrete_sequence\s*=\s*['\"]([^'\"]+)['\"]", "color_discrete_sequence"),
-            (r"color_continuous_scale\s*=\s*['\"]([^'\"]+)['\"]", "color_continuous_scale"),
-            (r"symbol\s*=\s*['\"]([^'\"]+)['\"]", "symbol"),
-            (r"line_dash\s*=\s*['\"]([^'\"]+)['\"]", "line_dash"),
-            (r"pattern_shape\s*=\s*['\"]([^'\"]+)['\"]", "pattern_shape"),
-            (r"orientation\s*=\s*['\"]([^'\"]+)['\"]", "orientation"),
-            (r"barmode\s*=\s*['\"]([^'\"]+)['\"]", "barmode"),
-            (r"histnorm\s*=\s*['\"]([^'\"]+)['\"]", "histnorm"),
-            (r"points\s*=\s*['\"]([^'\"]+)['\"]", "points"),
-            (r"violinmode\s*=\s*['\"]([^'\"]+)['\"]", "violinmode"),
-            (r"line_shape\s*=\s*['\"]([^'\"]+)['\"]", "line_shape"),
-            (r"trendline\s*=\s*['\"]([^'\"]+)['\"]", "trendline"),
-            # Boolean parameters
-            (r"log_x\s*=\s*(True|False)", "log_x"),
-            (r"log_y\s*=\s*(True|False)", "log_y"),
-            (r"marginal_x\s*=\s*['\"]([^'\"]+)['\"]", "marginal_x"),
-            (r"marginal_y\s*=\s*['\"]([^'\"]+)['\"]", "marginal_y"),
-            # Special handling for False as a string value
-            (r"points\s*=\s*False", "points"),
-        ]
+                is_clustering_call = (
+                    isinstance(node.func, ast.Name)
+                    and node.func.id.startswith("create_")
+                    and node.func.id.endswith("_plot")
+                )
 
-        for pattern, key in param_patterns:
-            param_match = re.search(pattern, params_str)
-            if param_match:
-                # Handle patterns that might not have groups
-                if param_match.groups():
-                    value = param_match.group(1)
+                if is_px_call or is_clustering_call:
+                    # Extract all keyword arguments
+                    for keyword in node.keywords:
+                        if keyword.arg:  # Skip **kwargs
+                            param_name = keyword.arg
 
-                    # Handle boolean values
-                    if value == "True":
-                        params[key] = True
-                    elif value == "False":
-                        params[key] = False
-                    else:
-                        params[key] = value
+                            # Extract the value based on its type
+                            if isinstance(keyword.value, ast.Constant):
+                                # String, number, boolean literals
+                                params[param_name] = keyword.value.value
+                            elif isinstance(keyword.value, ast.Name):
+                                # Variable references (like column names)
+                                params[param_name] = keyword.value.id
+                            elif isinstance(keyword.value, ast.Str):  # Python < 3.8 compatibility
+                                params[param_name] = keyword.value.s
+                            elif isinstance(keyword.value, ast.Num):  # Python < 3.8 compatibility
+                                params[param_name] = keyword.value.n
+                            elif isinstance(
+                                keyword.value, ast.NameConstant
+                            ):  # Python < 3.8 compatibility
+                                params[param_name] = keyword.value.value
+                            # For more complex expressions, try to convert back to string
+                            elif hasattr(ast, "unparse"):  # Python 3.9+
+                                params[param_name] = ast.unparse(keyword.value)
+                            else:
+                                # Fallback: convert to string representation
+                                params[param_name] = str(keyword.value)
+
+    except (SyntaxError, ValueError):
+        # Fallback to regex-based extraction if AST parsing fails
+        plotly_call_pattern = (
+            r"(px\.\w+\(df\w*(?:,\s*(.+?))?\)|create_\w+_plot\(df\w*(?:,\s*(.+?))?\))"
+        )
+        match = re.search(plotly_call_pattern, code, re.DOTALL)
+
+        if match and match.group(2):
+            params_str = match.group(2)
+
+            # Dynamic parameter extraction using regex
+            # Match any parameter=value pattern
+            param_pattern = r"(\w+)\s*=\s*([^,)]+)"
+            param_matches = re.findall(param_pattern, params_str)
+
+            for param_name, param_value in param_matches:
+                # Clean up the parameter value
+                param_value = param_value.strip()
+
+                # Remove quotes if present
+                if (param_value.startswith("'") and param_value.endswith("'")) or (
+                    param_value.startswith('"') and param_value.endswith('"')
+                ):
+                    param_value = param_value[1:-1]
+
+                # Handle boolean values
+                if param_value == "True":
+                    params[param_name] = True
+                elif param_value == "False":
+                    params[param_name] = False
                 else:
-                    # For patterns without groups (like points=False)
-                    if key == "points":
-                        params[key] = False
+                    params[param_name] = param_value
 
     return params
