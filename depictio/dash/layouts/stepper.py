@@ -355,6 +355,7 @@ def register_callbacks_stepper(app):
                 data_collection_id=data_collection_id,
                 TOKEN=TOKEN,
                 limit_rows=100,  # Default preview size for stepper
+                load_for_preview=True,  # Use preview cache to avoid conflicts with full dataset
             )
 
             if df is None or df.height == 0:
