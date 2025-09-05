@@ -280,10 +280,16 @@ def remove_duplicates_by_index(components):
             current_parent = component.get("parent_index")
             existing_parent = existing.get("parent_index")
 
-            # If current has parent_index but existing doesn't, prefer current
+            # If current has parent_index but existing doesn't, prefer current but preserve all fields
             if current_parent is not None and existing_parent is None:
                 logger.debug(f"DEDUP: Replacing {index} (parent_index: None -> {current_parent})")
-                unique_components[index] = component
+                # Merge: start with existing, update with current, preserving important fields
+                merged_component = {**existing, **component}
+                # Preserve code_content if it exists in either version
+                if existing.get("code_content") and not component.get("code_content"):
+                    merged_component["code_content"] = existing["code_content"]
+                    logger.debug(f"DEDUP: Preserved code_content for component {index}")
+                unique_components[index] = merged_component
             # If existing has parent_index but current doesn't, keep existing (do nothing)
             elif existing_parent is not None and current_parent is None:
                 logger.debug(
@@ -299,7 +305,13 @@ def remove_duplicates_by_index(components):
                         logger.debug(
                             f"DEDUP: Replacing {index} based on timestamp ({existing_updated} -> {current_updated})"
                         )
-                        unique_components[index] = component
+                        # Merge: start with existing, update with current, preserving important fields
+                        merged_component = {**existing, **component}
+                        # Preserve code_content if it exists in existing but not in current
+                        if existing.get("code_content") and not component.get("code_content"):
+                            merged_component["code_content"] = existing["code_content"]
+                            logger.debug(f"DEDUP: Preserved code_content for component {index}")
+                        unique_components[index] = merged_component
                 # If last_updated is not available, keep existing (first occurrence)
     return list(unique_components.values())
 
@@ -498,7 +510,6 @@ def register_callbacks_draggable(app):
     @app.callback(
         Output("draggable", "items"),
         Output("draggable", "currentLayout"),
-        Output("stored-draggable-children", "data"),
         Output("stored-draggable-layouts", "data"),
         Output("current-edit-parent-index", "data"),  # Add this Output
         # Output("stored-add-button", "data"),
@@ -576,9 +587,7 @@ def register_callbacks_draggable(app):
         State("draggable", "items"),
         State("draggable", "currentLayout"),
         Input("draggable", "currentLayout"),
-        State("stored-draggable-children", "data"),
         State("stored-draggable-layouts", "data"),
-        Input("stored-draggable-children", "data"),
         Input("stored-draggable-layouts", "data"),
         Input(
             {"type": "remove-box-button", "index": ALL},
@@ -681,9 +690,7 @@ def register_callbacks_draggable(app):
         draggable_children,
         draggable_layouts,
         input_draggable_layouts,
-        state_stored_draggable_children,
         state_stored_draggable_layouts,
-        input_stored_draggable_children,
         input_stored_draggable_layouts,
         remove_box_button_values,
         edit_box_button_values,
@@ -701,12 +708,11 @@ def register_callbacks_draggable(app):
         # height_store,
     ):
         if not local_data:
-            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         if not state_stored_draggable_layouts:
             state_stored_draggable_layouts = {}
-        if not state_stored_draggable_children:
-            state_stored_draggable_children = {}
+        # REMOVED: state_stored_draggable_children to fix localStorage quota exceeded error
 
         TOKEN = local_data["access_token"]
 
@@ -882,7 +888,6 @@ def register_callbacks_draggable(app):
                         dash.no_update,
                         dash.no_update,
                         dash.no_update,
-                        dash.no_update,
                     )
                 child_metadata = tmp_stored_metadata[0]
                 child_index = child_metadata["index"]
@@ -921,7 +926,6 @@ def register_callbacks_draggable(app):
                 return (
                     draggable_children,
                     draggable_layouts,
-                    dash.no_update,
                     state_stored_draggable_layouts,
                     dash.no_update,
                 )
@@ -941,8 +945,14 @@ def register_callbacks_draggable(app):
                         f"🔄 LAYOUT UPDATE - New layout received: {input_draggable_layouts}"
                     )
 
+                    # Check for None layout (can happen with large datasets)
+                    if input_draggable_layouts is None:
+                        logger.warning(
+                            "⚠️ LAYOUT UPDATE - input_draggable_layouts is None, skipping layout processing"
+                        )
+
                     # Check if any dimensions were changed by responsive grid
-                    if dashboard_id in state_stored_draggable_layouts:
+                    elif dashboard_id in state_stored_draggable_layouts:
                         stored_layouts = state_stored_draggable_layouts[dashboard_id]
                         for new_layout in input_draggable_layouts:
                             for stored_layout in stored_layouts:
@@ -992,24 +1002,16 @@ def register_callbacks_draggable(app):
                             f"  Stored Layout {i}: {layout.get('i')} -> {layout.get('w')}x{layout.get('h')} at ({layout.get('x')},{layout.get('y')})"
                         )
 
-                    # Prepare updated stored children data
-                    updated_stored_children = (
-                        state_stored_draggable_children.copy()
-                        if isinstance(state_stored_draggable_children, dict)
-                        else {}
-                    )
-                    updated_stored_children[dashboard_id] = draggable_children
+                    # REMOVED: updated_stored_children logic to fix localStorage quota exceeded
 
                     return (
                         draggable_children,
                         fixed_layouts,  # Return the normalized layout array
-                        updated_stored_children,  # Update stored children
                         state_stored_draggable_layouts,
                         dash.no_update,
                     )
                 else:
                     return (
-                        dash.no_update,
                         dash.no_update,
                         dash.no_update,
                         dash.no_update,
@@ -1068,7 +1070,6 @@ def register_callbacks_draggable(app):
                     dash.no_update,
                     dash.no_update,
                     dash.no_update,
-                    dash.no_update,
                 )
 
             # Handle scenarios where the user clicks/select on a graph
@@ -1086,7 +1087,6 @@ def register_callbacks_draggable(app):
                     graph_metadata = graph_metadata[0]
                 else:
                     return (
-                        dash.no_update,
                         dash.no_update,
                         dash.no_update,
                         dash.no_update,
@@ -1121,12 +1121,10 @@ def register_callbacks_draggable(app):
                                 dash.no_update,
                                 dash.no_update,
                                 dash.no_update,
-                                dash.no_update,
                             )
                         else:
                             return (
                                 draggable_children,
-                                dash.no_update,
                                 dash.no_update,
                                 dash.no_update,
                                 dash.no_update,
@@ -1158,7 +1156,6 @@ def register_callbacks_draggable(app):
                                 dash.no_update,
                                 dash.no_update,
                                 dash.no_update,
-                                dash.no_update,
                             )
                         else:
                             return (
@@ -1178,7 +1175,6 @@ def register_callbacks_draggable(app):
                             dash.no_update,
                             dash.no_update,
                             dash.no_update,
-                            dash.no_update,
                         )
 
                     else:
@@ -1187,11 +1183,9 @@ def register_callbacks_draggable(app):
                             dash.no_update,
                             dash.no_update,
                             dash.no_update,
-                            dash.no_update,
                         )
                 else:
                     return (
-                        dash.no_update,
                         dash.no_update,
                         dash.no_update,
                         dash.no_update,
@@ -1242,7 +1236,7 @@ def register_callbacks_draggable(app):
                     dashboard_id=dashboard_id,
                     theme=theme,
                 )
-                state_stored_draggable_children[dashboard_id] = new_children
+                # REMOVED: state_stored_draggable_children storage to fix localStorage quota
 
                 if new_children:
                     return (
@@ -1250,12 +1244,10 @@ def register_callbacks_draggable(app):
                         dash.no_update,
                         dash.no_update,
                         dash.no_update,
-                        dash.no_update,
                     )
                 else:
                     return (
                         draggable_children,
-                        dash.no_update,
                         dash.no_update,
                         dash.no_update,
                         dash.no_update,
@@ -1286,7 +1278,6 @@ def register_callbacks_draggable(app):
                             return (
                                 [],  # Empty children for empty dashboard
                                 current_layouts,  # Empty layouts
-                                dash.no_update,
                                 state_stored_draggable_layouts,
                                 dash.no_update,
                             )
@@ -1304,7 +1295,6 @@ def register_callbacks_draggable(app):
                         return (
                             children,
                             current_layouts,
-                            dash.no_update,
                             state_stored_draggable_layouts,
                             dash.no_update,
                         )
@@ -1314,12 +1304,10 @@ def register_callbacks_draggable(app):
                             dash.no_update,
                             dash.no_update,
                             dash.no_update,
-                            dash.no_update,
                         )
 
                 else:
                     return (
-                        dash.no_update,
                         dash.no_update,
                         dash.no_update,
                         dash.no_update,
@@ -1359,7 +1347,6 @@ def register_callbacks_draggable(app):
                 return (
                     updated_children,
                     updated_layouts,
-                    dash.no_update,
                     state_stored_draggable_layouts,
                     dash.no_update,
                 )
@@ -1408,7 +1395,6 @@ def register_callbacks_draggable(app):
                 return (
                     updated_children,
                     draggable_layouts,
-                    dash.no_update,
                     dash.no_update,
                     input_id,
                 )
@@ -1618,7 +1604,6 @@ def register_callbacks_draggable(app):
                 return (
                     updated_children,
                     draggable_layouts,
-                    dash.no_update,
                     state_stored_draggable_layouts,
                     "",
                 )
@@ -1659,7 +1644,6 @@ def register_callbacks_draggable(app):
                         dash.no_update,
                         dash.no_update,
                         dash.no_update,
-                        dash.no_update,
                     )
 
                 # CRITICAL: Check if there are multiple triggers and only process the first one
@@ -1675,7 +1659,6 @@ def register_callbacks_draggable(app):
                             f"🔍 DUPLICATE DEBUG - Skipping duplicate trigger: {current_trigger_id}"
                         )
                         return (
-                            dash.no_update,
                             dash.no_update,
                             dash.no_update,
                             dash.no_update,
@@ -1739,7 +1722,6 @@ def register_callbacks_draggable(app):
                         dash.no_update,
                         dash.no_update,
                         dash.no_update,
-                        dash.no_update,
                     )
 
                 # Generate a new unique ID for the duplicated component
@@ -1767,7 +1749,6 @@ def register_callbacks_draggable(app):
                 if metadata is None:
                     logger.warning(f"No metadata found for index {triggered_index}")
                     return (
-                        dash.no_update,
                         dash.no_update,
                         dash.no_update,
                         dash.no_update,
@@ -1916,7 +1897,6 @@ def register_callbacks_draggable(app):
                 return (
                     updated_children,
                     draggable_layouts,
-                    dash.no_update,
                     state_stored_draggable_layouts,
                     dash.no_update,
                 )
@@ -1934,7 +1914,6 @@ def register_callbacks_draggable(app):
                 return (
                     [],  # Empty children
                     empty_layouts,  # Empty layouts (list format)
-                    dash.no_update,
                     state_stored_draggable_layouts,
                     dash.no_update,
                 )
@@ -1961,7 +1940,6 @@ def register_callbacks_draggable(app):
                     dash.no_update,
                     dash.no_update,
                     dash.no_update,
-                    dash.no_update,
                 )
             elif triggered_input == "unified-edit-mode-button":
                 logger.info(f"Unified edit mode button clicked: {unified_edit_mode_button}")
@@ -1977,7 +1955,6 @@ def register_callbacks_draggable(app):
                 return (
                     draggable_children,  # Keep existing children unchanged
                     draggable_layouts,  # Keep existing layouts unchanged
-                    dash.no_update,  # Don't update stored children
                     dash.no_update,  # Don't update stored layouts
                     dash.no_update,  # Don't update edit parent index
                 )
@@ -1990,12 +1967,10 @@ def register_callbacks_draggable(app):
                     dash.no_update,
                     dash.no_update,
                     dash.no_update,
-                    dash.no_update,
                 )
 
         else:
             return (
-                dash.no_update,
                 dash.no_update,
                 dash.no_update,
                 dash.no_update,
@@ -2018,11 +1993,15 @@ def register_callbacks_draggable(app):
         Output("test-output", "children"),
         Output("stored-add-button", "data"),
         Output("initialized-add-button", "data"),
+        Output("notes-footer-content", "className", allow_duplicate=True),
+        Output("page-content", "className", allow_duplicate=True),
         # Output("initialized-edit-button", "data"),
         Input("add-button", "n_clicks"),
         # Input({"type": "edit-box-button", "index": ALL}, "n_clicks"),
         State("stored-add-button", "data"),
         State("initialized-add-button", "data"),
+        State("notes-footer-content", "className"),
+        State("page-content", "className"),
         # State("initialized-edit-button", "data"),
         prevent_initial_call=True,
     )
@@ -2031,6 +2010,8 @@ def register_callbacks_draggable(app):
         #   edit_button_nclicks,
         stored_add_button,
         initialized_add_button,
+        current_footer_class,
+        current_page_class,
         # initialized_edit_button,
     ):
         # logger.info("\n\nTrigger modal")
@@ -2042,7 +2023,7 @@ def register_callbacks_draggable(app):
 
         if not initialized_add_button:
             logger.info("Initializing add button")
-            return dash.no_update, dash.no_update, True
+            return dash.no_update, dash.no_update, True, dash.no_update, dash.no_update
             # return dash.no_update, dash.no_update, True, dash.no_update
 
         # if not initialized_edit_button:
@@ -2052,7 +2033,7 @@ def register_callbacks_draggable(app):
         if add_button_nclicks is None:
             logger.info("No clicks detected")
             # return dash.no_update, dash.no_update, True, dash.no_update
-            return dash.no_update, dash.no_update, dash.no_update
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         # if edit_button_nclicks is None:
         #     logger.info("No clicks detected")
@@ -2072,7 +2053,33 @@ def register_callbacks_draggable(app):
 
             current_draggable_children = add_new_component(str(index))
 
-            return current_draggable_children, stored_add_button, True
+            # Close notes footer when add-button is clicked
+            # If footer is visible or fullscreen, hide it completely
+            current_footer_class = current_footer_class or ""
+            current_page_class = current_page_class or ""
+
+            if (
+                "footer-visible" in current_footer_class
+                or "footer-fullscreen" in current_footer_class
+            ):
+                # Hide footer completely
+                new_footer_class = ""
+                new_page_class = current_page_class.replace("notes-fullscreen", "").strip()
+                logger.info(
+                    f"Closing notes footer when add-button clicked. Footer: '{new_footer_class}', Page: '{new_page_class}'"
+                )
+            else:
+                # Footer already hidden, no change needed
+                new_footer_class = current_footer_class
+                new_page_class = current_page_class
+
+            return (
+                current_draggable_children,
+                stored_add_button,
+                True,
+                new_footer_class,
+                new_page_class,
+            )
             # return current_draggable_children, stored_add_button, True, dash.no_update
 
         # elif "edit-box-button" in triggered_input:
@@ -2084,7 +2091,7 @@ def register_callbacks_draggable(app):
         #     return current_draggable_children, stored_add_button, dash.no_update, True
         else:
             logger.warning(f"Unexpected triggered_input: {triggered_input}")
-            return dash.no_update, dash.no_update, dash.no_update
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
     @app.callback(
         Output("interactive-values-store", "data"),
