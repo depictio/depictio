@@ -532,6 +532,7 @@ def register_callbacks_figure_component(app):
         [
             Input({"type": "dict_kwargs", "index": MATCH}, "data"),
             Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
+            Input({"type": "figure-mode-store", "index": MATCH}, "data"),  # Trigger on mode changes
             State("theme-store", "data"),  # Keep as State - theme handled separately
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
@@ -539,7 +540,6 @@ def register_callbacks_figure_component(app):
             State("current-edit-parent-index", "data"),  # Retrieve parent_index
             State("local-store", "data"),
             State("url", "pathname"),
-            State({"type": "figure-mode-store", "index": MATCH}, "data"),
             State({"type": "stored-metadata-component", "index": MATCH}, "data"),
         ],
         prevent_initial_call=True,
@@ -547,14 +547,14 @@ def register_callbacks_figure_component(app):
     def update_figure(*args):
         dict_kwargs = args[0]
         visu_type_label = args[1]  # This is now the visualization name from dropdown
-        theme_data = args[2]  # Theme is 3rd in the State list
-        workflow_id = args[3]
-        data_collection_id = args[4]
-        component_id_dict = args[5]
-        parent_index = args[6]
-        local_data = args[7]
-        pathname = args[8]
-        current_mode = args[9]  # Current mode from figure-mode-store
+        current_mode = args[2]  # Current mode from figure-mode-store (now Input)
+        theme_data = args[3]  # Theme is 4th in the State list
+        workflow_id = args[4]
+        data_collection_id = args[5]
+        component_id_dict = args[6]
+        parent_index = args[7]
+        local_data = args[8]
+        pathname = args[9]
         stored_metadata = args[10]  # Stored metadata containing code_content
 
         logger.info("=== UPDATE FIGURE CALLBACK ===")
@@ -1288,19 +1288,48 @@ def register_callbacks_figure_component(app):
         [
             State({"type": "dict_kwargs", "index": MATCH}, "data"),
             State({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
+            State({"type": "code-content-store", "index": MATCH}, "data"),
+            State({"type": "stored-metadata-component", "index": MATCH}, "data"),
         ],
         prevent_initial_call=False,
     )
-    def store_generated_code(mode, dict_kwargs, visu_type_label):
+    def store_generated_code(
+        mode, dict_kwargs, visu_type_label, current_code_content, stored_metadata
+    ):
         """Store generated code when switching to code mode"""
 
         logger.info("=== store_generated_code CALLBACK CALLED ===")
         logger.info(f"Mode: {mode}")
         logger.info(f"Dict kwargs: {dict_kwargs}")
         logger.info(f"Visualization type label: {visu_type_label}")
+        logger.info(f"Current code content: {bool(current_code_content)}")
+        logger.info(
+            f"Stored metadata code: {bool(stored_metadata and stored_metadata.get('code_content'))}"
+        )
 
         if mode == "code":
-            logger.info("Switching to code mode, generating code from UI parameters")
+            # Check if we already have existing code content - preserve it!
+            existing_code = None
+
+            # Priority 1: stored metadata code_content (from saved component)
+            if stored_metadata and isinstance(stored_metadata, dict):
+                metadata_code = stored_metadata.get("code_content", "")
+                if metadata_code and metadata_code.strip():
+                    existing_code = metadata_code
+                    logger.info("Using existing code from stored metadata")
+
+            # Priority 2: current code content store
+            if not existing_code and current_code_content and current_code_content.strip():
+                existing_code = current_code_content
+                logger.info("Using existing code from code content store")
+
+            # If we have existing code, preserve it
+            if existing_code:
+                logger.info("Preserving existing code content, not generating new code")
+                return existing_code
+
+            # Only generate new code if no existing code
+            logger.info("No existing code found, generating code from UI parameters")
             if dict_kwargs:
                 # visu_type_label is now the visualization name (lowercase) from dropdown
                 visu_type = "scatter"  # Default fallback
@@ -1316,8 +1345,9 @@ def register_callbacks_figure_component(app):
                 if generated_code:
                     return generated_code
             else:
-                logger.info("No dict_kwargs, returning template")
-                return "# Add your Plotly code here\n# Available: df (DataFrame), px (plotly.express), go (plotly.graph_objects)\n# Example:\n# fig = px.scatter(df, x='your_x_column', y='your_y_column')"
+                logger.info("No dict_kwargs, returning executable template")
+                # Return a more executable default template
+                return "# Example: Basic scatter plot\nfig = px.scatter(df, x=df.columns[0] if len(df.columns) > 0 else None, y=df.columns[1] if len(df.columns) > 1 else None)"
 
         logger.info("Not in code mode, returning no_update")
         return dash.no_update
@@ -1335,8 +1365,16 @@ def register_callbacks_figure_component(app):
         """Update code editor from stored code or clear button"""
 
         ctx = dash.callback_context
+
+        # Handle initial load (no trigger) - load stored code if available
         if not ctx.triggered:
-            return dash.no_update
+            logger.info(f"=== update_code_editor INITIAL LOAD: stored_code={stored_code} ===")
+            if stored_code:
+                logger.info("Loading initial code content into Ace editor")
+                return stored_code
+            else:
+                logger.info("No initial code content, keeping empty editor")
+                return ""
 
         triggered_prop = ctx.triggered[0]["prop_id"]
         logger.info(f"=== update_code_editor TRIGGERED by: {triggered_prop} ===")
@@ -1398,7 +1436,86 @@ def register_callbacks_figure_component(app):
 
         return dash.no_update
 
-    # Code execution callback
+    # Automatic code execution when switching to code mode with existing code
+    @app.callback(
+        [
+            Output({"type": "code-generated-figure", "index": MATCH}, "data", allow_duplicate=True),
+            Output({"type": "code-status", "index": MATCH}, "children", allow_duplicate=True),
+            Output({"type": "code-status", "index": MATCH}, "color", allow_duplicate=True),
+            Output({"type": "code-status", "index": MATCH}, "title", allow_duplicate=True),
+        ],
+        [
+            Input({"type": "figure-mode-store", "index": MATCH}, "data"),
+        ],
+        [
+            State({"type": "code-content-store", "index": MATCH}, "data"),
+            State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State("local-store", "data"),
+        ],
+        prevent_initial_call="initial_duplicate",  # Required for allow_duplicate with initial calls
+    )
+    def auto_execute_code_on_mode_switch(
+        mode, stored_code, workflow_id, data_collection_id, local_data
+    ):
+        """Automatically execute code when switching to code mode with existing code"""
+        logger.info(f"=== AUTO CODE EXECUTION: mode={mode}, has_code={bool(stored_code)} ===")
+
+        # Only auto-execute when switching to code mode and we have meaningful code
+        if mode != "code" or not stored_code or not stored_code.strip():
+            logger.info("Not executing: not in code mode or no code available")
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+        # Don't auto-execute template/placeholder code
+        if _is_placeholder_code(stored_code):
+            logger.info("Not executing: code appears to be template/placeholder")
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+        if not local_data or not workflow_id or not data_collection_id:
+            logger.info("Not executing: missing required data")
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+        try:
+            # Get dataset from actual data collection
+            from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+            TOKEN = local_data["access_token"]
+            loaded_df = load_deltatable_lite(workflow_id, data_collection_id, TOKEN=TOKEN)
+            df = loaded_df
+
+            # Execute code securely
+            from depictio.dash.modules.figure_component.simple_code_executor import (
+                SimpleCodeExecutor,
+            )
+
+            executor = SimpleCodeExecutor()
+            success, result, message = executor.execute_code(stored_code, df)
+
+            if success and result:
+                # Store the figure data with metadata for further processing
+                figure_data = {
+                    "figure": result.to_dict(),
+                    "code": stored_code,
+                    "workflow_id": workflow_id,
+                    "data_collection_id": data_collection_id,
+                }
+                logger.info("✅ Auto-executed code successfully on mode switch")
+                return (
+                    figure_data,
+                    "Code executed automatically",
+                    "green",
+                    "Auto-Execution Success",
+                )
+            else:
+                logger.warning(f"Auto-execution failed: {message}")
+                return (None, f"Auto-execution failed: {message}", "red", "Auto-Execution Error")
+
+        except Exception as e:
+            error_msg = f"Auto-execution error: {str(e)}"
+            logger.error(error_msg)
+            return (None, error_msg, "red", "Auto-Execution Error")
+
+    # Manual code execution callback (Execute button)
     @app.callback(
         [
             Output({"type": "code-generated-figure", "index": MATCH}, "data"),
