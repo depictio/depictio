@@ -15,7 +15,11 @@ from .simple_code_executor import get_code_examples
 def create_code_mode_interface(component_index: str) -> html.Div:
     """Create the code mode interface for figure creation"""
 
-    return html.Div(
+    from depictio.api.v1.configs.logging_init import logger
+
+    logger.info(f"🔧 CREATING CODE MODE INTERFACE for component: {component_index}")
+
+    interface = html.Div(
         [
             # Code editor area - flexible height container
             dmc.Stack(
@@ -304,6 +308,9 @@ def create_code_mode_interface(component_index: str) -> html.Div:
             "padding": "10px",
         },
     )
+
+    logger.info("✅ CODE MODE INTERFACE CREATED - returning interface")
+    return interface
 
 
 def convert_ui_params_to_code(dict_kwargs: Dict[str, Any], visu_type: str) -> str:
