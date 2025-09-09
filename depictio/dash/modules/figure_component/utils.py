@@ -1,3 +1,4 @@
+import ast
 import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -316,6 +317,7 @@ def render_figure(
     selected_point: Optional[Dict] = None,
     theme: str = "light",
     skip_validation: bool = False,
+    mode: str = "ui",
 ) -> Any:
     """Render a Plotly figure with robust parameter handling and result caching.
 
@@ -326,6 +328,8 @@ def render_figure(
         cutoff: Maximum data points before sampling
         selected_point: Point to highlight
         theme: Theme ('light' or 'dark')
+        skip_validation: Skip parameter validation
+        mode: Component mode ('ui' or 'code') for parameter evaluation
 
     Returns:
         Plotly figure object
@@ -440,15 +444,57 @@ def render_figure(
     for param_name in json_params:
         if param_name in cleaned_kwargs and isinstance(cleaned_kwargs[param_name], str):
             try:
+                # First try JSON parsing
                 parsed_value = json.loads(cleaned_kwargs[param_name])
                 cleaned_kwargs[param_name] = parsed_value
                 logger.debug(f"Parsed JSON parameter {param_name}: {cleaned_kwargs[param_name]}")
-            except json.JSONDecodeError as e:
-                logger.warning(
-                    f"Invalid JSON for parameter {param_name}: {cleaned_kwargs[param_name]} - {e}"
-                )
-                # Remove invalid JSON parameter to avoid Plotly errors
-                del cleaned_kwargs[param_name]
+            except json.JSONDecodeError:
+                # Check if this looks like a complex Python expression (contains function calls)
+                param_value = cleaned_kwargs[param_name]
+                if any(
+                    pattern in param_value
+                    for pattern in ["(", ".", "sorted", "unique", "to_list", "df["]
+                ):
+                    if mode == "code" and df is not None:
+                        # In code mode, try to evaluate the expression with df available
+                        try:
+                            from depictio.dash.modules.figure_component.code_mode import (
+                                evaluate_params_in_context,
+                            )
+
+                            temp_params = {param_name: param_value}
+                            evaluated_params = evaluate_params_in_context(temp_params, df)
+                            if param_name in evaluated_params:
+                                cleaned_kwargs[param_name] = evaluated_params[param_name]
+                                logger.info(
+                                    f"Evaluated code mode parameter {param_name}: {param_value} -> {evaluated_params[param_name]}"
+                                )
+                                continue
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to evaluate code mode parameter {param_name}: {e}"
+                            )
+
+                    logger.info(
+                        f"Skipping complex Python expression for {param_name}: {param_value}"
+                    )
+                    # Remove complex expressions that can't be safely evaluated
+                    del cleaned_kwargs[param_name]
+                    continue
+
+                try:
+                    # Fallback to ast.literal_eval for simple Python literal expressions
+                    parsed_value = ast.literal_eval(param_value)
+                    cleaned_kwargs[param_name] = parsed_value
+                    logger.debug(
+                        f"Parsed Python literal parameter {param_name}: {cleaned_kwargs[param_name]}"
+                    )
+                except (ValueError, SyntaxError) as e:
+                    logger.warning(
+                        f"Invalid parameter format for {param_name}: {param_value} - {e}"
+                    )
+                    # Remove invalid parameter to avoid Plotly errors
+                    del cleaned_kwargs[param_name]
 
     # PERFORMANCE OPTIMIZATION: Reduce verbose logging in production
     logger.debug("=== CLEANED PARAMETERS DEBUG ===")
@@ -1100,10 +1146,15 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
                 df_for_figure = df
 
             figure = render_figure(
-                validated_kwargs, visu_type, df_for_figure, theme=theme, skip_validation=True
+                validated_kwargs,
+                visu_type,
+                df_for_figure,
+                theme=theme,
+                skip_validation=True,
+                mode="code",
             )
         else:
-            figure = render_figure(validated_kwargs, visu_type, df, theme=theme)
+            figure = render_figure(validated_kwargs, visu_type, df, theme=theme, mode="ui")
 
         logger.info(f"render_figure SUCCESS: figure type = {type(figure)}")
     except Exception as e:

@@ -1163,7 +1163,6 @@ def register_callbacks_draggable(app):
                                 dash.no_update,
                                 dash.no_update,
                                 dash.no_update,
-                                dash.no_update,
                             )
 
                     # Handle scenarios where the user relayouts the graph
@@ -1365,7 +1364,15 @@ def register_callbacks_draggable(app):
                 if component_data:
                     component_data["parent_index"] = input_id
                 else:
-                    component_data = {"parent_index": input_id}
+                    # Fallback component data when component is not found in backend
+                    # Default to figure component since that's the most common case
+                    component_data = {
+                        "parent_index": input_id,
+                        "component_type": "figure",  # Required by stepper.py
+                        "mode": "ui",  # Default mode
+                        "dict_kwargs": {},  # Default parameters
+                        "visu_type": "scatter",  # Default visualization
+                    }
 
                 new_id = generate_unique_index()
                 edited_modal = edit_component(

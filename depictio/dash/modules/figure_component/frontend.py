@@ -14,6 +14,7 @@ from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
 from depictio.dash.modules.figure_component.code_mode import (
     convert_ui_params_to_code,
     create_code_mode_interface,
+    evaluate_params_in_context,
     extract_params_from_code,
     extract_visualization_type_from_code,
 )
@@ -1269,7 +1270,16 @@ def register_callbacks_figure_component(app):
             # Switch to UI mode interface
             ui_content_style = {"display": "block"}
             code_content_style = {"display": "none"}
-            code_interface_children = []
+            # Create hidden code-status component to ensure callbacks work
+            code_interface_children = [
+                dmc.Alert(
+                    id={"type": "code-status", "index": component_index},
+                    title="UI Mode",
+                    color="blue",
+                    children="Component in UI mode",
+                    style={"display": "none"},  # Hidden in UI mode
+                )
+            ]
             logger.info(f"Switched to UI MODE for {component_index}")
 
         return (
@@ -1461,6 +1471,22 @@ def register_callbacks_figure_component(app):
         """Automatically execute code when switching to code mode with existing code"""
         logger.info(f"=== AUTO CODE EXECUTION: mode={mode}, has_code={bool(stored_code)} ===")
 
+        # Get component index to check if it's a stepper component
+        ctx = dash.callback_context
+        component_index = "unknown"
+        try:
+            if ctx.outputs_list:
+                output_id = ctx.outputs_list[0]["id"]
+                if isinstance(output_id, dict):
+                    component_index = output_id.get("index", "unknown")
+        except Exception:
+            pass
+
+        # Skip auto-execution for stepper components (they don't have code interface yet)
+        if component_index.endswith("-tmp"):
+            logger.info(f"Skipping auto-execution for stepper component: {component_index}")
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
         # Only auto-execute when switching to code mode and we have meaningful code
         if mode != "code" or not stored_code or not stored_code.strip():
             logger.info("Not executing: not in code mode or no code available")
@@ -1585,6 +1611,10 @@ def register_callbacks_figure_component(app):
                 extracted_params = extract_params_from_code(code)
                 logger.info(f"Extracted parameters from executed code: {extracted_params}")
 
+                # Evaluate parameters that reference df in the execution context
+                evaluated_params = evaluate_params_in_context(extracted_params, df)
+                logger.info(f"Evaluated parameters with df context: {evaluated_params}")
+
                 # Store the figure data with metadata for further processing
                 figure_data = {
                     "figure": result.to_dict(),
@@ -1600,7 +1630,7 @@ def register_callbacks_figure_component(app):
                     "Code executed successfully!",
                     "green",
                     "Success",
-                    extracted_params,
+                    evaluated_params,
                 )
             else:
                 return (None, message, "red", "Error", dash.no_update)
@@ -1726,6 +1756,10 @@ def register_callbacks_figure_component(app):
                 "last_updated": datetime.now().isoformat(),
             }
         )
+
+        # Ensure parent_index is always present (required by draggable.py)
+        if "parent_index" not in metadata:
+            metadata["parent_index"] = None
 
         # Only update these fields if we have new data from code mode
         if code:
@@ -2327,6 +2361,7 @@ def design_figure(id, component_data=None):
                 "mode": component_data.get("mode", "ui") if component_data else "ui",
                 "code_content": component_data.get("code_content", "") if component_data else "",
                 "last_updated": component_data.get("last_updated") if component_data else None,
+                "parent_index": component_data.get("parent_index") if component_data else None,
             },
             storage_type="memory",
         ),

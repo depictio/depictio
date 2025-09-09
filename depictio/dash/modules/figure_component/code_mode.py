@@ -6,8 +6,11 @@ from typing import Any, Dict
 
 import dash_ace
 import dash_mantine_components as dmc
+import polars as pl
 from dash import html
 from dash_iconify import DashIconify
+
+from depictio.api.v1.configs.logging_init import logger
 
 from .simple_code_executor import get_code_examples
 
@@ -576,3 +579,37 @@ def extract_params_from_code(code: str) -> Dict[str, Any]:
                     params[param_name] = param_value
 
     return params
+
+
+def evaluate_params_in_context(params: Dict[str, Any], df: pl.DataFrame) -> Dict[str, Any]:
+    """Evaluate parameter expressions that contain references to df in the execution context"""
+
+    evaluated_params = {}
+    for param_name, param_value in params.items():
+        if isinstance(param_value, str) and ("df[" in param_value or "sorted(" in param_value):
+            try:
+                # Create a safe execution environment with df available
+                safe_globals = {
+                    "__builtins__": {
+                        "len": len,
+                        "list": list,
+                        "set": set,
+                        "sorted": sorted,
+                        "min": min,
+                        "max": max,
+                    },
+                    "df": df,
+                }
+                # Evaluate the expression in the safe context
+                evaluated_value = eval(param_value, safe_globals, {})
+                evaluated_params[param_name] = evaluated_value
+                logger.info(f"Evaluated parameter {param_name}: {param_value} -> {evaluated_value}")
+            except Exception as e:
+                logger.warning(f"Could not evaluate parameter {param_name}: {param_value} - {e}")
+                # Keep original value if evaluation fails
+                evaluated_params[param_name] = param_value
+        else:
+            # Keep non-expression parameters as-is
+            evaluated_params[param_name] = param_value
+
+    return evaluated_params
