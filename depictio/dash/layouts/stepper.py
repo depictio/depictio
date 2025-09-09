@@ -58,13 +58,28 @@ def register_callbacks_stepper(app):
 
     @app.callback(
         Output({"type": "modal-edit", "index": MATCH}, "opened"),
-        [Input({"type": "btn-done-edit", "index": MATCH}, "n_clicks")],
+        [
+            Input({"type": "btn-done-edit", "index": MATCH}, "n_clicks"),
+            Input({"type": "modal-edit", "index": MATCH}, "opened"),
+        ],
         prevent_initial_call=True,
     )
-    def close_edit_modal(n_clicks):
-        if n_clicks and n_clicks > 0:
-            return False
-        return True
+    def close_edit_modal(n_clicks, modal_opened):
+        if not ctx.triggered:
+            return True
+
+        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+
+        # If done button was clicked, close modal
+        if "btn-done-edit" in trigger_id:
+            if n_clicks and n_clicks > 0:
+                logger.info("🔚 EDIT MODAL - Done button clicked, closing modal")
+                return False
+
+        # For modal state changes, let the draggable callback handle restoration
+        # Just return the current state without interfering
+        logger.info(f"🔚 EDIT MODAL - Modal state passthrough: {modal_opened}")
+        return modal_opened
 
     @app.callback(
         Output({"type": "workflow-selection-label", "index": MATCH}, "data"),
