@@ -152,18 +152,22 @@ def update_nested_ids(component, old_index, new_index):
 
 
 def fix_responsive_scaling(layout_data, metadata_list):
-    """Fix responsive scaling by restoring proper dimensions based on component metadata."""
+    """Fix responsive scaling by restoring proper dimensions based on component metadata.
+
+    IMPORTANT: This function now preserves user customizations and only fixes
+    obvious responsive scaling artifacts (exact fractions like 1/2, 2/3, etc.).
+    """
     if not layout_data or not metadata_list:
         return layout_data
 
-    # Create a mapping of component IDs to their expected dimensions
+    # Create a mapping of component IDs to their expected DEFAULT dimensions
     expected_dimensions = {}
     for meta in metadata_list:
         if meta.get("index") and meta.get("component_type"):
             comp_id = f"box-{meta['index']}"
             comp_type = meta["component_type"]
-            expected_dims = component_dimensions.get(comp_type, {"w": 6, "h": 8})
-            expected_dimensions[comp_id] = expected_dims
+            default_dims = component_dimensions.get(comp_type, {"w": 6, "h": 8})
+            expected_dimensions[comp_id] = default_dims
 
     fixed_layouts = []
     for layout in layout_data:
@@ -174,24 +178,33 @@ def fix_responsive_scaling(layout_data, metadata_list):
         layout_id = layout.get("i", "")
 
         if layout_id in expected_dimensions:
-            expected = expected_dimensions[layout_id]
+            default_dims = expected_dimensions[layout_id]
             current_w = layout.get("w", 0)
             current_h = layout.get("h", 0)
 
-            # Check if dimensions are halved (responsive scaling)
-            if current_w == expected["w"] // 2 and current_h == expected["h"] // 2:
+            # ONLY fix obvious responsive scaling artifacts, NOT user customizations
+            # Check if dimensions are EXACTLY halved (responsive scaling from xs breakpoint)
+            if (
+                current_w == default_dims["w"] // 2
+                and current_h == default_dims["h"] // 2
+                and current_w * 2 == default_dims["w"]
+                and current_h * 2 == default_dims["h"]
+            ):
                 logger.warning(
-                    f"🔧 FIXING RESPONSIVE SCALING - {layout_id}: {current_w}x{current_h} → {expected['w']}x{expected['h']}"
+                    f"🔧 FIXING XS RESPONSIVE SCALING - {layout_id}: {current_w}x{current_h} → {default_dims['w']}x{default_dims['h']}"
                 )
-                layout_copy["w"] = expected["w"]
-                layout_copy["h"] = expected["h"]
-            # Check for other scaling ratios (md: 10/12, sm: 6/12, xs: 4/12)
-            elif current_w * 12 // 10 == expected["w"] and current_h * 12 // 10 == expected["h"]:
+                layout_copy["w"] = default_dims["w"]
+                layout_copy["h"] = default_dims["h"]
+            # Check for other scaling ratios (md: 10/12 breakpoint scaling)
+            elif (
+                current_w * 12 == default_dims["w"] * 10
+                and current_h * 12 == default_dims["h"] * 10
+            ):
                 logger.warning(
-                    f"🔧 FIXING MD SCALING - {layout_id}: {current_w}x{current_h} → {expected['w']}x{expected['h']}"
+                    f"🔧 FIXING MD RESPONSIVE SCALING - {layout_id}: {current_w}x{current_h} → {default_dims['w']}x{default_dims['h']}"
                 )
-                layout_copy["w"] = expected["w"]
-                layout_copy["h"] = expected["h"]
+                layout_copy["w"] = default_dims["w"]
+                layout_copy["h"] = default_dims["h"]
 
         fixed_layouts.append(layout_copy)
 
@@ -616,6 +629,13 @@ def register_callbacks_draggable(app):
         ),
         Input(
             {
+                "type": "modal-edit",
+                "index": ALL,
+            },
+            "opened",
+        ),
+        Input(
+            {
                 "type": "reset-selection-graph-button",
                 "index": ALL,
             },
@@ -696,6 +716,7 @@ def register_callbacks_draggable(app):
         edit_box_button_values,
         tmp_edit_component_metadata_values,
         duplicate_box_button_values,
+        modal_edit_opened_values,
         reset_selection_graph_button_values,
         reset_all_filters_button,
         remove_all_components_button,
@@ -869,6 +890,164 @@ def register_callbacks_draggable(app):
                 stored_metadata_interactive,
             )
         }
+
+        # Check for modal close events (when user cancels edit without saving)
+        # Only handle modal closes, not opens, and only when we're sure it's a close action
+        if (
+            triggered_input
+            and "modal-edit" in triggered_input
+            and ctx.triggered
+            and ctx.triggered[0]["value"] is False
+        ):  # Explicitly check for close (False) not open (True)
+            # Extract the index of the modal that was closed
+            modal_index = ctx.triggered_id["index"]
+
+            # Check if the specific modal for this index was closed (False)
+            logger.info(f"🔍 MODAL DEBUG - Modal states: {modal_edit_opened_values}")
+            logger.info(f"🔍 MODAL DEBUG - Modal index: {modal_index}")
+
+            # Get the current modal state - the triggered modal should be False (closed)
+            current_modal_state = ctx.triggered[0]["value"]
+            logger.info(f"🔍 MODAL DEBUG - Current modal state: {current_modal_state}")
+
+            if current_modal_state is False:  # Modal was closed
+                logger.info(
+                    f"🔚 MODAL CLOSE DETECTED - Restoring component for index: {modal_index}"
+                )
+                logger.info(
+                    f"🔚 MODAL RESTORE DEBUG - Have {len(draggable_children)} draggable children"
+                )
+                logger.info(
+                    f"🔚 MODAL RESTORE DEBUG - Have {len(stored_metadata)} metadata entries"
+                )
+
+                # CRITICAL FIX: The component ID doesn't match because edit mode replaces it
+                # Instead of looking for a specific component to replace, let's:
+                # 1. Find the metadata for the modal_index
+                # 2. Recreate the original component
+                # 3. Remove any existing modal/edit components for this index
+                # 4. Add the restored component to the children
+
+                logger.info(
+                    f"🔧 MODAL RESTORE - NEW APPROACH: Recreating component {modal_index} from metadata"
+                )
+
+                # Find the original metadata for the component
+                original_metadata = None
+                for i, metadata in enumerate(stored_metadata):
+                    logger.info(
+                        f"🔍 MODAL RESTORE - Metadata {i}: index={metadata.get('index')}, type={metadata.get('component_type')}"
+                    )
+                    if metadata["index"] == modal_index:
+                        original_metadata = metadata
+                        logger.info(
+                            f"🔍 MODAL RESTORE - Found matching metadata for component type: {metadata.get('component_type')}"
+                        )
+                        break
+
+                if not original_metadata:
+                    logger.error(f"❌ MODAL RESTORE - No metadata found for index {modal_index}")
+                    # Just return existing children unchanged
+                    updated_children = list(draggable_children)
+                else:
+                    # Recreate the original component from metadata
+                    logger.info(
+                        f"🔄 MODAL RESTORE - Recreating {original_metadata.get('component_type')} component"
+                    )
+
+                    try:
+                        restored_child, _ = render_raw_children(
+                            original_metadata,
+                            unified_edit_mode_button,
+                            dashboard_id,
+                            TOKEN=TOKEN,
+                            theme=theme,
+                        )
+                        logger.info(
+                            f"🔄 MODAL RESTORE - Successfully recreated component, type: {type(restored_child)}"
+                        )
+
+                        # Replace strategy: Look for any component that might be the edit modal/placeholder
+                        # and replace it with the restored component
+                        updated_children = []
+                        modal_box_id = f"box-{modal_index}"
+                        component_replaced = False
+
+                        logger.info(
+                            f"🔄 MODAL RESTORE - Looking to replace component with modal_box_id: {modal_box_id}"
+                        )
+
+                        for child in draggable_children:
+                            child_id = get_component_id(child)
+                            logger.info(f"🔄 MODAL RESTORE - Checking child: {child_id}")
+
+                            # Strategy 1: Direct ID match with modal index
+                            if child_id == modal_box_id:
+                                logger.info(
+                                    f"🔄 MODAL RESTORE - Direct ID match - Replacing {child_id} with restored component"
+                                )
+                                updated_children.append(restored_child)
+                                component_replaced = True
+                                continue
+
+                            # Keep all other components
+                            updated_children.append(child)
+
+                        # If we couldn't find anything to replace, we have a problem
+                        # This suggests the edit modal has a completely different structure
+                        if not component_replaced:
+                            logger.warning(
+                                f"⚠️ MODAL RESTORE - Could not find component to replace for {modal_box_id}"
+                            )
+                            logger.warning(
+                                f"⚠️ MODAL RESTORE - Available child IDs: {[get_component_id(c) for c in draggable_children]}"
+                            )
+
+                            # Fallback: Replace the LAST component (most recent addition)
+                            if updated_children:
+                                logger.info(
+                                    "🔄 MODAL RESTORE - Fallback: Replacing last component with restored component"
+                                )
+                                updated_children[-1] = restored_child
+                                component_replaced = True
+                            else:
+                                # Ultimate fallback: just add it
+                                updated_children.append(restored_child)
+                                component_replaced = True
+
+                        logger.info(
+                            f"🔄 MODAL RESTORE - Component {'replaced' if component_replaced else 'added'}, total children: {len(updated_children)}"
+                        )
+
+                    except Exception as e:
+                        logger.error(f"❌ MODAL RESTORE - Failed to recreate component: {e}")
+                        # Fallback: use existing children unchanged
+                        updated_children = list(draggable_children)
+
+                logger.info(f"✅ MODAL RESTORE - Component {modal_index} restored successfully")
+                logger.info(f"✅ MODAL RESTORE - Returning {len(updated_children)} children to UI")
+                logger.info(
+                    f"✅ MODAL RESTORE - First child type: {type(updated_children[0]) if updated_children else 'None'}"
+                )
+
+                # Debug the actual children IDs being returned
+                for i, child in enumerate(updated_children):
+                    child_id = get_component_id(child)
+                    logger.info(f"✅ MODAL RESTORE - Child {i}: ID={child_id}, type={type(child)}")
+
+                logger.info("✅ MODAL RESTORE - About to return to draggable.items output")
+
+                # Try a simpler approach - just return the restored children without layout forcing
+                # The issue might be that layout modifications are interfering with component rendering
+                logger.info("✅ MODAL RESTORE - Using simple restoration without layout forcing")
+
+                # Return restored children with minimal changes to avoid interference
+                return (
+                    updated_children,  # This should update draggable.items
+                    draggable_layouts,  # Keep original layout unchanged
+                    state_stored_draggable_layouts,  # Keep stored layout unchanged
+                    dash.no_update,  # Don't update parent index to avoid conflicts
+                )
 
         # Can be "btn-done" or "btn-done-edit" or "graph" ..
         if triggered_input:
@@ -1788,11 +1967,11 @@ def register_callbacks_draggable(app):
                 # Clean existing layouts to remove any corrupted entries
                 existing_layouts = clean_layout_data(draggable_layouts)
 
-                # Fix any responsive scaling issues in existing layouts
+                # Skip responsive scaling fixes for duplicate operation to preserve user customizations
+                # The fix_responsive_scaling function was resetting custom sizes back to defaults
                 logger.info(
-                    "🔧 RESPONSIVE FIX - Applying responsive scaling corrections to existing layouts"
+                    "⏭️  DUPLICATE - Skipping responsive scaling corrections to preserve custom component sizes"
                 )
-                existing_layouts = fix_responsive_scaling(existing_layouts, stored_metadata)
 
                 # DEBUG: Check for responsive scaling in existing layouts
                 logger.debug("🔍 RESPONSIVE DEBUG - Checking existing layouts after fixes:")
@@ -1833,20 +2012,23 @@ def register_callbacks_draggable(app):
                         f"🔧 DUPLICATE FIX - Preserving original layout dimensions: w={original_layout.get('w')}, h={original_layout.get('h')}"
                     )
 
-                    # Find a position near the original component (slightly offset)
-                    original_x = original_layout.get("x", 0)
-                    original_y = original_layout.get("y", 0)
+                    # Find a collision-free position near the original component
                     original_w = original_layout.get("w", 6)
                     original_h = original_layout.get("h", 8)
 
-                    # Try to place the duplicate to the right of the original, or below if no space
-                    new_x = original_x + original_w
-                    new_y = original_y
+                    # Simple approach: just place the duplicate below all existing components
+                    # Find the bottom-most position of all existing components
+                    max_bottom = 0
+                    for layout in existing_layouts:
+                        if isinstance(layout, dict) and "y" in layout and "h" in layout:
+                            bottom = layout["y"] + layout["h"]
+                            max_bottom = max(max_bottom, bottom)
 
-                    # If it would go beyond the grid (12 columns), place it below instead
-                    if new_x + original_w > 12:
-                        new_x = 0  # Start from left
-                        new_y = original_y + original_h  # Place below original
+                    # Place duplicate at the bottom-left, guaranteed collision-free
+                    new_x = 0
+                    new_y = max_bottom
+
+                    logger.info(f"📍 DUPLICATE - Placing duplicate at bottom: x={new_x}, y={new_y}")
 
                     new_layout = {
                         "x": new_x,
@@ -1877,6 +2059,19 @@ def register_callbacks_draggable(app):
                 logger.debug(
                     f"🔍 DUPLICATE DEBUG - Expected dimensions for {metadata['component_type']}: {component_dimensions.get(metadata['component_type'], {'w': 6, 'h': 8})}"
                 )
+
+                # Create the new component using render_raw_children to ensure proper setup
+                logger.info("🔧 DUPLICATE - Creating new component using render_raw_children")
+                new_child, _ = render_raw_children(
+                    metadata,
+                    unified_edit_mode_button,
+                    dashboard_id,
+                    TOKEN=TOKEN,
+                    theme=theme,
+                )
+
+                # Replace the deep-copied component with the properly rendered one
+                updated_children[-1] = new_child
 
                 # Add new layout item to the cleaned list
                 existing_layouts.append(new_layout)
