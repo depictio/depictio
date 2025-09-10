@@ -550,6 +550,20 @@ def render_figure(
                     # Remove invalid column reference
                     cleaned_kwargs[param_name] = None
 
+    # Early check: if no valid plotting parameters are provided, return empty figure
+    valid_plot_params = [
+        param
+        for param, value in cleaned_kwargs.items()
+        if value is not None and value != "" and param != "template"
+    ]
+
+    if not valid_plot_params and not is_clustering:
+        logger.info(f"No valid plotting parameters for {visu_type}, returning empty figure")
+        return px.scatter(
+            template=dict_kwargs.get("template", _get_theme_template(theme)),
+            title=f"Select columns to create {visu_type} plot",
+        )
+
     try:
         if is_clustering:
             # Handle clustering visualizations (e.g., UMAP)
