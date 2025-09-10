@@ -756,7 +756,9 @@ def design_interactive(id, df):
                     "Resulting interactive component", order=5, style={"textAlign": "center"}
                 ),
                 html.Div(
-                    build_interactive_frame(index=id["index"], show_border=True),
+                    build_interactive_frame(
+                        index=id["index"], show_border=False
+                    ),  # No border in stepper mode
                     id={
                         "type": "component-container",
                         "index": id["index"],
