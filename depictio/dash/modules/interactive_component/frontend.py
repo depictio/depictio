@@ -755,14 +755,21 @@ def design_interactive(id, df):
                 dmc.Title(
                     "Resulting interactive component", order=5, style={"textAlign": "center"}
                 ),
-                html.Div(
-                    build_interactive_frame(
-                        index=id["index"], show_border=False
-                    ),  # No border in stepper mode
-                    id={
-                        "type": "component-container",
-                        "index": id["index"],
-                    },
+                # Add a Paper wrapper just for visual preview in stepper mode
+                dmc.Paper(
+                    html.Div(
+                        build_interactive_frame(
+                            index=id["index"], show_border=False
+                        ),  # No border on the actual component
+                        id={
+                            "type": "component-container",
+                            "index": id["index"],
+                        },
+                    ),
+                    withBorder=True,  # Show border on preview container
+                    radius="md",
+                    p="md",  # Add some padding for the preview
+                    style={"width": "100%"},
                 ),
             ],
             align="flex-start",  # Align to left (horizontal)

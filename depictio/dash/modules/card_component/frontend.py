@@ -388,7 +388,7 @@ def register_callbacks_card_component(app):
             # "value": v,
             "access_token": TOKEN,
             "stepper": True,  # Show border during editing
-            "build_frame": True,  # Use card frame for editing
+            "build_frame": False,  # Don't build frame - return just the content for the card-body container
             "color": color_value,
             "cols_json": cols_json,  # Pass cols_json for reference values
         }
@@ -508,12 +508,21 @@ def design_card(id, df):
         dmc.Stack(
             [
                 dmc.Title("Resulting card", order=5, style={"textAlign": "center"}),
-                html.Div(
-                    build_card_frame(index=id["index"], show_border=True),
-                    id={
-                        "type": "component-container",
-                        "index": id["index"],
-                    },
+                # Add a Paper wrapper just for visual preview in stepper mode
+                dmc.Paper(
+                    html.Div(
+                        build_card_frame(
+                            index=id["index"], show_border=False
+                        ),  # No border on actual component
+                        id={
+                            "type": "component-container",
+                            "index": id["index"],
+                        },
+                    ),
+                    withBorder=True,  # Show border on preview container
+                    radius="md",
+                    p="md",  # Add some padding for the preview
+                    style={"width": "100%"},
                 ),
             ],
             align="flex-start",  # Align to left (horizontal)

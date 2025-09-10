@@ -541,22 +541,43 @@ def build_card(**kwargs):
     card_content.append(store_component)
 
     # Create the modern card body using DMC Card component
-    new_card_body = dmc.Card(
-        children=card_content,
-        withBorder=False,
-        # shadow="sm",
-        # radius="md",
-        style={
-            "boxSizing": "content-box",
-            "height": "100%",
-            "minHeight": "120px",
-            "padding": "0",
-        },
-        id={
-            "type": "card",
-            "index": str(index),
-        },
-    )
+    # When in stepper mode without frame, use minimal styling to avoid double box
+    if stepper and not build_frame:
+        # Return card with minimal styling - no extra borders or padding
+        new_card_body = dmc.Card(
+            children=card_content,
+            withBorder=False,
+            style={
+                "boxSizing": "content-box",
+                "height": "100%",
+                "minHeight": "120px",
+                "padding": "0",
+                # Remove any styling that could create visual boundaries
+            },
+            id={
+                "type": "card",
+                "index": str(index),
+            },
+        )
+    else:
+        # Normal mode with standard card styling
+        new_card_body = dmc.Card(
+            children=card_content,
+            withBorder=False,
+            # shadow="sm",
+            # radius="md",
+            style={
+                "boxSizing": "content-box",
+                "height": "100%",
+                "minHeight": "120px",
+                "padding": "0",
+            },
+            id={
+                "type": "card",
+                "index": str(index),
+            },
+        )
+
     if not build_frame:
         return new_card_body
     else:
