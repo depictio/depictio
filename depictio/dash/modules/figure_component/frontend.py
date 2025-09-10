@@ -684,7 +684,7 @@ def register_callbacks_figure_component(app):
                 "dc_config": dc_config,
                 "access_token": TOKEN,
                 "theme": theme,
-                "build_frame": True,
+                "build_frame": False,  # Don't build frame - return just the content for stepper mode
                 "stepper": True,
             }
 

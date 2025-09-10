@@ -1184,33 +1184,90 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         build_frame,
     )
 
-    # Create figure component
-    figure_div = html.Div(
-        [
-            badges,
-            dcc.Graph(
-                figure=figure,
-                id={"type": "graph", "index": index},
-                config={
-                    "editable": True,
-                    "scrollZoom": True,
-                    "responsive": True,
-                    "displayModeBar": True,
-                },
-                className="responsive-graph",  # Add responsive graph class for vertical growing
-                # style={
-                #     "width": "100%",
-                #     "height": "100%",  # FIXED: Use full height for vertical growing
-                #     "flex": "1",  # Critical for vertical growing
-                #     "backgroundColor": "transparent",  # Fix white background issue
-                #     # "minHeight": "200px",  # Minimum height for usability
-                # },
-            ),
+    # Create the figure div with conditional Store component
+    # In stepper mode with build_frame=False, don't include Store to avoid duplication
+    figure_components = [
+        badges,
+        dcc.Graph(
+            figure=figure,
+            id={"type": "graph", "index": index},
+            config={
+                "editable": True,
+                "scrollZoom": True,
+                "responsive": True,
+                "displayModeBar": True,
+            },
+            className="responsive-graph",  # Add responsive graph class for vertical growing
+            # style={
+            #     "width": "100%",
+            #     "height": "100%",  # FIXED: Use full height for vertical growing
+            #     "flex": "1",  # Critical for vertical growing
+            #     "backgroundColor": "transparent",  # Fix white background issue
+            #     # "minHeight": "200px",  # Minimum height for usability
+            # },
+        ),
+    ]
+
+    # DUPLICATION FIX: Intelligent store creation based on component existence
+    # Check if this is a new component creation or editing existing component
+    def is_new_component(component_index, parent_index):
+        """
+        Check if this is a new component being created or an existing one being edited.
+
+        For new components:
+        - Component index might be temporary (e.g., contains "-tmp")
+        - No existing metadata in dashboard
+
+        For existing components:
+        - Component exists in the current dashboard
+        - Has persistent index and metadata
+        """
+        # If we have a parent_index, this suggests it's an edit operation on existing component
+        if parent_index and parent_index != component_index:
+            logger.info(
+                f"🔍 EDIT DETECTED: parent_index ({parent_index}) != component_index ({component_index})"
+            )
+            return False
+
+        # If index contains "-tmp", this is likely a temporary component during creation
+        if "-tmp" in str(component_index):
+            logger.info(f"🔍 NEW COMPONENT: temporary index detected ({component_index})")
+            return True
+
+        # For other cases, we could check if component exists in dashboard DB
+        # but for now, use the stepper flag as indicator of creation context
+        logger.info(f"🔍 STEPPER CONTEXT: stepper={stepper}, assuming new component")
+        return stepper
+
+    is_new = is_new_component(store_index, parent_index)
+
+    # Decision logic:
+    # 1. New components (stepper creation): ALWAYS create store
+    # 2. Edit modal (existing component): NEVER create store (design_figure already created it)
+    # 3. Dashboard restore: ALWAYS create store (no design_figure involved)
+
+    should_create_store = is_new or not stepper
+
+    logger.info(
+        f"🔍 STORE CREATION: build_frame={build_frame}, stepper={stepper}, is_new={is_new}, should_create={should_create_store}"
+    )
+
+    if should_create_store:
+        # This is new component creation or dashboard restore - store is needed
+        logger.info(f"✅ CREATING STORE: stored-metadata-component for index {store_index}")
+        figure_components.append(
             dcc.Store(
                 data=store_component_data,
                 id={"type": "stored-metadata-component", "index": store_index},
-            ),
-        ],
+            )
+        )
+    else:
+        logger.info(
+            "❌ SKIPPING STORE: Not creating stored-metadata-component (editing existing component)"
+        )
+
+    figure_div = html.Div(
+        figure_components,
         # style={
         #     "width": "100%",
         #     "height": "100%",
