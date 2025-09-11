@@ -6,13 +6,77 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.4.0-b2</summary>
+<summary>Click to expand the changelog for 0.4.0-b3</summary>
 
 ### Changes 📜
 
+#### New Features ✨
+
+* feat: Add MultiQC Controls tab with highlight and show/hide samples functionality [525eda88]
+* feat: Enhance MultiQC automation with show/hide filter functionality and UI updates [39698eed]
+* feat: Implement incremental filter updates for MultiQC patterns [5f216161]
+* feat: Add dash-dock dependency to pyproject.toml for enhanced dashboard functionality [ed414c80]
+
 #### Bug Fixes 🐛
 
-* fix: update comments for clarity and remove SpinnerCellRenderer to prevent AG Grid error [ef2ba9ca]
+* fix: enhance login feedback and validation in api_login function [267e6633]
+
+#### Improvements 🚀
+
+* refactor: Enhance value handling in interactive components to ensure proper type conversion and logging [323653f3]
+* refactor: Update dark mode tests to use MantineProvider for theme state verification [cab906c6]
+* refactor: Implement component search utility and enhance error handling for missing wf_id and dc_id in stepper output [f5ba0705]
+* refactor: Update figure component logic to avoid frame building in stepper mode and enhance store creation handling [2545153b]
+* refactor: Add early check for valid plotting parameters in render_figure to return empty figure when none are provided [1134653a]
+* refactor: Update card and interactive component rendering to enhance stepper mode visuals and improve layout consistency [d7231228]
+* refactor: Update build_interactive_frame to remove border in stepper mode for improved UI clarity [458318dc]
+* refactor: Enhance modal closing logic to handle state changes and improve user feedback [595e708f]
+* refactor: Improve responsive scaling handling to preserve user customizations and enhance duplicate component placement logic [3023d42d]
+* refactor: Enhance component data handling in draggable and figure components for improved UI interactions [559c8b53]
+* refactor: Enhance figure mode handling and auto-execute code on mode switch for improved user experience [e531aa3c]
+* refactor: Enhance logging and handle code mode in register_callbacks_figure_component for improved UI management [c777c62a]
+* refactor: Add safety checks for DataFrame in render_figure and build_figure to prevent NoneType errors [f808309d]
+* refactor: Add validation for df_modified type to ensure it is a Polars DataFrame [b2320eb9]
+* refactor: Improve parameter extraction in extract_params_from_code using AST for dynamic parsing [127981f0]
+* refactor: Enhance logging for code mode figures in render_raw_children to improve debugging [b984696b]
+* refactor: Add load_for_preview parameter to register_callbacks_stepper for improved data handling [d89abc52]
+* refactor: Enhance duplicate component handling and remove unnecessary state management to improve performance and maintainability [558a611b]
+* refactor: Remove unused layout CSS import to streamline styles [db7bf11c]
+* refactor: Enhance logging in load_deltatable_lite for better debugging and monitoring of DataFrame sizes [64313e1e]
+* refactor: Clean up imports and comment out size attribute for badges in dashboard management [c8182960]
+* refactor: Remove unused CSS for slider components to streamline styles and improve maintainability [77f544e9]
+* refactor: Update component button configurations to streamline functionality and remove unnecessary reset button [dd437f42]
+* refactor: Handle multiple components returned from design functions in modal body [1896704f]
+* refactor: Enhance offcanvas toggle functionality to manage footer visibility and page class updates [4da1d168]
+* refactor: Enhance logging for schema validation in interactive components and add border option in Paper component [172178e5]
+* refactor: Replace html.H5 with dmc.Title for improved consistency in card components [473deb53]
+* refactor: Update action icon component to include gray color for improved visibility [189013e0]
+* refactor: Update agent configuration display to use dmc.CodeHighlight for improved formatting and remove unused clipboard functionality [e260e296]
+* refactor: Update workflow card styles to use DMC-native properties for consistency [ad69e39d]
+* refactor: Update padding in AccordionPanel and Paper components to use DMC-native spacing for consistency [5dad57d1]
+* refactor: Replace Dash Bootstrap components with Dash Mantine components in figure component utilities for improved styling and layout consistency [f59330ac]
+* refactor: Refactor theme management system to use DMC-native theming; remove old theme utilities and simplify callbacks. Delete autofill test HTML file and enhance FOUC prevention styles in CSS. Add logging for main callback registration and execution. [19a92e74]
+* refactor: replace Dash Bootstrap components with Dash Mantine components across multiple files [37f12901]
+* refactor: Update layout and debug section in minimal_dash_dock_test.py for improved readability and functionality [c7b60eff]
+
+#### Other Changes 📝
+
+* Bump version: 0.4.0-b2 → 0.4.0-b3 [eb33499b]
+* Refactor components to use Dash Mantine Components (DMC) for improved theming and layout [3f79672f]
+* Refactor components to use Dash Mantine instead of Dash Bootstrap [8eeb9d30]
+* Add MultiQC clientside callback dispatcher and modular functions [a1fac181]
+* Update CHANGELOG.md for v0.4.0-b2 [71fc3708]
+* Bump version: 0.4.0-b1 → 0.4.0-b2 [fc41cb7f]
+* Add Same-Origin MultiQC Proxy Test with Automation Features [71767344]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+erCellRenderer to prevent AG Grid error [ef2ba9ca]
 * fix: ensure className is a string before checking for dash-debug-menu in MutationObserver [371892ae]
 * fix: change default value of disable_theme_animations to True in PerformanceConfig [a2e13b59]
 * fix: update tag pattern for stable releases in multi-arch build workflow [2691f934]
