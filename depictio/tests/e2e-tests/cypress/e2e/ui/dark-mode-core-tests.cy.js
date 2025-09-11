@@ -24,21 +24,22 @@ describe('Dark Mode Core Functionality', () => {
   })
 
   it('should toggle between light and dark modes', () => {
-    // Check current theme state
-    cy.get('body').then(($body) => {
-      const isDarkMode = $body.hasClass('theme-dark')
-      cy.log(`Current theme: ${isDarkMode ? 'dark' : 'light'}`)
+    // Check current theme state via MantineProvider's data-mantine-color-scheme
+    cy.get('[data-mantine-color-scheme]').then(($element) => {
+      const currentScheme = $element.attr('data-mantine-color-scheme')
+      const isDarkMode = currentScheme === 'dark'
+      cy.log(`Current theme: ${currentScheme}`)
 
       // Toggle theme
       cy.get('label[for="theme-switch"]').click()
       cy.wait(1000)
 
-      // Verify theme changed
+      // Verify theme changed via MantineProvider attribute
       if (isDarkMode) {
-        cy.get('body').should('have.class', 'theme-light')
+        cy.get('[data-mantine-color-scheme]').should('have.attr', 'data-mantine-color-scheme', 'light')
         cy.get('#theme-switch').should('not.be.checked')
       } else {
-        cy.get('body').should('have.class', 'theme-dark')
+        cy.get('[data-mantine-color-scheme]').should('have.attr', 'data-mantine-color-scheme', 'dark')
         cy.get('#theme-switch').should('be.checked')
       }
 
@@ -51,19 +52,19 @@ describe('Dark Mode Core Functionality', () => {
 
       // Verify original state restored
       if (isDarkMode) {
-        cy.get('body').should('have.class', 'theme-dark')
+        cy.get('[data-mantine-color-scheme]').should('have.attr', 'data-mantine-color-scheme', 'dark')
         cy.get('#theme-switch').should('be.checked')
       } else {
-        cy.get('body').should('have.class', 'theme-light')
+        cy.get('[data-mantine-color-scheme]').should('have.attr', 'data-mantine-color-scheme', 'light')
         cy.get('#theme-switch').should('not.be.checked')
       }
     })
   })
 
   it('should persist theme after page reload', () => {
-    // Get initial theme state
-    cy.get('body').then(($body) => {
-      const initialTheme = $body.hasClass('theme-dark') ? 'dark' : 'light'
+    // Get initial theme state from MantineProvider
+    cy.get('[data-mantine-color-scheme]').then(($element) => {
+      const initialTheme = $element.attr('data-mantine-color-scheme') || 'light'
 
       // Toggle to opposite theme
       cy.get('label[for="theme-switch"]').click()
@@ -71,14 +72,14 @@ describe('Dark Mode Core Functionality', () => {
 
       // Verify theme changed
       const expectedNewTheme = initialTheme === 'dark' ? 'light' : 'dark'
-      cy.get('body').should('have.class', `theme-${expectedNewTheme}`)
+      cy.get('[data-mantine-color-scheme]').should('have.attr', 'data-mantine-color-scheme', expectedNewTheme)
 
       // Reload the page
       cy.reload()
       cy.wait(2000)
 
       // Verify new theme persists
-      cy.get('body').should('have.class', `theme-${expectedNewTheme}`)
+      cy.get('[data-mantine-color-scheme]').should('have.attr', 'data-mantine-color-scheme', expectedNewTheme)
 
       if (expectedNewTheme === 'dark') {
         cy.get('#theme-switch').should('be.checked')
@@ -92,9 +93,10 @@ describe('Dark Mode Core Functionality', () => {
   })
 
   it('should update logo based on theme', () => {
-    // Get current theme and verify correct logo
-    cy.get('body').then(($body) => {
-      const isDarkMode = $body.hasClass('theme-dark')
+    // Get current theme from MantineProvider and verify correct logo
+    cy.get('[data-mantine-color-scheme]').then(($element) => {
+      const currentScheme = $element.attr('data-mantine-color-scheme') || 'light'
+      const isDarkMode = currentScheme === 'dark'
       const expectedLogo = isDarkMode ? 'logo_white.svg' : 'logo_black.svg'
 
       // Verify current logo matches theme
