@@ -504,7 +504,7 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
         children=[
             dmc.Select(
                 id={"type": "workflow-selection-label", "index": n},
-                value=component_data["wf_id"],
+                value=component_data.get("wf_id", ""),
                 label=dmc.Group(
                     [
                         DashIconify(icon="flat-color-icons:workflow", width=20),
@@ -519,7 +519,7 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
                     "type": "datacollection-selection-label",
                     "index": n,
                 },
-                value=component_data["dc_id"],
+                value=component_data.get("dc_id", ""),
                 label=dmc.Group(
                     [
                         DashIconify(icon="bxs:data", width=20),
@@ -535,7 +535,18 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
 
     # logger.info(f"Select row: {select_row}")
 
-    df = load_deltatable_lite(component_data["wf_id"], component_data["dc_id"], TOKEN=TOKEN)
+    # Defensive handling for missing wf_id/dc_id
+    wf_id = component_data.get("wf_id")
+    dc_id = component_data.get("dc_id")
+
+    if wf_id and dc_id:
+        df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
+    else:
+        logger.warning(f"Missing wf_id or dc_id in component_data: wf_id={wf_id}, dc_id={dc_id}")
+        # Return empty dataframe as fallback
+        import polars as pl
+
+        df = pl.DataFrame()
     # logger.info(f"DF: {df}")
 
     def return_design_component(component_selected, id, df):

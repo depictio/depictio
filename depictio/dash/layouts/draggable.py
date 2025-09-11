@@ -344,6 +344,42 @@ def clean_stored_metadata(stored_metadata):
     return stored_metadata
 
 
+def find_component_by_type(component, target_type, target_index):
+    """
+    Recursively search for a component with specific type and index in the component tree.
+
+    Args:
+        component: The component to search within
+        target_type: The type of component to find (e.g., "stored-metadata-component")
+        target_index: The index to match
+
+    Returns:
+        List of matching components
+    """
+    matches = []
+
+    # Check if this is the component we're looking for
+    if hasattr(component, "id") and isinstance(component.id, dict):
+        if component.id.get("type") == target_type and component.id.get("index") == target_index:
+            # Extract the data from the Store component
+            if hasattr(component, "data"):
+                matches.append({"data": component.data})
+
+    # Recursively search children
+    if hasattr(component, "children"):
+        children = component.children
+        if children is not None:
+            # Handle both single child and list of children
+            if not isinstance(children, list):
+                children = [children]
+
+            for child in children:
+                if child is not None:
+                    matches.extend(find_component_by_type(child, target_type, target_index))
+
+    return matches
+
+
 def register_callbacks_draggable(app):
     @app.callback(
         Output("local-store-components-metadata", "data"),
@@ -1544,14 +1580,60 @@ def register_callbacks_draggable(app):
                     component_data["parent_index"] = input_id
                 else:
                     # Fallback component data when component is not found in backend
-                    # Default to figure component since that's the most common case
+                    # Try to get metadata from the current component's stored-metadata-component
+                    logger.warning(
+                        f"Component {input_id} not found in backend, creating fallback data"
+                    )
+
+                    # Try to find the component's stored metadata in the current page
+                    stored_metadata = None
+                    try:
+                        # Look for stored-metadata-component with matching index in the current draggable children
+                        for child in draggable_children:
+                            if hasattr(child, "children") and child.children:
+                                metadata_stores = find_component_by_type(
+                                    child, "stored-metadata-component", input_id
+                                )
+                                if metadata_stores:
+                                    stored_metadata = (
+                                        metadata_stores[0].get("data", {})
+                                        if metadata_stores
+                                        else None
+                                    )
+                                    logger.info(
+                                        f"Found stored metadata for {input_id}: {stored_metadata}"
+                                    )
+                                    break
+                    except Exception as e:
+                        logger.error(f"Error searching for stored metadata: {e}")
+
+                    # Build fallback data with as much information as possible
                     component_data = {
                         "parent_index": input_id,
-                        "component_type": "figure",  # Required by stepper.py
-                        "mode": "ui",  # Default mode
-                        "dict_kwargs": {},  # Default parameters
-                        "visu_type": "scatter",  # Default visualization
+                        "component_type": stored_metadata.get("component_type", "figure")
+                        if stored_metadata
+                        else "figure",
+                        "mode": stored_metadata.get("mode", "ui") if stored_metadata else "ui",
+                        "dict_kwargs": stored_metadata.get("dict_kwargs", {})
+                        if stored_metadata
+                        else {},
+                        "visu_type": stored_metadata.get("visu_type", "scatter")
+                        if stored_metadata
+                        else "scatter",
                     }
+
+                    # CRITICAL: Add wf_id and dc_id from stored metadata if available
+                    if stored_metadata:
+                        if "wf_id" in stored_metadata:
+                            component_data["wf_id"] = stored_metadata["wf_id"]
+                        if "dc_id" in stored_metadata:
+                            component_data["dc_id"] = stored_metadata["dc_id"]
+                        if "dc_config" in stored_metadata:
+                            component_data["dc_config"] = stored_metadata["dc_config"]
+                        if "code_content" in stored_metadata:
+                            component_data["code_content"] = stored_metadata["code_content"]
+
+                    logger.info(f"Fallback component_data created: {component_data}")
 
                 new_id = generate_unique_index()
                 edited_modal = edit_component(
