@@ -1,13 +1,11 @@
 import math
 
-import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import numpy as np
 import pandas as pd
 import polars as pl
 from bson import ObjectId
-
-from dash import dcc, html
+from dash import dcc
 
 # PERFORMANCE OPTIMIZATION: Use centralized config
 from depictio.api.v1.configs.config import settings
@@ -22,76 +20,65 @@ def build_interactive_frame(index, children=None, show_border=False):
     Note: Border is now always shown regardless of show_border parameter for better UX.
     """
     if not children:
-        return dbc.Card(
-            dbc.CardBody(
-                html.Div(
-                    "Configure your interactive component using the edit menu",
-                    style={
-                        "textAlign": "center",
-                        "color": "var(--app-text-color, #999)",  # Use theme-aware text color
-                        "fontSize": "14px",
-                        "fontStyle": "italic",
+        return dmc.Paper(
+            children=[
+                dmc.Center(
+                    dmc.Text(
+                        "Configure your interactive component using the edit menu",
+                        size="sm",
+                        fs="italic",
+                        ta="center",
+                    ),
+                    id={
+                        "type": "input-body",
+                        "index": index,
                     },
-                ),
-                id={
-                    "type": "input-body",
-                    "index": index,
-                },
-                style={
-                    "padding": "20px",
-                    "display": "flex",
-                    "flexDirection": "column",
-                    "justifyContent": "center",
-                    "alignItems": "center",
-                    "minHeight": "150px",  # Ensure minimum height
-                    "height": "100%",
-                },
-            ),
-            style={
-                "width": "100%",
-                "height": "100%",
-                "padding": "0",
-                "margin": "0",
-                "boxShadow": "none",
-                "border": "1px solid var(--app-border-color, #ddd)",
-                "borderRadius": "4px",
-                "backgroundColor": "var(--app-surface-color, transparent)",  # Use theme-aware background
-            },
+                    p="xl",
+                    style={
+                        "minHeight": "150px",
+                        "height": "100%",
+                    },
+                )
+            ],
             id={
                 "type": "interactive-component",
                 "index": index,
             },
+            w="100%",
+            h="100%",
+            p="0",
+            radius="md",
+            withBorder=show_border,
         )
     else:
-        return dbc.Card(
-            dbc.CardBody(
-                children=children,
-                id={
-                    "type": "input-body",
-                    "index": index,
-                },
-                style={
-                    "display": "flex",
-                    "flexDirection": "column",
-                    "overflow": "visible",  # Allow dropdown to overflow
-                    "height": "100%",
-                    "position": "relative",  # Ensure positioning context
-                },
-            ),
-            style={
-                "width": "100%",
-                "height": "100%",  # Ensure the card fills the container's height
-                "padding": "0",
-                "overflow": "visible",  # Allow dropdown to overflow
-                "position": "relative",  # Ensure positioning context
-                "border": "1px solid var(--app-border-color, #ddd)",
-                "borderRadius": "4px",
-                "backgroundColor": "var(--app-surface-color, transparent)",  # Use theme-aware background
-            },
+        return dmc.Paper(
+            children=[
+                dmc.Center(
+                    children=children,
+                    id={
+                        "type": "input-body",
+                        "index": index,
+                    },
+                    style={
+                        "overflow": "visible",
+                        "height": "100%",
+                        "position": "relative",
+                    },
+                )
+            ],
             id={
                 "type": "interactive-component",
                 "index": index,
             },
+            w="100%",
+            h="100%",
+            p="0",
+            radius="md",
+            style={
+                "overflow": "visible",
+                "position": "relative",
+            },
+            withBorder=show_border,
         )
 
 
@@ -691,6 +678,21 @@ def build_interactive(**kwargs):
 
     # If the aggregation value is Select, MultiSelect or SegmentedControl
     if interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
+        # LOG SCHEMA DEBUG INFO FOR SELECT COMPONENTS
+        logger.info("🔍 SELECT COMPONENT SCHEMA DEBUG:")
+        logger.info(f"  - Component type: {interactive_component_type}")
+        logger.info(f"  - Component expects column: '{column_name}'")
+        logger.info(f"  - DataFrame shape: {df.shape}")
+        logger.info(f"  - Available columns: {df.columns}")
+        logger.info(f"  - Column '{column_name}' present: {column_name in df.columns}")
+
+        # Check if column exists before processing
+        if column_name not in df.columns:
+            logger.error(f"❌ SCHEMA MISMATCH: Column '{column_name}' not found in DataFrame")
+            logger.error(f"Available columns: {df.columns}")
+            # Return empty component to prevent crash
+            return dmc.Text(f"Error: Column '{column_name}' not found", color="red")
+
         data = sorted(df[column_name].drop_nulls().unique())[:100]  # Limit to 100 options
 
         # CRITICAL: If DataFrame is empty but we have a preserved value, include those values in options
@@ -720,29 +722,80 @@ def build_interactive(**kwargs):
         if value is not None:
             # For Select: only set value if it's still valid (in data options)
             if interactive_component_type == "Select":
-                if value in data:
+                # Convert value to string if it's not already (handles numeric values from sliders)
+                if not isinstance(value, str):
+                    if isinstance(value, (list, tuple)):
+                        # If value is from a RangeSlider, don't set any value
+                        logger.warning(
+                            f"Select component {index}: Ignoring array value {value} from slider"
+                        )
+                        value = None
+                    else:
+                        # Convert numeric value to string
+                        value = str(value) if value is not None else None
+                        logger.debug(
+                            f"Select component {index}: Converted value to string: '{value}'"
+                        )
+
+                if value and value in data:
                     component_kwargs["value"] = value
                     logger.debug(
                         f"Select component {index}: Preserved value '{value}' (available in options)"
                     )
-                else:
+                elif value:
                     logger.warning(
                         f"Select component {index}: Value '{value}' no longer available in options {data}"
                     )
             # For SegmentedControl: only set value if it's valid and not empty
             elif interactive_component_type == "SegmentedControl":
-                if value in data:
+                # Convert value to string if it's not already (handles numeric values from sliders)
+                if not isinstance(value, str):
+                    if isinstance(value, (list, tuple)):
+                        # If value is from a RangeSlider, don't set any value
+                        logger.warning(
+                            f"SegmentedControl component {index}: Ignoring array value {value} from slider"
+                        )
+                        value = None
+                    else:
+                        # Convert numeric value to string
+                        value = str(value) if value is not None else None
+                        logger.debug(
+                            f"SegmentedControl component {index}: Converted value to string: '{value}'"
+                        )
+
+                if value and value in data:
                     component_kwargs["value"] = value
                     logger.debug(
                         f"SegmentedControl component {index}: Preserved value '{value}' (available in options)"
                     )
-                else:
+                elif value:
                     logger.warning(
                         f"SegmentedControl component {index}: Value '{value}' no longer available in options {data}, defaulting to no selection"
                     )
                     # Don't set value - let it default to None (no selection)
             # For MultiSelect: preserve value even if partially invalid
             elif interactive_component_type == "MultiSelect":
+                # Ensure value is a list for MultiSelect
+                if value is not None and not isinstance(value, list):
+                    if isinstance(value, (tuple, set)):
+                        value = list(value)
+                        logger.debug(
+                            f"MultiSelect component {index}: Converted {type(value).__name__} to list"
+                        )
+                    else:
+                        # Single value - wrap in list
+                        value = [str(value)]
+                        logger.debug(
+                            f"MultiSelect component {index}: Wrapped single value in list: {value}"
+                        )
+
+                # Convert all values in list to strings
+                if isinstance(value, list):
+                    value = [str(v) for v in value if v is not None]
+                    logger.debug(
+                        f"MultiSelect component {index}: Converted values to strings: {value}"
+                    )
+
                 component_kwargs["value"] = value
                 logger.debug(f"MultiSelect component {index}: Preserved value '{value}'")
         else:
@@ -952,6 +1005,20 @@ def build_interactive(**kwargs):
         # Convert Polars DataFrame to Pandas for processing
         df_pandas = df.to_pandas()
         # logger.info(f"df['{column_name}']: {df_pandas[column_name]}")
+
+        # LOG SCHEMA DEBUG INFO
+        logger.info("🔍 INTERACTIVE COMPONENT SCHEMA DEBUG:")
+        logger.info(f"  - Component expects column: '{column_name}'")
+        logger.info(f"  - DataFrame shape: {df_pandas.shape}")
+        logger.info(f"  - Available columns: {list(df_pandas.columns)}")
+        logger.info(f"  - Column '{column_name}' present: {column_name in df_pandas.columns}")
+
+        # Check if column exists before processing
+        if column_name not in df_pandas.columns:
+            logger.error(f"❌ SCHEMA MISMATCH: Column '{column_name}' not found in DataFrame")
+            logger.error(f"Available columns: {list(df_pandas.columns)}")
+            # Return empty options to prevent crash
+            return []
 
         # Drop NaN, None, and invalid values
         df_pandas = df_pandas[~df_pandas[column_name].isin([None, "None", "nan", "NaN"])]
@@ -1230,10 +1297,9 @@ def build_interactive(**kwargs):
     else:
         logger.info(f"Interactive - component value: {value}")
 
-    # Apply custom color if specified, otherwise use theme-aware color
+    # Apply custom color if specified, otherwise let Mantine handle theming
     title_style = {
         "marginBottom": "0.5rem",
-        "color": "var(--app-text-color, #000000)",  # Default to theme-aware text color
     }
     if color:
         title_style["color"] = color
@@ -1241,9 +1307,9 @@ def build_interactive(**kwargs):
         store_data["custom_color"] = color
         logger.info(f"Applied custom color: {color}")
     else:
-        logger.debug("Using theme-aware text color for title")
+        logger.debug("Using Mantine's native theming for title")
 
-    card_title_h5 = html.H5(card_title, style=title_style)
+    card_title_h5 = dmc.Text(card_title, size="md", fw="bold", style=title_style)
 
     # Generate default state information for the component
     # For select-type components, pass unique values if available
@@ -1289,23 +1355,20 @@ def build_interactive(**kwargs):
         storage_type="memory",
     )
 
-    # Create wrapper with constrained sizing to prevent slider stretching
-    new_interactive_component = html.Div(
+    # Create wrapper with proper sizing for interactive components
+    new_interactive_component = dmc.Stack(
         [card_title_h5, interactive_component, store_component],
-        # className="interactive-component-wrapper",  # Add class for CSS targeting
+        gap="xs",
         style={
             "width": "100%",
-            "height": "auto !important",  # Use natural height
-            "maxWidth": "500px !important",  # Constrain width to reasonable size
+            "height": "auto",  # Use natural height, don't force 100%
+            "maxWidth": "500px",
             "padding": "10px",
             "boxSizing": "border-box",
-            "backgroundColor": "var(--app-surface-color, transparent)",  # Use theme-aware background
-            "color": "var(--app-text-color, #000000)",  # Use theme-aware text color
-            # Prevent vertical stretching with !important
-            "flex": "none !important",
-            "flexGrow": "0 !important",
-            "flexShrink": "0 !important",
-            "alignSelf": "flex-start !important",
+            # Center the stack within its container
+            "margin": "0 auto",
+            # Allow components to grow horizontally but not vertically
+            "alignSelf": "flex-start",
         },
     )
 

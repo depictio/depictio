@@ -7,13 +7,12 @@ Includes modular components for buttons, badges, modals, and responsive layout m
 
 import datetime
 
-import dash_bootstrap_components as dbc
+import dash
 import dash_mantine_components as dmc
 import httpx
+from dash import Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
-import dash
-from dash import Input, Output, State, dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, api_call_get_dashboard
@@ -157,6 +156,7 @@ def _create_action_icon(icon, button_id, disabled=False, n_clicks=0, tooltip=Non
         size="xl",
         radius="xl",
         variant="subtle",
+        color="gray",
         style=BUTTON_STYLE,
         disabled=disabled,
         n_clicks=n_clicks,
@@ -309,24 +309,34 @@ def _create_title_section(data):
 
 def _create_backend_components():
     """Create backend components (stores, modals, etc.)."""
-    modal_save_button = dbc.Modal(
-        [
-            dbc.ModalHeader(
-                html.H1("Success!", className="text-success"),
-            ),
-            dbc.ModalBody(
-                html.H5(
-                    "Your amazing dashboard was successfully saved!",
-                    className="text-success",
-                ),
-                style={"background-color": "#F0FFF0"},
-            ),
+    modal_save_button = dmc.Modal(
+        children=[
+            dmc.Stack(
+                [
+                    dmc.Text(
+                        "Your amazing dashboard was successfully saved!",
+                        size="lg",
+                        c="green",
+                        ta="center",
+                    )
+                ],
+                gap="md",
+                style={"padding": "20px", "backgroundColor": "var(--app-success-bg, #F0FFF0)"},
+            )
         ],
         id="success-modal-dashboard",
-        is_open=False,
+        opened=False,
         centered=True,
-        backdrop=True,  # Allow clicking outside to close
-        keyboard=True,  # Allow Escape key to close
+        closeOnClickOutside=True,
+        closeOnEscape=True,
+        title=dmc.Group(
+            [
+                DashIconify(icon="material-symbols:check-circle", width=24, color="green"),
+                dmc.Text("Success!", size="xl", fw="bold", c="green"),
+            ],
+            gap="xs",
+            justify="center",
+        ),
     )
 
     backend_stores = html.Div(
@@ -434,16 +444,40 @@ def register_callbacks_header(app):
         return is_open
 
     @app.callback(
-        Output("offcanvas-parameters", "is_open"),
+        Output("offcanvas-parameters", "opened"),
+        Output("notes-footer-content", "className", allow_duplicate=True),
+        Output("page-content", "className", allow_duplicate=True),
         Input("open-offcanvas-parameters-button", "n_clicks"),
-        State("offcanvas-parameters", "is_open"),
+        State("offcanvas-parameters", "opened"),
+        State("notes-footer-content", "className"),
+        State("page-content", "className"),
         prevent_initial_call=True,
     )
-    def toggle_offcanvas_parameters(n_clicks, is_open):
+    def toggle_offcanvas_parameters(n_clicks, is_open, current_footer_class, current_page_class):
         logger.info(f"toggle_offcanvas_parameters: {n_clicks}, {is_open}")
         if n_clicks:
-            return not is_open
-        return is_open
+            new_drawer_state = not is_open
+
+            # If we're opening the drawer, close the notes footer
+            current_footer_class = current_footer_class or ""
+            current_page_class = current_page_class or ""
+
+            if new_drawer_state and (
+                "footer-visible" in current_footer_class
+                or "footer-fullscreen" in current_footer_class
+            ):
+                # Opening drawer and footer is visible - close footer
+                new_footer_class = ""
+                new_page_class = current_page_class.replace("notes-fullscreen", "").strip()
+                logger.info(
+                    f"Closing notes footer when opening offcanvas drawer. Footer: '{new_footer_class}', Page: '{new_page_class}'"
+                )
+                return new_drawer_state, new_footer_class, new_page_class
+            else:
+                # Either closing drawer or footer already hidden - no footer change needed
+                return new_drawer_state, current_footer_class, current_page_class
+
+        return is_open, current_footer_class, current_page_class
 
     @app.callback(
         [
@@ -574,7 +608,11 @@ def design_header(data, local_store):
     )
 
     # Create header components
-    card_section = dbc.Row([_create_info_badges(data, project_name)])
+    card_section = dmc.Group(
+        [_create_info_badges(data, project_name)],
+        justify="center",
+        align="center",
+    )
 
     # Create action buttons with tooltips
     add_new_component_button = _create_action_icon(
@@ -696,13 +734,15 @@ def design_header(data, local_store):
         ]
     )
 
-    offcanvas_parameters = dbc.Offcanvas(
+    offcanvas_parameters = dmc.Drawer(
         id="offcanvas-parameters",
         title="Parameters",
-        placement="end",
-        backdrop=True,
-        children=[toggle_switches_group, buttons_group],
-        class_name="dashboard-offcanvas",  # Add class for theme targeting
+        position="right",
+        opened=False,
+        closeOnClickOutside=True,
+        closeOnEscape=True,
+        children=dmc.Stack([toggle_switches_group, buttons_group], gap="md"),
+        size="400px",
     )
 
     # notes_button and open_offcanvas_parameters_button are now created above with tooltips

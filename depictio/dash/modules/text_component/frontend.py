@@ -1,10 +1,8 @@
 # Import necessary libraries
-import dash_bootstrap_components as dbc
-import dash_mantine_components as dmc
-from dash_iconify import DashIconify
-
 import dash
-from dash import MATCH, Input, Output, State, callback_context, dcc, html
+import dash_mantine_components as dmc
+from dash import MATCH, Input, Output, State, callback_context, dcc
+from dash_iconify import DashIconify
 
 # Depictio imports
 from depictio.api.v1.configs.logging_init import logger
@@ -14,6 +12,30 @@ from depictio.dash.component_metadata import (
 )
 from depictio.dash.modules.text_component.utils import build_text, build_text_frame
 from depictio.dash.utils import UNSELECTED_STYLE
+
+
+def get_centered_title_style(alignment="left", display="block"):
+    """Get the proper title style with centering and alignment."""
+    justify_content = "flex-start"
+    if alignment == "center":
+        justify_content = "center"
+    elif alignment == "right":
+        justify_content = "flex-end"
+
+    return {
+        "cursor": "text",
+        "padding": "4px 8px",
+        "borderRadius": "4px",
+        "transition": "background-color 0.2s",
+        "margin": "0",
+        "minHeight": "100%",
+        "width": "100%",
+        "border": "1px dashed transparent",
+        "textAlign": alignment,
+        "display": "flex" if display == "block" else display,
+        "alignItems": "center",
+        "justifyContent": justify_content,
+    }
 
 
 def register_callbacks_text_component(app):
@@ -55,16 +77,11 @@ def register_callbacks_text_component(app):
                 "alignment": "left",
             }
 
-        # Base styles
-        title_style = {
-            "cursor": "text",
-            "padding": "4px 8px",
-            "borderRadius": "4px",
-            "transition": "background-color 0.2s",
-            "margin": "8px 0",
-            "minHeight": "24px",
-            "border": "1px dashed transparent",
-        }
+        # Get current alignment from store data
+        current_alignment = store_data.get("alignment", "left") if store_data else "left"
+
+        # Base styles with centering
+        title_style = get_centered_title_style(alignment=current_alignment, display="block")
         input_style = {"display": "none"}
 
         if "edit-input" in trigger_id and (
@@ -72,8 +89,8 @@ def register_callbacks_text_component(app):
         ):
             # Stop editing and save
             logger.info(f"Stopping edit mode, saving: {input_value}")
-            title_style["display"] = "block"
-            input_style["display"] = "none"
+            title_style = get_centered_title_style(alignment=current_alignment, display="block")
+            input_style = {"display": "none"}
             store_data["editing"] = False
             store_data["text"] = input_value
 
@@ -109,17 +126,11 @@ def register_callbacks_text_component(app):
 
         logger.info("Starting edit mode via double-click")
 
-        # Start editing
-        title_style = {
-            "cursor": "text",
-            "padding": "4px 8px",
-            "borderRadius": "4px",
-            "transition": "background-color 0.2s",
-            "margin": "8px 0",
-            "minHeight": "24px",
-            "border": "1px dashed transparent",
-            "display": "none",
-        }
+        # Get current alignment from store data
+        current_alignment = store_data.get("alignment", "left")
+
+        # Start editing - hide title, show input
+        title_style = get_centered_title_style(alignment=current_alignment, display="none")
         input_style = {"display": "block", "width": "100%"}
         store_data["editing"] = True
 
@@ -220,19 +231,6 @@ def register_callbacks_text_component(app):
                 "alignment": "left",
             }
 
-        # Initialize current_style if None
-        if not current_style:
-            current_style = {
-                "cursor": "text",
-                "padding": "4px 8px",
-                "borderRadius": "4px",
-                "transition": "background-color 0.2s",
-                "margin": "8px 0",
-                "minHeight": "24px",
-                "border": "1px dashed transparent",
-                "textAlign": "left",
-            }
-
         # Determine alignment and icon based on trigger
         if "align-left-btn" in trigger_id:
             alignment = "left"
@@ -246,9 +244,8 @@ def register_callbacks_text_component(app):
         else:
             return dash.no_update, dash.no_update, dash.no_update
 
-        # Update style with new alignment
-        new_style = current_style.copy()
-        new_style["textAlign"] = alignment
+        # Create new style with proper centering and alignment
+        new_style = get_centered_title_style(alignment=alignment, display="block")
 
         # Update store data with new alignment
         new_store_data = store_data.copy()
@@ -356,16 +353,14 @@ def register_callbacks_text_component(app):
                     if (container.hasAttribute('data-interactions-processed')) return;
                     container.setAttribute('data-interactions-processed', 'true');
 
-                    // Hover effects for text containers
+                    // Simple hover effects for text containers
                     container.addEventListener('mouseenter', function() {
-                        this.style.border = '1px dashed #ddd';
-                        this.style.backgroundColor = 'var(--app-surface-color, #f9f9f9)';
+                        this.style.border = '1px dashed #adb5bd';
                         this.style.cursor = 'pointer';
                     });
 
                     container.addEventListener('mouseleave', function() {
                         this.style.border = '1px solid transparent';
-                        this.style.backgroundColor = 'transparent';
                         this.style.cursor = 'default';
                     });
 
@@ -482,16 +477,19 @@ def register_callbacks_text_component(app):
         except Exception as e:
             logger.error(f"Error creating text component: {e}")
             # Fallback to simple textarea if inline editable text fails
-            return html.Div(
+            return dmc.Stack(
                 [
-                    html.H5("Text Component (Fallback Mode)"),
-                    dcc.Textarea(
+                    dmc.Title("Text Component (Fallback Mode)", order=5),
+                    dmc.Textarea(
                         id={"type": "text-editor-fallback", "index": id["index"]},
                         placeholder="Enter your text content here (use # for headers)...",
                         style={"width": "100%", "minHeight": "200px"},
                         value="# Section Title",
+                        autosize=True,
+                        minRows=8,
                     ),
-                ]
+                ],
+                gap="sm",
             )
 
 
@@ -510,12 +508,10 @@ def design_text(id):
                     dmc.Text(
                         "Use # for H1, ## for H2, ### for H3, #### for H4, ##### for H5",
                         size="sm",
-                        c="gray",
                     ),
                     dmc.Text(
                         "Type your header format directly (e.g., ## My Section)",
                         size="sm",
-                        c="gray",
                     ),
                 ],
                 title="How to use Text Components",
@@ -541,24 +537,24 @@ def design_text(id):
                 p="lg",
             ),
             # Simple preview
-            html.Div(
+            dmc.Stack(
                 [
-                    dmc.Text("Preview:", fw="bold", style={"marginBottom": "10px"}),
-                    html.Div(
+                    dmc.Text("Preview:", fw="bold", size="sm"),
+                    dmc.Paper(
                         build_text_frame(index=id["index"]),
                         id={
                             "type": "component-container",
                             "index": id["index"],
                         },
-                        style={
-                            "border": "1px dashed var(--app-border-color, #ddd)",
-                            "borderRadius": "4px",
-                            "minHeight": "150px",
-                            "padding": "10px",
-                        },
+                        withBorder=True,
+                        style={"border": "2px dashed var(--mantine-color-gray-4)"},
+                        radius="sm",
+                        p="md",
+                        mih=150,
                     ),
                 ],
-                style={"marginTop": "20px"},
+                gap="sm",
+                mt="md",
             ),
         ]
     )
@@ -581,21 +577,19 @@ def create_stepper_text_button(n, disabled=None):
     logger.info(f"Text button color: {color}")
 
     # Create the text button
-    button = dbc.Col(
-        dmc.Button(
-            "Text",
-            id={
-                "type": "btn-option",
-                "index": n,
-                "value": "Text",
-            },
-            n_clicks=0,
-            style=UNSELECTED_STYLE,
-            size="xl",
-            color=get_dmc_button_color("text"),
-            leftSection=DashIconify(icon="mdi:text-box-edit", color="white"),
-            disabled=disabled,
-        )
+    button = dmc.Button(
+        "Text",
+        id={
+            "type": "btn-option",
+            "index": n,
+            "value": "Text",
+        },
+        n_clicks=0,
+        style=UNSELECTED_STYLE,
+        size="xl",
+        color=get_dmc_button_color("text"),
+        leftSection=DashIconify(icon="mdi:text-box-edit", color="white"),
+        disabled=disabled,
     )
     store = dcc.Store(
         id={

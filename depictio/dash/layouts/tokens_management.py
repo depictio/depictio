@@ -1,12 +1,11 @@
-import dash_bootstrap_components as dbc
+import dash
 import dash_mantine_components as dmc
 import yaml
+from dash import ALL, ctx, dcc
+from dash.exceptions import PreventUpdate
 from dash_extensions.enrich import Input, Output, State, html
 from dash_iconify import DashIconify
 
-import dash
-from dash import ALL, ctx, dcc
-from dash.exceptions import PreventUpdate
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import (
@@ -168,8 +167,10 @@ def render_tokens_list(tokens):
     )
 
 
-layout = dbc.Container(
-    [
+layout = dmc.Container(
+    size="lg",
+    p="md",
+    children=[
         dcc.Store(id="delete-token-id-store", storage_type="memory"),
         # Header section with improved styling
         dmc.Center(
@@ -393,8 +394,6 @@ layout = dbc.Container(
             children=[html.Div(id="display-agent")],
         ),
     ],
-    fluid=True,
-    className="py-4",
 )
 
 
@@ -583,7 +582,8 @@ def register_tokens_management_callbacks(app):
             # logger.info(f"Token data: {token_data}")
 
             # Add extra formatting to color with YAML ('''...''') and add a copy button
-            agent_config = f"""```yaml\n{agent_config}\n```"""
+            agent_config = f"""{agent_config}"""
+            # agent_config = f"""```yaml\n{agent_config}\n```"""
 
             # logger.info(f"Config: {agent_config}")
 
@@ -625,57 +625,59 @@ def register_tokens_management_callbacks(app):
                             ),
                             dmc.Paper(
                                 children=[
-                                    dcc.Markdown(id="agent-config-md", children=agent_config),
-                                ],
-                                withBorder=True,
-                                p="sm",
-                                style={
-                                    "position": "relative",
-                                    "backgroundColor": "#f8f9fa",
-                                    "borderColor": colors["teal"] + "40",
-                                },
-                            ),
-                            dmc.Group(
-                                [
-                                    # dmc.Button(
-                                    #     "Copy Configuration",
-                                    #     variant="filled",
-                                    #     color="teal",
-                                    #     radius="md",
-                                    #     leftIcon=DashIconify(
-                                    #         icon="mdi:content-copy", width=20
-                                    #     ),
-                                    #     id="copy-config-button",
-                                    # ),
-                                    # Styled clipboard component
-                                    dcc.Clipboard(
-                                        id="copy-config-clipboard",
-                                        target_id="agent-config-md",
-                                        className="clipboard-button",
-                                        title="Copy to clipboard",  # Basic tooltip
-                                        content="",
-                                        n_clicks=0,
-                                        style={
-                                            "position": "absolute",
-                                            "top": "270px",
-                                            "right": "45px",
-                                            # grey background
-                                            "background-color": "#f8f9fa",
-                                            "border": "none",
-                                            "color": "grey",
-                                            "border-radius": "4px",
-                                            "padding": "8px",
-                                            "cursor": "pointer",
-                                            "box-shadow": "0 2px 5px rgba(0,0,0,0.2)",
-                                        },
-                                        # children=html.Img(
-                                        #     src=clipboard_icon_uri,
-                                        #     style={"width": "16px", "height": "16px"},
-                                        # ),
+                                    dmc.CodeHighlight(
+                                        id="agent-config-md", language="yaml", code=agent_config
                                     ),
                                 ],
-                                justify="flex-end",
+                                # withBorder=True,
+                                p="sm",
+                                # style={
+                                #     "position": "relative",
+                                #     "backgroundColor": "#f8f9fa",
+                                #     "borderColor": colors["teal"] + "40",
+                                # },
                             ),
+                            # dmc.Group(
+                            #     [
+                            #         # dmc.Button(
+                            #         #     "Copy Configuration",
+                            #         #     variant="filled",
+                            #         #     color="teal",
+                            #         #     radius="md",
+                            #         #     leftIcon=DashIconify(
+                            #         #         icon="mdi:content-copy", width=20
+                            #         #     ),
+                            #         #     id="copy-config-button",
+                            #         # ),
+                            #         # Styled clipboard component
+                            #         dcc.Clipboard(
+                            #             id="copy-config-clipboard",
+                            #             target_id="agent-config-md",
+                            #             className="clipboard-button",
+                            #             title="Copy to clipboard",  # Basic tooltip
+                            #             content="",
+                            #             n_clicks=0,
+                            #             style={
+                            #                 "position": "absolute",
+                            #                 "top": "270px",
+                            #                 "right": "45px",
+                            #                 # grey background
+                            #                 "background-color": "#f8f9fa",
+                            #                 "border": "none",
+                            #                 "color": "grey",
+                            #                 "border-radius": "4px",
+                            #                 "padding": "8px",
+                            #                 "cursor": "pointer",
+                            #                 "box-shadow": "0 2px 5px rgba(0,0,0,0.2)",
+                            #             },
+                            #             # children=html.Img(
+                            #             #     src=clipboard_icon_uri,
+                            #             #     style={"width": "16px", "height": "16px"},
+                            #             # ),
+                            #         ),
+                            #     ],
+                            #     justify="flex-end",
+                            # ),
                         ],
                         gap="md",
                     ),

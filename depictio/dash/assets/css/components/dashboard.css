@@ -3,9 +3,9 @@
    Layout and styling fixes for dashboard draggable components
    ============================================================================= */
 
-/* Add constant border to outermost draggable container */
+/* Add constant border to outermost draggable container - DMC will handle theming */
 .react-grid-item {
-    border: 2px solid var(--app-border-color, #ddd) !important;
+    border: 2px solid #ddd !important;
     border-radius: 8px !important;
     transition: border-color 0.2s ease !important;
 }
@@ -62,17 +62,17 @@
     flex: 1 !important;
 }
 
-/* Active/selected state for grid items - Theme compliant grey/black colors */
+/* Active/selected state for grid items - DMC will handle theming */
 .react-grid-item.react-grid-item-dragging {
-    border-color: var(--app-text-color, #666) !important;
+    border-color: #666 !important;
     border-width: 3px !important;
     box-shadow: 0 4px 16px rgba(102, 102, 102, 0.3) !important;
-    background-color: var(--app-surface-color, #ffffff) !important;
+    background-color: #ffffff !important;
 }
 
 .react-grid-item.react-grid-item-resizing {
-    border-color: var(--app-text-color, #666) !important;
+    border-color: #666 !important;
     border-width: 3px !important;
     box-shadow: 0 4px 16px rgba(102, 102, 102, 0.3) !important;
-    background-color: var(--app-surface-color, #ffffff) !important;
+    background-color: #ffffff !important;
 }

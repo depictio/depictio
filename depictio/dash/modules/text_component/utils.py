@@ -1,9 +1,8 @@
-import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import httpx
+from dash import dcc
 from dash_iconify import DashIconify
 
-from dash import dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 
@@ -55,9 +54,9 @@ def create_inline_editable_text(
 ):
     """Create an inline editable text component for dashboard section delimiters."""
 
-    return html.Div(
+    return dmc.Paper(
         [
-            # The editable text display
+            # The editable text display - just the title, no container
             dmc.Title(
                 initial_text.lstrip("#").strip() if initial_text.startswith("#") else initial_text,
                 order=initial_order,
@@ -67,11 +66,16 @@ def create_inline_editable_text(
                     "padding": "4px 8px",
                     "borderRadius": "4px",
                     "transition": "background-color 0.2s",
-                    "margin": "8px 0",
-                    "minHeight": "24px",
+                    "margin": "0",  # Remove margin to fill container
+                    "minHeight": "100%",  # Fill container height
+                    "width": "100%",  # Fill container width
                     "border": "1px dashed transparent",
                     "textAlign": initial_alignment,  # Add text alignment
-                    "color": "var(--app-text-color, #000000)",  # Theme-aware text color
+                    "display": "flex",
+                    "alignItems": "center",  # Center text vertically within title
+                    "justifyContent": initial_alignment
+                    if initial_alignment in ["left", "center", "right"]
+                    else "left",  # Align horizontally
                 },
             ),
             # Hidden input for editing
@@ -100,15 +104,22 @@ def create_inline_editable_text(
                 },
             ),
         ],
-        style={
-            "border": "1px solid transparent",
-            "borderRadius": "8px",
-            "padding": "8px",
-            "marginBottom": "8px",
-            "position": "relative",
-        },
         id={"type": "text-container", "index": component_id},
         className="text-container-hoverable",  # Add class for hover styling
+        w="100%",
+        h="100%",
+        pos="relative",
+        withBorder=False,  # No border by default
+        radius="sm",
+        p="xs",
+        style={
+            "width": "100%",
+            "height": "100%",
+            "display": "flex",
+            "flexDirection": "column",
+            "justifyContent": "flex-start",  # Let the title handle centering itself
+            "alignItems": "stretch",  # Stretch title to fill width
+        },
     )
 
 
@@ -122,80 +133,61 @@ def build_text_frame(index, children=None, show_border=False):
         show_border: Whether to show border (for editing mode)
 
     Returns:
-        dbc.Card: Text component frame
+        dmc.Paper: Text component frame
     """
     if not children:
-        return dbc.Card(
-            dbc.CardBody(
-                html.Div(
-                    "Configure your text component using the edit menu",
-                    style={
-                        "textAlign": "center",
-                        "color": "var(--app-text-color, #999)",
-                        "fontSize": "14px",
-                        "fontStyle": "italic",
+        return dmc.Paper(
+            children=[
+                dmc.Center(
+                    dmc.Text(
+                        "Configure your text component using the edit menu",
+                        size="sm",
+                        fs="italic",
+                        ta="center",
+                    ),
+                    id={
+                        "type": "text-body",
+                        "index": index,
                     },
-                ),
-                id={
-                    "type": "text-body",
-                    "index": index,
-                },
-                style={
-                    "padding": "20px",
-                    "display": "flex",
-                    "flexDirection": "column",
-                    "justifyContent": "center",
-                    "alignItems": "center",
-                    "minHeight": "150px",  # Ensure minimum height
-                    "height": "100%",
-                    "minWidth": "150px",  # Ensure minimum width
-                },
-            ),
-            style={
-                "width": "100%",
-                "height": "100%",
-                "padding": "0",
-                "margin": "0",
-                "boxShadow": "none",
-                "border": "1px solid var(--app-border-color, #ddd)",  # Always show border for draggable delimitation
-                "borderRadius": "4px",
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
-            },
+                    style={
+                        "minHeight": "150px",
+                        "height": "100%",
+                        "minWidth": "150px",
+                    },
+                )
+            ],
             id={
                 "type": "text-component",
                 "index": index,
             },
+            withBorder=show_border,
+            radius="sm",
+            p="md",
+            w="100%",
+            h="100%",
         )
     else:
-        return dbc.Card(
-            dbc.CardBody(
-                children=children,
-                id={
-                    "type": "text-body",
-                    "index": index,
-                },
-                style={
-                    "padding": "5px",  # Reduce padding inside the card body
-                    "display": "flex",
-                    "flexDirection": "column",
-                    "justifyContent": "flex-start",  # Align text to top
-                    "height": "100%",  # Make sure it fills the parent container
-                },
-            ),
-            style={
-                "width": "100%",
-                "height": "100%",  # Ensure the card fills the container's height
-                "padding": "0",  # Remove default padding
-                "margin": "0",  # Remove default margin
-                "boxShadow": "none",  # Remove shadow for a cleaner look
-                "border": f"1px solid {'var(--app-border-color, #ddd)' if show_border else 'transparent'}",  # Conditional border
-                "borderRadius": "4px",
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
-            },
+        return dmc.Paper(
+            children=[
+                dmc.Stack(
+                    children=children,
+                    id={
+                        "type": "text-body",
+                        "index": index,
+                    },
+                    gap="xs",
+                    h="100%",
+                )
+            ],
             id={
                 "type": "text-component",
                 "index": index,
             },
+            withBorder=show_border,
+            radius="sm",
+            p="xs",
+            w="100%",
+            h="100%",
         )
 
 
@@ -327,17 +319,31 @@ def build_text(**kwargs):
         initial_alignment=alignment,  # Use the alignment from kwargs or metadata
     )
 
-    # Create the main content container
-    text_content = html.Div(
+    # For dashboard use (build_frame=True, stepper=False), return minimal structure
+    if build_frame and not stepper:
+        # Dashboard mode - just return the inline editable text with metadata store
+        return dmc.Paper(
+            [
+                inline_editable_text,
+                store_component,
+            ],
+            id={"index": store_index},
+            w="100%",
+            h="100%",
+            withBorder=False,
+            radius="sm",
+            p="0",  # No padding since inner container has padding
+        )
+
+    # For stepper mode or no frame, use more structured layout
+    text_content = dmc.Stack(
         [
             # Optional title for the entire component
-            html.H5(
+            dmc.Text(
                 title,
-                style={
-                    "marginBottom": "10px",
-                    "color": "var(--app-text-color, #000000)",
-                    "fontWeight": "bold",
-                },
+                fw="bold",
+                size="lg",
+                mb="xs",
             )
             if title and show_title
             else None,
@@ -345,22 +351,22 @@ def build_text(**kwargs):
             inline_editable_text,
             # Metadata store
             store_component,
-        ]
+        ],
+        gap="xs",
     )
 
     if not build_frame:
         return text_content
     else:
-        # Build the text component with frame using proper index
+        # Stepper mode - use frame container
         text_component = build_text_frame(
             index=store_index, children=text_content, show_border=stepper
         )
-
-        # Always return the component directly for text components
-        # Text components should work immediately without loading delays
-        return html.Div(
+        return dmc.Paper(
             text_component,
-            id={"index": store_index},  # Preserve the expected id structure
+            id={"index": store_index},
+            withBorder=False,
+            radius="sm",
         )
 
 

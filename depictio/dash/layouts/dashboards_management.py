@@ -2,13 +2,13 @@ import os
 import shutil
 from datetime import datetime
 
+import dash
 import dash_mantine_components as dmc
 import httpx
 from bson import ObjectId
+from dash import ALL, MATCH, Input, Output, State, ctx, dcc, html
 from dash_iconify import DashIconify
 
-import dash
-from dash import ALL, MATCH, Input, Output, State, ctx, dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.custom_logging import format_pydantic
 from depictio.api.v1.configs.logging_init import logger
@@ -1334,7 +1334,7 @@ def register_callbacks_dashboards_management(app):
                         dmc.Badge(
                             children="Title already exists",
                             color="red",
-                            size="xl",
+                            # size="xl",
                             id="unique-title-warning-badge",
                         ),
                         dash.no_update,
@@ -1350,7 +1350,7 @@ def register_callbacks_dashboards_management(app):
                         dmc.Badge(
                             children="Title cannot be empty",
                             color="red",
-                            size="xl",
+                            # size="xl",
                             id="unique-title-warning-badge",
                         ),
                         dash.no_update,
@@ -1365,7 +1365,7 @@ def register_callbacks_dashboards_management(app):
                     dmc.Badge(
                         children="Project not selected",
                         color="red",
-                        size="xl",
+                        # size="xl",
                         id="unique-title-warning-badge",
                     ),
                     dash.no_update,

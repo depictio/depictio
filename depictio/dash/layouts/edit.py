@@ -1,8 +1,8 @@
 import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
+from dash import Input, html
 from dash_iconify import DashIconify
 
-from dash import Input, html
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.layouts.header import _is_different_from_default
 from depictio.dash.layouts.stepper import create_stepper_output_edit
@@ -229,15 +229,25 @@ def _create_component_buttons(
                 "reset",
             ],  # Interactive components get reset button
         },
-        "table": {"orientation": "horizontal", "buttons": ["drag", "remove", "duplicate"]},
-        "jbrowse": {"orientation": "horizontal", "buttons": ["drag", "remove", "duplicate"]},
+        "card": {
+            "orientation": "horizontal",
+            "buttons": [
+                "drag",
+                "remove",
+                "edit",
+                "duplicate",
+                # "reset",
+            ],  # Interactive components get reset button
+        },
+        "table": {"orientation": "horizontal", "buttons": ["drag", "remove"]},
+        "jbrowse": {"orientation": "horizontal", "buttons": ["drag", "remove"]},
         "text": {
             "orientation": "horizontal",
             "buttons": ["drag", "remove", "duplicate", "alignment"],
         },  # Text components get alignment button (no edit button)
         "default": {
             "orientation": "horizontal",
-            "buttons": ["drag", "remove", "edit", "duplicate"],
+            "buttons": ["drag", "remove"],
         },
     }
 
@@ -534,9 +544,8 @@ def enable_box_edit_mode(
                 "height": "100%",
                 "boxSizing": "border-box",
                 "padding": "5px",
-                "border": "1px solid var(--app-border-color, #ddd)",
+                "border": "1px solid transparent",
                 "borderRadius": "8px",
-                "background": "var(--app-surface-color, #ffffff)",
                 "position": "relative",
                 "minHeight": "100px",
                 "transition": "all 0.3s ease",
@@ -605,9 +614,8 @@ def enable_box_edit_mode(
                 "height": "100%",
                 "boxSizing": "border-box",
                 "padding": "5px",
-                "border": "1px solid var(--app-border-color, #ddd)",
+                "border": "1px solid transparent",
                 "borderRadius": "8px",
-                "background": "var(--app-surface-color, #ffffff)",
                 "position": "relative",
                 "minHeight": "100px",
                 "transition": "all 0.3s ease",

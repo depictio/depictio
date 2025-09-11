@@ -2,19 +2,19 @@
 from collections import defaultdict
 from typing import Any, Dict, List
 
-import dash_bootstrap_components as dbc
+import dash
 import dash_mantine_components as dmc
 import httpx
+from dash import ALL, MATCH, Input, Output, Patch, State, dcc, html
 from dash_iconify import DashIconify
 
-import dash
-from dash import ALL, MATCH, Input, Output, Patch, State, dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
 from depictio.dash.modules.figure_component.code_mode import (
     convert_ui_params_to_code,
     create_code_mode_interface,
+    evaluate_params_in_context,
     extract_params_from_code,
     extract_visualization_type_from_code,
 )
@@ -164,6 +164,7 @@ def register_callbacks_figure_component(app):
             State({"type": "dict_kwargs", "index": MATCH}, "data"),
             State("local-store", "data"),
             State("url", "pathname"),
+            State({"type": "figure-mode-store", "index": MATCH}, "data"),
         ],
         prevent_initial_call=False,  # Prevent initial call to avoid loops
     )
@@ -177,11 +178,17 @@ def register_callbacks_figure_component(app):
         current_dict_kwargs,
         local_data,
         pathname,
+        current_mode,
     ):
         """Build parameter interface using the new robust system."""
 
         if not local_data:
             raise dash.exceptions.PreventUpdate
+
+        # Don't build UI parameter interface if in code mode
+        if current_mode == "code":
+            logger.info("🚫 SKIPPING UI PARAMETER INTERFACE - Component is in code mode")
+            return html.Div()  # Return empty div for code mode
 
         logger.info("=== BUILDING PARAMETER INTERFACE ===")
         logger.info(f"Visualization type: {visu_type}")
@@ -454,7 +461,7 @@ def register_callbacks_figure_component(app):
                 "type": "collapse",
                 "index": MATCH,
             },
-            "is_open",
+            "opened",
         ),
         [
             Input(
@@ -471,7 +478,7 @@ def register_callbacks_figure_component(app):
                     "type": "collapse",
                     "index": MATCH,
                 },
-                "is_open",
+                "opened",
             )
         ],
         # prevent_initial_call=True,
@@ -526,6 +533,7 @@ def register_callbacks_figure_component(app):
         [
             Input({"type": "dict_kwargs", "index": MATCH}, "data"),
             Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
+            Input({"type": "figure-mode-store", "index": MATCH}, "data"),  # Trigger on mode changes
             State("theme-store", "data"),  # Keep as State - theme handled separately
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
@@ -533,21 +541,22 @@ def register_callbacks_figure_component(app):
             State("current-edit-parent-index", "data"),  # Retrieve parent_index
             State("local-store", "data"),
             State("url", "pathname"),
-            State({"type": "figure-mode-store", "index": MATCH}, "data"),
+            State({"type": "stored-metadata-component", "index": MATCH}, "data"),
         ],
         prevent_initial_call=True,
     )
     def update_figure(*args):
         dict_kwargs = args[0]
         visu_type_label = args[1]  # This is now the visualization name from dropdown
-        theme_data = args[2]  # Theme is 3rd in the State list
-        workflow_id = args[3]
-        data_collection_id = args[4]
-        component_id_dict = args[5]
-        parent_index = args[6]
-        local_data = args[7]
-        pathname = args[8]
-        current_mode = args[9]  # Current mode from figure-mode-store
+        current_mode = args[2]  # Current mode from figure-mode-store (now Input)
+        theme_data = args[3]  # Theme is 4th in the State list
+        workflow_id = args[4]
+        data_collection_id = args[5]
+        component_id_dict = args[6]
+        parent_index = args[7]
+        local_data = args[8]
+        pathname = args[9]
+        stored_metadata = args[10]  # Stored metadata containing code_content
 
         logger.info("=== UPDATE FIGURE CALLBACK ===")
         logger.info(f"Received dict_kwargs: {dict_kwargs}")
@@ -675,9 +684,28 @@ def register_callbacks_figure_component(app):
                 "dc_config": dc_config,
                 "access_token": TOKEN,
                 "theme": theme,
-                "build_frame": True,
+                "build_frame": False,  # Don't build frame - return just the content for stepper mode
                 "stepper": True,
             }
+
+            # Add mode and code_content if component is in code mode
+            if current_mode == "code":
+                figure_kwargs["mode"] = "code"
+                if stored_metadata and isinstance(stored_metadata, dict):
+                    code_content = stored_metadata.get("code_content", "")
+                    if code_content:
+                        figure_kwargs["code_content"] = code_content
+                        logger.info(
+                            f"Added mode=code and code_content to figure_kwargs for component {component_id}"
+                        )
+                    else:
+                        logger.warning(
+                            f"Code mode detected but no code_content in stored metadata for component {component_id}"
+                        )
+                else:
+                    logger.warning(
+                        f"Code mode detected but no valid stored_metadata for component {component_id}"
+                    )
 
             if parent_index:
                 figure_kwargs["parent_index"] = parent_index
@@ -928,6 +956,7 @@ def register_callbacks_figure_component(app):
             State("theme-store", "data"),
             State("url", "pathname"),
             State({"type": "figure-mode-store", "index": MATCH}, "data"),
+            State({"type": "stored-metadata-component", "index": MATCH}, "data"),
         ],
         prevent_initial_call="initial_load",
     )
@@ -942,6 +971,7 @@ def register_callbacks_figure_component(app):
         theme_data,
         pathname,
         current_mode,
+        stored_metadata,
     ):
         logger.info("=== GENERATE DEFAULT FIGURE CALLBACK ===")
         logger.info(f"Visualization type label: {visu_type_label}")
@@ -1101,6 +1131,25 @@ def register_callbacks_figure_component(app):
                 "stepper": True,
             }
 
+            # Add mode and code_content if component is in code mode
+            if current_mode == "code":
+                figure_kwargs["mode"] = "code"
+                if stored_metadata and isinstance(stored_metadata, dict):
+                    code_content = stored_metadata.get("code_content", "")
+                    if code_content:
+                        figure_kwargs["code_content"] = code_content
+                        logger.info(
+                            f"Added mode=code and code_content to figure_kwargs for component {component_index}"
+                        )
+                    else:
+                        logger.warning(
+                            f"Code mode detected but no code_content in stored metadata for component {component_index}"
+                        )
+                else:
+                    logger.warning(
+                        f"Code mode detected but no valid stored_metadata for component {component_index}"
+                    )
+
             # Add parent_index if available
             if parent_index:
                 figure_kwargs["parent_index"] = parent_index
@@ -1168,7 +1217,9 @@ def register_callbacks_figure_component(app):
         prevent_initial_call=True,
     )
 
-    # Mode switching callback
+    # Removed separate initial setup callback to avoid race conditions
+
+    # Mode toggle callback - handles both initial setup and user interactions
     @app.callback(
         [
             Output({"type": "ui-mode-content", "index": MATCH}, "style"),
@@ -1185,32 +1236,51 @@ def register_callbacks_figure_component(app):
             State({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
             State({"type": "code-content-store", "index": MATCH}, "data"),
         ],
-        prevent_initial_call=True,
+        prevent_initial_call=False,  # Handle both initial load and user toggles
     )
     def handle_mode_switch(mode, current_mode, dict_kwargs, visu_type_label, current_code):
-        """Handle switching between UI and Code modes"""
-        logger.info(f"Mode switch triggered: {current_mode} -> {mode}")
+        """Handle initial setup and user toggling between UI and Code modes"""
+        logger.info(f"🔄 MODE TOGGLE: {current_mode} -> {mode}")
 
-        component_id = dash.callback_context.triggered[0]["prop_id"].split(".")[0]
-        component_index = eval(component_id)["index"]
-        logger.info(f"Component index for mode switch: {component_index}")
-        logger.info(f"Current code content: {current_code}")
-        logger.info(f"Current mode: {current_mode}")
-        logger.info(f"Current dict_kwargs: {dict_kwargs}")
-        logger.info(f"Visualization type label: {visu_type_label}")
+        # Get component index for code interface creation
+        ctx = dash.callback_context
+        try:
+            if ctx.outputs_list:
+                component_id = ctx.outputs_list[0]["id"]
+                component_index = (
+                    component_id["index"] if isinstance(component_id, dict) else "unknown"
+                )
+            else:
+                component_index = "unknown"
+        except Exception:
+            component_index = "unknown"
 
-        if mode == "ui":
-            # Switch to UI mode
-            ui_content_style = {"display": "block"}
-            code_content_style = {"display": "none"}
-            code_interface_children = []
-        else:
-            # Switch to Code mode
+        # Check if this is initial setup (current_mode is None or doesn't match mode)
+        is_initial_setup = current_mode is None or current_mode != mode
+        action_type = "INITIAL SETUP" if is_initial_setup else "USER TOGGLE"
+        logger.info(f"{action_type}: Setting {mode} mode for component {component_index}")
+
+        if mode == "code":
+            # Switch to code mode interface
             ui_content_style = {"display": "none"}
             code_content_style = {"display": "block"}
-
-            # Create code mode interface
             code_interface_children = create_code_mode_interface(component_index)
+            logger.info(f"Switched to CODE MODE for {component_index}")
+        else:
+            # Switch to UI mode interface
+            ui_content_style = {"display": "block"}
+            code_content_style = {"display": "none"}
+            # Create hidden code-status component to ensure callbacks work
+            code_interface_children = [
+                dmc.Alert(
+                    id={"type": "code-status", "index": component_index},
+                    title="UI Mode",
+                    color="blue",
+                    children="Component in UI mode",
+                    style={"display": "none"},  # Hidden in UI mode
+                )
+            ]
+            logger.info(f"Switched to UI MODE for {component_index}")
 
         return (
             ui_content_style,
@@ -1228,19 +1298,48 @@ def register_callbacks_figure_component(app):
         [
             State({"type": "dict_kwargs", "index": MATCH}, "data"),
             State({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
+            State({"type": "code-content-store", "index": MATCH}, "data"),
+            State({"type": "stored-metadata-component", "index": MATCH}, "data"),
         ],
         prevent_initial_call=False,
     )
-    def store_generated_code(mode, dict_kwargs, visu_type_label):
+    def store_generated_code(
+        mode, dict_kwargs, visu_type_label, current_code_content, stored_metadata
+    ):
         """Store generated code when switching to code mode"""
 
         logger.info("=== store_generated_code CALLBACK CALLED ===")
         logger.info(f"Mode: {mode}")
         logger.info(f"Dict kwargs: {dict_kwargs}")
         logger.info(f"Visualization type label: {visu_type_label}")
+        logger.info(f"Current code content: {bool(current_code_content)}")
+        logger.info(
+            f"Stored metadata code: {bool(stored_metadata and stored_metadata.get('code_content'))}"
+        )
 
         if mode == "code":
-            logger.info("Switching to code mode, generating code from UI parameters")
+            # Check if we already have existing code content - preserve it!
+            existing_code = None
+
+            # Priority 1: stored metadata code_content (from saved component)
+            if stored_metadata and isinstance(stored_metadata, dict):
+                metadata_code = stored_metadata.get("code_content", "")
+                if metadata_code and metadata_code.strip():
+                    existing_code = metadata_code
+                    logger.info("Using existing code from stored metadata")
+
+            # Priority 2: current code content store
+            if not existing_code and current_code_content and current_code_content.strip():
+                existing_code = current_code_content
+                logger.info("Using existing code from code content store")
+
+            # If we have existing code, preserve it
+            if existing_code:
+                logger.info("Preserving existing code content, not generating new code")
+                return existing_code
+
+            # Only generate new code if no existing code
+            logger.info("No existing code found, generating code from UI parameters")
             if dict_kwargs:
                 # visu_type_label is now the visualization name (lowercase) from dropdown
                 visu_type = "scatter"  # Default fallback
@@ -1256,8 +1355,9 @@ def register_callbacks_figure_component(app):
                 if generated_code:
                     return generated_code
             else:
-                logger.info("No dict_kwargs, returning template")
-                return "# Add your Plotly code here\n# Available: df (DataFrame), px (plotly.express), go (plotly.graph_objects)\n# Example:\n# fig = px.scatter(df, x='your_x_column', y='your_y_column')"
+                logger.info("No dict_kwargs, returning executable template")
+                # Return a more executable default template
+                return "# Example: Basic scatter plot\nfig = px.scatter(df, x=df.columns[0] if len(df.columns) > 0 else None, y=df.columns[1] if len(df.columns) > 1 else None)"
 
         logger.info("Not in code mode, returning no_update")
         return dash.no_update
@@ -1275,8 +1375,16 @@ def register_callbacks_figure_component(app):
         """Update code editor from stored code or clear button"""
 
         ctx = dash.callback_context
+
+        # Handle initial load (no trigger) - load stored code if available
         if not ctx.triggered:
-            return dash.no_update
+            logger.info(f"=== update_code_editor INITIAL LOAD: stored_code={stored_code} ===")
+            if stored_code:
+                logger.info("Loading initial code content into Ace editor")
+                return stored_code
+            else:
+                logger.info("No initial code content, keeping empty editor")
+                return ""
 
         triggered_prop = ctx.triggered[0]["prop_id"]
         logger.info(f"=== update_code_editor TRIGGERED by: {triggered_prop} ===")
@@ -1338,7 +1446,102 @@ def register_callbacks_figure_component(app):
 
         return dash.no_update
 
-    # Code execution callback
+    # Automatic code execution when switching to code mode with existing code
+    @app.callback(
+        [
+            Output({"type": "code-generated-figure", "index": MATCH}, "data", allow_duplicate=True),
+            Output({"type": "code-status", "index": MATCH}, "children", allow_duplicate=True),
+            Output({"type": "code-status", "index": MATCH}, "color", allow_duplicate=True),
+            Output({"type": "code-status", "index": MATCH}, "title", allow_duplicate=True),
+        ],
+        [
+            Input({"type": "figure-mode-store", "index": MATCH}, "data"),
+        ],
+        [
+            State({"type": "code-content-store", "index": MATCH}, "data"),
+            State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State("local-store", "data"),
+        ],
+        prevent_initial_call="initial_duplicate",  # Required for allow_duplicate with initial calls
+    )
+    def auto_execute_code_on_mode_switch(
+        mode, stored_code, workflow_id, data_collection_id, local_data
+    ):
+        """Automatically execute code when switching to code mode with existing code"""
+        logger.info(f"=== AUTO CODE EXECUTION: mode={mode}, has_code={bool(stored_code)} ===")
+
+        # Get component index to check if it's a stepper component
+        ctx = dash.callback_context
+        component_index = "unknown"
+        try:
+            if ctx.outputs_list:
+                output_id = ctx.outputs_list[0]["id"]
+                if isinstance(output_id, dict):
+                    component_index = output_id.get("index", "unknown")
+        except Exception:
+            pass
+
+        # Skip auto-execution for stepper components (they don't have code interface yet)
+        if component_index.endswith("-tmp"):
+            logger.info(f"Skipping auto-execution for stepper component: {component_index}")
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+        # Only auto-execute when switching to code mode and we have meaningful code
+        if mode != "code" or not stored_code or not stored_code.strip():
+            logger.info("Not executing: not in code mode or no code available")
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+        # Don't auto-execute template/placeholder code
+        if _is_placeholder_code(stored_code):
+            logger.info("Not executing: code appears to be template/placeholder")
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+        if not local_data or not workflow_id or not data_collection_id:
+            logger.info("Not executing: missing required data")
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+        try:
+            # Get dataset from actual data collection
+            from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+            TOKEN = local_data["access_token"]
+            loaded_df = load_deltatable_lite(workflow_id, data_collection_id, TOKEN=TOKEN)
+            df = loaded_df
+
+            # Execute code securely
+            from depictio.dash.modules.figure_component.simple_code_executor import (
+                SimpleCodeExecutor,
+            )
+
+            executor = SimpleCodeExecutor()
+            success, result, message = executor.execute_code(stored_code, df)
+
+            if success and result:
+                # Store the figure data with metadata for further processing
+                figure_data = {
+                    "figure": result.to_dict(),
+                    "code": stored_code,
+                    "workflow_id": workflow_id,
+                    "data_collection_id": data_collection_id,
+                }
+                logger.info("✅ Auto-executed code successfully on mode switch")
+                return (
+                    figure_data,
+                    "Code executed automatically",
+                    "green",
+                    "Auto-Execution Success",
+                )
+            else:
+                logger.warning(f"Auto-execution failed: {message}")
+                return (None, f"Auto-execution failed: {message}", "red", "Auto-Execution Error")
+
+        except Exception as e:
+            error_msg = f"Auto-execution error: {str(e)}"
+            logger.error(error_msg)
+            return (None, error_msg, "red", "Auto-Execution Error")
+
+    # Manual code execution callback (Execute button)
     @app.callback(
         [
             Output({"type": "code-generated-figure", "index": MATCH}, "data"),
@@ -1408,6 +1611,10 @@ def register_callbacks_figure_component(app):
                 extracted_params = extract_params_from_code(code)
                 logger.info(f"Extracted parameters from executed code: {extracted_params}")
 
+                # Evaluate parameters that reference df in the execution context
+                evaluated_params = evaluate_params_in_context(extracted_params, df)
+                logger.info(f"Evaluated parameters with df context: {evaluated_params}")
+
                 # Store the figure data with metadata for further processing
                 figure_data = {
                     "figure": result.to_dict(),
@@ -1423,7 +1630,7 @@ def register_callbacks_figure_component(app):
                     "Code executed successfully!",
                     "green",
                     "Success",
-                    extracted_params,
+                    evaluated_params,
                 )
             else:
                 return (None, message, "red", "Error", dash.no_update)
@@ -1549,6 +1756,10 @@ def register_callbacks_figure_component(app):
                 "last_updated": datetime.now().isoformat(),
             }
         )
+
+        # Ensure parent_index is always present (required by draggable.py)
+        if "parent_index" not in metadata:
+            metadata["parent_index"] = None
 
         # Only update these fields if we have new data from code mode
         if code:
@@ -1846,9 +2057,9 @@ def register_callbacks_figure_component(app):
         raise dash.exceptions.PreventUpdate
 
     @app.callback(
-        Output({"type": "figure", "index": MATCH}, "figure", allow_duplicate=True),
+        Output({"type": "figure", "index": MATCH}, "figure"),
         Input("theme-store", "data"),
-        prevent_initial_call=True,
+        # prevent_initial_call=True,
     )
     def update_theme_figure(theme_data):
         """Update figure theme based on current theme."""
@@ -2083,12 +2294,12 @@ def design_figure(id, component_data=None):
                                             )
                                         ),
                                         # Edit panel (always open)
-                                        dbc.Collapse(
+                                        dmc.Collapse(
                                             id={
                                                 "type": "collapse",
                                                 "index": id["index"],
                                             },
-                                            is_open=True,
+                                            opened=True,
                                             style={
                                                 "overflowY": "auto",
                                                 # "maxHeight": "35vh",
@@ -2141,23 +2352,30 @@ def design_figure(id, component_data=None):
             data={
                 "index": id["index"],
                 "component_type": "figure",
-                "dict_kwargs": {},
-                "visu_type": "scatter",
-                "wf_id": None,
-                "dc_id": None,
-                "last_updated": None,
+                "dict_kwargs": component_data.get("dict_kwargs", {}) if component_data else {},
+                "visu_type": component_data.get("visu_type", "scatter")
+                if component_data
+                else "scatter",
+                "wf_id": component_data.get("wf_id") if component_data else None,
+                "dc_id": component_data.get("dc_id") if component_data else None,
+                "mode": component_data.get("mode", "ui") if component_data else "ui",
+                "code_content": component_data.get("code_content", "") if component_data else "",
+                "last_updated": component_data.get("last_updated") if component_data else None,
+                "parent_index": component_data.get("parent_index") if component_data else None,
             },
             storage_type="memory",
         ),
         # Mode management stores
         dcc.Store(
             id={"type": "figure-mode-store", "index": id["index"]},
-            data="ui",  # Default to UI mode
+            data=initial_mode,  # Use detected initial mode (ui or code)
             storage_type="memory",
         ),
         dcc.Store(
             id={"type": "code-content-store", "index": id["index"]},
-            data="",  # Store for code content
+            data=component_data.get("code_content", "")
+            if component_data
+            else "",  # Initialize with existing code
             storage_type="memory",
         ),
         dcc.Store(
@@ -2195,21 +2413,19 @@ def create_stepper_figure_button(n, disabled=None):
     if disabled is None:
         disabled = not is_enabled("figure")
 
-    button = dbc.Col(
-        dmc.Button(
-            "Figure",
-            id={
-                "type": "btn-option",
-                "index": n,
-                "value": "Figure",
-            },
-            n_clicks=0,
-            style=UNSELECTED_STYLE,
-            size="xl",
-            color=get_dmc_button_color("figure"),
-            leftSection=DashIconify(icon="mdi:graph-box", color="white"),
-            disabled=disabled,
-        )
+    button = dmc.Button(
+        "Figure",
+        id={
+            "type": "btn-option",
+            "index": n,
+            "value": "Figure",
+        },
+        n_clicks=0,
+        style=UNSELECTED_STYLE,
+        size="xl",
+        color=get_dmc_button_color("figure"),
+        leftSection=DashIconify(icon="mdi:graph-box", color="white"),
+        disabled=disabled,
     )
     store = dcc.Store(
         id={

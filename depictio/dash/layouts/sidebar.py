@@ -1,11 +1,11 @@
-import dash_mantine_components as dmc
-from dash_iconify import DashIconify
-
 import dash
+import dash_mantine_components as dmc
 from dash import ALL, Input, Output, State, dcc, html
 from dash.exceptions import PreventUpdate
+from dash_iconify import DashIconify
+
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.theme_utils import create_theme_controls
+from depictio.dash.simple_theme import create_theme_controls
 
 
 def register_sidebar_callbacks(app):
@@ -95,7 +95,7 @@ def register_sidebar_callbacks(app):
         Output("app-shell", "navbar"),
         Input("url", "pathname"),
         State("sidebar-collapsed", "data"),
-        prevent_initial_call=True,
+        prevent_initial_call=False,
     )
     def handle_navbar_url_changes(pathname, is_collapsed):
         # Check if we're on the auth page - if so, hide the navbar completely

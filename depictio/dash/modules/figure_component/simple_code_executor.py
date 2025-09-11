@@ -267,9 +267,15 @@ class SimpleCodeExecutor:
 
             df_modified = execution_locals["df_modified"]
             logger.info("✅ Preprocessing-only execution successful: df_modified created")
-            # Turn back into polars
-            df_modified = pl.from_pandas(df_modified)
-            logger.info("Turned df_modified back into polars DataFrame")
+
+            # Verify that df_modified is a Polars DataFrame
+            if not isinstance(df_modified, pl.DataFrame):
+                return (
+                    False,
+                    None,
+                    f"❌ Expected Polars DataFrame, got {type(df_modified)}: {df_modified}",
+                )
+            logger.info("df_modified is already a Polars DataFrame")
             logger.info(f"df_modified head:\n{df_modified.head()}")
             return True, df_modified, "✅ Preprocessing successful"
 

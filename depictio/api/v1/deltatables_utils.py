@@ -412,6 +412,7 @@ def load_deltatable_lite(
     # Separate cache keys for preview vs full data to prevent conflicts
     cache_suffix = "preview" if load_for_preview else "base"
     base_cache_key = f"{workflow_id_str}_{data_collection_id_str}_{cache_suffix}"
+    logger.debug(f"🔑 Generated cache key: {base_cache_key} (load_for_preview={load_for_preview})")
 
     # REDIS INTEGRATION: Check Redis cache first, then fallback to memory
     try:
@@ -420,10 +421,14 @@ def load_deltatable_lite(
         redis_cached_df = get_cached_dataframe(base_cache_key)
         if redis_cached_df is not None:
             logger.info(f"🚀 REDIS CACHE HIT: Skipping DB/HTTP calls for key: {base_cache_key}")
+            logger.info(
+                f"📊 CACHED DATAFRAME SIZE: {redis_cached_df.height:,} rows × {redis_cached_df.width} columns"
+            )
 
             # Apply metadata filters in memory first (very fast)
             if metadata and not load_for_options:
                 df = apply_runtime_filters(redis_cached_df, metadata)
+                logger.debug(f"📊 AFTER FILTERS: {df.height:,} rows × {df.width} columns")
             else:
                 df = redis_cached_df
 
@@ -449,10 +454,14 @@ def load_deltatable_lite(
 
         # Get cached DataFrame and apply filters in memory
         cached_df = _dataframe_memory_cache[base_cache_key]
+        logger.info(
+            f"📊 MEMORY CACHED DATAFRAME SIZE: {cached_df.height:,} rows × {cached_df.width} columns"
+        )
 
         # Apply metadata filters in memory first (very fast)
         if metadata and not load_for_options:
             df = apply_runtime_filters(cached_df, metadata)
+            logger.debug(f"📊 AFTER FILTERS: {df.height:,} rows × {df.width} columns")
         else:
             df = cached_df
 
@@ -524,6 +533,11 @@ def load_deltatable_lite(
         # Collect the FULL DataFrame first (no filters) to get accurate size and cache the full data
         try:
             df = delta_scan.collect()
+            # LOG RAW DATAFRAME SHAPE IMMEDIATELY AFTER LOADING
+            logger.info(
+                f"📊 RAW DATAFRAME LOADED: {df.height:,} rows × {df.width} columns (DC: {data_collection_id_str})"
+            )
+            logger.debug(f"RAW DataFrame columns: {df.columns}")
             # Use Polars' estimated_size method if available, fallback to rough estimation
             if hasattr(df, "estimated_size"):
                 actual_size = df.estimated_size("b")
@@ -625,6 +639,11 @@ def load_deltatable_lite(
         # Collect the DataFrame (materialization happens here)
         try:
             df = delta_scan.collect()
+            # LOG RAW DATAFRAME SHAPE IMMEDIATELY AFTER LOADING (LARGE DF PATH)
+            logger.info(
+                f"📊 RAW DATAFRAME LOADED (LARGE): {df.height:,} rows × {df.width} columns (DC: {data_collection_id_str})"
+            )
+            logger.debug(f"RAW DataFrame columns: {df.columns}")
         except Exception as e:
             logger.error(f"Error collecting Delta table data: {e}")
             raise Exception("Error collecting Delta table data") from e

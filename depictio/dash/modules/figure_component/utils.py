@@ -1,3 +1,4 @@
+import ast
 import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -7,9 +8,8 @@ import dash_mantine_components as dmc
 import plotly.express as px
 import polars as pl
 from bson import ObjectId
-from dash_iconify import DashIconify
-
 from dash import dcc, html
+from dash_iconify import DashIconify
 
 # PERFORMANCE OPTIMIZATION: Use centralized config
 from depictio.api.v1.configs.config import settings
@@ -317,6 +317,7 @@ def render_figure(
     selected_point: Optional[Dict] = None,
     theme: str = "light",
     skip_validation: bool = False,
+    mode: str = "ui",
 ) -> Any:
     """Render a Plotly figure with robust parameter handling and result caching.
 
@@ -327,14 +328,28 @@ def render_figure(
         cutoff: Maximum data points before sampling
         selected_point: Point to highlight
         theme: Theme ('light' or 'dark')
+        skip_validation: Skip parameter validation
+        mode: Component mode ('ui' or 'code') for parameter evaluation
 
     Returns:
         Plotly figure object
     """
     # PERFORMANCE OPTIMIZATION: Check figure result cache first
 
+    # Safety check: ensure df is not None
+    if df is None:
+        logger.error("DataFrame is None, cannot build figure")
+        return html.Div(
+            dmc.Alert(
+                "Error: No data available to build figure",
+                title="Data Error",
+                color="red",
+            ),
+            style={"height": "400px", "display": "flex", "alignItems": "center"},
+        )
+
     # Generate cache key from all inputs
-    df_hash = str(hash(str(df.hash_rows()) if not df.is_empty() else "empty"))
+    df_hash = str(hash(str(df.hash_rows()) if df is not None and not df.is_empty() else "empty"))
     selected_point_clean = selected_point or {}
 
     cache_key = _get_figure_cache_key(
@@ -429,15 +444,57 @@ def render_figure(
     for param_name in json_params:
         if param_name in cleaned_kwargs and isinstance(cleaned_kwargs[param_name], str):
             try:
+                # First try JSON parsing
                 parsed_value = json.loads(cleaned_kwargs[param_name])
                 cleaned_kwargs[param_name] = parsed_value
                 logger.debug(f"Parsed JSON parameter {param_name}: {cleaned_kwargs[param_name]}")
-            except json.JSONDecodeError as e:
-                logger.warning(
-                    f"Invalid JSON for parameter {param_name}: {cleaned_kwargs[param_name]} - {e}"
-                )
-                # Remove invalid JSON parameter to avoid Plotly errors
-                del cleaned_kwargs[param_name]
+            except json.JSONDecodeError:
+                # Check if this looks like a complex Python expression (contains function calls)
+                param_value = cleaned_kwargs[param_name]
+                if any(
+                    pattern in param_value
+                    for pattern in ["(", ".", "sorted", "unique", "to_list", "df["]
+                ):
+                    if mode == "code" and df is not None:
+                        # In code mode, try to evaluate the expression with df available
+                        try:
+                            from depictio.dash.modules.figure_component.code_mode import (
+                                evaluate_params_in_context,
+                            )
+
+                            temp_params = {param_name: param_value}
+                            evaluated_params = evaluate_params_in_context(temp_params, df)
+                            if param_name in evaluated_params:
+                                cleaned_kwargs[param_name] = evaluated_params[param_name]
+                                logger.info(
+                                    f"Evaluated code mode parameter {param_name}: {param_value} -> {evaluated_params[param_name]}"
+                                )
+                                continue
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to evaluate code mode parameter {param_name}: {e}"
+                            )
+
+                    logger.info(
+                        f"Skipping complex Python expression for {param_name}: {param_value}"
+                    )
+                    # Remove complex expressions that can't be safely evaluated
+                    del cleaned_kwargs[param_name]
+                    continue
+
+                try:
+                    # Fallback to ast.literal_eval for simple Python literal expressions
+                    parsed_value = ast.literal_eval(param_value)
+                    cleaned_kwargs[param_name] = parsed_value
+                    logger.debug(
+                        f"Parsed Python literal parameter {param_name}: {cleaned_kwargs[param_name]}"
+                    )
+                except (ValueError, SyntaxError) as e:
+                    logger.warning(
+                        f"Invalid parameter format for {param_name}: {param_value} - {e}"
+                    )
+                    # Remove invalid parameter to avoid Plotly errors
+                    del cleaned_kwargs[param_name]
 
     # PERFORMANCE OPTIMIZATION: Reduce verbose logging in production
     logger.debug("=== CLEANED PARAMETERS DEBUG ===")
@@ -492,6 +549,20 @@ def render_figure(
                     )
                     # Remove invalid column reference
                     cleaned_kwargs[param_name] = None
+
+    # Early check: if no valid plotting parameters are provided, return empty figure
+    valid_plot_params = [
+        param
+        for param, value in cleaned_kwargs.items()
+        if value is not None and value != "" and param != "template"
+    ]
+
+    if not valid_plot_params and not is_clustering:
+        logger.info(f"No valid plotting parameters for {visu_type}, returning empty figure")
+        return px.scatter(
+            template=dict_kwargs.get("template", _get_theme_template(theme)),
+            title=f"Select columns to create {visu_type} plot",
+        )
 
     try:
         if is_clustering:
@@ -858,6 +929,10 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     stepper = kwargs.get("stepper", False)
     parent_index = kwargs.get("parent_index", None)
     df = kwargs.get("df", pl.DataFrame())
+    # Ensure df is never None
+    if df is None:
+        logger.warning("df was None, using empty DataFrame")
+        df = pl.DataFrame()
     TOKEN = kwargs.get("access_token")
     filter_applied = kwargs.get("filter_applied", False)
     theme = kwargs.get("theme", "light")
@@ -907,7 +982,23 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         "last_updated": datetime.now().isoformat(),
         "mode": kwargs.get("mode", "ui"),  # Store the mode in component metadata
     }
+
+    # CRITICAL: Preserve code_content in stored metadata for code mode components
+    if kwargs.get("mode") == "code" and "code_content" in kwargs:
+        store_component_data["code_content"] = kwargs["code_content"]
+        logger.info(
+            f"📝 STORED code_content for component {str(store_index)} (length: {len(kwargs['code_content'])})"
+        )
     logger.info(f"Component metadata: {store_component_data}")
+
+    # Log code mode component details
+    if kwargs.get("mode") == "code":
+        if "code_content" in kwargs:
+            logger.info(
+                f"✅ CODE MODE: code_content present (length: {len(kwargs['code_content'])})"
+            )
+        else:
+            logger.warning("⚠️ CODE MODE: code_content missing - will attempt database recovery")
 
     # Ensure dc_config is available for build_figure
     if not dc_config and wf_id and dc_id:
@@ -967,17 +1058,35 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         logger.info(f"🎨 RESTORE: Using existing template: {template_value}")
 
     # Handle data loading
-    if df.is_empty() and kwargs.get("refresh", True):
+    if df is not None and df.is_empty() and kwargs.get("refresh", True):
         if wf_id and dc_id:
             logger.info(f"Loading data for {wf_id}:{dc_id}")
             try:
+                # LOG DETAILED INFO ABOUT DATA LOADING
+                logger.info("🔍 FIGURE COMPONENT DATA LOADING:")
+                logger.info(f"  - Component expects column: {dict_kwargs.get('x', 'N/A')}")
+                logger.info(f"  - Workflow ID: {wf_id}")
+                logger.info(f"  - Data Collection ID: {dc_id}")
+                logger.info(f"  - DC ID type: {type(dc_id)}")
+                logger.info(f"  - Is joined DC: {'--' in str(dc_id) if dc_id else False}")
+
                 # Handle joined data collection IDs - don't convert to ObjectId
                 if isinstance(dc_id, str) and "--" in dc_id:
                     # For joined data collections, pass the DC ID as string
+                    logger.info(f"  - Loading joined data collection: {dc_id}")
                     df = load_deltatable_lite(ObjectId(wf_id), dc_id, TOKEN=TOKEN)
                 else:
                     # Regular data collection - convert to ObjectId
+                    logger.info(f"  - Loading regular data collection: {dc_id}")
                     df = load_deltatable_lite(ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN)
+
+                # LOG THE RESULTING DATAFRAME SCHEMA
+                logger.info("📊 LOADED DATAFRAME SCHEMA:")
+                logger.info(f"  - Shape: {df.shape}")
+                logger.info(f"  - Columns: {df.columns}")
+                logger.info(
+                    f"  - Expected column '{dict_kwargs.get('x', 'N/A')}' present: {dict_kwargs.get('x', 'N/A') in df.columns}"
+                )
             except Exception as e:
                 logger.error(f"Failed to load data: {e}")
                 df = pl.DataFrame()
@@ -1016,18 +1125,50 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
                         )
                         logger.info(f"CODE MODE: Preprocessing message: {message}")
                         logger.info(f"CODE MODE: Preprocessing success: {success}")
-                        logger.info(f"CODE MODE: Preprocessing dataframe: {df_for_figure.head()}")
+
+                        # Safety check: if preprocessing failed or returned None, use original df
+                        if not success or df_for_figure is None:
+                            logger.warning(
+                                "CODE MODE: Preprocessing failed or returned None, using original df"
+                            )
+                            df_for_figure = df
+                        else:
+                            # Additional safety check before calling head()
+                            if df_for_figure is not None:
+                                logger.info(
+                                    f"CODE MODE: Preprocessing dataframe: {df_for_figure.head()}"
+                                )
+                            else:
+                                logger.warning(
+                                    "CODE MODE: df_for_figure is None after preprocessing"
+                                )
+                                df_for_figure = df
 
                     except Exception as e:
                         logger.error(
                             f"❌ CODE MODE: Preprocessing execution failed: {e}, using original df"
                         )
+                        df_for_figure = df  # Fallback to original DataFrame
+            else:
+                # No code content provided for code mode - this indicates a metadata flow issue
+                logger.error(
+                    f"❌ CODE MODE: Component marked as code mode but no code_content provided. "
+                    f"This indicates the component metadata pipeline is not preserving code_content during interactive updates. "
+                    f"Expected columns like '{validated_kwargs.get('y')}' will not exist. "
+                    f"FIX NEEDED: Ensure stored_metadata includes code_content field."
+                )
+                df_for_figure = df
 
             figure = render_figure(
-                validated_kwargs, visu_type, df_for_figure, theme=theme, skip_validation=True
+                validated_kwargs,
+                visu_type,
+                df_for_figure,
+                theme=theme,
+                skip_validation=True,
+                mode="code",
             )
         else:
-            figure = render_figure(validated_kwargs, visu_type, df, theme=theme)
+            figure = render_figure(validated_kwargs, visu_type, df, theme=theme, mode="ui")
 
         logger.info(f"render_figure SUCCESS: figure type = {type(figure)}")
     except Exception as e:
@@ -1035,35 +1176,98 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         figure = px.scatter(title=f"Error: {str(e)}")
 
     # Create info badges
-    badges = _create_info_badges(index or "unknown", df, visu_type, filter_applied, build_frame)
+    badges = _create_info_badges(
+        index or "unknown",
+        df if df is not None else pl.DataFrame(),
+        visu_type,
+        filter_applied,
+        build_frame,
+    )
 
-    # Create figure component
-    figure_div = html.Div(
-        [
-            badges,
-            dcc.Graph(
-                figure=figure,
-                id={"type": "graph", "index": index},
-                config={
-                    "editable": True,
-                    "scrollZoom": True,
-                    "responsive": True,
-                    "displayModeBar": True,
-                },
-                className="responsive-graph",  # Add responsive graph class for vertical growing
-                # style={
-                #     "width": "100%",
-                #     "height": "100%",  # FIXED: Use full height for vertical growing
-                #     "flex": "1",  # Critical for vertical growing
-                #     "backgroundColor": "transparent",  # Fix white background issue
-                #     # "minHeight": "200px",  # Minimum height for usability
-                # },
-            ),
+    # Create the figure div with conditional Store component
+    # In stepper mode with build_frame=False, don't include Store to avoid duplication
+    figure_components = [
+        badges,
+        dcc.Graph(
+            figure=figure,
+            id={"type": "graph", "index": index},
+            config={
+                "editable": True,
+                "scrollZoom": True,
+                "responsive": True,
+                "displayModeBar": True,
+            },
+            className="responsive-graph",  # Add responsive graph class for vertical growing
+            # style={
+            #     "width": "100%",
+            #     "height": "100%",  # FIXED: Use full height for vertical growing
+            #     "flex": "1",  # Critical for vertical growing
+            #     "backgroundColor": "transparent",  # Fix white background issue
+            #     # "minHeight": "200px",  # Minimum height for usability
+            # },
+        ),
+    ]
+
+    # DUPLICATION FIX: Intelligent store creation based on component existence
+    # Check if this is a new component creation or editing existing component
+    def is_new_component(component_index, parent_index):
+        """
+        Check if this is a new component being created or an existing one being edited.
+
+        For new components:
+        - Component index might be temporary (e.g., contains "-tmp")
+        - No existing metadata in dashboard
+
+        For existing components:
+        - Component exists in the current dashboard
+        - Has persistent index and metadata
+        """
+        # If we have a parent_index, this suggests it's an edit operation on existing component
+        if parent_index and parent_index != component_index:
+            logger.info(
+                f"🔍 EDIT DETECTED: parent_index ({parent_index}) != component_index ({component_index})"
+            )
+            return False
+
+        # If index contains "-tmp", this is likely a temporary component during creation
+        if "-tmp" in str(component_index):
+            logger.info(f"🔍 NEW COMPONENT: temporary index detected ({component_index})")
+            return True
+
+        # For other cases, we could check if component exists in dashboard DB
+        # but for now, use the stepper flag as indicator of creation context
+        logger.info(f"🔍 STEPPER CONTEXT: stepper={stepper}, assuming new component")
+        return stepper
+
+    is_new = is_new_component(store_index, parent_index)
+
+    # Decision logic:
+    # 1. New components (stepper creation): ALWAYS create store
+    # 2. Edit modal (existing component): NEVER create store (design_figure already created it)
+    # 3. Dashboard restore: ALWAYS create store (no design_figure involved)
+
+    should_create_store = is_new or not stepper
+
+    logger.info(
+        f"🔍 STORE CREATION: build_frame={build_frame}, stepper={stepper}, is_new={is_new}, should_create={should_create_store}"
+    )
+
+    if should_create_store:
+        # This is new component creation or dashboard restore - store is needed
+        logger.info(f"✅ CREATING STORE: stored-metadata-component for index {store_index}")
+        figure_components.append(
             dcc.Store(
                 data=store_component_data,
                 id={"type": "stored-metadata-component", "index": store_index},
-            ),
-        ],
+            )
+        )
+    else:
+        logger.info(
+            "❌ SKIPPING STORE: Not creating stored-metadata-component (editing existing component)"
+        )
+
+    figure_div = html.Div(
+        figure_components,
         # style={
         #     "width": "100%",
         #     "height": "100%",
@@ -1127,7 +1331,12 @@ def _create_info_badges(
     cutoff = _config.max_data_points
 
     # Partial data badge
-    if visu_type.lower() == "scatter" and not df.is_empty() and df.shape[0] > cutoff:
+    if (
+        visu_type.lower() == "scatter"
+        and df is not None
+        and not df.is_empty()
+        and df.shape[0] > cutoff
+    ):
         partial_badge = dmc.Tooltip(
             children=dmc.Badge(
                 "Partial data displayed",

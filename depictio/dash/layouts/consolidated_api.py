@@ -9,8 +9,8 @@ import time
 from typing import Any, Dict, Optional
 
 import httpx
-
 from dash import Input, Output, State, callback_context, no_update
+
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 

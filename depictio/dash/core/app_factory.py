@@ -4,9 +4,8 @@ Factory module for creating and configuring the Dash application.
 
 import os
 
-import dash_bootstrap_components as dbc
-
 import dash
+
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.components.google_analytics import integrate_google_analytics
 
@@ -56,7 +55,6 @@ def create_dash_app():
         __name__,  # Use the current module name
         requests_pathname_prefix="/",
         external_stylesheets=[
-            dbc.themes.BOOTSTRAP,
             {
                 "href": "https://fonts.googleapis.com/icon?family=Material+Icons",
                 "rel": "stylesheet",

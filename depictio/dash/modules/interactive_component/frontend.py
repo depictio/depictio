@@ -1,9 +1,9 @@
 # Import necessary libraries
 import dash_mantine_components as dmc
 import httpx
+from dash import MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
-from dash import MATCH, Input, Output, State, dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 
@@ -337,8 +337,6 @@ def register_callbacks_interactive_component(app):
             logger.info(f"cols_json type: {type(cols_json)}")
 
             if cols_json:
-                from dash import dash_table
-
                 logger.info("Creating data_columns_df...")
                 try:
                     data_columns_df = [
@@ -351,34 +349,62 @@ def register_callbacks_interactive_component(app):
                     )
 
                     logger.info("Creating DataTable...")
-                    columns_description_df = dash_table.DataTable(
-                        columns=[
-                            {"name": "Column", "id": "column"},
-                            {"name": "Description", "id": "description"},
+                    # Create DMC Table instead of DataTable for better theming
+                    table_rows = []
+                    for row in data_columns_df:
+                        table_rows.append(
+                            dmc.TableTr(
+                                [
+                                    dmc.TableTd(
+                                        row["column"],
+                                        style={
+                                            "textAlign": "center",
+                                            "fontSize": "11px",
+                                            "maxWidth": "150px",
+                                        },
+                                    ),
+                                    dmc.TableTd(
+                                        row["description"],
+                                        style={
+                                            "textAlign": "center",
+                                            "fontSize": "11px",
+                                            "maxWidth": "150px",
+                                        },
+                                    ),
+                                ]
+                            )
+                        )
+
+                    columns_description_df = dmc.Table(
+                        [
+                            dmc.TableThead(
+                                [
+                                    dmc.TableTr(
+                                        [
+                                            dmc.TableTh(
+                                                "Column",
+                                                style={
+                                                    "textAlign": "center",
+                                                    "fontSize": "11px",
+                                                    "fontWeight": "bold",
+                                                },
+                                            ),
+                                            dmc.TableTh(
+                                                "Description",
+                                                style={
+                                                    "textAlign": "center",
+                                                    "fontSize": "11px",
+                                                    "fontWeight": "bold",
+                                                },
+                                            ),
+                                        ]
+                                    )
+                                ]
+                            ),
+                            dmc.TableTbody(table_rows),
                         ],
-                        data=data_columns_df,
-                        # Small font size, helvetica, no border, center text
-                        style_cell={
-                            "fontSize": 11,
-                            "fontFamily": "Helvetica",
-                            "border": "0px",
-                            "textAlign": "center",
-                            "backgroundColor": "var(--app-surface-color, #ffffff)",
-                            "color": "var(--app-text-color, #000000)",
-                            "padding": "4px 8px",
-                            "maxWidth": "150px",
-                            "overflow": "hidden",
-                            "textOverflow": "ellipsis",
-                        },
-                        style_header={
-                            "fontWeight": "bold",
-                            "backgroundColor": "var(--app-surface-color, #ffffff)",
-                            "color": "var(--app-text-color, #000000)",
-                        },
-                        style_data={
-                            "backgroundColor": "var(--app-surface-color, #ffffff)",
-                            "color": "var(--app-text-color, #000000)",
-                        },
+                        striped="odd",
+                        withTableBorder=True,
                     )
                     logger.info("DataTable created successfully")
                 except Exception as e:
@@ -587,7 +613,7 @@ def design_interactive(id, df):
     left_column = dmc.GridCol(
         dmc.Stack(
             [
-                html.H5("Interactive edit menu", style={"textAlign": "center"}),
+                dmc.Title("Interactive edit menu", order=5, style={"textAlign": "center"}),
                 dmc.Card(
                     dmc.CardSection(
                         dmc.Stack(
@@ -726,13 +752,24 @@ def design_interactive(id, df):
     right_column = dmc.GridCol(
         dmc.Stack(
             [
-                html.H5("Resulting interactive component", style={"textAlign": "center"}),
-                html.Div(
-                    build_interactive_frame(index=id["index"], show_border=True),
-                    id={
-                        "type": "component-container",
-                        "index": id["index"],
-                    },
+                dmc.Title(
+                    "Resulting interactive component", order=5, style={"textAlign": "center"}
+                ),
+                # Add a Paper wrapper just for visual preview in stepper mode
+                dmc.Paper(
+                    html.Div(
+                        build_interactive_frame(
+                            index=id["index"], show_border=False
+                        ),  # No border on the actual component
+                        id={
+                            "type": "component-container",
+                            "index": id["index"],
+                        },
+                    ),
+                    withBorder=True,  # Show border on preview container
+                    radius="md",
+                    p="md",  # Add some padding for the preview
+                    style={"width": "100%"},
                 ),
             ],
             align="flex-start",  # Align to left (horizontal)
@@ -807,27 +844,24 @@ def create_stepper_interactive_button(n, disabled=None):
         n (_type_): _description_
         disabled (bool, optional): Override enabled state. If None, uses metadata.
     """
-    import dash_bootstrap_components as dbc
 
     # Use metadata enabled field if disabled not explicitly provided
     if disabled is None:
         disabled = not is_enabled("interactive")
 
-    button = dbc.Col(
-        dmc.Button(
-            "Interactive",
-            id={
-                "type": "btn-option",
-                "index": n,
-                "value": "Interactive",
-            },
-            n_clicks=0,
-            style=UNSELECTED_STYLE,
-            size="xl",
-            color=get_dmc_button_color("interactive"),
-            leftSection=DashIconify(icon="bx:slider-alt", color="white"),
-            disabled=disabled,
-        )
+    button = dmc.Button(
+        "Interactive",
+        id={
+            "type": "btn-option",
+            "index": n,
+            "value": "Interactive",
+        },
+        n_clicks=0,
+        style=UNSELECTED_STYLE,
+        size="xl",
+        color=get_dmc_button_color("interactive"),
+        leftSection=DashIconify(icon="bx:slider-alt", color="white"),
+        disabled=disabled,
     )
     store = dcc.Store(
         id={

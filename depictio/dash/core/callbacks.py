@@ -3,6 +3,7 @@ Callback registration for the Depictio Dash application.
 """
 
 from dash import Input, Output, State, ctx
+
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.core.auth import process_authentication
 
@@ -14,6 +15,7 @@ def register_main_callback(app):
     Args:
         app (dash.Dash): The Dash application instance
     """
+    logger.info("🔥 REGISTERING MAIN CALLBACK for page routing and authentication")
 
     @app.callback(
         Output("page-content", "children"),
@@ -26,7 +28,7 @@ def register_main_callback(app):
             State("theme-store", "data"),
             State("project-cache-store", "data"),
         ],
-        prevent_initial_call=True,
+        prevent_initial_call="initial_duplicate",
     )
     def display_page(pathname, local_data, theme_store, cached_project_data):
         """
@@ -40,7 +42,7 @@ def register_main_callback(app):
             tuple: (page_content, header, pathname, local_data)
         """
         trigger = ctx.triggered_id
-        logger.debug(f"Trigger: {trigger}")
+        logger.info(f"🔥 MAIN CALLBACK TRIGGERED: {trigger}, pathname={pathname}")
 
         # PERFORMANCE DEBUG: Log data sizes to identify serialization bottlenecks
         import sys
@@ -59,12 +61,18 @@ def register_main_callback(app):
             )
 
         # Process authentication and return appropriate content
-        return process_authentication(pathname, local_data, theme_store, cached_project_data)
+        result = process_authentication(pathname, local_data, theme_store, cached_project_data)
+        logger.info(
+            f"🔥 MAIN CALLBACK RESULT: page_content={'<content>' if result[0] else 'None'}, header_content={'<header>' if result[1] else 'None'}, pathname={result[2]}"
+        )
+        return result
+
+    logger.info("🔥 MAIN CALLBACK REGISTERED SUCCESSFULLY")
 
     @app.callback(
         Output("app-shell", "header"),
         Input("url", "pathname"),
-        prevent_initial_call=True,
+        prevent_initial_call=False,
     )
     def toggle_appshell_header_visibility(pathname):
         """
@@ -76,12 +84,42 @@ def register_main_callback(app):
         Returns:
             dict or None: header_config - None value hides the component
         """
+        logger.info(f"🔥 HEADER VISIBILITY CALLBACK: pathname={pathname}")
         if pathname == "/auth":
             # Hide header on auth page
+            return None
+        elif pathname is None:
+            # On initial load, hide header by default until pathname is determined
             return None
         else:
             # Show header on all other pages
             return {"height": 87}
+
+    # Add clientside callback to manage body classes for auth page
+    app.clientside_callback(
+        """
+        function(pathname) {
+            // Also check location.pathname for initial load
+            const currentPath = pathname || window.location.pathname;
+
+            // Add a small delay to ensure smooth transitions
+            setTimeout(() => {
+                if (currentPath === '/auth') {
+                    document.body.classList.add('auth-page');
+                    document.body.classList.remove('page-loaded');
+                } else {
+                    document.body.classList.remove('auth-page');
+                    document.body.classList.add('page-loaded');
+                }
+            }, 50); // 50ms delay for smooth transition
+
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("dummy-resize-output", "children", allow_duplicate=True),
+        Input("url", "pathname"),
+        prevent_initial_call="initial_duplicate",
+    )
 
 
 def register_all_callbacks(app):
@@ -141,7 +179,7 @@ def register_layout_callbacks(app):
     # from depictio.dash.layouts.stepper_parts.part_one import register_callbacks_stepper_part_one
     # from depictio.dash.layouts.stepper_parts.part_three import register_callbacks_stepper_part_three
     # from depictio.dash.layouts.stepper_parts.part_two import register_callbacks_stepper_part_two
-    from depictio.dash.theme_utils import register_theme_callbacks
+    from depictio.dash.simple_theme import register_simple_theme_system
 
     # Register consolidated API callbacks first (highest priority)
     register_consolidated_api_callbacks(app)
@@ -156,7 +194,7 @@ def register_layout_callbacks(app):
     register_sidebar_callbacks(app)
     register_callbacks_notes_footer(app)
     register_callbacks_save(app)
-    register_theme_callbacks(app)
+    register_simple_theme_system(app)
 
 
 def register_component_callbacks(app):

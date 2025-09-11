@@ -171,6 +171,15 @@ def render_raw_children(
     interactive_components_dict = interactive_components_dict or {}
     component = stored_metadata
 
+    # Log code mode component processing during filters
+    if component.get("component_type") == "figure" and component.get("mode") == "code":
+        if "code_content" in component:
+            logger.info(
+                f"🔄 FILTER: Code mode figure with code_content (length: {len(component['code_content'])})"
+            )
+        else:
+            logger.warning("⚠️ FILTER: Code mode figure missing code_content - component may break")
+
     # Process 'jbrowse' components first
     # children.extend(
     #     child for child, component in zip(current_draggable_children, stored_metadata)

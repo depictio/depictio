@@ -1,9 +1,9 @@
 # Import necessary libraries
 import dash_mantine_components as dmc
 import httpx
+from dash import MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
-from dash import MATCH, Input, Output, State, dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
@@ -233,42 +233,60 @@ def register_callbacks_card_component(app):
         cols_json = get_columns_from_data_collection(wf_id, dc_id, TOKEN)
         logger.info(f"cols_json: {cols_json}")
 
-        from dash import dash_table
-
         data_columns_df = [
             {"column": c, "description": cols_json[c]["description"]}
             for c in cols_json
             if cols_json[c]["description"] is not None
         ]
 
-        columns_description_df = dash_table.DataTable(
-            columns=[
-                {"name": "Column", "id": "column"},
-                {"name": "Description", "id": "description"},
+        # Create DMC Table instead of DataTable for better theming
+        table_rows = []
+        for row in data_columns_df:
+            table_rows.append(
+                dmc.TableTr(
+                    [
+                        dmc.TableTd(
+                            row["column"],
+                            style={"textAlign": "center", "fontSize": "11px", "maxWidth": "150px"},
+                        ),
+                        dmc.TableTd(
+                            row["description"],
+                            style={"textAlign": "center", "fontSize": "11px", "maxWidth": "150px"},
+                        ),
+                    ]
+                )
+            )
+
+        columns_description_df = dmc.Table(
+            [
+                dmc.TableThead(
+                    [
+                        dmc.TableTr(
+                            [
+                                dmc.TableTh(
+                                    "Column",
+                                    style={
+                                        "textAlign": "center",
+                                        "fontSize": "11px",
+                                        "fontWeight": "bold",
+                                    },
+                                ),
+                                dmc.TableTh(
+                                    "Description",
+                                    style={
+                                        "textAlign": "center",
+                                        "fontSize": "11px",
+                                        "fontWeight": "bold",
+                                    },
+                                ),
+                            ]
+                        )
+                    ]
+                ),
+                dmc.TableTbody(table_rows),
             ],
-            data=data_columns_df,
-            # Small font size, helvetica, no border, center text
-            style_cell={
-                "fontSize": 11,
-                "fontFamily": "Helvetica",
-                "border": "0px",
-                "textAlign": "center",
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
-                "color": "var(--app-text-color, #000000)",
-                "padding": "4px 8px",
-                "maxWidth": "150px",
-                "overflow": "hidden",
-                "textOverflow": "ellipsis",
-            },
-            style_header={
-                "fontWeight": "bold",
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
-                "color": "var(--app-text-color, #000000)",
-            },
-            style_data={
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
-                "color": "var(--app-text-color, #000000)",
-            },
+            striped="odd",
+            withTableBorder=True,
         )
 
         # If any of the input values are None, return an empty list
@@ -370,7 +388,7 @@ def register_callbacks_card_component(app):
             # "value": v,
             "access_token": TOKEN,
             "stepper": True,  # Show border during editing
-            "build_frame": True,  # Use card frame for editing
+            "build_frame": False,  # Don't build frame - return just the content for the card-body container
             "color": color_value,
             "cols_json": cols_json,  # Pass cols_json for reference values
         }
@@ -392,7 +410,7 @@ def design_card(id, df):
     left_column = dmc.GridCol(
         dmc.Stack(
             [
-                html.H5("Card edit menu", style={"textAlign": "center"}),
+                dmc.Title("Card edit menu", order=5, style={"textAlign": "center"}),
                 dmc.Card(
                     dmc.CardSection(
                         dmc.Stack(
@@ -489,13 +507,22 @@ def design_card(id, df):
     right_column = dmc.GridCol(
         dmc.Stack(
             [
-                html.H5("Resulting card", style={"textAlign": "center"}),
-                html.Div(
-                    build_card_frame(index=id["index"], show_border=True),
-                    id={
-                        "type": "component-container",
-                        "index": id["index"],
-                    },
+                dmc.Title("Resulting card", order=5, style={"textAlign": "center"}),
+                # Add a Paper wrapper just for visual preview in stepper mode
+                dmc.Paper(
+                    html.Div(
+                        build_card_frame(
+                            index=id["index"], show_border=False
+                        ),  # No border on actual component
+                        id={
+                            "type": "component-container",
+                            "index": id["index"],
+                        },
+                    ),
+                    withBorder=True,  # Show border on preview container
+                    radius="md",
+                    p="md",  # Add some padding for the preview
+                    style={"width": "100%"},
                 ),
             ],
             align="flex-start",  # Align to left (horizontal)
@@ -524,8 +551,8 @@ def design_card(id, df):
                     ),
                 ),
             ],
-            align="center",
-            justify="center",
+            align="start",
+            justify="start",
             style={"height": "100%"},
         ),
         span="content",
@@ -574,28 +601,24 @@ def create_stepper_card_button(n, disabled=None):
         disabled (bool, optional): Override enabled state. If None, uses metadata.
     """
 
-    import dash_bootstrap_components as dbc
-
     # Use metadata enabled field if disabled not explicitly provided
     if disabled is None:
         disabled = not is_enabled("card")
 
     # Create the card button
-    button = dbc.Col(
-        dmc.Button(
-            "Card",
-            id={
-                "type": "btn-option",
-                "index": n,
-                "value": "Card",
-            },
-            n_clicks=0,
-            style=UNSELECTED_STYLE,
-            size="xl",
-            color=get_dmc_button_color("card"),
-            leftSection=DashIconify(icon="formkit:number", color="white"),
-            disabled=disabled,
-        )
+    button = dmc.Button(
+        "Card",
+        id={
+            "type": "btn-option",
+            "index": n,
+            "value": "Card",
+        },
+        n_clicks=0,
+        style=UNSELECTED_STYLE,
+        size="xl",
+        color=get_dmc_button_color("card"),
+        leftSection=DashIconify(icon="formkit:number", color="white"),
+        disabled=disabled,
     )
     store = dcc.Store(
         id={
