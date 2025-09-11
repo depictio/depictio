@@ -722,29 +722,80 @@ def build_interactive(**kwargs):
         if value is not None:
             # For Select: only set value if it's still valid (in data options)
             if interactive_component_type == "Select":
-                if value in data:
+                # Convert value to string if it's not already (handles numeric values from sliders)
+                if not isinstance(value, str):
+                    if isinstance(value, (list, tuple)):
+                        # If value is from a RangeSlider, don't set any value
+                        logger.warning(
+                            f"Select component {index}: Ignoring array value {value} from slider"
+                        )
+                        value = None
+                    else:
+                        # Convert numeric value to string
+                        value = str(value) if value is not None else None
+                        logger.debug(
+                            f"Select component {index}: Converted value to string: '{value}'"
+                        )
+
+                if value and value in data:
                     component_kwargs["value"] = value
                     logger.debug(
                         f"Select component {index}: Preserved value '{value}' (available in options)"
                     )
-                else:
+                elif value:
                     logger.warning(
                         f"Select component {index}: Value '{value}' no longer available in options {data}"
                     )
             # For SegmentedControl: only set value if it's valid and not empty
             elif interactive_component_type == "SegmentedControl":
-                if value in data:
+                # Convert value to string if it's not already (handles numeric values from sliders)
+                if not isinstance(value, str):
+                    if isinstance(value, (list, tuple)):
+                        # If value is from a RangeSlider, don't set any value
+                        logger.warning(
+                            f"SegmentedControl component {index}: Ignoring array value {value} from slider"
+                        )
+                        value = None
+                    else:
+                        # Convert numeric value to string
+                        value = str(value) if value is not None else None
+                        logger.debug(
+                            f"SegmentedControl component {index}: Converted value to string: '{value}'"
+                        )
+
+                if value and value in data:
                     component_kwargs["value"] = value
                     logger.debug(
                         f"SegmentedControl component {index}: Preserved value '{value}' (available in options)"
                     )
-                else:
+                elif value:
                     logger.warning(
                         f"SegmentedControl component {index}: Value '{value}' no longer available in options {data}, defaulting to no selection"
                     )
                     # Don't set value - let it default to None (no selection)
             # For MultiSelect: preserve value even if partially invalid
             elif interactive_component_type == "MultiSelect":
+                # Ensure value is a list for MultiSelect
+                if value is not None and not isinstance(value, list):
+                    if isinstance(value, (tuple, set)):
+                        value = list(value)
+                        logger.debug(
+                            f"MultiSelect component {index}: Converted {type(value).__name__} to list"
+                        )
+                    else:
+                        # Single value - wrap in list
+                        value = [str(value)]
+                        logger.debug(
+                            f"MultiSelect component {index}: Wrapped single value in list: {value}"
+                        )
+
+                # Convert all values in list to strings
+                if isinstance(value, list):
+                    value = [str(v) for v in value if v is not None]
+                    logger.debug(
+                        f"MultiSelect component {index}: Converted values to strings: {value}"
+                    )
+
                 component_kwargs["value"] = value
                 logger.debug(f"MultiSelect component {index}: Preserved value '{value}'")
         else:
