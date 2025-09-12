@@ -26,7 +26,7 @@ from depictio.api.v1.configs.logging_init import logger
 
 # Data generation configuration
 DATA_CONFIG = {
-    "rows": 10000000,  # 10M rows for performance testing
+    "rows": 1000,  # 1K rows for fast development
     "categories": ["Category A", "Category B", "Category C", "Category D", "Category E"],
     "metrics": {
         "users": {"min": 1000, "max": 10000, "format": "int"},
@@ -941,14 +941,11 @@ def register_dashboard_content_callbacks(app):
 
                 return no_update
 
-        # Random delay between 0.5s and 3.0s to simulate real-world processing
-        delay = random.uniform(0.5, 3.0)
-        logger.info(f"⏱️ METRIC CARD {metric_index}: Processing delay = {delay:.2f}s")
+        logger.info(f"⏱️ METRIC CARD {metric_index}: Starting processing")
 
         # Get base dataframe and apply current filters
         base_df = get_cached_dataframe()
         df = apply_data_filters(base_df, event_state, f"metric-{metric_index}")
-        # time.sleep(delay)
 
         # Find component configuration
         component_config = None
@@ -1001,7 +998,7 @@ def register_dashboard_content_callbacks(app):
         card = create_metric_card(metric_data)
 
         logger.info(
-            f"✅ METRIC CARD {metric_index}: Rendered '{component_config['title']}' ({metric_data['value']}) after {delay:.2f}s"
+            f"✅ METRIC CARD {metric_index}: Rendered '{component_config['title']}' ({metric_data['value']})"
         )
         return card
 
@@ -1052,21 +1049,11 @@ def register_dashboard_content_callbacks(app):
 
                 return no_update
 
-        # Variable delay based on chart complexity (different for each chart type)
-        delay_config = {
-            0: random.uniform(1.0, 2.5),  # Scatter plot - medium complexity
-            1: random.uniform(2.0, 4.0),  # Bar chart - higher complexity due to aggregation
-            2: random.uniform(1.5, 3.5),  # Box plot - medium-high complexity
-            3: random.uniform(0.8, 2.0),  # Timeline scatter - lower complexity
-        }
-
-        delay = delay_config.get(chart_index, random.uniform(1.0, 3.0))
-        logger.info(f"⏱️ CHART COMPONENT {chart_index}: Processing delay = {delay:.2f}s")
+        logger.info(f"⏱️ CHART COMPONENT {chart_index}: Starting processing")
 
         # Get base dataframe and apply current filters
         base_df = get_cached_dataframe()
         df = apply_data_filters(base_df, event_state, f"chart-{chart_index}")
-        # time.sleep(delay)
 
         # Find component configuration
         component_config = None
@@ -1140,7 +1127,7 @@ def register_dashboard_content_callbacks(app):
             )
 
             logger.info(
-                f"✅ CHART COMPONENT {chart_index}: Rendered {component_config['chart_type']} chart '{component_config['title']}' after {delay:.2f}s"
+                f"✅ CHART COMPONENT {chart_index}: Rendered {component_config['chart_type']} chart '{component_config['title']}'"
             )
             return chart
 
