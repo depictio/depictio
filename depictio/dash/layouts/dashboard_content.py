@@ -328,11 +328,11 @@ def get_cached_dataframe(config=None):
     # Step 2: Check if another process is loading data
     if cache.exists(lock_key):
         logger.info("🔄 PARQUET LOADING: Another process loading data, waiting...")
-        max_wait = 60  # Increased wait time for large parquet files
+        max_wait = 10  # Optimized for small datasets (1000 rows)
         wait_time = 0
         while wait_time < max_wait and cache.exists(lock_key):
-            time.sleep(1)
-            wait_time += 1
+            time.sleep(0.1)  # Much faster polling for small files
+            wait_time += 0.1
             # Check if data became available in cache
             cached_df = cache.get(cache_key)
             if cached_df is not None:
@@ -526,6 +526,11 @@ def should_component_update(component_type, event_state, trigger_id):
         if changed:
             logger.info(f"🔄 COMPONENT UPDATE: {component_type} updating due to {dep} change")
             return True
+
+    # Check if this is initial load (trigger_id is None) - always render
+    if trigger_id is None:
+        logger.info(f"🔄 COMPONENT UPDATE: {component_type} updating - initial page load")
+        return True  # Initial page load
 
     # Check if this is an initial component trigger (not event-driven)
     if trigger_id and not any(
@@ -840,7 +845,11 @@ def register_dashboard_content_callbacks(app):
             if comp["type"] == "interactive" and comp.get("position") == "top":
                 containers.append(
                     html.Div(
-                        dmc.Skeleton(height=120, radius="md"),  # Loading skeleton
+                        # dmc.Skeleton(height=120, radius="md"),  # Loading skeleton disabled for performance test
+                        html.Div(
+                            "Loading interactive...",
+                            style={"height": "120px", "textAlign": "center", "paddingTop": "50px"},
+                        ),
                         id={"type": "interactive-component", "index": comp["index"]},
                     )
                 )
@@ -855,7 +864,15 @@ def register_dashboard_content_callbacks(app):
                         dmc.Box(
                             [
                                 html.Div(
-                                    dmc.Skeleton(height=150, radius="md"),  # Loading skeleton
+                                    # dmc.Skeleton(height=150, radius="md"),  # Loading skeleton disabled for performance test
+                                    html.Div(
+                                        "Loading metric...",
+                                        style={
+                                            "height": "150px",
+                                            "textAlign": "center",
+                                            "paddingTop": "60px",
+                                        },
+                                    ),
                                     id={"type": "metric-card", "index": comp["index"]},
                                 ),
                             ],
@@ -879,7 +896,11 @@ def register_dashboard_content_callbacks(app):
             if comp["type"] == "chart":
                 containers.append(
                     html.Div(
-                        dmc.Skeleton(height=400, radius="md"),  # Loading skeleton
+                        # dmc.Skeleton(height=400, radius="md"),  # Loading skeleton disabled for performance test
+                        html.Div(
+                            "Loading chart...",
+                            style={"height": "400px", "textAlign": "center", "paddingTop": "180px"},
+                        ),
                         id={"type": "chart-component", "index": comp["index"]},
                     )
                 )
@@ -1165,10 +1186,7 @@ def register_dashboard_content_callbacks(app):
             f"🔄 INTERACTIVE COMPONENT {interactive_index}: Individual rendering (background)"
         )
 
-        # Short delay for interactive components (they should load quickly)
-        delay = random.uniform(0.3, 1.0)
-        logger.info(f"⏱️ INTERACTIVE COMPONENT {interactive_index}: Processing delay = {delay:.2f}s")
-        # time.sleep(delay)
+        # Interactive components should load immediately for optimal performance
 
         # Find component configuration
         component_config = None
@@ -1313,7 +1331,7 @@ def register_dashboard_content_callbacks(app):
             )
 
             logger.info(
-                f"✅ INTERACTIVE COMPONENT {interactive_index}: Rendered controls panel '{component_config['title']}' after {delay:.2f}s"
+                f"✅ INTERACTIVE COMPONENT {interactive_index}: Rendered controls panel '{component_config['title']}'"
             )
             return interactive_panel
 
