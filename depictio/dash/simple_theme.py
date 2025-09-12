@@ -58,28 +58,31 @@ def register_simple_theme_system(app):
 
     dmc.add_figure_templates()  # type: ignore[unresolved-attribute]
 
-    # Core theme callback - updates MantineProvider directly
-    @app.callback(
+    # Move theme callbacks to clientside for instant response
+    app.clientside_callback(
+        """
+        function(theme_data) {
+            console.log('🔥 CLIENTSIDE THEME: Setting MantineProvider.forceColorScheme to', theme_data || 'light');
+            return theme_data || 'light';
+        }
+        """,
         Output("mantine-provider", "forceColorScheme"),
         Input("theme-store", "data"),
         prevent_initial_call=False,
     )
-    def update_mantine_theme(theme_data):
-        """Update MantineProvider theme - this handles all DMC components automatically."""
-        logger.info(
-            f"🔥 THEME CALLBACK: Setting MantineProvider.forceColorScheme to {theme_data or 'light'}"
-        )
-        return theme_data or "light"
 
-    # Sync switch state with current theme
-    @app.callback(
+    # Sync switch state with current theme - clientside
+    app.clientside_callback(
+        """
+        function(theme_data) {
+            console.log('🔧 CLIENTSIDE THEME SWITCH: Setting checked to', theme_data === 'dark');
+            return theme_data === 'dark';
+        }
+        """,
         Output("theme-switch", "checked"),
         Input("theme-store", "data"),
         prevent_initial_call=True,
     )
-    def sync_switch_state(theme_data):
-        """Keep switch in sync with current theme."""
-        return theme_data == "dark"
 
     # Handle manual theme switch with localStorage storage
     clientside_callback(
@@ -175,14 +178,14 @@ def register_simple_theme_system(app):
         return logo_src
 
     # Disable theme switch on dashboard pages only
-    @app.callback(
-        Output("theme-switch", "disabled"),
-        Input("url", "pathname"),
-        prevent_initial_call=False,
-    )
-    def disable_theme_switch_on_dashboard(pathname):
-        """Disable theme switch only on dashboard pages."""
-        return pathname and pathname.startswith("/dashboard/")
+    # @app.callback(
+    #     Output("theme-switch", "disabled"),
+    #     Input("url", "pathname"),
+    #     prevent_initial_call=False,
+    # )
+    # def disable_theme_switch_on_dashboard(pathname):
+    #     """Disable theme switch only on dashboard pages."""
+    #     return pathname and pathname.startswith("/dashboard/")
 
     # Simple Plotly template update (replace complex JS approach)
     # clientside_callback(

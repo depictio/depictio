@@ -45,20 +45,20 @@ def register_main_callback(app):
         logger.info(f"🔥 MAIN CALLBACK TRIGGERED: {trigger}, pathname={pathname}")
 
         # PERFORMANCE DEBUG: Log data sizes to identify serialization bottlenecks
-        import sys
+        # import sys
 
-        local_data_size = sys.getsizeof(str(local_data)) if local_data else 0
-        theme_store_size = sys.getsizeof(str(theme_store)) if theme_store else 0
-        cached_project_size = sys.getsizeof(str(cached_project_data)) if cached_project_data else 0
+        # local_data_size = sys.getsizeof(str(local_data)) if local_data else 0
+        # theme_store_size = sys.getsizeof(str(theme_store)) if theme_store else 0
+        # cached_project_size = sys.getsizeof(str(cached_project_data)) if cached_project_data else 0
 
-        logger.info(
-            f"🔍 CALLBACK DATA SIZES: local_data={local_data_size:,}B, theme_store={theme_store_size:,}B, cached_project={cached_project_size:,}B"
-        )
+        # logger.info(
+        #     f"🔍 CALLBACK DATA SIZES: local_data={local_data_size:,}B, theme_store={theme_store_size:,}B, cached_project={cached_project_size:,}B"
+        # )
 
-        if cached_project_size > 100000:  # > 100KB
-            logger.warning(
-                f"⚠️ LARGE PROJECT CACHE: {cached_project_size:,} bytes - potential performance bottleneck!"
-            )
+        # if cached_project_size > 100000:  # > 100KB
+        #     logger.warning(
+        #         f"⚠️ LARGE PROJECT CACHE: {cached_project_size:,} bytes - potential performance bottleneck!"
+        #     )
 
         # Process authentication and return appropriate content
         result = process_authentication(pathname, local_data, theme_store, cached_project_data)
@@ -69,31 +69,24 @@ def register_main_callback(app):
 
     logger.info("🔥 MAIN CALLBACK REGISTERED SUCCESSFULLY")
 
-    @app.callback(
+    # Move header visibility to clientside for instant response
+    app.clientside_callback(
+        """
+        function(pathname) {
+            console.log('🔥 CLIENTSIDE HEADER VISIBILITY: pathname=' + pathname);
+            if (pathname === '/auth') {
+                // Hide header on auth page
+                return null;
+            } else {
+                // Show header on all other pages (including dashboard routes)
+                return {"height": 87};
+            }
+        }
+        """,
         Output("app-shell", "header"),
         Input("url", "pathname"),
-        prevent_initial_call=False,
+        prevent_initial_call=True,
     )
-    def toggle_appshell_header_visibility(pathname):
-        """
-        Control AppShell header visibility based on current route.
-
-        Args:
-            pathname (str): Current URL pathname
-
-        Returns:
-            dict or None: header_config - None value hides the component
-        """
-        logger.info(f"🔥 HEADER VISIBILITY CALLBACK: pathname={pathname}")
-        if pathname == "/auth":
-            # Hide header on auth page
-            return None
-        elif pathname is None:
-            # On initial load, hide header by default until pathname is determined
-            return None
-        else:
-            # Show header on all other pages
-            return {"height": 87}
 
     # Add clientside callback to manage body classes for auth page
     app.clientside_callback(
@@ -136,29 +129,43 @@ def register_all_callbacks(app):
     register_layout_callbacks(app)
 
     # Register component callbacks
-    register_component_callbacks(app)
+    # register_component_callbacks(app)
 
     # Register feature-specific callbacks
     register_feature_callbacks(app)
 
     # Register theme bridge callback
     # Register progressive loading callbacks
-    from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
-        register_progressive_loading_callbacks,
-    )
-    from depictio.dash.layouts.edit import register_reset_button_callbacks
+    # from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
+    #     register_progressive_loading_callbacks,
+    # )
+    # from depictio.dash.layouts.edit import register_reset_button_callbacks
+    # register_reset_button_callbacks(app)
+    # register_dashboard_callbacks(app)
+
     # from depictio.dash.theme_utils import register_theme_bridge_callback
 
     # register_theme_bridge_callback(app)
-    register_progressive_loading_callbacks(app)
-    register_reset_button_callbacks(app)
+    # register_progressive_loading_callbacks(app)
 
     # Register analytics callbacks
     # from depictio.dash.components.analytics_tracker import register_analytics_callbacks
-    from depictio.dash.layouts.admin_analytics_callbacks import register_admin_analytics_callbacks
+    # from depictio.dash.layouts.admin_analytics_callbacks import register_admin_analytics_callbacks
 
     # register_analytics_callbacks(app)
-    register_admin_analytics_callbacks(app)
+    # register_admin_analytics_callbacks(app)
+
+
+def register_dashboard_callbacks(app):
+    from depictio.dash.layouts.draggable import register_callbacks_draggable
+    from depictio.dash.layouts.notes_footer import register_callbacks_notes_footer
+    from depictio.dash.layouts.save import register_callbacks_save
+    from depictio.dash.layouts.stepper import register_callbacks_stepper
+
+    register_callbacks_stepper(app)
+    register_callbacks_draggable(app)
+    register_callbacks_notes_footer(app)
+    register_callbacks_save(app)
 
 
 def register_layout_callbacks(app):
@@ -169,12 +176,9 @@ def register_layout_callbacks(app):
         app (dash.Dash): The Dash application instance
     """
     from depictio.dash.layouts.consolidated_api import register_consolidated_api_callbacks
-    from depictio.dash.layouts.draggable import register_callbacks_draggable
+    from depictio.dash.layouts.dashboard_content import register_dashboard_content_callbacks
     from depictio.dash.layouts.header import register_callbacks_header
-    from depictio.dash.layouts.notes_footer import register_callbacks_notes_footer
-    from depictio.dash.layouts.save import register_callbacks_save
     from depictio.dash.layouts.sidebar import register_sidebar_callbacks
-    from depictio.dash.layouts.stepper import register_callbacks_stepper
 
     # from depictio.dash.layouts.stepper_parts.part_one import register_callbacks_stepper_part_one
     # from depictio.dash.layouts.stepper_parts.part_three import register_callbacks_stepper_part_three
@@ -184,16 +188,17 @@ def register_layout_callbacks(app):
     # Register consolidated API callbacks first (highest priority)
     register_consolidated_api_callbacks(app)
 
+    # Register dashboard content callbacks (background callback for dashboard container)
+    register_dashboard_content_callbacks(app)
+
     # Register layout callbacks
-    register_callbacks_stepper(app)
+
     # register_callbacks_stepper_part_one(app)
     # register_callbacks_stepper_part_two(app)
     # register_callbacks_stepper_part_three(app)
     register_callbacks_header(app)
-    register_callbacks_draggable(app)
+
     register_sidebar_callbacks(app)
-    register_callbacks_notes_footer(app)
-    register_callbacks_save(app)
     register_simple_theme_system(app)
 
 
