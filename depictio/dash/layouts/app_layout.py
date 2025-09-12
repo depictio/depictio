@@ -16,8 +16,6 @@ from depictio.dash.layouts.dashboards_management import layout as dashboards_man
 from depictio.dash.layouts.draggable import design_draggable
 
 # Depictio utils imports
-from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data_sync
-from depictio.dash.layouts.header import design_header
 from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
 from depictio.dash.layouts.notes_footer import create_notes_footer
 from depictio.dash.layouts.palette import create_color_palette_page
@@ -99,50 +97,19 @@ def handle_authenticated_user(pathname, local_data, theme="light", cached_projec
     logger.info(f"User logged in: {local_data.get('email', 'Unknown')}")
     # logger.info(f"Local data: {local_data}")
 
+    # OPTIMIZATION: Check dashboard route FIRST to return faster
+    if pathname.startswith("/dashboard/"):
+        # Return immediately for dashboard routes - skip purge for speed
+        header_content = create_default_header("Dashboard")
+        dashboard_layout = dmc.Container(id="dashboard-content")
+        return dashboard_layout, header_content, pathname, local_data
+
+    # For all other routes, purge tokens as normal
     purge_expired_tokens(local_data["access_token"])
 
     # Map the pathname to the appropriate content and header
-    if pathname.startswith("/dashboard/"):
-        dashboard_id = pathname.split("/")[-1]
-
-        # Load dashboard data and create layout directly
-        logger.info(f"🔄 DASHBOARD NAVIGATION: Loading dashboard {dashboard_id}")
-
-        logger.info(f"🔄 DASHBOARD NAVIGATION: theme - {theme}")
-        # Load dashboard data synchronously
-        depictio_dash_data = load_depictio_data_sync(
-            dashboard_id=dashboard_id,
-            local_data=local_data,
-            theme=theme,
-        )
-
-        # Create dashboard layout
-        if depictio_dash_data:
-            header_content, backend_components = design_header(depictio_dash_data, local_data)
-
-            # Create dashboard layout
-            dashboard_layout = create_dashboard_layout(
-                depictio_dash_data=depictio_dash_data,
-                dashboard_id=dashboard_id,
-                local_data=local_data,
-                backend_components=backend_components,
-                theme=theme,
-                cached_project_data=cached_project_data,
-            )
-
-            return dashboard_layout, header_content, pathname, local_data
-        else:
-            # Dashboard not found or error
-            header_content = create_default_header("Dashboard Not Found")
-            error_layout = html.Div(
-                [
-                    html.H3("Dashboard not found or you don't have access"),
-                    html.P(f"Dashboard ID: {dashboard_id}"),
-                ]
-            )
-            return error_layout, header_content, pathname, local_data
-
-    elif pathname == "/dashboards":
+    # Test: Check exact paths first before pattern matching
+    if pathname == "/dashboards":
         user = api_call_fetch_user_from_token(local_data["access_token"])
         # user = fetch_user_from_token(local_data["access_token"])
         # logger.info(f"User: {user}")
@@ -433,6 +400,21 @@ def create_dashboards_management_layout():
     return dashboards_management_layout
 
 
+def create_dashboard_error_layout():
+    """Return a static error layout for dashboard routes - prevents Loading... display"""
+    return dmc.Center(
+        dmc.Stack(
+            [
+                DashIconify(icon="material-symbols:error", width=48, height=48, color="red"),
+                dmc.Title("Dashboard Error", order=3),
+                dmc.Text("Unable to load dashboard content", c="gray"),
+            ],
+            align="center",
+        ),
+        style={"height": "50vh"},
+    )
+
+
 def create_projects_layout():
     return projects_layout
 
@@ -574,19 +556,19 @@ def create_app_layout():
             # Consolidated user cache to reduce API calls
             dcc.Store(
                 id="user-cache-store",
-                storage_type="memory",
+                storage_type="session",  # Changed to session to persist across navigation
                 data=None,  # Will be populated by consolidated callback
             ),
             # Server status cache
             dcc.Store(
                 id="server-status-cache",
-                storage_type="memory",
+                storage_type="session",  # Changed to session to persist across navigation
                 data=None,  # Will be populated by consolidated callback
             ),
             # Project data cache (dashboard-specific)
             dcc.Store(
                 id="project-cache-store",
-                storage_type="memory",
+                storage_type="session",
                 data=None,  # Will be populated by consolidated callback
             ),
             dcc.Store(
