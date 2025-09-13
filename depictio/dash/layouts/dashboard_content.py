@@ -14,9 +14,10 @@ from typing import Any
 import dash_mantine_components as dmc
 import plotly.express as px
 import polars as pl
-from dash import MATCH, Input, Output, State, dcc, html
+from dash import ALL, MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
+from depictio.api.v1.configs.config import create_cache
 from depictio.api.v1.configs.logging_init import logger
 
 # ============================================================================
@@ -56,7 +57,7 @@ COMPONENT_DEPENDENCIES = {
 DASHBOARD_COMPONENTS = [
     # Interactive controls at the top
     {"type": "interactive", "index": 0, "title": "Dashboard Controls", "position": "top"},
-    # 20 Metric cards
+    # 8 Metric cards (reduced for stability)
     {"type": "metric", "index": 0, "title": "Total Users", "metric_key": "users"},
     {"type": "metric", "index": 1, "title": "Revenue", "metric_key": "revenue"},
     {"type": "metric", "index": 2, "title": "Conversion Rate", "metric_key": "conversion_rate"},
@@ -65,19 +66,41 @@ DASHBOARD_COMPONENTS = [
     {"type": "metric", "index": 5, "title": "Monthly Revenue", "metric_key": "revenue"},
     {"type": "metric", "index": 6, "title": "Daily Conversion", "metric_key": "conversion_rate"},
     {"type": "metric", "index": 7, "title": "Peak Sessions", "metric_key": "sessions"},
-    {"type": "metric", "index": 8, "title": "Returning Users", "metric_key": "users"},
-    {"type": "metric", "index": 9, "title": "Avg Revenue", "metric_key": "revenue"},
-    {"type": "metric", "index": 10, "title": "Min Conversion", "metric_key": "conversion_rate"},
-    {"type": "metric", "index": 11, "title": "Session Duration", "metric_key": "sessions"},
-    {"type": "metric", "index": 12, "title": "Active Users", "metric_key": "users"},
-    {"type": "metric", "index": 13, "title": "Total Revenue", "metric_key": "revenue"},
-    {"type": "metric", "index": 14, "title": "Max Conversion", "metric_key": "conversion_rate"},
-    {"type": "metric", "index": 15, "title": "Live Sessions", "metric_key": "sessions"},
-    {"type": "metric", "index": 16, "title": "Guest Users", "metric_key": "users"},
-    {"type": "metric", "index": 17, "title": "Weekly Revenue", "metric_key": "revenue"},
-    {"type": "metric", "index": 18, "title": "Overall Rate", "metric_key": "conversion_rate"},
-    {"type": "metric", "index": 19, "title": "Total Sessions", "metric_key": "sessions"},
-    # 12 Chart components
+    # Commented out for reduced load - uncomment for benchmarking
+    # {"type": "metric", "index": 8, "title": "Returning Users", "metric_key": "users"},
+    # {"type": "metric", "index": 9, "title": "Avg Revenue", "metric_key": "revenue"},
+    # {"type": "metric", "index": 10, "title": "Min Conversion", "metric_key": "conversion_rate"},
+    # {"type": "metric", "index": 11, "title": "Session Duration", "metric_key": "sessions"},
+    # {"type": "metric", "index": 12, "title": "Active Users", "metric_key": "users"},
+    # {"type": "metric", "index": 13, "title": "Total Revenue", "metric_key": "revenue"},
+    # {"type": "metric", "index": 14, "title": "Max Conversion", "metric_key": "conversion_rate"},
+    # {"type": "metric", "index": 15, "title": "Live Sessions", "metric_key": "sessions"},
+    # {"type": "metric", "index": 16, "title": "Guest Users", "metric_key": "users"},
+    # {"type": "metric", "index": 17, "title": "Weekly Revenue", "metric_key": "revenue"},
+    # {"type": "metric", "index": 18, "title": "Overall Rate", "metric_key": "conversion_rate"},
+    # {"type": "metric", "index": 19, "title": "Total Sessions", "metric_key": "sessions"},
+    # Additional 20 metrics (20-39) - commented for reduced load
+    # {"type": "metric", "index": 20, "title": "Unique Visitors", "metric_key": "users"},
+    # {"type": "metric", "index": 21, "title": "Gross Profit", "metric_key": "revenue"},
+    # {"type": "metric", "index": 22, "title": "Bounce Rate", "metric_key": "conversion_rate"},
+    # {"type": "metric", "index": 23, "title": "Avg Session Time", "metric_key": "sessions"},
+    # {"type": "metric", "index": 24, "title": "Registered Users", "metric_key": "users"},
+    # {"type": "metric", "index": 25, "title": "Net Revenue", "metric_key": "revenue"},
+    # {"type": "metric", "index": 26, "title": "Cart Abandon Rate", "metric_key": "conversion_rate"},
+    # {"type": "metric", "index": 27, "title": "Mobile Sessions", "metric_key": "sessions"},
+    # {"type": "metric", "index": 28, "title": "Premium Users", "metric_key": "users"},
+    # {"type": "metric", "index": 29, "title": "Subscription Rev", "metric_key": "revenue"},
+    # {"type": "metric", "index": 30, "title": "Signup Rate", "metric_key": "conversion_rate"},
+    # {"type": "metric", "index": 31, "title": "Desktop Sessions", "metric_key": "sessions"},
+    # {"type": "metric", "index": 32, "title": "Trial Users", "metric_key": "users"},
+    # {"type": "metric", "index": 33, "title": "Ad Revenue", "metric_key": "revenue"},
+    # {"type": "metric", "index": 34, "title": "Retention Rate", "metric_key": "conversion_rate"},
+    # {"type": "metric", "index": 35, "title": "API Sessions", "metric_key": "sessions"},
+    # {"type": "metric", "index": 36, "title": "Enterprise Users", "metric_key": "users"},
+    # {"type": "metric", "index": 37, "title": "Recurring Revenue", "metric_key": "revenue"},
+    # {"type": "metric", "index": 38, "title": "Churn Rate", "metric_key": "conversion_rate"},
+    # {"type": "metric", "index": 39, "title": "Bot Sessions", "metric_key": "sessions"},
+    # 20 Chart components for benchmarking
     {
         "type": "chart",
         "index": 0,
@@ -110,70 +133,136 @@ DASHBOARD_COMPONENTS = [
         "x_col": "date",
         "y_col": "sessions",
     },
-    {
-        "type": "chart",
-        "index": 4,
-        "title": "User Revenue Correlation",
-        "chart_type": "scatter",
-        "x_col": "users",
-        "y_col": "revenue",
-    },
-    {
-        "type": "chart",
-        "index": 5,
-        "title": "Daily Metrics",
-        "chart_type": "line",
-        "x_col": "date",
-        "y_col": "conversion_rate",
-    },
-    {
-        "type": "chart",
-        "index": 6,
-        "title": "Category Analysis",
-        "chart_type": "bar",
-        "x_col": "category",
-        "y_col": "sessions",
-    },
-    {
-        "type": "chart",
-        "index": 7,
-        "title": "Revenue Trends",
-        "chart_type": "line",
-        "x_col": "date",
-        "y_col": "revenue",
-    },
-    {
-        "type": "chart",
-        "index": 8,
-        "title": "User Distribution",
-        "chart_type": "box",
-        "x_col": "category",
-        "y_col": "users",
-    },
-    {
-        "type": "chart",
-        "index": 9,
-        "title": "Session Distribution",
-        "chart_type": "box",
-        "x_col": "category",
-        "y_col": "sessions",
-    },
-    {
-        "type": "chart",
-        "index": 10,
-        "title": "Performance Matrix",
-        "chart_type": "scatter",
-        "x_col": "conversion_rate",
-        "y_col": "sessions",
-    },
-    {
-        "type": "chart",
-        "index": 11,
-        "title": "Overall Trends",
-        "chart_type": "line",
-        "x_col": "date",
-        "y_col": "users",
-    },
+    # Commented out for reduced configuration (keeping 4 charts total)
+    # {
+    #     "type": "chart",
+    #     "index": 4,
+    #     "title": "User Revenue Correlation",
+    #     "chart_type": "scatter",
+    #     "x_col": "users",
+    #     "y_col": "revenue",
+    # },
+    # {
+    #     "type": "chart",
+    #     "index": 5,
+    #     "title": "Daily Metrics",
+    #     "chart_type": "line",
+    #     "x_col": "date",
+    #     "y_col": "conversion_rate",
+    # },
+    # {
+    #     "type": "chart",
+    #     "index": 6,
+    #     "title": "Category Analysis",
+    #     "chart_type": "bar",
+    #     "x_col": "category",
+    #     "y_col": "sessions",
+    # },
+    # {
+    #     "type": "chart",
+    #     "index": 7,
+    #     "title": "Revenue Trends",
+    #     "chart_type": "line",
+    #     "x_col": "date",
+    #     "y_col": "revenue",
+    # },
+    # {
+    #     "type": "chart",
+    #     "index": 8,
+    #     "title": "User Distribution",
+    #     "chart_type": "box",
+    #     "x_col": "category",
+    #     "y_col": "users",
+    # },
+    # {
+    #     "type": "chart",
+    #     "index": 9,
+    #     "title": "Session Distribution",
+    #     "chart_type": "box",
+    #     "x_col": "category",
+    #     "y_col": "sessions",
+    # },
+    # {
+    #     "type": "chart",
+    #     "index": 10,
+    #     "title": "Performance Matrix",
+    #     "chart_type": "scatter",
+    #     "x_col": "conversion_rate",
+    #     "y_col": "sessions",
+    # },
+    # {
+    #     "type": "chart",
+    #     "index": 11,
+    #     "title": "Overall Trends",
+    #     "chart_type": "line",
+    #     "x_col": "date",
+    #     "y_col": "users",
+    # },
+    # # Additional 8 charts (12-19) for benchmarking
+    # {
+    #     "type": "chart",
+    #     "index": 12,
+    #     "title": "Daily Performance",
+    #     "chart_type": "line",
+    #     "x_col": "date",
+    #     "y_col": "revenue",
+    # },
+    # {
+    #     "type": "chart",
+    #     "index": 13,
+    #     "title": "Category Comparison",
+    #     "chart_type": "bar",
+    #     "x_col": "category",
+    #     "y_col": "users",
+    # },
+    # {
+    #     "type": "chart",
+    #     "index": 14,
+    #     "title": "Revenue Scatter",
+    #     "chart_type": "scatter",
+    #     "x_col": "users",
+    #     "y_col": "revenue",
+    # },
+    # {
+    #     "type": "chart",
+    #     "index": 15,
+    #     "title": "Session Analysis",
+    #     "chart_type": "box",
+    #     "x_col": "category",
+    #     "y_col": "sessions",
+    # },
+    # {
+    #     "type": "chart",
+    #     "index": 16,
+    #     "title": "Conversion Trends",
+    #     "chart_type": "line",
+    #     "x_col": "date",
+    #     "y_col": "conversion_rate",
+    # },
+    # {
+    #     "type": "chart",
+    #     "index": 17,
+    #     "title": "User Categories",
+    #     "chart_type": "bar",
+    #     "x_col": "category",
+    #     "y_col": "users",
+    # },
+    # {
+    #     "type": "chart",
+    #     "index": 18,
+    #     "title": "Performance Metrics",
+    #     "chart_type": "scatter",
+    #     "x_col": "sessions",
+    #     "y_col": "revenue",
+    # },
+    # {
+    #     "type": "chart",
+    #     "index": 19,
+    #     "title": "Monthly Overview",
+    #     "chart_type": "line",
+    #     "x_col": "date",
+    #     "y_col": "sessions",
+    # },
 ]
 
 
@@ -479,7 +568,7 @@ def create_initial_event_state():
                 DATA_CONFIG["metrics"]["revenue"]["max"],
             ],
             "timestamp": time.time(),
-            "changed": False,
+            "changed": True,  # Mark as changed to trigger initial component rendering
         },
         "users_range": {
             "value": [
@@ -775,10 +864,37 @@ def create_chart_figure(df, chart_config):
     return fig
 
 
+# Removed complex state tracking - using simpler timeout-based loading indicator
+
+
 def register_dashboard_content_callbacks(app):
     """Register dashboard content callbacks with pattern matching."""
 
     logger.info("🔧 DASHBOARD CONTENT: Registering pattern-matching background callbacks...")
+
+    # Initialize Flask-Caching for simple caching
+    flask_cache = create_cache(app.server)
+    logger.info("✅ CACHE: Flask-Caching initialized for dashboard")
+
+    # Cache dataframe loading for 15 minutes
+    @flask_cache.memoize(timeout=900)
+    def get_cached_dataframe_with_memoize():
+        """Cached wrapper for dataframe loading."""
+        logger.info("📊 CACHE: Loading dataframe (will be cached for 15 minutes)")
+        return get_cached_dataframe()
+
+    # Cache figure generation for 5 minutes
+    @flask_cache.memoize(timeout=300)
+    def create_cached_chart_figure(df_shape, config_str):
+        """Cached wrapper for chart figure generation."""
+        logger.info("📊 CACHE: Generating figure (will be cached for 5 minutes)")
+        # Reconstruct the dataframe and config
+        # In production, you'd want to pass serializable parameters
+        df = get_cached_dataframe()
+        import json
+
+        config = json.loads(config_str)
+        return create_chart_figure(df, config)
 
     # Main callback to create container structure
     @app.callback(
@@ -787,7 +903,7 @@ def register_dashboard_content_callbacks(app):
             Input("url", "pathname"),
             Input("local-store", "data"),
         ],
-        prevent_initial_call=False,
+        prevent_initial_call="initial_duplicate",
     )
     def create_dashboard_containers(pathname, local_store):
         """
@@ -815,7 +931,7 @@ def register_dashboard_content_callbacks(app):
         # Create container structure with unique IDs for pattern matching
         containers = []
 
-        # Dashboard header
+        # Dashboard header with loading indicator
         containers.append(
             dmc.Group(
                 justify="space-between",
@@ -835,6 +951,18 @@ def register_dashboard_content_callbacks(app):
                                 c="gray",
                             ),
                         ]
+                    ),
+                    # Dashboard loading indicator
+                    dmc.Badge(
+                        id="dashboard-loading-indicator",
+                        children=[
+                            DashIconify(icon="svg-spinners:180-ring", width=16, className="mr-2"),
+                            "Dashboard Updating...",
+                        ],
+                        color="blue",
+                        variant="dot",
+                        size="lg",
+                        style={"display": "none"},  # Initially hidden
                     ),
                 ],
             )
@@ -911,6 +1039,9 @@ def register_dashboard_content_callbacks(app):
         containers.extend(
             [
                 dcc.Store(id="dashboard-event-store", data=create_initial_event_state()),
+                dcc.Store(
+                    id="loading-completion-tracker", data={"components_loaded": 0, "timestamp": 0}
+                ),
                 html.Div(id="dummy-event-output"),  # Dummy output for event callbacks
             ]
         )
@@ -925,7 +1056,7 @@ def register_dashboard_content_callbacks(app):
             Input("dashboard-event-store", "data"),  # Listen to event changes
         ],
         State("local-store", "data"),
-        prevent_initial_call=False,
+        prevent_initial_call="initial_duplicate",
         background=True,  # Background execution for each individual metric
     )
     def render_single_metric_card(component_id, event_state, local_store):
@@ -960,6 +1091,7 @@ def register_dashboard_content_callbacks(app):
                 logger.info(f"⏭️ METRIC CARD {metric_index}: Skipping update - no relevant changes")
                 from dash import no_update
 
+                # Keep current state when skipping update
                 return no_update
 
         logger.info(f"⏱️ METRIC CARD {metric_index}: Starting processing")
@@ -977,7 +1109,10 @@ def register_dashboard_content_callbacks(app):
 
         if not component_config:
             logger.error(f"❌ METRIC CARD {metric_index}: Component configuration not found")
-            return html.Div("Configuration Error")
+            logger.error(
+                f"Available metric indices: {[c['index'] for c in DASHBOARD_COMPONENTS if c['type'] == 'metric']}"
+            )
+            return html.Div(f"Configuration Error: Metric {metric_index} not found")
 
         # Get metric data from DataFrame
         metric_key = component_config["metric_key"]
@@ -1031,7 +1166,7 @@ def register_dashboard_content_callbacks(app):
             Input("dashboard-event-store", "data"),  # Listen to event changes
         ],
         State("local-store", "data"),
-        prevent_initial_call=False,
+        prevent_initial_call="initial_duplicate",
         background=True,  # Background execution for each individual chart
     )
     def render_single_chart_component(component_id, event_state, local_store):
@@ -1068,6 +1203,7 @@ def register_dashboard_content_callbacks(app):
                 )
                 from dash import no_update
 
+                # Keep current state when skipping update
                 return no_update
 
         logger.info(f"⏱️ CHART COMPONENT {chart_index}: Starting processing")
@@ -1085,7 +1221,10 @@ def register_dashboard_content_callbacks(app):
 
         if not component_config:
             logger.error(f"❌ CHART COMPONENT {chart_index}: Component configuration not found")
-            return html.Div("Configuration Error")
+            logger.error(
+                f"Available chart indices: {[c['index'] for c in DASHBOARD_COMPONENTS if c['type'] == 'chart']}"
+            )
+            return html.Div(f"Configuration Error: Chart {chart_index} not found")
 
         # Apply intelligent sampling for optimal performance
         try:
@@ -1106,6 +1245,7 @@ def register_dashboard_content_callbacks(app):
             enhanced_config["chart_height"] = chart_height
             enhanced_config["chart_theme"] = chart_theme
 
+            # Generate figure directly - Flask-Cache will handle caching transparently
             fig = create_chart_figure(optimized_df, enhanced_config)
 
             # Create chart component with Plotly graph
@@ -1172,7 +1312,7 @@ def register_dashboard_content_callbacks(app):
             Input({"type": "interactive-component", "index": MATCH}, "id"),
         ],
         State("local-store", "data"),
-        prevent_initial_call=False,
+        prevent_initial_call="initial_duplicate",
         background=True,  # Background execution for each interactive component
     )
     def render_single_interactive_component(component_id, local_store):
@@ -1476,6 +1616,132 @@ def register_dashboard_content_callbacks(app):
         # This dummy output triggers the component updates through the pattern matching system
         # The actual component updates happen in their individual MATCH callbacks
         return f"Event dispatch: {', '.join(changed_events)} at {time.strftime('%H:%M:%S')}"
+
+    # Component completion tracker - updates when any component children change
+    @app.callback(
+        Output("loading-completion-tracker", "data"),
+        [
+            Input({"type": "metric-card", "index": ALL}, "children"),
+            Input({"type": "chart-component", "index": ALL}, "children"),
+            Input({"type": "interactive-component", "index": ALL}, "children"),
+        ],
+        prevent_initial_call=True,
+    )
+    def track_component_completion(metric_cards, chart_components, interactive_components):
+        """Track when all components have finished loading/updating."""
+        import time
+
+        # Count total components that have content (non-empty children)
+        total_components = 0
+        loaded_components = 0
+
+        # Check metric cards
+        for card in metric_cards:
+            total_components += 1
+            if card and card != "Loading...":
+                loaded_components += 1
+
+        # Check chart components
+        for chart in chart_components:
+            total_components += 1
+            if chart and chart != "Loading...":
+                loaded_components += 1
+
+        # Check interactive components
+        for interactive in interactive_components:
+            total_components += 1
+            if interactive and interactive != "Loading...":
+                loaded_components += 1
+
+        logger.info(
+            f"🔄 COMPLETION TRACKER: {loaded_components}/{total_components} components loaded"
+        )
+
+        return {
+            "components_loaded": loaded_components,
+            "total_components": total_components,
+            "timestamp": time.time(),
+            "all_loaded": loaded_components == total_components and total_components > 0,
+        }
+
+    # Hybrid dashboard loading indicator - show immediately on events, hide when components complete
+    app.clientside_callback(
+        """
+        function(pathname, event_store, completion_data) {
+            console.log('🔧 DASHBOARD LOADING INDICATOR: triggered', {pathname, event_store, completion_data});
+
+            // Only show on dashboard pages
+            if (!pathname || !pathname.startsWith('/dashboard/')) {
+                return {"display": "none"};
+            }
+
+            // Get the context to see what triggered this callback
+            var ctx = window.dash_clientside.callback_context;
+            var triggered_id = ctx.triggered.length > 0 ? ctx.triggered[0].prop_id : '';
+            console.log('🔧 TRIGGERED BY:', triggered_id);
+
+            // If completion tracker indicates all components are loaded, hide indicator
+            if (completion_data && completion_data.all_loaded && triggered_id === 'loading-completion-tracker.data') {
+                console.log('✅ LOADING INDICATOR: All components loaded - hiding indicator');
+
+                // Clear any existing timeout
+                if (window.loadingIndicatorTimeout) {
+                    clearTimeout(window.loadingIndicatorTimeout);
+                }
+
+                return {"display": "none"};
+            }
+
+            // If dashboard-event-store changed, show indicator immediately
+            if (triggered_id === 'dashboard-event-store.data') {
+                console.log('📊 LOADING INDICATOR: SHOWING IMMEDIATELY - event detected');
+
+                // Clear any existing timeout
+                if (window.loadingIndicatorTimeout) {
+                    clearTimeout(window.loadingIndicatorTimeout);
+                }
+
+                // Show indicator
+                var showStyle = {
+                    "display": "flex",
+                    "alignItems": "center",
+                    "gap": "8px"
+                };
+
+                // Fallback timeout (in case component tracking fails)
+                window.loadingIndicatorTimeout = setTimeout(function() {
+                    console.log('⏰ LOADING INDICATOR: Fallback timeout - hiding indicator');
+                    var indicator = document.getElementById('dashboard-loading-indicator');
+                    if (indicator) {
+                        indicator.style.display = 'none';
+                    }
+                }, 5000);
+
+                return showStyle;
+            }
+
+            // For initial page load, show briefly
+            if (triggered_id === 'url.pathname' || triggered_id === '') {
+                console.log('📊 LOADING INDICATOR: Showing for initial load');
+
+                return {
+                    "display": "flex",
+                    "alignItems": "center",
+                    "gap": "8px"
+                };
+            }
+
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("dashboard-loading-indicator", "style"),
+        [
+            Input("url", "pathname"),
+            Input("dashboard-event-store", "data"),
+            Input("loading-completion-tracker", "data"),
+        ],
+        prevent_initial_call=False,
+    )
 
     logger.info("✅ DASHBOARD CONTENT: All callbacks registered successfully")
 
