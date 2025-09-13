@@ -568,7 +568,7 @@ def create_initial_event_state():
                 DATA_CONFIG["metrics"]["revenue"]["max"],
             ],
             "timestamp": time.time(),
-            "changed": True,  # Mark as changed to trigger initial component rendering
+            "changed": True,  # Mark as changed to trigger initial component rendering (Apply button mode)
         },
         "users_range": {
             "value": [
@@ -971,6 +971,7 @@ def register_dashboard_content_callbacks(app):
         # Create interactive controls at the top
         for comp in components:
             if comp["type"] == "interactive" and comp.get("position") == "top":
+                logger.info(f"🚨 DEBUG: Creating interactive container for index {comp['index']}")
                 containers.append(
                     html.Div(
                         # dmc.Skeleton(height=120, radius="md"),  # Loading skeleton disabled for performance test
@@ -980,6 +981,9 @@ def register_dashboard_content_callbacks(app):
                         ),
                         id={"type": "interactive-component", "index": comp["index"]},
                     )
+                )
+                logger.info(
+                    f"✅ DEBUG: Interactive container created with ID: {{'type': 'interactive-component', 'index': {comp['index']}}}"
                 )
 
         # Create grid for metric cards
@@ -1042,6 +1046,10 @@ def register_dashboard_content_callbacks(app):
                 dcc.Store(
                     id="loading-completion-tracker", data={"components_loaded": 0, "timestamp": 0}
                 ),
+                dcc.Store(
+                    id="pending-changes-store",
+                    data={"has_pending_changes": False, "pending_controls": {}},
+                ),
                 html.Div(id="dummy-event-output"),  # Dummy output for event callbacks
             ]
         )
@@ -1082,17 +1090,14 @@ def register_dashboard_content_callbacks(app):
         logger.info(f"🔍 METRIC CARD {metric_index}: Trigger ID = {trigger_id}")
         logger.info(f"🔍 METRIC CARD {metric_index}: Event state = {event_state}")
 
-        # For debugging: always update when event store changes until we fix the changed flag issue
-        if trigger_id == "dashboard-event-store.data":
-            logger.info(f"🔄 METRIC CARD {metric_index}: Updating due to event store change")
-        else:
-            # Use centralized logic to determine if update is needed for other triggers
-            if not should_component_update("metric", event_state, trigger_id):
-                logger.info(f"⏭️ METRIC CARD {metric_index}: Skipping update - no relevant changes")
-                from dash import no_update
+        # TEMPORARY FIX: Always render components until we debug the conditional logic
+        logger.info(f"🔄 METRIC CARD {metric_index}: Rendering (debugging mode - always render)")
+        logger.info(f"🔍 DEBUG: trigger_id = {trigger_id}")
+        logger.info(f"🔍 DEBUG: event_state = {event_state}")
 
-                # Keep current state when skipping update
-                return no_update
+        # Check what should_component_update would return
+        should_update = should_component_update("metric", event_state, trigger_id)
+        logger.info(f"🔍 DEBUG: should_component_update returned {should_update}")
 
         logger.info(f"⏱️ METRIC CARD {metric_index}: Starting processing")
 
@@ -1156,6 +1161,7 @@ def register_dashboard_content_callbacks(app):
         logger.info(
             f"✅ METRIC CARD {metric_index}: Rendered '{component_config['title']}' ({metric_data['value']})"
         )
+
         return card
 
     # Individual MATCH callback for each chart component
@@ -1192,19 +1198,14 @@ def register_dashboard_content_callbacks(app):
         logger.info(f"🔍 CHART COMPONENT {chart_index}: Trigger ID = {trigger_id}")
         logger.info(f"🔍 CHART COMPONENT {chart_index}: Event state = {event_state}")
 
-        # For debugging: always update when event store changes until we fix the changed flag issue
-        if trigger_id == "dashboard-event-store.data":
-            logger.info(f"🔄 CHART COMPONENT {chart_index}: Updating due to event store change")
-        else:
-            # Use centralized logic to determine if update is needed for other triggers
-            if not should_component_update("chart", event_state, trigger_id):
-                logger.info(
-                    f"⏭️ CHART COMPONENT {chart_index}: Skipping update - no relevant changes"
-                )
-                from dash import no_update
+        # TEMPORARY FIX: Always render components until we debug the conditional logic
+        logger.info(f"🔄 CHART COMPONENT {chart_index}: Rendering (debugging mode - always render)")
+        logger.info(f"🔍 DEBUG: trigger_id = {trigger_id}")
+        logger.info(f"🔍 DEBUG: event_state = {event_state}")
 
-                # Keep current state when skipping update
-                return no_update
+        # Check what should_component_update would return
+        should_update = should_component_update("chart", event_state, trigger_id)
+        logger.info(f"🔍 DEBUG: should_component_update returned {should_update}")
 
         logger.info(f"⏱️ CHART COMPONENT {chart_index}: Starting processing")
 
@@ -1312,18 +1313,23 @@ def register_dashboard_content_callbacks(app):
             Input({"type": "interactive-component", "index": MATCH}, "id"),
         ],
         State("local-store", "data"),
-        prevent_initial_call="initial_duplicate",
-        background=True,  # Background execution for each interactive component
+        prevent_initial_call=False,  # Allow initial render to fix Loading... issue
+        # background=True,  # Temporarily disabled to debug loading issue
     )
     def render_single_interactive_component(component_id, local_store):
         """
         Render a single interactive component - each component has its own callback.
         This is called individually for EACH interactive component.
         """
+        logger.info(f"🚨 DEBUG: Interactive callback triggered with component_id={component_id}")
+
+        if not component_id or "index" not in component_id:
+            logger.error(f"❌ INTERACTIVE: Invalid component_id: {component_id}")
+            return html.Div("Invalid Component ID")
 
         interactive_index = component_id["index"]
         logger.info(
-            f"🔄 INTERACTIVE COMPONENT {interactive_index}: Individual rendering (background)"
+            f"🔄 INTERACTIVE COMPONENT {interactive_index}: Individual rendering (non-background)"
         )
 
         # Interactive components should load immediately for optimal performance
@@ -1460,8 +1466,24 @@ def register_dashboard_content_callbacks(app):
                         ],
                         gutter="lg",
                     ),
+                    # Apply Update Button
+                    dmc.Group(
+                        justify="center",
+                        mt="xl",
+                        children=[
+                            dmc.Button(
+                                "Apply Updates",
+                                id="apply-updates-button",
+                                leftSection=DashIconify(icon="mdi:check-circle", width=16),
+                                disabled=True,  # Initially disabled
+                                color="green",
+                                variant="filled",
+                                size="md",
+                            ),
+                        ],
+                    ),
                     dmc.Text(
-                        "🔍 Data filters loaded • Adjust ranges and categories to filter dashboard data",
+                        "🔍 Data filters loaded • Adjust ranges and categories, then click Apply to update dashboard",
                         size="xs",
                         c="gray",
                         ta="center",
@@ -1494,87 +1516,153 @@ def register_dashboard_content_callbacks(app):
     # CENTRALIZED EVENT LISTENER CALLBACKS
     # ============================================================================
 
-    # Event listener for range slider changes (data filtering)
+    # Event listener for range slider changes (data filtering) - now tracks pending changes
     @app.callback(
-        Output("dashboard-event-store", "data", allow_duplicate=True),
+        Output("pending-changes-store", "data", allow_duplicate=True),
         [
             Input({"type": "data-filter-range", "index": "revenue_range"}, "value"),
             Input({"type": "data-filter-range", "index": "users_range"}, "value"),
         ],
-        State("dashboard-event-store", "data"),
+        State("pending-changes-store", "data"),
         prevent_initial_call=True,
     )
-    def update_event_store_from_range_sliders(revenue_range, users_range, current_event_state):
+    def track_pending_range_changes(revenue_range, users_range, pending_state):
         """
-        Central event listener for data filtering range slider changes.
-        Updates the event store with new range values and marks them as changed.
+        Track pending changes from range sliders without immediately updating components.
+        This allows users to modify multiple controls before applying changes.
         """
         from dash import callback_context
 
         ctx = callback_context
         if not ctx.triggered:
-            return current_event_state
+            return pending_state
 
         # Determine which range slider triggered the callback
         trigger_id = ctx.triggered[0]["prop_id"]
         trigger_value = ctx.triggered[0]["value"]
 
-        logger.info(f"🎛️ RANGE FILTER EVENT: {trigger_id} = {trigger_value}")
+        logger.info(f"📋 PENDING CHANGE: {trigger_id} = {trigger_value}")
 
-        # Update event state based on which range slider changed
+        # Update pending changes based on which range slider changed
+        updated_pending = pending_state.copy()
+        updated_pending["has_pending_changes"] = True
+
         if "revenue_range" in trigger_id and revenue_range is not None:
-            new_state = update_event_state(current_event_state, "revenue_range", revenue_range)
+            updated_pending["pending_controls"]["revenue_range"] = revenue_range
             logger.info(
-                f"💰 EVENT STATE: Revenue range updated to ${revenue_range[0]:,} - ${revenue_range[1]:,}"
+                f"💰 PENDING: Revenue range staged as ${revenue_range[0]:,} - ${revenue_range[1]:,}"
             )
-            return new_state
         elif "users_range" in trigger_id and users_range is not None:
-            new_state = update_event_state(current_event_state, "users_range", users_range)
+            updated_pending["pending_controls"]["users_range"] = users_range
             logger.info(
-                f"👥 EVENT STATE: Users range updated to {users_range[0]:,} - {users_range[1]:,}"
+                f"👥 PENDING: Users range staged as {users_range[0]:,} - {users_range[1]:,}"
             )
-            return new_state
 
-        return current_event_state
+        return updated_pending
 
-    # Event listener for dropdown changes (data filtering)
+    # Event listener for dropdown changes (data filtering) - now tracks pending changes
     @app.callback(
-        Output("dashboard-event-store", "data", allow_duplicate=True),
+        Output("pending-changes-store", "data", allow_duplicate=True),
         [
             Input({"type": "data-filter-dropdown", "index": "category_filter"}, "value"),
             Input({"type": "data-filter-dropdown", "index": "date_range"}, "value"),
         ],
-        State("dashboard-event-store", "data"),
+        State("pending-changes-store", "data"),
         prevent_initial_call=True,
     )
-    def update_event_store_from_filter_dropdowns(category_filter, date_range, current_event_state):
+    def track_pending_dropdown_changes(category_filter, date_range, pending_state):
         """
-        Central event listener for data filtering dropdown changes.
-        Updates the event store with new filter values and marks them as changed.
+        Track pending changes from dropdown filters without immediately updating components.
+        This allows users to modify multiple controls before applying changes.
         """
         from dash import callback_context
 
         ctx = callback_context
         if not ctx.triggered:
-            return current_event_state
+            return pending_state
 
         # Determine which dropdown triggered the callback
         trigger_id = ctx.triggered[0]["prop_id"]
         trigger_value = ctx.triggered[0]["value"]
 
-        logger.info(f"🎛️ FILTER DROPDOWN EVENT: {trigger_id} = {trigger_value}")
+        logger.info(f"📋 PENDING DROPDOWN: {trigger_id} = {trigger_value}")
 
-        # Update event state based on which dropdown changed
+        # Update pending changes based on which dropdown changed
+        updated_pending = pending_state.copy()
+        updated_pending["has_pending_changes"] = True
+
         if "category_filter" in trigger_id and category_filter is not None:
-            new_state = update_event_state(current_event_state, "category_filter", category_filter)
-            logger.info(f"🔍 EVENT STATE: Category filter updated to {category_filter}")
-            return new_state
+            updated_pending["pending_controls"]["category_filter"] = category_filter
+            logger.info(f"🔍 PENDING: Category filter staged as {category_filter}")
         elif "date_range" in trigger_id and date_range is not None:
-            new_state = update_event_state(current_event_state, "date_range", date_range)
-            logger.info(f"📅 EVENT STATE: Date range filter updated to {date_range}")
-            return new_state
+            updated_pending["pending_controls"]["date_range"] = date_range
+            logger.info(f"📅 PENDING: Date range filter staged as {date_range}")
 
-        return current_event_state
+        return updated_pending
+
+    # Callback to enable/disable Apply button based on pending changes
+    @app.callback(
+        [
+            Output("apply-updates-button", "disabled"),
+            Output("apply-updates-button", "children"),
+        ],
+        Input("pending-changes-store", "data"),
+        prevent_initial_call=False,
+    )
+    def update_apply_button_state(pending_state):
+        """
+        Enable/disable the Apply button based on whether there are pending changes.
+        Also update button text to indicate pending changes count.
+        """
+        if not pending_state or not pending_state.get("has_pending_changes"):
+            return True, "Apply Updates"  # Disabled with default text
+
+        pending_count = len(pending_state.get("pending_controls", {}))
+        button_text = f"Apply Updates ({pending_count} changes)"
+
+        logger.info(f"🔘 APPLY BUTTON: Enabled with {pending_count} pending changes")
+        return False, button_text  # Enabled with change count
+
+    # Apply button callback - applies pending changes to event store
+    @app.callback(
+        [
+            Output("dashboard-event-store", "data", allow_duplicate=True),
+            Output("pending-changes-store", "data", allow_duplicate=True),
+        ],
+        Input("apply-updates-button", "n_clicks"),
+        [
+            State("pending-changes-store", "data"),
+            State("dashboard-event-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def apply_pending_changes(n_clicks, pending_state, current_event_state):
+        """
+        Apply all pending changes to the event store when Apply button is clicked.
+        This triggers component updates and resets pending changes.
+        """
+        if not n_clicks or not pending_state or not pending_state.get("has_pending_changes"):
+            from dash import no_update
+
+            return no_update, no_update
+
+        logger.info(
+            f"🚀 APPLY CHANGES: Applying {len(pending_state.get('pending_controls', {}))} pending changes"
+        )
+
+        # Apply all pending changes to the event store
+        updated_event_state = current_event_state.copy()
+        pending_controls = pending_state.get("pending_controls", {})
+
+        for control_id, control_value in pending_controls.items():
+            updated_event_state = update_event_state(updated_event_state, control_id, control_value)
+            logger.info(f"✅ APPLIED: {control_id} = {control_value}")
+
+        # Reset pending changes
+        reset_pending_state = {"has_pending_changes": False, "pending_controls": {}}
+
+        logger.info("🎯 APPLY COMPLETE: All pending changes applied to event store")
+        return updated_event_state, reset_pending_state
 
     # Reactive component updates based on event changes
     @app.callback(
@@ -1680,16 +1768,27 @@ def register_dashboard_content_callbacks(app):
             var triggered_id = ctx.triggered.length > 0 ? ctx.triggered[0].prop_id : '';
             console.log('🔧 TRIGGERED BY:', triggered_id);
 
-            // If completion tracker indicates all components are loaded, hide indicator
+            // For completion tracker, use an intelligent delay before hiding
+            // This gives background callbacks time to finish rendering
             if (completion_data && completion_data.all_loaded && triggered_id === 'loading-completion-tracker.data') {
-                console.log('✅ LOADING INDICATOR: All components loaded - hiding indicator');
+                console.log('✅ LOADING INDICATOR: All components loaded - scheduling hide with delay');
 
                 // Clear any existing timeout
                 if (window.loadingIndicatorTimeout) {
                     clearTimeout(window.loadingIndicatorTimeout);
                 }
 
-                return {"display": "none"};
+                // Use shorter delay for completion-based hiding (background tasks likely done)
+                window.loadingIndicatorTimeout = setTimeout(function() {
+                    console.log('⏰ LOADING INDICATOR: Completion delay finished - hiding indicator');
+                    var indicator = document.getElementById('dashboard-loading-indicator');
+                    if (indicator) {
+                        indicator.style.display = 'none';
+                    }
+                }, 2000); // 2 second delay to ensure background rendering is complete
+
+                // Keep showing for now
+                return window.dash_clientside.no_update;
             }
 
             // If dashboard-event-store changed, show indicator immediately
@@ -1708,21 +1807,36 @@ def register_dashboard_content_callbacks(app):
                     "gap": "8px"
                 };
 
-                // Fallback timeout (in case component tracking fails)
+                // Background tasks timeout - longer for background callbacks
+                // Background callbacks typically take 2-8 seconds, so use 10 second timeout
                 window.loadingIndicatorTimeout = setTimeout(function() {
-                    console.log('⏰ LOADING INDICATOR: Fallback timeout - hiding indicator');
+                    console.log('⏰ LOADING INDICATOR: Background tasks timeout - hiding indicator');
                     var indicator = document.getElementById('dashboard-loading-indicator');
                     if (indicator) {
                         indicator.style.display = 'none';
                     }
-                }, 5000);
+                }, 10000); // Increased from 5s to 10s for background callbacks
 
                 return showStyle;
             }
 
-            // For initial page load, show briefly
+            // For initial page load, show with timeout
             if (triggered_id === 'url.pathname' || triggered_id === '') {
-                console.log('📊 LOADING INDICATOR: Showing for initial load');
+                console.log('📊 LOADING INDICATOR: Showing for initial load with extended timeout');
+
+                // Clear any existing timeout
+                if (window.loadingIndicatorTimeout) {
+                    clearTimeout(window.loadingIndicatorTimeout);
+                }
+
+                // Initial load timeout - components need time to render
+                window.loadingIndicatorTimeout = setTimeout(function() {
+                    console.log('⏰ LOADING INDICATOR: Initial load timeout - hiding indicator');
+                    var indicator = document.getElementById('dashboard-loading-indicator');
+                    if (indicator) {
+                        indicator.style.display = 'none';
+                    }
+                }, 8000); // 8 second timeout for initial load
 
                 return {
                     "display": "flex",
