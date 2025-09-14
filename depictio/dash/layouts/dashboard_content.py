@@ -14,7 +14,7 @@ from typing import Any
 import dash_mantine_components as dmc
 import plotly.express as px
 import polars as pl
-from dash import ALL, MATCH, Input, Output, State, dcc, html
+from dash import MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import create_cache
@@ -880,14 +880,14 @@ def register_dashboard_content_callbacks(app):
     @flask_cache.memoize(timeout=900)
     def get_cached_dataframe_with_memoize():
         """Cached wrapper for dataframe loading."""
-        logger.info("📊 CACHE: Loading dataframe (will be cached for 15 minutes)")
+        logger.info("📊 MEMOIZING CACHE: Loading dataframe (will be cached for 15 minutes)")
         return get_cached_dataframe()
 
     # Cache figure generation for 5 minutes
     @flask_cache.memoize(timeout=300)
     def create_cached_chart_figure(df_shape, config_str):
         """Cached wrapper for chart figure generation."""
-        logger.info("📊 CACHE: Generating figure (will be cached for 5 minutes)")
+        logger.info("📊 MEMOIZING CACHE: Generating figure (will be cached for 5 minutes)")
         # Reconstruct the dataframe and config
         # In production, you'd want to pass serializable parameters
         df = get_cached_dataframe()
@@ -895,6 +895,10 @@ def register_dashboard_content_callbacks(app):
 
         config = json.loads(config_str)
         return create_chart_figure(df, config)
+
+    # Make memoized functions accessible to callbacks
+    app.get_cached_dataframe_with_memoize = get_cached_dataframe_with_memoize
+    app.create_cached_chart_figure = create_cached_chart_figure
 
     # Main callback to create container structure
     @app.callback(
@@ -951,18 +955,6 @@ def register_dashboard_content_callbacks(app):
                                 c="gray",
                             ),
                         ]
-                    ),
-                    # Dashboard loading indicator
-                    dmc.Badge(
-                        id="dashboard-loading-indicator",
-                        children=[
-                            DashIconify(icon="svg-spinners:180-ring", width=16, className="mr-2"),
-                            "Dashboard Updating...",
-                        ],
-                        color="blue",
-                        variant="dot",
-                        size="lg",
-                        style={"display": "none"},  # Initially hidden
                     ),
                 ],
             )
@@ -1044,9 +1036,6 @@ def register_dashboard_content_callbacks(app):
             [
                 dcc.Store(id="dashboard-event-store", data=create_initial_event_state()),
                 dcc.Store(
-                    id="loading-completion-tracker", data={"components_loaded": 0, "timestamp": 0}
-                ),
-                dcc.Store(
                     id="pending-changes-store",
                     data={"has_pending_changes": False, "pending_controls": {}},
                 ),
@@ -1102,7 +1091,7 @@ def register_dashboard_content_callbacks(app):
         logger.info(f"⏱️ METRIC CARD {metric_index}: Starting processing")
 
         # Get base dataframe and apply current filters
-        base_df = get_cached_dataframe()
+        base_df = app.get_cached_dataframe_with_memoize()
         df = apply_data_filters(base_df, event_state, f"metric-{metric_index}")
 
         # Find component configuration
@@ -1210,7 +1199,7 @@ def register_dashboard_content_callbacks(app):
         logger.info(f"⏱️ CHART COMPONENT {chart_index}: Starting processing")
 
         # Get base dataframe and apply current filters
-        base_df = get_cached_dataframe()
+        base_df = app.get_cached_dataframe_with_memoize()
         df = apply_data_filters(base_df, event_state, f"chart-{chart_index}")
 
         # Find component configuration
@@ -1543,6 +1532,25 @@ def register_dashboard_content_callbacks(app):
 
         logger.info(f"📋 PENDING CHANGE: {trigger_id} = {trigger_value}")
 
+        # Check if this is initial rendering vs real user interaction
+        # If the current values match the initial defaults, ignore the change
+        initial_defaults = create_initial_event_state()
+
+        if "revenue_range" in trigger_id and revenue_range is not None:
+            initial_revenue = initial_defaults["revenue_range"]["value"]
+            if revenue_range == initial_revenue:
+                logger.info(
+                    f"⏭️ PENDING SKIP: Revenue range matches initial default {initial_revenue}, ignoring"
+                )
+                return pending_state
+        elif "users_range" in trigger_id and users_range is not None:
+            initial_users = initial_defaults["users_range"]["value"]
+            if users_range == initial_users:
+                logger.info(
+                    f"⏭️ PENDING SKIP: Users range matches initial default {initial_users}, ignoring"
+                )
+                return pending_state
+
         # Update pending changes based on which range slider changed
         updated_pending = pending_state.copy()
         updated_pending["has_pending_changes"] = True
@@ -1586,6 +1594,25 @@ def register_dashboard_content_callbacks(app):
         trigger_value = ctx.triggered[0]["value"]
 
         logger.info(f"📋 PENDING DROPDOWN: {trigger_id} = {trigger_value}")
+
+        # Check if this is initial rendering vs real user interaction
+        # If the current values match the initial defaults, ignore the change
+        initial_defaults = create_initial_event_state()
+
+        if "category_filter" in trigger_id and category_filter is not None:
+            initial_category = initial_defaults["category_filter"]["value"]
+            if category_filter == initial_category:
+                logger.info(
+                    f"⏭️ PENDING SKIP: Category filter matches initial default {initial_category}, ignoring"
+                )
+                return pending_state
+        elif "date_range" in trigger_id and date_range is not None:
+            initial_date = initial_defaults["date_range"]["value"]
+            if date_range == initial_date:
+                logger.info(
+                    f"⏭️ PENDING SKIP: Date range matches initial default {initial_date}, ignoring"
+                )
+                return pending_state
 
         # Update pending changes based on which dropdown changed
         updated_pending = pending_state.copy()
@@ -1704,158 +1731,6 @@ def register_dashboard_content_callbacks(app):
         # This dummy output triggers the component updates through the pattern matching system
         # The actual component updates happen in their individual MATCH callbacks
         return f"Event dispatch: {', '.join(changed_events)} at {time.strftime('%H:%M:%S')}"
-
-    # Component completion tracker - updates when any component children change
-    @app.callback(
-        Output("loading-completion-tracker", "data"),
-        [
-            Input({"type": "metric-card", "index": ALL}, "children"),
-            Input({"type": "chart-component", "index": ALL}, "children"),
-            Input({"type": "interactive-component", "index": ALL}, "children"),
-        ],
-        prevent_initial_call=True,
-    )
-    def track_component_completion(metric_cards, chart_components, interactive_components):
-        """Track when all components have finished loading/updating."""
-        import time
-
-        # Count total components that have content (non-empty children)
-        total_components = 0
-        loaded_components = 0
-
-        # Check metric cards
-        for card in metric_cards:
-            total_components += 1
-            if card and card != "Loading...":
-                loaded_components += 1
-
-        # Check chart components
-        for chart in chart_components:
-            total_components += 1
-            if chart and chart != "Loading...":
-                loaded_components += 1
-
-        # Check interactive components
-        for interactive in interactive_components:
-            total_components += 1
-            if interactive and interactive != "Loading...":
-                loaded_components += 1
-
-        logger.info(
-            f"🔄 COMPLETION TRACKER: {loaded_components}/{total_components} components loaded"
-        )
-
-        return {
-            "components_loaded": loaded_components,
-            "total_components": total_components,
-            "timestamp": time.time(),
-            "all_loaded": loaded_components == total_components and total_components > 0,
-        }
-
-    # Hybrid dashboard loading indicator - show immediately on events, hide when components complete
-    app.clientside_callback(
-        """
-        function(pathname, event_store, completion_data) {
-            console.log('🔧 DASHBOARD LOADING INDICATOR: triggered', {pathname, event_store, completion_data});
-
-            // Only show on dashboard pages
-            if (!pathname || !pathname.startsWith('/dashboard/')) {
-                return {"display": "none"};
-            }
-
-            // Get the context to see what triggered this callback
-            var ctx = window.dash_clientside.callback_context;
-            var triggered_id = ctx.triggered.length > 0 ? ctx.triggered[0].prop_id : '';
-            console.log('🔧 TRIGGERED BY:', triggered_id);
-
-            // For completion tracker, use an intelligent delay before hiding
-            // This gives background callbacks time to finish rendering
-            if (completion_data && completion_data.all_loaded && triggered_id === 'loading-completion-tracker.data') {
-                console.log('✅ LOADING INDICATOR: All components loaded - scheduling hide with delay');
-
-                // Clear any existing timeout
-                if (window.loadingIndicatorTimeout) {
-                    clearTimeout(window.loadingIndicatorTimeout);
-                }
-
-                // Use shorter delay for completion-based hiding (background tasks likely done)
-                window.loadingIndicatorTimeout = setTimeout(function() {
-                    console.log('⏰ LOADING INDICATOR: Completion delay finished - hiding indicator');
-                    var indicator = document.getElementById('dashboard-loading-indicator');
-                    if (indicator) {
-                        indicator.style.display = 'none';
-                    }
-                }, 2000); // 2 second delay to ensure background rendering is complete
-
-                // Keep showing for now
-                return window.dash_clientside.no_update;
-            }
-
-            // If dashboard-event-store changed, show indicator immediately
-            if (triggered_id === 'dashboard-event-store.data') {
-                console.log('📊 LOADING INDICATOR: SHOWING IMMEDIATELY - event detected');
-
-                // Clear any existing timeout
-                if (window.loadingIndicatorTimeout) {
-                    clearTimeout(window.loadingIndicatorTimeout);
-                }
-
-                // Show indicator
-                var showStyle = {
-                    "display": "flex",
-                    "alignItems": "center",
-                    "gap": "8px"
-                };
-
-                // Background tasks timeout - longer for background callbacks
-                // Background callbacks typically take 2-8 seconds, so use 10 second timeout
-                window.loadingIndicatorTimeout = setTimeout(function() {
-                    console.log('⏰ LOADING INDICATOR: Background tasks timeout - hiding indicator');
-                    var indicator = document.getElementById('dashboard-loading-indicator');
-                    if (indicator) {
-                        indicator.style.display = 'none';
-                    }
-                }, 10000); // Increased from 5s to 10s for background callbacks
-
-                return showStyle;
-            }
-
-            // For initial page load, show with timeout
-            if (triggered_id === 'url.pathname' || triggered_id === '') {
-                console.log('📊 LOADING INDICATOR: Showing for initial load with extended timeout');
-
-                // Clear any existing timeout
-                if (window.loadingIndicatorTimeout) {
-                    clearTimeout(window.loadingIndicatorTimeout);
-                }
-
-                // Initial load timeout - components need time to render
-                window.loadingIndicatorTimeout = setTimeout(function() {
-                    console.log('⏰ LOADING INDICATOR: Initial load timeout - hiding indicator');
-                    var indicator = document.getElementById('dashboard-loading-indicator');
-                    if (indicator) {
-                        indicator.style.display = 'none';
-                    }
-                }, 8000); // 8 second timeout for initial load
-
-                return {
-                    "display": "flex",
-                    "alignItems": "center",
-                    "gap": "8px"
-                };
-            }
-
-            return window.dash_clientside.no_update;
-        }
-        """,
-        Output("dashboard-loading-indicator", "style"),
-        [
-            Input("url", "pathname"),
-            Input("dashboard-event-store", "data"),
-            Input("loading-completion-tracker", "data"),
-        ],
-        prevent_initial_call=False,
-    )
 
     logger.info("✅ DASHBOARD CONTENT: All callbacks registered successfully")
 
