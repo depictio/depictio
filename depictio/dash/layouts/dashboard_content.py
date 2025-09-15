@@ -14,11 +14,13 @@ from typing import Any
 import dash_mantine_components as dmc
 import plotly.express as px
 import polars as pl
-from dash import MATCH, Input, Output, State, dcc, html
+from dash import ALL, MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import create_cache
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.layouts.dashboard_export import create_standalone_html
+from depictio.dash.utils import generate_unique_index
 
 # ============================================================================
 # DASHBOARD METADATA CONFIGURATION
@@ -37,20 +39,55 @@ DATA_CONFIG = {
     },
 }
 
-# Component dependency mapping - defines which components react to which data filters
+# Dynamic interactive control configurations
+INTERACTIVE_CONTROLS = [
+    {
+        "id": 0,
+        "control_type": "range_slider",
+        "field": "revenue",
+        "label": "Revenue Range",
+        "min": 10000,
+        "max": 100000,
+        "step": 5000,
+        "format": "currency",
+    },
+    {
+        "id": 1,
+        "control_type": "range_slider",
+        "field": "users",
+        "label": "Users Range",
+        "min": 1000,
+        "max": 10000,
+        "step": 500,
+        "format": "int",
+    },
+    {
+        "id": 2,
+        "control_type": "multi_select",
+        "field": "category",
+        "label": "Category Filter",
+        "options": ["Category A", "Category B", "Category C", "Category D", "Category E"],
+        "default": ["all"],
+    },
+    {
+        "id": 3,
+        "control_type": "dropdown",
+        "field": "date_range",
+        "label": "Date Range Filter",
+        "options": [
+            {"label": "All Time", "value": "all"},
+            {"label": "Last 7 Days", "value": "last_7_days"},
+            {"label": "Last 30 Days", "value": "last_30_days"},
+            {"label": "Last 90 Days", "value": "last_90_days"},
+        ],
+        "default": "all",
+    },
+]
+
+# Component dependency mapping - now uses field names dynamically
 COMPONENT_DEPENDENCIES = {
-    "metric": [
-        "revenue_range",
-        "users_range",
-        "category_filter",
-        "date_range",
-    ],  # Metrics affected by data filters
-    "chart": [
-        "revenue_range",
-        "users_range",
-        "category_filter",
-        "date_range",
-    ],  # Charts affected by all data filters
+    "metric": ["all"],  # Metrics affected by all filters
+    "chart": ["all"],  # Charts affected by all filters
     "interactive": [],  # Interactive components don't depend on other controls
 }
 
@@ -560,27 +597,46 @@ def get_optimized_chart_data(df, chart_config):
 
 
 def create_initial_event_state():
-    """Create the initial state for the dashboard event store with data filtering controls."""
-    return {
-        "revenue_range": {
-            "value": [
-                DATA_CONFIG["metrics"]["revenue"]["min"],
-                DATA_CONFIG["metrics"]["revenue"]["max"],
-            ],
-            "timestamp": time.time(),
-            "changed": True,  # Mark as changed to trigger initial component rendering (Apply button mode)
-        },
-        "users_range": {
-            "value": [
-                DATA_CONFIG["metrics"]["users"]["min"],
-                DATA_CONFIG["metrics"]["users"]["max"],
-            ],
-            "timestamp": time.time(),
-            "changed": False,
-        },
-        "category_filter": {"value": ["all"], "timestamp": time.time(), "changed": False},
-        "date_range": {"value": "all", "timestamp": time.time(), "changed": False},
-    }
+    """Create the initial state for the dashboard event store with dynamic filtering controls."""
+    event_state = {}
+
+    for control in INTERACTIVE_CONTROLS:
+        control_id = f"control-{control['id']}"
+
+        if control["control_type"] == "range_slider":
+            # Initialize range sliders with min/max values
+            event_state[control_id] = {
+                "value": [control["min"], control["max"]],
+                "timestamp": time.time(),
+                "changed": False,
+                "field": control["field"],
+                "control_type": control["control_type"],
+            }
+        elif control["control_type"] == "multi_select":
+            # Initialize multi-select with default
+            event_state[control_id] = {
+                "value": control.get("default", ["all"]),
+                "timestamp": time.time(),
+                "changed": False,
+                "field": control["field"],
+                "control_type": control["control_type"],
+            }
+        elif control["control_type"] == "dropdown":
+            # Initialize dropdown with default
+            event_state[control_id] = {
+                "value": control.get("default", "all"),
+                "timestamp": time.time(),
+                "changed": False,
+                "field": control["field"],
+                "control_type": control["control_type"],
+            }
+
+    # Mark first control as changed to trigger initial render
+    if event_state:
+        first_key = list(event_state.keys())[0]
+        event_state[first_key]["changed"] = True
+
+    return event_state
 
 
 def should_component_update(component_type, event_state, trigger_id):
@@ -608,13 +664,24 @@ def should_component_update(component_type, event_state, trigger_id):
     dependencies = COMPONENT_DEPENDENCIES.get(component_type, [])
     logger.info(f"🔍 SHOULD_UPDATE: {component_type} dependencies = {dependencies}")
 
-    # Check if any dependencies have changed
-    for dep in dependencies:
-        changed = event_state.get(dep, {}).get("changed", False)
-        logger.info(f"🔍 SHOULD_UPDATE: {dep} changed = {changed}")
-        if changed:
-            logger.info(f"🔄 COMPONENT UPDATE: {component_type} updating due to {dep} change")
-            return True
+    # Check if any control has changed (for "all" dependencies)
+    if "all" in dependencies:
+        # Check all dynamic controls
+        for control_key, control_state in event_state.items():
+            if control_key.startswith("control-") and control_state.get("changed", False):
+                logger.info(
+                    f"🔄 COMPONENT UPDATE: {component_type} updating due to {control_key} change"
+                )
+                return True
+    else:
+        # Check specific dependencies (if we ever add specific field dependencies)
+        for dep in dependencies:
+            for control_key, control_state in event_state.items():
+                if control_state.get("field") == dep and control_state.get("changed", False):
+                    logger.info(
+                        f"🔄 COMPONENT UPDATE: {component_type} updating due to {control_key} change"
+                    )
+                    return True
 
     # Check if this is initial load (trigger_id is None) - always render
     if trigger_id is None:
@@ -636,10 +703,11 @@ def should_component_update(component_type, event_state, trigger_id):
 def update_event_state(current_state, control_id, new_value):
     """
     Update the event state when a control changes.
+    Now supports dynamic control IDs with metadata preservation.
 
     Args:
         current_state: Current event state
-        control_id: ID of the control that changed
+        control_id: ID of the control that changed (format: "control-N")
         new_value: New value of the control
 
     Returns:
@@ -648,25 +716,45 @@ def update_event_state(current_state, control_id, new_value):
     if not current_state:
         current_state = create_initial_event_state()
 
-    # Reset all changed flags
+    # Reset all changed flags while preserving metadata
     updated_state = {}
     for key, state in current_state.items():
         updated_state[key] = {
             "value": state["value"],
             "timestamp": state["timestamp"],
             "changed": False,
+            # Preserve metadata fields
+            "field": state.get("field", "unknown"),
+            "control_type": state.get("control_type", "unknown"),
         }
 
     # Update the changed control
     if control_id in updated_state:
         old_value = updated_state[control_id]["value"]
         if old_value != new_value:
-            updated_state[control_id] = {
-                "value": new_value,
-                "timestamp": time.time(),
-                "changed": True,
-            }
-            logger.info(f"🎛️ EVENT UPDATE: {control_id} changed from {old_value} → {new_value}")
+            updated_state[control_id].update(
+                {
+                    "value": new_value,
+                    "timestamp": time.time(),
+                    "changed": True,
+                }
+            )
+            field = updated_state[control_id].get("field", "unknown")
+            logger.info(
+                f"🎛️ EVENT UPDATE: {control_id} ({field}) changed from {old_value} → {new_value}"
+            )
+    else:
+        # If control doesn't exist, create it (dynamic addition)
+        logger.warning(
+            f"⚠️ EVENT UPDATE: Control {control_id} not found in state, creating new entry"
+        )
+        updated_state[control_id] = {
+            "value": new_value,
+            "timestamp": time.time(),
+            "changed": True,
+            "field": "dynamic",
+            "control_type": "unknown",
+        }
 
     return updated_state
 
@@ -689,6 +777,7 @@ def get_current_config_from_events(event_state):
 def apply_data_filters(df, event_state, component_id="unknown"):
     """
     Apply data filters based on current event state to the DataFrame.
+    Now works with dynamic control configurations.
 
     Args:
         df: polars DataFrame to filter
@@ -701,66 +790,86 @@ def apply_data_filters(df, event_state, component_id="unknown"):
     if not event_state:
         return df
 
-    logger.info(f"🔍 FILTER DEBUG [{component_id}]: Full event state = {event_state}")
+    logger.info(f"🔍 FILTER DEBUG [{component_id}]: Processing {len(event_state)} controls")
 
     filtered_df = df
 
-    # Apply revenue range filter using polars
-    revenue_range = event_state.get("revenue_range", {}).get("value", [0, float("inf")])
-    if revenue_range and len(revenue_range) == 2:
-        min_revenue, max_revenue = revenue_range
-        filtered_df = filtered_df.filter(
-            (pl.col("revenue") >= min_revenue) & (pl.col("revenue") <= max_revenue)
-        )
+    # Apply filters dynamically based on control configurations
+    for control_key, control_state in event_state.items():
+        if not control_key.startswith("control-"):
+            continue
+
+        field = control_state.get("field")
+        control_type = control_state.get("control_type")
+        value = control_state.get("value")
+
         logger.info(
-            f"🔍 DATA FILTER [{component_id}]: Revenue range [{min_revenue:,} - {max_revenue:,}] → {len(filtered_df):,} rows"
+            f"🔍 FILTER DEBUG [{component_id}]: {control_key} - field={field}, type={control_type}, value={value}"
         )
 
-    # Apply users range filter using polars
-    users_range = event_state.get("users_range", {}).get("value", [0, float("inf")])
-    if users_range and len(users_range) == 2:
-        min_users, max_users = users_range
-        filtered_df = filtered_df.filter(
-            (pl.col("users") >= min_users) & (pl.col("users") <= max_users)
-        )
+        # Debug the condition check
+        is_range_slider = control_type == "range_slider"
+        has_value = bool(value)
+        is_list_of_two = isinstance(value, list) and len(value) == 2
         logger.info(
-            f"🔍 DATA FILTER [{component_id}]: Users range [{min_users:,} - {max_users:,}] → {len(filtered_df):,} rows"
+            f"🔍 CONDITION DEBUG [{component_id}]: {control_key} - is_range_slider={is_range_slider}, has_value={has_value}, is_list_of_two={is_list_of_two}"
         )
 
-    # Apply category filter
-    category_filter = event_state.get("category_filter", {}).get("value", ["all"])
-    logger.info(
-        f"🔍 FILTER DEBUG [{component_id}]: Category filter from event state = {category_filter}"
-    )
-    if category_filter and "all" not in category_filter:
-        before_filter = len(filtered_df)
-        filtered_df = filtered_df.filter(pl.col("category").is_in(category_filter))
-        logger.info(
-            f"🔍 DATA FILTER [{component_id}]: Categories {category_filter} → {before_filter:,} → {len(filtered_df):,} rows"
-        )
-        logger.info(
-            f"🔍 FILTER DEBUG [{component_id}]: Unique categories in filtered data = {sorted(filtered_df['category'].unique().to_list())}"
-        )
-
-    # Apply date range filter
-    date_range = event_state.get("date_range", {}).get("value", "all")
-    if date_range != "all":
-        # For demo, implement last N days filter using polars
-        if date_range == "last_7_days":
-            cutoff_date = datetime.now() - timedelta(days=7)
-            filtered_df = filtered_df.filter(pl.col("date") >= cutoff_date)
-            logger.info(f"🔍 DATA FILTER [{component_id}]: Last 7 days → {len(filtered_df):,} rows")
-        elif date_range == "last_30_days":
-            cutoff_date = datetime.now() - timedelta(days=30)
-            filtered_df = filtered_df.filter(pl.col("date") >= cutoff_date)
+        if control_type == "range_slider" and value and isinstance(value, list) and len(value) == 2:
+            # Apply range filter
+            min_val, max_val = value
+            column_name = field  # Map field to column name
             logger.info(
-                f"🔍 DATA FILTER [{component_id}]: Last 30 days → {len(filtered_df):,} rows"
+                f"🔍 FILTER DEBUG [{component_id}]: Range slider condition met - min={min_val}, max={max_val}"
             )
-        elif date_range == "last_90_days":
-            cutoff_date = datetime.now() - timedelta(days=90)
-            filtered_df = filtered_df.filter(pl.col("date") >= cutoff_date)
+
+            if column_name in filtered_df.columns:
+                filtered_df = filtered_df.filter(
+                    (pl.col(column_name) >= min_val) & (pl.col(column_name) <= max_val)
+                )
+                logger.info(
+                    f"🔍 DATA FILTER [{component_id}]: {field} range [{min_val:,} - {max_val:,}] → {len(filtered_df):,} rows"
+                )
+            else:
+                logger.info(
+                    f"🔍 FILTER DEBUG [{component_id}]: Column {column_name} not found in DataFrame"
+                )
+
+        elif control_type == "multi_select" and value:
+            # Apply category filter
+            if "all" not in value:
+                column_name = field  # Map field to column name
+                if column_name in filtered_df.columns:
+                    before_filter = len(filtered_df)
+                    filtered_df = filtered_df.filter(pl.col(column_name).is_in(value))
+                    logger.info(
+                        f"🔍 DATA FILTER [{component_id}]: {field} {value} → {before_filter:,} → {len(filtered_df):,} rows"
+                    )
+
+        elif control_type == "dropdown" and value and value != "all":
+            # Apply date range or other dropdown filters
+            if field == "date_range":
+                if value == "last_7_days":
+                    cutoff_date = datetime.now() - timedelta(days=7)
+                    filtered_df = filtered_df.filter(pl.col("date") >= cutoff_date)
+                    logger.info(
+                        f"🔍 DATA FILTER [{component_id}]: Last 7 days → {len(filtered_df):,} rows"
+                    )
+                elif value == "last_30_days":
+                    cutoff_date = datetime.now() - timedelta(days=30)
+                    filtered_df = filtered_df.filter(pl.col("date") >= cutoff_date)
+                    logger.info(
+                        f"🔍 DATA FILTER [{component_id}]: Last 30 days → {len(filtered_df):,} rows"
+                    )
+                elif value == "last_90_days":
+                    cutoff_date = datetime.now() - timedelta(days=90)
+                    filtered_df = filtered_df.filter(pl.col("date") >= cutoff_date)
+                    logger.info(
+                        f"🔍 DATA FILTER [{component_id}]: Last 90 days → {len(filtered_df):,} rows"
+                    )
+        else:
             logger.info(
-                f"🔍 DATA FILTER [{component_id}]: Last 90 days → {len(filtered_df):,} rows"
+                f"🔍 FILTER DEBUG [{component_id}]: Control {control_key} not processed - type={control_type}, value={value}, value_len={len(value) if value else 'None'}"
             )
 
     total_filters_applied = len(df) - len(filtered_df)
@@ -935,7 +1044,7 @@ def register_dashboard_content_callbacks(app):
         # Create container structure with unique IDs for pattern matching
         containers = []
 
-        # Dashboard header with loading indicator
+        # Dashboard header with loading indicator and add component button
         containers.append(
             dmc.Group(
                 justify="space-between",
@@ -955,6 +1064,40 @@ def register_dashboard_content_callbacks(app):
                                 c="gray",
                             ),
                         ]
+                    ),
+                    # Dashboard action buttons
+                    dmc.Group(
+                        gap="sm",
+                        children=[
+                            # Export Dashboard button
+                            dmc.Button(
+                                "Export HTML",
+                                id={
+                                    "type": "export-dashboard-button",
+                                    "dashboard_id": dashboard_id,
+                                },
+                                color="green",
+                                size="md",
+                                leftSection=DashIconify(icon="mdi:download", width=16),
+                                variant="outline",
+                            ),
+                            # Add Component button - generate unique component ID using same system as draggable
+                            dcc.Link(
+                                dmc.Button(
+                                    "Add Component",
+                                    id={
+                                        "type": "add-component-button",
+                                        "dashboard_id": dashboard_id,
+                                    },
+                                    color="blue",
+                                    size="md",
+                                    leftSection=DashIconify(icon="mdi:plus-circle", width=16),
+                                    variant="filled",
+                                ),
+                                href=f"/dashboard/{dashboard_id}/add_component/{generate_unique_index()}",
+                                style={"textDecoration": "none"},
+                            ),
+                        ],
                     ),
                 ],
             )
@@ -1031,7 +1174,7 @@ def register_dashboard_content_callbacks(app):
 
         logger.info(f"✅ DASHBOARD CONTENT: Created {len(components)} component containers")
 
-        # Add event store for centralized state management
+        # Add event store for centralized state management and export functionality
         containers.extend(
             [
                 dcc.Store(id="dashboard-event-store", data=create_initial_event_state()),
@@ -1040,6 +1183,9 @@ def register_dashboard_content_callbacks(app):
                     data={"has_pending_changes": False, "pending_controls": {}},
                 ),
                 html.Div(id="dummy-event-output"),  # Dummy output for event callbacks
+                dcc.Download(
+                    id={"type": "dashboard-export-download", "dashboard_id": dashboard_id}
+                ),
             ]
         )
 
@@ -1238,13 +1384,39 @@ def register_dashboard_content_callbacks(app):
             # Generate figure directly - Flask-Cache will handle caching transparently
             fig = create_chart_figure(optimized_df, enhanced_config)
 
-            # Create chart component with Plotly graph
+            # Create chart component with Plotly graph and fullscreen button
             chart = dmc.Paper(
                 shadow="sm",
                 radius="md",
                 p="lg",
                 withBorder=True,
+                style={"position": "relative"},
                 children=[
+                    # Fullscreen button (hidden by default, visible on hover)
+                    html.Button(
+                        DashIconify(icon="mdi:fullscreen", width=18),
+                        id={"type": "chart-fullscreen-btn", "index": chart_index},
+                        n_clicks=0,
+                        style={
+                            "position": "absolute",
+                            "top": "8px",
+                            "right": "8px",
+                            "background": "rgba(0,0,0,0.7)",
+                            "color": "white",
+                            "border": "none",
+                            "borderRadius": "4px",
+                            "width": "32px",
+                            "height": "32px",
+                            "cursor": "pointer",
+                            "zIndex": 1000,
+                            "display": "flex",
+                            "alignItems": "center",
+                            "justifyContent": "center",
+                            "opacity": "0",
+                            "transition": "opacity 0.2s ease",
+                        },
+                        className="chart-fullscreen-btn",
+                    ),
                     dmc.Group(
                         justify="space-between",
                         align="center",
@@ -1336,8 +1508,96 @@ def register_dashboard_content_callbacks(app):
             )
             return html.Div("Configuration Error")
 
-        # Create data filtering controls panel
+        # Create data filtering controls panel dynamically
         try:
+            # Build controls dynamically from configuration
+            control_elements = []
+
+            for control_config in INTERACTIVE_CONTROLS:
+                control_id = control_config["id"]
+                control_type = control_config["control_type"]
+
+                if control_type == "range_slider":
+                    # Create range slider control
+                    control_elements.append(
+                        dmc.GridCol(
+                            [
+                                dmc.Text(control_config["label"], size="sm", fw="bold", mb="xs"),
+                                dcc.RangeSlider(
+                                    id={
+                                        "type": "interactive-control",
+                                        "index": control_id,
+                                        "field": control_config["field"],
+                                    },
+                                    min=control_config["min"],
+                                    max=control_config["max"],
+                                    step=control_config.get("step", 100),
+                                    value=[control_config["min"], control_config["max"]],
+                                    marks={
+                                        control_config["min"]: (
+                                            f"${control_config['min']:,}"
+                                            if control_config.get("format") == "currency"
+                                            else f"{control_config['min']:,}"
+                                        ),
+                                        control_config["max"]: (
+                                            f"${control_config['max']:,}"
+                                            if control_config.get("format") == "currency"
+                                            else f"{control_config['max']:,}"
+                                        ),
+                                    },
+                                    tooltip={"placement": "bottom", "always_visible": True},
+                                ),
+                            ],
+                            span=6,
+                        )
+                    )
+
+                elif control_type == "multi_select":
+                    # Create multi-select dropdown
+                    options = [{"label": "All", "value": "all"}] + [
+                        {"label": opt, "value": opt} for opt in control_config["options"]
+                    ]
+                    control_elements.append(
+                        dmc.GridCol(
+                            [
+                                dmc.Text(control_config["label"], size="sm", fw="bold", mb="xs"),
+                                dcc.Dropdown(
+                                    id={
+                                        "type": "interactive-control",
+                                        "index": control_id,
+                                        "field": control_config["field"],
+                                    },
+                                    options=options,
+                                    value=control_config.get("default", ["all"]),
+                                    multi=True,
+                                    placeholder=f"Select {control_config['label'].lower()}...",
+                                ),
+                            ],
+                            span=6,
+                        )
+                    )
+
+                elif control_type == "dropdown":
+                    # Create single-select dropdown
+                    control_elements.append(
+                        dmc.GridCol(
+                            [
+                                dmc.Text(control_config["label"], size="sm", fw="bold", mb="xs"),
+                                dcc.Dropdown(
+                                    id={
+                                        "type": "interactive-control",
+                                        "index": control_id,
+                                        "field": control_config["field"],
+                                    },
+                                    options=control_config["options"],
+                                    value=control_config.get("default", "all"),
+                                    clearable=False,
+                                ),
+                            ],
+                            span=6,
+                        )
+                    )
+
             interactive_panel = dmc.Paper(
                 shadow="sm",
                 radius="md",
@@ -1352,7 +1612,7 @@ def register_dashboard_content_callbacks(app):
                         children=[
                             dmc.Title("Data Filters", order=4),
                             dmc.Badge(
-                                "Interactive Data Controls",
+                                f"Dynamic Controls ({len(INTERACTIVE_CONTROLS)})",
                                 color="violet",
                                 variant="light",
                                 leftSection=DashIconify(icon="mdi:filter-variant", width=12),
@@ -1360,99 +1620,7 @@ def register_dashboard_content_callbacks(app):
                         ],
                     ),
                     dmc.Grid(
-                        [
-                            # First row: Revenue and Users range sliders
-                            dmc.GridCol(
-                                [
-                                    dmc.Text("Revenue Range", size="sm", fw="bold", mb="xs"),
-                                    dcc.RangeSlider(
-                                        id={"type": "data-filter-range", "index": "revenue_range"},
-                                        min=DATA_CONFIG["metrics"]["revenue"]["min"],
-                                        max=DATA_CONFIG["metrics"]["revenue"]["max"],
-                                        step=5000,
-                                        value=[
-                                            DATA_CONFIG["metrics"]["revenue"]["min"],
-                                            DATA_CONFIG["metrics"]["revenue"]["max"],
-                                        ],
-                                        marks={
-                                            DATA_CONFIG["metrics"]["revenue"][
-                                                "min"
-                                            ]: f"${DATA_CONFIG['metrics']['revenue']['min']:,}",
-                                            DATA_CONFIG["metrics"]["revenue"][
-                                                "max"
-                                            ]: f"${DATA_CONFIG['metrics']['revenue']['max']:,}",
-                                        },
-                                        tooltip={"placement": "bottom", "always_visible": True},
-                                    ),
-                                ],
-                                span=6,
-                            ),
-                            dmc.GridCol(
-                                [
-                                    dmc.Text("Users Range", size="sm", fw="bold", mb="xs"),
-                                    dcc.RangeSlider(
-                                        id={"type": "data-filter-range", "index": "users_range"},
-                                        min=DATA_CONFIG["metrics"]["users"]["min"],
-                                        max=DATA_CONFIG["metrics"]["users"]["max"],
-                                        step=500,
-                                        value=[
-                                            DATA_CONFIG["metrics"]["users"]["min"],
-                                            DATA_CONFIG["metrics"]["users"]["max"],
-                                        ],
-                                        marks={
-                                            DATA_CONFIG["metrics"]["users"][
-                                                "min"
-                                            ]: f"{DATA_CONFIG['metrics']['users']['min']:,}",
-                                            DATA_CONFIG["metrics"]["users"][
-                                                "max"
-                                            ]: f"{DATA_CONFIG['metrics']['users']['max']:,}",
-                                        },
-                                        tooltip={"placement": "bottom", "always_visible": True},
-                                    ),
-                                ],
-                                span=6,
-                            ),
-                            # Second row: Category and Date filters
-                            dmc.GridCol(
-                                [
-                                    dmc.Text("Category Filter", size="sm", fw="bold", mb="xs"),
-                                    dcc.Dropdown(
-                                        id={
-                                            "type": "data-filter-dropdown",
-                                            "index": "category_filter",
-                                        },
-                                        options=[
-                                            {"label": "All Categories", "value": "all"},
-                                        ]
-                                        + [
-                                            {"label": cat, "value": cat}
-                                            for cat in DATA_CONFIG["categories"]
-                                        ],
-                                        value=["all"],
-                                        multi=True,
-                                        placeholder="Select categories to include...",
-                                    ),
-                                ],
-                                span=6,
-                            ),
-                            dmc.GridCol(
-                                [
-                                    dmc.Text("Date Range Filter", size="sm", fw="bold", mb="xs"),
-                                    dcc.Dropdown(
-                                        id={"type": "data-filter-dropdown", "index": "date_range"},
-                                        options=[
-                                            {"label": "All Time", "value": "all"},
-                                            {"label": "Last 7 Days", "value": "last_7_days"},
-                                            {"label": "Last 30 Days", "value": "last_30_days"},
-                                            {"label": "Last 90 Days", "value": "last_90_days"},
-                                        ],
-                                        value="all",
-                                        clearable=False,
-                                    ),
-                                ],
-                                span=6,
-                            ),
-                        ],
+                        control_elements,
                         gutter="lg",
                     ),
                     # Apply Update Button
@@ -1505,125 +1673,74 @@ def register_dashboard_content_callbacks(app):
     # CENTRALIZED EVENT LISTENER CALLBACKS
     # ============================================================================
 
-    # Event listener for range slider changes (data filtering) - now tracks pending changes
+    # Unified event listener for ALL interactive controls using MATCH pattern
     @app.callback(
         Output("pending-changes-store", "data", allow_duplicate=True),
-        [
-            Input({"type": "data-filter-range", "index": "revenue_range"}, "value"),
-            Input({"type": "data-filter-range", "index": "users_range"}, "value"),
-        ],
+        Input({"type": "interactive-control", "index": ALL, "field": ALL}, "value"),
         State("pending-changes-store", "data"),
         prevent_initial_call=True,
     )
-    def track_pending_range_changes(revenue_range, users_range, pending_state):
+    def track_pending_control_changes(control_values, pending_state):
         """
-        Track pending changes from range sliders without immediately updating components.
-        This allows users to modify multiple controls before applying changes.
+        Track pending changes from ALL interactive controls using pattern matching.
+        This unified callback handles any number of dynamic controls.
         """
+        import json
+
         from dash import callback_context
 
         ctx = callback_context
         if not ctx.triggered:
             return pending_state
 
-        # Determine which range slider triggered the callback
-        trigger_id = ctx.triggered[0]["prop_id"]
+        # Parse the triggered control's ID
+        trigger_id_str = ctx.triggered[0]["prop_id"]
         trigger_value = ctx.triggered[0]["value"]
 
-        logger.info(f"📋 PENDING CHANGE: {trigger_id} = {trigger_value}")
+        # Extract the control info from the trigger ID
+        try:
+            # Parse the pattern-matched ID
+            trigger_id_json = trigger_id_str.split(".value")[0]
+            trigger_id = json.loads(trigger_id_json)
+            control_index = trigger_id["index"]
+            control_field = trigger_id["field"]
 
-        # Check if this is initial rendering vs real user interaction
-        # If the current values match the initial defaults, ignore the change
-        initial_defaults = create_initial_event_state()
-
-        if "revenue_range" in trigger_id and revenue_range is not None:
-            initial_revenue = initial_defaults["revenue_range"]["value"]
-            if revenue_range == initial_revenue:
-                logger.info(
-                    f"⏭️ PENDING SKIP: Revenue range matches initial default {initial_revenue}, ignoring"
-                )
-                return pending_state
-        elif "users_range" in trigger_id and users_range is not None:
-            initial_users = initial_defaults["users_range"]["value"]
-            if users_range == initial_users:
-                logger.info(
-                    f"⏭️ PENDING SKIP: Users range matches initial default {initial_users}, ignoring"
-                )
-                return pending_state
-
-        # Update pending changes based on which range slider changed
-        updated_pending = pending_state.copy()
-        updated_pending["has_pending_changes"] = True
-
-        if "revenue_range" in trigger_id and revenue_range is not None:
-            updated_pending["pending_controls"]["revenue_range"] = revenue_range
             logger.info(
-                f"💰 PENDING: Revenue range staged as ${revenue_range[0]:,} - ${revenue_range[1]:,}"
+                f"📋 PENDING CHANGE: Control {control_index} ({control_field}) = {trigger_value}"
             )
-        elif "users_range" in trigger_id and users_range is not None:
-            updated_pending["pending_controls"]["users_range"] = users_range
-            logger.info(
-                f"👥 PENDING: Users range staged as {users_range[0]:,} - {users_range[1]:,}"
-            )
-
-        return updated_pending
-
-    # Event listener for dropdown changes (data filtering) - now tracks pending changes
-    @app.callback(
-        Output("pending-changes-store", "data", allow_duplicate=True),
-        [
-            Input({"type": "data-filter-dropdown", "index": "category_filter"}, "value"),
-            Input({"type": "data-filter-dropdown", "index": "date_range"}, "value"),
-        ],
-        State("pending-changes-store", "data"),
-        prevent_initial_call=True,
-    )
-    def track_pending_dropdown_changes(category_filter, date_range, pending_state):
-        """
-        Track pending changes from dropdown filters without immediately updating components.
-        This allows users to modify multiple controls before applying changes.
-        """
-        from dash import callback_context
-
-        ctx = callback_context
-        if not ctx.triggered:
+        except Exception as e:
+            logger.error(f"Failed to parse trigger ID: {e}")
             return pending_state
 
-        # Determine which dropdown triggered the callback
-        trigger_id = ctx.triggered[0]["prop_id"]
-        trigger_value = ctx.triggered[0]["value"]
-
-        logger.info(f"📋 PENDING DROPDOWN: {trigger_id} = {trigger_value}")
-
-        # Check if this is initial rendering vs real user interaction
-        # If the current values match the initial defaults, ignore the change
+        # Get initial state to check if this is a real change
         initial_defaults = create_initial_event_state()
+        control_key = f"control-{control_index}"
 
-        if "category_filter" in trigger_id and category_filter is not None:
-            initial_category = initial_defaults["category_filter"]["value"]
-            if category_filter == initial_category:
+        # Check if value matches initial default
+        if control_key in initial_defaults:
+            initial_value = initial_defaults[control_key]["value"]
+            if trigger_value == initial_value:
                 logger.info(
-                    f"⏭️ PENDING SKIP: Category filter matches initial default {initial_category}, ignoring"
-                )
-                return pending_state
-        elif "date_range" in trigger_id and date_range is not None:
-            initial_date = initial_defaults["date_range"]["value"]
-            if date_range == initial_date:
-                logger.info(
-                    f"⏭️ PENDING SKIP: Date range matches initial default {initial_date}, ignoring"
+                    f"⏭️ PENDING SKIP: Control {control_index} matches initial default, ignoring"
                 )
                 return pending_state
 
-        # Update pending changes based on which dropdown changed
-        updated_pending = pending_state.copy()
+        # Update pending changes
+        updated_pending = (
+            pending_state.copy()
+            if pending_state
+            else {"has_pending_changes": False, "pending_controls": {}}
+        )
         updated_pending["has_pending_changes"] = True
 
-        if "category_filter" in trigger_id and category_filter is not None:
-            updated_pending["pending_controls"]["category_filter"] = category_filter
-            logger.info(f"🔍 PENDING: Category filter staged as {category_filter}")
-        elif "date_range" in trigger_id and date_range is not None:
-            updated_pending["pending_controls"]["date_range"] = date_range
-            logger.info(f"📅 PENDING: Date range filter staged as {date_range}")
+        # Store the change with control metadata
+        updated_pending["pending_controls"][control_key] = {
+            "value": trigger_value,
+            "field": control_field,
+            "index": control_index,
+        }
+
+        logger.info(f"✅ PENDING: Control {control_index} ({control_field}) staged for update")
 
         return updated_pending
 
@@ -1678,12 +1795,41 @@ def register_dashboard_content_callbacks(app):
         )
 
         # Apply all pending changes to the event store
-        updated_event_state = current_event_state.copy()
+        updated_event_state = (
+            current_event_state.copy() if current_event_state else create_initial_event_state()
+        )
         pending_controls = pending_state.get("pending_controls", {})
 
-        for control_id, control_value in pending_controls.items():
-            updated_event_state = update_event_state(updated_event_state, control_id, control_value)
-            logger.info(f"✅ APPLIED: {control_id} = {control_value}")
+        logger.info(f"🔍 DEBUG APPLY: Current event state keys: {list(updated_event_state.keys())}")
+        logger.info(f"🔍 DEBUG APPLY: Pending controls keys: {list(pending_controls.keys())}")
+
+        for control_key, control_data in pending_controls.items():
+            # Handle both old format (direct value) and new format (with metadata)
+            if isinstance(control_data, dict) and "value" in control_data:
+                control_value = control_data["value"]
+                field = control_data.get("field", "unknown")
+            else:
+                control_value = control_data  # Backward compatibility
+                field = "legacy"
+
+            old_state = updated_event_state.get(control_key, {}).get("value", "N/A")
+            updated_event_state = update_event_state(
+                updated_event_state, control_key, control_value
+            )
+
+            # FORCE the changed flag to true for all applied controls - this ensures components update
+            if control_key in updated_event_state:
+                updated_event_state[control_key]["changed"] = True
+                updated_event_state[control_key]["timestamp"] = time.time()
+                logger.info(
+                    f"🔧 FORCED UPDATE: {control_key} marked as changed for component refresh"
+                )
+
+            logger.info(f"✅ APPLIED: {control_key} ({field}) = {old_state} → {control_value}")
+
+        # Log final state for debugging
+        changed_controls = [k for k, v in updated_event_state.items() if v.get("changed", False)]
+        logger.info(f"🔍 DEBUG APPLY: Controls marked as changed: {changed_controls}")
 
         # Reset pending changes
         reset_pending_state = {"has_pending_changes": False, "pending_controls": {}}
@@ -1710,27 +1856,307 @@ def register_dashboard_content_callbacks(app):
         # Check what changed and log dependencies
         changed_events = []
         for control_id, state in event_state.items():
-            if state.get("changed", False):
-                changed_events.append(control_id)
+            if control_id.startswith("control-") and state.get("changed", False):
+                field = state.get("field", "unknown")
+                changed_events.append(f"{control_id} ({field})")
 
         if not changed_events:
             logger.info("⏭️ EVENT DISPATCH: No changed events detected")
             return ""
 
-        logger.info(f"📢 EVENT DISPATCH: Changed events: {changed_events}")
+        logger.info(f"📢 EVENT DISPATCH: Changed controls: {changed_events}")
 
-        # Log which components will be affected
-        affected_components = set()
+        # Log which components will be affected - all components react to dynamic controls
+        affected_components = []
         for component_type, dependencies in COMPONENT_DEPENDENCIES.items():
-            for changed_event in changed_events:
-                if changed_event in dependencies:
-                    affected_components.add(component_type)
+            if "all" in dependencies or dependencies:  # Either explicit "all" or any dependencies
+                affected_components.append(component_type)
 
-        logger.info(f"🎯 EVENT DISPATCH: Components to update: {list(affected_components)}")
+        logger.info(f"🎯 EVENT DISPATCH: Components to update: {affected_components}")
 
         # This dummy output triggers the component updates through the pattern matching system
         # The actual component updates happen in their individual MATCH callbacks
-        return f"Event dispatch: {', '.join(changed_events)} at {time.strftime('%H:%M:%S')}"
+        return f"Dynamic controls updated: {len(changed_events)} controls at {time.strftime('%H:%M:%S')}"
+
+    # Simple fullscreen toggle callback
+    app.clientside_callback(
+        """
+        function(n_clicks, button_id) {
+            if (!n_clicks) {
+                return window.dash_clientside.no_update;
+            }
+
+            console.log('Fullscreen button clicked:', button_id);
+
+            // Find the button using the event target (much simpler)
+            const button = document.activeElement;
+            console.log('Active button:', button);
+
+            if (!button || button.tagName !== 'BUTTON') {
+                console.error('Could not find button element');
+                return window.dash_clientside.no_update;
+            }
+
+            // The button is inside the Paper container - find it by going up the parent chain
+            let paper = button.parentElement;
+            console.log('Button parent:', paper);
+
+            // The Paper container should have the style position: relative that we set
+            while (paper && !paper.style.position) {
+                paper = paper.parentElement;
+                console.log('Checking parent:', paper);
+            }
+
+            console.log('Found paper container:', paper);
+
+            if (!paper) {
+                console.error('Could not find chart container - using button parent as fallback');
+                paper = button.parentElement;
+            }
+
+            // Toggle fullscreen
+            if (paper.classList.contains('chart-fullscreen')) {
+                // Exit fullscreen
+                console.log('Exiting fullscreen');
+                paper.classList.remove('chart-fullscreen');
+
+                // Reset all styles to original state
+                paper.style.cssText = paper.getAttribute('data-original-style') || 'position: relative;';
+
+                // Reset button position
+                button.style.position = 'absolute';
+                button.style.top = '8px';
+                button.style.right = '8px';
+
+                // Reset body overflow
+                document.body.style.overflow = '';
+
+                // Force graph resize with explicit dimension restoration
+                setTimeout(() => {
+                    const graphs = paper.querySelectorAll('.js-plotly-plot');
+                    graphs.forEach((graph, index) => {
+                        // Get stored original dimensions
+                        const originalWidth = paper.getAttribute(`data-graph-${index}-width`);
+                        const originalHeight = paper.getAttribute(`data-graph-${index}-height`);
+
+                        console.log(`Restoring graph ${index} to original size:`, originalWidth, 'x', originalHeight);
+
+                        // Clear all inline dimensions first
+                        graph.style.cssText = graph.style.cssText.replace(/width\\s*:[^;]*(;|$)/g, '').replace(/height\\s*:[^;]*(;|$)/g, '');
+
+                        // Clear parent dimensions
+                        let parent = graph.parentElement;
+                        while (parent && parent !== paper) {
+                            parent.style.cssText = parent.style.cssText.replace(/width\\s*:[^;]*(;|$)/g, '').replace(/height\\s*:[^;]*(;|$)/g, '');
+                            parent = parent.parentElement;
+                        }
+
+                        // Set explicit dimensions if we have stored values
+                        if (originalWidth && originalHeight) {
+                            graph.style.width = originalWidth + 'px';
+                            graph.style.height = originalHeight + 'px';
+                            console.log(`Set explicit dimensions: ${originalWidth}px x ${originalHeight}px`);
+                        }
+
+                        // Force relayout with explicit dimensions
+                        if (window.Plotly) {
+                            const update = {
+                                'xaxis.autorange': true,
+                                'yaxis.autorange': true,
+                                autosize: false  // Disable autosize to respect explicit dimensions
+                            };
+
+                            if (originalWidth && originalHeight) {
+                                update.width = parseInt(originalWidth);
+                                update.height = parseInt(originalHeight);
+                            }
+
+                            window.Plotly.relayout(graph, update).then(() => {
+                                window.Plotly.Plots.resize(graph);
+                            });
+                        }
+                    });
+                }, 50);
+
+                // Additional resize after longer delay
+                setTimeout(() => {
+                    const graphs = paper.querySelectorAll('.js-plotly-plot');
+                    graphs.forEach((graph, index) => {
+                        if (window.Plotly) {
+                            console.log(`Final resize attempt for graph ${index}, current size:`, graph.offsetWidth, 'x', graph.offsetHeight);
+                            window.Plotly.Plots.resize(graph);
+                        }
+                    });
+                }, 500);
+
+            } else {
+                // Enter fullscreen
+                console.log('Entering fullscreen');
+
+                // Store original styles AND graph dimensions before modifying
+                paper.setAttribute('data-original-style', paper.style.cssText);
+
+                // Store original graph dimensions (always capture current state)
+                const graphs = paper.querySelectorAll('.js-plotly-plot');
+                graphs.forEach((graph, index) => {
+                    const rect = graph.getBoundingClientRect();
+                    paper.setAttribute(`data-graph-${index}-width`, rect.width);
+                    paper.setAttribute(`data-graph-${index}-height`, rect.height);
+                    console.log(`Storing graph ${index} current size before fullscreen:`, rect.width, 'x', rect.height);
+                    console.log(`Graph ${index} current style:`, graph.style.cssText);
+                });
+
+                paper.classList.add('chart-fullscreen');
+                paper.style.position = 'fixed';
+                paper.style.top = '0';
+                paper.style.left = '0';
+                paper.style.width = '100vw';
+                paper.style.height = '100vh';
+                paper.style.zIndex = '9999';
+                paper.style.background = 'var(--mantine-color-body, white)';
+                paper.style.margin = '0';
+                paper.style.boxSizing = 'border-box';
+
+                document.body.style.overflow = 'hidden';
+
+                // Force graph resize for fullscreen - more aggressive approach
+                setTimeout(() => {
+                    graphs.forEach(graph => {
+                        console.log('Resizing graph for fullscreen, current dimensions:', graph.offsetWidth, 'x', graph.offsetHeight);
+
+                        // Set graph to take full container size in fullscreen
+                        graph.style.width = '100%';
+                        graph.style.height = 'calc(100vh - 100px)';  // Account for padding and title
+
+                        if (window.Plotly) {
+                            // Re-enable autosize for fullscreen mode
+                            window.Plotly.relayout(graph, {
+                                autosize: true,
+                                'xaxis.autorange': true,
+                                'yaxis.autorange': true,
+                                width: null,
+                                height: null
+                            }).then(() => {
+                                console.log('Plotly relayout complete, now calling resize');
+                                window.Plotly.Plots.resize(graph);
+                                console.log('After resize, graph dimensions:', graph.offsetWidth, 'x', graph.offsetHeight);
+                            });
+                        }
+                    });
+                }, 100);
+
+                // Additional resize attempt
+                setTimeout(() => {
+                    graphs.forEach(graph => {
+                        if (window.Plotly) {
+                            console.log('Second resize attempt for fullscreen');
+                            window.Plotly.Plots.resize(graph);
+                        }
+                    });
+                }, 300);
+            }
+
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output({"type": "chart-fullscreen-btn", "index": MATCH}, "n_clicks"),
+        Input({"type": "chart-fullscreen-btn", "index": MATCH}, "n_clicks"),
+        State({"type": "chart-fullscreen-btn", "index": MATCH}, "id"),
+        prevent_initial_call=True,
+    )
+
+    # Dashboard export callback
+    @app.callback(
+        Output({"type": "dashboard-export-download", "dashboard_id": MATCH}, "data"),
+        Input({"type": "export-dashboard-button", "dashboard_id": MATCH}, "n_clicks"),
+        [
+            State("dashboard-event-store", "data"),
+            State({"type": "export-dashboard-button", "dashboard_id": MATCH}, "id"),
+        ],
+        prevent_initial_call=True,
+        background=True,  # Background processing for export
+    )
+    def export_dashboard_html(n_clicks, event_state, button_id):
+        """
+        Export the current dashboard state as a standalone HTML file.
+        This generates a complete HTML page with embedded charts and data.
+        """
+        if not n_clicks:
+            from dash import no_update
+
+            return no_update
+
+        dashboard_id = button_id["dashboard_id"]
+        logger.info(f"🔄 DASHBOARD EXPORT: Starting export for dashboard {dashboard_id}")
+
+        try:
+            # Get current dashboard data
+            base_df = app.get_cached_dataframe_with_memoize()
+            filtered_df = apply_data_filters(base_df, event_state, f"export-{dashboard_id}")
+
+            # Generate all current charts
+            charts = []
+            chart_components = [c for c in DASHBOARD_COMPONENTS if c["type"] == "chart"]
+
+            for comp in chart_components:
+                try:
+                    # Apply chart-specific optimization
+                    optimized_df = get_optimized_chart_data(filtered_df, comp)
+
+                    # Create chart figure
+                    fig = create_chart_figure(optimized_df, comp)
+                    charts.append(fig)
+
+                    logger.info(f"📊 EXPORT: Added chart '{comp['title']}' to export")
+                except Exception as e:
+                    logger.error(
+                        f"❌ EXPORT: Failed to create chart '{comp.get('title', 'Unknown')}': {e}"
+                    )
+                    # Continue with other charts even if one fails
+
+            # Prepare dashboard data for export
+            dashboard_data = {
+                "dashboard_id": dashboard_id,
+                "export_timestamp": datetime.now().isoformat(),
+                "total_data_points": len(filtered_df),
+                "applied_filters": event_state,
+                "chart_count": len(charts),
+            }
+
+            # Create standalone HTML
+            title = f"Dashboard {dashboard_id} Export"
+            html_content = create_standalone_html(dashboard_data, charts, title)
+
+            # Generate filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"dashboard_{dashboard_id}_export_{timestamp}.html"
+
+            logger.info(f"✅ DASHBOARD EXPORT: Successfully exported {len(charts)} charts")
+
+            # Return download data
+            return {"content": html_content, "filename": filename, "type": "text/html"}
+
+        except Exception as e:
+            logger.error(f"❌ DASHBOARD EXPORT: Failed to export dashboard {dashboard_id}: {e}")
+
+            # Return error HTML as fallback
+            error_html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head><title>Export Error</title></head>
+            <body>
+                <h1>Dashboard Export Error</h1>
+                <p>Failed to export dashboard {dashboard_id}: {str(e)}</p>
+                <p>Please try again or contact support.</p>
+            </body>
+            </html>
+            """
+
+            return {
+                "content": error_html,
+                "filename": f"dashboard_{dashboard_id}_export_error.html",
+                "type": "text/html",
+            }
 
     logger.info("✅ DASHBOARD CONTENT: All callbacks registered successfully")
 
