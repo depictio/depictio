@@ -52,67 +52,79 @@ def register_sidebar_callbacks(app):
     #     prevent_initial_call=True,
     # )
 
-    # Combined callback to handle sidebar icon based on both initialization and clicks
-    @app.callback(
+    # Move sidebar icon to clientside for instant response
+    app.clientside_callback(
+        """
+        function(is_collapsed, pathname) {
+            console.log('🔧 CLIENTSIDE SIDEBAR ICON: collapsed=' + is_collapsed + ', pathname=' + pathname);
+
+            // Don't update if on auth page (sidebar doesn't exist)
+            if (pathname === '/auth') {
+                return window.dash_clientside.no_update;
+            }
+
+            // Set icon based on current collapsed state
+            // When collapsed -> show right arrow (points to expand)
+            // When expanded -> show left arrow (points to collapse)
+            return is_collapsed ? 'ep:d-arrow-right' : 'ep:d-arrow-left';
+        }
+        """,
         Output("sidebar-icon", "icon"),
         [Input("sidebar-collapsed", "data"), Input("url", "pathname")],
-        prevent_initial_call=False,  # Allow initial call to set correct icon
+        prevent_initial_call=False,
     )
-    def update_sidebar_icon(is_collapsed, pathname):
-        # Don't update if on auth page (sidebar doesn't exist)
-        if pathname == "/auth":
-            return dash.no_update
 
-        # Set icon based on current collapsed state
-        # When collapsed -> show right arrow (points to expand)
-        # When expanded -> show left arrow (points to collapse)
-        return "ep:d-arrow-right" if is_collapsed else "ep:d-arrow-left"
+    # Move header favicon to clientside for instant response
+    app.clientside_callback(
+        """
+        function(is_collapsed) {
+            console.log('🔧 CLIENTSIDE FAVICON: collapsed=' + is_collapsed);
 
-    # Callback to show/hide the header favicon based on sidebar collapsed state
-    @app.callback(
+            var base_style = {
+                "height": "44px",
+                "width": "44px",
+                "marginLeft": "-5px",
+                "marginRight": "0px",
+                "display": is_collapsed ? "block" : "none"
+            };
+
+            return base_style;
+        }
+        """,
         Output("header-favicon", "style"),
         [Input("sidebar-collapsed", "data")],
         prevent_initial_call=False,
     )
-    def update_header_favicon_visibility(is_collapsed):
-        # Show favicon when sidebar is collapsed, hide when expanded
-        base_style = {
-            "height": "44px",
-            "width": "44px",
-            "marginLeft": "-5px",
-            "marginRight": "0px",
+
+    # Move navbar URL changes to clientside for instant response
+    app.clientside_callback(
+        """
+        function(pathname, is_collapsed) {
+            console.log('🔧 CLIENTSIDE NAVBAR URL: pathname=' + pathname + ', collapsed=' + is_collapsed);
+
+            // Check if we're on the auth page - if so, hide the navbar completely
+            if (pathname === '/auth') {
+                return null;
+            }
+
+            // For other pages, show the navbar with current collapsed state
+            var navbar_config = {
+                "width": 220,
+                "breakpoint": "sm",
+                "collapsed": {
+                    "mobile": true,
+                    "desktop": is_collapsed !== null ? is_collapsed : false
+                }
+            };
+
+            return navbar_config;
         }
-
-        if is_collapsed:
-            base_style["display"] = "block"
-        else:
-            base_style["display"] = "none"
-
-        return base_style
-
-    # Callback to handle URL changes and navbar visibility
-    @app.callback(
+        """,
         Output("app-shell", "navbar"),
-        Input("url", "pathname"),
-        State("sidebar-collapsed", "data"),
+        [Input("url", "pathname")],
+        [State("sidebar-collapsed", "data")],
         prevent_initial_call=False,
     )
-    def handle_navbar_url_changes(pathname, is_collapsed):
-        # Check if we're on the auth page - if so, hide the navbar completely
-        if pathname == "/auth":
-            return None
-
-        # For other pages, show the navbar with current collapsed state
-        navbar_config = {
-            "width": 220,
-            "breakpoint": "sm",
-            "collapsed": {
-                "mobile": True,
-                "desktop": is_collapsed if is_collapsed is not None else False,
-            },
-        }
-
-        return navbar_config
 
     # Callback to handle sidebar button clicks (conditional to avoid auth page error)
     @app.callback(
@@ -137,47 +149,59 @@ def register_sidebar_callbacks(app):
         logger.info(f"Toggling sidebar state from {is_collapsed} to {not is_collapsed}")
         return not is_collapsed
 
-    # Update navbar when sidebar collapsed state changes
-    @app.callback(
+    # Move navbar collapsed state update to clientside for instant response
+    app.clientside_callback(
+        """
+        function(is_collapsed, pathname) {
+            console.log('🔧 CLIENTSIDE NAVBAR COLLAPSED: collapsed=' + is_collapsed + ', pathname=' + pathname);
+
+            // Don't update on auth page
+            if (pathname === '/auth') {
+                return window.dash_clientside.no_update;
+            }
+
+            // Return new navbar configuration
+            var navbar_config = {
+                "width": 220,
+                "breakpoint": "sm",
+                "collapsed": {
+                    "mobile": true,
+                    "desktop": is_collapsed !== null ? is_collapsed : false
+                }
+            };
+
+            return navbar_config;
+        }
+        """,
         Output("app-shell", "navbar", allow_duplicate=True),
-        Input("sidebar-collapsed", "data"),
-        State("url", "pathname"),
+        [Input("sidebar-collapsed", "data")],
+        [State("url", "pathname")],
         prevent_initial_call=True,
     )
-    def update_navbar_from_collapsed_state(is_collapsed, pathname):
-        # Don't update on auth page
-        if pathname == "/auth":
-            return dash.no_update
 
-        # Return new navbar configuration
-        navbar_config = {
-            "width": 220,
-            "breakpoint": "sm",
-            "collapsed": {
-                "mobile": True,
-                "desktop": is_collapsed if is_collapsed is not None else False,
-            },
+    # Move sidebar active state to clientside for instant response
+    app.clientside_callback(
+        """
+        function(pathname) {
+            console.log('🔧 CLIENTSIDE SIDEBAR ACTIVE: pathname=' + pathname);
+
+            if (pathname === '/dashboards') {
+                return [true, false, false, false];
+            } else if (pathname === '/projects') {
+                return [false, true, false, false];
+            } else if (pathname === '/admin') {
+                return [false, false, true, false];
+            } else if (pathname === '/about') {
+                return [false, false, false, true];
+            } else {
+                return [false, false, false, false];
+            }
         }
-
-        return navbar_config
-
-    # Callback to update sidebar-link active state
-    @app.callback(
+        """,
         Output({"type": "sidebar-link", "index": ALL}, "active"),
         Input("url", "pathname"),
         prevent_initial_call=True,
     )
-    def update_active_state(pathname):
-        if pathname == "/dashboards":
-            return [True, False, False, False]
-        elif pathname == "/projects":
-            return [False, True, False, False]
-        elif pathname == "/admin":
-            return [False, False, True, False]
-        elif pathname == "/about":
-            return [False, False, False, True]
-        else:
-            return [False, False, False, False]
 
     @app.callback(
         Output("avatar-container", "children"),
@@ -185,24 +209,17 @@ def register_sidebar_callbacks(app):
         prevent_initial_call=True,
     )
     def update_avatar(user_cache):
-        from depictio.models.models.users import UserContext
-
-        logger.info(f"🔧 AVATAR CALLBACK: user_cache received: {bool(user_cache)}")
-        if user_cache:
-            logger.info(
-                f"🔧 AVATAR CALLBACK: user_cache keys: {list(user_cache.keys()) if isinstance(user_cache, dict) else 'not dict'}"
-            )
-
         # Get user from consolidated cache
-        current_user = UserContext.from_cache(user_cache)
-        logger.info(f"🔧 AVATAR CALLBACK: current_user: {bool(current_user)}")
+        if user_cache and isinstance(user_cache, dict) and "user" in user_cache:
+            user_data = user_cache["user"]
 
-        if not current_user or not current_user.email:
-            logger.info("🔧 AVATAR CALLBACK: No user or email, returning empty")
+            if user_data and user_data.get("email"):
+                email = user_data["email"]
+                name = user_data.get("name", email.split("@")[0])
+            else:
+                return []
+        else:
             return []
-
-        email = current_user.email
-        name = current_user.name
         avatar = dcc.Link(
             dmc.Avatar(
                 id="avatar",
@@ -253,30 +270,31 @@ def register_sidebar_callbacks(app):
             )
             return [server_status_badge]
 
-    @app.callback(
+    # Move admin link visibility to clientside for instant response
+    app.clientside_callback(
+        """
+        function(user_cache) {
+            console.log('🔧 CLIENTSIDE ADMIN LINK: user_cache received:', !!user_cache);
+
+            if (!user_cache || !user_cache.user) {
+                console.log('🔧 CLIENTSIDE ADMIN LINK: No user, hiding admin link');
+                return {"padding": "20px", "display": "none"};
+            }
+
+            var user = user_cache.user;
+            if (user.is_admin) {
+                console.log('✅ CLIENTSIDE ADMIN LINK: Showing admin link for', user.email);
+                return {"padding": "20px"};
+            } else {
+                console.log('🔧 CLIENTSIDE ADMIN LINK: Hiding admin link for non-admin', user.email);
+                return {"padding": "20px", "display": "none"};
+            }
+        }
+        """,
         Output({"type": "sidebar-link", "index": "administration"}, "style"),
         Input("user-cache-store", "data"),
         prevent_initial_call=True,
     )
-    def show_admin_link(user_cache):
-        from depictio.models.models.users import UserContext
-
-        logger.info(f"🔧 ADMIN LINK CALLBACK: user_cache received: {bool(user_cache)}")
-
-        # Get user from consolidated cache
-        current_user = UserContext.from_cache(user_cache)
-        if not current_user:
-            logger.info("🔧 ADMIN LINK CALLBACK: No user, hiding admin link")
-            return {"padding": "20px", "display": "none"}
-
-        if current_user.is_admin:
-            logger.info(f"✅ ADMIN LINK CALLBACK: Showing admin link for {current_user.email}")
-            return {"padding": "20px"}
-        else:
-            logger.info(
-                f"🔧 ADMIN LINK CALLBACK: Hiding admin link for non-admin {current_user.email}"
-            )
-            return {"padding": "20px", "display": "none"}
 
     # {"padding": "20px", "display": "none"}
 
