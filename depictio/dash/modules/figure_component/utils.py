@@ -1187,6 +1187,24 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     # Create the figure div with conditional Store component
     # In stepper mode with build_frame=False, don't include Store to avoid duplication
     figure_components = [
+        # DMC ActionIcon drag handle for chart components (required by CSS)
+        dmc.ActionIcon(
+            "🟢 DRAG CHART 🟢",
+            className="react-grid-dragHandle",
+            variant="filled",
+            color="green",
+            size="xl",
+            style={
+                "position": "absolute",
+                "top": "5px",
+                "right": "5px",
+                "border": "3px solid yellow",
+                "fontWeight": "bold",
+                "fontSize": "14px",
+                "cursor": "grab",
+                "zIndex": 1000,
+            },
+        ),
         badges,
         dcc.Graph(
             figure=figure,
