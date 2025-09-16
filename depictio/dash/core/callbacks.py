@@ -175,6 +175,7 @@ def register_layout_callbacks(app):
     Args:
         app (dash.Dash): The Dash application instance
     """
+    from depictio.dash.layouts.component_creator import register_component_creator_callbacks
     from depictio.dash.layouts.consolidated_api import register_consolidated_api_callbacks
     from depictio.dash.layouts.dashboard_content import register_dashboard_content_callbacks
     from depictio.dash.layouts.header import register_callbacks_header
@@ -190,6 +191,9 @@ def register_layout_callbacks(app):
 
     # Register dashboard content callbacks (background callback for dashboard container)
     register_dashboard_content_callbacks(app)
+
+    # Register component creator callbacks (for add component stepper)
+    register_component_creator_callbacks(app)
 
     # Register layout callbacks
 
