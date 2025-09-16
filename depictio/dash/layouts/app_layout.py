@@ -99,7 +99,32 @@ def handle_authenticated_user(pathname, local_data, theme="light", cached_projec
 
     # OPTIMIZATION: Check dashboard route FIRST to return faster
     if pathname.startswith("/dashboard/"):
-        # Return immediately for dashboard routes - skip purge for speed
+        # Handle add component routes
+        if "/add_component" in pathname:
+            from depictio.dash.layouts.component_creator import create_component_creator_layout
+
+            # Extract dashboard_id and optional component_id from URL
+            path_parts = pathname.strip("/").split("/")
+            dashboard_id = None
+            component_id = None
+
+            for i, part in enumerate(path_parts):
+                if part == "dashboard" and i + 1 < len(path_parts):
+                    dashboard_id = path_parts[i + 1]
+                elif part == "add_component" and i + 1 < len(path_parts):
+                    component_id = path_parts[i + 1]
+
+            if not dashboard_id:
+                # Fallback to dashboard content if no dashboard_id found
+                header_content = create_default_header("Dashboard")
+                dashboard_layout = dmc.Container(id="dashboard-content")
+                return dashboard_layout, header_content, pathname, local_data
+
+            header_content = create_default_header("Add Component")
+            creator_layout = create_component_creator_layout(dashboard_id, component_id)
+            return creator_layout, header_content, pathname, local_data
+
+        # Return immediately for regular dashboard routes - skip purge for speed
         header_content = create_default_header("Dashboard")
         dashboard_layout = dmc.Container(id="dashboard-content")
         return dashboard_layout, header_content, pathname, local_data
