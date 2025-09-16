@@ -75,30 +75,31 @@ services:
       - mongo
       - redis
 
-  # depictio-celery-worker:
-  #   container_name: depictio-celery-worker
-  #   # Use the same image as backend
-  #   image: ${DEPICTIO_VERSION:-depictio:dev}
-  #   build:
-  #     dockerfile: docker-images/Dockerfile_depictio.dockerfile
-  #     context: .
-  #   volumes:
-  #     - ./depictio:/app/depictio
-  #     - ./pyproject.toml:/app/pyproject.toml
-  #     - ./docker-images/run_celery_worker.sh:/app/run_celery_worker.sh
-  #     - ./prof_files:/app/prof_files
-  #   env_file:
-  #     - docker-compose/.env
-  #   environment:
-  #       DEV_MODE: "${DEV_MODE:-false}"
-  #       DEPICTIO_LOGGING_VERBOSITY_LEVEL: "${DEPICTIO_LOGGING_VERBOSITY_LEVEL:-DEBUG}"
-  #       DEPICTIO_CONTEXT: "celery"
-  #   command: ["/app/run_celery_worker.sh"]
-  #   user: "${UID:-1000}:${GID:-1000}"
-  #   depends_on:
-  #     - mongo
-  #     - redis
-  #     - depictio-backend
+
+  depictio-celery-worker:
+    container_name: depictio-celery-worker
+    # Use the same image as backend
+    image: ${DEPICTIO_VERSION:-depictio:dev}
+    build:
+      dockerfile: docker-images/Dockerfile_depictio.dockerfile
+      context: .
+    volumes:
+      - ./depictio:/app/depictio
+      - ./pyproject.toml:/app/pyproject.toml
+      - ./docker-images/run_celery_worker.sh:/app/run_celery_worker.sh
+      - ./prof_files:/app/prof_files
+    env_file:
+      - docker-compose/.env
+    environment:
+        DEV_MODE: "${DEV_MODE:-false}"
+        DEPICTIO_LOGGING_VERBOSITY_LEVEL: "${DEPICTIO_LOGGING_VERBOSITY_LEVEL:-DEBUG}"
+        DEPICTIO_CONTEXT: "celery"
+    command: ["/app/run_celery_worker.sh"]
+    user: "${UID:-1000}:${GID:-1000}"
+    depends_on:
+      - mongo
+      - redis
+      - depictio-backend
 
 volumes:
   redis_data:

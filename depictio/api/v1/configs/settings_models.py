@@ -386,21 +386,28 @@ class CeleryConfig(BaseSettings):
         # Fallback to REDIS_PASSWORD env var (used by docker-compose)
         import os
 
-        redis_password = os.getenv("REDIS_PASSWORD", "depictio_cache_2024")
+        redis_password = os.getenv("REDIS_PASSWORD", "")
         return redis_password
 
     @computed_field
     @property
     def broker_url(self) -> str:
         """Construct Redis broker URL."""
-        return f"redis://:{self._redis_password}@{self.broker_host}:{self.broker_port}/{self.broker_db}"
+        password = self._redis_password
+        if password and password != "":
+            return f"redis://:{password}@{self.broker_host}:{self.broker_port}/{self.broker_db}"
+        else:
+            return f"redis://{self.broker_host}:{self.broker_port}/{self.broker_db}"
 
     @computed_field
     @property
     def result_backend_url(self) -> str:
         """Construct Redis result backend URL."""
         result_password = self.result_backend_password or self._redis_password
-        return f"redis://:{result_password}@{self.result_backend_host}:{self.result_backend_port}/{self.result_backend_db}"
+        if result_password and result_password != "":
+            return f"redis://:{result_password}@{self.result_backend_host}:{self.result_backend_port}/{self.result_backend_db}"
+        else:
+            return f"redis://{self.result_backend_host}:{self.result_backend_port}/{self.result_backend_db}"
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_CELERY_")
 

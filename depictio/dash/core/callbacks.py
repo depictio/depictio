@@ -129,29 +129,43 @@ def register_all_callbacks(app):
     register_layout_callbacks(app)
 
     # Register component callbacks
-    register_component_callbacks(app)
+    # register_component_callbacks(app)
 
     # Register feature-specific callbacks
     register_feature_callbacks(app)
 
     # Register theme bridge callback
     # Register progressive loading callbacks
-    from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
-        register_progressive_loading_callbacks,
-    )
-    from depictio.dash.layouts.edit import register_reset_button_callbacks
+    # from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
+    #     register_progressive_loading_callbacks,
+    # )
+    # from depictio.dash.layouts.edit import register_reset_button_callbacks
+    # register_reset_button_callbacks(app)
+    # register_dashboard_callbacks(app)
+
     # from depictio.dash.theme_utils import register_theme_bridge_callback
 
     # register_theme_bridge_callback(app)
-    register_progressive_loading_callbacks(app)
-    register_reset_button_callbacks(app)
+    # register_progressive_loading_callbacks(app)
 
     # Register analytics callbacks
     # from depictio.dash.components.analytics_tracker import register_analytics_callbacks
-    from depictio.dash.layouts.admin_analytics_callbacks import register_admin_analytics_callbacks
+    # from depictio.dash.layouts.admin_analytics_callbacks import register_admin_analytics_callbacks
 
     # register_analytics_callbacks(app)
-    register_admin_analytics_callbacks(app)
+    # register_admin_analytics_callbacks(app)
+
+
+def register_dashboard_callbacks(app):
+    from depictio.dash.layouts.draggable import register_callbacks_draggable
+    from depictio.dash.layouts.notes_footer import register_callbacks_notes_footer
+    from depictio.dash.layouts.save import register_callbacks_save
+    from depictio.dash.layouts.stepper import register_callbacks_stepper
+
+    register_callbacks_stepper(app)
+    register_callbacks_draggable(app)
+    register_callbacks_notes_footer(app)
+    register_callbacks_save(app)
 
 
 def register_layout_callbacks(app):
@@ -161,13 +175,11 @@ def register_layout_callbacks(app):
     Args:
         app (dash.Dash): The Dash application instance
     """
+    from depictio.dash.layouts.component_creator import register_component_creator_callbacks
     from depictio.dash.layouts.consolidated_api import register_consolidated_api_callbacks
-    from depictio.dash.layouts.draggable import register_callbacks_draggable
+    from depictio.dash.layouts.dashboard_content import register_dashboard_content_callbacks
     from depictio.dash.layouts.header import register_callbacks_header
-    from depictio.dash.layouts.notes_footer import register_callbacks_notes_footer
-    from depictio.dash.layouts.save import register_callbacks_save
     from depictio.dash.layouts.sidebar import register_sidebar_callbacks
-    from depictio.dash.layouts.stepper import register_callbacks_stepper
 
     # from depictio.dash.layouts.stepper_parts.part_one import register_callbacks_stepper_part_one
     # from depictio.dash.layouts.stepper_parts.part_three import register_callbacks_stepper_part_three
@@ -177,16 +189,20 @@ def register_layout_callbacks(app):
     # Register consolidated API callbacks first (highest priority)
     register_consolidated_api_callbacks(app)
 
+    # Register dashboard content callbacks (background callback for dashboard container)
+    register_dashboard_content_callbacks(app)
+
+    # Register component creator callbacks (for add component stepper)
+    register_component_creator_callbacks(app)
+
     # Register layout callbacks
-    register_callbacks_stepper(app)
+
     # register_callbacks_stepper_part_one(app)
     # register_callbacks_stepper_part_two(app)
     # register_callbacks_stepper_part_three(app)
     register_callbacks_header(app)
-    register_callbacks_draggable(app)
+
     register_sidebar_callbacks(app)
-    register_callbacks_notes_footer(app)
-    register_callbacks_save(app)
     register_simple_theme_system(app)
 
 

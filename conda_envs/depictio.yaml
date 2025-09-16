@@ -21,11 +21,13 @@ dependencies:
   - fastapi==0.115.8
   - fastexcel
   - fastparquet
+  - flask-caching
   - gunicorn
   - httpx==0.28.1
   - motor
   - mypy-boto3-s3
   - numpy==2.2.3
+  - orjson
   - pandas==2.2.3
   - playwright
   # - playwright==1.50.1

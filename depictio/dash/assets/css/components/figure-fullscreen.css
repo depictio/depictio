@@ -1,0 +1,183 @@
+/* =============================================================================
+   FIGURE COMPONENT FULLSCREEN MODE
+   ============================================================================= */
+
+/* Chart fullscreen button - hidden by default, visible on paper hover */
+.chart-fullscreen-btn {
+    opacity: 0 !important;
+    transition: opacity 0.2s ease !important;
+}
+
+/* Show button when hovering over the paper container */
+[style*="position: relative"]:hover .chart-fullscreen-btn {
+    opacity: 1 !important;
+}
+
+/* Always show button when in fullscreen mode */
+.chart-fullscreen .chart-fullscreen-btn {
+    opacity: 1 !important;
+    background: rgba(0, 0, 0, 0.8) !important;
+}
+
+/* Button styling */
+button[id*="chart-fullscreen-btn"] {
+    position: absolute !important;
+    top: 8px !important;
+    right: 8px !important;
+    z-index: 1000 !important;
+    background: rgba(0, 0, 0, 0.7) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 4px !important;
+    width: 32px !important;
+    height: 32px !important;
+    cursor: pointer !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 !important;
+    transition: all 0.2s ease !important;
+}
+
+button[id*="chart-fullscreen-btn"]:hover {
+    background: rgba(0, 0, 0, 0.9) !important;
+    transform: scale(1.05) !important;
+}
+
+/* Fullscreen overlay that covers the entire AppShell main area */
+.figure-fullscreen-overlay {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    z-index: 9999 !important;
+    background: var(--app-bg-color, #ffffff) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+}
+
+/* Hide all grid items when in fullscreen mode except the active one */
+.figure-fullscreen-mode .react-grid-item:not(.figure-fullscreen-active) {
+    display: none !important;
+}
+
+/* Style the active fullscreen figure component */
+.figure-fullscreen-active {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    z-index: 9999 !important;
+    background: var(--app-bg-color, #ffffff) !important;
+    transform: none !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: none !important;
+    max-height: none !important;
+    padding: 20px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+}
+
+/* Style the graph inside fullscreen */
+.figure-fullscreen-active .js-plotly-plot {
+    width: 100% !important;
+    height: calc(100vh - 100px) !important; /* Account for padding and button space */
+    flex: 1 !important;
+}
+
+/* Enhance fullscreen button visibility in fullscreen mode */
+.figure-fullscreen-active button[id*="figure-fullscreen-btn"] {
+    background: rgba(0, 0, 0, 0.9) !important;
+    color: white !important;
+    border: 2px solid rgba(255, 255, 255, 0.4) !important;
+    width: 40px !important;
+    height: 40px !important;
+}
+
+.figure-fullscreen-active button[id*="figure-fullscreen-btn"]:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
+    border-color: rgba(255, 255, 255, 0.6) !important;
+    transform: scale(1.1) !important;
+}
+
+/* Fullscreen controls bar */
+.figure-fullscreen-controls {
+    position: absolute !important;
+    top: 10px !important;
+    right: 10px !important;
+    z-index: 10000 !important;
+    background: rgba(0, 0, 0, 0.7) !important;
+    border-radius: 6px !important;
+    padding: 8px !important;
+    display: flex !important;
+    gap: 8px !important;
+}
+
+.figure-fullscreen-controls button {
+    color: white !important;
+    background: transparent !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    border-radius: 4px !important;
+    padding: 6px 12px !important;
+    cursor: pointer !important;
+    font-size: 12px !important;
+    transition: background 0.2s ease !important;
+}
+
+.figure-fullscreen-controls button:hover {
+    background: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Hide dashboard elements when in fullscreen */
+.fullscreen-mode #page-content {
+    overflow: hidden !important;
+}
+
+/* Ensure fullscreen figure takes precedence over grid positioning */
+.react-grid-layout .fullscreen-active {
+    position: fixed !important;
+    transform: none !important;
+    transition: none !important;
+}
+
+/* Dark mode support for fullscreen */
+[data-mantine-color-scheme="dark"] .figure-fullscreen-overlay,
+[data-mantine-color-scheme="dark"] .fullscreen-active {
+    background: var(--mantine-color-dark-7, #1a1b1e) !important;
+}
+
+/* Animation for entering/exiting fullscreen */
+.fullscreen-entering {
+    animation: fullscreen-enter 0.3s ease-out forwards;
+}
+
+.fullscreen-exiting {
+    animation: fullscreen-exit 0.3s ease-in forwards;
+}
+
+@keyframes fullscreen-enter {
+    from {
+        transform: scale(0.95);
+        opacity: 0.8;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes fullscreen-exit {
+    from {
+        transform: scale(1);
+        opacity: 1;
+    }
+    to {
+        transform: scale(0.95);
+        opacity: 0.8;
+    }
+}

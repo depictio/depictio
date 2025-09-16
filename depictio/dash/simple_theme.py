@@ -178,14 +178,14 @@ def register_simple_theme_system(app):
         return logo_src
 
     # Disable theme switch on dashboard pages only
-    @app.callback(
-        Output("theme-switch", "disabled"),
-        Input("url", "pathname"),
-        prevent_initial_call=False,
-    )
-    def disable_theme_switch_on_dashboard(pathname):
-        """Disable theme switch only on dashboard pages."""
-        return pathname and pathname.startswith("/dashboard/")
+    # @app.callback(
+    #     Output("theme-switch", "disabled"),
+    #     Input("url", "pathname"),
+    #     prevent_initial_call=False,
+    # )
+    # def disable_theme_switch_on_dashboard(pathname):
+    #     """Disable theme switch only on dashboard pages."""
+    #     return pathname and pathname.startswith("/dashboard/")
 
     # Simple Plotly template update (replace complex JS approach)
     # clientside_callback(

@@ -45,3 +45,59 @@ PUBLIC_KEY = load_public_key(settings.auth.keys_dir / "public_key.pem")  # Load 
 
 logger.debug("Private key successfully loaded")
 logger.debug("Public key successfully loaded")
+
+
+# ============================================================================
+# CACHE CONFIGURATION FOR DASH PERFORMANCE OPTIMIZATION
+# ============================================================================
+
+
+def create_cache(app_server):
+    """
+    Create and configure Flask-Cache instance for the Dash application.
+
+    Args:
+        app_server: The Flask server instance from Dash app
+
+    Returns:
+        Configured Cache instance
+    """
+    import os
+
+    from flask_caching import Cache
+
+    # Check for Redis availability first
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+
+    try:
+        import redis
+
+        r = redis.from_url(redis_url)
+        r.ping()
+
+        # Redis is available, use it
+        cache_config = {
+            "CACHE_TYPE": "redis",
+            "CACHE_REDIS_URL": redis_url,
+            "CACHE_DEFAULT_TIMEOUT": 600,  # 10 minutes default
+            "CACHE_KEY_PREFIX": "depictio_dash_",
+        }
+        logger.info(f"✅ CACHE: Using Redis cache at {redis_url}")
+
+    except Exception as e:
+        # Fall back to filesystem cache
+        logger.warning(f"⚠️ CACHE: Redis not available ({e}), using filesystem cache")
+        cache_dir = os.path.join(os.path.expanduser("~"), ".depictio", "cache")
+        os.makedirs(cache_dir, exist_ok=True)
+
+        cache_config = {
+            "CACHE_TYPE": "filesystem",
+            "CACHE_DIR": cache_dir,
+            "CACHE_DEFAULT_TIMEOUT": 600,
+            "CACHE_THRESHOLD": 500,  # Max number of items
+        }
+
+    cache = Cache(config=cache_config)
+    cache.init_app(app_server)
+
+    return cache
