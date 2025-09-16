@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
 import plotly.express as px
 import polars as pl
@@ -1069,6 +1070,16 @@ def register_dashboard_content_callbacks(app):
                     dmc.Group(
                         gap="sm",
                         children=[
+                            # Apply Updates button (moved from bottom)
+                            dmc.Button(
+                                "Apply Updates",
+                                id="apply-updates-button",
+                                leftSection=DashIconify(icon="mdi:check-circle", width=16),
+                                disabled=True,  # Initially disabled
+                                color="green",
+                                variant="filled",
+                                size="md",
+                            ),
                             # Export Dashboard button
                             dmc.Button(
                                 "Export HTML",
@@ -1121,56 +1132,163 @@ def register_dashboard_content_callbacks(app):
                     f"✅ DEBUG: Interactive container created with ID: {{'type': 'interactive-component', 'index': {comp['index']}}}"
                 )
 
-        # Create grid for metric cards
+        # Create containers for metric cards and charts
         metric_containers = []
+        chart_containers = []
+
         for comp in components:
             if comp["type"] == "metric":
-                # Create empty container with pattern-matching ID and LoadingOverlay
+                # Create container with DraggableWrapper - add drag handle to loading state
                 metric_containers.append(
-                    dmc.GridCol(
-                        dmc.Box(
-                            [
-                                html.Div(
-                                    # dmc.Skeleton(height=150, radius="md"),  # Loading skeleton disabled for performance test
+                    dgl.DraggableWrapper(
+                        id=f"metric-{comp['index']}",
+                        children=[
+                            # Wrapper with drag handle
+                            html.Div(
+                                style={
+                                    "width": "100%",
+                                    "height": "100%",
+                                    "position": "relative",
+                                },
+                                children=[
+                                    # DRAG HANDLE IN LOADING STATE
                                     html.Div(
-                                        "Loading metric...",
+                                        "⋮⋮",
+                                        className="react-grid-dragHandle",
                                         style={
-                                            "height": "150px",
-                                            "textAlign": "center",
-                                            "paddingTop": "60px",
+                                            "position": "absolute",
+                                            "top": "5px",
+                                            "right": "5px",
+                                            "width": "30px",
+                                            "height": "30px",
+                                            "backgroundColor": "red",
+                                            "color": "white",
+                                            "display": "flex",
+                                            "alignItems": "center",
+                                            "justifyContent": "center",
+                                            "cursor": "grab",
+                                            "zIndex": 999999,
+                                            "fontSize": "16px",
+                                            "fontWeight": "bold",
+                                            "borderRadius": "4px",
+                                            "border": "2px solid yellow",
                                         },
                                     ),
-                                    id={"type": "metric-card", "index": comp["index"]},
-                                ),
-                            ],
-                            pos="relative",
-                        ),
-                        span={"base": 12, "sm": 6, "lg": 3},
+                                    # Content container that gets replaced by callback
+                                    html.Div(
+                                        "Loading metric...",
+                                        id={"type": "metric-card", "index": comp["index"]},
+                                        style={
+                                            "width": "100%",
+                                            "height": "100%",
+                                            "display": "flex",
+                                            "flexDirection": "column",
+                                            "alignItems": "center",
+                                            "justifyContent": "center",
+                                            "backgroundColor": "#f8f9fa",
+                                            "border": "2px solid #007bff",
+                                            "borderRadius": "8px",
+                                            "overflow": "visible",  # Changed to visible
+                                            "boxSizing": "border-box",
+                                        },
+                                    ),
+                                ],
+                            ),
+                        ],
+                    )
+                )
+            elif comp["type"] == "chart":
+                chart_containers.append(
+                    dgl.DraggableWrapper(
+                        id=f"chart-{comp['index']}",
+                        children=[
+                            # Wrapper with drag handle
+                            html.Div(
+                                style={
+                                    "width": "100%",
+                                    "height": "100%",
+                                    "position": "relative",
+                                },
+                                children=[
+                                    # DRAG HANDLE IN LOADING STATE
+                                    html.Div(
+                                        "⋮⋮",
+                                        className="react-grid-dragHandle",
+                                        style={
+                                            "position": "absolute",
+                                            "top": "5px",
+                                            "left": "5px",
+                                            "width": "30px",
+                                            "height": "30px",
+                                            "backgroundColor": "blue",
+                                            "color": "white",
+                                            "display": "flex",
+                                            "alignItems": "center",
+                                            "justifyContent": "center",
+                                            "cursor": "grab",
+                                            "zIndex": 999999,
+                                            "fontSize": "16px",
+                                            "fontWeight": "bold",
+                                            "borderRadius": "4px",
+                                            "border": "2px solid yellow",
+                                        },
+                                    ),
+                                    # Content container that gets replaced by callback
+                                    html.Div(
+                                        [
+                                            "Loading chart...",
+                                            html.Br(),
+                                            html.Div(
+                                                "🔵 DRAG HANDLE 🔵",
+                                                className="react-grid-dragHandle",
+                                                style={
+                                                    "backgroundColor": "blue",
+                                                    "color": "white",
+                                                    "padding": "10px",
+                                                    "margin": "10px",
+                                                    "cursor": "grab",
+                                                    "border": "3px solid yellow",
+                                                    "fontWeight": "bold",
+                                                },
+                                            ),
+                                        ],
+                                        id={"type": "chart-component", "index": comp["index"]},
+                                        style={
+                                            "width": "100%",
+                                            "height": "100%",
+                                            "display": "flex",
+                                            "flexDirection": "column",
+                                            "alignItems": "center",
+                                            "justifyContent": "center",
+                                            "backgroundColor": "#f8f9fa",
+                                            "border": "2px solid #28a745",
+                                            "borderRadius": "8px",
+                                            "overflow": "visible",  # Changed to visible
+                                            "boxSizing": "border-box",
+                                        },
+                                    ),
+                                ],
+                            ),
+                        ],
                     )
                 )
 
-        if metric_containers:
+        # Combine all draggable components for the grid layout
+        all_draggable_components = metric_containers + chart_containers
+
+        if all_draggable_components:
             containers.append(
-                dmc.Grid(
-                    children=metric_containers,
-                    gutter="md",
-                    mb="xl",
+                dgl.DashGridLayout(
+                    id="dashboard-grid-layout",
+                    items=all_draggable_components,
+                    style={"minHeight": "600px"},
+                    showResizeHandles=True,
+                    draggableChildStyle={"cursor": "grab"},
+                    cols={"lg": 12, "md": 8, "sm": 6, "xs": 4, "xxs": 2},
+                    rowHeight=150,
+                    margin=[10, 10],
                 )
             )
-
-        # Create containers for other component types
-        for comp in components:
-            if comp["type"] == "chart":
-                containers.append(
-                    html.Div(
-                        # dmc.Skeleton(height=400, radius="md"),  # Loading skeleton disabled for performance test
-                        html.Div(
-                            "Loading chart...",
-                            style={"height": "400px", "textAlign": "center", "paddingTop": "180px"},
-                        ),
-                        id={"type": "chart-component", "index": comp["index"]},
-                    )
-                )
 
         logger.info(f"✅ DASHBOARD CONTENT: Created {len(components)} component containers")
 
@@ -1385,66 +1503,80 @@ def register_dashboard_content_callbacks(app):
             fig = create_chart_figure(optimized_df, enhanced_config)
 
             # Create chart component with Plotly graph and fullscreen button
-            chart = dmc.Paper(
-                shadow="sm",
-                radius="md",
-                p="lg",
-                withBorder=True,
-                style={"position": "relative"},
+            chart = html.Div(
+                style={
+                    "width": "100%",
+                    "height": "100%",
+                    "position": "relative",
+                },
                 children=[
-                    # Fullscreen button (hidden by default, visible on hover)
-                    html.Button(
-                        DashIconify(icon="mdi:fullscreen", width=18),
-                        id={"type": "chart-fullscreen-btn", "index": chart_index},
-                        n_clicks=0,
+                    dmc.Paper(
+                        shadow="sm",
+                        radius="md",
+                        p="lg",
+                        withBorder=True,
                         style={
-                            "position": "absolute",
-                            "top": "8px",
-                            "right": "8px",
-                            "background": "rgba(0,0,0,0.7)",
-                            "color": "white",
-                            "border": "none",
-                            "borderRadius": "4px",
-                            "width": "32px",
-                            "height": "32px",
-                            "cursor": "pointer",
-                            "zIndex": 1000,
-                            "display": "flex",
-                            "alignItems": "center",
-                            "justifyContent": "center",
-                            "opacity": "0",
-                            "transition": "opacity 0.2s ease",
+                            "width": "100%",
+                            "height": "100%",
+                            "boxSizing": "border-box",
+                            "overflow": "hidden",
                         },
-                        className="chart-fullscreen-btn",
-                    ),
-                    dmc.Group(
-                        justify="space-between",
-                        align="center",
-                        mb="md",
                         children=[
-                            dmc.Title(component_config["title"], order=4),
-                            dmc.Badge(
-                                component_config["chart_type"].title(),
-                                color="blue",
-                                variant="light",
-                                leftSection=DashIconify(icon="mdi:chart-line", width=12),
+                            # Fullscreen button (hidden by default, visible on hover)
+                            html.Button(
+                                DashIconify(icon="mdi:fullscreen", width=18),
+                                id={"type": "chart-fullscreen-btn", "index": chart_index},
+                                n_clicks=0,
+                                style={
+                                    "position": "absolute",
+                                    "top": "8px",
+                                    "right": "8px",
+                                    "background": "rgba(0,0,0,0.7)",
+                                    "color": "white",
+                                    "border": "none",
+                                    "borderRadius": "4px",
+                                    "width": "32px",
+                                    "height": "32px",
+                                    "cursor": "pointer",
+                                    "zIndex": 1000,
+                                    "display": "flex",
+                                    "alignItems": "center",
+                                    "justifyContent": "center",
+                                    "opacity": "0",
+                                    "transition": "opacity 0.2s ease",
+                                },
+                                className="chart-fullscreen-btn",
+                            ),
+                            dmc.Group(
+                                justify="space-between",
+                                align="center",
+                                mb="md",
+                                children=[
+                                    dmc.Title(component_config["title"], order=4),
+                                    dmc.Badge(
+                                        component_config["chart_type"].title(),
+                                        color="blue",
+                                        variant="light",
+                                        leftSection=DashIconify(icon="mdi:chart-line", width=12),
+                                    ),
+                                ],
+                            ),
+                            dcc.Graph(
+                                figure=fig,
+                                config={
+                                    "displayModeBar": True,
+                                    "displaylogo": False,
+                                    "modeBarButtonsToRemove": ["pan2d", "lasso2d"],
+                                },
+                            ),
+                            dmc.Text(
+                                f"📊 {len(optimized_df):,} data points • Generated at {time.strftime('%H:%M:%S')}",
+                                size="xs",
+                                c="gray",
+                                ta="center",
+                                mt="sm",
                             ),
                         ],
-                    ),
-                    dcc.Graph(
-                        figure=fig,
-                        config={
-                            "displayModeBar": True,
-                            "displaylogo": False,
-                            "modeBarButtonsToRemove": ["pan2d", "lasso2d"],
-                        },
-                    ),
-                    dmc.Text(
-                        f"📊 {len(optimized_df):,} data points • Generated at {time.strftime('%H:%M:%S')}",
-                        size="xs",
-                        c="gray",
-                        ta="center",
-                        mt="sm",
                     ),
                 ],
             )
@@ -1523,7 +1655,7 @@ def register_dashboard_content_callbacks(app):
                         dmc.GridCol(
                             [
                                 dmc.Text(control_config["label"], size="sm", fw="bold", mb="xs"),
-                                dcc.RangeSlider(
+                                dmc.RangeSlider(
                                     id={
                                         "type": "interactive-control",
                                         "index": control_id,
@@ -1532,20 +1664,33 @@ def register_dashboard_content_callbacks(app):
                                     min=control_config["min"],
                                     max=control_config["max"],
                                     step=control_config.get("step", 100),
-                                    value=[control_config["min"], control_config["max"]],
-                                    marks={
-                                        control_config["min"]: (
-                                            f"${control_config['min']:,}"
-                                            if control_config.get("format") == "currency"
-                                            else f"{control_config['min']:,}"
-                                        ),
-                                        control_config["max"]: (
-                                            f"${control_config['max']:,}"
-                                            if control_config.get("format") == "currency"
-                                            else f"{control_config['max']:,}"
-                                        ),
+                                    value=(control_config["min"], control_config["max"]),
+                                    marks=[
+                                        {
+                                            "value": control_config["min"],
+                                            "label": (
+                                                f"${control_config['min']:,}"
+                                                if control_config.get("format") == "currency"
+                                                else f"{control_config['min']:,}"
+                                            ),
+                                        },
+                                        {
+                                            "value": control_config["max"],
+                                            "label": (
+                                                f"${control_config['max']:,}"
+                                                if control_config.get("format") == "currency"
+                                                else f"{control_config['max']:,}"
+                                            ),
+                                        },
+                                    ],
+                                    thumbSize=16,
+                                    styles={
+                                        "track": {
+                                            "backgroundColor": "var(--app-border-color, #ddd)"
+                                        },
+                                        "bar": {"backgroundColor": "var(--mantine-color-blue-6)"},
+                                        "thumb": {"borderColor": "var(--mantine-color-blue-6)"},
                                     },
-                                    tooltip={"placement": "bottom", "always_visible": True},
                                 ),
                             ],
                             span=6,
@@ -1561,16 +1706,27 @@ def register_dashboard_content_callbacks(app):
                         dmc.GridCol(
                             [
                                 dmc.Text(control_config["label"], size="sm", fw="bold", mb="xs"),
-                                dcc.Dropdown(
+                                dmc.MultiSelect(
                                     id={
                                         "type": "interactive-control",
                                         "index": control_id,
                                         "field": control_config["field"],
                                     },
-                                    options=options,
+                                    data=[
+                                        {"value": opt["value"], "label": opt["label"]}
+                                        for opt in options
+                                    ],
                                     value=control_config.get("default", ["all"]),
-                                    multi=True,
                                     placeholder=f"Select {control_config['label'].lower()}...",
+                                    searchable=True,
+                                    clearable=True,
+                                    styles={
+                                        "input": {"borderColor": "var(--app-border-color, #ddd)"},
+                                        "dropdown": {
+                                            "borderColor": "var(--app-border-color, #ddd)"
+                                        },
+                                        "label": {"color": "var(--app-text-color, #000)"},
+                                    },
                                 ),
                             ],
                             span=6,
@@ -1583,15 +1739,26 @@ def register_dashboard_content_callbacks(app):
                         dmc.GridCol(
                             [
                                 dmc.Text(control_config["label"], size="sm", fw="bold", mb="xs"),
-                                dcc.Dropdown(
+                                dmc.Select(
                                     id={
                                         "type": "interactive-control",
                                         "index": control_id,
                                         "field": control_config["field"],
                                     },
-                                    options=control_config["options"],
+                                    data=[
+                                        {"value": opt["value"], "label": opt["label"]}
+                                        for opt in control_config["options"]
+                                    ],
                                     value=control_config.get("default", "all"),
                                     clearable=False,
+                                    searchable=True,
+                                    styles={
+                                        "input": {"borderColor": "var(--app-border-color, #ddd)"},
+                                        "dropdown": {
+                                            "borderColor": "var(--app-border-color, #ddd)"
+                                        },
+                                        "label": {"color": "var(--app-text-color, #000)"},
+                                    },
                                 ),
                             ],
                             span=6,
@@ -1622,22 +1789,6 @@ def register_dashboard_content_callbacks(app):
                     dmc.Grid(
                         control_elements,
                         gutter="lg",
-                    ),
-                    # Apply Update Button
-                    dmc.Group(
-                        justify="center",
-                        mt="xl",
-                        children=[
-                            dmc.Button(
-                                "Apply Updates",
-                                id="apply-updates-button",
-                                leftSection=DashIconify(icon="mdi:check-circle", width=16),
-                                disabled=True,  # Initially disabled
-                                color="green",
-                                variant="filled",
-                                size="md",
-                            ),
-                        ],
                     ),
                     dmc.Text(
                         "🔍 Data filters loaded • Adjust ranges and categories, then click Apply to update dashboard",
@@ -2164,67 +2315,102 @@ def register_dashboard_content_callbacks(app):
 def create_metric_card(metric):
     """Create a single metric card using dmc.Paper."""
 
-    return dmc.Paper(
-        shadow="sm",
-        radius="md",
-        p="lg",
-        withBorder=True,
+    return html.Div(
         style={
-            "height": "150px",
-            "display": "flex",
-            "flexDirection": "column",
-            "justifyContent": "space-between",
+            "width": "100%",
+            "height": "100%",
+            "position": "relative",
         },
         children=[
-            # Header with icon and title
-            dmc.Group(
-                justify="space-between",
-                align="center",
-                children=[
-                    dmc.Text(
-                        metric["title"],
-                        size="sm",
-                        c="gray",
-                        fw="bold",
-                    ),
-                    DashIconify(
-                        icon=metric["icon"],
-                        width=24,
-                        height=24,
-                        color=f"var(--mantine-color-{metric['color']}-6)",
-                    ),
-                ],
+            # MASSIVE DRAG HANDLE - IMPOSSIBLE TO MISS
+            html.Div(
+                "DRAG ME!!!",
+                className="react-grid-dragHandle",
+                style={
+                    "position": "fixed",  # Fixed positioning to override everything
+                    "top": "50px",
+                    "right": "50px",
+                    "width": "150px",
+                    "height": "50px",
+                    "backgroundColor": "red",
+                    "color": "white",
+                    "display": "flex",
+                    "alignItems": "center",
+                    "justifyContent": "center",
+                    "cursor": "grab",
+                    "zIndex": 999999,  # Extremely high z-index
+                    "fontSize": "16px",
+                    "fontWeight": "bold",
+                    "border": "5px solid yellow",  # Bright yellow border
+                    "boxShadow": "0 0 20px rgba(255,0,0,0.8)",  # Red glow
+                },
             ),
-            # Main metric value
-            dmc.Text(
-                str(metric["value"]),
-                size="xl",
-                fw="bold",
-                c=metric["color"],
-                style={"fontSize": "2rem"},
-            ),
-            # Change indicator
-            dmc.Group(
-                justify="flex-start",
-                align="center",
-                gap="xs",
+            dmc.Paper(
+                shadow="sm",
+                radius="md",
+                p="lg",
+                withBorder=True,
+                style={
+                    "width": "100%",
+                    "height": "100%",
+                    "display": "flex",
+                    "flexDirection": "column",
+                    "justifyContent": "space-between",
+                    "boxSizing": "border-box",
+                    "overflow": "hidden",
+                },
                 children=[
-                    DashIconify(
-                        icon="mdi:trending-up",
-                        width=16,
-                        height=16,
-                        color="var(--mantine-color-green-6)",
+                    # Header with icon and title
+                    dmc.Group(
+                        justify="space-between",
+                        align="center",
+                        children=[
+                            dmc.Text(
+                                metric["title"],
+                                size="sm",
+                                c="gray",
+                                fw="bold",
+                            ),
+                            DashIconify(
+                                icon=metric["icon"],
+                                width=24,
+                                height=24,
+                                color=f"var(--mantine-color-{metric['color']}-6)",
+                            ),
+                        ],
                     ),
+                    # Main metric value
                     dmc.Text(
-                        metric["change"],
-                        size="sm",
-                        c="green",
+                        str(metric["value"]),
+                        size="xl",
                         fw="bold",
+                        c=metric["color"],
+                        style={"fontSize": "2rem"},
                     ),
-                    dmc.Text(
-                        "vs last month",
-                        size="xs",
-                        c="gray",
+                    # Change indicator
+                    dmc.Group(
+                        justify="flex-start",
+                        align="center",
+                        gap="xs",
+                        children=[
+                            DashIconify(
+                                icon="mdi:trending-up",
+                                width=16,
+                                height=16,
+                                color="var(--mantine-color-green-6)",
+                            ),
+                            dmc.Text(
+                                metric["change"],
+                                size="sm",
+                                c="green",
+                                fw="bold",
+                            ),
+                            dmc.Text(
+                                "vs last month",
+                                size="xs",
+                                c="gray",
+                            ),
+                        ],
                     ),
                 ],
             ),
