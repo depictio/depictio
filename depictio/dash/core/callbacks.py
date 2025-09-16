@@ -45,20 +45,20 @@ def register_main_callback(app):
         logger.info(f"🔥 MAIN CALLBACK TRIGGERED: {trigger}, pathname={pathname}")
 
         # PERFORMANCE DEBUG: Log data sizes to identify serialization bottlenecks
-        import sys
+        # import sys
 
-        local_data_size = sys.getsizeof(str(local_data)) if local_data else 0
-        theme_store_size = sys.getsizeof(str(theme_store)) if theme_store else 0
-        cached_project_size = sys.getsizeof(str(cached_project_data)) if cached_project_data else 0
+        # local_data_size = sys.getsizeof(str(local_data)) if local_data else 0
+        # theme_store_size = sys.getsizeof(str(theme_store)) if theme_store else 0
+        # cached_project_size = sys.getsizeof(str(cached_project_data)) if cached_project_data else 0
 
-        logger.info(
-            f"🔍 CALLBACK DATA SIZES: local_data={local_data_size:,}B, theme_store={theme_store_size:,}B, cached_project={cached_project_size:,}B"
-        )
+        # logger.info(
+        #     f"🔍 CALLBACK DATA SIZES: local_data={local_data_size:,}B, theme_store={theme_store_size:,}B, cached_project={cached_project_size:,}B"
+        # )
 
-        if cached_project_size > 100000:  # > 100KB
-            logger.warning(
-                f"⚠️ LARGE PROJECT CACHE: {cached_project_size:,} bytes - potential performance bottleneck!"
-            )
+        # if cached_project_size > 100000:  # > 100KB
+        #     logger.warning(
+        #         f"⚠️ LARGE PROJECT CACHE: {cached_project_size:,} bytes - potential performance bottleneck!"
+        #     )
 
         # Process authentication and return appropriate content
         result = process_authentication(pathname, local_data, theme_store, cached_project_data)
@@ -69,31 +69,24 @@ def register_main_callback(app):
 
     logger.info("🔥 MAIN CALLBACK REGISTERED SUCCESSFULLY")
 
-    @app.callback(
+    # Move header visibility to clientside for instant response
+    app.clientside_callback(
+        """
+        function(pathname) {
+            console.log('🔥 CLIENTSIDE HEADER VISIBILITY: pathname=' + pathname);
+            if (pathname === '/auth') {
+                // Hide header on auth page
+                return null;
+            } else {
+                // Show header on all other pages (including dashboard routes)
+                return {"height": 87};
+            }
+        }
+        """,
         Output("app-shell", "header"),
         Input("url", "pathname"),
-        prevent_initial_call=False,
+        prevent_initial_call=True,
     )
-    def toggle_appshell_header_visibility(pathname):
-        """
-        Control AppShell header visibility based on current route.
-
-        Args:
-            pathname (str): Current URL pathname
-
-        Returns:
-            dict or None: header_config - None value hides the component
-        """
-        logger.info(f"🔥 HEADER VISIBILITY CALLBACK: pathname={pathname}")
-        if pathname == "/auth":
-            # Hide header on auth page
-            return None
-        elif pathname is None:
-            # On initial load, hide header by default until pathname is determined
-            return None
-        else:
-            # Show header on all other pages
-            return {"height": 87}
 
     # Add clientside callback to manage body classes for auth page
     app.clientside_callback(
