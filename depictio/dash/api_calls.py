@@ -26,6 +26,14 @@ API_QUERY_PARAMS = {"test_mode": "true"} if is_testing else {}
 _user_cache: dict[str, tuple[Any, float]] = {}
 _cache_timeout = 30  # seconds
 
+# Cache for token validity to eliminate API calls during routing
+_token_validity_cache: dict[str, tuple[dict, float]] = {}
+_validity_cache_timeout = 300  # 5 minutes
+
+# Cache for token purge operations to avoid repeated calls
+_token_purge_cache: dict[str, float] = {}
+_purge_cache_timeout = 600  # 10 minutes
+
 
 @validate_call(validate_return=True)
 def api_call_register_user(
@@ -332,27 +340,46 @@ def api_call_create_token(token_data: TokenData) -> dict[str, Any] | None:
 @validate_call(validate_return=True)
 def purge_expired_tokens(token: str) -> dict[str, Any] | None:
     """
-    Purge expired tokens from the database.
+    Purge expired tokens from the database with caching to avoid repeated calls.
     Args:
         token: The authentication token
     Returns:
         Optional[Dict[str, Any]]: The response from the purge operation
     """
-    if token:
-        # Clean existing expired token from DB
-        response = httpx.post(
-            f"{API_BASE_URL}/depictio/api/v1/auth/purge_expired_tokens",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-
-        if response.status_code == 200:
-            logger.info("Expired tokens purged successfully.")
-            return dict(response.json())
-        else:
-            logger.error(f"Error purging expired tokens: {response.text}")
-            return None
-    else:
+    if not token:
         logger.error("Token not found.")
+        return None
+
+    # Check cache to avoid repeated purge calls
+    cache_key = f"purge_{token[:10]}"  # Use token prefix for cache key
+    current_time = time.time()
+
+    if cache_key in _token_purge_cache:
+        cache_time = _token_purge_cache[cache_key]
+        if current_time - cache_time < _purge_cache_timeout:
+            logger.debug("Skipping token purge - recently purged (cached)")
+            return {"message": "Purge skipped - recently executed"}
+
+    # Clean existing expired token from DB
+    response = httpx.post(
+        f"{API_BASE_URL}/depictio/api/v1/auth/purge_expired_tokens",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    if response.status_code == 200:
+        logger.info("Expired tokens purged successfully.")
+
+        # Cache the purge operation
+        _token_purge_cache[cache_key] = current_time
+
+        # Clean old cache entries
+        if len(_token_purge_cache) > 20:
+            oldest_key = min(_token_purge_cache.keys(), key=lambda k: _token_purge_cache[k])
+            del _token_purge_cache[oldest_key]
+
+        return dict(response.json())
+    else:
+        logger.error(f"Error purging expired tokens: {response.text}")
         return None
 
 
@@ -394,7 +421,7 @@ def refresh_access_token(refresh_token: str) -> dict | None:
 @validate_call(validate_return=True)
 def check_token_validity(token: TokenBase) -> dict:
     """
-    Enhanced token validity check that returns detailed status.
+    Enhanced token validity check that returns detailed status with caching to eliminate API calls during routing.
 
     Returns:
         dict: {
@@ -403,7 +430,18 @@ def check_token_validity(token: TokenBase) -> dict:
             "action": str  # "valid", "refresh", "logout"
         }
     """
-    logger.info("Checking token validity.")
+    # Create cache key from access token
+    cache_key = f"token_validity_{token.access_token}"
+    current_time = time.time()
+
+    # Check cache first
+    if cache_key in _token_validity_cache:
+        cached_result, cache_time = _token_validity_cache[cache_key]
+        if current_time - cache_time < _validity_cache_timeout:
+            logger.debug("Returning cached token validity result")
+            return cached_result
+
+    logger.info("Checking token validity via API.")
     logger.info(
         f"Token with name: {token.name}, user_id: {token.user_id}, access_token: {token.access_token[:10]}..."
     )
@@ -423,15 +461,29 @@ def check_token_validity(token: TokenBase) -> dict:
                 "action": data.get("action", "logout"),
             }
 
-            # logger.debug(f"Token validation result: {result['valid']}, can refresh: {result['can_refresh']}, action: {result['action']}")
+            # Cache the result (only cache successful responses)
+            _token_validity_cache[cache_key] = (result, current_time)
+
+            # Clean old cache entries (simple cleanup)
+            if len(_token_validity_cache) > 50:  # Prevent memory buildup
+                oldest_key = min(
+                    _token_validity_cache.keys(), key=lambda k: _token_validity_cache[k][1]
+                )
+                del _token_validity_cache[oldest_key]
+
+            logger.debug(f"Token validation result cached: action={result['action']}")
             return result
         else:
             logger.error(f"Token validation failed with status {response.status_code}")
-            return {"valid": False, "can_refresh": False, "action": "logout"}
+            failure_result = {"valid": False, "can_refresh": False, "action": "logout"}
+            # Don't cache failure results as they might be temporary
+            return failure_result
 
     except Exception as e:
         logger.error(f"Error during token validation: {e}")
-        return {"valid": False, "can_refresh": False, "action": "logout"}
+        failure_result = {"valid": False, "can_refresh": False, "action": "logout"}
+        # Don't cache exceptions as they might be temporary network issues
+        return failure_result
 
 
 def api_create_group(group_dict: dict, current_token: str):
