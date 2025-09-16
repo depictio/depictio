@@ -248,6 +248,9 @@ def register_callbacks_dashboards_management(app):
     def create_homepage_view(dashboards, user_id, token, current_user):
         logger.debug(f"dashboards: {dashboards}")
 
+        # Create project cache to avoid redundant API calls
+        project_cache = {}
+
         def modal_edit_name_dashboard(dashboard):
             modal = dmc.Modal(
                 id={"type": "edit-password-modal", "index": dashboard["dashboard_id"]},
@@ -364,14 +367,21 @@ def register_callbacks_dashboards_management(app):
                 leftSection=DashIconify(icon="mdi:account", width=16, color="white"),
             )
 
-            response = api_get_project_from_id(project_id=dashboard["project_id"], token=token)
-            if response.status_code == 200:
-                # logger.debug(f"Project response: {response.json()}")
-                project = response.json()
-                project_name = project["name"]
+            # Use project cache to avoid redundant API calls
+            project_id_str = str(dashboard["project_id"])
+            if project_id_str in project_cache:
+                project_name = project_cache[project_id_str]
             else:
-                logger.error(f"Failed to get project from ID: {dashboard['project_id']}")
-                project_name = "Unknown"
+                response = api_get_project_from_id(project_id=dashboard["project_id"], token=token)
+                if response.status_code == 200:
+                    # logger.debug(f"Project response: {response.json()}")
+                    project = response.json()
+                    project_name = project["name"]
+                    project_cache[project_id_str] = project_name  # Cache for next use
+                else:
+                    logger.error(f"Failed to get project from ID: {dashboard['project_id']}")
+                    project_name = "Unknown"
+                    project_cache[project_id_str] = project_name  # Cache the failure too
 
             badge_project = dmc.Badge(
                 f"Project: {project_name}",
@@ -1440,14 +1450,14 @@ def register_callbacks_dashboards_management(app):
 
         # Respond to URL changes
         if trigger_id == "url":
-            if pathname:
-                if pathname.startswith("/dashboard/"):
-                    # dashboard_id = pathname.split("/")[-1]
-                    # Fetch dashboard data based on dashboard_id and return the appropriate layout
-                    # return html.Div([f"Displaying Dashboard {dashboard_id}", dbc.Button("Go back", href="/", color="black", external_link=True)])
-                    return dash.no_update
-                elif pathname == "/dashboards":
-                    return render_landing_page(data)
+            if pathname == "/dashboards":
+                # if pathname.startswith("/dashboard/"):
+                # dashboard_id = pathname.split("/")[-1]
+                # Fetch dashboard data based on dashboard_id and return the appropriate layout
+                # return html.Div([f"Displaying Dashboard {dashboard_id}", dbc.Button("Go back", href="/", color="black", external_link=True)])
+                # return dash.no_update
+                # elif pathname
+                return render_landing_page(data)
 
         # Respond to modal-store data changes
         elif trigger_id == "local-store":
