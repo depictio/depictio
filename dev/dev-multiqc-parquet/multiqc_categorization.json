@@ -1,0 +1,4594 @@
+{
+  "data_extraction_patterns": {
+    "general_statistics": {
+      "description": "General QC statistics table - easily extractable",
+      "extraction_method": "filter by anchor == 'general_stats_table'",
+      "structure": "tabular with sample, metric, value columns",
+      "sample_count": 1781,
+      "complexity": "low"
+    },
+    "plot_input": {
+      "description": "Simple plot input data - direct tabular access",
+      "extraction_method": "filter by type == 'plot_input'",
+      "structure": "tabular with sample, metric, value, anchor columns",
+      "anchor_count": 565,
+      "complexity": "low"
+    },
+    "plot_input_row": {
+      "description": "Tabular data organized by anchor (table name)",
+      "extraction_method": "filter by type == 'plot_input_row', group by anchor",
+      "structure": "tabular grouped by anchor/table",
+      "anchor_count": 50,
+      "complexity": "medium"
+    },
+    "complex_json": {
+      "description": "Nested JSON structures in plot_input_data requiring pattern analysis",
+      "extraction_method": "parse plot_input_data JSON, analyze structure",
+      "structure": "varied - histogram_bar, line_scatter, table_data",
+      "anchor_count": 234,
+      "complexity": "high"
+    }
+  },
+  "anchor_categorization": {
+    "ngsbits_readqc_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "idhist_bbm_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "megahit-stats-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "nanoq_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "umitools_stats_violin": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "cellranger-gex-stats-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "well_metrics_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "fastp_top_overrepresented_sequences_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "spaceranger-count-stats": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "mgi_lane_ambiguous_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "mvcf-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "whatshap-stats-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "cellranger-atac-stats-table1": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "qhist_bbm_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "fastqc_top_overrepresented_sequences_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bcl2fastq-lane-stats-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "cellranger-vdj-annot-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "happy_snp_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "samtools-markdup-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "xenome-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "clusterflow-commands-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "biscuit_seq_depth": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bclconvert-sample-stats-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "nextclade_run_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "gstacks_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "dragen-trimmer-metrics-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "dragen-mapping-metrics-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "checkm2-first-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "run_metrics_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "samtools-ampliconclip-pct-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "minionqc-stats-qAll-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "general_stats_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "qc3C_kmer_signal_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "dragen-cov-metrics-own-section-target-bed-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "haplocheck-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "picard_validatesamfile_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "picard_hsmetrics_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "nanostat_aligned_stats_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "gatk_ask_stats": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "samtools-coverage-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "pangolin_run_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "stats_bbm_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "dragen-gvcf-metrics-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "odgi_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "cellranger-arc-warnings-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bustools_summary": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "nonpareil-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "rna_seqc_bam_stat_violin": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "qc3C_bam_runtime_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "glimpse-err-spl-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "picard_rrbs_ignored_reads_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "sequali_sequence_length_distribution_plot_read2": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "snippy_variants": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "picard-crosscheckfingerprints-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "cellranger-antibody-stats-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "samblaster_duplicates": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 5,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "picard-crosscheckfingerprints-sample-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "rseqc_read_dups_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "fastp-insert-size-plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "hicup_mapping_stats_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 26,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "homer-tag-length-dist": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "porechop-endtrim-barplot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "kat-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "picard_alignment_summary": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 10,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "cutadapt_trimmed_sequences_plot_default": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "flash_combo_stats_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 5,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "ngsderive_instruments_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "pycoqc_stats_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "deeptools_correlation_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "clipandmerge_rates": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "kaiju-topfive-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 7,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "malt-taxonomic-success-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 71,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "mqc_cellranger_count_bc_knee": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "humid-clusters": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "hicpro_contact_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 6,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "mapdamage-length-distribution-Forward": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "umitools_extract_barplot_success": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "Sample_Stat_Read_Length": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bclconvert-lane-stats-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "qc3C_kmer_acceptance_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 17,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "humid-bargraph": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "sequali_sequence_length_distribution_plot_read1": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "vcftools_tstv_by_qual": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "cutadapt_trimmed_sequences_plot_5": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "homer-tag-directory-gc-content": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "pychopper_classification_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "sequali_per_position_quality_plot_read2": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "rseqc_inner_distance_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "methylqa_coverage": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "biobloom_tools": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "ccs-filter-graph": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "time_metrics_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "picard-illumina-lane-metrics-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bbmap-mhist_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "sample_qc_metric_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "supernova_molecules": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "anglerfish_undetermined_index_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 209,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "dragen-gc-metrics-summary-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "rseqc_infer_experiment_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "slamdunk_tcperreadpos_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bus_umis": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "qorts_splice_loci": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 6,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "humid-neighbours": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "samtools-ampliconclip-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "hicexplorer_orientation_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 9,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "xengsort-summary-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "mirtop_mean_read_count_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 161,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "mosdepth-coverage-per-contig-multi": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "homer-freq-distribution": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bbmap-gchist_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "hisat2_se_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 4,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "mgi_lane_read_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "mosaicatcher-coverage": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 96,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "picard_mark_illumina_adapters": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "sequali_adapter_content_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "hicexplorer_categorization_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 9,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "rockhopper_reads_counts_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 4,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "picard_hybrid_selection_penalty": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "mosdepth-xy-coverage-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "bcl2fastq_sample_counts": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 464,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "dragen-vc-metrics-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "somalier_ancestry_barplot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 34,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "mqc_cellranger_count_genesXcell": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "snippy_core_alignment": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 4,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "interop-runmetrics-summary-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "quast_num_contigs": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 12,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "picard_wgs_metrics_bases": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 5,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "sourmash-gather-top-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "isoseq_refine_boxplot_threelen": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "qualimap_genomic_origin": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 6,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "supernova_kmers": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "biscuit_retention_cytosine": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "salmon_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "somalier_sex_check_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "snpsplit-sorting-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 10,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "ngsbits_mappingqc_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "hicpro_mapping_stats_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 10,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "fastqc_overrepresented_sequences_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 35,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "prokka_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "quast_partially_predicted_genes": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "picard_pcr_metrics_bases": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "nanoq_plot_quality_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "bismark_strand_alignment": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 9,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "snpeff_effects": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "rna_seqc_gene_body_coverage_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "qc3C_bam_valid_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 17,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "mosaicatcher-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "qc3C_kmer_frequency_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 6,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "biscuit_mapq": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "sequali_most_common_adapters_read_1": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "GoPeaksBarGraph": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "interop-indexmetrics-details-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "flash_freqpoly_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "goleft_indexcov-roc-plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "vcftools-relatedness2-heatmap-2": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "malt-mappability-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 71,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "trimmomatic_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 7,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "rseqc_read_distribution_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 6,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "slamdunk_utrratesplot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 6,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "mqc_cellranger_vdj_bc_knee": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "cell_assignment_bar": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "deeptools_readlengths_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "checkm-first-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "rna_seqc_position_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 4,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "samtools_alignment_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 5,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "xenome_detail_bar_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "picard_rna_coverage": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "percolator_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 99,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "per_cycle_base_content": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "pychopper_umi_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "pair_by_orient_cis_ranges": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "seqera_cli_process_statuses_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 11,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "librarian-library-type-plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "dragen_coverage_per_contig": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "gatk_ASM_base_calls_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "kraken-top-n-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 17,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "sequali_top_overrepresented_sequences_table_read1": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "mapdamage-fiveprime_misinc_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "hicpro_cap_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "featureCounts_assignment_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 18,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "rna_seqc_correlation_heatmap": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "tophat_alignment": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "seqera_cli_cpu_time_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 11,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "dragenqc_per_base_n_content_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "ganon-reads-match-type-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "qahist_bbm_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "dragen_coverage_dist": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "pycoqc_count_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "fastqc_per_base_n_content_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bamdst-depth-per-contig-plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "motus-identification-types": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "cell_segmentation_bar": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "bbmap-bhist_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "vcftools_tstv_summary": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "multiqc_whatshap_phased_bp_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 6,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "peddy_relatedness_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "gffcompare_novel_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "truvari-bench-pre-rec-plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "plot-picard-illuminabarcodemetrics-readsperlane": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "nonpareil-redundancy-plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bclconvert_lane_counts": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 14,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "cutadapt_trimmed_sequences_plot_3": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "sequali_per_position_gc_content_plot_read1": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "samplegender": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "snpsplit-allele-tagging-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 10,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "nanoq_plot_length_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "bbmap-ehist_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "threeprime_misinc_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "prinseplusplus-filtered-reads-violin": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "distribs_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "sequali_per_sequence_gc_content_plot_read2": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "sequali_per_position_quality_plot_read1": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "goleft_indexcov-bin-plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "per_cycle_n_content": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "per_run_bq_hist": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "rsem_multimapping_rates": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "fastq_screen_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 11,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "porechop-starttrim-barplot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "biscuit_isize": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "he_reads_plots": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 4,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "jcvi_exon_count_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bcftools_stats_variant_depths": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "varscan2_variant_counts_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "samtools-flagstat-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bbmap-qhist_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "picard_wgs_metrics_histogram": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "interop-indexmetrics-summary-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "mirtop_read_count_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 161,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "dragen-cov-metrics-own-section-qc-coverage-region-1-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "hicpro_pairing_stats_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 5,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "qualimap_gc_content": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "verifybamid-results": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bbmap-covhist_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "snpeff_qualities": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "sortmerna-detailed-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "humid-counts": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "fastp_overrepresented_sequences_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "hisat2_pe_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "jcvi_plot_features_len": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "dragen_coverage_per_non_main_contig": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "position_in_protein_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 7,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "picard-crosscheckfingerprints-heatmap": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "star_summary_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "picard_base_distribution_by_cycle": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "ngsderive_readlen_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "samtools-stats-dp": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "picard_quality_by_cycle": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bus_reads": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "sequali_most_common_adapters_read_2": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bbmap-lhist_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "hifiasm-kmer-graph": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "checkqc_error-rate-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 6,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "peddy_het_check_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "ganon-reads-match-to-read-ratio-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "fastqc-status-check-heatmap": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "mapdamage-length-distribution-Reverse": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "qc3C_kmer_runtime_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "dedup_rates": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "sequali_per_sequence_gc_content_plot_read1": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "length-distribution-Forward": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "busco_plot_ascomycota_odb9": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "bismark_alignment": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 9,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "biscuit_strands": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "macs2_filtered": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 4,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "bbmap-qahist_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "isoseq-cluster-size-distribution-barplot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "dragenqc_per_sequence_gc_content_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "rseqc_junction_annotation_junctions_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "vcftools_tstv_by_count": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "vep-general-stats": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "gchist_bbm_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "sequali_sequence_duplication_levels_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "hicexplorer_contact_distance_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 9,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "hicup_truncated_reads_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 26,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "seqera_cli_wall_time_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 11,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "bcftools-stats-sequencing-depth": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "dragen-cov-metrics-own-section-qc-coverage-region-2-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "htseq_assignment_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 4,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "hicexplorer_mapping_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 9,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "umicollapse_deduplication_barplot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 9,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "plotFingerprint_quality_metrics": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "nanostat_fasta_stats_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "broom_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "rseqc_gene_body_coverage_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "consequences_all__plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 8,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "mqc_spaceranger_count_genomic_dna": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "qualimap_genome_fraction": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "ataqv_chrom_dist": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "ataqv_peak_percentiles": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "cellranger-count-stats-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bcftools_stats_indel-lengths": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bismark-methylation-dp": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "interop-runmetrics-detail-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "mqc_spaceranger_count_genesXspot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "qorts_strand_test": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 6,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "porechop-middlesplit-barplot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "busco_plot_sample_dataset_BUSCO_2_0": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "samtools-flagstat-pct-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "mirtrace_rna_categories_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 19,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "per_cycle_adapter_content": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "samtools-coverage": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "gatk-base-recalibrator-reported-empirical-plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "cellranger-count-warnings-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "jcvi_feature_length_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "dragen_rna_quant_metrics": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "polyphen_summary_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 5,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "cellranger-atac-stats-table2": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "ganon-reads-classified-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "gffcompare_missing_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "sexdeterrmine-rate-plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "dragenqc_per_sequence_quality_scores_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "umitools_extract_regex_barplot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "biscuit_retention": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 4,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "umicollapse_stats_violin": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "minionqc_read_lengths": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "isoseq_refine_boxplot_insertlen": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "sequali_per_sequence_quality_scores_plot_read2": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bbmap-bqhist_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "snpeff_variant_effects_impact": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "somalier_relatedness_heatmap_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "samtools-idxstats-mapped-reads-plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "mqc_gex_genes_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "Jellyfish_kmer_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "pycoqc_read_qual_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bakta_feature_types": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "ar_length_count_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bamdst-cov-per-contig-plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bismark_deduplication": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 9,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "sourmash-compare-heatmap-gut_compare_2": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "star_alignment_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 4,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "slamdunk_nontcperreadpos_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "length-distribution-Reverse": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "mapdamage-threeprime_misinc_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bbmap-indelhist_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "mgi_lane_undetermined_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 20,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "hicpro_filtering_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 5,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "truvari-bench-classifications-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 7,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "preseq_complexity_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "dragen_ploidy_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "fastqc_adapter_content_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "sequali_per_position_gc_content_plot_read2": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "peddy_pca_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "biscuit_cumulative": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "rseqc_bam_stat": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "mosdepth-cumcoverage-dist-id": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "spaceranger-count-warnings": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "seqyclean-summary-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 6,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "hicup_filtering_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 13,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "sexdeterrmine-readcounts-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "bismark_mbias": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "samtools-markdup-fraction": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "deeptools_readlengthsPlot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "seqwho_species_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "minionqc-stats-qFilt-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "Freyja_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "bcl2fastq_lane_counts": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 23,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "mirtop_unique_read_count_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 161,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "disambiguated_alignments": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "clusterflow-pipelines-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "optitype_summary_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 6,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "somalier_ancestry_pca_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "deeptools_coverage_metrics_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "lima-filter-graph": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "bcftools-stats-singletons": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "rna_seqc_strandedness_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 4,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "nanostat_quality_dist": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 9,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "slamdunk_filtering_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "read_distribution_profile": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "jcvi_plot_isoforms": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "xengsort_summary_bar_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "sexdeterrmine-snps-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "flexbar_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 4,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "seqwho_sequencing_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "fiveprime_misinc_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "qorts_alignments": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 6,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "biscuit_dup_report": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "pair_types": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "slamdunk_slamdunk_nontcperutrpos_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "fastp_filtered_reads_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 12,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "mqc_cellranger_count_saturation": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "mirtrace_qc_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 19,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "bclconvert_sample_counts": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 237,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "deeptools_fragmentlengths_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "gatk_compare_overlap": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "fastqc_gc_content_mean_sequence_quality_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "picard_rnaseqmetrics_strand_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "picard_gcbias_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "sequali_per_sequence_quality_scores_plot_read1": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "busco_plot_fungi_odb9": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "variants_by_chromosome_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 8,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "fastqc_per_base_sequence_quality_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "fastqc_sequence_duplication_levels_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "somalier_het_check_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "dragen_fragment_length": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bamdst-coverage-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "mgi_lane_stats_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "run_metrics_bar": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "afterqc_bad_reads_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 6,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "gatk_ASM_reads_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "fastp-seq-content-n-plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "pychopper_orientation_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "checkqc_unidentified-index-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 7,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "gatk_varianteval_variant_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 4,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "homer-tag-info-dist": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "seqera_cli_cost_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 11,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "bcftools_stats_vqc": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bcl2fastq_undetermined": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 20,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "picard_deduplication": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 15,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "picard_rrbs_converted_bases_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "bowtie1_alignment": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 4,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "gtdbtk-first-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "qualimap_gene_coverage_profile": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bbduk-filtered-barplot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "bcftools-stats-sites": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "sumstats_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bbmap-idhist_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "jcvi_plot_feature_counts_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "barcoding_bar": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "batch_metrics_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bcftools-stats-subtypes": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 4,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "bbmap-ihist_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "dragenqc_sequence_length_distribution_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "sickle_sequence_counts_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "bamtools-stats-plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "ataqv_fld_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "dragen-cov-metrics-own-section-wgs-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "qorts_splice_events": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 6,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "qc3C_bam_longrange_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 17,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "cutadapt_filtered_reads_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 28,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "deeptools_pca_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "picard_percentage_target_bases": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "checkqc_q30-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 15,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "kallisto_alignment": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 26,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "ganon-stats-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "fastqc_per_sequence_quality_scores_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "multiqc_lima_counts": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "longranger-phasing-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "picard_variantCallingMetrics_variant_type": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "preseq_complexity_plot_molecules": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "qc3C_bam_fragment_histogram": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "controls_bar": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "fastqc_sequence_counts_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 36,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "seqyclean-read-annotation-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 6,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "longranger-alignment-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "mqc_atac_insert_size_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "isoseq_refine_bargraph": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "seqyclean-discarded-reads-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 6,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "qc3C_bam_acceptance_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 17,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "samtools_rmdup_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "checkqc_reads-per-sample-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 18,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "gc_hist": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "cellranger-vdj-warnings-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bowtie2_pe_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 5,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "plot-picard-illuminabasecallingmetrics": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "motus-filtering-reads": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "pycoqc_read_len_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "snpeff_variant_effects_region": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "ataqv_mapq_dist": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "rsem_assignment_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 4,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "ar_retained_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 5,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "checkqc_cluster-pf-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "seqwho_qualdis_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "dragen_fastqc_adapter_content_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "mirtrace_length_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "qc3C_bam_junction_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 6,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "sourmash-compare-heatmap-gut_compare": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "mirtrace_complexity_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "rseqc_junction_saturation_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "glimpse-err-grp-plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "overallratesplot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 6,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "slamdunk_slamdunk_tcperutrpos_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bbmap-qchist_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "happy_indel_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "ngsderive_junctions_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "sequali_adapter_content_from_overlap_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "picard_quality_score_distribution": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "ganon-taxonomic-entries-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "plot-picard-illuminabarcodemetrics-readsperbarcode": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 10,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "hicpro_asan_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "mirtrace_contamination_check_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 47,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "gc-bias-hist": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "supernova_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "isoseq_refine_boxplot_polyAlen": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "ivar-primer-count-heatmap": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "fastq_screen_bisulfite_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "biscuit-mapping-overview-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 4,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "sift_summary_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 5,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "picard_insert_size": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "dragen_fastqc_per_base_sequence_quality_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "sargasso_assignment_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 9,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "fgbio-groupreadsbyumi-plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "odgi_mean_links_length_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 5,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "fgbio_ErrorRateByReadPosition": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "picard_variantCallingMetrics_variant_label": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "motus-mapping-inserts": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "seqwho_readdist_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "SambambaMarkdupBargraph": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 22,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "star_gene_counts": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "bbmap-aqhist_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "ihist_bbm_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "mqc_gex_saturation_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "deeptools_coverage_metrics_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "qualimap_coverage_histogram": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "vcftools-relatedness2-heatmap-1": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "deeptools_enrichment_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "variant_classes_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 8,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "mqc_atac_tss_enrichment_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "umitools_deduplication_barplot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 60,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "somalier_relatedness_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "samtools-idxstats-xy-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "quast_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "xenome_summary_bar_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "fastp-seq-content-gc-plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "mqc_cellranger_antibody_counts": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "vg_stats_violin": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "skewer_read_length_histogram": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "bowtie2_se_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "ngsderive_strandedness_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "fastp-duprates-plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "snpeff_variant_effects_class": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "isoseq_refine_boxplot_fivelen": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "fastqc_sequence_length_distribution_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "vg_stats_aligned_barplot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "gffcompare_accuracy_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "seqwho_qualscore_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "mvcf_barplot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "mgi_sample_read_plot1": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 33,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "slamdunk_pca": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "quast_predicted_genes": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "picard_variantcallingmetrics_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "gatk-base-recalibrator-quality-scores-plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "fastqc_per_sequence_gc_content_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "theta2_purity_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "purple_summary": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "hops-heatmap": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "jcvi_plot_features_per_genes": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "per_run_quality_by_cycle": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "mapping_dup_percentage_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 5,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "mqc_spaceranger_count_saturation": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "metaphlan-top-n-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "rseqc_read_gc_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "hicup_dedup_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 13,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "dragen_cumulative_coverage_hist": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "cellranger-vdj-stats-table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "somalier_stats": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "picard_rnaseqmetrics_assignment_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 3,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "qualimap_insert_size": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "supernova_n50": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 4,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "biobambam2_deduplication": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "peddy_sex_check_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "mgi_sample_read_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 33,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "kraken-top-duplication_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "odgi_sum_of_path_nodes_distances_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 5,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "deeptools_estimate_read_filtering_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "checkqc_undetermined-percentage-plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 4,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "bcftools-stats-tstv": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "fastp-seq-quality-plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "deeptools_fingerprint_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "nanostat_fastq_stats_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "sequali_sequence_counts_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "table_data",
+      "sample_count": 1,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "picard_alignment_readlength_plot": {
+      "type": "json_structured",
+      "complexity": "medium",
+      "data_type": "histogram_bar",
+      "sample_count": 10,
+      "extraction_method": "json_pattern_extraction"
+    },
+    "homer-petag-restriction-dist": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "fragment_size_distribution_plot": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "longranger_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    },
+    "nanostat_seq_summary_stats_table": {
+      "type": "plot_input",
+      "complexity": "low",
+      "data_type": "unknown",
+      "sample_count": 0,
+      "extraction_method": "plot_input_extraction"
+    }
+  },
+  "extraction_priorities": {
+    "priority_1_general_stats": {
+      "anchors": [
+        "general_stats_table"
+      ],
+      "method": "direct_tabular_extraction",
+      "expected_yield": "high"
+    },
+    "priority_2_simple_tables": {
+      "anchors": [
+        "umitools_stats_violin",
+        "spaceranger-count-stats",
+        "whatshap-stats-table",
+        "bcl2fastq-lane-stats-table",
+        "clusterflow-commands-table",
+        "bclconvert-sample-stats-table",
+        "nextclade_run_table",
+        "checkm2-first-table",
+        "general_stats_table",
+        "dragen-cov-metrics-own-section-target-bed-table",
+        "picard_hsmetrics_table",
+        "pangolin_run_table",
+        "qc3C_bam_runtime_table"
+      ],
+      "method": "plot_input_row_extraction",
+      "expected_yield": "high"
+    },
+    "priority_3_structured_json": {
+      "anchors": [
+        "hicup_mapping_stats_plot",
+        "malt-taxonomic-success-plot",
+        "qc3C_kmer_acceptance_plot",
+        "anglerfish_undetermined_index_plot",
+        "mirtop_mean_read_count_plot",
+        "mosaicatcher-coverage",
+        "bcl2fastq_sample_counts",
+        "somalier_ancestry_barplot",
+        "quast_num_contigs",
+        "fastqc_overrepresented_sequences_plot",
+        "qc3C_bam_valid_plot",
+        "malt-mappability-plot",
+        "percolator_plot",
+        "seqera_cli_process_statuses_plot",
+        "kraken-top-n-plot",
+        "featureCounts_assignment_plot",
+        "seqera_cli_cpu_time_plot",
+        "bclconvert_lane_counts",
+        "fastq_screen_plot",
+        "mirtop_read_count_plot",
+        "hicup_truncated_reads_plot",
+        "seqera_cli_wall_time_plot",
+        "mirtrace_rna_categories_plot",
+        "mgi_lane_undetermined_plot",
+        "hicup_filtering_plot",
+        "bcl2fastq_lane_counts",
+        "mirtop_unique_read_count_plot",
+        "fastp_filtered_reads_plot",
+        "mirtrace_qc_plot",
+        "bclconvert_sample_counts",
+        "seqera_cli_cost_plot",
+        "bcl2fastq_undetermined",
+        "picard_deduplication",
+        "qc3C_bam_longrange_plot",
+        "cutadapt_filtered_reads_plot",
+        "checkqc_q30-plot",
+        "kallisto_alignment",
+        "fastqc_sequence_counts_plot",
+        "qc3C_bam_acceptance_plot",
+        "checkqc_reads-per-sample-plot",
+        "mirtrace_contamination_check_plot",
+        "SambambaMarkdupBargraph",
+        "umitools_deduplication_barplot",
+        "mgi_sample_read_plot1",
+        "hicup_dedup_plot",
+        "mgi_sample_read_plot"
+      ],
+      "method": "json_pattern_extraction",
+      "expected_yield": "medium"
+    },
+    "priority_4_plot_visualization": {
+      "anchors": [
+        "picard_rrbs_ignored_reads_plot",
+        "ngsbits_readqc_table",
+        "samtools-coverage-table",
+        "sequali_sequence_length_distribution_plot_read2",
+        "snippy_variants",
+        "picard-crosscheckfingerprints-table",
+        "cellranger-antibody-stats-table",
+        "samblaster_duplicates",
+        "picard-crosscheckfingerprints-sample-table",
+        "rseqc_read_dups_plot",
+        "fastp-insert-size-plot",
+        "cellranger-arc-warnings-table",
+        "homer-tag-length-dist",
+        "porechop-endtrim-barplot",
+        "kat-table",
+        "picard_alignment_summary",
+        "cutadapt_trimmed_sequences_plot_default",
+        "flash_combo_stats_plot",
+        "nonpareil-table",
+        "ngsderive_instruments_plot",
+        "pycoqc_stats_table",
+        "deeptools_correlation_plot",
+        "clipandmerge_rates",
+        "kaiju-topfive-plot",
+        "mqc_cellranger_count_bc_knee",
+        "humid-clusters",
+        "hicpro_contact_plot",
+        "mapdamage-length-distribution-Forward",
+        "umitools_extract_barplot_success",
+        "Sample_Stat_Read_Length",
+        "bclconvert-lane-stats-table",
+        "humid-bargraph",
+        "sequali_sequence_length_distribution_plot_read1",
+        "vcftools_tstv_by_qual",
+        "cutadapt_trimmed_sequences_plot_5",
+        "dragen-gvcf-metrics-table",
+        "homer-tag-directory-gc-content",
+        "pychopper_classification_plot",
+        "sequali_per_position_quality_plot_read2",
+        "rseqc_inner_distance_plot",
+        "methylqa_coverage",
+        "biobloom_tools",
+        "ccs-filter-graph",
+        "time_metrics_plot",
+        "qc3C_bam_runtime_table",
+        "picard-illumina-lane-metrics-table",
+        "bbmap-mhist_plot",
+        "sample_qc_metric_table",
+        "supernova_molecules",
+        "dragen-gc-metrics-summary-table",
+        "rseqc_infer_experiment_plot",
+        "stats_bbm_table",
+        "slamdunk_tcperreadpos_plot",
+        "bus_umis",
+        "nextclade_run_table",
+        "qorts_splice_loci",
+        "humid-neighbours",
+        "samtools-ampliconclip-table",
+        "hicexplorer_orientation_plot",
+        "xengsort-summary-table",
+        "mosdepth-coverage-per-contig-multi",
+        "homer-freq-distribution",
+        "bbmap-gchist_plot",
+        "hisat2_se_plot",
+        "mgi_lane_read_plot",
+        "glimpse-err-spl-table",
+        "picard_mark_illumina_adapters",
+        "sequali_adapter_content_plot",
+        "picard_validatesamfile_table",
+        "hicexplorer_categorization_plot",
+        "rockhopper_reads_counts_plot",
+        "picard_hybrid_selection_penalty",
+        "mosdepth-xy-coverage-plot",
+        "dragen-vc-metrics-table",
+        "umitools_stats_violin",
+        "mqc_cellranger_count_genesXcell",
+        "snippy_core_alignment",
+        "interop-runmetrics-summary-table",
+        "picard_wgs_metrics_bases",
+        "bustools_summary",
+        "sourmash-gather-top-plot",
+        "isoseq_refine_boxplot_threelen",
+        "qualimap_genomic_origin",
+        "supernova_kmers",
+        "biscuit_retention_cytosine",
+        "salmon_plot",
+        "somalier_sex_check_plot",
+        "snpsplit-sorting-plot",
+        "ngsbits_mappingqc_table",
+        "hicpro_mapping_stats_plot",
+        "prokka_plot",
+        "quast_partially_predicted_genes",
+        "picard_pcr_metrics_bases",
+        "nanoq_plot_quality_plot",
+        "bismark_strand_alignment",
+        "snpeff_effects",
+        "rna_seqc_gene_body_coverage_plot",
+        "rna_seqc_bam_stat_violin",
+        "mosaicatcher-table",
+        "happy_snp_plot",
+        "qc3C_kmer_frequency_plot",
+        "biscuit_mapq",
+        "sequali_most_common_adapters_read_1",
+        "GoPeaksBarGraph",
+        "interop-indexmetrics-details-table",
+        "flash_freqpoly_plot",
+        "goleft_indexcov-roc-plot",
+        "vcftools-relatedness2-heatmap-2",
+        "trimmomatic_plot",
+        "rseqc_read_distribution_plot",
+        "slamdunk_utrratesplot",
+        "mqc_cellranger_vdj_bc_knee",
+        "cell_assignment_bar",
+        "deeptools_readlengths_table",
+        "checkm-first-table",
+        "rna_seqc_position_plot",
+        "samtools_alignment_plot",
+        "bclconvert-sample-stats-table",
+        "xenome_detail_bar_plot",
+        "picard_rna_coverage",
+        "per_cycle_base_content",
+        "pychopper_umi_plot",
+        "pair_by_orient_cis_ranges",
+        "librarian-library-type-plot",
+        "dragen_coverage_per_contig",
+        "gatk_ASM_base_calls_plot",
+        "sequali_top_overrepresented_sequences_table_read1",
+        "mapdamage-fiveprime_misinc_plot",
+        "hicpro_cap_plot",
+        "bcl2fastq-lane-stats-table",
+        "rna_seqc_correlation_heatmap",
+        "tophat_alignment",
+        "dragenqc_per_base_n_content_plot",
+        "ganon-reads-match-type-plot",
+        "minionqc-stats-qAll-table",
+        "cellranger-vdj-annot-table",
+        "qahist_bbm_table",
+        "dragen_coverage_dist",
+        "pycoqc_count_plot",
+        "fastqc_per_base_n_content_plot",
+        "bamdst-depth-per-contig-plot",
+        "motus-identification-types",
+        "cell_segmentation_bar",
+        "bbmap-bhist_plot",
+        "vcftools_tstv_summary",
+        "multiqc_whatshap_phased_bp_plot",
+        "peddy_relatedness_plot",
+        "gffcompare_novel_plot",
+        "truvari-bench-pre-rec-plot",
+        "plot-picard-illuminabarcodemetrics-readsperlane",
+        "nonpareil-redundancy-plot",
+        "biscuit_seq_depth",
+        "cutadapt_trimmed_sequences_plot_3",
+        "sequali_per_position_gc_content_plot_read1",
+        "samplegender",
+        "pangolin_run_table",
+        "snpsplit-allele-tagging-plot",
+        "nanoq_plot_length_plot",
+        "bbmap-ehist_plot",
+        "threeprime_misinc_plot",
+        "prinseplusplus-filtered-reads-violin",
+        "distribs_plot",
+        "sequali_per_sequence_gc_content_plot_read2",
+        "sequali_per_position_quality_plot_read1",
+        "goleft_indexcov-bin-plot",
+        "per_cycle_n_content",
+        "per_run_bq_hist",
+        "rsem_multimapping_rates",
+        "porechop-starttrim-barplot",
+        "biscuit_isize",
+        "he_reads_plots",
+        "jcvi_exon_count_plot",
+        "bcftools_stats_variant_depths",
+        "varscan2_variant_counts_plot",
+        "samtools-flagstat-table",
+        "bbmap-qhist_plot",
+        "picard_wgs_metrics_histogram",
+        "interop-indexmetrics-summary-table",
+        "dragen-cov-metrics-own-section-qc-coverage-region-1-table",
+        "hicpro_pairing_stats_plot",
+        "qualimap_gc_content",
+        "verifybamid-results",
+        "fastp_top_overrepresented_sequences_table",
+        "bbmap-covhist_plot",
+        "snpeff_qualities",
+        "sortmerna-detailed-plot",
+        "whatshap-stats-table",
+        "humid-counts",
+        "fastp_overrepresented_sequences_plot",
+        "hisat2_pe_plot",
+        "jcvi_plot_features_len",
+        "dragen_coverage_per_non_main_contig",
+        "position_in_protein_plot",
+        "picard-crosscheckfingerprints-heatmap",
+        "clusterflow-commands-table",
+        "star_summary_table",
+        "picard_base_distribution_by_cycle",
+        "ngsderive_readlen_plot",
+        "samtools-stats-dp",
+        "picard_quality_by_cycle",
+        "bus_reads",
+        "well_metrics_table",
+        "sequali_most_common_adapters_read_2",
+        "bbmap-lhist_plot",
+        "hifiasm-kmer-graph",
+        "checkqc_error-rate-plot",
+        "peddy_het_check_plot",
+        "ganon-reads-match-to-read-ratio-plot",
+        "fastqc-status-check-heatmap",
+        "mapdamage-length-distribution-Reverse",
+        "qc3C_kmer_runtime_table",
+        "dedup_rates",
+        "sequali_per_sequence_gc_content_plot_read1",
+        "length-distribution-Forward",
+        "busco_plot_ascomycota_odb9",
+        "bismark_alignment",
+        "biscuit_strands",
+        "macs2_filtered",
+        "bbmap-qahist_plot",
+        "isoseq-cluster-size-distribution-barplot",
+        "dragenqc_per_sequence_gc_content_plot",
+        "rseqc_junction_annotation_junctions_plot",
+        "vcftools_tstv_by_count",
+        "vep-general-stats",
+        "gchist_bbm_table",
+        "general_stats_table",
+        "sequali_sequence_duplication_levels_plot",
+        "hicexplorer_contact_distance_plot",
+        "bcftools-stats-sequencing-depth",
+        "dragen-cov-metrics-own-section-qc-coverage-region-2-table",
+        "htseq_assignment_plot",
+        "hicexplorer_mapping_plot",
+        "umicollapse_deduplication_barplot",
+        "plotFingerprint_quality_metrics",
+        "nanostat_fasta_stats_table",
+        "broom_plot",
+        "rseqc_gene_body_coverage_plot",
+        "consequences_all__plot",
+        "mqc_spaceranger_count_genomic_dna",
+        "qualimap_genome_fraction",
+        "picard_hsmetrics_table",
+        "ataqv_chrom_dist",
+        "ataqv_peak_percentiles",
+        "cellranger-count-stats-table",
+        "bcftools_stats_indel-lengths",
+        "bismark-methylation-dp",
+        "interop-runmetrics-detail-table",
+        "mqc_spaceranger_count_genesXspot",
+        "qorts_strand_test",
+        "porechop-middlesplit-barplot",
+        "busco_plot_sample_dataset_BUSCO_2_0",
+        "samtools-flagstat-pct-table",
+        "per_cycle_adapter_content",
+        "samtools-coverage",
+        "gatk-base-recalibrator-reported-empirical-plot",
+        "cellranger-count-warnings-table",
+        "jcvi_feature_length_plot",
+        "dragen_rna_quant_metrics",
+        "cellranger-gex-stats-table",
+        "polyphen_summary_plot",
+        "cellranger-atac-stats-table2",
+        "ganon-reads-classified-plot",
+        "gffcompare_missing_plot",
+        "sexdeterrmine-rate-plot",
+        "dragenqc_per_sequence_quality_scores_plot",
+        "umitools_extract_regex_barplot",
+        "biscuit_retention",
+        "umicollapse_stats_violin",
+        "minionqc_read_lengths",
+        "isoseq_refine_boxplot_insertlen",
+        "sequali_per_sequence_quality_scores_plot_read2",
+        "bbmap-bqhist_plot",
+        "snpeff_variant_effects_impact",
+        "somalier_relatedness_heatmap_plot",
+        "samtools-idxstats-mapped-reads-plot",
+        "mqc_gex_genes_plot",
+        "Jellyfish_kmer_plot",
+        "pycoqc_read_qual_plot",
+        "bakta_feature_types",
+        "ar_length_count_plot",
+        "bamdst-cov-per-contig-plot",
+        "samtools-ampliconclip-pct-table",
+        "bismark_deduplication",
+        "sourmash-compare-heatmap-gut_compare_2",
+        "star_alignment_plot",
+        "slamdunk_nontcperreadpos_plot",
+        "length-distribution-Reverse",
+        "mapdamage-threeprime_misinc_plot",
+        "bbmap-indelhist_plot",
+        "hicpro_filtering_plot",
+        "truvari-bench-classifications-plot",
+        "preseq_complexity_plot",
+        "dragen_ploidy_table",
+        "fastqc_adapter_content_plot",
+        "sequali_per_position_gc_content_plot_read2",
+        "peddy_pca_plot",
+        "biscuit_cumulative",
+        "rseqc_bam_stat",
+        "mosdepth-cumcoverage-dist-id",
+        "spaceranger-count-warnings",
+        "seqyclean-summary-plot",
+        "sexdeterrmine-readcounts-plot",
+        "bismark_mbias",
+        "samtools-markdup-fraction",
+        "deeptools_readlengthsPlot",
+        "seqwho_species_plot",
+        "minionqc-stats-qFilt-table",
+        "dragen-cov-metrics-own-section-target-bed-table",
+        "Freyja_plot",
+        "disambiguated_alignments",
+        "nanoq_table",
+        "clusterflow-pipelines-table",
+        "optitype_summary_plot",
+        "run_metrics_table",
+        "somalier_ancestry_pca_plot",
+        "deeptools_coverage_metrics_plot",
+        "lima-filter-graph",
+        "bcftools-stats-singletons",
+        "rna_seqc_strandedness_plot",
+        "nanostat_quality_dist",
+        "slamdunk_filtering_table",
+        "read_distribution_profile",
+        "jcvi_plot_isoforms",
+        "xengsort_summary_bar_plot",
+        "sexdeterrmine-snps-plot",
+        "flexbar_plot",
+        "seqwho_sequencing_plot",
+        "fiveprime_misinc_plot",
+        "nanostat_aligned_stats_table",
+        "qorts_alignments",
+        "biscuit_dup_report",
+        "checkm2-first-table",
+        "pair_types",
+        "slamdunk_slamdunk_nontcperutrpos_plot",
+        "mqc_cellranger_count_saturation",
+        "deeptools_fragmentlengths_table",
+        "gatk_compare_overlap",
+        "fastqc_gc_content_mean_sequence_quality_plot",
+        "picard_rnaseqmetrics_strand_plot",
+        "picard_gcbias_plot",
+        "gatk_ask_stats",
+        "sequali_per_sequence_quality_scores_plot_read1",
+        "busco_plot_fungi_odb9",
+        "variants_by_chromosome_plot",
+        "fastqc_per_base_sequence_quality_plot",
+        "fastqc_sequence_duplication_levels_plot",
+        "somalier_het_check_plot",
+        "dragen_fragment_length",
+        "bamdst-coverage-table",
+        "mgi_lane_stats_plot",
+        "run_metrics_bar",
+        "afterqc_bad_reads_plot",
+        "gatk_ASM_reads_plot",
+        "fastp-seq-content-n-plot",
+        "pychopper_orientation_plot",
+        "checkqc_unidentified-index-plot",
+        "gatk_varianteval_variant_plot",
+        "homer-tag-info-dist",
+        "bcftools_stats_vqc",
+        "mvcf-table",
+        "picard_rrbs_converted_bases_plot",
+        "bowtie1_alignment",
+        "gtdbtk-first-table",
+        "qualimap_gene_coverage_profile",
+        "bbduk-filtered-barplot",
+        "bcftools-stats-sites",
+        "megahit-stats-table",
+        "sumstats_table",
+        "bbmap-idhist_plot",
+        "jcvi_plot_feature_counts_plot",
+        "barcoding_bar",
+        "batch_metrics_table",
+        "idhist_bbm_table",
+        "bcftools-stats-subtypes",
+        "bbmap-ihist_plot",
+        "dragenqc_sequence_length_distribution_plot",
+        "sickle_sequence_counts_plot",
+        "bamtools-stats-plot",
+        "ataqv_fld_plot",
+        "dragen-cov-metrics-own-section-wgs-table",
+        "qorts_splice_events",
+        "gstacks_table",
+        "deeptools_pca_plot",
+        "picard_percentage_target_bases",
+        "ganon-stats-table",
+        "fastqc_per_sequence_quality_scores_plot",
+        "multiqc_lima_counts",
+        "xenome-table",
+        "longranger-phasing-plot",
+        "picard_variantCallingMetrics_variant_type",
+        "qc3C_kmer_signal_table",
+        "preseq_complexity_plot_molecules",
+        "qc3C_bam_fragment_histogram",
+        "haplocheck-table",
+        "controls_bar",
+        "seqyclean-read-annotation-plot",
+        "longranger-alignment-plot",
+        "mqc_atac_insert_size_plot",
+        "isoseq_refine_bargraph",
+        "seqyclean-discarded-reads-plot",
+        "samtools_rmdup_plot",
+        "gc_hist",
+        "cellranger-vdj-warnings-table",
+        "bowtie2_pe_plot",
+        "plot-picard-illuminabasecallingmetrics",
+        "motus-filtering-reads",
+        "pycoqc_read_len_plot",
+        "snpeff_variant_effects_region",
+        "ataqv_mapq_dist",
+        "rsem_assignment_plot",
+        "ar_retained_plot",
+        "checkqc_cluster-pf-plot",
+        "seqwho_qualdis_plot",
+        "dragen_fastqc_adapter_content_plot",
+        "odgi_table",
+        "mirtrace_length_plot",
+        "qc3C_bam_junction_plot",
+        "sourmash-compare-heatmap-gut_compare",
+        "cellranger-atac-stats-table1",
+        "mirtrace_complexity_plot",
+        "rseqc_junction_saturation_plot",
+        "glimpse-err-grp-plot",
+        "overallratesplot",
+        "slamdunk_slamdunk_tcperutrpos_plot",
+        "bbmap-qchist_plot",
+        "happy_indel_plot",
+        "ngsderive_junctions_plot",
+        "sequali_adapter_content_from_overlap_table",
+        "picard_quality_score_distribution",
+        "ganon-taxonomic-entries-plot",
+        "plot-picard-illuminabarcodemetrics-readsperbarcode",
+        "hicpro_asan_plot",
+        "gc-bias-hist",
+        "supernova_table",
+        "isoseq_refine_boxplot_polyAlen",
+        "ivar-primer-count-heatmap",
+        "fastq_screen_bisulfite_plot",
+        "biscuit-mapping-overview-plot",
+        "sift_summary_plot",
+        "picard_insert_size",
+        "dragen_fastqc_per_base_sequence_quality_plot",
+        "sargasso_assignment_plot",
+        "fgbio-groupreadsbyumi-plot",
+        "samtools-markdup-table",
+        "odgi_mean_links_length_plot",
+        "fgbio_ErrorRateByReadPosition",
+        "picard_variantCallingMetrics_variant_label",
+        "motus-mapping-inserts",
+        "seqwho_readdist_plot",
+        "star_gene_counts",
+        "bbmap-aqhist_plot",
+        "ihist_bbm_table",
+        "mqc_gex_saturation_plot",
+        "deeptools_coverage_metrics_table",
+        "qualimap_coverage_histogram",
+        "vcftools-relatedness2-heatmap-1",
+        "deeptools_enrichment_plot",
+        "variant_classes_plot",
+        "mqc_atac_tss_enrichment_plot",
+        "somalier_relatedness_plot",
+        "samtools-idxstats-xy-plot",
+        "quast_table",
+        "xenome_summary_bar_plot",
+        "dragen-mapping-metrics-table",
+        "fastp-seq-content-gc-plot",
+        "mqc_cellranger_antibody_counts",
+        "vg_stats_violin",
+        "skewer_read_length_histogram",
+        "bowtie2_se_plot",
+        "ngsderive_strandedness_plot",
+        "fastp-duprates-plot",
+        "snpeff_variant_effects_class",
+        "isoseq_refine_boxplot_fivelen",
+        "fastqc_sequence_length_distribution_plot",
+        "vg_stats_aligned_barplot",
+        "mgi_lane_ambiguous_plot",
+        "gffcompare_accuracy_plot",
+        "seqwho_qualscore_plot",
+        "mvcf_barplot",
+        "slamdunk_pca",
+        "spaceranger-count-stats",
+        "quast_predicted_genes",
+        "picard_variantcallingmetrics_table",
+        "gatk-base-recalibrator-quality-scores-plot",
+        "fastqc_top_overrepresented_sequences_table",
+        "fastqc_per_sequence_gc_content_plot",
+        "theta2_purity_plot",
+        "purple_summary",
+        "hops-heatmap",
+        "jcvi_plot_features_per_genes",
+        "per_run_quality_by_cycle",
+        "dragen-trimmer-metrics-table",
+        "mapping_dup_percentage_plot",
+        "mqc_spaceranger_count_saturation",
+        "qhist_bbm_table",
+        "metaphlan-top-n-plot",
+        "rseqc_read_gc_plot",
+        "dragen_cumulative_coverage_hist",
+        "cellranger-vdj-stats-table",
+        "somalier_stats",
+        "picard_rnaseqmetrics_assignment_plot",
+        "qualimap_insert_size",
+        "supernova_n50",
+        "biobambam2_deduplication",
+        "peddy_sex_check_plot",
+        "kraken-top-duplication_plot",
+        "odgi_sum_of_path_nodes_distances_plot",
+        "deeptools_estimate_read_filtering_table",
+        "checkqc_undetermined-percentage-plot",
+        "bcftools-stats-tstv",
+        "fastp-seq-quality-plot",
+        "deeptools_fingerprint_plot",
+        "nanostat_fastq_stats_table",
+        "sequali_sequence_counts_plot",
+        "picard_alignment_readlength_plot",
+        "homer-petag-restriction-dist",
+        "fragment_size_distribution_plot",
+        "longranger_table",
+        "nanostat_seq_summary_stats_table"
+      ],
+      "method": "plot_input_extraction",
+      "expected_yield": "low"
+    }
+  }
+}
