@@ -6,7 +6,7 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
+from depictio.dash.component_metadata import get_component_color, get_dmc_button_color, is_enabled
 from depictio.dash.modules.card_component.utils import agg_functions, build_card, build_card_frame
 
 # Depictio imports
@@ -605,6 +605,9 @@ def create_stepper_card_button(n, disabled=None):
     if disabled is None:
         disabled = not is_enabled("card")
 
+    color = get_dmc_button_color("card")
+    hex_color = get_component_color("card")
+
     # Create the card button
     button = dmc.Button(
         "Card",
@@ -614,10 +617,11 @@ def create_stepper_card_button(n, disabled=None):
             "value": "Card",
         },
         n_clicks=0,
-        style=UNSELECTED_STYLE,
+        style={**UNSELECTED_STYLE, "fontSize": "26px"},
         size="xl",
-        color=get_dmc_button_color("card"),
-        leftSection=DashIconify(icon="formkit:number", color="white"),
+        variant="outline",
+        color=color,
+        leftSection=DashIconify(icon="formkit:number", color=hex_color),
         disabled=disabled,
     )
     store = dcc.Store(

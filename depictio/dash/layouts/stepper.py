@@ -649,74 +649,104 @@ def create_stepper_output(n, active):
     # workflow_selection = component_data.get("workflow_selection", "")
     # datacollection_selection = component_data.get("datacollection_selection", "")
 
-    stepper_dropdowns = html.Div(
+    stepper_dropdowns = dmc.Stack(
         [
-            dmc.Divider(),
-            dmc.Center(
+            # Component Selection Display
+            dmc.Stack(
                 [
                     dmc.Title(
-                        "Component selected:",
+                        "Select Data Source",
                         order=3,
-                        ta="left",
+                        ta="center",
                         fw="bold",
-                        style={"display": "inline-block", "margin-right": "10px"},
+                        mb="xs",
+                    ),
+                    dmc.Text(
+                        "Choose the workflow and data collection for your component",
+                        size="sm",
+                        c="gray",
+                        ta="center",
+                        mb="md",
+                    ),
+                ],
+                gap="xs",
+            ),
+            # Selected Component Badge
+            dmc.Group(
+                [
+                    dmc.Text(
+                        "Selected Component:",
+                        fw="bold",
+                        size="md",
                     ),
                     html.Div(
-                        dmc.Text(
+                        id={"type": "component-selected", "index": n},
+                        children=dmc.Badge(
                             "None",
-                            id={"type": "component-selected", "index": n},
-                            size="xl",
-                            ta="left",
-                            fw="normal",
+                            size="lg",
+                            variant="outline",
+                            color="gray",
                         ),
-                        style={"display": "inline-block"},
                     ),
                 ],
-                style={"align-items": "center", "display": "flex"},
+                justify="center",
+                align="center",
+                gap="sm",
             ),
-            # html.Hr(),
-            dmc.Space(h=20),
-            dmc.SimpleGrid(
-                cols=2,
-                spacing="md",
-                children=[
-                    dmc.Select(
-                        id={"type": "workflow-selection-label", "index": n},
-                        label=dmc.Group(
-                            [
-                                DashIconify(icon="flat-color-icons:workflow", width=20),
-                                dmc.Text("Workflow selection", fw="bold", size="md"),
-                            ],
-                            gap="xs",
-                        ),
-                        placeholder="Select workflow...",
-                    ),
-                    dmc.Select(
-                        id={
-                            "type": "datacollection-selection-label",
-                            "index": n,
-                        },
-                        label=dmc.Group(
-                            [
-                                DashIconify(icon="bxs:data", width=20),
-                                dmc.Text("Data collection selection", fw="bold", size="md"),
-                            ],
-                            gap="xs",
-                        ),
-                        placeholder="Select data collection...",
+            dmc.Divider(variant="solid"),
+            # Data Selection
+            dmc.Stack(
+                [
+                    # dmc.Title(
+                    #     "Data Configuration",
+                    #     order=4,
+                    #     ta="left",
+                    #     fw="normal",
+                    #     size="md",
+                    #     mb="sm",
+                    # ),
+                    dmc.SimpleGrid(
+                        cols=2,
+                        spacing="lg",
+                        children=[
+                            dmc.Select(
+                                id={"type": "workflow-selection-label", "index": n},
+                                label=dmc.Group(
+                                    [
+                                        DashIconify(icon="flat-color-icons:workflow", width=20),
+                                        dmc.Text("Workflow", fw="bold", size="md"),
+                                    ],
+                                    gap="xs",
+                                ),
+                                placeholder="Select workflow...",
+                                size="md",
+                            ),
+                            dmc.Select(
+                                id={
+                                    "type": "datacollection-selection-label",
+                                    "index": n,
+                                },
+                                label=dmc.Group(
+                                    [
+                                        DashIconify(icon="bxs:data", width=20),
+                                        dmc.Text("Data Collection", fw="bold", size="md"),
+                                    ],
+                                    gap="xs",
+                                ),
+                                placeholder="Select data collection...",
+                                size="md",
+                            ),
+                        ],
                     ),
                 ],
+                gap="sm",
             ),
-            dmc.Divider(),
+            # Data Collection Information
             html.Div(id={"type": "dropdown-output", "index": n}),
-            # Data preview section
-            html.Div(id={"type": "stepper-data-preview", "index": n}, style={"margin-top": "20px"}),
+            # Data Preview Section
+            html.Div(id={"type": "stepper-data-preview", "index": n}),
         ],
-        # style={
-        #     "height": "100%",
-        #     "width": "100%",
-        #     "maxWidth": "none",
-        # },
+        gap="lg",
     )
 
     buttons_list = html.Div(
@@ -737,53 +767,69 @@ def create_stepper_output(n, active):
     )
 
     step_one = dmc.StepperStep(
-        label="Component selection",
-        description="Select your component type",
+        label="Component Type",
+        description="Choose the type of dashboard component to create",
         children=buttons_list,
         id={"type": "stepper-step-2", "index": n},
     )
 
     step_two = dmc.StepperStep(
-        label="Data selection",
-        description="Select your workflow and data collection",
+        label="Data Source",
+        description="Connect your component to data",
         children=stepper_dropdowns,
-        # loading=True,
         id={"type": "stepper-step-1", "index": n},
     )
     step_three = dmc.StepperStep(
-        label="Design your component",
-        description="Customize your component as you wish",
-        # loading=True,
+        label="Component Design",
+        description="Customize the appearance and behavior of your component",
         children=html.Div(
             id={
                 "type": "output-stepper-step-3",
                 "index": n,
             },
-            # style={"width": "100%"},
         ),
         id={"type": "stepper-step-3", "index": n},
     )
     step_completed = dmc.StepperCompleted(
         children=[
-            dmc.Center(
+            dmc.Stack(
                 [
-                    dmc.Button(
-                        "Add to dashboard",
-                        id={
-                            "type": "btn-done",
-                            "index": n,
-                        },
-                        color="green",
-                        n_clicks=0,
-                        size="xl",
-                        style={
-                            "display": "block",
-                            "align": "center",
-                            "height": "100px",
-                        },
-                        leftSection=DashIconify(icon="bi:check-circle", width=30, color="white"),
+                    dmc.Title(
+                        "Component Ready!",
+                        order=2,
+                        ta="center",
+                        fw="bold",
+                        c="green",
                     ),
-                ]
+                    dmc.Text(
+                        "Your component has been configured and is ready to be added to your dashboard.",
+                        size="md",
+                        ta="center",
+                        c="gray",
+                        mb="xl",
+                    ),
+                    dmc.Center(
+                        dmc.Button(
+                            "Add to Dashboard",
+                            id={
+                                "type": "btn-done",
+                                "index": n,
+                            },
+                            color="green",
+                            variant="filled",
+                            n_clicks=0,
+                            size="xl",
+                            style={
+                                "height": "60px",
+                                "fontSize": "18px",
+                                "fontWeight": "bold",
+                            },
+                            leftSection=DashIconify(icon="bi:check-circle", width=24),
+                        )
+                    ),
+                ],
+                gap="md",
+                align="center",
             ),
         ],
     )
@@ -793,27 +839,44 @@ def create_stepper_output(n, active):
     stepper = dmc.Stepper(
         id={"type": "stepper-basic-usage", "index": n},
         active=active,
-        # color="green",
-        # breakpoint="sm",
         children=steps,
         color="gray",
+        size="lg",
+        iconSize=42,
+        styles={
+            "stepLabel": {
+                "fontSize": "16px",
+                "fontWeight": "bold",
+            },
+            "stepDescription": {
+                "fontSize": "14px",
+                "color": "var(--mantine-color-dimmed)",
+            },
+        },
     )
 
     stepper_footer = dmc.Group(
         justify="center",
+        align="center",
         children=[
             dmc.Button(
                 "Back",
                 id={"type": "back-basic-usage", "index": n},
-                variant="default",
+                variant="outline",
+                color="gray",
+                size="lg",
                 n_clicks=0,
+                leftSection=DashIconify(icon="mdi:arrow-left", width=20),
             ),
             dmc.Button(
-                "Next step",
+                "Next Step",
                 id={"type": "next-basic-usage", "index": n},
+                variant="filled",
                 disabled=True,
                 n_clicks=0,
                 color="gray",
+                size="lg",
+                rightSection=DashIconify(icon="mdi:arrow-right", width=20),
             ),
         ],
     )
@@ -853,9 +916,7 @@ def create_stepper_output(n, active):
                                 "verticalAlign": "middle",
                             },
                         ),
-                        html.Span(
-                            "Design your new dashboard component", style={"verticalAlign": "middle"}
-                        ),
+                        html.Span("Create Dashboard Component", style={"verticalAlign": "middle"}),
                     ]
                 ),
                 opened=True,

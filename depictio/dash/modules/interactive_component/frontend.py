@@ -8,7 +8,7 @@ from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 
 # Depictio imports
-from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
+from depictio.dash.component_metadata import get_component_color, get_dmc_button_color, is_enabled
 from depictio.dash.modules.interactive_component.utils import (
     agg_functions,
     build_interactive,
@@ -849,6 +849,9 @@ def create_stepper_interactive_button(n, disabled=None):
     if disabled is None:
         disabled = not is_enabled("interactive")
 
+    color = get_dmc_button_color("interactive")
+    hex_color = get_component_color("interactive")
+
     button = dmc.Button(
         "Interactive",
         id={
@@ -857,10 +860,11 @@ def create_stepper_interactive_button(n, disabled=None):
             "value": "Interactive",
         },
         n_clicks=0,
-        style=UNSELECTED_STYLE,
+        style={**UNSELECTED_STYLE, "fontSize": "26px"},
         size="xl",
-        color=get_dmc_button_color("interactive"),
-        leftSection=DashIconify(icon="bx:slider-alt", color="white"),
+        variant="outline",
+        color=color,
+        leftSection=DashIconify(icon="bx:slider-alt", color=hex_color),
         disabled=disabled,
     )
     store = dcc.Store(

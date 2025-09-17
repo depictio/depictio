@@ -650,10 +650,32 @@ def register_callbacks_header(app):
             return "gray", "subtle", icon, True
 
         # If live interactivity is OFF, check for pending changes
-        # Handle None, empty dict, or empty store
-        has_pending_changes = bool(
-            pending_changes and isinstance(pending_changes, dict) and len(pending_changes) > 0
-        )
+        # Compare current values with default states to detect real changes
+        def has_meaningful_pending_changes(changes):
+            if not changes or not isinstance(changes, dict):
+                return False
+
+            for key, value in changes.items():
+                if key == "interactive_components_values" and value:
+                    # Check if there are actual component values that differ from defaults
+                    if isinstance(value, list) and len(value) > 0:
+                        for component in value:
+                            if isinstance(component, dict):
+                                current_value = component.get("value")
+                                metadata = component.get("metadata", {})
+                                default_state = metadata.get("default_state", {})
+
+                                # Use the same logic as _is_different_from_default
+                                if _is_different_from_default(current_value, default_state):
+                                    logger.info(
+                                        f"🔍 Found pending change: current={current_value}, default_state={default_state}"
+                                    )
+                                    return True
+                elif value:  # Other non-empty values
+                    return True
+            return False
+
+        has_pending_changes = has_meaningful_pending_changes(pending_changes)
 
         logger.info(f"📝 Pending changes detected: {has_pending_changes}")
 

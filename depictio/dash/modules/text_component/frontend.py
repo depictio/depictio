@@ -7,6 +7,7 @@ from dash_iconify import DashIconify
 # Depictio imports
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import (
+    get_component_color,
     get_dmc_button_color,
     is_enabled,
 )
@@ -574,6 +575,7 @@ def create_stepper_text_button(n, disabled=None):
         disabled = not is_enabled("text")
 
     color = get_dmc_button_color("text")
+    hex_color = get_component_color("text")
     logger.info(f"Text button color: {color}")
 
     # Create the text button
@@ -585,10 +587,11 @@ def create_stepper_text_button(n, disabled=None):
             "value": "Text",
         },
         n_clicks=0,
-        style=UNSELECTED_STYLE,
+        style={**UNSELECTED_STYLE, "fontSize": "26px"},
         size="xl",
-        color=get_dmc_button_color("text"),
-        leftSection=DashIconify(icon="mdi:text-box-edit", color="white"),
+        variant="outline",
+        color=color,
+        leftSection=DashIconify(icon="mdi:text-box-edit", color=hex_color),
         disabled=disabled,
     )
     store = dcc.Store(

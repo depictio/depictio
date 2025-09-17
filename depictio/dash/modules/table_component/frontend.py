@@ -145,11 +145,12 @@ def register_callbacks_table_component(app):
             State({"type": "stored-metadata-component", "index": MATCH}, "data"),
             State("local-store", "data"),
             State("url", "pathname"),
+            State("live-interactivity-toggle", "checked"),
         ],
         prevent_initial_call=False,
     )
     def infinite_scroll_component(
-        request, interactive_values, stored_metadata, local_store, pathname
+        request, interactive_values, stored_metadata, local_store, pathname, live_interactivity_on
     ):
         """
         INFINITE SCROLL CALLBACK WITH INTERACTIVE COMPONENT SUPPORT
@@ -206,11 +207,15 @@ def register_callbacks_table_component(app):
             )
             return no_update
 
-        # ENHANCED APPROACH: Process interactive changes immediately
+        # Check live interactivity state before processing interactive changes
         if request is None and triggered_by_interactive:
-            logger.info(
-                "🔄 IMMEDIATE PROCESSING: Interactive values changed - processing data immediately"
-            )
+            if not live_interactivity_on:
+                logger.info(
+                    "⏸️ NON-LIVE MODE: Interactive values changed but live interactivity is OFF - ignoring update"
+                )
+                return no_update
+
+            logger.info("🔄 LIVE MODE: Interactive values changed - processing data immediately")
             # Create a synthetic request for the first page to start the refresh process
             request = {
                 "startRow": 0,
@@ -757,10 +762,13 @@ def create_stepper_table_button(n, disabled=None):
     if disabled is None:
         disabled = not is_enabled("table")
 
-    color = get_dmc_button_color("table")
-    logger.info(f"Table button color: {color}")
+    from depictio.dash.component_metadata import get_component_color
 
-    # Create the table button
+    dmc_color = get_dmc_button_color("table")
+    hex_color = get_component_color("table")  # This returns the hex color from colors.py
+    logger.info(f"Table button DMC color: {dmc_color}, hex color: {hex_color}")
+
+    # Create the table button with outline variant and larger text
     button = dmc.Button(
         "Table",
         id={
@@ -769,10 +777,11 @@ def create_stepper_table_button(n, disabled=None):
             "value": "Table",
         },
         n_clicks=0,
-        style=UNSELECTED_STYLE,
+        style={**UNSELECTED_STYLE, "fontSize": "26px"},
         size="xl",
-        color=get_dmc_button_color("table"),
-        leftSection=DashIconify(icon="octicon:table-24", color="white"),
+        variant="outline",
+        color=dmc_color,
+        leftSection=DashIconify(icon="octicon:table-24", color=hex_color),
         disabled=disabled,
     )
     store = dcc.Store(

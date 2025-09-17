@@ -6,7 +6,7 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
+from depictio.dash.component_metadata import get_component_color, get_dmc_button_color, is_enabled
 from depictio.dash.modules.jbrowse_component.utils import build_jbrowse, build_jbrowse_frame
 from depictio.dash.utils import UNSELECTED_STYLE, list_workflows, return_mongoid
 
@@ -127,6 +127,9 @@ def create_stepper_jbrowse_button(n, disabled=None):
     if disabled is None:
         disabled = not is_enabled("jbrowse")
 
+    color = get_dmc_button_color("jbrowse")
+    hex_color = get_component_color("jbrowse")
+
     button = dmc.Button(
         "JBrowse (Beta)",
         id={
@@ -135,10 +138,11 @@ def create_stepper_jbrowse_button(n, disabled=None):
             "value": "JBrowse2",
         },
         n_clicks=0,
-        style=UNSELECTED_STYLE,
+        style={**UNSELECTED_STYLE, "fontSize": "26px"},
         size="xl",
-        color=get_dmc_button_color("jbrowse"),
-        leftSection=DashIconify(icon="material-symbols:table-rows-narrow-rounded", color="white"),
+        variant="outline",
+        color=color,
+        leftSection=DashIconify(icon="material-symbols:table-rows-narrow-rounded", color=hex_color),
         disabled=disabled,
     )
     store = dcc.Store(

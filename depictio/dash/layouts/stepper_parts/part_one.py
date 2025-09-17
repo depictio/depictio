@@ -6,7 +6,10 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.component_metadata import get_component_metadata_by_display_name
+from depictio.dash.component_metadata import (
+    get_component_color,
+    get_component_metadata_by_display_name,
+)
 
 
 def register_callbacks_stepper_part_one(app):
@@ -24,16 +27,18 @@ def register_callbacks_stepper_part_one(app):
                 if selected_component == "Text":
                     # For Text components, show selection immediately since no data selection is needed
                     component_metadata = get_component_metadata_by_display_name(selected_component)
+                    hex_color = get_component_color("text")  # Get hex color from colors.py
                     return dmc.Badge(
                         selected_component,
                         size="xl",
                         radius="xl",
-                        style={"fontFamily": "Virgil"},
+                        variant="outline",
+                        style={"fontFamily": "Virgil", "fontSize": "16px"},
                         color=component_metadata["color"],
                         leftSection=DashIconify(
                             icon=component_metadata["icon"],
                             width=15,
-                            color="white",
+                            color=hex_color,
                         ),
                     )
         return dash.no_update
@@ -169,7 +174,14 @@ def register_callbacks_stepper_part_one(app):
             #     width=6,
             # )
 
-            dc_main_info = dmc.Title("Data collection info", order=3, ta="left", fw="normal")
+            dc_main_info = dmc.Title(
+                "Data Collection Information",
+                order=4,
+                ta="left",
+                fw="bold",
+                size="md",
+                mb="sm",
+            )
 
             main_info = html.Table(
                 [
@@ -189,6 +201,30 @@ def register_callbacks_stepper_part_one(app):
                                     "text-align": "left",
                                     "word-break": "break-all",
                                     "overflow-wrap": "break-word",
+                                    "font-family": "monospace",
+                                    "font-size": "0.9em",
+                                },
+                            ),
+                        ]
+                    ),
+                    html.Tr(
+                        [
+                            html.Td(
+                                "Data Collection ID:",
+                                style={
+                                    "font-weight": "bold",
+                                    "text-align": "left",
+                                    "width": "25%",
+                                },
+                            ),
+                            html.Td(
+                                dc_specs["_id"],
+                                style={
+                                    "text-align": "left",
+                                    "word-break": "break-all",
+                                    "overflow-wrap": "break-word",
+                                    "font-family": "monospace",
+                                    "font-size": "0.9em",
                                 },
                             ),
                         ]
@@ -268,28 +304,6 @@ def register_callbacks_stepper_part_one(app):
                     html.Tr(
                         [
                             html.Td(
-                                "MongoDB ID:",
-                                style={
-                                    "font-weight": "bold",
-                                    "text-align": "left",
-                                    "width": "25%",
-                                },
-                            ),
-                            html.Td(
-                                dc_specs["_id"],
-                                style={
-                                    "text-align": "left",
-                                    "word-break": "break-all",
-                                    "overflow-wrap": "break-word",
-                                    "font-family": "monospace",
-                                    "font-size": "0.9em",
-                                },
-                            ),
-                        ]
-                    ),
-                    html.Tr(
-                        [
-                            html.Td(
                                 "Delta Table version:",
                                 style={
                                     "font-weight": "bold",
@@ -311,7 +325,22 @@ def register_callbacks_stepper_part_one(app):
 
             # turn main_info into 4 rows with 2 columns
 
-            layout = [dc_main_info, html.Hr(), main_info, html.Hr()]
+            # Create improved layout with consistent DMC components
+            layout = dmc.Stack(
+                [
+                    dc_main_info,
+                    dmc.Divider(variant="solid"),
+                    dmc.Card(
+                        main_info,
+                        withBorder=True,
+                        shadow="sm",
+                        radius="md",
+                        p="md",
+                    ),
+                    dmc.Space(h="md"),
+                ],
+                gap="md",
+            )
             # if dc_specs["config"]["type"] == "Table":
             #     logger.info(f"PART 1 - TOKEN: {TOKEN}")
             #     df = load_deltatable_lite(workflow_id, data_collection_id, TOKEN=TOKEN)
@@ -453,17 +482,19 @@ def register_callbacks_stepper_part_one(app):
 
         # Get metadata for the selected component
         component_metadata = get_component_metadata_by_display_name(component_selected)
+        hex_color = get_component_color(component_selected.lower())  # Get hex color from colors.py
 
         return layout, dmc.Badge(
             component_selected,
             size="xl",
             radius="xl",
-            style={"fontFamily": "Virgil"},
+            variant="outline",
+            style={"fontFamily": "Virgil", "fontSize": "16px"},
             color=component_metadata["color"],
             leftSection=DashIconify(
                 icon=component_metadata["icon"],
                 width=15,
-                color="white",
+                color=hex_color,
             ),
         )
 
