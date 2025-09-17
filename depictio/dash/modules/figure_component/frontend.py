@@ -10,7 +10,7 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
+from depictio.dash.component_metadata import get_component_color, get_dmc_button_color, is_enabled
 from depictio.dash.modules.figure_component.code_mode import (
     convert_ui_params_to_code,
     create_code_mode_interface,
@@ -2429,6 +2429,8 @@ def create_stepper_figure_button(n, disabled=None):
     if disabled is None:
         disabled = not is_enabled("figure")
 
+    color = get_dmc_button_color("figure")
+    hex_color = get_component_color("figure")
     button = dmc.Button(
         "Figure",
         id={
@@ -2437,10 +2439,11 @@ def create_stepper_figure_button(n, disabled=None):
             "value": "Figure",
         },
         n_clicks=0,
-        style=UNSELECTED_STYLE,
+        style={**UNSELECTED_STYLE, "fontSize": "26px"},
         size="xl",
-        color=get_dmc_button_color("figure"),
-        leftSection=DashIconify(icon="mdi:graph-box", color="white"),
+        variant="outline",
+        color=color,
+        leftSection=DashIconify(icon="mdi:graph-box", color=hex_color),
         disabled=disabled,
     )
     store = dcc.Store(

@@ -327,12 +327,12 @@
     z-index: 1001 !important;
 }
 
-/* Show individual action buttons on component hover */
-.react-grid-item:hover .mantine-ActionIcon-root[id*="remove_box_button"],
-.react-grid-item:hover .mantine-ActionIcon-root[id*="edit_box_button"],
-.react-grid-item:hover .mantine-ActionIcon-root[id*="duplicate_box_button"],
-.react-grid-item:hover .mantine-ActionIcon-root[id*="reset_selection_graph_button"],
-.react-grid-item:hover .mantine-ActionIcon-root[id*="alignment_menu_btn"] {
+/* Show individual action buttons on component hover (only when edit mode is ON) */
+.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="remove_box_button"],
+.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="edit_box_button"],
+.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="duplicate_box_button"],
+.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="reset_selection_graph_button"],
+.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="alignment_menu_btn"] {
     opacity: 1 !important;
     pointer-events: auto !important;
 }

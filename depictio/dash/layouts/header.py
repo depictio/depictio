@@ -198,6 +198,29 @@ def _create_reset_filters_button():
     )
 
 
+def _create_apply_filters_button():
+    """Create the apply filters button with checkmark icon."""
+    button = dmc.ActionIcon(
+        DashIconify(icon="material-symbols:check", width=35, color="gray"),
+        id="apply-filters-button",
+        size="xl",
+        radius="xl",
+        variant="subtle",  # Default subtle variant
+        color="gray",
+        style=BUTTON_STYLE,
+        disabled=True,  # Disabled by default (no pending changes)
+        n_clicks=0,
+    )
+
+    return dmc.Tooltip(
+        label="Apply pending filter changes\nto update the dashboard",
+        position="bottom",
+        withArrow=True,
+        openDelay=800,
+        children=button,
+    )
+
+
 def _create_info_badges(data, project_name):
     """Create the informational badges for project, owner, and last saved."""
     return dmc.Stack(
@@ -265,33 +288,40 @@ def _create_title_section(data):
                                             "margin": "0",
                                         },
                                     ),
-                                    # Edit status badge
-                                    dmc.Badge(
-                                        "Edit OFF",
-                                        id="edit-status-badge",
-                                        size="xs",
-                                        color="gray",
-                                        leftSection=DashIconify(
-                                            icon="mdi:pencil-off", width=8, color="white"
+                                    # Edit status badge - now clickable
+                                    dmc.ActionIcon(
+                                        dmc.Badge(
+                                            "Edit OFF",
+                                            id="edit-status-badge",
+                                            size="xs",
+                                            color="gray",
+                                            leftSection=DashIconify(
+                                                icon="mdi:pencil-off", width=8, color="white"
+                                            ),
+                                            style={
+                                                "marginTop": "1px",
+                                                "fontSize": "8px",
+                                                "height": "14px",
+                                                "padding": "2px 6px",
+                                            },
                                         ),
-                                        style={
-                                            "marginTop": "1px",
-                                            "fontSize": "8px",
-                                            "height": "14px",
-                                            "padding": "2px 6px",
-                                        },
+                                        id="edit-status-badge-button",
+                                        variant="transparent",
+                                        size="sm",
+                                        style={"padding": "0"},
                                     ),
                                 ],
                                 style={
                                     "display": "flex",
-                                    "flexDirection": "column",
+                                    "flexDirection": "row",
                                     "alignItems": "center",
+                                    "gap": "4px",
                                 },
                             ),
                         ],
                         gap="md",
                         align="center",
-                        style={"display": "inline-flex", "alignItems": "center"},
+                        style={"display": "inline-flex", "alignItems": "center", "gap": "4px"},
                     ),
                 ],
                 style={"textAlign": "center"},
@@ -302,6 +332,7 @@ def _create_title_section(data):
             "display": "flex",
             "justifyContent": "center",
             "alignItems": "center",
+            "gap": "4px",
             "minWidth": 0,
         },
     )
@@ -345,6 +376,8 @@ def _create_backend_components():
             dcc.Store(id="stored-edit-component", data=None, storage_type="memory"),
             dcc.Store(id="stored-draggable-layouts", storage_type="session", data={}),
             dcc.Store(id="interactive-values-store", storage_type="session", data={}),
+            dcc.Store(id="pending-changes-store", storage_type="memory", data={}),
+            dcc.Store(id="live-interactivity-store", storage_type="session", data=False),
         ]
     )
 
@@ -481,9 +514,9 @@ def register_callbacks_header(app):
 
     @app.callback(
         [
-            Output("edit-status-badge", "children"),
-            Output("edit-status-badge", "color"),
-            Output("edit-status-badge", "leftSection"),
+            Output("edit-status-badge-2", "children"),
+            Output("edit-status-badge-2", "color"),
+            Output("edit-status-badge-2", "leftSection"),
         ],
         Input("unified-edit-mode-button", "checked"),
         prevent_initial_call=False,
@@ -494,6 +527,76 @@ def register_callbacks_header(app):
             return ("Edit ON", "blue", DashIconify(icon="mdi:pencil", width=8, color="white"))
         else:
             return ("Edit OFF", "gray", DashIconify(icon="mdi:pencil-off", width=8, color="white"))
+
+    # Make edit status badge clickable to toggle edit mode
+    @app.callback(
+        Output("unified-edit-mode-button", "checked", allow_duplicate=True),
+        Input("edit-status-badge-clickable-2", "n_clicks"),
+        State("unified-edit-mode-button", "checked"),
+        prevent_initial_call=True,
+    )
+    def toggle_edit_mode_from_badge(n_clicks, current_state):
+        """Toggle edit mode when clicking on edit status badge."""
+        if n_clicks:
+            return not current_state
+        return dash.no_update
+
+    # Update live interactivity badge based on toggle state
+    @app.callback(
+        [
+            Output("live-interactivity-badge", "children"),
+            Output("live-interactivity-badge", "color"),
+            Output("live-interactivity-badge", "leftSection"),
+        ],
+        [
+            Input("live-interactivity-toggle", "checked"),
+            Input("live-interactivity-store", "data"),
+        ],
+        prevent_initial_call=False,
+    )
+    def update_live_interactivity_badge(toggle_checked, store_data):
+        """Update the live interactivity badge based on toggle state."""
+        # Use store data as source of truth, fall back to toggle
+        is_live_on = store_data if store_data is not None else toggle_checked
+        if is_live_on:
+            return (
+                "Live ON",
+                "green",
+                DashIconify(icon="mdi:lightning-bolt", width=8, color="white"),
+            )
+        else:
+            return (
+                "Live OFF",
+                "gray",
+                DashIconify(icon="mdi:lightning-bolt-outline", width=8, color="white"),
+            )
+
+    # Make live interactivity badge clickable to toggle live mode
+    @app.callback(
+        [
+            Output("live-interactivity-toggle", "checked", allow_duplicate=True),
+            Output("live-interactivity-store", "data", allow_duplicate=True),
+        ],
+        Input("live-interactivity-badge-clickable", "n_clicks"),
+        State("live-interactivity-toggle", "checked"),
+        prevent_initial_call=True,
+    )
+    def toggle_live_interactivity_from_badge(n_clicks, current_state):
+        """Toggle live interactivity when clicking on live interactivity badge."""
+        if n_clicks:
+            new_state = not current_state
+            return new_state, new_state
+        return dash.no_update, dash.no_update
+
+    # Sync toggle and store on toggle change
+    @app.callback(
+        Output("live-interactivity-store", "data", allow_duplicate=True),
+        Input("live-interactivity-toggle", "checked"),
+        prevent_initial_call=True,
+    )
+    def sync_live_interactivity_store(toggle_checked):
+        """Sync the live interactivity store when toggle changes."""
+        return toggle_checked
 
     @app.callback(
         [
@@ -523,6 +626,69 @@ def register_callbacks_header(app):
             logger.info("⚪ Setting reset button to gray with gray icon (no filters)")
             icon = DashIconify(icon="bx:reset", width=35, color="gray")
             return "gray", "subtle", icon
+
+    @app.callback(
+        [
+            Output("apply-filters-button", "color"),
+            Output("apply-filters-button", "variant"),
+            Output("apply-filters-button", "children"),
+            Output("apply-filters-button", "disabled"),
+        ],
+        [
+            Input("pending-changes-store", "data"),
+            Input("live-interactivity-toggle", "checked"),
+        ],
+        prevent_initial_call=False,
+    )
+    def update_apply_button_style(pending_changes, live_interactivity_on):
+        """Update apply button style and state based on pending changes and live interactivity mode."""
+        logger.info(f"🔍 Apply button style check - pending_changes: {pending_changes}")
+        logger.info(f"🔍 Live interactivity mode: {live_interactivity_on}")
+        # If live interactivity is ON, hide/disable the apply button
+        if live_interactivity_on:
+            icon = DashIconify(icon="material-symbols:check", width=35, color="gray")
+            return "gray", "subtle", icon, True
+
+        # If live interactivity is OFF, check for pending changes
+        # Compare current values with default states to detect real changes
+        def has_meaningful_pending_changes(changes):
+            if not changes or not isinstance(changes, dict):
+                return False
+
+            for key, value in changes.items():
+                if key == "interactive_components_values" and value:
+                    # Check if there are actual component values that differ from defaults
+                    if isinstance(value, list) and len(value) > 0:
+                        for component in value:
+                            if isinstance(component, dict):
+                                current_value = component.get("value")
+                                metadata = component.get("metadata", {})
+                                default_state = metadata.get("default_state", {})
+
+                                # Use the same logic as _is_different_from_default
+                                if _is_different_from_default(current_value, default_state):
+                                    logger.info(
+                                        f"🔍 Found pending change: current={current_value}, default_state={default_state}"
+                                    )
+                                    return True
+                elif value:  # Other non-empty values
+                    return True
+            return False
+
+        has_pending_changes = has_meaningful_pending_changes(pending_changes)
+
+        logger.info(f"📝 Pending changes detected: {has_pending_changes}")
+
+        if has_pending_changes:
+            # Green filled variant with white icon when pending changes exist (matching Live ON badge)
+            logger.info("🟢 Setting apply button to green with white icon (pending changes)")
+            icon = DashIconify(icon="material-symbols:check", width=35, color="white")
+            return "green", "filled", icon, False
+        else:
+            # Gray subtle variant with gray icon when no pending changes
+            logger.info("⚪ Setting apply button to gray with gray icon (no pending changes)")
+            icon = DashIconify(icon="material-symbols:check", width=35, color="gray")
+            return "gray", "subtle", icon, True
 
     # @app.callback(
     #     Output("stored_metadata", "data"),
@@ -555,6 +721,72 @@ def register_callbacks_header(app):
     #         logger.exception("Failed to load stored_metadata from MongoDB.")
     #         return dash.no_update
 
+    # Apply pending filter changes when Apply button is clicked and clear pending changes atomically
+    @app.callback(
+        [
+            Output("interactive-values-store", "data", allow_duplicate=True),
+            Output("pending-changes-store", "data", allow_duplicate=True),
+        ],
+        Input("apply-filters-button", "n_clicks"),
+        [
+            State("pending-changes-store", "data"),
+            State("interactive-values-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def apply_and_clear_pending_changes(n_clicks, pending_changes, current_interactive_values):
+        """Apply pending filter changes and clear pending changes atomically in a single callback."""
+        if not n_clicks or not pending_changes:
+            return dash.no_update, dash.no_update
+
+        logger.info("🔄 Applying pending filter changes and clearing pending store")
+        logger.info(f"🔄 Pending changes keys: {list(pending_changes.keys())}")
+
+        # Start with current interactive values
+        updated_values = current_interactive_values.copy() if current_interactive_values else {}
+
+        # Merge at component level to preserve all components
+        if "interactive_components_values" in pending_changes:
+            if "interactive_components_values" not in updated_values:
+                updated_values["interactive_components_values"] = []
+
+            # Create dict for quick lookup of current components by index
+            existing_components = {
+                comp.get("index"): comp for comp in updated_values["interactive_components_values"]
+            }
+
+            # Apply pending changes to components
+            pending_components = pending_changes["interactive_components_values"]
+            logger.info(f"🔄 Applying {len(pending_components)} pending component changes")
+
+            for pending_component in pending_components:
+                component_index = pending_component.get("index")
+                if component_index:
+                    # Debug: Log before and after values
+                    old_value = existing_components.get(component_index, {}).get(
+                        "value", "NOT_FOUND"
+                    )
+                    new_value = pending_component.get("value")
+                    logger.info(
+                        f"🔄 Updating component {component_index}: {old_value} -> {new_value}"
+                    )
+
+                    existing_components[component_index] = pending_component
+                    logger.info(
+                        f"🔄 Applied pending change: {component_index} = {pending_component.get('value')}"
+                    )
+
+            # Convert back to list
+            updated_values["interactive_components_values"] = list(existing_components.values())
+
+        logger.info(
+            f"✅ Applied pending filter changes - {len(updated_values.get('interactive_components_values', []))} components updated"
+        )
+        logger.info("🧹 Clearing pending changes after successful apply")
+
+        # Return both updated interactive values and empty pending changes
+        return updated_values, {}
+
 
 # =============================================================================
 # MAIN LAYOUT FUNCTION
@@ -569,6 +801,8 @@ def design_header(data, local_store):
             data["stored_add_button"] = {"count": 0}
         if "stored_edit_dashboard_mode_button" not in data:
             data["stored_edit_dashboard_mode_button"] = [int(0)]
+        if "buttons_data" not in data:
+            data["buttons_data"] = {"unified_edit_mode": False}  # Default edit mode OFF
 
     # Get user and permissions
     current_user = api_call_fetch_user_from_token(local_store["access_token"])
@@ -580,13 +814,17 @@ def design_header(data, local_store):
         unified_edit_mode_checked = False
     else:
         disabled = False
-        unified_edit_mode_checked = data["buttons_data"].get(
-            "unified_edit_mode",
-            data["buttons_data"].get(
-                "edit_dashboard_mode_button",
-                data["buttons_data"].get("edit_components_button", False),
-            ),
-        )
+        # Set default edit mode to OFF (False) and only use stored value if explicitly set
+        buttons_data = data.get("buttons_data", {})
+        unified_edit_mode_checked = False  # Always default to OFF
+
+        # Only override default if there's an explicit stored value
+        if "unified_edit_mode" in buttons_data:
+            unified_edit_mode_checked = buttons_data["unified_edit_mode"]
+        elif "edit_dashboard_mode_button" in buttons_data:
+            unified_edit_mode_checked = buttons_data["edit_dashboard_mode_button"]
+        elif "edit_components_button" in buttons_data:
+            unified_edit_mode_checked = buttons_data["edit_components_button"]
 
     # Get project name
     response = httpx.get(
@@ -643,6 +881,7 @@ def design_header(data, local_store):
     )
 
     reset_filters_button = _create_reset_filters_button()
+    apply_filters_button = _create_apply_filters_button()
 
     # Create remove all components button for offcanvas
     remove_all_components_button = dmc.Button(
@@ -697,6 +936,19 @@ def design_header(data, local_store):
                         color="gray",
                     ),
                     dmc.Text("Toggle interactivity", style={"fontFamily": "default"}),
+                ],
+                align="center",
+                gap="sm",
+                style={"padding": "10px", "margin": "10px 0"},
+            ),
+            dmc.Group(
+                [
+                    dmc.Switch(
+                        id="live-interactivity-toggle",
+                        checked=False,  # Default off
+                        color="blue",
+                    ),
+                    dmc.Text("Live interactivity", style={"fontFamily": "default"}),
                 ],
                 align="center",
                 gap="sm",
@@ -833,46 +1085,94 @@ def design_header(data, local_store):
                                     ),
                                     html.Div(
                                         [
-                                            dmc.Title(
-                                                f"{data['title']}",
-                                                order=1,
-                                                id="dashboard-title",
-                                                style={
-                                                    "fontWeight": "bold",
-                                                    "fontSize": "24px",
-                                                    "margin": "0",
-                                                },
-                                            ),
-                                            # Edit status badge - directly below title
-                                            dmc.Badge(
-                                                "Edit OFF",
-                                                id="edit-status-badge",
-                                                size="xs",
-                                                color="gray",
-                                                leftSection=DashIconify(
-                                                    icon="mdi:pencil-off", width=8, color="white"
-                                                ),
-                                                style={
-                                                    "marginTop": "1px",
-                                                    "fontSize": "8px",
-                                                    "height": "14px",
-                                                    "padding": "2px 6px",
-                                                },
-                                            ),
-                                        ],
-                                        style={
-                                            "display": "flex",
-                                            "flexDirection": "column",
-                                            "alignItems": "center",
-                                        },
+                                            dmc.Center(
+                                                dmc.Stack(
+                                                    [
+                                                        dmc.Title(
+                                                            f"{data['title']}",
+                                                            order=1,
+                                                            id="dashboard-title",
+                                                            style={
+                                                                "fontWeight": "bold",
+                                                                "fontSize": "24px",
+                                                                "margin": "0",
+                                                            },
+                                                        ),
+                                                        dmc.Group(
+                                                            [
+                                                                # Edit status badge - directly below title - now clickable
+                                                                html.Div(
+                                                                    dmc.Badge(
+                                                                        id="edit-status-badge-2",
+                                                                        children="Edit OFF",
+                                                                        size="sm",
+                                                                        color="gray",
+                                                                        leftSection=DashIconify(
+                                                                            icon="mdi:pencil-off",
+                                                                            width=8,
+                                                                            color="white",
+                                                                        ),
+                                                                        style={
+                                                                            "marginTop": "1px",
+                                                                            "fontSize": "10px",
+                                                                            "height": "18px",
+                                                                            "padding": "2px 8px",
+                                                                            "cursor": "pointer",
+                                                                        },
+                                                                    ),
+                                                                    id="edit-status-badge-clickable-2",
+                                                                ),
+                                                                # Live interactivity status badge - next to edit badge - clickable
+                                                                html.Div(
+                                                                    dmc.Badge(
+                                                                        id="live-interactivity-badge",
+                                                                        children="Live OFF",
+                                                                        size="sm",
+                                                                        color="gray",
+                                                                        leftSection=DashIconify(
+                                                                            icon="mdi:lightning-bolt-outline",
+                                                                            width=8,
+                                                                            color="white",
+                                                                        ),
+                                                                        style={
+                                                                            "marginTop": "1px",
+                                                                            "fontSize": "10px",
+                                                                            "height": "18px",
+                                                                            "padding": "2px 8px",
+                                                                            "cursor": "pointer",
+                                                                        },
+                                                                    ),
+                                                                    id="live-interactivity-badge-clickable",
+                                                                    style={
+                                                                        "cursor": "pointer !important"
+                                                                    },
+                                                                ),
+                                                            ],
+                                                            justify="center",
+                                                        ),
+                                                    ],
+                                                    align="center",
+                                                )
+                                            )
+                                        ]
                                     ),
                                 ],
                                 gap="md",
                                 align="center",
-                                style={"display": "inline-flex", "alignItems": "center"},
+                                style={
+                                    "display": "inline-flex",
+                                    "flexDirection": "column",
+                                    "alignItems": "center",
+                                    "gap": "4px",
+                                },
                             ),
                         ],
-                        style={"textAlign": "center"},
+                        style={
+                            "display": "flex",
+                            "flexDirection": "column",
+                            "alignItems": "center",
+                            "textAlign": "center",
+                        },
                     )
                 ],
                 style={
@@ -880,6 +1180,7 @@ def design_header(data, local_store):
                     "display": "flex",
                     "justifyContent": "center",
                     "alignItems": "center",
+                    "gap": "4px",
                     "minWidth": 0,
                 },
             ),
@@ -887,6 +1188,7 @@ def design_header(data, local_store):
             dmc.Group(
                 [
                     add_new_component_button,
+                    apply_filters_button,
                     reset_filters_button,
                     save_button,
                     notes_button,

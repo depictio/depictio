@@ -53,7 +53,7 @@ def register_callbacks_notes_footer(app):
 
                     /* Expanded state when toggled - High specificity - Override hidden state */
                     body #notes-footer-content.footer-visible, html #notes-footer-content.footer-visible {
-                        height: 300px !important;
+                        height: 165px !important;
                         opacity: 1 !important;
                         overflow: visible !important;
                         visibility: visible !important;  /* Override hidden visibility */
@@ -389,7 +389,8 @@ def create_notes_footer(dashboard_data=None):
                     dmc.RichTextEditor(
                         id="notes-rich-text-editor",
                         html=initial_notes_content,
-                        style={"minHeight": "200px", "maxHeight": "250px", "overflowY": "auto"},
+                        style={"maxHeight": "250px", "overflowY": "auto"},
+                        # style={"minHeight": "200px", "maxHeight": "250px", "overflowY": "auto"},
                         toolbar={
                             "sticky": True,
                             "controlsGroups": [

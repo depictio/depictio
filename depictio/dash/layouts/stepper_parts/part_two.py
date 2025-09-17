@@ -1,6 +1,5 @@
 import dash_mantine_components as dmc
 from dash import ALL, MATCH, Input, Output, State, ctx, dcc, html
-from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import is_enabled
@@ -9,10 +8,8 @@ from depictio.dash.modules.card_component.frontend import create_stepper_card_bu
 # Depictio components imports - button step
 from depictio.dash.modules.figure_component.frontend import create_stepper_figure_button
 from depictio.dash.modules.interactive_component.frontend import create_stepper_interactive_button
-from depictio.dash.modules.jbrowse_component.frontend import create_stepper_jbrowse_button
 from depictio.dash.modules.table_component.frontend import create_stepper_table_button
 from depictio.dash.modules.text_component.frontend import create_stepper_text_button
-from depictio.dash.utils import UNSELECTED_STYLE
 
 
 def register_callbacks_stepper_part_two(app):
@@ -27,23 +24,7 @@ def register_callbacks_stepper_part_two(app):
     def update_button_list(stored_add_button):
         n = stored_add_button["_id"]
 
-        graph_stepper_button = dmc.Button(
-            "Graph",
-            size="xl",
-            style=UNSELECTED_STYLE,
-            color="orange",
-            leftSection=DashIconify(icon="ph:graph-fill", color="white"),
-            disabled=True,
-        )
-
-        map_stepper_button = dmc.Button(
-            "Map",
-            size="xl",
-            style=UNSELECTED_STYLE,
-            color="red",
-            leftSection=DashIconify(icon="gridicons:globe", color="white"),
-            disabled=True,
-        )
+        # Removed graph_stepper_button and map_stepper_button as they are no longer needed
 
         figure_stepper_button, figure_stepper_button_store = create_stepper_figure_button(
             n, disabled=not is_enabled("figure")
@@ -58,9 +39,7 @@ def register_callbacks_stepper_part_two(app):
         table_stepper_button, table_stepper_button_store = create_stepper_table_button(
             n, disabled=not is_enabled("table")
         )
-        jbrowse_stepper_button, jbrowse_stepper_button_store = create_stepper_jbrowse_button(
-            n, disabled=not is_enabled("jbrowse")
-        )
+        # Removed jbrowse_stepper_button creation as it's no longer displayed
         text_stepper_button, text_stepper_button_store = create_stepper_text_button(
             n, disabled=not is_enabled("text")
         )
@@ -72,34 +51,61 @@ def register_callbacks_stepper_part_two(app):
             table_stepper_button,
             text_stepper_button,
         ]
-        special_components = [jbrowse_stepper_button]
-        # FIXME: remove graph and map buttons
-        special_components += [graph_stepper_button, map_stepper_button]
+        # Hide special components (JBrowse, Graph, Map) as requested
+        # special_components = [jbrowse_stepper_button]
+        # special_components += [graph_stepper_button, map_stepper_button]
 
-        buttons_list = html.Div(
+        buttons_list = dmc.Stack(
             [
-                html.H5("Standard components", style={"margin-top": "20px"}),
-                html.Hr(),
-                dmc.Center(
-                    dmc.Group(
-                        standard_components,
-                        justify="center",
-                        align="center",
-                        gap="md",
-                    )
+                dmc.Stack(
+                    [
+                        dmc.Title(
+                            "Select Component Type",
+                            order=3,
+                            ta="center",
+                            fw="bold",
+                            mb="xs",
+                        ),
+                        dmc.Text(
+                            "Choose the type of component you want to add to your dashboard",
+                            size="sm",
+                            c="gray",
+                            ta="center",
+                            mb="lg",
+                        ),
+                    ],
+                    gap="xs",
                 ),
-                html.Br(),
-                html.H5("Special components", style={"margin-top": "20px"}),
-                html.Hr(),
-                dmc.Center(
-                    dmc.Group(
-                        special_components,
-                        justify="center",
-                        align="center",
-                        gap="md",
-                    )
+                dmc.Divider(variant="solid"),
+                # macOS dock-style component selection
+                html.Div(
+                    [
+                        html.Div(
+                            standard_components,
+                            id="component-dock-container",
+                            style={
+                                "display": "flex",
+                                "flexDirection": "column",
+                                "alignItems": "flex-start",
+                                "justifyContent": "center",
+                                "gap": "16px",
+                                "padding": "24px 0",
+                                "marginLeft": "10%",  # Centered but slightly left
+                                "minHeight": "60vh",  # Ensure vertical centering
+                            },
+                        ),
+                    ],
+                    style={
+                        "display": "flex",
+                        "justifyContent": "center",
+                        "alignItems": "center",
+                        "minHeight": "60vh",
+                    },
                 ),
-            ]
+            ],
+            gap="md",
+            justify="center",
+            align="center",
         )
         # logger.info(f"Buttons list: {buttons_list}")
 
@@ -109,7 +115,6 @@ def register_callbacks_stepper_part_two(app):
             interactive_stepper_button_store,
             table_stepper_button_store,
             text_stepper_button_store,
-            jbrowse_stepper_button_store,
             dcc.Store(
                 id={"type": "last-button", "index": n},
                 data="None",
