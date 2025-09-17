@@ -2057,22 +2057,38 @@ def register_callbacks_figure_component(app):
         raise dash.exceptions.PreventUpdate
 
     @app.callback(
-        Output({"type": "figure", "index": MATCH}, "figure"),
+        Output({"type": "graph", "index": MATCH}, "figure"),
         Input("theme-store", "data"),
-        # prevent_initial_call=True,
+        prevent_initial_call=True,  # Only update on theme changes, not initial load
     )
     def update_theme_figure(theme_data):
-        """Update figure theme based on current theme."""
-        logger.info(f"Figure theme update triggered with theme_data: {theme_data}")
+        """Update figure theme based on current theme using Patch."""
+
+        # Handle different theme_data formats robustly
+        if isinstance(theme_data, dict):
+            is_dark = theme_data.get("colorScheme") == "dark"
+        elif isinstance(theme_data, str):
+            is_dark = theme_data == "dark"
+        else:
+            is_dark = False
+
+        # Use mantine templates for consistency
+        template_name = "mantine_dark" if is_dark else "mantine_light"
+
+        # Debug: Check what's actually in the mantine templates
         import plotly.io as pio
 
-        template = (
-            pio.templates["mantine_light"]
-            if theme_data == "light"
-            else pio.templates["mantine_dark"]
-        )
+        template = pio.templates[template_name]
+
         patch = Patch()
+        # Pass template object, not string name
         patch.layout.template = template
+
+        # Remove explicit colors - let the template handle everything
+
+        logger.info(
+            f"🎨 SERVER PATCH: Applied template {template_name} via Patch with explicit colors (theme_data: {theme_data})"
+        )
         return patch
 
 

@@ -147,7 +147,7 @@ class FigureComponentState(BaseModel):
 class ComponentConfig(BaseModel):
     """Configuration for the figure component system."""
 
-    max_data_points: int = Field(100000, description="Maximum data points before sampling")
+    max_data_points: int = Field(10000, description="Maximum data points before sampling")
     enable_caching: bool = Field(True, description="Enable parameter and data caching")
     cache_ttl: int = Field(3600, description="Cache TTL in seconds")
     auto_update: bool = Field(

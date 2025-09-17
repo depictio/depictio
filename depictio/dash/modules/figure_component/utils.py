@@ -51,8 +51,23 @@ def _get_theme_template(theme: str) -> str:
         theme = "light"
 
     logger.info(f"Using theme: {theme} for Plotly template")
-    # Use actual available Plotly templates
+    # Use mantine templates provided by dmc.add_figure_templates()
     return "mantine_dark" if theme == "dark" else "mantine_light"
+
+
+def _create_theme_aware_figure(template: str, title: str = "") -> Any:
+    """Create a theme-aware placeholder figure with proper template colors.
+
+    Args:
+        template: Plotly template name
+        title: Figure title
+
+    Returns:
+        Plotly figure with theme-aware styling
+    """
+    fig = px.scatter(template=template, title=title)
+    # Let the mantine template handle background colors
+    return fig
 
 
 def build_figure_frame(index, children=None):
@@ -313,7 +328,7 @@ def render_figure(
     dict_kwargs: Dict[str, Any],
     visu_type: str,
     df: pl.DataFrame,
-    cutoff: int = 100000,
+    cutoff: int = _config.max_data_points,
     selected_point: Optional[Dict] = None,
     theme: str = "light",
     skip_validation: bool = False,
@@ -414,7 +429,7 @@ def render_figure(
     # Handle empty or invalid data
     if df is None or df.is_empty():
         logger.warning("Empty or invalid dataframe, creating empty figure")
-        return px.scatter(template=dict_kwargs.get("template", _get_theme_template(theme)))
+        return _create_theme_aware_figure(dict_kwargs.get("template", _get_theme_template(theme)))
 
     # Clean parameters - remove None values and problematic empty strings
     # Keep certain parameters that can legitimately be empty strings (like parents for hierarchical charts)
@@ -516,8 +531,8 @@ def render_figure(
                     f"Missing required parameters for {visu_type}: need either X or Y. Available columns: {df.columns}"
                 )
                 title = f"Please select X or Y column to create {visu_type} plot"
-                return px.scatter(
-                    template=dict_kwargs.get("template", _get_theme_template(theme)), title=title
+                return _create_theme_aware_figure(
+                    dict_kwargs.get("template", _get_theme_template(theme)), title=title
                 )
         else:
             # Standard validation for specific requirements (pie: values, box: y, etc.)
@@ -527,8 +542,8 @@ def render_figure(
                     f"Missing required parameters for {visu_type}: {missing_params}. Available columns: {df.columns}"
                 )
                 title = f"Please select {', '.join(missing_params).upper()} column(s) to create {visu_type} plot"
-                return px.scatter(
-                    template=dict_kwargs.get("template", _get_theme_template(theme)), title=title
+                return _create_theme_aware_figure(
+                    dict_kwargs.get("template", _get_theme_template(theme)), title=title
                 )
     else:
         logger.info(f"🚀 CODE MODE: Skipping parameter validation for {visu_type}")
@@ -559,8 +574,8 @@ def render_figure(
 
     if not valid_plot_params and not is_clustering:
         logger.info(f"No valid plotting parameters for {visu_type}, returning empty figure")
-        return px.scatter(
-            template=dict_kwargs.get("template", _get_theme_template(theme)),
+        return _create_theme_aware_figure(
+            dict_kwargs.get("template", _get_theme_template(theme)),
             title=f"Select columns to create {visu_type} plot",
         )
 
@@ -626,11 +641,22 @@ def render_figure(
                 )
                 figure = plot_function(df, **cleaned_kwargs)
 
-        # Apply responsive sizing - FORCE for vertical growing
+        # Fix for marginal plots: Disable axis matches to prevent infinite loop warnings
+        # When using marginal_x and marginal_y, Plotly Express creates conflicting axis constraints
+        if "marginal_x" in cleaned_kwargs or "marginal_y" in cleaned_kwargs:
+            # Disable matches on all axes to prevent infinite loop warnings
+            figure.update_xaxes(matches=None)
+            figure.update_yaxes(matches=None)
+            logger.debug(
+                "Disabled axis matches for marginal plot to prevent infinite loop warnings"
+            )
+
+        # Apply responsive sizing - let mantine templates handle colors
         figure.update_layout(
             autosize=True,
             margin=dict(l=40, r=40, t=40, b=40),
             height=None,  # Let container control height
+            # Don't override background colors - let mantine templates handle them
         )
 
         # Highlight selected point if provided
@@ -646,8 +672,8 @@ def render_figure(
     except Exception as e:
         logger.error(f"Error creating figure: {e}")
         # Return fallback figure
-        fallback_figure = px.scatter(
-            template=dict_kwargs.get("template", _get_theme_template(theme)),
+        fallback_figure = _create_theme_aware_figure(
+            dict_kwargs.get("template", _get_theme_template(theme)),
             title=f"Error: {str(e)}",
         )
 
@@ -707,8 +733,8 @@ def create_figure_placeholder(theme: str = "light", visu_type: str = "scatter") 
     Returns:
         Plotly figure object with placeholder content
     """
-    # Use standard Plotly templates for better compatibility
-    template = "plotly_dark" if theme == "dark" else "plotly"
+    # Use mantine templates for consistency
+    template = _get_theme_template(theme)
 
     # Create an empty scatter plot as base
     placeholder_fig = px.scatter(
