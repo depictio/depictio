@@ -117,6 +117,9 @@ def register_callbacks_save(app):
             ),
             Input("remove-all-components-button", "n_clicks"),
             Input({"type": "interactive-component-value", "index": ALL}, "value"),
+            Input("interactive-values-store", "data"),
+            Input("apply-filters-button", "n_clicks"),
+            State("live-interactivity-store", "data"),
         ],
         prevent_initial_call=True,
     )
@@ -139,6 +142,9 @@ def register_callbacks_save(app):
         n_clicks_remove,
         n_clicks_remove_all,
         interactive_component_values_all,
+        interactive_values_store,
+        n_clicks_apply,
+        live_interactivity_on,
     ):
         logger.info("Saving dashboard data...")
         logger.info(
@@ -172,6 +178,7 @@ def register_callbacks_save(app):
             for elem in stored_metadata
         ]
         logger.info(f"Stored metadata for logging: {stored_metadata_for_logging}")
+        logger.info(f"Stored complete metadata: {stored_metadata}")
 
         # Early return if user is not logged in
         if not local_store:
@@ -235,11 +242,30 @@ def register_callbacks_save(app):
             "text-store",
             "notes-editor-store",
             "interactive-component-value",
+            "apply-filters-button",
         ]
+
+        # special_save_triggers = [
+        #     "interactive-component-value",
+        #     "apply-filters-button",
+        # ]
 
         # Check if save should be triggered - modified to allow edit mode state persistence
         if not any(trigger in triggered_id for trigger in save_triggers):
             raise dash.exceptions.PreventUpdate
+
+        # Check if trigger is interactive component value change
+        # If so, check if live interactivity is enabled
+        triggered_by_interactive = "interactive-component-value" in triggered_id
+        if triggered_by_interactive and not live_interactivity_on:
+            logger.info(
+                "⏸️ NON-LIVE MODE: Interactive component value changed but live interactivity is OFF - ignoring save"
+            )
+            raise dash.exceptions.PreventUpdate
+
+        # Check if trigger is apply filters button
+        if "apply-filters-button" in triggered_id and not live_interactivity_on:
+            logger.info("NON-LIVE MODE: Apply filters button clicked > saving changes")
 
         # Original logic blocked saving when edit mode was OFF - removed to allow persistence
 
@@ -342,6 +368,8 @@ def register_callbacks_save(app):
 
             unique_metadata.append(best_metadata)
             seen_indexes.add(index)
+
+        logger.info(f"📊 SAVE DEBUG - Unique metadata: {unique_metadata}")
 
         # Summary logging of deduplication results
         # logger.info(
@@ -614,6 +642,45 @@ def register_callbacks_save(app):
         #         f"🔍 SAVE DEBUG - final metadata item {i}: index={meta_item.get('index')}, type={meta_item.get('component_type')}, title={meta_item.get('title')}"
         #     )
 
+        # Apply interactive component values to metadata when Apply button is clicked or live mode is active
+        # This uses the interactive_component_values parameter that's automatically collected from all components
+        if ("apply-filters-button" in triggered_id and not live_interactivity_on) or (
+            triggered_by_interactive and live_interactivity_on
+        ):
+            logger.info("🔄 UPDATING METADATA WITH CURRENT INTERACTIVE COMPONENT VALUES")
+
+            # Get interactive components from metadata to match with values
+            interactive_metadata = [
+                meta for meta in unique_metadata if meta.get("component_type") == "interactive"
+            ]
+
+            if interactive_component_values and interactive_metadata:
+                logger.info(
+                    f"🔄 Found {len(interactive_component_values)} values and {len(interactive_metadata)} interactive components"
+                )
+
+                # Match values to metadata by position (they should be in the same order)
+                for i, (value, meta) in enumerate(
+                    zip(interactive_component_values, interactive_metadata)
+                ):
+                    old_value = meta.get("value")
+                    component_index = meta.get("index")
+
+                    # Update both value and corrected_value in metadata
+                    meta["value"] = value
+                    meta["corrected_value"] = value
+
+                    logger.info(
+                        f"🔄 Updated metadata for component {component_index} (position {i}): {old_value} -> {value}"
+                    )
+
+                # Update the stored_metadata in the save data to include updated values
+                updated_dashboard_data["stored_metadata"] = unique_metadata
+            else:
+                logger.warning(
+                    f"🔄 Mismatch: {len(interactive_component_values or [])} values vs {len(interactive_metadata)} components!"
+                )
+
         # Update dashboard data
         dashboard_data.update(updated_dashboard_data)
 
@@ -637,19 +704,30 @@ def register_callbacks_save(app):
         #         f"🔍 SAVE DEBUG - database metadata item {i}: index={meta_item.get('index')}, type={meta_item.get('component_type')}, title={meta_item.get('title')}"
         #     )
 
-        # logger.debug("=" * 80)
-        # logger.debug("🔍 SAVE DEBUG - CALLING API TO SAVE DASHBOARD")
-        # logger.debug("=" * 80)
+        logger.debug("=" * 80)
+        logger.debug("🔍 SAVE DEBUG - CALLING API TO SAVE DASHBOARD")
+        logger.debug("=" * 80)
 
         # Save dashboard data using API call with proper timeout
         save_success = api_call_save_dashboard(dashboard_id, dashboard_data, TOKEN)
 
         # Log save result and verify what was actually saved
-        # logger.debug("=" * 80)
-        # logger.debug("🔍 SAVE DEBUG - SAVE OPERATION RESULT")
-        # logger.debug("=" * 80)
-        # logger.debug(f"🔍 SAVE DEBUG - save_success: {save_success}")
+        logger.debug("=" * 80)
+        logger.debug("🔍 SAVE DEBUG - SAVE OPERATION RESULT")
+        logger.debug("=" * 80)
+        logger.debug(f"🔍 SAVE DEBUG - save_success: {save_success}")
+        logger.debug(f"🔍 SAVE DEBUG - dashboard_id: {dashboard_id}")
+        logger.debug(f"🔍 SAVE DEBUG - user_id: {current_user.id}")
 
+        # for each component which is interactive, show value & corrected_value
+        for i, value in enumerate(interactive_component_values):
+            logger.debug(f"🔍 SAVE DEBUG - interactive component {i}: value={value}")
+        for elem in dashboard_data.get("stored_metadata", []):
+            if elem["component_type"] == "interactive":
+                index = elem.get("index")
+                logger.info(
+                    f"🔍 SAVE DEBUG - interactive component metadata: index={index}, value={elem.get('value')}, corrected_value={elem.get('corrected_value')}"
+                )
         if save_success:
             # Fetch the dashboard again to verify what was actually saved
             # logger.debug("🔍 SAVE DEBUG - Fetching saved dashboard to verify data...")
