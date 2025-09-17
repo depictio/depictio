@@ -9,6 +9,7 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.colors import colors
 
 # Import centralized component dimensions from metadata
 from depictio.dash.component_metadata import get_component_dimensions_dict
@@ -1208,6 +1209,9 @@ def register_callbacks_draggable(app):
                         "🔧 RESPONSIVE FIX - Applying fixes to currentLayout before storing"
                     )
                     fixed_layouts = fix_responsive_scaling(input_draggable_layouts, stored_metadata)
+                    # Ensure fixed_layouts is always a list to avoid TypeError
+                    if fixed_layouts is None:
+                        fixed_layouts = []
                     # Normalize layout data to ensure consistent moved/static properties
                     state_stored_draggable_layouts[dashboard_id] = fixed_layouts
 
@@ -2227,7 +2231,9 @@ def register_callbacks_draggable(app):
                 )
             elif triggered_input == "unified-edit-mode-button":
                 logger.info(f"Unified edit mode button clicked: {unified_edit_mode_button}")
-                logger.info(f"Current draggable children count: {len(draggable_children)}")
+                logger.info(
+                    f"Current draggable children count: {len(draggable_children) if draggable_children else 0}"
+                )
 
                 # For edit mode toggle, we should NOT recreate components
                 # The showRemoveButton and showResizeHandles are handled by update_grid_edit_mode callback
@@ -2846,14 +2852,190 @@ def register_callbacks_draggable(app):
             # Keep layout consistent - CSS handles button visibility, not DashGridLayout properties
             return False, False, "draggable-grid-container drag-handles-hidden"
 
+    @app.callback(
+        Output("draggable-wrapper", "children"),
+        [
+            Input("unified-edit-mode-button", "checked"),
+            Input("draggable", "items"),
+        ],
+        [
+            State("local-store", "data"),
+        ],
+    )
+    def update_empty_dashboard_wrapper(edit_mode_enabled, current_draggable_items, local_data):
+        """Update draggable wrapper to show empty state messages when dashboard is empty"""
+        logger.info(f"🔄 Updating draggable wrapper - Edit mode: {edit_mode_enabled}")
+
+        # Only show empty messages for truly empty dashboards
+        if current_draggable_items and len(current_draggable_items) > 0:
+            logger.info("Dashboard has components, keeping original draggable")
+            return dash.no_update
+
+        if not local_data:
+            logger.info("No local data available, keeping original draggable")
+            return dash.no_update
+
+        logger.info(f"Empty dashboard - Edit mode: {edit_mode_enabled}")
+
+        if not edit_mode_enabled:
+            logger.info("🔵 Empty dashboard + Edit mode OFF - showing welcome message")
+            # Welcome message (blue theme) - now clickable to enable edit mode
+            welcome_message = html.Div(
+                dmc.Center(
+                    dmc.Paper(
+                        [
+                            dmc.Stack(
+                                [
+                                    dmc.Center(
+                                        DashIconify(
+                                            icon="material-symbols:edit-outline",
+                                            width=64,
+                                            height=64,
+                                            color=colors["blue"],
+                                        )
+                                    ),
+                                    dmc.Text(
+                                        "Your dashboard is empty",
+                                        size="xl",
+                                        fw="bold",
+                                        ta="center",
+                                        c=colors["blue"],
+                                        style={"color": f"var(--app-text-color, {colors['blue']})"},
+                                    ),
+                                    dmc.Text(
+                                        "Enable Edit Mode to start building your dashboard",
+                                        size="md",
+                                        ta="center",
+                                        c="gray",
+                                        style={"color": "var(--app-text-color, #666)"},
+                                    ),
+                                ],
+                                gap="md",
+                                align="center",
+                            )
+                        ],
+                        p="xl",
+                        radius="lg",
+                        shadow="sm",
+                        withBorder=True,
+                        style={
+                            "backgroundColor": "var(--app-surface-color, #ffffff)",
+                            "border": f"1px solid var(--app-border-color, {colors['blue']}20)",
+                            "maxWidth": "500px",
+                            "marginTop": "2rem",
+                            "transition": "transform 0.1s ease",
+                        },
+                    ),
+                    style={
+                        "height": "50vh",
+                        "display": "flex",
+                        "alignItems": "center",
+                        "justifyContent": "center",
+                    },
+                ),
+                id="welcome-message-clickable",
+                style={"cursor": "pointer"},
+            )
+            # Create empty draggable component for callbacks
+            empty_draggable = html.Div(id="draggable")
+            return [welcome_message, empty_draggable]
+        else:
+            logger.info("🧡 Empty dashboard + Edit mode ON - showing add component message")
+            # Add component message (orange theme) - now clickable to trigger add button
+            add_component_message = html.Div(
+                dmc.Center(
+                    dmc.Paper(
+                        [
+                            dmc.Stack(
+                                [
+                                    dmc.Center(
+                                        DashIconify(
+                                            icon="material-symbols:add-circle-outline",
+                                            width=64,
+                                            height=64,
+                                            color=colors["orange"],
+                                        )
+                                    ),
+                                    dmc.Text(
+                                        "Add your first component",
+                                        size="xl",
+                                        fw="bold",
+                                        ta="center",
+                                        c=colors["orange"],
+                                        style={
+                                            "color": f"var(--app-text-color, {colors['orange']})"
+                                        },
+                                    ),
+                                    dmc.Text(
+                                        "Click here to choose from charts, tables, and more",
+                                        size="md",
+                                        ta="center",
+                                        c="gray",
+                                        style={"color": "var(--app-text-color, #666)"},
+                                    ),
+                                ],
+                                gap="md",
+                                align="center",
+                            )
+                        ],
+                        p="xl",
+                        radius="lg",
+                        shadow="sm",
+                        withBorder=True,
+                        style={
+                            "backgroundColor": "var(--app-surface-color, #ffffff)",
+                            "border": f"1px solid var(--app-border-color, {colors['orange']}20)",
+                            "maxWidth": "500px",
+                            "marginTop": "2rem",
+                            "transition": "transform 0.1s ease",
+                        },
+                    ),
+                    style={
+                        "height": "50vh",
+                        "display": "flex",
+                        "alignItems": "center",
+                        "justifyContent": "center",
+                    },
+                ),
+                id="add-component-message-clickable",
+                style={"cursor": "pointer"},
+            )
+            # Create empty draggable component for callbacks
+            empty_draggable = html.Div(id="draggable")
+            return [add_component_message, empty_draggable]
+
+    # Make welcome message clickable to enable edit mode
+    @app.callback(
+        Output("unified-edit-mode-button", "checked", allow_duplicate=True),
+        Input("welcome-message-clickable", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def enable_edit_mode_from_welcome_message(n_clicks):
+        """Enable edit mode when clicking on the welcome message."""
+        if n_clicks:
+            logger.info("🔵 Welcome message clicked - enabling edit mode")
+            return True
+        return dash.no_update
+
+    # Make add component message clickable to trigger add button
+    @app.callback(
+        Output("add-button", "n_clicks", allow_duplicate=True),
+        Input("add-component-message-clickable", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def trigger_add_button_from_message(n_clicks):
+        """Trigger add button when clicking on the add component message."""
+        if n_clicks:
+            logger.info("🧡 Add component message clicked - triggering add button")
+            return 1  # Increment n_clicks to trigger add button callback
+        return dash.no_update
+
 
 def design_draggable(
     init_layout: dict,
     init_children: list[dict],
     dashboard_id: str,
     local_data: dict,
-    theme: str = "light",
-    edit_dashboard_mode_button: bool = False,
     cached_project_data: dict | None = None,
 ):
     # logger.info("design_draggable - Initializing draggable layout")
@@ -3027,6 +3209,13 @@ def design_draggable(
         },
     )
 
+    # Create a wrapper for the draggable that can show empty state messages
+    draggable_wrapper = html.Div(
+        [draggable],  # Initially just contains the draggable
+        id="draggable-wrapper",
+        style={"flex-grow": 1, "width": "100%", "height": "auto"},
+    )
+
     # Simple centered loading spinner
     # progress = html.Div(
     #     dmc.Loader(size="lg", type="dots", color="blue"),
@@ -3041,8 +3230,8 @@ def design_draggable(
     #     },
     # )
 
-    # Add draggable to the core children list whether it's visible or not
-    core_children.append(draggable)
+    # Add draggable wrapper to the core children list whether it's visible or not
+    core_children.append(draggable_wrapper)
     # core_children.append(progress)
 
     # The core Div contains all elements, managing visibility as needed

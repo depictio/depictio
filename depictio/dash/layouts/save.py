@@ -230,18 +230,18 @@ def register_callbacks_save(app):
             "remove-box-button",
             "remove-all-components-button",
             "edit-components-mode-button",
+            "unified-edit-mode-button",  # Add edit mode button to save triggers
             "draggable",
             "text-store",
             "notes-editor-store",
             "interactive-component-value",
         ]
 
-        # Check if save should be triggered
-        if (
-            not any(trigger in triggered_id for trigger in save_triggers)
-            or not unified_edit_mode_button_checked
-        ):
+        # Check if save should be triggered - modified to allow edit mode state persistence
+        if not any(trigger in triggered_id for trigger in save_triggers):
             raise dash.exceptions.PreventUpdate
+
+        # Original logic blocked saving when edit mode was OFF - removed to allow persistence
 
         # Deduplicate and clean metadata - prioritize complete metadata entries
         unique_metadata = []
