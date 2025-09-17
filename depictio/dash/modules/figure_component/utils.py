@@ -641,6 +641,16 @@ def render_figure(
                 )
                 figure = plot_function(df, **cleaned_kwargs)
 
+        # Fix for marginal plots: Disable axis matches to prevent infinite loop warnings
+        # When using marginal_x and marginal_y, Plotly Express creates conflicting axis constraints
+        if "marginal_x" in cleaned_kwargs or "marginal_y" in cleaned_kwargs:
+            # Disable matches on all axes to prevent infinite loop warnings
+            figure.update_xaxes(matches=None)
+            figure.update_yaxes(matches=None)
+            logger.debug(
+                "Disabled axis matches for marginal plot to prevent infinite loop warnings"
+            )
+
         # Apply responsive sizing - let mantine templates handle colors
         figure.update_layout(
             autosize=True,

@@ -2063,7 +2063,6 @@ def register_callbacks_figure_component(app):
     )
     def update_theme_figure(theme_data):
         """Update figure theme based on current theme using Patch."""
-        logger.info(f"🎨 SERVER PATCH: Figure theme update triggered with theme_data: {theme_data}")
 
         # Handle different theme_data formats robustly
         if isinstance(theme_data, dict):
@@ -2080,10 +2079,6 @@ def register_callbacks_figure_component(app):
         import plotly.io as pio
 
         template = pio.templates[template_name]
-        logger.info(f"🔍 MANTINE TEMPLATE {template_name} LAYOUT:")
-        logger.info(f"  paper_bgcolor: {template.layout.paper_bgcolor}")
-        logger.info(f"  plot_bgcolor: {template.layout.plot_bgcolor}")
-        logger.info(f"  font.color: {template.layout.font.color}")
 
         patch = Patch()
         # Pass template object, not string name
