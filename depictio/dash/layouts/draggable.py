@@ -2457,6 +2457,7 @@ def register_callbacks_draggable(app):
 
         components = []
         scatter_plot_components = {}
+        reset_action_performed = False  # Track if an individual reset was performed
 
         # Check trigger types
         graph_triggered = any("graph" in prop_id for prop_id in triggered_prop_ids)
@@ -2583,12 +2584,13 @@ def register_callbacks_draggable(app):
                             else:
                                 filtered_components = current_components
 
-                            output_data = {"interactive_components_values": filtered_components}
+                            # Update components list for individual reset and let normal flow handle it
+                            components = filtered_components
+                            # Mark this as a reset action for special pending logic
+                            reset_action_performed = True
                             logger.info(
-                                f"🔄 Individual reset completed: {len(filtered_components)} components"
+                                f"🔄 Individual reset completed: {len(components)} components - continuing with normal flow"
                             )
-                            # Reset always applies immediately regardless of live interactivity state
-                            return output_data, {}
 
                     except Exception as e:
                         logger.error(f"Error processing individual reset: {e}")
@@ -2851,7 +2853,18 @@ def register_callbacks_draggable(app):
             return output_data, {}  # Empty pending changes
         else:
             # Non-live mode: store as pending changes, keep current store unchanged
-            logger.info(f"⏸️ NON-LIVE MODE: Storing {len(components)} filters as pending")
+            logger.info(
+                f"⏸️ NON-LIVE MODE: Checking {len(components)} components for pending changes"
+            )
+
+            # Get current applied values for comparison
+            current_applied_components = {}
+            if current_store_data and "interactive_components_values" in current_store_data:
+                for comp in current_store_data["interactive_components_values"]:
+                    comp_index = comp.get("index")
+                    if comp_index:
+                        current_applied_components[comp_index] = comp.get("value")
+
             updated_pending = pending_changes.copy() if pending_changes else {}
 
             # Merge at component level to avoid overwriting existing pending changes
@@ -2865,30 +2878,38 @@ def register_callbacks_draggable(app):
                     for comp in updated_pending["interactive_components_values"]
                 }
 
-                # Update/add components from output_data
+                # Update/add components from output_data only if they differ from current applied values
+                components_with_changes = 0
                 for component in output_data["interactive_components_values"]:
                     component_index = component.get("index")
                     if component_index:
-                        # Debug: Log before and after values for pending changes
-                        old_pending_value = existing_pending.get(component_index, {}).get(
-                            "value", "NOT_FOUND"
-                        )
-                        new_value = component.get("value")
-                        logger.info(
-                            f"⏸️ Updating pending {component_index}: {old_pending_value} -> {new_value}"
-                        )
+                        current_value = component.get("value")
+                        applied_value = current_applied_components.get(component_index)
 
-                        existing_pending[component_index] = component
-                        logger.info(
-                            f"⏸️ Updated pending component: {component_index} = {component.get('value')}"
-                        )
+                        # Add to pending if value differs OR if this was a reset action
+                        if current_value != applied_value or reset_action_performed:
+                            components_with_changes += 1
+                            if reset_action_performed:
+                                logger.info(
+                                    f"⏸️ Found reset action pending: {component_index} = {current_value} (reset action forces pending)"
+                                )
+                            else:
+                                logger.info(
+                                    f"⏸️ Found pending change {component_index}: current={current_value}, applied={applied_value}"
+                                )
+                            existing_pending[component_index] = component
+                        else:
+                            logger.info(
+                                f"⏸️ No change for {component_index}: current={current_value}, applied={applied_value}"
+                            )
+                            # Remove from pending if it was there before (values now match applied)
+                            existing_pending.pop(component_index, None)
 
                 # Convert back to list
                 updated_pending["interactive_components_values"] = list(existing_pending.values())
 
-            logger.info(
-                f"⏸️ Total pending components: {len(updated_pending.get('interactive_components_values', []))}"
-            )
+            pending_count = len(updated_pending.get("interactive_components_values", []))
+            logger.info(f"⏸️ Total pending components: {pending_count}")
             return dash.no_update, updated_pending
 
     # Add callback to control grid edit mode like in the prototype
