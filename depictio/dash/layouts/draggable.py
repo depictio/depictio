@@ -680,7 +680,8 @@ def register_callbacks_draggable(app):
         ),
         Input("reset-all-filters-button", "n_clicks"),
         Input("remove-all-components-button", "n_clicks"),
-        State("toggle-interactivity-button", "checked"),
+        Input("interactive-values-store", "data"),
+        State("live-interactivity-toggle", "checked"),
         State("unified-edit-mode-button", "checked"),
         Input("unified-edit-mode-button", "checked"),
         State("url", "pathname"),
@@ -757,6 +758,7 @@ def register_callbacks_draggable(app):
         reset_selection_graph_button_values,
         reset_all_filters_button,
         remove_all_components_button,
+        interactive_values_store,
         toggle_interactivity_button,
         unified_edit_mode_button,
         input_unified_edit_mode_button,
@@ -1413,10 +1415,15 @@ def register_callbacks_draggable(app):
             elif (
                 "interactive-component" in triggered_input
                 and toggle_interactivity_button
+                or triggered_input == "interactive-values-store"
                 or triggered_input == "theme-store"
                 or triggered_input == "dashboard-title"
             ):
-                if triggered_input == "theme-store":
+                if triggered_input == "interactive-values-store":
+                    logger.info(
+                        "🔄 Interactive values store changed - applying filters to all components"
+                    )
+                elif triggered_input == "theme-store":
                     logger.info("Theme store triggered - updating all components with new theme")
                 elif triggered_input == "dashboard-title":
                     logger.info(
@@ -2384,7 +2391,10 @@ def register_callbacks_draggable(app):
             return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
     @app.callback(
-        Output("interactive-values-store", "data"),
+        [
+            Output("interactive-values-store", "data"),
+            Output("pending-changes-store", "data", allow_duplicate=True),
+        ],
         [
             Input({"type": "interactive-component-value", "index": ALL}, "value"),
             Input({"type": "graph", "index": ALL}, "clickData"),
@@ -2398,7 +2408,9 @@ def register_callbacks_draggable(app):
             State({"type": "graph", "index": ALL}, "id"),
             State("local-store", "data"),
             State("url", "pathname"),
-            State("interactive-values-store", "data"),  # Add current store state
+            State("interactive-values-store", "data"),
+            State("live-interactivity-toggle", "checked"),
+            State("pending-changes-store", "data"),
         ],
         prevent_initial_call=True,
     )
@@ -2414,6 +2426,8 @@ def register_callbacks_draggable(app):
         local_store,
         pathname,
         current_store_data,
+        live_interactivity_on,
+        pending_changes,
     ):
         from depictio.dash.layouts.draggable_scenarios.graphs_interactivity import (
             process_click_data,
@@ -2504,7 +2518,8 @@ def register_callbacks_draggable(app):
 
                     output_data = {"interactive_components_values": filtered_components}
                     logger.info(f"🔄 Reset all completed: {len(filtered_components)} components")
-                    return output_data
+                    # Reset always applies immediately regardless of live interactivity state
+                    return output_data, {}
 
                 elif "reset-selection-graph-button" in triggered_prop_id:
                     logger.info("🔄 Individual reset in main callback")
@@ -2572,7 +2587,8 @@ def register_callbacks_draggable(app):
                             logger.info(
                                 f"🔄 Individual reset completed: {len(filtered_components)} components"
                             )
-                            return output_data
+                            # Reset always applies immediately regardless of live interactivity state
+                            return output_data, {}
 
                     except Exception as e:
                         logger.error(f"Error processing individual reset: {e}")
@@ -2824,12 +2840,56 @@ def register_callbacks_draggable(app):
             logger.warning(
                 "🚨 Preventing accidental loss of scatter plot filters - keeping current store"
             )
-            return current_store_data
+            return current_store_data, dash.no_update
 
         output_data = {"interactive_components_values": components}
-        logger.info(f"🎯 Store updated with {len(components)} total components")
-        logger.info(f"🎯 Final scatter filter count: {scatter_filters_after}")
-        return output_data
+
+        # Check live interactivity state to decide filter application
+        if live_interactivity_on:
+            # Live mode: apply filters immediately
+            logger.info(f"🔴 LIVE MODE: Applying {len(components)} filters immediately")
+            return output_data, {}  # Empty pending changes
+        else:
+            # Non-live mode: store as pending changes, keep current store unchanged
+            logger.info(f"⏸️ NON-LIVE MODE: Storing {len(components)} filters as pending")
+            updated_pending = pending_changes.copy() if pending_changes else {}
+
+            # Merge at component level to avoid overwriting existing pending changes
+            if "interactive_components_values" in output_data:
+                if "interactive_components_values" not in updated_pending:
+                    updated_pending["interactive_components_values"] = []
+
+                # Create a dict for quick lookup of existing pending components by index
+                existing_pending = {
+                    comp.get("index"): comp
+                    for comp in updated_pending["interactive_components_values"]
+                }
+
+                # Update/add components from output_data
+                for component in output_data["interactive_components_values"]:
+                    component_index = component.get("index")
+                    if component_index:
+                        # Debug: Log before and after values for pending changes
+                        old_pending_value = existing_pending.get(component_index, {}).get(
+                            "value", "NOT_FOUND"
+                        )
+                        new_value = component.get("value")
+                        logger.info(
+                            f"⏸️ Updating pending {component_index}: {old_pending_value} -> {new_value}"
+                        )
+
+                        existing_pending[component_index] = component
+                        logger.info(
+                            f"⏸️ Updated pending component: {component_index} = {component.get('value')}"
+                        )
+
+                # Convert back to list
+                updated_pending["interactive_components_values"] = list(existing_pending.values())
+
+            logger.info(
+                f"⏸️ Total pending components: {len(updated_pending.get('interactive_components_values', []))}"
+            )
+            return dash.no_update, updated_pending
 
     # Add callback to control grid edit mode like in the prototype
     @app.callback(
@@ -2866,16 +2926,29 @@ def register_callbacks_draggable(app):
         """Update draggable wrapper to show empty state messages when dashboard is empty"""
         logger.info(f"🔄 Updating draggable wrapper - Edit mode: {edit_mode_enabled}")
 
-        # Only show empty messages for truly empty dashboards
+        # Check if dashboard has stored components in database (more reliable than current_draggable_items)
+        stored_children_data = local_data.get("stored_children_data", []) if local_data else []
+        stored_layout_data = local_data.get("stored_layout_data", []) if local_data else []
+
+        # If there are stored components or layouts, this is NOT an empty dashboard
+        if (stored_children_data and len(stored_children_data) > 0) or (
+            stored_layout_data and len(stored_layout_data) > 0
+        ):
+            logger.info(
+                f"Dashboard has stored components ({len(stored_children_data)} children, {len(stored_layout_data)} layouts) - keeping original draggable"
+            )
+            return dash.no_update
+
+        # Also check current draggable items as secondary check
         if current_draggable_items and len(current_draggable_items) > 0:
-            logger.info("Dashboard has components, keeping original draggable")
+            logger.info("Dashboard has current draggable items, keeping original draggable")
             return dash.no_update
 
         if not local_data:
             logger.info("No local data available, keeping original draggable")
             return dash.no_update
 
-        logger.info(f"Empty dashboard - Edit mode: {edit_mode_enabled}")
+        logger.info(f"Truly empty dashboard - Edit mode: {edit_mode_enabled}")
 
         if not edit_mode_enabled:
             logger.info("🔵 Empty dashboard + Edit mode OFF - showing welcome message")

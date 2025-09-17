@@ -567,7 +567,7 @@ def register_callbacks_header(app):
         else:
             return (
                 "Live OFF",
-                "orange",
+                "gray",
                 DashIconify(icon="mdi:lightning-bolt-outline", width=8, color="white"),
             )
 
@@ -658,10 +658,10 @@ def register_callbacks_header(app):
         logger.info(f"📝 Pending changes detected: {has_pending_changes}")
 
         if has_pending_changes:
-            # Blue filled variant with white icon when pending changes exist
-            logger.info("🔵 Setting apply button to blue with white icon (pending changes)")
+            # Green filled variant with white icon when pending changes exist (matching Live ON badge)
+            logger.info("🟢 Setting apply button to green with white icon (pending changes)")
             icon = DashIconify(icon="material-symbols:check", width=35, color="white")
-            return colors["blue"], "filled", icon, False
+            return "green", "filled", icon, False
         else:
             # Gray subtle variant with gray icon when no pending changes
             logger.info("⚪ Setting apply button to gray with gray icon (no pending changes)")
@@ -1083,7 +1083,7 @@ def design_header(data, local_store):
                                                                     dmc.Badge(
                                                                         id="edit-status-badge-2",
                                                                         children="Edit OFF",
-                                                                        size="xs",
+                                                                        size="sm",
                                                                         color="gray",
                                                                         leftSection=DashIconify(
                                                                             icon="mdi:pencil-off",
@@ -1105,8 +1105,8 @@ def design_header(data, local_store):
                                                                     dmc.Badge(
                                                                         id="live-interactivity-badge",
                                                                         children="Live OFF",
-                                                                        size="xs",
-                                                                        color="orange",
+                                                                        size="sm",
+                                                                        color="gray",
                                                                         leftSection=DashIconify(
                                                                             icon="mdi:lightning-bolt-outline",
                                                                             width=8,
