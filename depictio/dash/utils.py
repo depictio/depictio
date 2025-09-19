@@ -566,6 +566,53 @@ def get_columns_from_data_collection(
         return collections.defaultdict(dict)
 
 
+def get_data_collection_info(workflow_id: str, data_collection_id: str, TOKEN: str) -> dict:
+    """
+    Get data collection information including type.
+
+    Args:
+        workflow_id: ID of the workflow
+        data_collection_id: ID of the data collection
+        TOKEN: Authorization token
+
+    Returns:
+        Dict containing data collection information including type
+    """
+    try:
+        # Try to get workflow information which contains data collections
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/workflows/get/{workflow_id}",
+            headers={
+                "Authorization": f"Bearer {TOKEN}",
+            },
+        )
+
+        if response.status_code == 200:
+            workflow_data = response.json()
+
+            # Find the specific data collection in the workflow
+            for dc in workflow_data.get("data_collections", []):
+                if str(dc.get("id")) == str(data_collection_id):
+                    return {
+                        "type": dc.get("type", "table"),  # Default to table if not specified
+                        "data_collection_tag": dc.get("data_collection_tag", ""),
+                        "dc_specific_properties": dc.get("dc_specific_properties", {}),
+                        "full_data_collection": dc,
+                    }
+
+            logger.warning(
+                f"Data collection {data_collection_id} not found in workflow {workflow_id}"
+            )
+            return {"type": "table", "data_collection_tag": "", "dc_specific_properties": {}}
+        else:
+            logger.error(f"Error fetching workflow {workflow_id}: {response.text}")
+            return {"type": "table", "data_collection_tag": "", "dc_specific_properties": {}}
+
+    except Exception as e:
+        logger.error(f"Error getting data collection info: {e}")
+        return {"type": "table", "data_collection_tag": "", "dc_specific_properties": {}}
+
+
 def serialize_dash_component(obj):
     # If the object is a NumPy array, convert it to a list
     if isinstance(obj, np.ndarray):

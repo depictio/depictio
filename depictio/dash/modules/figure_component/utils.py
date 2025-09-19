@@ -789,6 +789,67 @@ def _highlight_selected_point(figure, df, dict_kwargs, selected_point):
         logger.warning(f"Failed to highlight selected point: {e}")
 
 
+def get_optimized_chart_data(df, chart_config):
+    """
+    Apply intelligent sampling based on chart type for optimal performance.
+
+    Args:
+        df: Full polars DataFrame
+        chart_config: Chart configuration dict
+
+    Returns:
+        pl.DataFrame: Optimally sampled data for the chart type
+    """
+    chart_type = chart_config.get("chart_type", "scatter")
+    original_size = len(df)
+
+    # Define optimal sample sizes for different chart types
+    sampling_strategy = {
+        "scatter": {
+            "max_sample": 10_000,
+            "reason": "Visual density limit - more points don't improve clarity",
+        },
+        "box": {
+            "max_sample": 50_000,
+            "reason": "Statistical representation - need good quartile accuracy",
+        },
+        "violin": {
+            "max_sample": 25_000,
+            "reason": "Distribution shape - need sufficient density points",
+        },
+        "histogram": {
+            "max_sample": 100_000,
+            "reason": "Bin accuracy - need representative distribution",
+        },
+        "bar": {"max_sample": None, "reason": "Aggregated data - typically small result set"},
+        "line": {"max_sample": None, "reason": "Time series - may need full temporal resolution"},
+    }
+
+    strategy = sampling_strategy.get(
+        chart_type, {"max_sample": 10_000, "reason": "Default conservative sampling"}
+    )
+    max_sample = strategy["max_sample"]
+
+    logger.info(f"📊 CHART DATA: Processing {original_size:,} rows for {chart_type} chart")
+
+    # No sampling needed for small datasets or non-sampling chart types
+    if max_sample is None or original_size <= max_sample:
+        logger.warning(
+            f"📊 CHART DATA: Using full dataset ({original_size:,} rows) for {chart_type} - {strategy['reason']}"
+        )
+        return df
+
+    # Apply intelligent sampling using polars
+    sampled_df = df.sample(n=max_sample, seed=42)  # Fixed seed for reproducible sampling
+
+    logger.info(
+        f"🎯 CHART SAMPLING: {chart_type} optimized from {original_size:,} → {max_sample:,} rows "
+        f"({max_sample / original_size * 100:.1f}% sample) - {strategy['reason']}"
+    )
+
+    return sampled_df
+
+
 def get_available_columns(df: pl.DataFrame) -> Dict[str, List[str]]:
     """Get available columns categorized by data type.
 

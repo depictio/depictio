@@ -6,6 +6,8 @@ from dash_iconify import DashIconify
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.simple_theme import create_theme_controls
 
+# Section functionality removed - sidebar now only shows navigation back to projects
+
 
 def register_sidebar_callbacks(app):
     # Callback to dynamically update sidebar content based on route
@@ -27,88 +29,23 @@ def register_sidebar_callbacks(app):
             dashboard_id = dashboard_match.group(1)
             logger.info(f"📊 Dashboard route detected, ID: {dashboard_id}")
 
-            # Return basic dashboard navigation with limited navlinks
+            # Return dashboard sidebar with navigation and section management
             return [
-                # Section-based navigation (default to overview tab) - using simple HTML links
-                html.A(
-                    dmc.Group(
-                        [
-                            DashIconify(icon="material-symbols:analytics", height=20),
-                            html.Span(
-                                "Metrics Overview",
-                                style={
-                                    "whiteSpace": "nowrap",
-                                    "overflow": "hidden",
-                                    "textOverflow": "ellipsis",
-                                },
-                            ),
-                        ],
-                        gap="sm",
-                        wrap="nowrap",
-                        style={"width": "100%"},
-                    ),
-                    href="#metrics-section",
-                    style={
-                        "textDecoration": "none",
-                        "color": "var(--app-text-color, #000)",
-                        "display": "block",
-                        "padding": "8px 12px",
-                        "borderRadius": "4px",
-                        "transition": "background-color 0.2s",
-                        "width": "100%",
-                        "overflowX": "hidden",
-                        "boxSizing": "border-box",
-                    },
-                ),
-                html.A(
-                    dmc.Group(
-                        [
-                            DashIconify(icon="material-symbols:bar-chart", height=20),
-                            html.Span(
-                                "Visualizations",
-                                style={
-                                    "whiteSpace": "nowrap",
-                                    "overflow": "hidden",
-                                    "textOverflow": "ellipsis",
-                                },
-                            ),
-                        ],
-                        gap="sm",
-                        wrap="nowrap",
-                        style={"width": "100%"},
-                    ),
-                    href="#charts-section",
-                    style={
-                        "textDecoration": "none",
-                        "color": "var(--app-text-color, #000)",
-                        "display": "block",
-                        "padding": "8px 12px",
-                        "borderRadius": "4px",
-                        "transition": "background-color 0.2s",
-                        "width": "100%",
-                        "overflowX": "hidden",
-                        "boxSizing": "border-box",
-                    },
-                ),
-                dmc.Divider(style={"margin": "20px 10px"}),
-                # Add NavLink button for edit mode - DISABLED
-                # html.Div(
-                #     dmc.Button(
-                #         "➕ Add NavLink",
-                #         id="add-navlink-btn-dashboard",
-                #         variant="light",
-                #         size="sm",
-                #         color="green",
-                #         fullWidth=True,
-                #         leftSection=DashIconify(icon="material-symbols:add", height=16),
-                #     ),
-                #     id="add-navlink-container-dashboard",
-                #     style={"display": "none", "margin": "10px 0"},  # Hidden by default
-                # ),
                 dmc.NavLink(
                     label="← All Projects",
                     leftSection=DashIconify(icon="material-symbols:arrow-back", height=20),
                     href="/projects",
+                ),
+                dmc.Divider(my="sm"),
+                dmc.Button(
+                    "Add Section",
+                    leftSection=DashIconify(icon="material-symbols:add", height=16),
+                    variant="light",
+                    color="green",
+                    size="sm",
+                    fullWidth=True,
+                    id="sidebar-add-section-btn",
+                    n_clicks=0,
                 ),
             ]
 
@@ -198,49 +135,7 @@ def register_sidebar_callbacks(app):
 
         return default_links
 
-    # NEW: Tab-based sidebar content callback for dynamic navigation
-    @app.callback(
-        Output("sidebar-content", "children", allow_duplicate=True),
-        [Input("rnaseq-tabs", "value"), Input("url", "pathname")],
-        prevent_initial_call=True,
-        suppress_callback_exceptions=True,  # Suppress exceptions for missing components
-    )
-    def update_sidebar_for_tab(tab_value, pathname):
-        import re
-
-        from dash import no_update
-
-        # Handle None or missing values
-        if not pathname:
-            logger.warning("🔄 Tab sidebar update: No pathname provided")
-            return no_update
-
-        logger.info(f"🔄 Tab sidebar update: tab={tab_value}, pathname={pathname}")
-
-        # Check if we're on a dashboard page
-        dashboard_match = re.match(r"/dashboard/([a-f0-9]{24})", pathname)
-
-        if not dashboard_match:
-            logger.info("❌ Not a dashboard route, keeping existing sidebar")
-            return no_update
-
-        dashboard_id = dashboard_match.group(1)
-
-        # Handle case where tabs component doesn't exist yet
-        if tab_value is None:
-            logger.info(
-                f"📊 Dashboard route detected, ID: {dashboard_id}, Tab: None (component not ready)"
-            )
-            # Use default tab when tabs component isn't ready
-            tab_value = "overview"
-        else:
-            logger.info(f"📊 Dashboard route detected, ID: {dashboard_id}, Tab: {tab_value}")
-
-        # Return tab-specific navlinks
-        tab_navlinks = get_tab_specific_navlinks(tab_value, dashboard_id)
-        logger.info(f"✅ Generated {len(tab_navlinks)} tab-specific navlinks for {tab_value}")
-
-        return tab_navlinks
+    # Tab-based sidebar callback removed - using simplified dashboard sidebar
 
     # Inject JavaScript to handle the resize when sidebar state changes
     # app.clientside_callback(
@@ -677,266 +572,7 @@ def render_sidebar(email):
     return navbar
 
 
-def get_tab_specific_navlinks(tab_value, dashboard_id):
-    """Get navlinks specific to the current tab"""
-
-    if tab_value == "overview":
-        return [
-            html.A(
-                dmc.Group(
-                    [
-                        DashIconify(icon="material-symbols:analytics", height=16),
-                        html.Span(
-                            "Metrics Overview",
-                            style={
-                                "whiteSpace": "nowrap",
-                                "overflow": "hidden",
-                                "textOverflow": "ellipsis",
-                            },
-                        ),
-                    ],
-                    gap="xs",
-                    wrap="nowrap",
-                    style={"width": "100%"},
-                ),
-                href="#metrics-section",
-                style={
-                    "textDecoration": "none",
-                    "color": "var(--app-text-color)",
-                    "display": "block",
-                    "padding": "8px 0",
-                    "borderRadius": "4px",
-                    "width": "100%",
-                    "overflowX": "hidden",
-                    "boxSizing": "border-box",
-                },
-            ),
-            html.Div(
-                [
-                    html.A(
-                        dmc.Group(
-                            [
-                                DashIconify(icon="material-symbols:bar-chart", height=16),
-                                html.Span(
-                                    "Visualizations",
-                                    style={
-                                        "whiteSpace": "nowrap",
-                                        "overflow": "hidden",
-                                        "textOverflow": "ellipsis",
-                                    },
-                                ),
-                            ],
-                            gap="xs",
-                            wrap="nowrap",
-                            style={"width": "100%"},
-                        ),
-                        href="#charts-section",
-                        style={
-                            "textDecoration": "none",
-                            "color": "var(--app-text-color)",
-                            "display": "block",
-                            "padding": "8px 0",
-                            "borderRadius": "4px",
-                            "width": "100%",
-                            "overflowX": "hidden",
-                            "boxSizing": "border-box",
-                        },
-                    ),
-                    html.Div(
-                        [
-                            html.A(
-                                dmc.Group(
-                                    [
-                                        DashIconify(
-                                            icon="material-symbols:scatter-plot", height=14
-                                        ),
-                                        html.Span(
-                                            "Gene Expression Scatter",
-                                            style={
-                                                "whiteSpace": "nowrap",
-                                                "overflow": "hidden",
-                                                "textOverflow": "ellipsis",
-                                            },
-                                        ),
-                                    ],
-                                    gap="xs",
-                                    wrap="nowrap",
-                                    style={"width": "100%"},
-                                ),
-                                href="#chart-0",
-                                style={
-                                    "textDecoration": "none",
-                                    "color": "var(--app-text-color)",
-                                    "display": "block",
-                                    "padding": "4px 0 4px 16px",
-                                    "fontSize": "0.9em",
-                                    "width": "100%",
-                                    "overflowX": "hidden",
-                                    "boxSizing": "border-box",
-                                },
-                            ),
-                            html.A(
-                                dmc.Group(
-                                    [
-                                        DashIconify(icon="material-symbols:bar-chart", height=14),
-                                        html.Span(
-                                            "DEG Count by Sample Type",
-                                            style={
-                                                "whiteSpace": "nowrap",
-                                                "overflow": "hidden",
-                                                "textOverflow": "ellipsis",
-                                            },
-                                        ),
-                                    ],
-                                    gap="xs",
-                                    wrap="nowrap",
-                                    style={"width": "100%"},
-                                ),
-                                href="#chart-1",
-                                style={
-                                    "textDecoration": "none",
-                                    "color": "var(--app-text-color)",
-                                    "display": "block",
-                                    "padding": "4px 0 4px 16px",
-                                    "fontSize": "0.9em",
-                                    "width": "100%",
-                                    "overflowX": "hidden",
-                                    "boxSizing": "border-box",
-                                },
-                            ),
-                            html.A(
-                                dmc.Group(
-                                    [
-                                        DashIconify(
-                                            icon="material-symbols:candlestick-chart", height=14
-                                        ),
-                                        html.Span(
-                                            "P-Value Distribution",
-                                            style={
-                                                "whiteSpace": "nowrap",
-                                                "overflow": "hidden",
-                                                "textOverflow": "ellipsis",
-                                            },
-                                        ),
-                                    ],
-                                    gap="xs",
-                                    wrap="nowrap",
-                                    style={"width": "100%"},
-                                ),
-                                href="#chart-2",
-                                style={
-                                    "textDecoration": "none",
-                                    "color": "var(--app-text-color)",
-                                    "display": "block",
-                                    "padding": "4px 0 4px 16px",
-                                    "fontSize": "0.9em",
-                                    "width": "100%",
-                                    "overflowX": "hidden",
-                                    "boxSizing": "border-box",
-                                },
-                            ),
-                            html.A(
-                                dmc.Group(
-                                    [
-                                        DashIconify(icon="material-symbols:show-chart", height=14),
-                                        html.Span(
-                                            "Fold Change Timeline",
-                                            style={
-                                                "whiteSpace": "nowrap",
-                                                "overflow": "hidden",
-                                                "textOverflow": "ellipsis",
-                                            },
-                                        ),
-                                    ],
-                                    gap="xs",
-                                    wrap="nowrap",
-                                    style={"width": "100%"},
-                                ),
-                                href="#chart-3",
-                                style={
-                                    "textDecoration": "none",
-                                    "color": "var(--app-text-color)",
-                                    "display": "block",
-                                    "padding": "4px 0 4px 16px",
-                                    "fontSize": "0.9em",
-                                    "width": "100%",
-                                    "overflowX": "hidden",
-                                    "boxSizing": "border-box",
-                                },
-                            ),
-                        ],
-                        style={
-                            "marginLeft": "4px",
-                            "borderLeft": "2px solid var(--app-border-color, #ddd)",
-                            "paddingLeft": "4px",
-                            "overflowX": "hidden",
-                        },
-                    ),
-                ]
-            ),
-        ]
-    elif tab_value == "analysis":
-        return [
-            html.A(
-                dmc.Group(
-                    [
-                        DashIconify(icon="material-symbols:analytics", height=16),
-                        html.Span(
-                            "Metrics Overview",
-                            style={
-                                "whiteSpace": "nowrap",
-                                "overflow": "hidden",
-                                "textOverflow": "ellipsis",
-                            },
-                        ),
-                    ],
-                    gap="xs",
-                    wrap="nowrap",
-                    style={"width": "100%"},
-                ),
-                href="#metrics-section",
-                style={
-                    "width": "100%",
-                    "overflowX": "hidden",
-                    "boxSizing": "border-box",
-                    "display": "block",
-                    "textDecoration": "none",
-                    "padding": "8px 0",
-                    "borderRadius": "4px",
-                },
-            ),
-            html.A(
-                dmc.Group(
-                    [
-                        DashIconify(icon="material-symbols:bar-chart", height=16),
-                        html.Span(
-                            "Visualizations",
-                            style={
-                                "whiteSpace": "nowrap",
-                                "overflow": "hidden",
-                                "textOverflow": "ellipsis",
-                            },
-                        ),
-                    ],
-                    gap="xs",
-                    wrap="nowrap",
-                    style={"width": "100%"},
-                ),
-                href="#charts-section",
-                style={
-                    "width": "100%",
-                    "overflowX": "hidden",
-                    "boxSizing": "border-box",
-                    "display": "block",
-                    "textDecoration": "none",
-                    "padding": "8px 0",
-                    "borderRadius": "4px",
-                },
-            ),
-        ]
-    else:
-        # Default overview navlinks
-        return get_tab_specific_navlinks("overview", dashboard_id)
+# get_tab_specific_navlinks function removed - using simplified sidebar
 
 
 def render_sidebar_content(email, current_tab="overview"):
@@ -999,12 +635,14 @@ def render_sidebar_content(email, current_tab="overview"):
         style={"padding": "8px"},
     )
 
-    # Extract dashboard_id from current URL for tab-specific navigation
-    # For now, use a placeholder - this will be updated by callback
-    dashboard_id = "placeholder"
-
-    # Get tab-specific navlinks (will be updated dynamically)
-    tab_navlinks = get_tab_specific_navlinks(current_tab, dashboard_id)
+    # Simplified dashboard navigation - just back to projects
+    tab_navlinks = [
+        dmc.NavLink(
+            label="← All Projects",
+            leftSection=DashIconify(icon="material-symbols:arrow-back", height=20),
+            href="/projects",
+        ),
+    ]
 
     sidebar_links = html.Div(
         id="sidebar-content",

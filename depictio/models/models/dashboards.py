@@ -1,22 +1,20 @@
-from pydantic import ConfigDict, field_serializer
+from typing import Any, Optional
 
+from pydantic import ConfigDict, field_serializer, model_serializer
+
+from depictio.models.dashboard_tab_structure import DashboardTabStructure
 from depictio.models.models.base import MongoModel, PyObjectId, convert_objectid_to_str
 from depictio.models.models.users import Permission
 
 
 class DashboardData(MongoModel):
     dashboard_id: PyObjectId
-    version: int = 1
-    tmp_children_data: list | None = []
-    stored_layout_data: list = []
-    stored_children_data: list = []
-    stored_metadata: list = []
-    stored_edit_dashboard_mode_button: list = []
-    buttons_data: dict = {
-        "unified_edit_mode": True,  # Unified edit mode replaces separate edit buttons
-        "add_components_button": {"count": 0},
-    }
-    stored_add_button: dict = {"count": 0}
+    version: int = 1  # Dashboard version (user-facing version number)
+
+    # Tab-based structure
+    tab_structure: Optional[DashboardTabStructure] = None
+
+    # Dashboard metadata
     title: str
     notes_content: str = ""
     permissions: Permission
@@ -25,6 +23,7 @@ class DashboardData(MongoModel):
     project_id: PyObjectId
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
+        extra="allow",  # Allow legacy fields during transition period
         # json_encoders={ObjectId: lambda oid: str(oid)},
     )
 
@@ -42,7 +41,29 @@ class DashboardData(MongoModel):
     def serialize_dashboard_id(self, dashboard_id: PyObjectId) -> str:
         return str(dashboard_id)
 
-    @field_serializer("stored_metadata")
-    def serialize_stored_metadata(self, stored_metadata: list) -> list:
-        # Convert any ObjectIds in the stored_metadata list to strings
-        return convert_objectid_to_str(stored_metadata)
+    @field_serializer("tab_structure")
+    def serialize_tab_structure(
+        self, tab_structure: Optional[DashboardTabStructure]
+    ) -> Optional[dict]:
+        # Serialize the tab structure to dict for MongoDB storage
+        return tab_structure.model_dump() if tab_structure else None
+
+    def has_tab_structure(self) -> bool:
+        """Check if this dashboard uses the tab-based structure."""
+        return self.tab_structure is not None
+
+    def get_active_structure(self) -> Optional[DashboardTabStructure]:
+        """Get the active dashboard structure."""
+        return self.tab_structure
+
+    @model_serializer(mode="wrap")
+    def serialize_model(self, serializer, info) -> dict[str, Any]:
+        """
+        Custom model serializer that converts all ObjectIds to strings,
+        including those in legacy fields allowed by extra="allow".
+        """
+        # Get the default serialization using the wrapped serializer
+        data = serializer(self)
+
+        # Convert all ObjectIds to strings recursively
+        return convert_objectid_to_str(data)

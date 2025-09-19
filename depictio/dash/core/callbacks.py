@@ -69,6 +69,93 @@ def register_main_callback(app):
 
     logger.info("🔥 MAIN CALLBACK REGISTERED SUCCESSFULLY")
 
+
+def register_anchor_navigation_callback(app):
+    """
+    Register clientside callback for anchor navigation.
+
+    Args:
+        app (dash.Dash): The Dash application instance
+    """
+    logger.info("🔗 REGISTERING ANCHOR NAVIGATION CALLBACK")
+
+    # Enhanced anchor navigation with better debugging and immediate execution
+    app.clientside_callback(
+        """
+        function(pathname) {
+            console.log('🎯 Anchor callback triggered with pathname:', pathname);
+
+            // Define global anchor navigation function
+            window.scrollToAnchor = function(targetId, maxRetries = 5) {
+                console.log('🎯 scrollToAnchor called for:', targetId);
+                let attempts = 0;
+                const delays = [100, 300, 600, 1200, 2000];
+
+                function tryScroll() {
+                    const element = document.getElementById(targetId);
+                    console.log('🎯 Looking for element:', targetId, 'Found:', !!element);
+
+                    if (element) {
+                        console.log('🎯 Scrolling to element:', targetId);
+
+                        // Get actual header height dynamically
+                        const appShell = document.querySelector('.mantine-AppShell-header');
+                        const headerHeight = appShell ? appShell.offsetHeight + 10 : 40; // 10px padding
+
+                        console.log('🎯 Header height detected:', headerHeight);
+
+                        const elementPosition = element.getBoundingClientRect().top + window.pageYOffset;
+                        const offsetPosition = elementPosition - headerHeight;
+
+                        window.scrollTo({
+                            top: offsetPosition,
+                            behavior: 'smooth'
+                        });
+
+                        // Add visual indicator
+                        element.style.boxShadow = '0 0 10px rgba(0, 123, 255, 0.5)';
+                        setTimeout(() => {
+                            element.style.boxShadow = '';
+                        }, 2000);
+
+                        return true;
+                    }
+
+                    if (attempts < maxRetries) {
+                        attempts++;
+                        console.log(`🎯 Retry ${attempts}/${maxRetries} for:`, targetId);
+                        setTimeout(tryScroll, delays[attempts - 1] || 2000);
+                    } else {
+                        console.warn('🎯 Failed to find element after retries:', targetId);
+                        // List all elements with IDs for debugging
+                        const allElements = document.querySelectorAll('[id]');
+                        console.log('🎯 Available elements with IDs:', Array.from(allElements).map(el => el.id));
+                    }
+                }
+
+                tryScroll();
+            };
+
+            // Handle URL-based navigation
+            if (pathname && pathname.includes('#')) {
+                const targetId = pathname.split('#')[1];
+                console.log('🎯 Extracted anchor ID:', targetId);
+                if (targetId) {
+                    // Try immediate scroll first
+                    setTimeout(() => window.scrollToAnchor(targetId), 50);
+                }
+            }
+
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("dummy-anchor-output", "children", allow_duplicate=True),
+        Input("url", "pathname"),
+        prevent_initial_call=True,
+    )
+
+    logger.info("✅ ANCHOR NAVIGATION CALLBACK REGISTERED SUCCESSFULLY")
+
     # Move header visibility to clientside for instant response
     app.clientside_callback(
         """
@@ -128,8 +215,16 @@ def register_all_callbacks(app):
     # Register layout callbacks
     register_layout_callbacks(app)
 
+    # Register anchor navigation callback
+    register_anchor_navigation_callback(app)
+
+    # Register fullscreen callbacks
+    from depictio.dash.modules.fullscreen import register_fullscreen_callbacks
+
+    register_fullscreen_callbacks(app)
+
     # Register component callbacks
-    # register_component_callbacks(app)
+    register_component_callbacks(app)
 
     # Register feature-specific callbacks
     register_feature_callbacks(app)
@@ -180,8 +275,10 @@ def register_layout_callbacks(app):
     from depictio.dash.layouts.consolidated_api import register_consolidated_api_callbacks
     from depictio.dash.layouts.dashboard_content import register_dashboard_content_callbacks
     from depictio.dash.layouts.header import register_callbacks_header
-    from depictio.dash.layouts.navigation_editor import register_navigation_editor_callbacks
+
+    # from depictio.dash.layouts.navigation_editor import register_navigation_editor_callbacks
     from depictio.dash.layouts.sidebar import register_sidebar_callbacks
+    from depictio.dash.modules.tab_management import register_tab_management_callbacks
 
     # from depictio.dash.layouts.stepper_parts.part_one import register_callbacks_stepper_part_one
     # from depictio.dash.layouts.stepper_parts.part_three import register_callbacks_stepper_part_three
@@ -198,7 +295,7 @@ def register_layout_callbacks(app):
     register_component_creator_callbacks(app)
 
     # Register navigation editor callbacks (for dynamic tab/navlink creation)
-    register_navigation_editor_callbacks(app)
+    # register_navigation_editor_callbacks(app)  # Disabled - using tab_management instead
 
     # Register layout callbacks
 
@@ -212,6 +309,9 @@ def register_layout_callbacks(app):
 
     # Register tab routing callback for URL updates
     register_tab_routing_callback(app)
+
+    # Register tab management callbacks
+    register_tab_management_callbacks(app)
 
 
 def register_component_callbacks(app):

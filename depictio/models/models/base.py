@@ -140,7 +140,7 @@ class MongoModel(BaseModel):
         if not data:
             return cls(**data)
 
-        # Helper function to convert nested documents
+        # Helper function to convert nested documents and ObjectIds
         def convert_ids(document):
             if isinstance(document, list):
                 return [convert_ids(item) for item in document]
@@ -154,6 +154,8 @@ class MongoModel(BaseModel):
             return document
 
         data = convert_ids(data)
+        # Apply ObjectId to string conversion for all fields including extra fields
+        data = convert_objectid_to_str(data)
         # Ensure 'hash' is explicitly retained
         hash_value = data.pop("hash", None)
         instance = cls(**data)

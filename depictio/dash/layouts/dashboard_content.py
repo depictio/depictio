@@ -1283,6 +1283,49 @@ def register_dashboard_content_callbacks(app):
 
         dashboard_id = pathname.split("/")[-1] if "/" in pathname else "unknown"
 
+        # Load dashboard structure from backend API to get the latest data including newly created sections
+        current_tab = None
+        current_tab_id = None
+        dashboard_structure = None
+
+        import re
+
+        dashboard_match = re.match(r"/dashboard/([a-f0-9]{24})", pathname)
+        if dashboard_match and local_store and local_store.get("access_token"):
+            dashboard_id = dashboard_match.group(1)
+            auth_token = local_store["access_token"]
+
+            # Get current tab ID from URL
+            tab_match = re.search(r"/dashboard/[a-f0-9]{24}/tab/([^/?]+)", pathname)
+            if tab_match:
+                current_tab_id = tab_match.group(1)
+
+            try:
+                from depictio.dash.api_calls import api_call_get_dashboard
+                from depictio.models.dashboard_tab_structure import DashboardTabStructure
+
+                # Load current dashboard data from backend
+                dashboard_data = api_call_get_dashboard(dashboard_id, auth_token)
+                if dashboard_data and dashboard_data.get("tab_structure"):
+                    dashboard_structure = DashboardTabStructure(**dashboard_data["tab_structure"])
+                    logger.info(
+                        f"📋 API DASHBOARD STRUCTURE: {len(dashboard_structure.tabs)} tabs loaded from backend"
+                    )
+
+                    # Find current tab
+                    if current_tab_id:
+                        current_tab = dashboard_structure.get_tab_by_id(current_tab_id)
+                    if not current_tab:
+                        current_tab = dashboard_structure.get_default_tab()
+
+                    if current_tab:
+                        logger.info(
+                            f"📋 CURRENT TAB: '{current_tab.name}' with {len(current_tab.sections)} sections"
+                        )
+
+            except Exception as e:
+                logger.error(f"❌ DASHBOARD STRUCTURE: Failed to load from backend: {e}")
+
         # Use centralized metadata configuration
         components = DASHBOARD_COMPONENTS
 
@@ -1434,7 +1477,45 @@ def register_dashboard_content_callbacks(app):
                             "minWidth": "0",  # Allow shrinking
                         },
                         children=[
-                            # Metrics section with container
+                            # Current tab name display
+                            html.Div(
+                                f"Current Tab: {current_tab.name if current_tab else current_tab_id if current_tab_id else 'Dashboard'}",
+                                style={
+                                    "padding": "16px",
+                                    "backgroundColor": "var(--app-surface-color, #f8f9fa)",
+                                    "border": "1px solid var(--app-border-color, #ddd)",
+                                    "borderRadius": "8px",
+                                    "marginBottom": "16px",
+                                    "fontSize": "16px",
+                                    "fontWeight": "500",
+                                    "color": "var(--app-text-color, #333)",
+                                },
+                            ),
+                            # Sections display
+                        ]
+                        + (
+                            [
+                                html.Div(
+                                    f"Current Section: {section.name}",
+                                    style={
+                                        "padding": "16px",
+                                        "backgroundColor": "var(--app-surface-color, #f0f0f0)",
+                                        "border": "1px solid var(--app-border-color, #ccc)",
+                                        "borderRadius": "8px",
+                                        "marginBottom": "16px",
+                                        "fontSize": "14px",
+                                        "fontWeight": "400",
+                                        "color": "var(--app-text-color, #666)",
+                                    },
+                                    id=section.id,
+                                )
+                                for section in current_tab.sections
+                            ]
+                            if current_tab and current_tab.sections
+                            else []
+                        )
+                        + [
+                            # Metrics section with container (existing code)
                             dmc.Paper(
                                 children=[
                                     dmc.Group(

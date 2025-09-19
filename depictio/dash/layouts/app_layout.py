@@ -138,39 +138,21 @@ def handle_authenticated_user(pathname, local_data, theme="light", cached_projec
         # Support URLs like: /dashboard/{id} or /dashboard/{id}/{tab} (with optional anchors)
         # Remove anchor part for routing logic
         clean_pathname = pathname.split("#")[0] if "#" in pathname else pathname
-        dashboard_match = re.match(r"/dashboard/([a-f0-9]{24})(?:/([a-zA-Z]+))?", clean_pathname)
+        dashboard_match = re.match(
+            r"/dashboard/([a-f0-9]{24})(?:/([a-zA-Z0-9_-]+))?", clean_pathname
+        )
 
         if dashboard_match:
             dashboard_id = dashboard_match.group(1)
-            tab_name = dashboard_match.group(2)
+            tab_name_from_url = dashboard_match.group(2)
 
-            # If no tab specified, redirect to first tab (overview) - but preserve anchor
-            if not tab_name:
-                anchor_part = f"#{pathname.split('#')[1]}" if "#" in pathname else ""
-                new_pathname = f"/dashboard/{dashboard_id}/overview{anchor_part}"
-                return (
-                    html.Div("Redirecting to first tab..."),
-                    create_default_header("Dashboard"),
-                    new_pathname,
-                    local_data,
-                )
-
-            # Validate tab name
-            valid_tabs = ["overview", "analysis"]
-            if tab_name not in valid_tabs:
-                # Redirect invalid tabs to first tab - but preserve anchor
-                anchor_part = f"#{pathname.split('#')[1]}" if "#" in pathname else ""
-                new_pathname = f"/dashboard/{dashboard_id}/overview{anchor_part}"
-                return (
-                    html.Div("Redirecting to valid tab..."),
-                    create_default_header("Dashboard"),
-                    new_pathname,
-                    local_data,
-                )
-
-            header_content = create_dashboard_tabs_header(dashboard_id, active_tab=tab_name)
+            # For dashboard routes, we'll validate the tab dynamically in the dashboard content loading
+            # Here we just accept the tab name from URL and let dashboard content handle validation
+            active_tab = tab_name_from_url if tab_name_from_url else None
+            header_content = create_dashboard_tabs_header(dashboard_id, active_tab=active_tab)
         else:
-            header_content = create_default_header("Dashboard")
+            # For dashboard routes without specific ID, still show tabs header
+            header_content = create_dashboard_tabs_header("default", active_tab="overview")
 
         dashboard_layout = dmc.Container(
             id="dashboard-content",
@@ -311,52 +293,44 @@ def create_default_header(text):
     )
 
 
-def create_dashboard_tabs_header(dashboard_id, active_tab="overview"):
-    """Create DMC tabs header for RNA-seq analysis dashboard"""
-    tabs = html.Div(
-        id="dynamic-tabs-container",
+def create_dashboard_tabs_header(dashboard_id, active_tab="dashboard"):
+    """Create simple dashboard header with title and management controls"""
+
+    # No longer need tab title since it's shown in dmc.Tabs
+    # Tabs will be populated dynamically by callbacks
+
+    # Header with tabs and management controls in horizontal layout
+    header_content = dmc.Group(
+        id="dashboard-header-content",
         children=[
+            # Visible tabs component with pills style
             dmc.Tabs(
-                [
-                    dmc.TabsList(
-                        id="dynamic-tabs-list",
-                        children=[
-                            dmc.TabsTab(
-                                "Overview",
-                                value="overview",
-                                leftSection=DashIconify(icon="material-symbols:biotech", height=16),
-                            ),
-                            dmc.TabsTab(
-                                "Analysis",
-                                value="analysis",
-                                leftSection=DashIconify(
-                                    icon="material-symbols:analytics", height=16
-                                ),
-                            ),
-                            # Add Tab button - only visible in edit mode
-                            html.Div(
-                                dmc.ActionIcon(
-                                    DashIconify(icon="material-symbols:add", height=16),
-                                    id="add-tab-btn",
-                                    variant="light",
-                                    size="sm",
-                                    color="blue",
-                                    style={"marginLeft": "10px"},
-                                ),
-                                id="add-tab-container",
-                                style={"display": "none"},  # Hidden by default
-                            ),
-                        ],
-                        style={"marginBottom": "0px"},
+                id="dashboard-tabs",
+                value=active_tab,
+                variant="pills",
+                children=[
+                    # Tab list will be populated by dashboard structure callback
+                    dmc.TabsList([])  # Empty initially, filled by callback
+                ],
+            ),
+            # Management controls for tabs only
+            dmc.Group(
+                children=[
+                    dmc.Button(
+                        "Add Tab",
+                        leftSection=DashIconify(icon="material-symbols:add", height=16),
+                        id="add-tab-btn",
+                        variant="light",
+                        size="xs",
+                        color="blue",
                     ),
                 ],
-                id="rnaseq-tabs",
-                value=active_tab,  # Use the active_tab parameter
-                variant="pills",
-                # style={"flex": "1", "padding": "10px 0px"},
+                gap="xs",
             ),
         ],
-        style={"flex": "1"},
+        justify="space-between",
+        align="center",
+        style={"flex": "1", "padding": "0 10px"},
     )
 
     return dmc.Group(
@@ -380,7 +354,7 @@ def create_dashboard_tabs_header(dashboard_id, active_tab="overview"):
                 gap="xs",
                 align="center",
             ),
-            tabs,
+            header_content,
             dmc.Group(
                 [
                     dmc.ActionIcon(
@@ -769,6 +743,9 @@ def create_app_layout():
             html.Div(
                 id="dummy-navlink-output", style={"display": "none"}
             ),  # Hidden output for navlink creation
+            html.Div(
+                id="dummy-section-output", style={"display": "none"}
+            ),  # Hidden output for section management
             dmc.Drawer(
                 title="",
                 id="drawer-simple",
@@ -780,56 +757,7 @@ def create_app_layout():
             ),
             dmc.NotificationContainer(id="notification-container"),
             html.Div(id="admin-password-warning-trigger", style={"display": "none"}),
-            # Navigation editing modals
-            dmc.Modal(
-                title="Add New Tab",
-                id="add-tab-modal",
-                opened=False,
-                children=[
-                    dmc.Stack(
-                        [
-                            dmc.TextInput(
-                                label="Tab Name",
-                                placeholder="Enter tab name",
-                                id="tab-name-input",
-                            ),
-                            dmc.Select(
-                                label="Icon",
-                                placeholder="Select an icon",
-                                id="tab-icon-select",
-                                data=[
-                                    {"value": "material-symbols:biotech", "label": "🧬 Biotech"},
-                                    {
-                                        "value": "material-symbols:analytics",
-                                        "label": "📊 Analytics",
-                                    },
-                                    {
-                                        "value": "material-symbols:trending-up",
-                                        "label": "📈 Trending Up",
-                                    },
-                                    {
-                                        "value": "material-symbols:check-circle",
-                                        "label": "✅ Check Circle",
-                                    },
-                                    {"value": "material-symbols:account-tree", "label": "🌳 Tree"},
-                                    {"value": "material-symbols:download", "label": "⬇️ Download"},
-                                    {"value": "material-symbols:settings", "label": "⚙️ Settings"},
-                                    {"value": "material-symbols:storage", "label": "🗃️ Storage"},
-                                ],
-                            ),
-                            dmc.Group(
-                                [
-                                    dmc.Button("Cancel", id="tab-modal-cancel", variant="light"),
-                                    dmc.Button("Add Tab", id="tab-modal-confirm", color="blue"),
-                                ],
-                                justify="flex-end",
-                            ),
-                        ],
-                        gap="md",
-                    ),
-                ],
-                size="md",
-            ),
+            # Navigation editing modals removed - using tab_management modals instead
             dmc.Modal(
                 title="Add New NavLink",
                 id="add-navlink-modal",
@@ -935,6 +863,33 @@ def create_app_layout():
     )
 
 
+def normalize_tab_name_for_url(tab_name):
+    """Convert tab name to URL-friendly format: lowercase, no accents, spaces to underscores"""
+    import re
+    import unicodedata
+
+    if not tab_name:
+        return ""
+
+    # Remove accents and normalize unicode
+    normalized = unicodedata.normalize("NFD", tab_name)
+    no_accents = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+
+    # Convert to lowercase and replace spaces with underscores
+    url_safe = no_accents.lower().replace(" ", "_")
+
+    # Remove any remaining non-alphanumeric characters except underscores and hyphens
+    url_safe = re.sub(r"[^a-z0-9_-]", "", url_safe)
+
+    # Remove multiple consecutive underscores
+    url_safe = re.sub(r"_+", "_", url_safe)
+
+    # Remove leading/trailing underscores
+    url_safe = url_safe.strip("_")
+
+    return url_safe or "tab"  # Fallback if name becomes empty
+
+
 def register_tab_routing_callback(app):
     """Register callback for tab routing with URL parameters"""
     import re
@@ -943,13 +898,13 @@ def register_tab_routing_callback(app):
 
     @app.callback(
         Output("url", "pathname", allow_duplicate=True),
-        [Input("rnaseq-tabs", "value")],
+        [Input("dashboard-tabs", "value")],
         [State("url", "pathname")],
         prevent_initial_call=True,
         suppress_callback_exceptions=True,  # Suppress exceptions for missing components
     )
     def update_url_on_tab_change(tab_value, current_pathname):
-        """Update URL when tab changes"""
+        """Update URL when tab changes - tab values are already normalized names"""
         from dash import no_update
 
         # Handle None or missing values
@@ -959,13 +914,12 @@ def register_tab_routing_callback(app):
         # Extract dashboard_id from current pathname
         dashboard_match = re.match(r"/dashboard/([a-f0-9]{24})", current_pathname)
         if not dashboard_match:
-            from dash import no_update
-
             return no_update
 
         dashboard_id = dashboard_match.group(1)
 
-        # Always include tab name in URL (no bare dashboard URLs)
+        # Tab value is already a normalized name (since we now use normalized names as tab IDs)
+        # So we can use it directly in the URL
         new_pathname = f"/dashboard/{dashboard_id}/{tab_value}"
 
         return new_pathname

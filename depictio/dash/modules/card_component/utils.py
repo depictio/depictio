@@ -80,6 +80,29 @@ AGGREGATION_MAPPING = {
 }
 
 
+def format_metric_value(value, format_type):
+    """Format metric value based on type with None handling."""
+    if value is None:
+        return "N/A"
+
+    try:
+        if format_type == "currency":
+            return f"${value:,.0f}"
+        elif format_type == "percentage":
+            return f"{value:.1f}%"
+        elif format_type == "int":
+            return f"{value:,}"
+        elif format_type == "scientific":
+            return f"{value:.2e}"
+        elif format_type == "float":
+            return f"{value:.2f}"
+        else:
+            return str(value)
+    except (ValueError, TypeError) as e:
+        logger.warning(f"Error formatting value {value} with format {format_type}: {e}")
+        return "Error"
+
+
 def compute_value(data, column_name, aggregation):
     logger.debug(f"Computing value for {column_name} with {aggregation}")
 

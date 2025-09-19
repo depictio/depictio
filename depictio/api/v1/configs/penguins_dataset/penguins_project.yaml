@@ -63,3 +63,32 @@ workflows:
               sex: "Penguin sex"
               year: "Observation year"
               species: "Species name"
+
+      # MultiQC data
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report data"
+        config:
+          type: "MultiQC"
+          multiqc_kwargs:
+            analysis_dir: # Path(s) to search for files to parse >> always multiqc.parquet here
+            verbose: # Print more information to the console
+            file_list: # Supply a file containing a list of file paths to be searched, one per row
+            prepend_dirs: # Prepend directory to sample names
+            dirs_depth: # Prepend n directories to sample names. Negative number to take from start of path
+            fn_clean_sample_names: # Do not clean the sample names (leave as full file name)
+            require_logs: # Require all explicitly requested modules to have log files. If not, MultiQC will exit with an error
+            use_filename_as_sample_name: # Use the log filename as the sample name
+            strict: # Don't catch exceptions, run additional code checks to help development
+            quiet:  #Only show log warnings
+            no_ansi: # Disable coloured log output
+            profile_runtime: # Add analysis of how long MultiQC takes to run to the report
+            no_version_check: # Disable checking the latest MultiQC version on the server
+            ignore: # Ignore analysis files
+            ignore_samples: # Ignore sample names
+            run_modules: # Use only this module. Can specify multiple times
+            exclude_modules: # Do not use this module. Can specify multiple times
+            config_files: # Specific config file to load, after those in MultiQC dir / home dir / working dir
+            module_order: # Names of modules in order of precedence to show in report
+            extra_fn_clean_exts: # Extra file extensions to clean from sample names
+            extra_fn_clean_trim: # Extra strings to clean from sample names
+            preserve_module_raw_data: # Preserve raw data from modules in the report - besides plots. Useful to use later interactively. Defaults to True. Set to False to save memory.
