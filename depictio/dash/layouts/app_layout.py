@@ -117,16 +117,69 @@ def handle_authenticated_user(pathname, local_data, theme="light", cached_projec
             if not dashboard_id:
                 # Fallback to dashboard content if no dashboard_id found
                 header_content = create_default_header("Dashboard")
-                dashboard_layout = dmc.Container(id="dashboard-content")
+                dashboard_layout = dmc.Container(
+                    id="dashboard-content",
+                    style={
+                        "--container-size": "none",  # Disable container size constraint
+                        "maxWidth": "none",
+                        "width": "100%",
+                    },
+                )
                 return dashboard_layout, header_content, pathname, local_data
 
             header_content = create_default_header("Add Component")
             creator_layout = create_component_creator_layout(dashboard_id, component_id)
             return creator_layout, header_content, pathname, local_data
 
-        # Return immediately for regular dashboard routes - skip purge for speed
-        header_content = create_default_header("Dashboard")
-        dashboard_layout = dmc.Container(id="dashboard-content")
+        # Return immediately for regular dashboard routes with tabs header
+        # Extract dashboard_id and optional tab from pathname
+        import re
+
+        # Support URLs like: /dashboard/{id} or /dashboard/{id}/{tab} (with optional anchors)
+        # Remove anchor part for routing logic
+        clean_pathname = pathname.split("#")[0] if "#" in pathname else pathname
+        dashboard_match = re.match(r"/dashboard/([a-f0-9]{24})(?:/([a-zA-Z]+))?", clean_pathname)
+
+        if dashboard_match:
+            dashboard_id = dashboard_match.group(1)
+            tab_name = dashboard_match.group(2)
+
+            # If no tab specified, redirect to first tab (overview) - but preserve anchor
+            if not tab_name:
+                anchor_part = f"#{pathname.split('#')[1]}" if "#" in pathname else ""
+                new_pathname = f"/dashboard/{dashboard_id}/overview{anchor_part}"
+                return (
+                    html.Div("Redirecting to first tab..."),
+                    create_default_header("Dashboard"),
+                    new_pathname,
+                    local_data,
+                )
+
+            # Validate tab name
+            valid_tabs = ["overview", "analysis"]
+            if tab_name not in valid_tabs:
+                # Redirect invalid tabs to first tab - but preserve anchor
+                anchor_part = f"#{pathname.split('#')[1]}" if "#" in pathname else ""
+                new_pathname = f"/dashboard/{dashboard_id}/overview{anchor_part}"
+                return (
+                    html.Div("Redirecting to valid tab..."),
+                    create_default_header("Dashboard"),
+                    new_pathname,
+                    local_data,
+                )
+
+            header_content = create_dashboard_tabs_header(dashboard_id, active_tab=tab_name)
+        else:
+            header_content = create_default_header("Dashboard")
+
+        dashboard_layout = dmc.Container(
+            id="dashboard-content",
+            style={
+                "--container-size": "none",  # Disable container size constraint
+                "maxWidth": "none",
+                "width": "100%",
+            },
+        )
         return dashboard_layout, header_content, pathname, local_data
 
     # For all other routes, purge tokens as normal
@@ -217,17 +270,36 @@ def handle_authenticated_user(pathname, local_data, theme="light", cached_projec
 
 
 def create_default_header(text):
-    # Return content for AppShellHeader - Simple text without sidebar button
+    # Return content for AppShellHeader - Simple text with burger menu
     return dmc.Group(
         [
-            dmc.Text(
-                text,
-                fw="bold",  # DMC 2.0+ equivalent of weight=600
-                size="xl",
-                style={
-                    "fontSize": "28px",
-                    "fontFamily": "Virgil",
-                },
+            dmc.Burger(
+                id="burger-menu",
+                opened=False,
+                style={"marginRight": "15px"},
+            ),
+            dmc.Group(
+                [
+                    dmc.ThemeIcon(
+                        DashIconify(icon="material-symbols:biotech", height=28),
+                        size="lg",
+                        radius="md",
+                        variant="gradient",
+                        gradient={"from": "green", "to": "teal"},
+                        style={"marginRight": "8px"},
+                    ),
+                    dmc.Text(
+                        text,
+                        fw="bold",  # DMC 2.0+ equivalent of weight=600
+                        size="xl",
+                        style={
+                            "fontSize": "24px",
+                            "fontFamily": "Virgil",
+                        },
+                    ),
+                ],
+                gap="xs",
+                align="center",
             ),
         ],
         justify="flex-start",  # Align to the left
@@ -236,6 +308,121 @@ def create_default_header(text):
             "padding": "0 20px",
             "height": "100%",
         },
+    )
+
+
+def create_dashboard_tabs_header(dashboard_id, active_tab="overview"):
+    """Create DMC tabs header for RNA-seq analysis dashboard"""
+    tabs = html.Div(
+        id="dynamic-tabs-container",
+        children=[
+            dmc.Tabs(
+                [
+                    dmc.TabsList(
+                        id="dynamic-tabs-list",
+                        children=[
+                            dmc.TabsTab(
+                                "Overview",
+                                value="overview",
+                                leftSection=DashIconify(icon="material-symbols:biotech", height=16),
+                            ),
+                            dmc.TabsTab(
+                                "Analysis",
+                                value="analysis",
+                                leftSection=DashIconify(
+                                    icon="material-symbols:analytics", height=16
+                                ),
+                            ),
+                            # Add Tab button - only visible in edit mode
+                            html.Div(
+                                dmc.ActionIcon(
+                                    DashIconify(icon="material-symbols:add", height=16),
+                                    id="add-tab-btn",
+                                    variant="light",
+                                    size="sm",
+                                    color="blue",
+                                    style={"marginLeft": "10px"},
+                                ),
+                                id="add-tab-container",
+                                style={"display": "none"},  # Hidden by default
+                            ),
+                        ],
+                        style={"marginBottom": "0px"},
+                    ),
+                ],
+                id="rnaseq-tabs",
+                value=active_tab,  # Use the active_tab parameter
+                variant="pills",
+                # style={"flex": "1", "padding": "10px 0px"},
+            ),
+        ],
+        style={"flex": "1"},
+    )
+
+    return dmc.Group(
+        [
+            dmc.Burger(
+                id="burger-menu",
+                opened=False,
+                # style={"marginRight": "15px"},
+            ),
+            dmc.Group(
+                [
+                    dmc.ThemeIcon(
+                        DashIconify(icon="material-symbols:biotech", height=24),
+                        size="md",
+                        radius="md",
+                        variant="gradient",
+                        gradient={"from": "green", "to": "teal"},
+                        # style={"marginRight": "8px"},
+                    ),
+                ],
+                gap="xs",
+                align="center",
+            ),
+            tabs,
+            dmc.Group(
+                [
+                    dmc.ActionIcon(
+                        DashIconify(icon="material-symbols:play-arrow", height=20),
+                        id="run-analysis-btn",
+                        variant="light",
+                        size="lg",
+                        color="green",
+                    ),
+                    dmc.ActionIcon(
+                        DashIconify(icon="material-symbols:save", height=20),
+                        id="save-analysis-btn",
+                        variant="light",
+                        size="lg",
+                    ),
+                    dmc.ActionIcon(
+                        DashIconify(icon="material-symbols:edit", height=20),
+                        id="edit-mode-toggle-btn",
+                        variant="light",
+                        size="lg",
+                        color="orange",
+                    ),
+                    dmc.ActionIcon(
+                        DashIconify(icon="material-symbols:more-vert", height=20),
+                        id="more-options-btn",
+                        variant="light",
+                        size="lg",
+                    ),
+                    dmc.ActionIcon(
+                        DashIconify(icon="material-symbols:side-navigation", height=20),
+                        id="aside-toggle-btn",
+                        variant="light",
+                        size="lg",
+                        color="blue",
+                    ),
+                ],
+                gap="sm",
+                # style={"marginRight": "20px"},
+            ),
+        ],
+        justify="space-between",
+        style={"width": "100%", "alignItems": "center", "height": "100%", "padding": "0 20px"},
     )
 
 
@@ -278,7 +465,7 @@ def create_admin_header(text):
     )
 
     header = dmc.AppShellHeader(  # type: ignore[unresolved-attribute]
-        h=60,  # Height of the header
+        # Height is controlled by AppShell config
         # padding="xs",  # Padding inside the header
         children=[
             dmc.Container(
@@ -304,19 +491,6 @@ def create_admin_header(text):
                                                 height=20,
                                             ),
                                             value="users",
-                                            # value="users",
-                                            # component=dcc.Link("Users", href="/admin/users", style={"textDecoration": "none", "color": "inherit"})
-                                        ),
-                                        dmc.TabsTab(  # type: ignore[unresolved-attribute]
-                                            "Groups",
-                                            leftSection=DashIconify(
-                                                icon="mdi:account-group",
-                                                width=20,
-                                                height=20,
-                                            ),
-                                            value="groups",
-                                            # value="users",
-                                            # component=dcc.Link("Users", href="/admin/users", style={"textDecoration": "none", "color": "inherit"})
                                         ),
                                         dmc.TabsTab(  # type: ignore[unresolved-attribute]
                                             "Projects",
@@ -326,53 +500,16 @@ def create_admin_header(text):
                                                 height=20,
                                             ),
                                             value="projects",
-                                            # value="projects",
-                                            # component=dcc.Link("Projects", href="/admin/projects", style={"textDecoration": "none", "color": "inherit"})
-                                        ),
-                                        dmc.TabsTab(  # type: ignore[unresolved-attribute]
-                                            "Dashboards",
-                                            leftSection=DashIconify(
-                                                icon="mdi:view-dashboard",
-                                                width=20,
-                                                height=20,
-                                            ),
-                                            value="dashboards",
-                                            # value="dashboards",
-                                            # component=dcc.Link("Dashboards", href="/admin/dashboards", style={"textDecoration": "none", "color": "inherit"})
-                                        ),
-                                        dmc.TabsTab(  # type: ignore[unresolved-attribute]
-                                            "Analytics",
-                                            leftSection=DashIconify(
-                                                icon="mdi:chart-line",
-                                                width=20,
-                                                height=20,
-                                            ),
-                                            value="analytics",
                                         ),
                                         dmc.TabsPanel(
                                             children=[],
                                             value="users",
                                             id="admin-tabs-users",
                                         ),
-                                        # dmc.TabsPanel(
-                                        # children=[],
-                                        #     value="groups",
-                                        #     id="admin-tabs-groups",
-                                        # ),
                                         dmc.TabsPanel(
                                             children=[],
                                             value="projects",
                                             id="admin-tabs-projects",
-                                        ),
-                                        dmc.TabsPanel(
-                                            children=[],
-                                            value="dashboards",
-                                            id="admin-tabs-dashboards",
-                                        ),
-                                        dmc.TabsPanel(
-                                            children=[],
-                                            value="analytics",
-                                            id="admin-tabs-analytics",
                                         ),
                                     ]
                                 ),
@@ -398,17 +535,27 @@ def create_admin_header(text):
 
 
 def create_header_with_button(text, button):
-    # Return content for AppShellHeader - Simple text and button without sidebar button
+    # Return content for AppShellHeader - Simple text and button with burger menu
     return dmc.Group(
         [
-            dmc.Text(
-                text,
-                fw="bold",  # DMC 2.0+ equivalent of weight=600
-                size="xl",
-                style={
-                    "fontSize": "28px",
-                    "fontFamily": "Virgil",
-                },
+            dmc.Group(
+                [
+                    dmc.Burger(
+                        id="burger-menu",
+                        opened=False,
+                        style={"marginRight": "15px"},
+                    ),
+                    dmc.Text(
+                        text,
+                        fw="bold",  # DMC 2.0+ equivalent of weight=600
+                        size="xl",
+                        style={
+                            "fontSize": "28px",
+                            "fontFamily": "Virgil",
+                        },
+                    ),
+                ],
+                align="center",
             ),
             button,
         ],
@@ -553,6 +700,8 @@ def create_app_layout():
         id="mantine-provider",
         forceColorScheme="light",  # Default to light, will be updated by callback
         children=[
+            # Add CSS for smooth transitions and responsive positioning
+            html.Div(id="global-css-injection"),
             dcc.Location(id="url", refresh=False),
             dcc.Store(
                 id="local-store",
@@ -577,6 +726,11 @@ def create_app_layout():
                 id="sidebar-collapsed",
                 storage_type="local",  # Changed to local storage to persist user preference
                 data=False,  # Default to expanded if no preference saved
+            ),
+            dcc.Store(
+                id="edit-mode-store",
+                storage_type="session",  # Session storage for edit mode
+                data=False,  # Default to view mode
             ),
             # Consolidated user cache to reduce API calls
             dcc.Store(
@@ -609,6 +763,12 @@ def create_app_layout():
             html.Div(
                 id="dummy-resize-output", style={"display": "none"}
             ),  # Hidden output for resize callback
+            html.Div(
+                id="dummy-tab-output", style={"display": "none"}
+            ),  # Hidden output for tab creation
+            html.Div(
+                id="dummy-navlink-output", style={"display": "none"}
+            ),  # Hidden output for navlink creation
             dmc.Drawer(
                 title="",
                 id="drawer-simple",
@@ -620,18 +780,136 @@ def create_app_layout():
             ),
             dmc.NotificationContainer(id="notification-container"),
             html.Div(id="admin-password-warning-trigger", style={"display": "none"}),
+            # Navigation editing modals
+            dmc.Modal(
+                title="Add New Tab",
+                id="add-tab-modal",
+                opened=False,
+                children=[
+                    dmc.Stack(
+                        [
+                            dmc.TextInput(
+                                label="Tab Name",
+                                placeholder="Enter tab name",
+                                id="tab-name-input",
+                            ),
+                            dmc.Select(
+                                label="Icon",
+                                placeholder="Select an icon",
+                                id="tab-icon-select",
+                                data=[
+                                    {"value": "material-symbols:biotech", "label": "🧬 Biotech"},
+                                    {
+                                        "value": "material-symbols:analytics",
+                                        "label": "📊 Analytics",
+                                    },
+                                    {
+                                        "value": "material-symbols:trending-up",
+                                        "label": "📈 Trending Up",
+                                    },
+                                    {
+                                        "value": "material-symbols:check-circle",
+                                        "label": "✅ Check Circle",
+                                    },
+                                    {"value": "material-symbols:account-tree", "label": "🌳 Tree"},
+                                    {"value": "material-symbols:download", "label": "⬇️ Download"},
+                                    {"value": "material-symbols:settings", "label": "⚙️ Settings"},
+                                    {"value": "material-symbols:storage", "label": "🗃️ Storage"},
+                                ],
+                            ),
+                            dmc.Group(
+                                [
+                                    dmc.Button("Cancel", id="tab-modal-cancel", variant="light"),
+                                    dmc.Button("Add Tab", id="tab-modal-confirm", color="blue"),
+                                ],
+                                justify="flex-end",
+                            ),
+                        ],
+                        gap="md",
+                    ),
+                ],
+                size="md",
+            ),
+            dmc.Modal(
+                title="Add New NavLink",
+                id="add-navlink-modal",
+                opened=False,
+                children=[
+                    dmc.Stack(
+                        [
+                            dmc.TextInput(
+                                label="NavLink Name",
+                                placeholder="Enter navlink name",
+                                id="navlink-name-input",
+                            ),
+                            dmc.Select(
+                                label="Icon",
+                                placeholder="Select an icon",
+                                id="navlink-icon-select",
+                                data=[
+                                    {"value": "material-symbols:biotech", "label": "🧬 Biotech"},
+                                    {
+                                        "value": "material-symbols:analytics",
+                                        "label": "📊 Analytics",
+                                    },
+                                    {"value": "material-symbols:folder", "label": "📁 Folder"},
+                                    {"value": "material-symbols:settings", "label": "⚙️ Settings"},
+                                    {"value": "material-symbols:storage", "label": "🗃️ Storage"},
+                                    {"value": "material-symbols:link", "label": "🔗 Link"},
+                                ],
+                            ),
+                            dmc.TextInput(
+                                label="URL (optional)",
+                                placeholder="Enter URL or leave empty",
+                                id="navlink-url-input",
+                            ),
+                            dmc.Switch(
+                                label="Nest under current navlink",
+                                id="navlink-nested-switch",
+                            ),
+                            dmc.Group(
+                                [
+                                    dmc.Button(
+                                        "Cancel", id="navlink-modal-cancel", variant="light"
+                                    ),
+                                    dmc.Button(
+                                        "Add NavLink", id="navlink-modal-confirm", color="blue"
+                                    ),
+                                ],
+                                justify="flex-end",
+                            ),
+                        ],
+                        gap="md",
+                    ),
+                ],
+                size="md",
+            ),
             dmc.AppShell(
                 id="app-shell",  # Add ID for callback targeting
-                # navbar and header will be set by callbacks
-                layout="alt",  # Use alternative layout where header stops at navbar
-                style={
-                    "height": "100vh",
-                    "overflow": "auto",  # ✅ Allow scrolling
-                },
+                # navbar, aside and header will be set by callbacks
+                layout="default",  # Use default layout
+                header={"height": 30},  # Set header height
+                # style={
+                #     "height": "100vh",
+                #     "overflow": "auto",
+                #     "transition": "all 0.15s ease-out",  # Faster, simpler transition
+                # },
                 children=[
                     dmc.AppShellNavbar(  # type: ignore[unresolved-attribute]
                         children=render_sidebar_content(""),
-                        id="sidebar",
+                        id="main-navbar",
+                        style={
+                            "borderRight": "1px solid var(--app-border-color, #dee2e6)",
+                            "transition": "transform 0.1s ease-out",  # Simplified and faster transition
+                        },
+                    ),
+                    dmc.AppShellAside(  # type: ignore[unresolved-attribute]
+                        children=[],  # Will be populated by callback for dashboard features
+                        id="dashboard-aside",
+                        style={
+                            "borderLeft": "1px solid var(--app-border-color, #dee2e6)",
+                            "transition": "transform 0.1s ease-out",  # Simplified and faster transition
+                        },
                     ),
                     dmc.AppShellHeader(  # type: ignore[unresolved-attribute]
                         children=[],  # Will be populated by callback
@@ -642,12 +920,52 @@ def create_app_layout():
                             id="page-content",
                             style={
                                 "padding": "1rem",
-                                "minHeight": "calc(100vh - 87px)",  # Ensure minimum height for short content
-                                "overflowY": "auto",  # Allow vertical scrolling
+                                "minHeight": "calc(100vh - 30px)",  # Updated for 30px header height
+                                "overflowY": "auto",
+                                "transition": "margin 0.1s ease-out",  # Simplified and faster transition
                             },
                         ),
+                        style={
+                            "transition": "margin 0.1s ease-out",  # Simplified and faster transition
+                        },
                     ),
                 ],
             ),
         ],
     )
+
+
+def register_tab_routing_callback(app):
+    """Register callback for tab routing with URL parameters"""
+    import re
+
+    from dash import Input, Output, State
+
+    @app.callback(
+        Output("url", "pathname", allow_duplicate=True),
+        [Input("rnaseq-tabs", "value")],
+        [State("url", "pathname")],
+        prevent_initial_call=True,
+        suppress_callback_exceptions=True,  # Suppress exceptions for missing components
+    )
+    def update_url_on_tab_change(tab_value, current_pathname):
+        """Update URL when tab changes"""
+        from dash import no_update
+
+        # Handle None or missing values
+        if not tab_value or not current_pathname:
+            return no_update
+
+        # Extract dashboard_id from current pathname
+        dashboard_match = re.match(r"/dashboard/([a-f0-9]{24})", current_pathname)
+        if not dashboard_match:
+            from dash import no_update
+
+            return no_update
+
+        dashboard_id = dashboard_match.group(1)
+
+        # Always include tab name in URL (no bare dashboard URLs)
+        new_pathname = f"/dashboard/{dashboard_id}/{tab_value}"
+
+        return new_pathname

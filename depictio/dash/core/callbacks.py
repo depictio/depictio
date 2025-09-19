@@ -79,7 +79,7 @@ def register_main_callback(app):
                 return null;
             } else {
                 // Show header on all other pages (including dashboard routes)
-                return {"height": 87};
+                return {"height": 50};
             }
         }
         """,
@@ -175,10 +175,12 @@ def register_layout_callbacks(app):
     Args:
         app (dash.Dash): The Dash application instance
     """
+    from depictio.dash.layouts.app_layout import register_tab_routing_callback
     from depictio.dash.layouts.component_creator import register_component_creator_callbacks
     from depictio.dash.layouts.consolidated_api import register_consolidated_api_callbacks
     from depictio.dash.layouts.dashboard_content import register_dashboard_content_callbacks
     from depictio.dash.layouts.header import register_callbacks_header
+    from depictio.dash.layouts.navigation_editor import register_navigation_editor_callbacks
     from depictio.dash.layouts.sidebar import register_sidebar_callbacks
 
     # from depictio.dash.layouts.stepper_parts.part_one import register_callbacks_stepper_part_one
@@ -195,6 +197,9 @@ def register_layout_callbacks(app):
     # Register component creator callbacks (for add component stepper)
     register_component_creator_callbacks(app)
 
+    # Register navigation editor callbacks (for dynamic tab/navlink creation)
+    register_navigation_editor_callbacks(app)
+
     # Register layout callbacks
 
     # register_callbacks_stepper_part_one(app)
@@ -204,6 +209,9 @@ def register_layout_callbacks(app):
 
     register_sidebar_callbacks(app)
     register_simple_theme_system(app)
+
+    # Register tab routing callback for URL updates
+    register_tab_routing_callback(app)
 
 
 def register_component_callbacks(app):

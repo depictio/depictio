@@ -11,7 +11,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
 import plotly.express as px
 import polars as pl
@@ -21,65 +20,95 @@ from dash_iconify import DashIconify
 from depictio.api.v1.configs.config import create_cache
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.layouts.dashboard_export import create_standalone_html
-from depictio.dash.utils import generate_unique_index
 
 # ============================================================================
 # DASHBOARD METADATA CONFIGURATION
 # ============================================================================
 # Central metadata location - the only input required to render components
 
-# Data generation configuration
+# RNA-seq data generation configuration
 DATA_CONFIG = {
-    "rows": 1000,  # 1K rows for fast development
-    "categories": ["Category A", "Category B", "Category C", "Category D", "Category E"],
+    "rows": 1000,  # 1K genes for fast development
+    "categories": ["Control", "Treatment", "Timepoint_0h", "Timepoint_6h", "Timepoint_24h"],
     "metrics": {
-        "users": {"min": 1000, "max": 10000, "format": "int"},
-        "revenue": {"min": 10000, "max": 100000, "format": "currency"},
-        "conversion_rate": {"min": 1.5, "max": 8.5, "format": "percentage"},
-        "sessions": {"min": 500, "max": 5000, "format": "int"},
+        "deg_count": {"min": 500, "max": 2500, "format": "int"},
+        "upregulated": {"min": 200, "max": 1200, "format": "int"},
+        "downregulated": {"min": 200, "max": 1200, "format": "int"},
+        "total_samples": {"min": 12, "max": 48, "format": "int"},
+        "log2_fold_change": {"min": -5.0, "max": 5.0, "format": "float"},
+        "p_value": {"min": 0.001, "max": 0.1, "format": "scientific"},
+        "base_mean": {"min": 0, "max": 10000, "format": "int"},
     },
 }
 
-# Dynamic interactive control configurations
+# RNA-seq interactive control configurations
 INTERACTIVE_CONTROLS = [
     {
         "id": 0,
         "control_type": "range_slider",
-        "field": "revenue",
-        "label": "Revenue Range",
-        "min": 10000,
-        "max": 100000,
-        "step": 5000,
-        "format": "currency",
+        "field": "log2_fold_change",
+        "label": "Log2 Fold Change",
+        "min": -5.0,
+        "max": 5.0,
+        "step": 0.1,
+        "format": "float",
+        "marks": {-2: "-2", 0: "0", 2: "2"},
     },
     {
         "id": 1,
         "control_type": "range_slider",
-        "field": "users",
-        "label": "Users Range",
-        "min": 1000,
-        "max": 10000,
-        "step": 500,
-        "format": "int",
+        "field": "p_value",
+        "label": "P-Value Threshold",
+        "min": 0.001,
+        "max": 0.1,
+        "step": 0.001,
+        "format": "scientific",
+        "marks": {0.001: "0.001", 0.01: "0.01", 0.05: "0.05", 0.1: "0.1"},
     },
     {
         "id": 2,
         "control_type": "multi_select",
-        "field": "category",
-        "label": "Category Filter",
-        "options": ["Category A", "Category B", "Category C", "Category D", "Category E"],
+        "field": "sample_type",
+        "label": "Sample Types",
+        "options": ["Control", "Treatment", "Timepoint_0h", "Timepoint_6h", "Timepoint_24h"],
         "default": ["all"],
     },
     {
         "id": 3,
         "control_type": "dropdown",
-        "field": "date_range",
-        "label": "Date Range Filter",
+        "field": "gene_biotype",
+        "label": "Gene Biotype",
         "options": [
-            {"label": "All Time", "value": "all"},
-            {"label": "Last 7 Days", "value": "last_7_days"},
-            {"label": "Last 30 Days", "value": "last_30_days"},
-            {"label": "Last 90 Days", "value": "last_90_days"},
+            {"label": "All Biotypes", "value": "all"},
+            {"label": "Protein Coding", "value": "protein_coding"},
+            {"label": "lncRNA", "value": "lncrna"},
+            {"label": "miRNA", "value": "mirna"},
+            {"label": "Pseudogene", "value": "pseudogene"},
+        ],
+        "default": "all",
+    },
+    {
+        "id": 4,
+        "control_type": "range_slider",
+        "field": "base_mean",
+        "label": "Base Mean Expression",
+        "min": 0,
+        "max": 10000,
+        "step": 100,
+        "format": "int",
+        "marks": {0: "0", 1000: "1K", 5000: "5K", 10000: "10K"},
+    },
+    {
+        "id": 5,
+        "control_type": "dropdown",
+        "field": "pathway",
+        "label": "Pathway Enrichment",
+        "options": [
+            {"label": "All Pathways", "value": "all"},
+            {"label": "Cell Cycle", "value": "cell_cycle"},
+            {"label": "Metabolism", "value": "metabolism"},
+            {"label": "Immune Response", "value": "immune_response"},
+            {"label": "Signal Transduction", "value": "signal_transduction"},
         ],
         "default": "all",
     },
@@ -93,19 +122,18 @@ COMPONENT_DEPENDENCIES = {
 }
 
 DASHBOARD_COMPONENTS = [
-    # Interactive controls at the top
-    {"type": "interactive", "index": 0, "title": "Dashboard Controls", "position": "top"},
-    # 8 Metric cards (reduced for stability)
-    {"type": "metric", "index": 0, "title": "Total Users", "metric_key": "users"},
-    {"type": "metric", "index": 1, "title": "Revenue", "metric_key": "revenue"},
-    {"type": "metric", "index": 2, "title": "Conversion Rate", "metric_key": "conversion_rate"},
-    {"type": "metric", "index": 3, "title": "Active Sessions", "metric_key": "sessions"},
-    {"type": "metric", "index": 4, "title": "New Users", "metric_key": "users"},
-    {"type": "metric", "index": 5, "title": "Monthly Revenue", "metric_key": "revenue"},
-    {"type": "metric", "index": 6, "title": "Daily Conversion", "metric_key": "conversion_rate"},
-    {"type": "metric", "index": 7, "title": "Peak Sessions", "metric_key": "sessions"},
-    # Commented out for reduced load - uncomment for benchmarking
-    # {"type": "metric", "index": 8, "title": "Returning Users", "metric_key": "users"},
+    # Interactive controls for filters
+    {"type": "interactive", "index": 0, "title": "RNA-seq Analysis Filters", "position": "top"},
+    # RNA-seq metrics cards
+    {
+        "type": "metric",
+        "index": 0,
+        "title": "Differentially Expressed Genes",
+        "metric_key": "deg_count",
+    },
+    {"type": "metric", "index": 1, "title": "Upregulated Genes", "metric_key": "upregulated"},
+    {"type": "metric", "index": 2, "title": "Downregulated Genes", "metric_key": "downregulated"},
+    {"type": "metric", "index": 3, "title": "Total Samples", "metric_key": "total_samples"},
     # {"type": "metric", "index": 9, "title": "Avg Revenue", "metric_key": "revenue"},
     # {"type": "metric", "index": 10, "title": "Min Conversion", "metric_key": "conversion_rate"},
     # {"type": "metric", "index": 11, "title": "Session Duration", "metric_key": "sessions"},
@@ -142,34 +170,34 @@ DASHBOARD_COMPONENTS = [
     {
         "type": "chart",
         "index": 0,
-        "title": "User Activity Scatter",
+        "title": "Gene Expression Scatter",
         "chart_type": "scatter",
-        "x_col": "date",
-        "y_col": "users",
+        "x_col": "log2_fold_change",
+        "y_col": "base_mean",
     },
     {
         "type": "chart",
         "index": 1,
-        "title": "Revenue by Category",
+        "title": "DEG Count by Sample Type",
         "chart_type": "bar",
         "x_col": "category",
-        "y_col": "revenue",
+        "y_col": "deg_count",
     },
     {
         "type": "chart",
         "index": 2,
-        "title": "Conversion Distribution",
+        "title": "P-Value Distribution",
         "chart_type": "box",
         "x_col": "category",
-        "y_col": "conversion_rate",
+        "y_col": "p_value",
     },
     {
         "type": "chart",
         "index": 3,
-        "title": "Sessions Timeline",
+        "title": "Fold Change Timeline",
         "chart_type": "line",
         "x_col": "date",
-        "y_col": "sessions",
+        "y_col": "log2_fold_change",
     },
     # Commented out for reduced configuration (keeping 4 charts total)
     # {
@@ -929,46 +957,262 @@ def create_chart_figure(df, chart_config):
     title = chart_config["title"]
 
     # Get height and theme from enhanced config or defaults
-    height = chart_config.get("chart_height", 400)
+    height = chart_config.get("chart_height", 450)  # Increased default height for full-width charts
     theme = chart_config.get("chart_theme", "plotly")
 
     logger.info(
         f"🔧 CHART GENERATION: Creating {chart_type} chart '{title}' (height={height}, theme={theme}) - using native Polars"
     )
 
+    # Enhanced RNA-seq color palette
+    rna_colors_primary = ["#2E7CD6", "#48BB78", "#ED8936", "#9F7AEA", "#F56565", "#38B2AC"]
+
     if chart_type == "scatter":
-        fig = px.scatter(df, x=x_col, y=y_col, title=title, height=height, template=theme)
+        # Enhanced scatter plot with size variation
+        fig = px.scatter(
+            df,
+            x=x_col,
+            y=y_col,
+            title=title,
+            height=height,
+            template="plotly_white",  # Clean white background
+            color_discrete_sequence=rna_colors_primary,
+            opacity=0.8,
+        )
+
+        # Update scatter markers with better styling
+        fig.update_traces(
+            marker=dict(size=10, line=dict(width=1, color="white"), symbol="circle"),
+            selector=dict(mode="markers"),
+        )
+
+        # Add statistical significance thresholds for RNA-seq with better styling
+        if "log2_fold_change" in x_col or "base_mean" in y_col:
+            # Add volcano plot thresholds if applicable
+            if "log2_fold_change" in x_col:
+                fig.add_vline(
+                    x=1,
+                    line_dash="dot",
+                    line_color="#48BB78",
+                    line_width=2,
+                    annotation_text="FC > 2",
+                    annotation_position="top left",
+                    annotation=dict(font_size=11, font_color="#48BB78"),
+                )
+                fig.add_vline(
+                    x=-1,
+                    line_dash="dot",
+                    line_color="#F56565",
+                    line_width=2,
+                    annotation_text="FC < -2",
+                    annotation_position="top right",
+                    annotation=dict(font_size=11, font_color="#F56565"),
+                )
+            if "p_value" in y_col:
+                fig.add_hline(
+                    y=0.05,
+                    line_dash="dot",
+                    line_color="#9F7AEA",
+                    line_width=2,
+                    annotation_text="p = 0.05",
+                    annotation_position="bottom right",
+                    annotation=dict(font_size=11, font_color="#9F7AEA"),
+                )
+
     elif chart_type == "bar":
         # Aggregate data for bar chart using polars directly
         agg_df = df.group_by(x_col).agg(pl.col(y_col).mean())
-        fig = px.bar(agg_df, x=x_col, y=y_col, title=title, height=height, template=theme)
-    elif chart_type == "box":
-        fig = px.box(df, x=x_col, y=y_col, title=title, height=height, template=theme)
-    elif chart_type == "line":
-        fig = px.line(df, x=x_col, y=y_col, title=title, height=height, template=theme)
-    else:
-        # Default to scatter
-        fig = px.scatter(df, x=x_col, y=y_col, title=title, height=height, template=theme)
+        fig = px.bar(
+            agg_df,
+            x=x_col,
+            y=y_col,
+            title=title,
+            height=height,
+            template="plotly_white",
+            color_discrete_sequence=rna_colors_primary,
+            text_auto=".2f",  # Show values on bars
+        )
 
-    # Update layout for better appearance (conditional based on theme)
+        # Update bar styling with rounded corners effect
+        fig.update_traces(
+            marker=dict(line=dict(width=0), opacity=0.9),
+            textfont_size=11,
+            textangle=0,
+            textposition="outside",
+            cliponaxis=False,
+        )
+
+    elif chart_type == "box":
+        # Enhanced box plot with violin overlay option
+        fig = px.box(
+            df,
+            x=x_col,
+            y=y_col,
+            title=title,
+            height=height,
+            template="plotly_white",
+            color_discrete_sequence=rna_colors_primary,
+            notched=True,  # Show confidence interval
+            points="outliers",  # Show outlier points
+        )
+
+        # Update box plot styling
+        fig.update_traces(
+            marker=dict(size=6, opacity=0.7, line=dict(width=1, color="white")),
+            line=dict(width=2),
+            fillcolor="rgba(0,0,0,0)",
+            opacity=0.9,
+        )
+
+    elif chart_type == "line":
+        # Enhanced line chart with smooth curves and markers
+        fig = px.line(
+            df,
+            x=x_col,
+            y=y_col,
+            title=title,
+            height=height,
+            template="plotly_white",
+            color_discrete_sequence=rna_colors_primary,
+            line_shape="spline",  # Smooth curves
+            render_mode="svg",  # Better rendering quality
+        )
+
+        # Update line styling with markers
+        fig.update_traces(
+            mode="lines+markers",
+            line=dict(width=3),
+            marker=dict(size=8, symbol="circle", line=dict(width=2, color="white")),
+        )
+
+    else:
+        # Default enhanced scatter
+        fig = px.scatter(
+            df,
+            x=x_col,
+            y=y_col,
+            title=title,
+            height=height,
+            template="plotly_white",
+            color_discrete_sequence=rna_colors_primary,
+            opacity=0.85,
+        )
+
+        fig.update_traces(
+            marker=dict(size=12, line=dict(width=1.5, color="white"), symbol="diamond")
+        )
+
+    # Enhanced modern layout with better typography and spacing
     layout_updates = {
-        "font": dict(size=12),
-        "margin": dict(l=40, r=40, t=60, b=40),
+        "font": dict(
+            size=13,
+            family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+            color="#2D3748",
+        ),
+        "margin": dict(l=80, r=80, t=100, b=80),  # Symmetric margins for centered full-width charts
+        "title": dict(
+            text=f"<b>{title}</b>",  # Bold title
+            font=dict(
+                size=22,  # Larger title for full-width charts
+                color="#1A365D",
+                family="Inter, -apple-system, BlinkMacSystemFont, sans-serif",
+            ),
+            x=0.5,
+            xanchor="center",
+            y=0.98,
+            yanchor="top",
+        ),
+        "xaxis": dict(
+            title_font=dict(size=14, color="#4A5568"),
+            tickfont=dict(size=11, color="#718096"),
+            gridcolor="rgba(203, 213, 224, 0.4)",
+            gridwidth=1,
+            zeroline=True,
+            zerolinecolor="rgba(203, 213, 224, 0.8)",
+            zerolinewidth=2,
+            showline=True,
+            linewidth=1,
+            linecolor="rgba(203, 213, 224, 0.8)",
+            mirror=False,
+            ticks="outside",
+            ticklen=4,
+            tickcolor="rgba(203, 213, 224, 0.5)",
+        ),
+        "yaxis": dict(
+            title_font=dict(size=14, color="#4A5568"),
+            tickfont=dict(size=11, color="#718096"),
+            gridcolor="rgba(203, 213, 224, 0.4)",
+            gridwidth=1,
+            zeroline=True,
+            zerolinecolor="rgba(203, 213, 224, 0.8)",
+            zerolinewidth=2,
+            showline=True,
+            linewidth=1,
+            linecolor="rgba(203, 213, 224, 0.8)",
+            mirror=False,
+            ticks="outside",
+            ticklen=4,
+            tickcolor="rgba(203, 213, 224, 0.5)",
+        ),
+        "hoverlabel": dict(
+            bgcolor="rgba(255, 255, 255, 0.95)",
+            bordercolor="rgba(0, 0, 0, 0.1)",
+            font=dict(size=12, family="Inter, -apple-system, sans-serif", color="#2D3748"),
+            align="left",
+        ),
+        "plot_bgcolor": "#FAFAFA",  # Very light gray background
+        "paper_bgcolor": "rgba(255, 255, 255, 0)",
+        "showlegend": True,
+        "legend": dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            bgcolor="rgba(255, 255, 255, 0.8)",
+            bordercolor="rgba(203, 213, 224, 0.5)",
+            borderwidth=1,
+            font=dict(size=11),
+        ),
+        "hovermode": "closest",
+        "dragmode": "pan",  # Enable panning by default
     }
 
-    # Only apply transparent backgrounds for certain themes
-    if theme in ["plotly", "plotly_white"]:
-        layout_updates.update(
-            {
-                "plot_bgcolor": "rgba(0,0,0,0)",
-                "paper_bgcolor": "rgba(0,0,0,0)",
-            }
-        )
+    # Add subtle animation
+    layout_updates["transition"] = {"duration": 500, "easing": "cubic-in-out"}
 
     fig.update_layout(**layout_updates)
 
+    # Custom modebar buttons configuration (unused for now)
+
+    # Add range slider for time series data
+    if chart_type == "line" and "date" in x_col.lower():
+        fig.update_xaxes(
+            rangeslider_visible=True,
+            rangeslider_thickness=0.1,
+            rangeslider_bgcolor="rgba(203, 213, 224, 0.2)",
+            rangeslider_bordercolor="rgba(203, 213, 224, 0.4)",
+            rangeslider_borderwidth=1,
+        )
+
+    # Enable spike lines for better data reading
+    fig.update_xaxes(
+        showspikes=True,
+        spikecolor="rgba(0,0,0,0.2)",
+        spikesnap="cursor",
+        spikemode="across",
+        spikethickness=1,
+    )
+    fig.update_yaxes(
+        showspikes=True,
+        spikecolor="rgba(0,0,0,0.2)",
+        spikethickness=1,
+        spikedash="dot",
+        spikemode="across",
+    )
+
     logger.info(
-        f"✅ CHART GENERATION: Created {chart_type} chart with {len(df)} data points (height={height}, theme={theme})"
+        f"✅ CHART GENERATION: Created enhanced {chart_type} chart with {len(df)} data points"
     )
 
     return fig
@@ -1045,87 +1289,19 @@ def register_dashboard_content_callbacks(app):
         # Create container structure with unique IDs for pattern matching
         containers = []
 
-        # Dashboard header with loading indicator and add component button
-        containers.append(
-            dmc.Group(
-                justify="space-between",
-                align="center",
-                mb="xl",
-                children=[
-                    html.Div(
-                        [
-                            dmc.Title(
-                                "Dashboard Analytics",
-                                order=2,
-                                mb="xs",
-                            ),
-                            dmc.Text(
-                                f"Dashboard ID: {dashboard_id}",
-                                size="sm",
-                                c="gray",
-                            ),
-                        ]
-                    ),
-                    # Dashboard action buttons
-                    dmc.Group(
-                        gap="sm",
-                        children=[
-                            # Apply Updates button (moved from bottom)
-                            dmc.Button(
-                                "Apply Updates",
-                                id="apply-updates-button",
-                                leftSection=DashIconify(icon="mdi:check-circle", width=16),
-                                disabled=True,  # Initially disabled
-                                color="green",
-                                variant="filled",
-                                size="md",
-                            ),
-                            # Export Dashboard button
-                            dmc.Button(
-                                "Export HTML",
-                                id={
-                                    "type": "export-dashboard-button",
-                                    "dashboard_id": dashboard_id,
-                                },
-                                color="green",
-                                size="md",
-                                leftSection=DashIconify(icon="mdi:download", width=16),
-                                variant="outline",
-                            ),
-                            # Add Component button - generate unique component ID using same system as draggable
-                            dcc.Link(
-                                dmc.Button(
-                                    "Add Component",
-                                    id={
-                                        "type": "add-component-button",
-                                        "dashboard_id": dashboard_id,
-                                    },
-                                    color="blue",
-                                    size="md",
-                                    leftSection=DashIconify(icon="mdi:plus-circle", width=16),
-                                    variant="filled",
-                                ),
-                                href=f"/dashboard/{dashboard_id}/add_component/{generate_unique_index()}",
-                                style={"textDecoration": "none"},
-                            ),
-                        ],
-                    ),
-                ],
-            )
-        )
-
-        # Create interactive controls at the top
+        # Create filter controls for left panel (1/4)
+        filter_controls = []
         for comp in components:
             if comp["type"] == "interactive" and comp.get("position") == "top":
                 logger.info(f"🚨 DEBUG: Creating interactive container for index {comp['index']}")
-                containers.append(
+                filter_controls.append(
                     html.Div(
-                        # dmc.Skeleton(height=120, radius="md"),  # Loading skeleton disabled for performance test
                         html.Div(
-                            "Loading interactive...",
+                            "Loading interactive filters...",
                             style={"height": "120px", "textAlign": "center", "paddingTop": "50px"},
                         ),
                         id={"type": "interactive-component", "index": comp["index"]},
+                        style={"marginBottom": "16px"},
                     )
                 )
                 logger.info(
@@ -1138,157 +1314,203 @@ def register_dashboard_content_callbacks(app):
 
         for comp in components:
             if comp["type"] == "metric":
-                # Create container with DraggableWrapper - add drag handle to loading state
+                # Create standard container for metric cards
                 metric_containers.append(
-                    dgl.DraggableWrapper(
+                    html.Div(
                         id=f"metric-{comp['index']}",
+                        style={
+                            "width": "100%",
+                            "height": "100%",
+                            "position": "relative",
+                        },
                         children=[
-                            # Wrapper with drag handle
+                            # Content container that gets replaced by callback
                             html.Div(
+                                "Loading RNA-seq metrics...",
+                                id={"type": "metric-card", "index": comp["index"]},
                                 style={
                                     "width": "100%",
                                     "height": "100%",
-                                    "position": "relative",
+                                    "display": "flex",
+                                    "flexDirection": "column",
+                                    "alignItems": "center",
+                                    "justifyContent": "center",
+                                    "backgroundColor": "var(--app-surface-color, #ffffff)",
+                                    "borderRadius": "8px",
+                                    "boxShadow": "0 1px 3px rgba(0,0,0,0.1)",
+                                    "boxSizing": "border-box",
                                 },
-                                children=[
-                                    # DRAG HANDLE IN LOADING STATE
-                                    html.Div(
-                                        "⋮⋮",
-                                        className="react-grid-dragHandle",
-                                        style={
-                                            "position": "absolute",
-                                            "top": "5px",
-                                            "right": "5px",
-                                            "width": "30px",
-                                            "height": "30px",
-                                            "backgroundColor": "red",
-                                            "color": "white",
-                                            "display": "flex",
-                                            "alignItems": "center",
-                                            "justifyContent": "center",
-                                            "cursor": "grab",
-                                            "zIndex": 999999,
-                                            "fontSize": "16px",
-                                            "fontWeight": "bold",
-                                            "borderRadius": "4px",
-                                            "border": "2px solid yellow",
-                                        },
-                                    ),
-                                    # Content container that gets replaced by callback
-                                    html.Div(
-                                        "Loading metric...",
-                                        id={"type": "metric-card", "index": comp["index"]},
-                                        style={
-                                            "width": "100%",
-                                            "height": "100%",
-                                            "display": "flex",
-                                            "flexDirection": "column",
-                                            "alignItems": "center",
-                                            "justifyContent": "center",
-                                            "backgroundColor": "#f8f9fa",
-                                            "border": "2px solid #007bff",
-                                            "borderRadius": "8px",
-                                            "overflow": "visible",  # Changed to visible
-                                            "boxSizing": "border-box",
-                                        },
-                                    ),
-                                ],
                             ),
                         ],
                     )
                 )
             elif comp["type"] == "chart":
+                # Create standard container for chart components
                 chart_containers.append(
-                    dgl.DraggableWrapper(
+                    html.Div(
                         id=f"chart-{comp['index']}",
+                        style={
+                            "width": "100%",
+                            "height": "100%",
+                            "position": "relative",
+                        },
                         children=[
-                            # Wrapper with drag handle
+                            # Content container that gets replaced by callback
                             html.Div(
+                                "Loading RNA-seq visualization...",
+                                id={"type": "chart-component", "index": comp["index"]},
                                 style={
                                     "width": "100%",
                                     "height": "100%",
-                                    "position": "relative",
+                                    "display": "flex",
+                                    "flexDirection": "column",
+                                    "alignItems": "center",
+                                    "justifyContent": "center",
+                                    "backgroundColor": "var(--app-surface-color, #ffffff)",
+                                    "borderRadius": "8px",
+                                    "boxShadow": "0 1px 3px rgba(0,0,0,0.1)",
+                                    "boxSizing": "border-box",
                                 },
-                                children=[
-                                    # DRAG HANDLE IN LOADING STATE
-                                    html.Div(
-                                        "⋮⋮",
-                                        className="react-grid-dragHandle",
-                                        style={
-                                            "position": "absolute",
-                                            "top": "5px",
-                                            "left": "5px",
-                                            "width": "30px",
-                                            "height": "30px",
-                                            "backgroundColor": "blue",
-                                            "color": "white",
-                                            "display": "flex",
-                                            "alignItems": "center",
-                                            "justifyContent": "center",
-                                            "cursor": "grab",
-                                            "zIndex": 999999,
-                                            "fontSize": "16px",
-                                            "fontWeight": "bold",
-                                            "borderRadius": "4px",
-                                            "border": "2px solid yellow",
-                                        },
-                                    ),
-                                    # Content container that gets replaced by callback
-                                    html.Div(
-                                        [
-                                            "Loading chart...",
-                                            html.Br(),
-                                            html.Div(
-                                                "🔵 DRAG HANDLE 🔵",
-                                                className="react-grid-dragHandle",
-                                                style={
-                                                    "backgroundColor": "blue",
-                                                    "color": "white",
-                                                    "padding": "10px",
-                                                    "margin": "10px",
-                                                    "cursor": "grab",
-                                                    "border": "3px solid yellow",
-                                                    "fontWeight": "bold",
-                                                },
-                                            ),
-                                        ],
-                                        id={"type": "chart-component", "index": comp["index"]},
-                                        style={
-                                            "width": "100%",
-                                            "height": "100%",
-                                            "display": "flex",
-                                            "flexDirection": "column",
-                                            "alignItems": "center",
-                                            "justifyContent": "center",
-                                            "backgroundColor": "#f8f9fa",
-                                            "border": "2px solid #28a745",
-                                            "borderRadius": "8px",
-                                            "overflow": "visible",  # Changed to visible
-                                            "boxSizing": "border-box",
-                                        },
-                                    ),
-                                ],
                             ),
                         ],
                     )
                 )
 
-        # Combine all draggable components for the grid layout
-        all_draggable_components = metric_containers + chart_containers
-
-        if all_draggable_components:
-            containers.append(
-                dgl.DashGridLayout(
-                    id="dashboard-grid-layout",
-                    items=all_draggable_components,
-                    style={"minHeight": "600px"},
-                    showResizeHandles=True,
-                    draggableChildStyle={"cursor": "grab"},
-                    cols={"lg": 12, "md": 8, "sm": 6, "xs": 4, "xxs": 2},
-                    rowHeight=150,
-                    margin=[10, 10],
-                )
+        # Use flexbox layout for better sticky positioning support
+        containers.append(
+            dmc.Container(
+                fluid=True,
+                p="md",
+                style={
+                    "display": "flex",
+                    "gap": "1rem",
+                    "alignItems": "flex-start",
+                    "flexWrap": "wrap",
+                },
+                children=[
+                    # Filters panel - sticky sidebar
+                    html.Div(
+                        children=[
+                            dmc.Paper(
+                                children=[
+                                    dmc.Group(
+                                        children=[
+                                            DashIconify(icon="mdi:filter-variant", width=20),
+                                            dmc.Title("Filters", order=4),
+                                        ],
+                                        gap="xs",
+                                        mb="md",
+                                    ),
+                                    dmc.Stack(children=filter_controls, gap="sm"),
+                                ],
+                                p="md",
+                                shadow="sm",
+                                radius="md",
+                                withBorder=True,
+                                style={
+                                    "backgroundColor": "var(--app-surface-color, #ffffff)",
+                                    "maxHeight": "calc(100vh - 4rem)",
+                                    "overflowY": "auto",
+                                    "overflowX": "hidden",
+                                },
+                            )
+                        ],
+                        className="filters-sidebar",
+                        style={
+                            "position": "sticky",
+                            "top": "0px",
+                            "width": "300px",
+                            "minWidth": "280px",
+                            "flexShrink": 0,
+                            "height": "100vh",
+                            "overflowY": "auto",
+                            "zIndex": 10,
+                        },
+                    ),
+                    # Main content area - flexible
+                    html.Div(
+                        style={
+                            "flex": "1",
+                            "minWidth": "0",  # Allow shrinking
+                        },
+                        children=[
+                            # Metrics section with container
+                            dmc.Paper(
+                                children=[
+                                    dmc.Group(
+                                        children=[
+                                            DashIconify(
+                                                icon="material-symbols:analytics", width=20
+                                            ),
+                                            dmc.Title("Metrics Overview", order=4),
+                                        ],
+                                        gap="xs",
+                                        mb="md",
+                                    ),
+                                    dmc.Grid(
+                                        children=[
+                                            dmc.GridCol(
+                                                span=3,
+                                                children=metric_containers[i]
+                                                if i < len(metric_containers)
+                                                else [],
+                                            )
+                                            for i in range(4)  # 4 metric cards in a row
+                                        ],
+                                    ),
+                                ],
+                                p="md",
+                                shadow="sm",
+                                radius="md",
+                                withBorder=True,
+                                mb="md",
+                                style={
+                                    "backgroundColor": "var(--app-surface-color, #ffffff)",
+                                },
+                                id="metrics-section",
+                            ),
+                            # Charts section with container
+                            dmc.Paper(
+                                children=[
+                                    dmc.Group(
+                                        children=[
+                                            DashIconify(
+                                                icon="material-symbols:bar-chart", width=20
+                                            ),
+                                            dmc.Title("Visualizations", order=4),
+                                        ],
+                                        gap="xs",
+                                        mb="md",
+                                    ),
+                                    dmc.Stack(
+                                        id="dashboard-charts-stack",
+                                        children=chart_containers
+                                        if chart_containers
+                                        else [
+                                            dmc.Text(
+                                                "No charts available",
+                                                style={"textAlign": "center", "padding": "2rem"},
+                                                c="gray",
+                                            )
+                                        ],
+                                        gap="md",
+                                        style={"minHeight": "400px", "width": "100%"},
+                                    ),
+                                ],
+                                p="md",
+                                shadow="sm",
+                                radius="md",
+                                withBorder=True,
+                                style={
+                                    "backgroundColor": "var(--app-surface-color, #ffffff)",
+                                },
+                                id="charts-section",
+                            ),
+                        ],
+                    ),
+                ],
             )
+        )
 
         logger.info(f"✅ DASHBOARD CONTENT: Created {len(components)} component containers")
 
@@ -1301,6 +1523,7 @@ def register_dashboard_content_callbacks(app):
                     data={"has_pending_changes": False, "pending_controls": {}},
                 ),
                 html.Div(id="dummy-event-output"),  # Dummy output for event callbacks
+                html.Div(id="dummy-anchor-output"),  # Dummy output for anchor navigation
                 dcc.Download(
                     id={"type": "dashboard-export-download", "dashboard_id": dashboard_id}
                 ),
@@ -1382,16 +1605,32 @@ def register_dashboard_content_callbacks(app):
         else:
             aggregated_value = df[metric_key].mean()
 
-        # Icon mapping based on metric type
+        # Icon mapping based on RNA-seq metric type
         icon_mapping = {
+            "deg_count": "mdi:dna",
+            "upregulated": "mdi:trending-up",
+            "downregulated": "mdi:trending-down",
+            "total_samples": "mdi:test-tube",
+            "log2_fold_change": "mdi:delta",
+            "p_value": "mdi:sigma",
+            "base_mean": "mdi:chart-scatter-plot",
+            # Legacy business metrics (fallback)
             "users": "mdi:account-group",
             "revenue": "mdi:currency-usd",
             "conversion_rate": "mdi:chart-line",
             "sessions": "mdi:monitor-eye",
         }
 
-        # Color mapping based on metric type
+        # Color mapping based on RNA-seq metric type
         color_mapping = {
+            "deg_count": "blue",
+            "upregulated": "red",
+            "downregulated": "green",
+            "total_samples": "orange",
+            "log2_fold_change": "purple",
+            "p_value": "yellow",
+            "base_mean": "gray",
+            # Legacy business metrics (fallback)
             "users": "blue",
             "revenue": "green",
             "conversion_rate": "orange",
@@ -1486,7 +1725,7 @@ def register_dashboard_content_callbacks(app):
 
             # Get current chart height from events
             chart_height = (
-                event_state.get("chart_height", {}).get("value", 400) if event_state else 400
+                event_state.get("chart_height", {}).get("value", 450) if event_state else 450
             )
             chart_theme = (
                 event_state.get("chart_theme", {}).get("value", "plotly")
@@ -1653,7 +1892,8 @@ def register_dashboard_content_callbacks(app):
                     # Create range slider control
                     control_elements.append(
                         dmc.GridCol(
-                            [
+                            span=12,  # Full width - 1 component per row
+                            children=[
                                 dmc.Text(control_config["label"], size="sm", fw="bold", mb="xs"),
                                 dmc.RangeSlider(
                                     id={
@@ -1693,7 +1933,6 @@ def register_dashboard_content_callbacks(app):
                                     },
                                 ),
                             ],
-                            span=6,
                         )
                     )
 
@@ -1704,7 +1943,8 @@ def register_dashboard_content_callbacks(app):
                     ]
                     control_elements.append(
                         dmc.GridCol(
-                            [
+                            span=12,  # Full width - 1 component per row
+                            children=[
                                 dmc.Text(control_config["label"], size="sm", fw="bold", mb="xs"),
                                 dmc.MultiSelect(
                                     id={
@@ -1729,7 +1969,6 @@ def register_dashboard_content_callbacks(app):
                                     },
                                 ),
                             ],
-                            span=6,
                         )
                     )
 
@@ -1737,7 +1976,8 @@ def register_dashboard_content_callbacks(app):
                     # Create single-select dropdown
                     control_elements.append(
                         dmc.GridCol(
-                            [
+                            span=12,  # Full width - 1 component per row
+                            children=[
                                 dmc.Text(control_config["label"], size="sm", fw="bold", mb="xs"),
                                 dmc.Select(
                                     id={
@@ -1761,43 +2001,12 @@ def register_dashboard_content_callbacks(app):
                                     },
                                 ),
                             ],
-                            span=6,
                         )
                     )
 
-            interactive_panel = dmc.Paper(
-                shadow="sm",
-                radius="md",
-                p="lg",
-                withBorder=True,
-                mb="xl",
-                children=[
-                    dmc.Group(
-                        justify="space-between",
-                        align="center",
-                        mb="md",
-                        children=[
-                            dmc.Title("Data Filters", order=4),
-                            dmc.Badge(
-                                f"Dynamic Controls ({len(INTERACTIVE_CONTROLS)})",
-                                color="violet",
-                                variant="light",
-                                leftSection=DashIconify(icon="mdi:filter-variant", width=12),
-                            ),
-                        ],
-                    ),
-                    dmc.Grid(
-                        control_elements,
-                        gutter="lg",
-                    ),
-                    dmc.Text(
-                        "🔍 Data filters loaded • Adjust ranges and categories, then click Apply to update dashboard",
-                        size="xs",
-                        c="gray",
-                        ta="center",
-                        mt="md",
-                    ),
-                ],
+            interactive_panel = dmc.Grid(
+                control_elements,
+                gutter="lg",
             )
 
             logger.info(
@@ -2309,6 +2518,81 @@ def register_dashboard_content_callbacks(app):
                 "type": "text/html",
             }
 
+    # Enhanced anchor navigation with better debugging and immediate execution
+    app.clientside_callback(
+        """
+        function(pathname) {
+            console.log('🎯 Anchor callback triggered with pathname:', pathname);
+
+            // Define global anchor navigation function
+            window.scrollToAnchor = function(targetId, maxRetries = 5) {
+                console.log('🎯 scrollToAnchor called for:', targetId);
+                let attempts = 0;
+                const delays = [100, 300, 600, 1200, 2000];
+
+                function tryScroll() {
+                    const element = document.getElementById(targetId);
+                    console.log('🎯 Looking for element:', targetId, 'Found:', !!element);
+
+                    if (element) {
+                        console.log('🎯 Scrolling to element:', targetId);
+
+                        // Get actual header height dynamically
+                        const appShell = document.querySelector('.mantine-AppShell-header');
+                        const headerHeight = appShell ? appShell.offsetHeight + 10 : 40; // 10px padding
+
+                        console.log('🎯 Header height detected:', headerHeight);
+
+                        const elementPosition = element.getBoundingClientRect().top + window.pageYOffset;
+                        const offsetPosition = elementPosition - headerHeight;
+
+                        window.scrollTo({
+                            top: offsetPosition,
+                            behavior: 'smooth'
+                        });
+
+                        // Add visual indicator
+                        element.style.boxShadow = '0 0 10px rgba(0, 123, 255, 0.5)';
+                        setTimeout(() => {
+                            element.style.boxShadow = '';
+                        }, 2000);
+
+                        return true;
+                    }
+
+                    if (attempts < maxRetries) {
+                        attempts++;
+                        console.log(`🎯 Retry ${attempts}/${maxRetries} for:`, targetId);
+                        setTimeout(tryScroll, delays[attempts - 1] || 2000);
+                    } else {
+                        console.warn('🎯 Failed to find element after retries:', targetId);
+                        // List all elements with IDs for debugging
+                        const allElements = document.querySelectorAll('[id]');
+                        console.log('🎯 Available elements with IDs:', Array.from(allElements).map(el => el.id));
+                    }
+                }
+
+                tryScroll();
+            };
+
+            // Handle URL-based navigation
+            if (pathname && pathname.includes('#')) {
+                const targetId = pathname.split('#')[1];
+                console.log('🎯 Extracted anchor ID:', targetId);
+                if (targetId) {
+                    // Try immediate scroll first
+                    setTimeout(() => window.scrollToAnchor(targetId), 50);
+                }
+            }
+
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("dummy-anchor-output", "children", allow_duplicate=True),
+        Input("url", "pathname"),
+        prevent_initial_call=True,
+    )
+
     logger.info("✅ DASHBOARD CONTENT: All callbacks registered successfully")
 
 
@@ -2322,29 +2606,6 @@ def create_metric_card(metric):
             "position": "relative",
         },
         children=[
-            # MASSIVE DRAG HANDLE - IMPOSSIBLE TO MISS
-            html.Div(
-                "DRAG ME!!!",
-                className="react-grid-dragHandle",
-                style={
-                    "position": "fixed",  # Fixed positioning to override everything
-                    "top": "50px",
-                    "right": "50px",
-                    "width": "150px",
-                    "height": "50px",
-                    "backgroundColor": "red",
-                    "color": "white",
-                    "display": "flex",
-                    "alignItems": "center",
-                    "justifyContent": "center",
-                    "cursor": "grab",
-                    "zIndex": 999999,  # Extremely high z-index
-                    "fontSize": "16px",
-                    "fontWeight": "bold",
-                    "border": "5px solid yellow",  # Bright yellow border
-                    "boxShadow": "0 0 20px rgba(255,0,0,0.8)",  # Red glow
-                },
-            ),
             dmc.Paper(
                 shadow="sm",
                 radius="md",
@@ -2406,7 +2667,7 @@ def create_metric_card(metric):
                                 fw="bold",
                             ),
                             dmc.Text(
-                                "vs last month",
+                                "vs baseline",
                                 size="xs",
                                 c="gray",
                             ),
