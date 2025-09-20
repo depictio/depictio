@@ -30,6 +30,7 @@ dependencies = [
   "flask-caching",
   "httpx==0.28.1",
   "motor",
+  "multiqc==1.31.0",
   "mypy-boto3-s3",
   "numpy==2.2.3",
   "orjson",

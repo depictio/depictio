@@ -54,10 +54,13 @@ dependencies:
   - umap-learn
   - uvicorn==0.34.0
   - werkzeug
+  - fsspec
+  - s3fs
   - pip:
-    # - dash-draggable==0.1.2
+    # - dash-draggable==0.1.2 TEST
     - dash[async,celery,diskcache]==3.2.0
     - dash-cytoscape==1.0.2
     - dash-ag-grid==31.3.1
     - dash-ace==0.2.1
     - dash-dynamic-grid-layout
+    - multiqc==1.31.0
