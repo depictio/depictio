@@ -406,8 +406,8 @@ def register_callbacks_header(app):
         Output("dashboard-version", "disabled"),
         Output("share-button", "disabled"),
         Output("toggle-notes-button", "disabled"),
-        Output("draggable", "showRemoveButton"),
-        Output("draggable", "showResizeHandles"),
+        # Output("draggable", "showRemoveButton"),
+        # Output("draggable", "showResizeHandles"),
         Input("unified-edit-mode-button", "checked"),
         State("local-store", "data"),
         State("url", "pathname"),
@@ -440,9 +440,11 @@ def register_callbacks_header(app):
 
         # If not owner (but has viewing access), disable all editing controls
         if not owner and viewer:
-            return [True] * (len_output - 2) + [False] * 2
+            # return [True] * (len_output - 2) + [False] * 2
+            return [True] * (len_output - 2)
 
-        return [not switch_state] * (len_output - 2) + [switch_state] * 2
+        # return [not switch_state] * (len_output - 2) + [False] * 2
+        return [not switch_state] * (len_output - 2)
 
     @app.callback(
         Output("share-modal-dashboard", "is_open"),

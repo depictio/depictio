@@ -12,11 +12,11 @@ from depictio.dash.components.analytics_tracker import (
 )
 from depictio.dash.layouts.dashboards_management import layout as dashboards_management_layout
 
-# from depictio.dash.layouts.draggable_scenarios.add_component import register_callbacks_add_component
-from depictio.dash.layouts.draggable import design_draggable
-
 # Depictio utils imports
 from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data_sync
+
+# from depictio.dash.layouts.draggable_scenarios.add_component import register_callbacks_add_component
+from depictio.dash.layouts.draggable_selector import get_draggable_layout
 from depictio.dash.layouts.header import design_header
 from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
 from depictio.dash.layouts.notes_footer import create_notes_footer
@@ -478,12 +478,13 @@ def create_dashboard_layout(
     # Generate draggable layout
     # Ensure local_data is a dict
     local_data = local_data or {}
-    core = design_draggable(
+    core = get_draggable_layout(
         init_layout,
         init_children,
         dashboard_id,
         local_data,
         cached_project_data=cached_project_data,
+        force_minimal=True,  # Force minimal version
     )
 
     # Add progressive loading components if we have metadata

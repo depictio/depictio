@@ -162,7 +162,7 @@ def register_layout_callbacks(app):
         app (dash.Dash): The Dash application instance
     """
     from depictio.dash.layouts.consolidated_api import register_consolidated_api_callbacks
-    from depictio.dash.layouts.draggable import register_callbacks_draggable
+    from depictio.dash.layouts.draggable_selector import register_draggable_callbacks
     from depictio.dash.layouts.header import register_callbacks_header
     from depictio.dash.layouts.notes_footer import register_callbacks_notes_footer
     from depictio.dash.layouts.save import register_callbacks_save
@@ -183,7 +183,7 @@ def register_layout_callbacks(app):
     # register_callbacks_stepper_part_two(app)
     # register_callbacks_stepper_part_three(app)
     register_callbacks_header(app)
-    register_callbacks_draggable(app)
+    register_draggable_callbacks(app, use_minimal=True)
     register_sidebar_callbacks(app)
     register_callbacks_notes_footer(app)
     register_callbacks_save(app)
