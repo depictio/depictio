@@ -192,7 +192,11 @@ def render_raw_children(
     # Process non-'jbrowse' components
     comp_type = component.get("component_type")
 
-    logger.info(f"Processing component type: {comp_type}")
+    # Convert component type to lowercase for helpers mapping compatibility
+    # Button values like "MultiQC" need to be converted to "multiqc" for the metadata
+    comp_type_lower = comp_type.lower() if comp_type else None
+
+    logger.info(f"Processing component type: {comp_type} (mapped to: {comp_type_lower})")
 
     # Update interactive components
     if comp_type == "interactive":
@@ -243,13 +247,17 @@ def render_raw_children(
 
     # Build the component using the helpers_mapping
     try:
-        child = helpers_mapping[comp_type](**component)
+        child = helpers_mapping[comp_type_lower](**component)
     except KeyError as e:
-        logger.error(f"No helper found for component type '{comp_type}': {e}")
+        logger.error(
+            f"No helper found for component type '{comp_type}' (mapped to '{comp_type_lower}'): {e}"
+        )
         # Return empty results if no helper is found
         return [], []
     except Exception as e:
-        logger.error(f"Error building component of type '{comp_type}': {e}")
+        logger.error(
+            f"Error building component of type '{comp_type}' (mapped to '{comp_type_lower}'): {e}"
+        )
         # Return empty results if there's an error during build
         return [], []
 
@@ -480,7 +488,9 @@ def update_interactive_component_sync(
             if component["component_type"] == "text":
                 logger.info(f"DEBUG - Calling build_text with component data: {component}")
 
-            child = helpers_mapping[component["component_type"]](**component)
+            # Convert component type to lowercase for helpers mapping compatibility
+            component_type_lower = component["component_type"].lower()
+            child = helpers_mapping[component_type_lower](**component)
 
             # Debug: Log component type for verification
             if component["component_type"] == "figure":
@@ -549,7 +559,9 @@ def update_interactive_component_sync(
             if component["component_type"] == "figure":
                 component["theme"] = theme
 
-            child = helpers_mapping[component["component_type"]](**component)
+            # Convert component type to lowercase for helpers mapping compatibility
+            component_type_lower = component["component_type"].lower()
+            child = helpers_mapping[component_type_lower](**component)
 
             logger.debug(f"JBROWSE CHILD - {child}")
 

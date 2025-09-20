@@ -690,3 +690,116 @@ def rich_print_data_collection_light(runs: list[WorkflowRun], workflow: Workflow
     )
 
     print("\n")
+
+
+def rich_print_multiqc_processing_summary(
+    processed_files: int,
+    total_samples: int,
+    total_modules: int,
+    plots_info: dict,
+    file_paths: list[str],
+    data_collection_tag: str,
+) -> None:
+    """
+    Print a rich table summarizing MultiQC processing results.
+
+    Args:
+        processed_files: Number of MultiQC files processed
+        total_samples: Total number of samples found across all files
+        total_modules: Total number of modules found
+        plots_info: Dictionary of plot information by module
+        file_paths: List of processed file paths
+        data_collection_tag: Name of the data collection
+    """
+    from rich import box
+    from rich.console import Console
+    from rich.table import Table
+
+    console = Console()
+
+    # Create summary table
+    summary_table = Table(
+        title=f"MultiQC Processing Summary - {data_collection_tag}",
+        show_header=True,
+        header_style="bold blue",
+        border_style="blue",
+        box=box.ROUNDED,
+        show_lines=True,
+    )
+
+    summary_table.add_column("Metric", style="cyan", justify="left", min_width=20)
+    summary_table.add_column("Value", style="green", justify="center", min_width=15)
+    summary_table.add_column("Details", style="yellow", justify="left", min_width=30)
+
+    # Add summary rows
+    summary_table.add_row(
+        "Files Processed",
+        str(processed_files),
+        f"{processed_files} MultiQC parquet file{'s' if processed_files != 1 else ''}",
+    )
+
+    summary_table.add_row("Total Samples", str(total_samples), "Unique samples across all files")
+
+    summary_table.add_row("Total Modules", str(total_modules), "QC modules detected")
+
+    # Count total plots
+    total_plots = 0
+    module_details = []
+    if plots_info:
+        for module, plots in plots_info.items():
+            if isinstance(plots, list):
+                plot_count = len(plots)
+                total_plots += plot_count
+                module_details.append(f"{module}: {plot_count} plots")
+            elif isinstance(plots, dict):
+                # Handle nested plot structures
+                plot_count = sum(len(v) if isinstance(v, list) else 1 for v in plots.values())
+                total_plots += plot_count
+                module_details.append(f"{module}: {plot_count} plots")
+
+    summary_table.add_row(
+        "Total Plots",
+        str(total_plots),
+        "; ".join(module_details) if module_details else "No plot details available",
+    )
+
+    console.print(summary_table)
+
+    # Create files table if there are multiple files
+    if processed_files > 1:
+        print("\n")
+        files_table = Table(
+            title="Processed Files Details",
+            show_header=True,
+            header_style="bold magenta",
+            border_style="magenta",
+            box=box.SIMPLE,
+        )
+
+        files_table.add_column("#", style="dim", justify="center", min_width=3)
+        files_table.add_column("File Path", style="cyan", justify="left")
+        files_table.add_column("Size", style="green", justify="right", min_width=10)
+
+        for i, file_path in enumerate(file_paths, 1):
+            try:
+                from pathlib import Path
+
+                file_size = Path(file_path).stat().st_size
+                size_str = (
+                    f"{file_size:,} B"
+                    if file_size < 1024 * 1024
+                    else f"{file_size / (1024 * 1024):.1f} MB"
+                )
+            except Exception:
+                size_str = "Unknown"
+
+            # Truncate long paths for display
+            display_path = file_path
+            if len(display_path) > 80:
+                display_path = "..." + display_path[-77:]
+
+            files_table.add_row(str(i), display_path, size_str)
+
+        console.print(files_table)
+
+    print("\n")

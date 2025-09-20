@@ -576,30 +576,45 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
     Returns:
         Dash Mantine Paper component
     """
-    icon = "mdi:table" if dc.config.type.lower() == "table" else "mdi:file-document"
+    # Set icon based on data collection type
+    if dc.config.type.lower() == "table":
+        icon = "mdi:table"
+    elif dc.config.type.lower() == "multiqc":
+        icon = "/assets/images/logos/multiqc.png"  # Use MultiQC logo
+    else:
+        icon = "mdi:file-document"
     dc_config = yaml.dump(dc.config.model_dump(), default_flow_style=False)
     dc_config_md = f"```yaml\n{dc_config}\n```"
 
-    # Preview Section for Tables
-    # if dc.config.type.lower() == "table":
-    #     # preview_panel, preview_control = return_deltatable_for_view(
-    #     #     workflow_id, dc, token
-    #     # )
+    # Preview Section for Tables (but not for MultiQC)
+    # MultiQC data is stored in S3 as processed reports, not suitable for table preview
+    if dc.config.type.lower() == "table":
+        # preview_panel, preview_control = return_deltatable_for_view(
+        #     workflow_id, dc, token
+        # )
+        preview_panel = None
+        preview_control = None
+    else:
+        # Disable preview for non-table types (including MultiQC)
+        preview_panel = None
+        preview_control = None
 
-    # else:
-    preview_panel = None
-    preview_control = None
+    # Hide metatype badge for MultiQC type (since it doesn't use traditional metatypes)
+    show_metatype_badge = dc.config.type.lower() != "multiqc"
 
-    metatype_lower = dc.config.metatype.lower() if dc.config.metatype else "unknown"
-    # TODO: DMC 2.0+ - 'black' is not a valid color for Badge, using 'dark' instead
-    badge_type_metatype = dmc.Badge(
-        children=("Metadata" if metatype_lower == "metadata" else "Aggregate"),
-        color="blue" if metatype_lower == "metadata" else "dark",
-        className="ml-2",
-        style=(
-            {"display": "inline-block"} if metatype_lower == "metadata" else {"display": "none"}
-        ),
-    )
+    if show_metatype_badge:
+        metatype_lower = dc.config.metatype.lower() if dc.config.metatype else "unknown"
+        # TODO: DMC 2.0+ - 'black' is not a valid color for Badge, using 'dark' instead
+        badge_type_metatype = dmc.Badge(
+            children=("Metadata" if metatype_lower == "metadata" else "Aggregate"),
+            color="blue" if metatype_lower == "metadata" else "dark",
+            className="ml-2",
+            style=(
+                {"display": "inline-block"} if metatype_lower == "metadata" else {"display": "none"}
+            ),
+        )
+    else:
+        badge_type_metatype = html.Div()  # Empty placeholder for MultiQC
 
     # DMC 2.0+ - Using regular Accordion with AccordionItem structure
     return dmc.Paper(
@@ -617,7 +632,11 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
                                         badge_type_metatype,
                                     ]
                                 ),
-                                icon=DashIconify(icon=icon, width=20),
+                                icon=(
+                                    html.Img(src=icon, style={"width": "20px", "height": "20px"})
+                                    if icon.startswith("/assets/")
+                                    else DashIconify(icon=icon, width=20)
+                                ),
                             ),
                             dmc.AccordionPanel(
                                 children=[

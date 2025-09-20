@@ -8,6 +8,7 @@ from depictio.cli.cli.utils.api_calls import (
     api_get_files_by_dc_id,
     api_upsert_deltatable,
 )
+from depictio.cli.cli.utils.multiqc_processor import process_multiqc_data_collection
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
 from depictio.models.models.base import convert_objectid_to_str
@@ -319,11 +320,17 @@ def client_aggregate_data(
     data_collection: DataCollection,
     CLI_config: CLIConfig,
     command_parameters: dict = {},
+    workflow=None,  # Optional workflow for MultiQC processing
 ) -> dict[str, str]:
     """
-    Aggregate files from a DataCollection into a Delta Lake object.
+    Aggregate files from a DataCollection into a Delta Lake object or handle MultiQC files.
 
-    The function:
+    For MultiQC data collections:
+      - Copies parquet files directly to S3
+      - Extracts metadata using MultiQC module
+      - Updates data collection with extracted metadata
+
+    For other data collections:
       - Lists files using the provided Data Collection ID.
       - Converts file dictionaries into validated File objects.
       - Reads each file into a Polars DataFrame based on the metadata.
@@ -331,15 +338,12 @@ def client_aggregate_data(
       - Writes the aggregated DataFrame as a Delta Lake table.
 
     Args:
-        dc_id (str): The Data Collection ID.
-        data_collection_config (dict): The configuration with "dc_specific_properties"
-            (including format and polars_kwargs).
+        data_collection: The DataCollection object containing type and configuration.
         CLI_config (CLIConfig): CLI configuration object containing API URL and credentials.
-        destination_prefix (str, optional): A path prefix for the Delta table destination.
-            If not provided, a default destination based on the Data Collection ID is used.
+        command_parameters: Optional command parameters including overwrite flag.
 
     Returns:
-        str: A message indicating the destination of the aggregated Delta table.
+        dict: Result dictionary with success/error status and message.
     """
 
     if command_parameters:
@@ -347,6 +351,10 @@ def client_aggregate_data(
         rich_tables = command_parameters.get("rich_tables", False)
     else:
         overwrite = False
+
+    # Handle MultiQC data collections specially - copy parquet files to S3 and extract metadata
+    if data_collection.config.type.lower() == "multiqc":
+        return process_multiqc_data_collection(data_collection, CLI_config, overwrite, workflow)
     # Generate destination prefix using the data collection id - should be a S3 path
     destination_prefix = f"s3://{CLI_config.s3_storage.bucket}/{str(data_collection.id)}"
     logger.debug(f"Destination prefix: {destination_prefix}")

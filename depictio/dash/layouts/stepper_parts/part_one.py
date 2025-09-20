@@ -240,7 +240,20 @@ def register_callbacks_stepper_part_one(app):
                                 },
                             ),
                             html.Td(
-                                dc_specs["config"]["type"].capitalize(),
+                                [
+                                    dc_specs["config"]["type"].capitalize(),
+                                    # Add MultiQC logo if this is a MultiQC data collection
+                                    html.Img(
+                                        src="/assets/images/logos/multiqc.png",
+                                        style={
+                                            "height": "20px",
+                                            "marginLeft": "8px",
+                                            "verticalAlign": "middle",
+                                        },
+                                    )
+                                    if dc_specs["config"]["type"].lower() == "multiqc"
+                                    else None,
+                                ],
                                 style={"text-align": "left"},
                             ),
                         ]
@@ -256,7 +269,7 @@ def register_callbacks_stepper_part_one(app):
                                 },
                             ),
                             html.Td(
-                                dc_specs["config"]["metatype"].capitalize(),
+                                (dc_specs["config"]["metatype"] or "Unknown").capitalize(),
                                 style={"text-align": "left"},
                             ),
                         ]
@@ -272,7 +285,7 @@ def register_callbacks_stepper_part_one(app):
                                 },
                             ),
                             html.Td(
-                                dc_specs["data_collection_tag"],
+                                dc_specs["data_collection_tag"] or "Unknown",
                                 style={
                                     "text-align": "left",
                                     "word-break": "break-all",
@@ -292,7 +305,7 @@ def register_callbacks_stepper_part_one(app):
                                 },
                             ),
                             html.Td(
-                                dc_specs["description"],
+                                dc_specs["description"] or "No description available",
                                 style={
                                     "text-align": "left",
                                     "word-break": "break-all",
