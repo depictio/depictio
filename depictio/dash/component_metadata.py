@@ -30,6 +30,7 @@ from depictio.dash.modules.card_component.utils import build_card
 from depictio.dash.modules.figure_component.utils import build_figure
 from depictio.dash.modules.interactive_component.utils import build_interactive
 from depictio.dash.modules.jbrowse_component.utils import build_jbrowse
+from depictio.dash.modules.multiqc_component.utils import build_multiqc
 from depictio.dash.modules.table_component.utils import build_table
 from depictio.dash.modules.text_component.utils import build_text
 
@@ -112,6 +113,20 @@ COMPONENT_METADATA = {
             "w": 2,
             "h": 2,
         },  # Adjusted for 12-column grid - text content is medium width
+    },
+    "multiqc": {
+        "icon": "mdi:chart-line",
+        "display_name": "MultiQC",
+        "description": "MultiQC quality control reports and visualizations",
+        "color": colors["orange"],
+        "supports_edit": False,  # MultiQC is read-only visualization
+        "supports_reset": False,  # No reset functionality
+        "enabled": True,  # Enable by default
+        "build_function": build_multiqc,
+        "default_dimensions": {
+            "w": 2,
+            "h": 2,
+        },  # Adjusted for 12-column grid - MultiQC reports need good space
     },
 }
 
@@ -245,8 +260,9 @@ DISPLAY_NAME_TO_TYPE_MAPPING = {
     "Interactive": "interactive",
     "Table": "table",
     "JBrowse2": "jbrowse",
-    "JBrowse": "jbrowse",  # Alternative nme
+    "JBrowse": "jbrowse",  # Alternative name
     "Text": "text",
+    "MultiQC": "multiqc",
     "None": None,  # Default case
 }
 

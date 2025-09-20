@@ -3,7 +3,7 @@ import collections
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, api_call_get_dashboard
-from depictio.dash.component_metadata import get_build_functions
+from depictio.dash.component_metadata import DISPLAY_NAME_TO_TYPE_MAPPING, get_build_functions
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import (
     update_interactive_component_sync,
 )
@@ -87,6 +87,15 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
 
         # Extract the type of the child (assuming there is a type key in the metadata)
         component_type = child_metadata.get("component_type", None)
+
+        # Handle legacy case conversion for existing components (e.g., "MultiQC" -> "multiqc")
+        if component_type not in build_functions and component_type in DISPLAY_NAME_TO_TYPE_MAPPING:
+            original_type = component_type
+            component_type = DISPLAY_NAME_TO_TYPE_MAPPING[component_type]
+            logger.info(f"Converting legacy component type '{original_type}' to '{component_type}'")
+            # Update the metadata to use the correct type for consistency
+            child_metadata["component_type"] = component_type
+
         # logger.info(f"component_type : {component_type}")
         if component_type not in build_functions:
             logger.warning(f"Unsupported child type: {component_type}")

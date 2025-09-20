@@ -681,3 +681,43 @@ def api_restore_backup(
         return {"success": False, "message": "Restore operation timed out"}
     except Exception as e:
         return {"success": False, "message": f"Backup restore failed: {str(e)}"}
+
+
+@validate_call
+def api_create_multiqc_report(multiqc_report: dict, CLI_config: "CLIConfig"):
+    """
+    Create a MultiQC report on the server.
+
+    Args:
+        multiqc_report: MultiQC report data as dictionary
+        CLI_config: CLI configuration containing API URL and credentials
+
+    Returns:
+        httpx.Response: API response
+    """
+    logger.info("Creating MultiQC report on server...")
+
+    url = f"{CLI_config.api_base_url}/depictio/api/v1/multiqc/reports"
+    headers = generate_api_headers(CLI_config)
+
+    logger.debug(f"POST URL: {url}")
+    logger.debug(f"Headers: {headers}")
+    logger.debug(
+        f"Payload keys: {list(multiqc_report.keys()) if isinstance(multiqc_report, dict) else 'not a dict'}"
+    )
+
+    try:
+        response = httpx.post(
+            url,
+            json=multiqc_report,
+            headers=headers,
+            timeout=30.0,  # Add timeout
+        )
+        logger.debug(f"HTTP response received: {response.status_code}")
+        return response
+    except httpx.TimeoutException:
+        logger.error("API request timed out after 30 seconds")
+        raise
+    except httpx.RequestError as e:
+        logger.error(f"HTTP request failed: {e}")
+        raise

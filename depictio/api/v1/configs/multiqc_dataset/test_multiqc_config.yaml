@@ -1,0 +1,17 @@
+# Test MultiQC Data Collection Configuration
+name: "MultiQC Test Project"
+
+workflows:
+  - name: "test-workflow"
+    engine:
+      name: "python"
+    data_location:
+      structure: "sequencing-runs"
+      runs_regex: "run_*"
+      locations:
+        - ../api/v1/configs/multiqc_dataset
+    data_collections:
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report data"
+        config:
+          type: "MultiQC"

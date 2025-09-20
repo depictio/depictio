@@ -169,6 +169,7 @@ class MongoDBConfig(ServiceConfig):
         dashboards_collection: str = Field(default="dashboards")
         initialization_collection: str = Field(default="initialization")
         projects_collection: str = Field(default="projects")
+        multiqc_collection: str = Field(default="multiqc")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)

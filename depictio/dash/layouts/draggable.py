@@ -861,6 +861,42 @@ def register_callbacks_draggable(app):
                     )
                 # logger.info(f"Updated draggable layouts: {draggable_layouts}")
 
+        # CRITICAL FIX: Generate missing layouts for components that don't have them
+        # This happens when dashboards are restored from stored metadata but layouts weren't saved
+        if draggable_children and stored_metadata:
+            existing_layout_ids = {layout.get("i") for layout in draggable_layouts}
+            logger.info(f"🔧 LAYOUT CHECK - Existing layout IDs: {existing_layout_ids}")
+
+            missing_layouts = []
+            for metadata in stored_metadata:
+                component_index = metadata.get("index")
+                if not component_index:
+                    continue
+
+                # Check if this component has a layout
+                box_id = f"box-{component_index}"
+                if box_id not in existing_layout_ids:
+                    logger.info(
+                        f"🔧 MISSING LAYOUT - Generating layout for component: {component_index}"
+                    )
+
+                    # Generate layout for this component
+                    component_type = metadata.get("component_type", "card")
+                    new_layout = calculate_new_layout_position(
+                        component_type,
+                        draggable_layouts + missing_layouts,  # Include previously generated layouts
+                        component_index,
+                        len(draggable_layouts) + len(missing_layouts),
+                    )
+                    missing_layouts.append(new_layout)
+                    logger.info(f"🔧 GENERATED LAYOUT - {box_id}: {new_layout}")
+
+            if missing_layouts:
+                draggable_layouts.extend(missing_layouts)
+                # Update stored layouts to persist the generated layouts
+                state_stored_draggable_layouts[dashboard_id] = draggable_layouts
+                logger.info(f"🔧 LAYOUT FIX - Added {len(missing_layouts)} missing layouts")
+
         if isinstance(ctx.triggered_id, dict):
             triggered_input = ctx.triggered_id["type"]
             triggered_input_dict = ctx.triggered_id

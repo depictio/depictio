@@ -205,6 +205,9 @@ def register_component_callbacks(app):
     from depictio.dash.modules.jbrowse_component.frontend import (
         register_callbacks_jbrowse_component,
     )
+    from depictio.dash.modules.multiqc_component.frontend import (
+        register_callbacks_multiqc_component,
+    )
     from depictio.dash.modules.table_component.frontend import register_callbacks_table_component
     from depictio.dash.modules.text_component.frontend import register_callbacks_text_component
 
@@ -213,6 +216,7 @@ def register_component_callbacks(app):
     register_callbacks_interactive_component(app)
     register_callbacks_figure_component(app)
     register_callbacks_jbrowse_component(app)
+    register_callbacks_multiqc_component(app)
     register_callbacks_table_component(app)
     register_callbacks_text_component(app)
 

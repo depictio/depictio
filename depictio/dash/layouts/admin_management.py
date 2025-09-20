@@ -1,12 +1,12 @@
 import datetime
 
+import dash
 import dash_mantine_components as dmc
 import httpx
+from dash import ALL, MATCH, Input, Output, State, ctx, html
 from dash_iconify import DashIconify
 from pydantic import validate_call
 
-import dash
-from dash import ALL, MATCH, Input, Output, State, ctx, html
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, api_create_group
