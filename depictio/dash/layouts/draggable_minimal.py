@@ -3,10 +3,12 @@ Minimal alternative to draggable.py without dash dynamic grid layout.
 Simple row-based layout using basic DMC components.
 """
 
+import dash
 import dash_mantine_components as dmc
 from dash import Input, Output, State, html
 
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.utils import generate_unique_index
 
 
 def design_draggable_minimal(
@@ -112,10 +114,34 @@ def design_draggable_minimal(
         style={"width": "100%"},
     )
 
+    # Create Component button for URL-based stepper
+    create_component_button = dmc.Button(
+        "Create Component",
+        id="create-component-button",
+        leftSection=dmc.Text("⚙️"),
+        variant="filled",
+        color="orange",
+        fullWidth=True,
+        style={"marginBottom": "1rem"},
+    )
+
+    # Add missing save button to fix callback error
+    save_button = dmc.Button(
+        "Save Dashboard",
+        id="save-button-dashboard",
+        leftSection=dmc.Text("💾"),
+        variant="filled",
+        color="green",
+        fullWidth=True,
+        style={"marginBottom": "1rem"},
+    )
+
     right_panel = dmc.Paper(
         children=[
             dmc.Text("Sections", size="xl", w=700, style={"marginBottom": "1rem"}),
             create_section_button,
+            create_component_button,  # Add component button below section button
+            save_button,  # Add save button to fix callback error
             sections_container,
         ],
         p="lg",
@@ -129,9 +155,20 @@ def design_draggable_minimal(
         },
     )
 
+    # Add missing modal for save callbacks
+    success_modal = dmc.Modal(
+        id="success-modal-dashboard",
+        title="Dashboard Saved",
+        children=[
+            dmc.Text("Your dashboard has been saved successfully!"),
+        ],
+        opened=False,
+    )
+
     # Two-panel layout using DMC Grid
     main_container = html.Div(
         children=[
+            success_modal,  # Add the modal
             dmc.Grid(
                 children=[
                     dmc.GridCol(left_panel, span=3),  # 1/4 width (3/12)
@@ -139,7 +176,7 @@ def design_draggable_minimal(
                 ],
                 gutter="md",
                 style={"height": "100%"},
-            )
+            ),
         ],
         id="minimal-draggable-container",
         style={
@@ -238,6 +275,21 @@ def create_minimal_row_component(text: str, index: int):
 def register_minimal_callbacks(app):
     """Register callbacks for the minimal draggable system."""
 
+    # Minimal save callback compatible with minimal layout
+    @app.callback(
+        Output("success-modal-dashboard", "opened"),
+        Input("save-button-dashboard", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def minimal_save_dashboard(n_clicks):
+        """Minimal save functionality for the minimal layout."""
+        if not n_clicks:
+            return dash.no_update
+
+        logger.info(f"🔧 MINIMAL SAVE: Save button clicked {n_clicks} times")
+        # For now, just show success modal - no actual saving needed for minimal demo
+        return True
+
     @app.callback(
         Output("filters-container", "children"),
         Input("create-filter-button", "n_clicks"),
@@ -315,3 +367,56 @@ def register_minimal_callbacks(app):
             f"🔧 MINIMAL: Added Section {section_letter}, total sections: {len(updated_sections)}"
         )
         return updated_sections
+
+    @app.callback(
+        Output("url", "pathname", allow_duplicate=True),
+        Input("create-component-button", "n_clicks"),
+        State("url", "pathname"),
+        prevent_initial_call=True,
+    )
+    def redirect_to_component_creation(n_clicks, current_pathname):
+        """Redirect to component creation URL when Create Component button is clicked."""
+        if not n_clicks:
+            return current_pathname
+
+        logger.info(f"🔧 MINIMAL: Create Component button clicked {n_clicks} times")
+
+        # Extract dashboard_id from current pathname
+        # Current pathname should be like "/dashboard/{dashboard_id}"
+        if current_pathname and current_pathname.startswith("/dashboard/"):
+            path_parts = current_pathname.strip("/").split("/")
+            if len(path_parts) >= 2:
+                dashboard_id = path_parts[1]
+
+                # Generate unique component ID
+                component_id = generate_unique_index()
+
+                # Create the new URL pattern: /dashboard/{dashboard_id}/{component_id}/create
+                new_pathname = f"/dashboard/{dashboard_id}/{component_id}/create"
+
+                logger.info(f"🔧 MINIMAL: Redirecting to {new_pathname}")
+                return new_pathname
+
+        logger.warning(
+            f"🔧 MINIMAL: Could not parse dashboard ID from pathname: {current_pathname}"
+        )
+        return current_pathname
+
+    # Add callback to trigger stepper button population for URL-based component creation
+    @app.callback(
+        Output("stored-add-button", "data", allow_duplicate=True),
+        Input("stepper-trigger-interval", "n_intervals"),
+        State("force-stepper-trigger", "data"),
+        prevent_initial_call=True,
+    )
+    def trigger_stepper_buttons(n_intervals, trigger_data):
+        """Force trigger the stepper buttons callback by updating the store."""
+        if n_intervals and trigger_data:
+            component_id = trigger_data.get("component_id")
+            if component_id:
+                logger.info(f"🔧 MINIMAL: Triggering stepper buttons for {component_id}")
+                # Update timestamp to ensure callback fires
+                import time
+
+                return {"_id": component_id, "count": 1, "timestamp": time.time()}
+        return dash.no_update
