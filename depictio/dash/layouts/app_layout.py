@@ -103,44 +103,153 @@ def handle_authenticated_user(pathname, local_data, theme="light", cached_projec
 
     # Map the pathname to the appropriate content and header
     if pathname.startswith("/dashboard/"):
-        dashboard_id = pathname.split("/")[-1]
+        path_parts = pathname.strip("/").split("/")
 
-        # Load dashboard data and create layout directly
-        logger.info(f"🔄 DASHBOARD NAVIGATION: Loading dashboard {dashboard_id}")
+        # Handle component creation URL: /dashboard/{dashboard_id}/{component_id}/create
+        if len(path_parts) == 4 and path_parts[3] == "create":
+            dashboard_id = path_parts[1]
+            component_id = path_parts[2]
 
-        logger.info(f"🔄 DASHBOARD NAVIGATION: theme - {theme}")
-        # Load dashboard data synchronously
-        depictio_dash_data = load_depictio_data_sync(
-            dashboard_id=dashboard_id,
-            local_data=local_data,
-            theme=theme,
-        )
+            logger.info(
+                f"🔄 COMPONENT CREATION: Dashboard {dashboard_id}, Component {component_id}"
+            )
 
-        # Create dashboard layout
-        if depictio_dash_data:
-            header_content, backend_components = design_header(depictio_dash_data, local_data)
+            # Import stepper system for component creation
+            from dash import dcc
 
-            # Create dashboard layout
-            dashboard_layout = create_dashboard_layout(
-                depictio_dash_data=depictio_dash_data,
+            from depictio.dash.layouts.stepper import create_stepper_output
+
+            # Import stepper button creation functions
+            from depictio.dash.layouts.stepper_parts.part_two import (
+                create_stepper_card_button,
+                create_stepper_figure_button,
+                create_stepper_interactive_button,
+                create_stepper_table_button,
+                create_stepper_text_button,
+                is_enabled,
+            )
+
+            # Create stepper content directly (bypass the callback dependency)
+            # This replicates what the callback in part_two.py does
+            figure_stepper_button, figure_stepper_button_store = create_stepper_figure_button(
+                component_id, disabled=not is_enabled("figure")
+            )
+            card_stepper_button, card_stepper_button_store = create_stepper_card_button(
+                component_id, disabled=not is_enabled("card")
+            )
+            (
+                interactive_stepper_button,
+                interactive_stepper_button_store,
+            ) = create_stepper_interactive_button(
+                component_id, disabled=not is_enabled("interactive")
+            )
+            table_stepper_button, table_stepper_button_store = create_stepper_table_button(
+                component_id, disabled=not is_enabled("table")
+            )
+            text_stepper_button, text_stepper_button_store = create_stepper_text_button(
+                component_id, disabled=not is_enabled("text")
+            )
+
+            # The stepper will generate buttons automatically via callbacks
+            # Button stores are created and used by the stepper system internally
+
+            # Create stepper layout and trigger the population of step 1
+            stepper_layout = create_stepper_output(component_id, active=0)
+
+            # Create store that will trigger the callback to populate buttons
+            stored_add_button_store = dcc.Store(
+                id="stored-add-button",
+                data={"_id": component_id, "count": 1},
+                storage_type="memory",
+            )
+
+            # Create interval component to trigger the callback after initial load
+            trigger_interval = dcc.Interval(
+                id="stepper-trigger-interval",
+                interval=100,  # 100ms delay
+                n_intervals=0,
+                max_intervals=1,  # Only run once
+            )
+
+            # Store for forcing callback trigger
+            force_trigger_store = dcc.Store(
+                id="force-stepper-trigger",
+                data={"trigger": True, "component_id": component_id, "timestamp": 0},
+                storage_type="memory",
+            )
+
+            # Create simple header for component creation
+            header_content = create_default_header(f"Create Component - {component_id[:8]}...")
+
+            # Wrap stepper in a container
+            component_creation_layout = html.Div(
+                [
+                    stored_add_button_store,
+                    trigger_interval,
+                    force_trigger_store,
+                    dmc.Container(
+                        [
+                            dmc.Title(
+                                "Create New Component", order=2, style={"marginBottom": "2rem"}
+                            ),
+                            dmc.Text(f"Dashboard: {dashboard_id}", style={"marginBottom": "1rem"}),
+                            dmc.Text(
+                                f"Component ID: {component_id}", style={"marginBottom": "2rem"}
+                            ),
+                            stepper_layout,
+                        ],
+                        size="xl",
+                        style={"padding": "2rem"},
+                    ),
+                ],
+                style={
+                    "backgroundColor": "var(--app-bg-color, #f8f9fa)",
+                    "minHeight": "100vh",
+                },
+            )
+
+            return component_creation_layout, header_content, pathname, local_data
+
+        # Handle regular dashboard URL: /dashboard/{dashboard_id}
+        else:
+            dashboard_id = path_parts[1] if len(path_parts) >= 2 else path_parts[-1]
+
+            # Load dashboard data and create layout directly
+            logger.info(f"🔄 DASHBOARD NAVIGATION: Loading dashboard {dashboard_id}")
+
+            logger.info(f"🔄 DASHBOARD NAVIGATION: theme - {theme}")
+            # Load dashboard data synchronously
+            depictio_dash_data = load_depictio_data_sync(
                 dashboard_id=dashboard_id,
                 local_data=local_data,
-                backend_components=backend_components,
                 theme=theme,
-                cached_project_data=cached_project_data,
             )
 
-            return dashboard_layout, header_content, pathname, local_data
-        else:
-            # Dashboard not found or error
-            header_content = create_default_header("Dashboard Not Found")
-            error_layout = html.Div(
-                [
-                    html.H3("Dashboard not found or you don't have access"),
-                    html.P(f"Dashboard ID: {dashboard_id}"),
-                ]
-            )
-            return error_layout, header_content, pathname, local_data
+            # Create dashboard layout
+            if depictio_dash_data:
+                header_content, backend_components = design_header(depictio_dash_data, local_data)
+
+                # Create dashboard layout
+                dashboard_layout = create_dashboard_layout(
+                    depictio_dash_data=depictio_dash_data,
+                    dashboard_id=dashboard_id,
+                    local_data=local_data,
+                    backend_components=backend_components,
+                    theme=theme,
+                    cached_project_data=cached_project_data,
+                )
+
+                return dashboard_layout, header_content, pathname, local_data
+            else:
+                # Dashboard not found or error
+                header_content = create_default_header("Dashboard Not Found")
+                error_layout = html.Div(
+                    [
+                        html.H3("Dashboard not found or you don't have access"),
+                        html.P(f"Dashboard ID: {dashboard_id}"),
+                    ]
+                )
+                return error_layout, header_content, pathname, local_data
 
     elif pathname == "/dashboards":
         user = api_call_fetch_user_from_token(local_data["access_token"])
