@@ -868,6 +868,57 @@ def register_callbacks_dashboards_management(app):
             return []
 
     @app.callback(
+        Output("dashboard-icon-select", "data"),
+        Input("dashboard-modal", "opened"),
+        prevent_initial_call=True,
+    )
+    def load_dashboard_icons(modal_opened):
+        """Load available icons when modal is opened."""
+        if not modal_opened:
+            logger.info("Modal not opened, returning empty icon list")
+            return []
+
+        try:
+            # Import the function here to avoid circular imports
+            from depictio.dash.layouts.layouts_toolbox import get_dashboard_icons
+
+            # Get curated list of 50 biology and dashboard relevant icons
+            icons = get_dashboard_icons()
+
+            logger.info(f"Loaded {len(icons)} curated icons for dashboard selection")
+            return icons
+
+        except Exception as e:
+            logger.error(f"Exception in load_dashboard_icons: {e}")
+            # Return fallback icons
+            from depictio.dash.layouts.layouts_toolbox import get_fallback_icons
+
+            return get_fallback_icons()
+
+    @app.callback(
+        Output("dashboard-icon-preview", "children"),
+        Input("dashboard-icon-select", "value"),
+        prevent_initial_call=True,
+    )
+    def update_icon_preview(selected_icon):
+        """Update the icon preview when an icon is selected."""
+        if not selected_icon:
+            # Default icon when nothing is selected
+            return DashIconify(
+                icon="mdi:view-dashboard-outline",
+                width=32,
+                height=32,
+                color="var(--app-text-color, #000000)",
+            )
+
+        return DashIconify(
+            icon=selected_icon,
+            width=32,
+            height=32,
+            color="var(--app-text-color, #000000)",
+        )
+
+    @app.callback(
         Output({"type": "dashboard-list", "index": ALL}, "children"),
         # [Output({"type": "dashboard-list", "index": ALL}, "children"), Output({"type": "dashboard-index-store", "index": ALL}, "data")],
         [
@@ -1037,7 +1088,6 @@ def register_callbacks_dashboards_management(app):
             # dashboard_id = generate_unique_index()
 
             new_dashboard = DashboardData(
-                id=dashboard_id,
                 title=modal_data["title"],
                 last_saved_ts=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 permissions=Permission(owners=[current_userbase]),
@@ -1045,6 +1095,8 @@ def register_callbacks_dashboards_management(app):
                 dashboard_id=dashboard_id,
                 project_id=PyObjectId(modal_data["project_id"]),
             )
+            # Set icon after creation to work around type checker issue
+            new_dashboard.icon = modal_data.get("icon", "mdi:view-dashboard-outline")
             logger.debug(f"New dashboard: {format_pydantic(new_dashboard)}")
             dashboards.append(new_dashboard)
             insert_dashboard(dashboard_id, new_dashboard.mongo(), user_data["access_token"])
@@ -1237,6 +1289,7 @@ def register_callbacks_dashboards_management(app):
             State("user-cache-store", "data"),
             State("init-create-dashboard-button", "data"),
             State("dashboard-projects", "value"),
+            State("dashboard-icon-select", "value"),
         ],
         prevent_initial_call=True,
     )
@@ -1250,8 +1303,9 @@ def register_callbacks_dashboards_management(app):
         user_cache,
         init_create_dashboard_button,
         project,
+        selected_icon,
     ):
-        data = {"title": "", "project_id": ""}
+        data = {"title": "", "project_id": "", "icon": ""}
 
         logger.debug(
             f"Create dashboard n_clicks: {n_clicks_create}, {n_clicks_submit}, {n_clicks_cancel}"
@@ -1384,6 +1438,7 @@ def register_callbacks_dashboards_management(app):
             # Set the title and keep the modal open (or toggle it based on your preference)
             data["title"] = title
             data["project_id"] = project
+            data["icon"] = selected_icon if selected_icon else "mdi:view-dashboard-outline"
             return data, False, False, {"display": "none"}, dash.no_update, dash.no_update
 
         logger.debug("No relevant clicks")
