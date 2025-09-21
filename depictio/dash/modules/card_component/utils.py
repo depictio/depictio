@@ -230,10 +230,8 @@ def build_card(**kwargs):
     color = kwargs.get("color", None)  # Custom color from user
     cols_json = kwargs.get("cols_json", {})  # Column specifications for reference values
 
-    if stepper:
-        index = f"{index}-tmp"
-    else:
-        index = index
+    # Simplified: removed -tmp logic as requested
+    index = index
 
     # logger.debug(f"Card kwargs: {kwargs}")
 
@@ -392,14 +390,9 @@ def build_card(**kwargs):
             reference_value = None
 
     # Metadata management - Create a store component to store the metadata of the card
-    # For stepper mode, use the temporary index to avoid conflicts with existing components
-    # For normal mode, use the original index (remove -tmp suffix if present)
-    if stepper:
-        store_index = index  # Use the temporary index with -tmp suffix
-        data_index = index.replace("-tmp", "") if index else "unknown"  # Clean index for data
-    else:
-        store_index = index.replace("-tmp", "") if index else "unknown"
-        data_index = store_index
+    # Simplified: removed -tmp logic as requested
+    store_index = index if index else "unknown"
+    data_index = store_index
 
     store_component = dcc.Store(
         id={

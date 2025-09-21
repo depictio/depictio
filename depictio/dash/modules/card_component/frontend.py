@@ -346,11 +346,17 @@ def register_callbacks_card_component(app):
         if dashboard_id:
             dashboard_data = load_depictio_data_mongo(dashboard_id, TOKEN=TOKEN)
             logger.info(f"dashboard_data: {dashboard_data}")
-            relevant_metadata = [
-                m
-                for m in dashboard_data["stored_metadata"]
-                if m["wf_id"] == wf_id and m["component_type"] == "interactive"
-            ]
+
+            # Check if dashboard_data is None to prevent TypeError
+            if dashboard_data is None:
+                logger.error(f"Failed to load dashboard data for dashboard_id: {dashboard_id}")
+                relevant_metadata = []
+            else:
+                relevant_metadata = [
+                    m
+                    for m in dashboard_data.get("stored_metadata", [])
+                    if m["wf_id"] == wf_id and m["component_type"] == "interactive"
+                ]
             logger.info(f"BUILD CARD - relevant_metadata: {relevant_metadata}")
 
         # Get the data collection specs
