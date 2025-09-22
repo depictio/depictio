@@ -1,800 +1,376 @@
+"""
+Minimal save functionality for dashboards using the new Pydantic structure.
+Provides simple save operations for the structured dashboard format.
+"""
+
 from datetime import datetime
+from typing import Optional
 
 import dash
 from dash import ALL, Input, Output, State
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import (
-    api_call_fetch_user_from_token,
     api_call_get_dashboard,
     api_call_save_dashboard,
     api_call_screenshot_dashboard,
 )
+from depictio.models.models.dashboard_structure import DashboardTabStructure
 
 
-def validate_and_clean_orphaned_layouts(stored_layout_data, stored_metadata):
+def collect_dashboard_structure_from_event_store(
+    event_store_data: Optional[dict],
+    dashboard_id: str,
+    existing_structure: Optional[DashboardTabStructure] = None,
+) -> DashboardTabStructure:
     """
-    Validate and clean orphaned layout entries that don't have corresponding metadata entries.
+    Collect dashboard structure from the event store metadata.
+    Use event store data instead of parsing UI elements.
 
     Args:
-        stored_layout_data (list): List of layout entries with 'i' field containing 'box-{index}'
-        stored_metadata (list): List of metadata entries with 'index' field
+        event_store_data: Dashboard event store data containing section metadata
+        dashboard_id: ID of the dashboard
 
     Returns:
-        list: Cleaned layout data with orphaned entries removed
+        DashboardTabStructure: Structured representation of the dashboard
     """
-    if not stored_layout_data or not stored_metadata:
-        return stored_layout_data or []
+    logger.info("💾 SAVE: Collecting dashboard structure from event store metadata")
 
-    # Extract valid component IDs from metadata
-    valid_component_ids = {
-        str(meta.get("index")) for meta in stored_metadata if meta.get("index") is not None
-    }
-    logger.info(f"🔍 LAYOUT VALIDATION - Valid component IDs from metadata: {valid_component_ids}")
+    # Start with existing structure or create new one
+    structure = existing_structure or DashboardTabStructure()
 
-    cleaned_layout_data = []
-    orphaned_layouts = []
+    # Ensure we have a default tab
+    default_tab = structure.ensure_default_tab(dashboard_id)
 
-    for layout_entry in stored_layout_data:
-        layout_id = layout_entry.get("i", "")
+    # Handle different event types
+    event_type = event_store_data.get("event_type") if event_store_data else None
 
-        # Extract component ID from layout ID (format: 'box-{index}')
-        if layout_id.startswith("box-"):
-            component_id = layout_id[4:]  # Remove 'box-' prefix
+    # Extract section metadata from event store
+    if event_type == "section_structure_created":
+        payload = event_store_data.get("payload", {})
 
-            if component_id in valid_component_ids:
-                cleaned_layout_data.append(layout_entry)
-            else:
-                orphaned_layouts.append(layout_entry)
-                logger.info(
-                    f"🗑️ SAVE - Removing orphaned layout: {layout_id} (no matching metadata)"
+        if payload:
+            logger.info(f"💾 SAVE: Processing section from event store: {payload}")
+
+            # Import models
+            from depictio.models.models.dashboard_structure import DashboardSection, SectionType
+
+            # Extract section metadata from event payload
+            section_id = payload.get("section_id")
+            section_name = payload.get("section_name", "Untitled Section")
+            section_type_str = payload.get("section_type", "mixed")
+
+            # Parse section type
+            try:
+                section_type = SectionType(section_type_str)
+            except ValueError:
+                section_type = SectionType.MIXED
+                logger.warning(f"💾 SAVE: Unknown section type '{section_type_str}', using MIXED")
+
+            # Check if section already exists (avoid duplicates)
+            existing_section = next((s for s in default_tab.sections if s.id == section_id), None)
+            if not existing_section:
+                # Create new section
+                section = DashboardSection(
+                    id=section_id,
+                    name=section_name,
+                    section_type=section_type,
+                    description="Auto-saved section from event store",
+                    components=[],
                 )
-        else:
-            # Keep entries that don't follow the 'box-{index}' pattern for safety
-            cleaned_layout_data.append(layout_entry)
-            logger.warning(
-                f"⚠️ LAYOUT VALIDATION - Layout entry with unexpected ID format: {layout_id}"
-            )
-
-    if orphaned_layouts:
-        logger.info(
-            f"🧹 LAYOUT VALIDATION - Removed {len(orphaned_layouts)} orphaned layout entries"
-        )
-        logger.info(f"🧹 LAYOUT VALIDATION - Kept {len(cleaned_layout_data)} valid layout entries")
-    else:
-        logger.info(
-            f"✅ LAYOUT VALIDATION - No orphaned layouts found, all {len(cleaned_layout_data)} entries are valid"
-        )
-
-    return cleaned_layout_data
-
-
-def register_callbacks_save(app):
-    @app.callback(
-        inputs=[
-            Input("save-button-dashboard", "n_clicks"),
-            Input("draggable", "currentLayout"),
-            Input(
-                {
-                    "type": "stored-metadata-component",
-                    "index": ALL,
-                },
-                "data",
-            ),
-            State("stored-edit-dashboard-mode-button", "data"),
-            Input("unified-edit-mode-button", "checked"),
-            State("stored-add-button", "data"),
-            State({"type": "interactive-component-value", "index": ALL}, "value"),
-            Input({"type": "text-store", "index": ALL}, "data"),
-            Input("notes-editor-store", "data"),
-            State("url", "pathname"),
-            State("local-store", "data"),
-            State("user-cache-store", "data"),
-            Input(
-                {
-                    "type": "btn-done",
-                    "index": ALL,
-                },
-                "n_clicks",
-            ),
-            Input(
-                {
-                    "type": "btn-done-edit",
-                    "index": ALL,
-                },
-                "n_clicks",
-            ),
-            Input(
-                {
-                    "type": "duplicate-box-button",
-                    "index": ALL,
-                },
-                "n_clicks",
-            ),
-            Input(
-                {"type": "remove-box-button", "index": ALL},
-                "n_clicks",
-            ),
-            Input("remove-all-components-button", "n_clicks"),
-            Input({"type": "interactive-component-value", "index": ALL}, "value"),
-            Input("interactive-values-store", "data"),
-            Input("apply-filters-button", "n_clicks"),
-            State("live-interactivity-store", "data"),
-        ],
-        prevent_initial_call=True,
-    )
-    def save_data_dashboard(
-        n_clicks,
-        stored_layout_data,
-        stored_metadata,
-        edit_dashboard_mode_button,
-        unified_edit_mode_button_checked,
-        add_button,
-        interactive_component_values,
-        text_store_data,
-        notes_data,
-        pathname,
-        local_store,
-        user_cache,
-        n_clicks_done,
-        n_clicks_done_edit,
-        n_clicks_duplicate,
-        n_clicks_remove,
-        n_clicks_remove_all,
-        interactive_component_values_all,
-        interactive_values_store,
-        n_clicks_apply,
-        live_interactivity_on,
-    ):
-        logger.info("Saving dashboard data...")
-        logger.info(
-            f"📊 SAVE DEBUG - Raw stored_metadata count: {len(stored_metadata) if stored_metadata else 0}"
-        )
-
-        # Log the first few raw metadata entries for debugging
-        # if stored_metadata:
-        #     for i, elem in enumerate(stored_metadata[:3]):  # Only first 3 to avoid spam
-        #         logger.info(
-        #             f"📊 SAVE DEBUG - Raw metadata {i}: keys={list(elem.keys()) if elem else 'None'}"
-        #         )
-        #         if elem:
-        #             logger.info(
-        #                 f"📊 SAVE DEBUG - Raw metadata {i}: mode={elem.get('mode', 'MISSING')}"
-        #             )
-        #             logger.info(
-        #                 f"📊 SAVE DEBUG - Raw metadata {i}: code_content={'YES' if elem.get('code_content') else 'NO'} ({len(elem.get('code_content', '')) if elem.get('code_content') else 0} chars)"
-        #             )
-        #             logger.info(
-        #                 f"📊 SAVE DEBUG - Raw metadata {i}: dict_kwargs={elem.get('dict_kwargs', 'MISSING')}"
-        #             )
-
-        stored_metadata_for_logging = [
-            {
-                "index": elem.get("index"),
-                "component_type": elem.get("component_type"),
-                "wf_id": elem.get("workflow_id"),
-                "dc_id": elem.get("dc_id"),
-            }
-            for elem in stored_metadata
-        ]
-        logger.info(f"Stored metadata for logging: {stored_metadata_for_logging}")
-        logger.info(f"Stored complete metadata: {stored_metadata}")
-
-        # Early return if user is not logged in
-        if not local_store:
-            logger.warning("User not logged in.")
-            raise dash.exceptions.PreventUpdate
-
-        # Validate user authentication using consolidated cache
-        from depictio.models.models.users import UserContext
-
-        TOKEN = local_store["access_token"]
-        current_user = UserContext.from_cache(user_cache)
-        if not current_user:
-            # Fallback to direct API call if cache not available
-            logger.info("🔄 Save: Using fallback API call for user authentication")
-            current_user_api = api_call_fetch_user_from_token(TOKEN)
-            if not current_user_api:
-                logger.warning("User not found.")
-                raise dash.exceptions.PreventUpdate
-            # Create UserContext from API response for consistency
-            current_user = UserContext(
-                id=str(current_user_api.id),
-                email=current_user_api.email,
-                is_admin=current_user_api.is_admin,
-                is_anonymous=getattr(current_user_api, "is_anonymous", False),
-            )
-        else:
-            logger.info("✅ Save: Using consolidated cache for user authentication")
-
-        # Extract dashboard ID from pathname
-        dashboard_id = pathname.split("/")[-1]
-
-        # Fetch dashboard data using API call with proper timeout
-        dashboard_data = api_call_get_dashboard(dashboard_id, TOKEN)
-        if not dashboard_data:
-            logger.error(f"Failed to fetch dashboard data for {dashboard_id}")
-            raise dash.exceptions.PreventUpdate
-
-        # Check user permissions
-        owner_ids = [str(e["id"]) for e in dashboard_data.get("permissions", {}).get("owners", [])]
-        if str(current_user.id) not in owner_ids:
-            logger.warning("User does not have permission to edit & save this dashboard.")
-            raise dash.exceptions.PreventUpdate
-
-        # Determine trigger context
-        from dash import ctx
-
-        triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
-        logger.info(f"Triggered ID: {triggered_id}")
-
-        # Define save-triggering conditions
-        save_triggers = [
-            "save-button-dashboard",
-            "btn-done",
-            "btn-done-edit",
-            "duplicate-box-button",
-            "remove-box-button",
-            "remove-all-components-button",
-            "edit-components-mode-button",
-            "unified-edit-mode-button",  # Add edit mode button to save triggers
-            "draggable",
-            "text-store",
-            "notes-editor-store",
-            "interactive-component-value",
-            "apply-filters-button",
-        ]
-
-        # special_save_triggers = [
-        #     "interactive-component-value",
-        #     "apply-filters-button",
-        # ]
-
-        # Check if save should be triggered - modified to allow edit mode state persistence
-        if not any(trigger in triggered_id for trigger in save_triggers):
-            raise dash.exceptions.PreventUpdate
-
-        # Check if trigger is interactive component value change
-        # If so, check if live interactivity is enabled
-        triggered_by_interactive = "interactive-component-value" in triggered_id
-        if triggered_by_interactive and not live_interactivity_on:
-            logger.info(
-                "⏸️ NON-LIVE MODE: Interactive component value changed but live interactivity is OFF - ignoring save"
-            )
-            raise dash.exceptions.PreventUpdate
-
-        # Check if trigger is apply filters button
-        if "apply-filters-button" in triggered_id and not live_interactivity_on:
-            logger.info("NON-LIVE MODE: Apply filters button clicked > saving changes")
-
-        # Original logic blocked saving when edit mode was OFF - removed to allow persistence
-
-        # Deduplicate and clean metadata - prioritize complete metadata entries
-        unique_metadata = []
-        seen_indexes = set()
-        indexed_metadata = {}
-
-        # First pass: collect all metadata entries by index
-        for elem in stored_metadata:
-            index = elem["index"]
-            if index not in indexed_metadata:
-                indexed_metadata[index] = []
-            indexed_metadata[index].append(elem)
-
-        # Second pass: for each index, select the most complete metadata entry
-        for index, metadata_list in indexed_metadata.items():
-            if len(metadata_list) == 1:
-                # Single entry - use it
-                best_metadata = metadata_list[0]
+                default_tab.add_section(section)
+                logger.info(f"💾 SAVE: Added new section '{section_name}' (type: {section_type})")
             else:
-                # Multiple entries - prioritize by completeness
-                # logger.info(
-                #     f"📊 SAVE DEBUG - Found {len(metadata_list)} duplicate entries for index {index}"
-                # )
+                logger.info(f"💾 SAVE: Section '{section_id}' already exists, skipping duplicate")
 
-                # Score each metadata entry by completeness
-                def score_metadata(meta):
-                    score = 0
-                    # Highest priority: non-empty dict_kwargs (this is the critical field we need to preserve)
-                    dict_kwargs = meta.get("dict_kwargs", {})
-                    if isinstance(dict_kwargs, dict) and len(dict_kwargs) > 0:
-                        score += 1000  # Much higher weight for dict_kwargs
-                        # Bonus points for specific important fields in dict_kwargs
-                        important_fields = ["x", "y", "color", "size", "hover_data"]
-                        for field in important_fields:
-                            if field in dict_kwargs and dict_kwargs[field]:
-                                score += 10
+    elif event_type == "component_created":
+        # Handle component creation event
+        payload = event_store_data.get("payload", {})
 
-                    # Medium priority: component configuration fields
-                    if meta.get("wf_id"):
-                        score += 100
-                    if meta.get("dc_id"):
-                        score += 100
-                    if meta.get("visu_type"):
-                        score += 50
-                    if meta.get("component_type"):
-                        score += 25
+        if payload:
+            logger.info(f"💾 SAVE: Processing component creation from event store: {payload}")
 
-                    # Low priority: metadata fields
-                    if meta.get("last_updated"):
-                        score += 1
-                    if meta.get("title"):
-                        score += 5
+            # Import models
+            from depictio.models.models.dashboard_structure import DashboardComponent
 
-                    return score
+            # Extract component metadata
+            component_id = payload.get("component_id")
+            section_id = payload.get("section_id")
+            metadata = payload.get("metadata", {})
 
-                # Log all candidates with their scores for debugging
-                candidate_scores = []
-                for i, meta in enumerate(metadata_list):
-                    score = score_metadata(meta)
-                    candidate_scores.append((score, i, meta))
-                    # logger.info(
-                    #     f"📊 SAVE DEBUG - Candidate {i} for index {index}: score={score}, dict_kwargs={meta.get('dict_kwargs', 'MISSING')}"
-                    # )
-
-                # Select the metadata with the highest completeness score
-                best_metadata = max(metadata_list, key=score_metadata)
-                # best_score = score_metadata(best_metadata)
-
-                # logger.info(
-                #     f"📊 SAVE DEBUG - SELECTED metadata with score {best_score} for index {index}"
-                # )
-                # logger.info(
-                #     f"📊 SAVE DEBUG - SELECTED metadata dict_kwargs: {best_metadata.get('dict_kwargs', 'MISSING')}"
-                # )
-                # logger.info(
-                #     f"📊 SAVE DEBUG - SELECTED metadata has {len(best_metadata.get('dict_kwargs', {}))} parameters"
-                # )
-
-            # Safety check: ensure we're not accidentally selecting empty metadata when better options exist
-            if len(metadata_list) > 1:
-                dict_kwargs = best_metadata.get("dict_kwargs", {})
-                if not isinstance(dict_kwargs, dict) or len(dict_kwargs) == 0:
-                    # Double-check if any other candidate has non-empty dict_kwargs
-                    alternatives = [
-                        meta
-                        for meta in metadata_list
-                        if meta.get("dict_kwargs") and len(meta.get("dict_kwargs", {})) > 0
-                    ]
-                    if alternatives:
-                        logger.warning(
-                            f"📊 SAVE DEBUG - SAFETY CHECK: Found {len(alternatives)} alternatives with non-empty dict_kwargs for index {index}"
-                        )
-                        # Use the first alternative with non-empty dict_kwargs
-                        best_metadata = alternatives[0]
-                        logger.warning(
-                            f"📊 SAVE DEBUG - SAFETY CHECK: Switched to alternative with dict_kwargs: {best_metadata.get('dict_kwargs', 'MISSING')}"
-                        )
-
-            unique_metadata.append(best_metadata)
-            seen_indexes.add(index)
-
-        logger.info(f"📊 SAVE DEBUG - Unique metadata: {unique_metadata}")
-
-        # Summary logging of deduplication results
-        # logger.info(
-        #     f"📊 SAVE DEBUG - Deduplication complete: {len(unique_metadata)} unique components"
-        # )
-        # components_with_dict_kwargs = sum(
-        #     1
-        #     for meta in unique_metadata
-        #     if meta.get("dict_kwargs") and len(meta.get("dict_kwargs", {})) > 0
-        # )
-        # # logger.info(
-        # #     f"📊 SAVE DEBUG - Components with non-empty dict_kwargs: {components_with_dict_kwargs}/{len(unique_metadata)}"
-        # # )
-
-        # # Log any components that ended up with empty dict_kwargs for investigation
-        # empty_dict_kwargs_components = [
-        #     meta
-        #     for meta in unique_metadata
-        #     if not meta.get("dict_kwargs") or len(meta.get("dict_kwargs", {})) == 0
-        # ]
-        # if empty_dict_kwargs_components:
-        #     logger.warning(
-        #         f"📊 SAVE DEBUG - WARNING: {len(empty_dict_kwargs_components)} components have empty dict_kwargs:"
-        #     )
-        #     for meta in empty_dict_kwargs_components:
-        #         logger.warning(
-        #             f"📊 SAVE DEBUG - Empty dict_kwargs component: index={meta.get('index')}, type={meta.get('component_type')}"
-        #         )
-
-        # logger.info(f"Unique metadata: {unique_metadata}")
-        # logger.info(f"seen_indexes: {seen_indexes}")
-        # Remove child components for edit mode
-        if "btn-done-edit" in triggered_id:
-            logger.info("=== BTN-DONE-EDIT TRIGGERED - PROCESSING EDIT MODE ===")
-            logger.info(f"Unique metadata BEFORE filtering: {len(unique_metadata)} items")
-            for i, elem in enumerate(unique_metadata):
-                logger.info(
-                    f"Item {i}: index={elem.get('index')}, parent_index={elem.get('parent_index')}, component_type={elem.get('component_type')}"
-                )
-
-            # In edit mode, we need to:
-            # 1. Find the edited component (has parent_index)
-            # 2. Remove the original component (with index = parent_index)
-            # 3. Add the edited component with parent_index removed
-            original_count = len(unique_metadata)
-
-            # Find the component being edited (it will have parent_index set)
-            edited_components = [
-                elem for elem in unique_metadata if elem.get("parent_index") is not None
-            ]
-            non_edited_components = [
-                elem for elem in unique_metadata if elem.get("parent_index") is None
-            ]
+            # All component details are in metadata
+            component_type_str = metadata.get("component_type", "unknown")
+            workflow_id = metadata.get("wf_id")
+            datacollection_id = metadata.get("dc_id")
 
             logger.info(
-                f"Found {len(edited_components)} edited components and {len(non_edited_components)} non-edited components"
+                f"💾 SAVE: Creating component {component_id} of type {component_type_str} for section {section_id}"
             )
+            logger.info(f"💾 SAVE: Component metadata: {metadata}")
 
-            # Log all component indices for debugging
-            logger.info("=== ALL COMPONENTS BEFORE PROCESSING ===")
-            for i, comp in enumerate(unique_metadata):
-                logger.info(
-                    f"Component {i}: index={comp.get('index')}, parent_index={comp.get('parent_index')}, type={comp.get('component_type')}, title={comp.get('title')}"
+            # Convert string to ComponentType enum
+            from depictio.models.models.dashboard_structure import ComponentType
+
+            try:
+                component_type = ComponentType(component_type_str.lower())
+            except ValueError:
+                logger.warning(
+                    f"💾 SAVE: Unknown component type '{component_type_str}', using TEXT as fallback"
                 )
+                component_type = ComponentType.TEXT
 
-            logger.info("=== EDITED COMPONENTS ===")
-            for i, comp in enumerate(edited_components):
-                logger.info(
-                    f"Edited {i}: index={comp.get('index')}, parent_index={comp.get('parent_index')}, type={comp.get('component_type')}, title={comp.get('title')}"
-                )
+            # Find the section to add the component to
+            if section_id:
+                section = next((s for s in default_tab.sections if s.id == section_id), None)
 
-            logger.info("=== NON-EDITED COMPONENTS ===")
-            for i, comp in enumerate(non_edited_components):
-                logger.info(
-                    f"Non-edited {i}: index={comp.get('index')}, parent_index={comp.get('parent_index')}, type={comp.get('component_type')}, title={comp.get('title')}"
-                )
+                if section:
+                    # Check if component already exists (avoid duplicates)
+                    existing_component = next(
+                        (c for c in section.components if c.id == component_id), None
+                    )
 
-            # Process edited components
-            for component in edited_components:
-                parent_index = component.get("parent_index")
-                component_index = component.get("index")
+                    if not existing_component:
+                        # Create component configuration from metadata
+                        component_config = {
+                            "workflow_id": workflow_id,
+                            "datacollection_id": datacollection_id,
+                        }
 
-                logger.info(
-                    f"Processing edited component: {component_index} (parent_index: {parent_index})"
-                )
-                logger.info(
-                    f"Component data: type={component.get('component_type')}, title={component.get('title')}, aggregation={component.get('aggregation')}"
-                )
+                        # Add metadata to config if available
+                        if metadata:
+                            component_config.update(metadata)
 
-                # Find and log the original components that will be removed (both original and temp)
-                temp_parent_index = f"{parent_index}-tmp"
-                original_component = None
-                temp_component = None
+                        # Create new component following DashboardComponent structure
+                        component = DashboardComponent(
+                            id=component_id,
+                            type=component_type,  # Use ComponentType enum
+                            config=component_config,  # Include workflow/dc IDs and metadata
+                            position={
+                                "x": 0,
+                                "y": 0,
+                                "width": 4,
+                                "height": 3,
+                            },  # Default position and size
+                        )
 
-                for elem in non_edited_components:
-                    if elem.get("index") == parent_index:
-                        original_component = elem
-                    elif elem.get("index") == temp_parent_index:
-                        temp_component = elem
-
-                components_to_remove = []
-                if original_component:
-                    components_to_remove.append(f"original ({original_component.get('index')})")
-                if temp_component:
-                    components_to_remove.append(f"temp ({temp_component.get('index')})")
-
-                if components_to_remove:
-                    logger.info(f"Found components to remove: {', '.join(components_to_remove)}")
+                        section.add_component(component)
+                        logger.info(
+                            f"💾 SAVE: Added component '{component_id}' to section '{section_id}'"
+                        )
+                    else:
+                        logger.info(
+                            f"💾 SAVE: Component '{component_id}' already exists, skipping duplicate"
+                        )
                 else:
                     logger.warning(
-                        f"Could not find any components to remove with parent_index {parent_index}"
+                        f"💾 SAVE: Section '{section_id}' not found for component '{component_id}'"
                     )
-
-                # Remove the original component and its temp component that were being edited
-                temp_parent_index = f"{parent_index}-tmp"
-                original_count = len(non_edited_components)
-                non_edited_components = [
-                    elem
-                    for elem in non_edited_components
-                    if elem.get("index") not in [parent_index, temp_parent_index]
-                ]
-                removed_count = original_count - len(non_edited_components)
-                logger.info(
-                    f"Removed {removed_count} components with indices {parent_index} and {temp_parent_index}"
-                )
-
-                # Update the edited component's index to be the same as the original
-                component["index"] = parent_index
-                logger.info(
-                    f"Updated edited component index from {component_index} to {parent_index}"
-                )
-
-                # Clear parent_index since this is now the final component (no longer a child)
-                component["parent_index"] = None
-                logger.info(f"Cleared parent_index for final component {parent_index}")
-
-                logger.info(
-                    f"Updated component data: type={component.get('component_type')}, title={component.get('title')}, aggregation={component.get('aggregation')}"
-                )
-                # if "parent_index" in component:
-                #     del component["parent_index"]
-                #     logger.info(f"Removed parent_index from component {parent_index}")
-
-            # Combine all components back together
-            unique_metadata = non_edited_components + edited_components
-
-            logger.info(
-                f"Unique metadata AFTER processing: {len(unique_metadata)} items (removed {original_count - len(unique_metadata)} items)"
-            )
-            # logger.debug("=== FINAL COMPONENTS AFTER PROCESSING ===")
-            # for i, elem in enumerate(unique_metadata):
-            #     logger.debug(
-            #         f"Final item {i}: index={elem.get('index')}, parent_index={elem.get('parent_index')}, component_type={elem.get('component_type')}, title={elem.get('title')}, aggregation={elem.get('aggregation')}"
-            #     )
-            # logger.debug("=== BTN-DONE-EDIT PROCESSING COMPLETE ===")
-
-        # Use draggable layout metadata if triggered by draggable
-        # if "draggable" in triggered_id:
-        #     unique_metadata = dashboard_data.get("stored_metadata", unique_metadata)
-        # logger.info(f"Unique metadata after using draggable layout metadata: {unique_metadata}")
-
-        # Debug logging for layout data - COMPREHENSIVE TRACKING
-        # logger.debug("=" * 80)
-        # logger.debug("🔍 SAVE DEBUG - LAYOUT DATA PROCESSING START")
-        # logger.debug("=" * 80)
-        # logger.debug(f"🔍 SAVE DEBUG - stored_layout_data received: {stored_layout_data}")
-        # logger.debug(f"🔍 SAVE DEBUG - type: {type(stored_layout_data)}")
-        # logger.debug(f"🔍 SAVE DEBUG - triggered_id: {triggered_id}")
-
-        # Log the complete callback context for debugging
-        from dash import ctx
-
-        # logger.info(f"🔍 SAVE DEBUG - callback context triggered: {ctx.triggered}")
-        # logger.info(f"🔍 SAVE DEBUG - callback inputs_list: {ctx.inputs_list}")
-
-        # Identify which callback triggered this save
-        # if "duplicate-box-button" in triggered_id:
-        #     logger.info("🎯 SAVE DEBUG - TRIGGERED BY: DUPLICATE CALLBACK")
-        # elif "draggable" in triggered_id:
-        #     logger.info("🎯 SAVE DEBUG - TRIGGERED BY: DRAGGABLE/GRID LAYOUT CALLBACK")
-        # elif "save-button-dashboard" in triggered_id:
-        #     logger.info("🎯 SAVE DEBUG - TRIGGERED BY: SAVE BUTTON")
-        # else:
-        #     logger.info(f"🎯 SAVE DEBUG - TRIGGERED BY: OTHER ({triggered_id})")
-
-        # Log current layout data details
-        # if stored_layout_data:
-        #     logger.info(f"🔍 SAVE DEBUG - layout data length: {len(stored_layout_data)}")
-        #     for i, layout_item in enumerate(stored_layout_data):
-        #         logger.info(f"🔍 SAVE DEBUG - layout item {i}: {layout_item}")
-        # else:
-        #     logger.info("🔍 SAVE DEBUG - stored_layout_data is empty or None")
-
-        # Log existing dashboard layout data for comparison
-        # existing_dashboard_layout = dashboard_data.get("stored_layout_data", [])
-        # logger.info(f"🔍 SAVE DEBUG - existing dashboard layout: {existing_dashboard_layout}")
-        # if existing_dashboard_layout:
-        #     logger.info(f"🔍 SAVE DEBUG - existing layout length: {len(existing_dashboard_layout)}")
-        #     for i, layout_item in enumerate(existing_dashboard_layout):
-        #         logger.info(f"🔍 SAVE DEBUG - existing layout item {i}: {layout_item}")
-
-        # Ensure layout data is in list format - no backward compatibility
-        if stored_layout_data is None:
-            stored_layout_data = []
-            # logger.info("⚠️ SAVE DEBUG - stored_layout_data was None, set to empty list")
-
-        # If layout data is empty but we have existing dashboard data, preserve the existing layout
-        if not stored_layout_data and dashboard_data and dashboard_data.get("stored_layout_data"):
-            existing_layout = dashboard_data.get("stored_layout_data")
-            if isinstance(existing_layout, list):
-                stored_layout_data = existing_layout
-                # logger.info(f"🔄 SAVE DEBUG - preserved existing layout: {stored_layout_data}")
-                # logger.info(f"🔄 SAVE DEBUG - preserved layout length: {len(stored_layout_data)}")
-                # for i, layout_item in enumerate(stored_layout_data):
-                #     logger.info(f"🔄 SAVE DEBUG - preserved layout item {i}: {layout_item}")
             else:
-                logger.warning(
-                    f"⚠️ SAVE DEBUG - existing layout is not a list: {type(existing_layout)}"
-                )
+                logger.warning(f"💾 SAVE: No section_id specified for component '{component_id}'")
 
-        # Validate and clean orphaned layouts before saving
-        # logger.debug("=" * 80)
-        # logger.debug("🧹 LAYOUT VALIDATION - CLEANING ORPHANED LAYOUTS")
-        # logger.debug("=" * 80)
-        # logger.debug(
-        #     f"🔍 LAYOUT VALIDATION - Before cleaning: {len(stored_layout_data) if stored_layout_data else 0} layout entries"
-        # )
-        # logger.info(f"🔍 LAYOUT VALIDATION - Available metadata: {len(unique_metadata)} entries")
+    else:
+        logger.info(f"💾 SAVE: Event type '{event_type}' not handled for structure collection")
 
-        stored_layout_data = validate_and_clean_orphaned_layouts(
-            stored_layout_data, unique_metadata
+    logger.info(f"💾 SAVE: Collected dashboard structure with {len(default_tab.sections)} sections")
+    return structure
+
+
+def save_dashboard_minimal(
+    dashboard_id: str,
+    user_token: str,
+    event_store_data: Optional[dict] = None,
+    filters_container_children: Optional[list] = None,
+) -> tuple[bool, str]:
+    """
+    Save dashboard using the new structured format.
+
+    Args:
+        dashboard_id: ID of the dashboard to save
+        user_token: User authentication token
+        event_store_data: Dashboard event store data containing section metadata
+        filters_container_children: Current filters UI state (optional)
+
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    try:
+        logger.info(f"💾 SAVE: Starting minimal save for dashboard {dashboard_id}")
+
+        # Fetch current dashboard data
+        current_dashboard_dict = api_call_get_dashboard(dashboard_id, user_token)
+        if not current_dashboard_dict:
+            return False, "Failed to fetch current dashboard data"
+
+        # Convert to Pydantic model
+        from depictio.models.models.dashboards import DashboardData
+
+        current_dashboard = DashboardData.from_mongo(current_dashboard_dict)
+
+        # Collect dashboard structure from event store metadata, preserving existing sections
+        existing_structure = current_dashboard.dashboard_structure
+        dashboard_structure = collect_dashboard_structure_from_event_store(
+            event_store_data, dashboard_id, existing_structure
         )
 
-        # logger.info(
-        #     f"🔍 LAYOUT VALIDATION - After cleaning: {len(stored_layout_data) if stored_layout_data else 0} layout entries"
-        # )
-        # logger.info("=" * 80)
+        # Update dashboard data with new structure
+        current_dashboard.dashboard_structure = dashboard_structure
+        current_dashboard.last_saved_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        current_dashboard.version = 2  # Set to new structure version
 
-        updated_dashboard_data = {
-            "stored_metadata": unique_metadata,
-            "stored_layout_data": stored_layout_data,
-            "stored_edit_dashboard_mode_button": edit_dashboard_mode_button,
-            "stored_add_button": add_button,
-            "buttons_data": {
-                "unified_edit_mode": unified_edit_mode_button_checked,
-                "add_components_button": add_button,
-            },
-            "notes_content": notes_data if notes_data else "",
-            "last_saved_ts": str(datetime.now()),
-        }
+        # Ensure edit mode is enabled for dashboards with sections
+        if not current_dashboard.buttons_data:
+            current_dashboard.buttons_data = {}
+        current_dashboard.buttons_data["edit_components_button"] = True
+        current_dashboard.buttons_data["unified_edit_mode"] = True
 
-        # Log final layout data being prepared for database
-        # logger.debug("=" * 80)
-        # logger.debug("🔍 SAVE DEBUG - FINAL DATA PREPARATION")
-        # logger.debug("=" * 80)
-        # final_layout_data = updated_dashboard_data["stored_layout_data"]
-        # logger.debug(f"🔍 SAVE DEBUG - final layout data to save: {final_layout_data}")
-        # logger.debug(f"🔍 SAVE DEBUG - final layout data type: {type(final_layout_data)}")
-        # if final_layout_data:
-        #     logger.debug(f"🔍 SAVE DEBUG - final layout data length: {len(final_layout_data)}")
-        #     for i, layout_item in enumerate(final_layout_data):
-        #         logger.debug(f"🔍 SAVE DEBUG - final layout item {i}: {layout_item}")
-        # else:
-        #     logger.debug("🔍 SAVE DEBUG - final layout data is empty")
+        logger.info(
+            f"💾 SAVE: Prepared save data with structure version {current_dashboard.version}"
+        )
 
-        # final_metadata = updated_dashboard_data["stored_metadata"]
-        # logger.debug(f"🔍 SAVE DEBUG - final metadata count: {len(final_metadata)}")
-        # for i, meta_item in enumerate(final_metadata):
-        #     logger.debug(
-        #         f"🔍 SAVE DEBUG - final metadata item {i}: index={meta_item.get('index')}, type={meta_item.get('component_type')}, title={meta_item.get('title')}"
-        #     )
+        # Save to database - use the full dashboard data object
+        success = api_call_save_dashboard(
+            dashboard_id=dashboard_id,
+            dashboard_data=current_dashboard.model_dump(),
+            token=user_token,
+        )
 
-        # Apply interactive component values to metadata when Apply button is clicked or live mode is active
-        # This uses the interactive_component_values parameter that's automatically collected from all components
-        if ("apply-filters-button" in triggered_id and not live_interactivity_on) or (
-            triggered_by_interactive and live_interactivity_on
-        ):
-            logger.info("🔄 UPDATING METADATA WITH CURRENT INTERACTIVE COMPONENT VALUES")
+        if success:
+            logger.info(f"💾 SAVE: Successfully saved dashboard {dashboard_id}")
 
-            # Get interactive components from metadata to match with values
-            interactive_metadata = [
-                meta for meta in unique_metadata if meta.get("component_type") == "interactive"
-            ]
+            # Take screenshot after successful save
+            try:
+                screenshot_success = api_call_screenshot_dashboard(dashboard_id)
+                if screenshot_success:
+                    logger.info("📸 SAVE: Successfully captured dashboard screenshot")
+                else:
+                    logger.warning("📸 SAVE: Failed to capture dashboard screenshot")
+            except Exception as e:
+                logger.warning(f"📸 SAVE: Screenshot failed: {e}")
 
-            if interactive_component_values and interactive_metadata:
-                logger.info(
-                    f"🔄 Found {len(interactive_component_values)} values and {len(interactive_metadata)} interactive components"
-                )
-
-                # Match values to metadata by position (they should be in the same order)
-                for i, (value, meta) in enumerate(
-                    zip(interactive_component_values, interactive_metadata)
-                ):
-                    old_value = meta.get("value")
-                    component_index = meta.get("index")
-
-                    # Update both value and corrected_value in metadata
-                    meta["value"] = value
-                    meta["corrected_value"] = value
-
-                    logger.info(
-                        f"🔄 Updated metadata for component {component_index} (position {i}): {old_value} -> {value}"
-                    )
-
-                # Update the stored_metadata in the save data to include updated values
-                updated_dashboard_data["stored_metadata"] = unique_metadata
-            else:
-                logger.warning(
-                    f"🔄 Mismatch: {len(interactive_component_values or [])} values vs {len(interactive_metadata)} components!"
-                )
-
-        # Update dashboard data
-        dashboard_data.update(updated_dashboard_data)
-
-        # Log the complete dashboard data being sent to API
-        # logger.debug("=" * 80)
-        # logger.debug("🔍 SAVE DEBUG - DATABASE SAVE PREPARATION")
-        # logger.debug("=" * 80)
-        # db_layout_data = dashboard_data.get("stored_layout_data", [])
-        # logger.debug(f"🔍 SAVE DEBUG - database layout data: {db_layout_data}")
-        # logger.debug(
-        #     f"🔍 SAVE DEBUG - database layout data length: {len(db_layout_data) if db_layout_data else 0}"
-        # )
-        # if db_layout_data:
-        #     for i, layout_item in enumerate(db_layout_data):
-        #         logger.debug(f"🔍 SAVE DEBUG - database layout item {i}: {layout_item}")
-
-        # db_metadata = dashboard_data.get("stored_metadata", [])
-        # logger.debug(f"🔍 SAVE DEBUG - database metadata count: {len(db_metadata)}")
-        # for i, meta_item in enumerate(db_metadata):
-        #     logger.debug(
-        #         f"🔍 SAVE DEBUG - database metadata item {i}: index={meta_item.get('index')}, type={meta_item.get('component_type')}, title={meta_item.get('title')}"
-        #     )
-
-        logger.debug("=" * 80)
-        logger.debug("🔍 SAVE DEBUG - CALLING API TO SAVE DASHBOARD")
-        logger.debug("=" * 80)
-
-        # Save dashboard data using API call with proper timeout
-        save_success = api_call_save_dashboard(dashboard_id, dashboard_data, TOKEN)
-
-        # Log save result and verify what was actually saved
-        logger.debug("=" * 80)
-        logger.debug("🔍 SAVE DEBUG - SAVE OPERATION RESULT")
-        logger.debug("=" * 80)
-        logger.debug(f"🔍 SAVE DEBUG - save_success: {save_success}")
-        logger.debug(f"🔍 SAVE DEBUG - dashboard_id: {dashboard_id}")
-        logger.debug(f"🔍 SAVE DEBUG - user_id: {current_user.id}")
-
-        # for each component which is interactive, show value & corrected_value
-        for i, value in enumerate(interactive_component_values):
-            logger.debug(f"🔍 SAVE DEBUG - interactive component {i}: value={value}")
-        for elem in dashboard_data.get("stored_metadata", []):
-            if elem["component_type"] == "interactive":
-                index = elem.get("index")
-                logger.info(
-                    f"🔍 SAVE DEBUG - interactive component metadata: index={index}, value={elem.get('value')}, corrected_value={elem.get('corrected_value')}"
-                )
-        if save_success:
-            # Fetch the dashboard again to verify what was actually saved
-            # logger.debug("🔍 SAVE DEBUG - Fetching saved dashboard to verify data...")
-            # verified_data = api_call_get_dashboard(dashboard_id, TOKEN)
-            # if verified_data:
-            #     verified_layout = verified_data.get("stored_layout_data", [])
-            #     verified_metadata = verified_data.get("stored_metadata", [])
-
-            #     logger.debug(
-            #         f"🔍 SAVE DEBUG - verified layout data from database: {verified_layout}"
-            #     )
-            #     logger.debug(
-            #         f"🔍 SAVE DEBUG - verified layout count: {len(verified_layout) if verified_layout else 0}"
-            #     )
-            #     if verified_layout:
-            #         for i, layout_item in enumerate(verified_layout):
-            #             logger.debug(f"🔍 SAVE DEBUG - verified layout item {i}: {layout_item}")
-
-            #     logger.debug(f"🔍 SAVE DEBUG - verified metadata count: {len(verified_metadata)}")
-            #     for i, meta_item in enumerate(verified_metadata):
-            #         logger.debug(
-            #             f"🔍 SAVE DEBUG - verified metadata item {i}: index={meta_item.get('index')}, type={meta_item.get('component_type')}, title={meta_item.get('title')}"
-            #         )
-            # else:
-            #     logger.error("🔍 SAVE DEBUG - Failed to fetch dashboard for verification")
-            pass
+            return True, "Dashboard saved successfully"
         else:
-            logger.error(f"Failed to save dashboard data for {dashboard_id}")
+            logger.error(f"💾 SAVE: Failed to save dashboard {dashboard_id}")
+            return False, "Failed to save dashboard to database"
 
-        # logger.debug("=" * 80)
-        # logger.debug("🔍 SAVE DEBUG - LAYOUT DATA PROCESSING END")
-        # logger.debug("=" * 80)
+    except Exception as e:
+        logger.error(f"💾 SAVE: Error saving dashboard {dashboard_id}: {e}")
+        return False, f"Save error: {str(e)}"
 
-        # Screenshot the dashboard if save button was clicked
-        if n_clicks and save_success:
-            screenshot_success = api_call_screenshot_dashboard(dashboard_id)
-            if not screenshot_success:
-                logger.warning(f"Failed to save dashboard screenshot for {dashboard_id}")
 
-        # Pure side-effect callback - no return needed
+def register_minimal_save_callbacks(app):
+    """Register minimal save callbacks for the dashboard."""
 
+    # @app.callback(
+    #     Output("success-modal-dashboard", "opened", allow_duplicate=True),
+    #     Input("save-button-dashboard", "n_clicks"),
+    #     State("dashboard-event-store", "data"),
+    #     State("filters-container", "children"),
+    #     State("url", "pathname"),
+    #     State("local-store", "data"),
+    #     prevent_initial_call=True,
+    # )
+    # def save_dashboard_callback(
+    #     n_clicks,
+    #     event_store_data,
+    #     filters_children,
+    #     current_pathname,
+    #     token_data,
+    # ):
+    #     """Handle dashboard save button clicks."""
+    #     if not n_clicks:
+    #         return dash.no_update
+
+    #     if not token_data or not current_pathname:
+    #         logger.error("💾 SAVE: Missing token or pathname")
+    #         return False
+
+    #     # Extract dashboard ID from URL
+    #     try:
+    #         path_parts = current_pathname.strip("/").split("/")
+    #         if len(path_parts) >= 2 and path_parts[0] == "dashboard":
+    #             dashboard_id = path_parts[1]
+    #         else:
+    #             logger.error(f"💾 SAVE: Invalid pathname format: {current_pathname}")
+    #             return False
+    #     except Exception as e:
+    #         logger.error(f"💾 SAVE: Error parsing pathname: {e}")
+    #         return False
+
+    #     # Perform save
+    #     success, message = save_dashboard_minimal(
+    #         dashboard_id=dashboard_id,
+    #         user_token=token_data.get("access_token"),
+    #         event_store_data=event_store_data,
+    #         filters_container_children=filters_children,
+    #     )
+
+    #     if success:
+    #         logger.info(f"💾 SAVE: {message}")
+    #         return True  # Open success modal
+    #     else:
+    #         logger.error(f"💾 SAVE: {message}")
+    #         return False  # Keep modal closed
+
+    # Auto-save callback for component creation events
     @app.callback(
-        Output("success-modal-dashboard", "is_open"),
-        Input("save-button-dashboard", "n_clicks"),
+        # Output("auto-save-status", "data", allow_duplicate=True),
+        Input("dashboard-event-store", "data"),
+        State("url", "pathname"),
+        State("local-store", "data"),
         prevent_initial_call=True,
     )
-    def toggle_success_modal_dashboard(n_save):
-        if n_save:
-            return True
-        raise dash.exceptions.PreventUpdate
+    def auto_save_on_component_creation(event_store_data, current_pathname, token_data):
+        """Automatically save dashboard when component_created events occur."""
+        logger.info(f"💾 AUTO-SAVE: Callback triggered with event_store_data: {event_store_data}")
 
-    # Auto-dismiss modal after 3 seconds
-    app.clientside_callback(
-        """
-        function(is_open) {
-            if (is_open) {
-                setTimeout(function() {
-                    // Find and click outside to close modal
-                    const backdrop = document.querySelector('.modal-backdrop');
-                    if (backdrop) {
-                        backdrop.click();
-                    }
-                }, 3000);
-            }
-            return window.dash_clientside.no_update;
-        }
-        """,
-        Output("success-modal-dashboard", "id"),
-        Input("success-modal-dashboard", "is_open"),
-    )
+        if not event_store_data or not event_store_data.get("event_type"):
+            logger.info("💾 AUTO-SAVE: No event_store_data or event_type, returning no_update")
+            # return dash.no_update
+
+        # Only auto-save for component creation events
+        if event_store_data.get("event_type") != "component_created":
+            logger.info(
+                f"💾 AUTO-SAVE: Event type is '{event_store_data.get('event_type')}', not 'component_created', returning no_update"
+            )
+            # return dash.no_update
+
+        if not token_data or not current_pathname:
+            logger.error("💾 AUTO-SAVE: Missing token or pathname")
+            # return dash.no_update
+
+        logger.info("💾 AUTO-SAVE: Component creation detected, triggering auto-save")
+
+        # Extract dashboard ID from URL
+        path_parts = current_pathname.strip("/").split("/")
+        if len(path_parts) < 2 or path_parts[0] != "dashboard":
+            logger.error(f"💾 AUTO-SAVE: Invalid dashboard URL: {current_pathname}")
+            # return dash.no_update
+
+        dashboard_id = path_parts[1]
+        access_token = token_data.get("access_token")
+
+        if not access_token:
+            logger.error("💾 AUTO-SAVE: No access token found")
+            # return dash.no_update
+
+        # Use the same save logic as the manual save button
+        success, message = save_dashboard_minimal(
+            dashboard_id=dashboard_id,
+            user_token=access_token,
+            event_store_data=event_store_data,
+        )
+
+        if success:
+            logger.info(f"💾 AUTO-SAVE: Success - {message}")
+        else:
+            logger.error(f"💾 AUTO-SAVE: Failed - {message}")
+
+        # return dash.no_update
+
+    # logger.info(
+    #     "💾 SAVE: Registered minimal save callbacks (2 callbacks: manual save and auto-save)"
+    # )
+
+
+# Alias for backward compatibility
+register_callbacks_save = register_minimal_save_callbacks

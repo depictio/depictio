@@ -1,0 +1,1 @@
+"""Component metadata endpoints module."""

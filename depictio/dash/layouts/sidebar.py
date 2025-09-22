@@ -230,7 +230,7 @@ def register_sidebar_callbacks(app):
             href="/profile",
         )
         name_text = dmc.Text(name, size="lg", style={"fontSize": "16px", "marginLeft": "10px"})
-        logger.info(f"✅ AVATAR CALLBACK: Created avatar for {email}")
+        logger.debug(f"✅ AVATAR CALLBACK: Created avatar for {email}")
         return [avatar, name_text]
 
     @app.callback(

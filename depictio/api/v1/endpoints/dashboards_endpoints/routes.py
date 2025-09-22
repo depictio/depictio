@@ -395,7 +395,31 @@ async def save_dashboard(
             detail="Anonymous users cannot create or modify dashboards. Please login to continue.",
         )
 
-    # logger.info(f"Dashboard data: {data}")
+    # Enhanced logging for debugging save operations
+    logger.info(f"📝 SAVE API: Saving dashboard {dashboard_id}")
+
+    # Log dashboard structure details
+    if data.dashboard_structure:
+        structure = data.dashboard_structure
+        tab_count = len(structure.tabs) if structure.tabs else 0
+        logger.info(f"📝 SAVE API: Dashboard has {tab_count} tabs")
+
+        for tab in structure.tabs or []:
+            section_count = len(tab.sections) if tab.sections else 0
+            logger.info(f"📝 SAVE API: Tab '{tab.name}' has {section_count} sections")
+
+            for section in tab.sections or []:
+                component_count = len(section.components) if section.components else 0
+                logger.info(
+                    f"📝 SAVE API: Section '{section.name}' (ID: {section.id}) has {component_count} components"
+                )
+
+                for component in section.components or []:
+                    logger.info(
+                        f"📝 SAVE API: Component '{component.id}' of type '{component.component_type}' (workflow: {component.workflow_id}, dc: {component.datacollection_id})"
+                    )
+    else:
+        logger.warning("📝 SAVE API: Dashboard has no structure data")
 
     # Check if dashboard exists first
     existing_dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})

@@ -41,328 +41,487 @@ def _get_ag_grid_theme_class(theme: str) -> str:
 
 
 def register_callbacks_stepper(app):
-    logger.info("🔧 STEPPER: Registering stepper callbacks...")
     # Register callbacks from modular parts
     register_callbacks_stepper_part_one(app)
     register_callbacks_stepper_part_two(app)
     register_callbacks_stepper_part_three(app)
-    logger.info("🔧 STEPPER: Stepper callbacks registered successfully")
 
-    # @app.callback(
-    #     Output({"type": "modal", "index": MATCH}, "opened"),
-    #     [Input({"type": "btn-done", "index": MATCH}, "n_clicks")],
-    #     prevent_initial_call=True,
-    # )
-    # def handle_modal_close(n_clicks):
-    #     """Close modal when btn-done is clicked."""
-    #     if not n_clicks or n_clicks == 0:
-    #         return dash.no_update
-
-    #     logger.info(f"🔧 BTN-DONE: Closing modal for n_clicks={n_clicks}")
-    #     return False
-
-    # Event Emitter - Emit component creation events when btn-done is clicked
-    # @app.callback(
-    #     Output("dashboard-event-store", "data", allow_duplicate=True),
-    #     Input({"type": "btn-done", "index": ALL}, "n_clicks"),
-    #     # [
-    #     #     State("url", "pathname"),
-    #     #     State("url", "search"),
-    #     # ],
-    #     prevent_initial_call=True,
-    # )
-    # def emit_component_creation_event(n_clicks_list):
-    # # def emit_component_creation_event(n_clicks_list, current_pathname, url_search):
-    #     """Emit component creation event when btn-done is clicked."""
-    #     logger.info(f"CTX Triggered ID: {ctx.triggered_id}")
-    #     logger.info(f"CTX triggered: {ctx.triggered}")
-    #     logger.info(f"n_clicks_list: {n_clicks_list}")
-    #     # logger.info(f"current_pathname: {current_pathname}")
-    #     # logger.info(f"url_search: {url_search}")
-    #     # Check if any btn-done was clicked
-    #     if not any(n_clicks_list) or all(n is None or n == 0 for n in n_clicks_list):
-    #         return dash.no_update
-
-    #     logger.info("🎯 EVENT SYSTEM: btn-done clicked, emitting component_created event")
-    #     return {"event": "component_created", "details": "Component creation event emitted."}
-
-    # # Simplified: just check if any button was clicked
-    # logger.info("🎯 EVENT SYSTEM: btn-done was clicked, creating event")
-
-    # # Extract component_id from URL
-    # path_parts = current_pathname.strip("/").split("/")
-    # component_id = path_parts[2] if len(path_parts) >= 3 else "unknown"
-
-    # # Extract section_id from URL search parameters
-    # section_id = None
-    # if url_search:
-    #     from urllib.parse import parse_qs
-
-    #     try:
-    #         parsed = parse_qs(url_search.lstrip("?"))
-    #         section_id = parsed.get("section_id", [None])[0]
-    #         logger.info(f"🎯 EVENT SYSTEM: Extracted section_id: {section_id}")
-    #     except Exception as e:
-    #         logger.error(f"🎯 EVENT SYSTEM: Error parsing URL search: {e}")
-
-    # # Create event data using helper function
-    # from depictio.dash.layouts.draggable_minimal_layouts.dashboard_events import emit_event
-    # from depictio.dash.layouts.draggable_minimal_layouts.event_models import EventType
-
-    # event_data = emit_event(
-    #     EventType.COMPONENT_CREATED,
-    #     {
-    #         "component_id": component_id,
-    #         "component_type": "stepper_demo",
-    #         "workflow_id": None,
-    #         "datacollection_id": None,
-    #         "trigger": "btn_done",
-    #         "url": current_pathname,
-    #         "section_id": section_id,
-    #     },
-    # )
-
-    # logger.info(f"🎯 EVENT SYSTEM: Emitting component_created event: {event_data}")
-    # return event_data
-
-    # Separate callback for URL redirection
-    # @app.callback(
-    #     Output("url", "pathname", allow_duplicate=True),
-    #     [Input({"type": "btn-done", "index": ALL}, "n_clicks")],
-    #     [State("url", "pathname")],
-    #     prevent_initial_call=True,
-    # )
-    # def redirect_after_component_creation(n_clicks_list, current_pathname):
-    #     """Redirect to dashboard after component creation."""
-    #     # Check if any btn-done was clicked
-    #     if not any(n_clicks_list) or all(n is None or n == 0 for n in n_clicks_list):
-    #         return dash.no_update
-
-    #     logger.info("🔧 BTN-DONE: Redirecting to dashboard")
-
-    #     # Extract dashboard_id from URL
-    #     path_parts = current_pathname.strip("/").split("/")
-    #     if len(path_parts) >= 2:
-    #         dashboard_id = path_parts[1]
-    #         redirect_url = f"/dashboard/{dashboard_id}"
-    #         logger.info(f"🔧 BTN-DONE: Redirecting to {redirect_url}")
-    #         return redirect_url
-    #     else:
-    #         logger.error("🔧 BTN-DONE: Could not extract dashboard_id from pathname")
-    #         return dash.no_update
-
-    # @app.callback(
-    #     Input("btn-done", "n_clicks"),
-    # )
-    # def debug_btn_done(n_clicks):
-    #     logger.info(f"🔍 DEBUG: btn-done clicked {n_clicks} times")
-    #     return dash.no_update
-
-    # SOLUTION: Use pattern-matching Output that matches the Input pattern
-    # Enhanced callback to capture component metadata and emit comprehensive event
     @app.callback(
-        Output("dashboard-event-store", "data", allow_duplicate=True),
-        Input("btn-done", "n_clicks"),
-        State("url", "pathname"),
-        State({"type": "stored-metadata-component", "index": ALL}, "data"),
+        Output({"type": "modal", "index": MATCH}, "opened"),
+        [Input({"type": "btn-done", "index": MATCH}, "n_clicks")],
         prevent_initial_call=True,
     )
-    def handle_component_creation(
-        n_clicks,
-        pathname,
-        stored_metadata_values,
-    ):
-        """Handle component creation when btn-done is clicked with full metadata."""
-
-        logger.info(f"🎯 COMPONENT CREATION: btn-done clicked {n_clicks} times")
-        logger.info(f"🎯 COMPONENT CREATION: Current pathname: {pathname}")
-        logger.info(f"🎯 COMPONENT CREATION: Stored metadata values: {stored_metadata_values}")
-
-        # Extract component_id and section_id from URL path
-        if pathname and "/create" in pathname:
-            path_parts = pathname.strip("/").split("/")
-            if len(path_parts) >= 3:
-                component_id = path_parts[2]  # /dashboard/{dashboard_id}/{component_id}/create
-
-                # Parse section_id from URL search params if provided
-                section_id = None
-                if "section_id=" in pathname:
-                    import urllib.parse
-
-                    parsed_url = urllib.parse.urlparse(pathname)
-                    params = urllib.parse.parse_qs(parsed_url.query)
-                    section_id = params.get("section_id", [None])[0]
-
-                # Extract component metadata from stored metadata
-                if stored_metadata_values and len(stored_metadata_values) > 0:
-                    metadata = stored_metadata_values[
-                        0
-                    ]  # Get the first (and should be only) metadata
-
-                    component_type = metadata.get("component_type", "unknown")
-                    workflow_id = metadata.get("wf_id")
-                    datacollection_id = metadata.get("dc_id")
-
-                    logger.info(
-                        f"🎯 COMPONENT CREATION: Final metadata - type: {component_type}, workflow: {workflow_id}, dc: {datacollection_id}, section: {section_id}"
-                    )
-                    logger.info(f"🎯 COMPONENT CREATION: Full metadata object: {metadata}")
-
-                    # Emit event through the event system
-                    from depictio.dash.layouts.draggable_minimal_layouts.dashboard_events import (
-                        emit_event,
-                    )
-                    from depictio.dash.layouts.draggable_minimal_layouts.event_models import (
-                        EventType,
-                    )
-
-                    # Create payload following ComponentCreatedPayload structure
-                    # All component info is already in metadata, just need section_id and trigger
-                    event_data = emit_event(
-                        EventType.COMPONENT_CREATED,
-                        {
-                            "component_id": component_id,  # Keep for clarity
-                            "section_id": section_id,  # Not in metadata
-                            "trigger": "btn_done_stepper",
-                            "metadata": metadata,  # Contains all component info
-                        },
-                    )
-
-                    logger.info(f"🎯 COMPONENT CREATION: Emitted event: {event_data}")
-                    return event_data
-                else:
-                    logger.warning("🎯 COMPONENT CREATION: No stored metadata found")
-
-        logger.warning(
-            f"🎯 COMPONENT CREATION: Could not parse component_id from pathname: {pathname}"
-        )
-        return dash.no_update
-
-    #     logger.info(
-    #         f"🔍 COMPONENT CREATION DEBUG: Workflow values type: {type(workflow_values)}, length: {len(workflow_values) if workflow_values else 'None'}"
-    #     )
-    #     logger.info(
-    #         f"🔍 COMPONENT CREATION DEBUG: Datacollection values type: {type(datacollection_values)}, length: {len(datacollection_values) if datacollection_values else 'None'}"
-    #     )
-
-    #     logger.info(
-    #         f"🔍 COMPONENT CREATION DEBUG: Component selected type: {type(component_selected_children)}, length: {len(component_selected_children) if component_selected_children else 'None'}"
-    #     )
-    #     # logger.info(
-    #     #     f"🔍 COMPONENT CREATION DEBUG: Stored metadata type: {type(stored_metadata_values)}, length: {len(stored_metadata_values) if stored_metadata_values else 'None'}"
-    #     # )
-
-    #     # Extract component_id from URL path
-    #     if pathname and "/create" in pathname:
-    #         path_parts = pathname.strip("/").split("/")
-    #         if len(path_parts) >= 3:
-    #             component_id = path_parts[2]  # /dashboard/{dashboard_id}/{component_id}/create
-
-    #             # Parse section_id from URL search params if provided
-    #             section_id = None
-    #             if search:
-    #                 import urllib.parse
-
-    #                 params = urllib.parse.parse_qs(search.lstrip("?"))
-    #                 section_id = params.get("section_id", [None])[0]
-
-    #             # Extract component metadata from stepper state with better validation
-    #             workflow_id = None
-    #             if workflow_values and len(workflow_values) > 0 and workflow_values[0]:
-    #                 workflow_id = workflow_values[0]
-    #                 logger.info(f"🎯 COMPONENT CREATION: Extracted workflow_id: {workflow_id}")
-    #             else:
-    #                 logger.warning(
-    #                     f"🎯 COMPONENT CREATION: No workflow selected - workflow_values: {workflow_values}"
-    #                 )
-
-    #             datacollection_id = None
-    #             if (
-    #                 datacollection_values
-    #                 and len(datacollection_values) > 0
-    #                 and datacollection_values[0]
-    #             ):
-    #                 datacollection_id = datacollection_values[0]
-    #                 logger.info(
-    #                     f"🎯 COMPONENT CREATION: Extracted datacollection_id: {datacollection_id}"
-    #                 )
-    #             else:
-    #                 logger.warning(
-    #                     f"🎯 COMPONENT CREATION: No datacollection selected - datacollection_values: {datacollection_values}"
-    #                 )
-
-    #             # Extract component type from selected component badge
-    #             component_type = "unknown"
-    #             if component_selected_children and len(component_selected_children) > 0:
-    #                 selected_child = component_selected_children[0]
-    #                 if isinstance(selected_child, dict) and "props" in selected_child:
-    #                     children = selected_child.get("props", {}).get("children", "")
-    #                     if isinstance(children, str) and children != "None":
-    #                         component_type = children.lower()
-    #                         logger.info(
-    #                             f"🎯 COMPONENT CREATION: Extracted component_type: {component_type}"
-    #                         )
-
-    #             logger.info(
-    #                 f"🎯 COMPONENT CREATION: Final metadata - type: {component_type}, workflow: {workflow_id}, dc: {datacollection_id}"
-    #             )
-
-    #             # Emit event through the event system
-    #             from depictio.dash.layouts.draggable_minimal_layouts.dashboard_events import (
-    #                 emit_event,
-    #             )
-    #             from depictio.dash.layouts.draggable_minimal_layouts.event_models import EventType
-
-    #             # Retrieve metadata using component index from URL
-    #             # metadata = [e for e in stored_metadata_values if e["index"] == component_id]
-
-    #             event_data = emit_event(
-    #                 EventType.COMPONENT_CREATED,
-    #                 {
-    #                     "component_id": component_id,
-    #                     "component_type": component_type,
-    #                     "workflow_id": workflow_id,
-    #                     "datacollection_id": datacollection_id,
-    #                     "section_id": section_id,
-    #                     "trigger": "btn_done_static",
-    #                     "url": pathname,
-    #                     # "metadata": metadata[0] if metadata else None,
-    #                 },
-    #             )
-
-    #             logger.info(f"🎯 COMPONENT CREATION: Emitted event: {event_data}")
-    #             return event_data
-
-    #     logger.warning(
-    #         f"🎯 COMPONENT CREATION: Could not parse component_id from pathname: {pathname}"
-    #     )
-    #     return dash.no_update
-
-    # Redirect back to dashboard after component creation event is emitted
-    @app.callback(
-        Output("url", "pathname", allow_duplicate=True),
-        Input("dashboard-event-store", "data"),
-        State("url", "pathname"),
-        prevent_initial_call=True,
-    )
-    def redirect_after_component_creation(event_store_data, pathname):
-        """Redirect to dashboard after component creation event is emitted."""
-        if not event_store_data or event_store_data.get("event_type") != "component_created":
+    def handle_modal_close(n_clicks):
+        """Close modal when btn-done is clicked."""
+        if not n_clicks or n_clicks == 0:
             return dash.no_update
 
-        logger.info("🔄 REDIRECT: Component creation event detected, checking redirect")
+        logger.info(f"🔧 BTN-DONE: Closing modal for n_clicks={n_clicks}")
+        return False
 
-        # Extract dashboard_id from URL and redirect to dashboard
-        if pathname and "/create" in pathname:
-            path_parts = pathname.strip("/").split("/")
-            if len(path_parts) >= 2:
-                dashboard_id = path_parts[1]
-                new_pathname = f"/dashboard/{dashboard_id}"
-                logger.info(f"🔄 REDIRECT: Redirecting to dashboard: {new_pathname}")
-                return new_pathname
+    # Separate callback for component creation using ALL pattern to match global output
+    @app.callback(
+        Output("sections-container", "children", allow_duplicate=True),
+        [Input({"type": "btn-done", "index": ALL}, "n_clicks")],
+        [
+            State({"type": "workflow-selection-label", "index": ALL}, "value"),
+            State({"type": "datacollection-selection-label", "index": ALL}, "value"),
+            State("local-store", "data"),
+            State("sections-container", "children"),
+        ],
+        prevent_initial_call=True,
+    )
+    def handle_component_creation_all(n_clicks_list, wf_values, dc_values, local_data, current_sections):
+        """Create component when btn-done is clicked - using ALL pattern."""
+        # Check if any btn-done was clicked
+        if not n_clicks_list or not any(n_clicks_list) or all(n is None or n == 0 for n in n_clicks_list):
+            return dash.no_update
 
-        logger.warning(f"🔄 REDIRECT: Could not extract dashboard_id from pathname: {pathname}")
-        return dash.no_update
+        logger.info(f"🔧 BTN-DONE: COMPONENT CREATION ALL callback triggered with n_clicks_list={n_clicks_list}")
+        logger.info(f"🔧 BTN-DONE: wf_values={wf_values}, dc_values={dc_values}")
+
+        # Find which button was clicked and get corresponding values
+        clicked_index = None
+        for i, n_clicks in enumerate(n_clicks_list):
+            if n_clicks and n_clicks > 0:
+                clicked_index = i
+                break
+
+        if clicked_index is None:
+            return dash.no_update
+
+        wf_value = wf_values[clicked_index] if clicked_index < len(wf_values) else None
+        dc_value = dc_values[clicked_index] if clicked_index < len(dc_values) else None
+
+        logger.info(f"🔧 BTN-DONE: Using values from index {clicked_index}: wf={wf_value}, dc={dc_value}")
+
+        # Create component and add to sections
+        try:
+            # Use real values or fallback to dummy for testing
+            if not wf_value or not dc_value:
+                wf_value = "dummy_workflow_for_testing"
+                dc_value = "dummy_datacollection_for_testing"
+                logger.info("🔧 BTN-DONE: Using dummy values for component creation")
+
+            # Generate component ID
+            import uuid
+            component_id = str(uuid.uuid4())
+
+            # Create demo component
+            from datetime import datetime
+            import dash_mantine_components as dmc
+            from dash import html
+
+            built_component = dmc.Paper(
+                children=[
+                    dmc.Title("Demo Component", order=4),
+                    dmc.Text("This is a test component created via minimal stepper", size="sm"),
+                    dmc.Badge(f"ID: {component_id[:8]}", color="blue"),
+                    dmc.Text(f"Created: {datetime.now().strftime('%H:%M:%S')}", size="xs", c="gray"),
+                ],
+                p="md",
+                radius="md",
+                withBorder=True,
+                style={
+                    "backgroundColor": "var(--app-surface-color, #ffffff)",
+                    "color": "var(--app-text-color, #000000)",
+                    "border": "2px solid var(--mantine-color-blue-6)",
+                }
+            )
+
+            # Add to sections
+            current_sections = current_sections or []
+            section_count = len([
+                s for s in current_sections
+                if isinstance(s, dict) and s.get("props", {}).get("id", "").startswith("section-")
+            ])
+
+            section_letter = chr(65 + section_count)  # A, B, C, etc.
+
+            new_section = dmc.Paper(
+                id=f"section-{section_count}",
+                children=[
+                    dmc.Group([
+                        dmc.Text("📊", size="lg"),
+                        dmc.Text(f"#{section_count + 1}", w=700, c="blue"),
+                        dmc.Text(f"Section {section_letter} - Demo", size="lg"),
+                    ], justify="flex-start", align="center", gap="xs"),
+                    dmc.Text(f"Section ID: section-{section_count}", size="xs", c="gray",
+                            style={"marginTop": "0.5rem"}),
+                    html.Div([
+                        dmc.Text("Built Component:", fw="bold", size="sm",
+                                style={"marginTop": "1rem"}),
+                        built_component,
+                    ], style={"marginTop": "1rem"}),
+                ],
+                p="md", radius="md", withBorder=True,
+                style={
+                    "marginBottom": "0.5rem",
+                    "backgroundColor": "var(--app-surface-color, #ffffff)",
+                    "color": "var(--app-text-color, #000000)",
+                    "border": "1px solid var(--app-border-color, #ddd)",
+                },
+            )
+
+            # Update sections
+            if section_count == 0:
+                updated_sections = [new_section]
+            else:
+                updated_sections = current_sections + [new_section]
+
+            logger.info(f"🔧 BTN-DONE: Successfully created Section {section_letter} with demo component")
+            return updated_sections
+
+        except Exception as e:
+            logger.error(f"🔧 BTN-DONE: Error creating component: {e}")
+            return dash.no_update
+
+    # DISABLED: Duplicate callback for component creation and section update
+    # This callback conflicts with handle_component_creation_all above
+    """
+    @app.callback(
+        Output("sections-container", "children", allow_duplicate=True),
+        [Input({"type": "btn-done", "index": ALL}, "n_clicks")],
+        [
+            State({"type": "workflow-selection-label", "index": ALL}, "value"),
+            State({"type": "datacollection-selection-label", "index": ALL}, "value"),
+            State("local-store", "data"),
+            State("sections-container", "children"),
+        ],
+        prevent_initial_call=True,
+    )
+    def handle_component_creation_with_section(
+        n_clicks_list, wf_values, dc_values, local_data, current_sections
+    ):
+        """Enhanced component creation: build component and add to new section."""
+        logger.info("🔧 BTN-DONE CALLBACK: ===== COMPONENT CREATION STARTED =====")
+        logger.info(f"🔧 BTN-DONE CALLBACK: n_clicks_list={n_clicks_list}")
+        logger.info(f"🔧 BTN-DONE CALLBACK: wf_values={wf_values}")
+        logger.info(f"🔧 BTN-DONE CALLBACK: dc_values={dc_values}")
+        logger.info(f"🔧 BTN-DONE CALLBACK: local_data keys={list(local_data.keys()) if local_data else 'None'}")
+        logger.info(f"🔧 BTN-DONE CALLBACK: current_sections count={len(current_sections) if current_sections else 0}")
+
+        # Check if any btn-done was clicked
+        if not n_clicks_list:
+            logger.info("🔧 BTN-DONE CALLBACK: n_clicks_list is empty")
+            return dash.no_update
+
+        if not any(n_clicks_list) or all(n is None or n == 0 for n in n_clicks_list):
+            logger.info("🔧 BTN-DONE CALLBACK: No valid clicks detected, returning no_update")
+            return dash.no_update
+
+        # Import required modules
+        from depictio.dash.component_metadata import get_build_functions
+
+        logger.info("🔧 BTN-DONE: Enhanced component creation triggered")
+
+        # Find which button was clicked and get corresponding values
+        clicked_index = None
+        for i, n_clicks in enumerate(n_clicks_list):
+            if n_clicks and n_clicks > 0:
+                clicked_index = i
+                logger.info(f"🔧 BTN-DONE: Found clicked button at index {i} with {n_clicks} clicks")
+                break
+
+        if clicked_index is None:
+            logger.warning("🔧 BTN-DONE: No valid clicked button found")
+            return dash.no_update
+
+        wf_value = wf_values[clicked_index] if clicked_index < len(wf_values) else None
+        dc_value = dc_values[clicked_index] if clicked_index < len(dc_values) else None
+
+        logger.info(f"🔧 BTN-DONE: Extracted wf_value={wf_value}, dc_value={dc_value}")
+
+        # ENHANCED: Provide default values for minimal testing if missing
+        if not wf_value or not dc_value:
+            logger.warning("🔧 BTN-DONE: Missing workflow or datacollection values, using defaults for testing")
+
+            # Try to get any available workflow/datacollection from project
+            try:
+                TOKEN = local_data.get("access_token") if local_data else None
+                if TOKEN:
+
+                    # Get current pathname to extract dashboard_id
+                    # For minimal testing, use dummy values
+                    wf_value = "dummy_workflow_for_testing"
+                    dc_value = "dummy_datacollection_for_testing"
+                    logger.info(f"🔧 BTN-DONE: Using dummy values: wf={wf_value}, dc={dc_value}")
+                else:
+                    logger.error("🔧 BTN-DONE: No access token available, cannot create component")
+                    return dash.no_update
+            except Exception as e:
+                logger.error(f"🔧 BTN-DONE: Error getting default values: {e}")
+                return dash.no_update
+
+        # Generate a component ID for this creation
+        import uuid
+        component_id = str(uuid.uuid4())
+
+        # Build the component using build_* utils
+        try:
+            logger.info("🔧 BTN-DONE: Starting component building process")
+
+            # For minimal testing, create a simple demo component instead of complex build_* logic
+            if wf_value == "dummy_workflow_for_testing" or dc_value == "dummy_datacollection_for_testing":
+                logger.info("🔧 BTN-DONE: Creating simple demo component for testing")
+
+                # Create a simple demo component
+                from datetime import datetime
+
+                import dash_mantine_components as dmc
+                from dash import html
+
+                built_component = dmc.Paper(
+                    children=[
+                        dmc.Title("Demo Component", order=4),
+                        dmc.Text("This is a test component created via minimal stepper", size="sm"),
+                        dmc.Badge(f"ID: {component_id[:8]}", color="blue"),
+                        dmc.Text(f"Created: {datetime.now().strftime('%H:%M:%S')}", size="xs", c="gray"),
+                    ],
+                    p="md",
+                    radius="md",
+                    withBorder=True,
+                    style={
+                        "backgroundColor": "var(--app-surface-color, #ffffff)",
+                        "color": "var(--app-text-color, #000000)",
+                        "border": "2px solid var(--mantine-color-blue-6)",
+                    }
+                )
+                logger.info("🔧 BTN-DONE: Demo component created successfully")
+
+            else:
+                # Use real build_* functions for actual workflow/datacollection
+                component_metadata = {
+                    "index": component_id,
+                    "component_type": "card",  # Default to card for now
+                    "wf_id": wf_value,
+                    "dc_id": dc_value,
+                    "stepper": False,  # Not in stepper mode when adding to dashboard
+                    "build_frame": True,
+                    "refresh": True,
+                    "access_token": local_data.get("access_token") if local_data else None,
+                    "no_store": True,
+                    "theme": "light",
+                }
+
+                # Get build functions and build the component
+                helpers_mapping = get_build_functions()
+                comp_type = component_metadata["component_type"]
+
+                if comp_type in helpers_mapping:
+                    logger.info(f"🔧 BTN-DONE: Building {comp_type} component with build_* utils")
+                    built_component = helpers_mapping[comp_type](**component_metadata)
+                    logger.info(f"🔧 BTN-DONE: Component built successfully: {type(built_component)}")
+                else:
+                    logger.error(f"🔧 BTN-DONE: Component type {comp_type} not found in helpers_mapping")
+                    return dash.no_update
+
+            # Add component to a new section
+            current_sections = current_sections or []
+            logger.info(f"🔧 BTN-DONE: Current sections before adding: {len(current_sections)}")
+
+            # Count existing sections (excluding welcome message)
+            section_count = len(
+                [
+                    s
+                    for s in current_sections
+                    if isinstance(s, dict)
+                    and s.get("props", {}).get("id", "").startswith("section-")
+                ]
+            )
+
+            # Create new section with the built component
+            section_letter = chr(65 + section_count)  # A, B, C, etc.
+            comp_type = "demo" if wf_value == "dummy_workflow_for_testing" else "card"
+
+            # Create section that contains the actual built component
+            import dash_mantine_components as dmc
+            from dash import html
+
+            new_section = dmc.Paper(
+                id=f"section-{section_count}",
+                children=[
+                    dmc.Group(
+                        [
+                            dmc.Text("📊", size="lg"),
+                            dmc.Text(f"#{section_count + 1}", w=700, c="blue"),
+                            dmc.Text(
+                                f"Section {section_letter} - {comp_type.title()}", size="lg"
+                            ),
+                        ],
+                        justify="flex-start",
+                        align="center",
+                        gap="xs",
+                    ),
+                    dmc.Text(
+                        f"Section ID: section-{section_count}",
+                        size="xs",
+                        c="gray",
+                        style={"marginTop": "0.5rem"},
+                    ),
+                    # Add the actual built component here
+                    html.Div(
+                        [
+                            dmc.Text(
+                                "Built Component:",
+                                fw="bold",
+                                size="sm",
+                                style={"marginTop": "1rem"},
+                            ),
+                                built_component,  # This is the actual rendered component
+                            ],
+                            style={"marginTop": "1rem"},
+                        ),
+                    ],
+                    p="md",
+                    radius="md",
+                    withBorder=True,
+                    style={
+                        "marginBottom": "0.5rem",
+                        "backgroundColor": "var(--app-surface-color, #ffffff)",
+                        "color": "var(--app-text-color, #000000)",
+                        "border": "1px solid var(--app-border-color, #ddd)",
+                    },
+            )
+
+            # Add the new section to sections
+            if section_count == 0:
+                # Replace welcome message with first section
+                updated_sections = [new_section]
+            else:
+                updated_sections = current_sections + [new_section]
+
+            logger.info(f"🔧 BTN-DONE: Added built component to Section {section_letter}")
+            return updated_sections
+
+        except Exception as e:
+            logger.error(f"🔧 BTN-DONE: Error creating component: {e}")
+            return dash.no_update
+
+    # Callback to display component metadata
+    @app.callback(
+        Output({"type": "component-metadata-display", "index": MATCH}, "children"),
+        [
+            Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+        ],
+        [
+            State("local-store-components-metadata", "data"),
+            State({"type": "component-metadata-display", "index": MATCH}, "id"),
+        ],
+        prevent_initial_call=True,
+    )
+    """
+
+    # Callback to display component metadata
+    @app.callback(
+        Output({"type": "component-metadata-display", "index": MATCH}, "children"),
+        [
+            Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+        ],
+        [
+            State({"type": "components-metadata", "index": MATCH}, "data"),
+            State({"type": "component-metadata-display", "index": MATCH}, "id"),
+        ],
+        prevent_initial_call=True,
+    )
+    def display_component_metadata(wf_value, dc_value, components_metadata, component_id_dict):
+        """Display component metadata below btn-done button."""
+        if not wf_value or not dc_value:
+            return html.Div()
+
+        component_id = component_id_dict["index"]
+
+        # Debug: Log the components_metadata structure
+        logger.info(f"🔧 METADATA: Component ID: {component_id}")
+        logger.info(f"🔧 METADATA: Type of components_metadata: {type(components_metadata)}")
+        if components_metadata:
+            logger.info(f"🔧 METADATA: Contents: {components_metadata}")
+            logger.info(f"🔧 METADATA: Length: {len(components_metadata)}")
+            for i, comp in enumerate(components_metadata):
+                logger.info(f"🔧 METADATA: Item {i}: {comp} (type: {type(comp)})")
+
+        # Find the component metadata for this component_id
+        component_metadata = None
+        if components_metadata:
+            for comp in components_metadata:
+                # Handle both dict and string types in components_metadata
+                if isinstance(comp, dict):
+                    # Remove -tmp logic as requested - just match the component_id directly
+                    if (
+                        comp.get("index") == component_id
+                        or comp.get("index") == f"{component_id}-tmp"
+                    ):
+                        component_metadata = comp.copy()
+                        break
+                elif isinstance(comp, str):
+                    # If it's a string, skip it for now (might be a different data format)
+                    continue
+
+        if not component_metadata:
+            # Create basic metadata from current inputs if none found
+            logger.info(
+                "🔧 METADATA: No stored metadata found, creating basic metadata from inputs"
+            )
+            component_metadata = {
+                "index": component_id,
+                "component_type": "card",  # Default since we're testing card components
+                "wf_id": wf_value,
+                "dc_id": dc_value,
+                "stepper": True,
+                "status": "Generated from current inputs (metadata not found in store)",
+            }
+
+        # Display the metadata in a readable format
+        metadata_items = []
+        for key, value in component_metadata.items():
+            if key not in ["access_token"]:  # Hide sensitive data
+                metadata_items.append(
+                    dmc.Group(
+                        [
+                            dmc.Text(f"{key}:", fw="bold", size="sm"),
+                            dmc.Text(str(value), size="sm", c="gray"),
+                        ],
+                        gap="xs",
+                    )
+                )
+
+        return dmc.Card(
+            [
+                dmc.Text("Component Metadata:", fw="bold", size="md", mb="sm"),
+                dmc.Stack(metadata_items, gap="xs"),
+            ],
+            withBorder=True,
+            p="md",
+            style={"backgroundColor": "#f8f9fa"},
+        )
+
+    # Separate callback for URL redirection
+    @app.callback(
+        Output("url", "pathname", allow_duplicate=True),
+        [Input({"type": "btn-done", "index": ALL}, "n_clicks")],
+        [State("url", "pathname")],
+        prevent_initial_call=True,
+    )
+    def redirect_after_component_creation(n_clicks_list, current_pathname):
+        """Redirect to dashboard after component creation."""
+        # Check if any btn-done was clicked
+        if not any(n_clicks_list) or all(n is None or n == 0 for n in n_clicks_list):
+            return dash.no_update
+
+        logger.info("🔧 BTN-DONE: Redirecting to dashboard")
+
+        # Extract dashboard_id from URL
+        path_parts = current_pathname.strip("/").split("/")
+        if len(path_parts) >= 2:
+            dashboard_id = path_parts[1]
+            redirect_url = f"/dashboard/{dashboard_id}"
+            logger.info(f"🔧 BTN-DONE: Redirecting to {redirect_url}")
+            return redirect_url
+        else:
+            logger.error("🔧 BTN-DONE: Could not extract dashboard_id from pathname")
+            return dash.no_update
 
     @app.callback(
         Output({"type": "modal-edit", "index": MATCH}, "opened"),
@@ -903,8 +1062,6 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
     else:
         modal_body = dmc.Stack([select_row, card], gap="md", style={"width": "100%"})
 
-    # No debug store needed - using only dashboard-event-store
-
     modal = dmc.Modal(
         id={"type": "modal-edit", "index": n},
         children=[
@@ -1147,7 +1304,10 @@ def create_stepper_output(n, active):
                     dmc.Center(
                         dmc.Button(
                             "Add to Dashboard",
-                            id="btn-done",  # Simple static ID - no pattern matching needed
+                            id={
+                                "type": "btn-done",
+                                "index": n,
+                            },
                             color="green",
                             variant="filled",
                             n_clicks=0,
@@ -1222,18 +1382,8 @@ def create_stepper_output(n, active):
         ],
     )
 
-    # Note: dashboard_event_store is already created in the main layout (draggable_minimal.py)
-    # We should NOT create a duplicate here as it would intercept events
-
-    # Add component creation store for intermediate storage
-    from dash import dcc
-
-    component_store = dcc.Store(id={"type": "component-creation-store", "index": n}, data={})
-
     modal = html.Div(
         [
-            # Removed duplicate dashboard_event_store - using the one from main layout
-            component_store,  # Add the store for component creation
             dmc.Modal(
                 id={"type": "modal", "index": n},
                 children=[

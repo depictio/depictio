@@ -178,15 +178,29 @@ def register_layout_callbacks(app):
     register_consolidated_api_callbacks(app)
 
     # Register layout callbacks
-    register_callbacks_stepper(app)
     # register_callbacks_stepper_part_one(app)
     # register_callbacks_stepper_part_two(app)
     # register_callbacks_stepper_part_three(app)
     register_callbacks_header(app)
-    register_draggable_callbacks(app, use_minimal=True)
+    # Determine layout type
+    use_minimal = True  # Force minimal for now
+
+    register_draggable_callbacks(app, use_minimal=use_minimal)
+    register_callbacks_stepper(app)
+
     register_sidebar_callbacks(app)
     register_callbacks_notes_footer(app)
-    register_callbacks_save(app)
+
+    # Register appropriate save callbacks based on layout type
+    if not use_minimal:
+        register_callbacks_save(app)
+        logger.info("🔧 CALLBACKS: Registered original save callbacks")
+    else:
+        from depictio.dash.layouts.save import register_minimal_save_callbacks
+
+        register_minimal_save_callbacks(app)
+        logger.info("🔧 CALLBACKS: Registered minimal save callbacks for minimal layout")
+
     register_simple_theme_system(app)
 
 
