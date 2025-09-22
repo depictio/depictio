@@ -12,11 +12,14 @@ from depictio.dash.components.analytics_tracker import (
 )
 from depictio.dash.layouts.dashboards_management import layout as dashboards_management_layout
 
-# from depictio.dash.layouts.draggable_scenarios.add_component import register_callbacks_add_component
-from depictio.dash.layouts.draggable import design_draggable
-
 # Depictio utils imports
+from depictio.dash.layouts.draggable_minimal_layouts.dashboard_events import (
+    create_dashboard_event_store,
+)
 from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data_sync
+
+# from depictio.dash.layouts.draggable_scenarios.add_component import register_callbacks_add_component
+from depictio.dash.layouts.draggable_selector import get_draggable_layout
 from depictio.dash.layouts.header import design_header
 from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
 from depictio.dash.layouts.notes_footer import create_notes_footer
@@ -103,44 +106,152 @@ def handle_authenticated_user(pathname, local_data, theme="light", cached_projec
 
     # Map the pathname to the appropriate content and header
     if pathname.startswith("/dashboard/"):
-        dashboard_id = pathname.split("/")[-1]
+        # Remove query parameters for path parsing
+        clean_pathname = pathname.split("?")[0]
+        path_parts = clean_pathname.strip("/").split("/")
 
-        # Load dashboard data and create layout directly
-        logger.info(f"🔄 DASHBOARD NAVIGATION: Loading dashboard {dashboard_id}")
+        # Handle component creation URL: /dashboard/{dashboard_id}/{component_id}/create
+        if len(path_parts) == 4 and path_parts[3] == "create":
+            dashboard_id = path_parts[1]
+            component_id = path_parts[2]
 
-        logger.info(f"🔄 DASHBOARD NAVIGATION: theme - {theme}")
-        # Load dashboard data synchronously
-        depictio_dash_data = load_depictio_data_sync(
-            dashboard_id=dashboard_id,
-            local_data=local_data,
-            theme=theme,
-        )
+            logger.info(
+                f"🔄 COMPONENT CREATION: Dashboard {dashboard_id}, Component {component_id}"
+            )
 
-        # Create dashboard layout
-        if depictio_dash_data:
-            header_content, backend_components = design_header(depictio_dash_data, local_data)
+            # Import stepper system for component creation
+            from dash import dcc
 
-            # Create dashboard layout
-            dashboard_layout = create_dashboard_layout(
-                depictio_dash_data=depictio_dash_data,
+            from depictio.dash.layouts.stepper import create_stepper_output
+
+            # Import stepper button creation functions
+            from depictio.dash.layouts.stepper_parts.part_two import (
+                create_stepper_card_button,
+                create_stepper_figure_button,
+                create_stepper_interactive_button,
+                create_stepper_table_button,
+                create_stepper_text_button,
+                is_enabled,
+            )
+
+            # Create stepper content directly (bypass the callback dependency)
+            # This replicates what the callback in part_two.py does
+            figure_stepper_button, figure_stepper_button_store = create_stepper_figure_button(
+                component_id, disabled=not is_enabled("figure")
+            )
+            card_stepper_button, card_stepper_button_store = create_stepper_card_button(
+                component_id, disabled=not is_enabled("card")
+            )
+            (
+                interactive_stepper_button,
+                interactive_stepper_button_store,
+            ) = create_stepper_interactive_button(
+                component_id, disabled=not is_enabled("interactive")
+            )
+            table_stepper_button, table_stepper_button_store = create_stepper_table_button(
+                component_id, disabled=not is_enabled("table")
+            )
+            text_stepper_button, text_stepper_button_store = create_stepper_text_button(
+                component_id, disabled=not is_enabled("text")
+            )
+
+            # The stepper will generate buttons automatically via callbacks
+            # Button stores are created and used by the stepper system internally
+
+            # Create stepper layout and trigger the population of step 1
+            stepper_layout = create_stepper_output(component_id, active=0)
+
+            # Create store that will trigger the callback to populate buttons
+            stored_add_button_store = dcc.Store(
+                id="stored-add-button",
+                data={"_id": component_id, "count": 1},
+                storage_type="memory",
+            )
+
+            # Store for forcing callback trigger
+            force_trigger_store = dcc.Store(
+                id="force-stepper-trigger",
+                data={"trigger": True, "component_id": component_id, "timestamp": 0},
+                storage_type="memory",
+            )
+
+            # Create simple header for component creation
+            header_content = create_default_header(f"Create Component - {component_id[:8]}...")
+
+            # Wrap stepper in a container
+            component_creation_layout = html.Div(
+                [
+                    stored_add_button_store,
+                    force_trigger_store,
+                    dmc.Container(
+                        [
+                            dmc.Title(
+                                "Create New Component", order=2, style={"marginBottom": "2rem"}
+                            ),
+                            dmc.Text(f"Dashboard: {dashboard_id}", style={"marginBottom": "1rem"}),
+                            dmc.Text(
+                                f"Component ID: {component_id}", style={"marginBottom": "2rem"}
+                            ),
+                            stepper_layout,
+                        ],
+                        size="xl",
+                        style={"padding": "2rem"},
+                    ),
+                ],
+                style={
+                    "backgroundColor": "var(--app-bg-color, #f8f9fa)",
+                    "minHeight": "100vh",
+                },
+            )
+
+            return component_creation_layout, header_content, pathname, local_data
+
+        # Handle regular dashboard URL: /dashboard/{dashboard_id}
+        else:
+            dashboard_id = path_parts[1] if len(path_parts) >= 2 else path_parts[-1]
+
+            # Load dashboard data and create layout directly
+            logger.info(f"🔄 DASHBOARD NAVIGATION: Loading dashboard {dashboard_id}")
+
+            logger.info(f"🔄 DASHBOARD NAVIGATION: theme - {theme}")
+            # Load dashboard data synchronously
+            depictio_dash_data = load_depictio_data_sync(
                 dashboard_id=dashboard_id,
                 local_data=local_data,
-                backend_components=backend_components,
                 theme=theme,
-                cached_project_data=cached_project_data,
             )
 
-            return dashboard_layout, header_content, pathname, local_data
-        else:
-            # Dashboard not found or error
-            header_content = create_default_header("Dashboard Not Found")
-            error_layout = html.Div(
-                [
-                    html.H3("Dashboard not found or you don't have access"),
-                    html.P(f"Dashboard ID: {dashboard_id}"),
-                ]
-            )
-            return error_layout, header_content, pathname, local_data
+            # Create dashboard layout
+            if depictio_dash_data:
+                # Create legacy dict only for header compatibility
+                legacy_data = (
+                    depictio_dash_data.to_legacy_dict()
+                    if hasattr(depictio_dash_data, "to_legacy_dict")
+                    else depictio_dash_data
+                )
+                header_content, backend_components = design_header(legacy_data, local_data)
+
+                # Pass Pydantic model directly to dashboard layout
+                dashboard_layout = create_dashboard_layout(
+                    depictio_dash_data=depictio_dash_data,
+                    dashboard_id=dashboard_id,
+                    local_data=local_data,
+                    backend_components=backend_components,
+                    theme=theme,
+                    cached_project_data=cached_project_data,
+                )
+
+                return dashboard_layout, header_content, pathname, local_data
+            else:
+                # Dashboard not found or error
+                header_content = create_default_header("Dashboard Not Found")
+                error_layout = html.Div(
+                    [
+                        html.H3("Dashboard not found or you don't have access"),
+                        html.P(f"Dashboard ID: {dashboard_id}"),
+                    ]
+                )
+                return error_layout, header_content, pathname, local_data
 
     elif pathname == "/dashboards":
         user = api_call_fetch_user_from_token(local_data["access_token"])
@@ -457,34 +568,50 @@ def create_dashboard_layout(
     theme="light",
     cached_project_data=None,
 ):
-    # Init layout and children if depictio_dash_data is available, else set to empty
-    if depictio_dash_data and isinstance(depictio_dash_data, dict):
-        # logger.info(f"Depictio dash data: {depictio_dash_data}")
-        if "stored_layout_data" in depictio_dash_data:
-            init_layout = depictio_dash_data["stored_layout_data"]
-        else:
-            init_layout = {}
-        if "stored_children_data" in depictio_dash_data:
-            init_children = depictio_dash_data["stored_children_data"]
-        else:
-            init_children = list()
+    from depictio.dash.layouts.draggable_minimal_layouts.dashboard_creators import render_section_ui
+    from depictio.models.models.dashboard_structure import DashboardLoadResponse
+
+    # Handle Pydantic model input
+    if isinstance(depictio_dash_data, DashboardLoadResponse):
+        dashboard_data = depictio_dash_data.dashboard_data
+        edit_mode = depictio_dash_data.edit_components_button
+
+        # Render sections from dashboard structure
+        rendered_sections = []
+        if dashboard_data and dashboard_data.dashboard_structure:
+            default_tab = dashboard_data.dashboard_structure.get_default_tab()
+            if default_tab and default_tab.sections:
+                for section in default_tab.sections:
+                    section_ui = render_section_ui(
+                        section, include_create_component_button=edit_mode
+                    )
+                    rendered_sections.append(section_ui)
+
+        # Use minimal draggable layout with rendered sections
+        from depictio.dash.layouts.draggable_minimal import design_draggable_minimal
+
+        core = design_draggable_minimal(
+            init_layout={},
+            init_children=rendered_sections,
+            dashboard_id=dashboard_id,
+            edit_mode=edit_mode,
+            local_data=local_data,
+        )
     else:
-        init_layout = {}
-        init_children = list()
+        # Fallback for legacy dict format
+        init_layout = depictio_dash_data.get("stored_layout_data", {}) if depictio_dash_data else {}
+        init_children = (
+            depictio_dash_data.get("stored_children_data", []) if depictio_dash_data else []
+        )
 
-    # logger.info(f"Loaded depictio init_layout: {init_layout}")
-    # header, backend_components = design_header(depictio_dash_data)
-
-    # Generate draggable layout
-    # Ensure local_data is a dict
-    local_data = local_data or {}
-    core = design_draggable(
-        init_layout,
-        init_children,
-        dashboard_id,
-        local_data,
-        cached_project_data=cached_project_data,
-    )
+        core = get_draggable_layout(
+            init_layout,
+            init_children,
+            dashboard_id,
+            local_data,
+            cached_project_data=cached_project_data,
+            force_minimal=True,  # Force minimal version
+        )
 
     # Add progressive loading components if we have metadata
     progressive_loading_components = []
@@ -594,6 +721,7 @@ def create_app_layout():
                 data={},
                 storage_type="local",
             ),
+            create_dashboard_event_store(),
             dcc.Store(id="current-edit-parent-index", storage_type="memory"),
             dcc.Interval(id="interval-component", interval=60 * 60 * 1000, n_intervals=0),
             html.Div(

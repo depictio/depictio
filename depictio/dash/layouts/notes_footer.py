@@ -190,15 +190,15 @@ def register_callbacks_notes_footer(app):
             return current_footer_class or "", current_page_class or ""
 
         trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
-        logger.info(f"Notes footer triggered by: {trigger_id}")
-        logger.info(
+        logger.debug(f"Notes footer triggered by: {trigger_id}")
+        logger.debug(
             f"Toggle clicks: {toggle_clicks}, Collapse clicks: {collapse_clicks}, Fullscreen clicks: {fullscreen_clicks}"
         )
 
         current_footer_class = current_footer_class or ""
         current_page_class = current_page_class or ""
 
-        logger.info(
+        logger.debug(
             f"Current footer class: '{current_footer_class}', page class: '{current_page_class}'"
         )
 
@@ -209,11 +209,11 @@ def register_callbacks_notes_footer(app):
             ):
                 # Hide footer completely
                 new_page_class = current_page_class.replace("notes-fullscreen", "").strip()
-                logger.info(f"Hiding footer. New classes: footer='', page='{new_page_class}'")
+                logger.debug(f"Hiding footer. New classes: footer='', page='{new_page_class}'")
                 return "", new_page_class
             else:
                 # Show footer in normal mode
-                logger.info(
+                logger.debug(
                     f"Showing footer in normal mode. New classes: footer='footer-visible', page='{current_page_class}'"
                 )
                 return "footer-visible", current_page_class
@@ -226,18 +226,18 @@ def register_callbacks_notes_footer(app):
             ):
                 # Hide footer completely
                 new_page_class = current_page_class.replace("notes-fullscreen", "").strip()
-                logger.info(f"Collapsing footer. New classes: footer='', page='{new_page_class}'")
+                logger.debug(f"Collapsing footer. New classes: footer='', page='{new_page_class}'")
                 return "", new_page_class
             else:
                 # If footer is not visible, do nothing
-                logger.info("Footer already collapsed, no action needed")
+                logger.debug("Footer already collapsed, no action needed")
                 return current_footer_class, current_page_class
 
         elif trigger_id == "fullscreen-notes-button" and fullscreen_clicks:
             if "footer-fullscreen" in current_footer_class:
                 # Exit fullscreen, go to normal footer mode
                 new_page_class = current_page_class.replace("notes-fullscreen", "").strip()
-                logger.info(
+                logger.debug(
                     f"Exiting fullscreen. New classes: footer='footer-visible', page='{new_page_class}'"
                 )
                 return "footer-visible", new_page_class
@@ -245,16 +245,16 @@ def register_callbacks_notes_footer(app):
                 # Enter fullscreen mode (only if footer is currently visible)
                 if "footer-visible" in current_footer_class:
                     new_page_class = f"{current_page_class} notes-fullscreen".strip()
-                    logger.info(
+                    logger.debug(
                         f"Entering fullscreen. New classes: footer='footer-fullscreen', page='{new_page_class}'"
                     )
                     return "footer-fullscreen", new_page_class
                 else:
                     # If footer is not visible, show it first in normal mode
-                    logger.info("Footer not visible, showing in normal mode first")
+                    logger.debug("Footer not visible, showing in normal mode first")
                     return "footer-visible", current_page_class
 
-        logger.info(
+        logger.debug(
             f"No action taken. Returning current classes: footer='{current_footer_class}', page='{current_page_class}'"
         )
         return current_footer_class, current_page_class
@@ -310,8 +310,23 @@ def create_notes_footer(dashboard_data=None):
     """Create the notes footer component with RichTextEditor."""
     # Load existing notes content if available
     initial_notes_content = "<p>Start writing your notes, documentation, or analysis here...</p><p><br></p><p><br></p><p><br></p>"
-    if dashboard_data and dashboard_data.get("notes_content"):
-        initial_notes_content = dashboard_data["notes_content"]
+
+    # Handle both Pydantic models and legacy dicts
+    if dashboard_data:
+        if hasattr(dashboard_data, "dashboard_data") and dashboard_data.dashboard_data:
+            # DashboardLoadResponse object
+            notes_content = getattr(dashboard_data.dashboard_data, "notes_content", None)
+        elif hasattr(dashboard_data, "notes_content"):
+            # Direct dashboard data object
+            notes_content = dashboard_data.notes_content
+        else:
+            # Legacy dict format
+            notes_content = (
+                dashboard_data.get("notes_content") if isinstance(dashboard_data, dict) else None
+            )
+
+        if notes_content:
+            initial_notes_content = notes_content
 
     return html.Div(
         [

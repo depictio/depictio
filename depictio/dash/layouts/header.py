@@ -254,7 +254,9 @@ def _format_last_saved(timestamp):
     if timestamp == "":
         return "Last saved: Never"
     else:
-        formatted_ts = datetime.datetime.strptime(timestamp.split(".")[0], "%Y-%m-%d %H:%M:%S")
+        # Normalize timestamp format by replacing T with space
+        timestamp_clean = timestamp.split(".")[0].replace("T", " ")
+        formatted_ts = datetime.datetime.strptime(timestamp_clean, "%Y-%m-%d %H:%M:%S")
         return f"Last saved: {formatted_ts}"
 
 
@@ -406,8 +408,8 @@ def register_callbacks_header(app):
         Output("dashboard-version", "disabled"),
         Output("share-button", "disabled"),
         Output("toggle-notes-button", "disabled"),
-        Output("draggable", "showRemoveButton"),
-        Output("draggable", "showResizeHandles"),
+        # Output("draggable", "showRemoveButton"),
+        # Output("draggable", "showResizeHandles"),
         Input("unified-edit-mode-button", "checked"),
         State("local-store", "data"),
         State("url", "pathname"),
@@ -416,7 +418,7 @@ def register_callbacks_header(app):
     )
     def toggle_buttons(switch_state, local_store, pathname, user_cache):
         """Handle button states based on edit mode and user permissions."""
-        len_output = 9
+        len_output = 7
 
         # Use consolidated user cache
         from depictio.models.models.users import UserContext
@@ -440,9 +442,11 @@ def register_callbacks_header(app):
 
         # If not owner (but has viewing access), disable all editing controls
         if not owner and viewer:
-            return [True] * (len_output - 2) + [False] * 2
+            # return [True] * (len_output - 2) + [False] * 2
+            return [True] * len_output
 
-        return [not switch_state] * (len_output - 2) + [switch_state] * 2
+        # return [not switch_state] * (len_output - 2) + [False] * 2
+        return [not switch_state] * len_output
 
     @app.callback(
         Output("share-modal-dashboard", "is_open"),
@@ -614,16 +618,16 @@ def register_callbacks_header(app):
 
         has_active_filters = _check_filter_activity(interactive_values)
 
-        logger.info(f"🎯 Filter activity detected: {has_active_filters}")
+        logger.debug(f"🎯 Filter activity detected: {has_active_filters}")
 
         if has_active_filters:
             # Orange filled variant with white icon when filters are active
-            logger.info("🟠 Setting reset button to orange with white icon (filters active)")
+            logger.debug("🟠 Setting reset button to orange with white icon (filters active)")
             icon = DashIconify(icon="bx:reset", width=35, color="white")
             return colors["orange"], "filled", icon
         else:
             # Gray subtle variant with gray icon when no filters
-            logger.info("⚪ Setting reset button to gray with gray icon (no filters)")
+            logger.debug("⚪ Setting reset button to gray with gray icon (no filters)")
             icon = DashIconify(icon="bx:reset", width=35, color="gray")
             return "gray", "subtle", icon
 
@@ -642,8 +646,8 @@ def register_callbacks_header(app):
     )
     def update_apply_button_style(pending_changes, live_interactivity_on):
         """Update apply button style and state based on pending changes and live interactivity mode."""
-        logger.info(f"🔍 Apply button style check - pending_changes: {pending_changes}")
-        logger.info(f"🔍 Live interactivity mode: {live_interactivity_on}")
+        logger.debug(f"🔍 Apply button style check - pending_changes: {pending_changes}")
+        logger.debug(f"🔍 Live interactivity mode: {live_interactivity_on}")
         # If live interactivity is ON, hide/disable the apply button
         if live_interactivity_on:
             icon = DashIconify(icon="material-symbols:check", width=35, color="gray")
@@ -677,16 +681,16 @@ def register_callbacks_header(app):
 
         has_pending_changes = has_meaningful_pending_changes(pending_changes)
 
-        logger.info(f"📝 Pending changes detected: {has_pending_changes}")
+        logger.debug(f"📝 Pending changes detected: {has_pending_changes}")
 
         if has_pending_changes:
             # Green filled variant with white icon when pending changes exist (matching Live ON badge)
-            logger.info("🟢 Setting apply button to green with white icon (pending changes)")
+            logger.debug("🟢 Setting apply button to green with white icon (pending changes)")
             icon = DashIconify(icon="material-symbols:check", width=35, color="white")
             return "green", "filled", icon, False
         else:
             # Gray subtle variant with gray icon when no pending changes
-            logger.info("⚪ Setting apply button to gray with gray icon (no pending changes)")
+            logger.debug("⚪ Setting apply button to gray with gray icon (no pending changes)")
             icon = DashIconify(icon="material-symbols:check", width=35, color="gray")
             return "gray", "subtle", icon, True
 

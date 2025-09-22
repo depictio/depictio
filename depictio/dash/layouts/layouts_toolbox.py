@@ -1,9 +1,130 @@
+import logging
+
 import dash_mantine_components as dmc
 from dash import dcc, html
 from dash_extensions import EventListener
 from dash_iconify import DashIconify
 
 from depictio.dash.colors import colors
+
+logger = logging.getLogger(__name__)
+
+
+def get_dashboard_icons():
+    """
+    Returns a curated list of 50 relevant icons for biology and dashboard applications.
+
+    Returns:
+    - List of dictionaries with 'value' and 'label' keys for DMC Select
+    """
+    icons = [
+        # Dashboard & Analytics
+        {"value": "mdi:view-dashboard", "label": "Dashboard"},
+        {"value": "mdi:view-dashboard-outline", "label": "Dashboard Outline"},
+        {"value": "mdi:chart-line", "label": "Line Chart"},
+        {"value": "mdi:chart-bar", "label": "Bar Chart"},
+        {"value": "mdi:chart-pie", "label": "Pie Chart"},
+        {"value": "mdi:chart-scatter-plot", "label": "Scatter Plot"},
+        {"value": "mdi:analytics", "label": "Analytics"},
+        {"value": "mdi:trending-up", "label": "Trending Up"},
+        {"value": "mdi:trending-down", "label": "Trending Down"},
+        {"value": "mdi:monitor", "label": "Monitor"},
+        # Biology & Science
+        {"value": "mdi:dna", "label": "DNA"},
+        {"value": "mdi:flask", "label": "Flask"},
+        {"value": "mdi:microscope", "label": "Microscope"},
+        {"value": "mdi:atom", "label": "Atom"},
+        {"value": "mdi:molecule", "label": "Molecule"},
+        {"value": "mdi:bacteria", "label": "Bacteria"},
+        {"value": "mdi:test-tube", "label": "Test Tube"},
+        {"value": "mdi:telescope", "label": "Telescope"},
+        {"value": "mdi:leaf", "label": "Leaf"},
+        {"value": "mdi:tree", "label": "Tree"},
+        # Data & Research
+        {"value": "mdi:database", "label": "Database"},
+        {"value": "mdi:file-chart", "label": "File Chart"},
+        {"value": "mdi:table", "label": "Table"},
+        {"value": "mdi:file-document", "label": "Document"},
+        {"value": "mdi:folder", "label": "Folder"},
+        {"value": "mdi:clipboard-text", "label": "Clipboard"},
+        {"value": "mdi:file-excel", "label": "Excel File"},
+        {"value": "mdi:graph", "label": "Graph"},
+        {"value": "mdi:chart-histogram", "label": "Histogram"},
+        {"value": "mdi:chart-box-outline", "label": "Box Plot"},
+        # Medical & Health
+        {"value": "mdi:heart", "label": "Heart"},
+        {"value": "mdi:heart-pulse", "label": "Heart Pulse"},
+        {"value": "mdi:hospital", "label": "Hospital"},
+        {"value": "mdi:pill", "label": "Pill"},
+        {"value": "mdi:medical-bag", "label": "Medical Bag"},
+        {"value": "mdi:stethoscope", "label": "Stethoscope"},
+        {"value": "mdi:brain", "label": "Brain"},
+        {"value": "mdi:eye", "label": "Eye"},
+        # Tools & Settings
+        {"value": "mdi:cog", "label": "Settings"},
+        {"value": "mdi:wrench", "label": "Wrench"},
+        {"value": "mdi:toolbox", "label": "Toolbox"},
+        {"value": "mdi:calculator", "label": "Calculator"},
+        {"value": "mdi:ruler", "label": "Ruler"},
+        {"value": "mdi:magnify", "label": "Search"},
+        {"value": "mdi:filter", "label": "Filter"},
+        {"value": "mdi:sort", "label": "Sort"},
+        # General Purpose
+        {"value": "mdi:star", "label": "Star"},
+        {"value": "mdi:bookmark", "label": "Bookmark"},
+        {"value": "mdi:tag", "label": "Tag"},
+        {"value": "mdi:lightbulb", "label": "Idea"},
+    ]
+
+    logger.info(f"Loaded {len(icons)} curated dashboard icons")
+    return icons
+
+
+def get_fallback_icons():
+    """
+    Fallback icon list when API is unavailable.
+    Returns commonly used dashboard icons.
+    """
+    fallback_icons = [
+        {"value": "mdi:view-dashboard", "label": "Dashboard"},
+        {"value": "mdi:chart-line", "label": "Line Chart"},
+        {"value": "mdi:chart-bar", "label": "Bar Chart"},
+        {"value": "mdi:chart-pie", "label": "Pie Chart"},
+        {"value": "mdi:analytics", "label": "Analytics"},
+        {"value": "mdi:trending-up", "label": "Trending Up"},
+        {"value": "mdi:database", "label": "Database"},
+        {"value": "mdi:server", "label": "Server"},
+        {"value": "mdi:cloud", "label": "Cloud"},
+        {"value": "mdi:monitor", "label": "Monitor"},
+        {"value": "mdi:briefcase", "label": "Briefcase"},
+        {"value": "mdi:calculator", "label": "Calculator"},
+        {"value": "mdi:presentation", "label": "Presentation"},
+        {"value": "mdi:target", "label": "Target"},
+        {"value": "mdi:flask", "label": "Flask"},
+        {"value": "mdi:microscope", "label": "Microscope"},
+        {"value": "mdi:atom", "label": "Atom"},
+        {"value": "mdi:heart", "label": "Heart"},
+        {"value": "mdi:school", "label": "School"},
+        {"value": "mdi:book", "label": "Book"},
+        {"value": "mdi:leaf", "label": "Leaf"},
+        {"value": "mdi:earth", "label": "Earth"},
+        {"value": "mdi:car", "label": "Car"},
+        {"value": "mdi:email", "label": "Email"},
+        {"value": "mdi:phone", "label": "Phone"},
+        {"value": "mdi:wrench", "label": "Wrench"},
+        {"value": "mdi:cog", "label": "Settings"},
+        {"value": "mdi:food", "label": "Food"},
+        {"value": "mdi:coffee", "label": "Coffee"},
+        {"value": "mdi:music", "label": "Music"},
+        {"value": "mdi:star", "label": "Star"},
+        {"value": "mdi:fire", "label": "Fire"},
+        {"value": "mdi:shield", "label": "Shield"},
+        {"value": "mdi:lock", "label": "Lock"},
+        {"value": "mdi:key", "label": "Key"},
+    ]
+
+    logger.info("Using fallback icon list")
+    return fallback_icons
 
 
 def create_dashboard_modal(
@@ -116,6 +237,67 @@ def create_dashboard_modal(
                                 clearable=False,  # Disable clear for now
                                 # comboboxProps={"zIndex": 1000},
                                 comboboxProps={"withinPortal": False},
+                            ),
+                            # Icon selector
+                            dmc.Group(
+                                children=[
+                                    dmc.Stack(
+                                        gap="sm",
+                                        children=[
+                                            dmc.Select(
+                                                label="Dashboard Icon",
+                                                description="Choose an icon to represent your dashboard",
+                                                data=[],  # Will be populated by callback
+                                                id=f"{id_prefix}-icon-select",
+                                                placeholder="Select an icon...",
+                                                searchable=True,
+                                                clearable=True,
+                                                leftSection=DashIconify(
+                                                    icon="mdi:palette", width=16
+                                                ),
+                                                style={"width": "100%"},
+                                                comboboxProps={
+                                                    "withinPortal": False,
+                                                    "zIndex": 10001,
+                                                },
+                                            ),
+                                        ],
+                                        style={"flex": 1},
+                                    ),
+                                    # Icon preview
+                                    dmc.Paper(
+                                        children=[
+                                            html.Div(
+                                                id=f"{id_prefix}-icon-preview",
+                                                children=[
+                                                    DashIconify(
+                                                        icon="mdi:view-dashboard-outline",
+                                                        width=32,
+                                                        height=32,
+                                                        color="var(--app-text-color, #000000)",
+                                                    )
+                                                ],
+                                                style={
+                                                    "display": "flex",
+                                                    "alignItems": "center",
+                                                    "justifyContent": "center",
+                                                    "width": "48px",
+                                                    "height": "48px",
+                                                },
+                                            )
+                                        ],
+                                        withBorder=True,
+                                        radius="md",
+                                        p="xs",
+                                        style={
+                                            "backgroundColor": "var(--app-surface-color, #ffffff)",
+                                            "borderColor": "var(--app-border-color, #ddd)",
+                                        },
+                                    ),
+                                ],
+                                gap="md",
+                                align="flex-end",
+                                style={"width": "100%"},
                             ),
                             # Available templates dropdown
                             # dmc.Select(

@@ -167,6 +167,7 @@ class MongoDBConfig(ServiceConfig):
         deltatables_collection: str = Field(default="deltatables")
         jbrowse_collection: str = Field(default="jbrowse")
         dashboards_collection: str = Field(default="dashboards")
+        components_collection: str = Field(default="components")
         initialization_collection: str = Field(default="initialization")
         projects_collection: str = Field(default="projects")
         test_collection: str = Field(default="test")
