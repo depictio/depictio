@@ -122,7 +122,7 @@ def save_component_to_database(
                 )
 
         if not component_added:
-            logger.error(f"💾 DB SAVE: No sections available to add component")
+            logger.error("💾 DB SAVE: No sections available to add component")
             return False, "No sections available to add component"
 
         # Step 3: Save the updated dashboard data
@@ -161,7 +161,7 @@ def load_dashboard_components(dashboard_id: str, user_token: str):
 
         if response.status_code == 200:
             dashboard_data = response.json()
-            logger.info(f"📁 DB LOAD: Loaded dashboard data successfully")
+            logger.info("📁 DB LOAD: Loaded dashboard data successfully")
 
             # Extract components from dashboard structure
             all_components = []

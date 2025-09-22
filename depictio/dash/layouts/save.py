@@ -6,8 +6,7 @@ Provides simple save operations for the structured dashboard format.
 from datetime import datetime
 from typing import Optional
 
-import dash
-from dash import ALL, Input, Output, State
+from dash import Input, State
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import (

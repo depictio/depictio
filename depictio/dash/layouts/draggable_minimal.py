@@ -350,12 +350,7 @@ def register_minimal_callbacks(app):
 
         # Calculate section index for naming
         current_sections = current_sections or []
-        section_count = len(
-            [
-                s
-                for s in current_sections
-            ]
-        )
+        section_count = len([s for s in current_sections])
         section_letter = chr(65 + section_count)  # A, B, C, etc.
 
         # Emit event through the event store using helper function
@@ -384,11 +379,11 @@ def register_minimal_callbacks(app):
         return event_data
 
     @app.callback(
-            Output({"type": "dashboard-section", "section_id": MATCH}, "children"),
-            Input({"type": "create-component-in-section-debug", "section_id": MATCH}, "n_clicks"),
-            State({"type": "create-component-in-section-debug", "section_id": MATCH}, "id"),
-            State({"type": "dashboard-section", "section_id": MATCH}, "children"),
-            prevent_initial_call=False,
+        Output({"type": "dashboard-section", "section_id": MATCH}, "children"),
+        Input({"type": "create-component-in-section-debug", "section_id": MATCH}, "n_clicks"),
+        State({"type": "create-component-in-section-debug", "section_id": MATCH}, "id"),
+        State({"type": "dashboard-section", "section_id": MATCH}, "children"),
+        prevent_initial_call=False,
     )
     def debug_create_component_in_section(n_clicks_list, section_id, current_children):
         """Debug callback to log clicks on section component creation buttons."""
@@ -402,8 +397,6 @@ def register_minimal_callbacks(app):
         new_child = dmc.Text(f"Button clicked {n_clicks_list} times", c="red")
         updated_children = current_children + [new_child]
         return updated_children
-
-
 
     @app.callback(
         Output("url", "pathname", allow_duplicate=True),
