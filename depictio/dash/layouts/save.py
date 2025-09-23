@@ -28,7 +28,9 @@ def validate_and_clean_orphaned_layouts(stored_layout_data, stored_metadata):
 
     # Extract valid component IDs from metadata
     valid_component_ids = {
-        str(meta.get("index")) for meta in stored_metadata if meta.get("index") is not None
+        str(meta.get("index"))
+        for meta in stored_metadata
+        if meta is not None and meta.get("index") is not None
     }
     logger.info(f"🔍 LAYOUT VALIDATION - Valid component IDs from metadata: {valid_component_ids}")
 
@@ -176,6 +178,7 @@ def register_callbacks_save(app):
                 "dc_id": elem.get("dc_id"),
             }
             for elem in stored_metadata
+            if elem is not None
         ]
         logger.info(f"Stored metadata for logging: {stored_metadata_for_logging}")
         logger.info(f"Stored complete metadata: {stored_metadata}")
@@ -276,6 +279,8 @@ def register_callbacks_save(app):
 
         # First pass: collect all metadata entries by index
         for elem in stored_metadata:
+            if elem is None:
+                continue
             index = elem["index"]
             if index not in indexed_metadata:
                 indexed_metadata[index] = []

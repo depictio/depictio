@@ -1,7 +1,6 @@
 import copy
 
 import dash
-import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
 import httpx
 from dash import ALL, Input, Output, State, ctx, dcc, html
@@ -9,7 +8,6 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.colors import colors
 
 # Import centralized component dimensions from metadata
 from depictio.dash.component_metadata import get_component_dimensions_dict
@@ -23,7 +21,6 @@ from depictio.dash.layouts.draggable_scenarios.interactive_component_update impo
     # update_interactive_component_async,
     update_interactive_component_sync,
 )
-from depictio.dash.layouts.draggable_scenarios.restore_dashboard import render_dashboard
 
 # Depictio layout imports for stepper
 # Depictio layout imports for header
@@ -284,6 +281,9 @@ def get_component_id(component):
 def remove_duplicates_by_index(components):
     unique_components = {}
     for component in components:
+        # Skip None components
+        if component is None:
+            continue
         index = component["index"]
         if index not in unique_components:
             # First occurrence of this index
@@ -341,7 +341,9 @@ def clean_stored_metadata(stored_metadata):
         ]
     )
     # remove parent indexes that are also child indexes
-    stored_metadata = [e for e in stored_metadata if e["index"] not in parent_indexes]
+    stored_metadata = [
+        e for e in stored_metadata if e is not None and e["index"] not in parent_indexes
+    ]
     return stored_metadata
 
 
@@ -558,9 +560,9 @@ def register_callbacks_draggable(app):
         return components_store
 
     @app.callback(
-        Output("draggable", "items"),
-        Output("draggable", "currentLayout"),
-        Output("stored-draggable-layouts", "data"),
+        Output("draggable", "children"),
+        # Output("draggable", "currentLayout"),
+        # Output("stored-draggable-layouts", "data"),
         Output("current-edit-parent-index", "data"),  # Add this Output
         # Output("stored-add-button", "data"),
         Input(
@@ -635,8 +637,8 @@ def register_callbacks_draggable(app):
             "children",
         ),
         State("draggable", "items"),
-        State("draggable", "currentLayout"),
-        Input("draggable", "currentLayout"),
+        # State("draggable", "currentLayout"),
+        # Input("draggable", "currentLayout"),
         State("stored-draggable-layouts", "data"),
         Input("stored-draggable-layouts", "data"),
         Input(
@@ -746,8 +748,8 @@ def register_callbacks_draggable(app):
         stored_metadata,
         test_container,
         draggable_children,
-        draggable_layouts,
-        input_draggable_layouts,
+        # draggable_layouts,
+        # input_draggable_layouts,
         state_stored_draggable_layouts,
         input_stored_draggable_layouts,
         remove_box_button_values,
@@ -768,7 +770,7 @@ def register_callbacks_draggable(app):
         # height_store,
     ):
         if not local_data:
-            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            return dash.no_update, dash.no_update
 
         if not state_stored_draggable_layouts:
             state_stored_draggable_layouts = {}
@@ -803,63 +805,63 @@ def register_callbacks_draggable(app):
         dashboard_id = pathname.split("/")[-1]
 
         # Ensure draggable_layouts is in list format
-        if isinstance(draggable_layouts, dict):
-            # Extract list from legacy dict format for backward compatibility
-            draggable_layouts = draggable_layouts.get("lg", [])
-        elif draggable_layouts is None:
-            draggable_layouts = []
+        # if isinstance(draggable_layouts, dict):
+        #     # Extract list from legacy dict format for backward compatibility
+        #     draggable_layouts = draggable_layouts.get("lg", [])
+        # elif draggable_layouts is None:
+        #     draggable_layouts = []
 
         # Initialize layouts from stored layouts if available
-        if dashboard_id in state_stored_draggable_layouts:
-            # Check if draggable_layouts is empty (list format only)
-            is_empty = not draggable_layouts or len(draggable_layouts) == 0
+        # if dashboard_id in state_stored_draggable_layouts:
+        #     # Check if draggable_layouts is empty (list format only)
+        #     is_empty = not draggable_layouts or len(draggable_layouts) == 0
 
-            if is_empty:
-                logger.info(
-                    f"Initializing layouts from stored layouts for dashboard {dashboard_id}"
-                )
-                stored_layouts = state_stored_draggable_layouts[dashboard_id]
-                # Ensure stored layouts are also in list format
-                if isinstance(stored_layouts, dict):
-                    raw_layouts = stored_layouts.get("lg", [])
-                else:
-                    raw_layouts = stored_layouts
+        #     if is_empty:
+        #         logger.info(
+        #             f"Initializing layouts from stored layouts for dashboard {dashboard_id}"
+        #         )
+        #         stored_layouts = state_stored_draggable_layouts[dashboard_id]
+        #         # Ensure stored layouts are also in list format
+        #         if isinstance(stored_layouts, dict):
+        #             raw_layouts = stored_layouts.get("lg", [])
+        #         else:
+        #             raw_layouts = stored_layouts
 
-                # Clean any corrupted layouts and normalize properties
-                cleaned_layouts = clean_layout_data(raw_layouts)
-                # logger.info(f"Cleaned layouts: {cleaned_layouts}")
+        #         # Clean any corrupted layouts and normalize properties
+        #         cleaned_layouts = clean_layout_data(raw_layouts)
+        #         # logger.info(f"Cleaned layouts: {cleaned_layouts}")
 
-                # CRITICAL: Remove orphaned layouts that don't have corresponding components
-                if draggable_children:
-                    component_ids = set()
-                    for child in draggable_children:
-                        # logger.info(f"Processing child: {child}")
-                        child_id = get_component_id(child)
-                        if child_id:
-                            component_ids.add(child_id)
+        #         # CRITICAL: Remove orphaned layouts that don't have corresponding components
+        #         if draggable_children:
+        #             component_ids = set()
+        #             for child in draggable_children:
+        #                 # logger.info(f"Processing child: {child}")
+        #                 child_id = get_component_id(child)
+        #                 if child_id:
+        #                     component_ids.add(child_id)
 
-                    # Filter layouts to only include those with matching components
-                    matched_layouts = []
-                    for layout in cleaned_layouts:
-                        layout_id = layout.get("i", "")
-                        if layout_id in component_ids:
-                            matched_layouts.append(layout)
-                        else:
-                            logger.warning(
-                                f"🗑️ Removing orphaned layout: {layout_id} (no matching component)"
-                            )
+        #             # Filter layouts to only include those with matching components
+        #             matched_layouts = []
+        #             for layout in cleaned_layouts:
+        #                 layout_id = layout.get("i", "")
+        #                 if layout_id in component_ids:
+        #                     matched_layouts.append(layout)
+        #                 else:
+        #                     logger.warning(
+        #                         f"🗑️ Removing orphaned layout: {layout_id} (no matching component)"
+        #                     )
 
-                    draggable_layouts = matched_layouts
+        #             draggable_layouts = matched_layouts
 
-                    logger.info(
-                        f"Matched layouts after cleaning: {len(matched_layouts)} from {len(cleaned_layouts)}"
-                    )
-                else:
-                    draggable_layouts = cleaned_layouts
-                    logger.info(
-                        f"Cleaned and normalized layouts loaded from storage: {len(raw_layouts)} -> {len(draggable_layouts)}"
-                    )
-                # logger.info(f"Updated draggable layouts: {draggable_layouts}")
+        #             logger.info(
+        #                 f"Matched layouts after cleaning: {len(matched_layouts)} from {len(cleaned_layouts)}"
+        #             )
+        #         else:
+        #             draggable_layouts = cleaned_layouts
+        #             logger.info(
+        #                 f"Cleaned and normalized layouts loaded from storage: {len(raw_layouts)} -> {len(draggable_layouts)}"
+        #             )
+        #         # logger.info(f"Updated draggable layouts: {draggable_layouts}")
 
         if isinstance(ctx.triggered_id, dict):
             triggered_input = ctx.triggered_id["type"]
@@ -918,7 +920,7 @@ def register_callbacks_draggable(app):
 
         dashboard_id = pathname.split("/")[-1]
         stored_metadata_interactive = [
-            e for e in stored_metadata if e["component_type"] == "interactive"
+            e for e in stored_metadata if e is not None and e["component_type"] == "interactive"
         ]
 
         interactive_components_dict = {
@@ -1083,8 +1085,8 @@ def register_callbacks_draggable(app):
                 # Return restored children with minimal changes to avoid interference
                 return (
                     updated_children,  # This should update draggable.items
-                    draggable_layouts,  # Keep original layout unchanged
-                    state_stored_draggable_layouts,  # Keep stored layout unchanged
+                    # draggable_layouts,  # Keep original layout unchanged
+                    # state_stored_draggable_layouts,  # Keep stored layout unchanged
                     dash.no_update,  # Don't update parent index to avoid conflicts
                 )
 
@@ -1103,8 +1105,8 @@ def register_callbacks_draggable(app):
                 if not tmp_stored_metadata:
                     return (
                         dash.no_update,
-                        dash.no_update,
-                        dash.no_update,
+                        # dash.no_update,
+                        # dash.no_update,
                         dash.no_update,
                     )
                 child_metadata = tmp_stored_metadata[0]
@@ -1118,7 +1120,8 @@ def register_callbacks_draggable(app):
                     TOKEN=TOKEN,
                     theme=theme,
                 )
-
+                if draggable_children is None:
+                    draggable_children = []
                 draggable_children.append(child)
                 # Use the clean child_index from metadata instead of the potentially corrupted return value
                 child_id = f"box-{str(child_index)}"
@@ -1127,13 +1130,13 @@ def register_callbacks_draggable(app):
                 logger.debug(f"🔍 DRAG DEBUG - child_id: {child_id}")
                 logger.info(f"Child type: {child_type}")
                 # Clean existing layouts before calculating new position
-                clean_draggable_layouts = clean_layout_data(draggable_layouts)
-                new_layout_item = calculate_new_layout_position(
+                clean_draggable_layouts = clean_layout_data({})
+                calculate_new_layout_position(
                     child_type, clean_draggable_layouts, child_id, len(draggable_children)
                 )
 
                 # Add new layout item to the cleaned list
-                clean_draggable_layouts.append(new_layout_item)
+                # clean_draggable_layouts.append(new_layout_item)
                 draggable_layouts = clean_draggable_layouts  # Use cleaned layouts
                 # logger.info(f"New layout item: {new_layout_item}")
                 # logger.info(f"New draggable layouts: {draggable_layouts}")
@@ -1143,274 +1146,276 @@ def register_callbacks_draggable(app):
                 # logger.info(f"New draggable children: {draggable_children}")
                 return (
                     draggable_children,
-                    draggable_layouts,
-                    state_stored_draggable_layouts,
+                    # draggable_layouts,
+                    # state_stored_draggable_layouts,
                     dash.no_update,
                 )
 
             # Handle scenarios where the user adjusts the layout of the draggable components
-            elif triggered_input == "draggable":
-                logger.info("Draggable callback triggered")
-                ctx_triggered_props_id = ctx.triggered_prop_ids
+            # elif triggered_input == "draggable":
+            #     logger.info("Draggable callback triggered")
+            #     ctx_triggered_props_id = ctx.triggered_prop_ids
 
-                # logger.info(f"CTX triggered props id: {ctx_triggered_props_id}")
-                # logger.info(f"Draggable layouts: {input_draggable_layouts}")
-                # logger.info(f"State stored draggable layouts: {state_stored_draggable_layouts}")
+            #     # logger.info(f"CTX triggered props id: {ctx_triggered_props_id}")
+            #     # logger.info(f"Draggable layouts: {input_draggable_layouts}")
+            #     # logger.info(f"State stored draggable layouts: {state_stored_draggable_layouts}")
 
-                if "draggable.currentLayout" in ctx_triggered_props_id:
-                    logger.info("🔄 LAYOUT UPDATE - DashGridLayout currentLayout changed")
-                    logger.info(
-                        f"🔄 LAYOUT UPDATE - New layout received: {input_draggable_layouts}"
-                    )
+            #     if "draggable.currentLayout" in ctx_triggered_props_id:
+            #         logger.info("🔄 LAYOUT UPDATE - DashGridLayout currentLayout changed")
+            #         # logger.info(
+            #         #     f"🔄 LAYOUT UPDATE - New layout received: {input_draggable_layouts}"
+            #         # )
 
-                    # Check for None layout (can happen with large datasets)
-                    if input_draggable_layouts is None:
-                        logger.warning(
-                            "⚠️ LAYOUT UPDATE - input_draggable_layouts is None, skipping layout processing"
-                        )
+            #         # # Check for None layout (can happen with large datasets)
+            #         # if input_draggable_layouts is None:
+            #         #     logger.warning(
+            #         #         "⚠️ LAYOUT UPDATE - input_draggable_layouts is None, skipping layout processing"
+            #         #     )
 
-                    # Check if any dimensions were changed by responsive grid
-                    elif dashboard_id in state_stored_draggable_layouts:
-                        stored_layouts = state_stored_draggable_layouts[dashboard_id]
-                        for new_layout in input_draggable_layouts:
-                            for stored_layout in stored_layouts:
-                                if new_layout.get("i") == stored_layout.get("i"):
-                                    if new_layout.get("w") != stored_layout.get(
-                                        "w"
-                                    ) or new_layout.get("h") != stored_layout.get("h"):
-                                        logger.info(
-                                            f"📏 DIMENSIONS CHANGED - {new_layout.get('i')}: {stored_layout.get('w')}x{stored_layout.get('h')} → {new_layout.get('w')}x{new_layout.get('h')}"
-                                        )
-                                        # Check if this looks like responsive scaling (halving)
-                                        if new_layout.get("w", 0) * 2 == stored_layout.get(
-                                            "w", 0
-                                        ) and new_layout.get("h", 0) * 2 == stored_layout.get(
-                                            "h", 0
-                                        ):
-                                            logger.warning(
-                                                "⚠️ RESPONSIVE SCALING DETECTED - Dimensions halved (likely xs breakpoint)"
-                                            )
-                                        elif (
-                                            new_layout.get("w", 0) * 3
-                                            == stored_layout.get("w", 0) * 2
-                                        ):
-                                            logger.warning(
-                                                "⚠️ RESPONSIVE SCALING DETECTED - Dimensions scaled by 2/3 (likely md breakpoint)"
-                                            )
-                                        logger.debug(
-                                            f"📱 SCALE DEBUG - Width ratio: {new_layout.get('w', 0) / max(stored_layout.get('w', 1), 1):.2f}"
-                                        )
-                                        logger.debug(
-                                            f"📱 SCALE DEBUG - Height ratio: {new_layout.get('h', 0) / max(stored_layout.get('h', 1), 1):.2f}"
-                                        )
+            #         # Check if any dimensions were changed by responsive grid
+            #         # elif dashboard_id in state_stored_draggable_layouts:
+            #         #     stored_layouts = state_stored_draggable_layouts[dashboard_id]
+            #         #     for new_layout in input_draggable_layouts:
+            #         #         for stored_layout in stored_layouts:
+            #         #             if new_layout.get("i") == stored_layout.get("i"):
+            #         #                 if new_layout.get("w") != stored_layout.get(
+            #         #                     "w"
+            #         #                 ) or new_layout.get("h") != stored_layout.get("h"):
+            #         #                     logger.info(
+            #         #                         f"📏 DIMENSIONS CHANGED - {new_layout.get('i')}: {stored_layout.get('w')}x{stored_layout.get('h')} → {new_layout.get('w')}x{new_layout.get('h')}"
+            #         #                     )
+            #         #                     # Check if this looks like responsive scaling (halving)
+            #         #                     if new_layout.get("w", 0) * 2 == stored_layout.get(
+            #         #                         "w", 0
+            #         #                     ) and new_layout.get("h", 0) * 2 == stored_layout.get(
+            #         #                         "h", 0
+            #         #                     ):
+            #         #                         logger.warning(
+            #         #                             "⚠️ RESPONSIVE SCALING DETECTED - Dimensions halved (likely xs breakpoint)"
+            #         #                         )
+            #         #                     elif (
+            #         #                         new_layout.get("w", 0) * 3
+            #         #                         == stored_layout.get("w", 0) * 2
+            #         #                     ):
+            #         #                         logger.warning(
+            #         #                             "⚠️ RESPONSIVE SCALING DETECTED - Dimensions scaled by 2/3 (likely md breakpoint)"
+            #         #                         )
+            #         #                     logger.debug(
+            #         #                         f"📱 SCALE DEBUG - Width ratio: {new_layout.get('w', 0) / max(stored_layout.get('w', 1), 1):.2f}"
+            #         #                     )
+            #         #                     logger.debug(
+            #         #                         f"📱 SCALE DEBUG - Height ratio: {new_layout.get('h', 0) / max(stored_layout.get('h', 1), 1):.2f}"
+            #         #                     )
 
-                    # dash-dynamic-grid-layout returns a single layout array - normalize and store it
-                    # Note: We'll return the updated children in the callback output instead of modifying state directly
-                    # Fix responsive scaling issues before normalizing
-                    logger.info(
-                        "🔧 RESPONSIVE FIX - Applying fixes to currentLayout before storing"
-                    )
-                    fixed_layouts = fix_responsive_scaling(input_draggable_layouts, stored_metadata)
-                    # Ensure fixed_layouts is always a list to avoid TypeError
-                    if fixed_layouts is None:
-                        fixed_layouts = []
-                    # Normalize layout data to ensure consistent moved/static properties
-                    state_stored_draggable_layouts[dashboard_id] = fixed_layouts
+            #         # dash-dynamic-grid-layout returns a single layout array - normalize and store it
+            #         # Note: We'll return the updated children in the callback output instead of modifying state directly
+            #         # Fix responsive scaling issues before normalizing
+            #         logger.info(
+            #             "🔧 RESPONSIVE FIX - Applying fixes to currentLayout before storing"
+            #         )
+            #         # fixed_layouts = fix_responsive_scaling(input_draggable_layouts, stored_metadata)
+            #         # Ensure fixed_layouts is always a list to avoid TypeError
+            #         # if fixed_layouts is None:
+            #         #     fixed_layouts = []
+            #         # Normalize layout data to ensure consistent moved/static properties
+            #         # state_stored_draggable_layouts[dashboard_id] = fixed_layouts
 
-                    logger.info("🔄 LAYOUT UPDATE - Final stored layouts:")
-                    for i, layout in enumerate(fixed_layouts):
-                        logger.info(
-                            f"  Stored Layout {i}: {layout.get('i')} -> {layout.get('w')}x{layout.get('h')} at ({layout.get('x')},{layout.get('y')})"
-                        )
+            #         logger.info("🔄 LAYOUT UPDATE - Final stored layouts:")
+            #         # for i, layout in enumerate(fixed_layouts):
+            #         #     logger.info(
+            #         #         f"  Stored Layout {i}: {layout.get('i')} -> {layout.get('w')}x{layout.get('h')} at ({layout.get('x')},{layout.get('y')})"
+            #         #     )
 
-                    # REMOVED: updated_stored_children logic to fix localStorage quota exceeded
+            #         # REMOVED: updated_stored_children logic to fix localStorage quota exceeded
 
-                    return (
-                        draggable_children,
-                        fixed_layouts,  # Return the normalized layout array
-                        state_stored_draggable_layouts,
-                        dash.no_update,
-                    )
-                else:
-                    return (
-                        dash.no_update,
-                        dash.no_update,
-                        dash.no_update,
-                        dash.no_update,
-                    )
+            #         return (
+            #             draggable_children,
+            #             # fixed_layouts,  # Return the normalized layout array
+            #             # state_stored_draggable_layouts,
+            #             dash.no_update,
+            #         )
+            #     else:
+            #         return (
+            #             dash.no_update,
+            #             # dash.no_update,
+            #             # dash.no_update,
+            #             dash.no_update,
+            #         )
 
-            # Handle scenarios where the user resets a component using the reset button
-            elif "reset-selection-graph-button" in triggered_input:
-                logger.info("Reset selection button triggered")
+            # # Handle scenarios where the user resets a component using the reset button
+            # elif "reset-selection-graph-button" in triggered_input:
+            #     logger.info("Reset selection button triggered")
 
-                # Find the component being reset
-                reset_component_metadata = None
-                ctx_triggered = ctx.triggered[0]
-                ctx_triggered_prop_id = ctx_triggered["prop_id"]
-                ctx_triggered_prop_id_index = eval(ctx_triggered_prop_id.split(".")[0])["index"]
+            #     # Find the component being reset
+            #     reset_component_metadata = None
+            #     ctx_triggered = ctx.triggered[0]
+            #     ctx_triggered_prop_id = ctx_triggered["prop_id"]
+            #     ctx_triggered_prop_id_index = eval(ctx_triggered_prop_id.split(".")[0])["index"]
 
-                for metadata in stored_metadata:
-                    if metadata["index"] == ctx_triggered_prop_id_index:
-                        metadata["filter_applied"] = False
-                        reset_component_metadata = metadata
-                        break
+            #     for metadata in stored_metadata:
+            #         if metadata["index"] == ctx_triggered_prop_id_index:
+            #             metadata["filter_applied"] = False
+            #             reset_component_metadata = metadata
+            #             break
 
-                # Handle specific reset logic based on component type
-                if reset_component_metadata:
-                    component_type = reset_component_metadata.get("component_type")
-                    logger.info(
-                        f"Resetting {component_type} component: {ctx_triggered_prop_id_index}"
-                    )
+            #     # Handle specific reset logic based on component type
+            #     if reset_component_metadata:
+            #         component_type = reset_component_metadata.get("component_type")
+            #         logger.info(
+            #             f"Resetting {component_type} component: {ctx_triggered_prop_id_index}"
+            #         )
 
-                    # For interactive components, clear their values in the interactive_components_dict
-                    if component_type == "interactive":
-                        if ctx_triggered_prop_id_index in interactive_components_dict:
-                            # Clear the value for this interactive component
-                            interactive_components_dict[ctx_triggered_prop_id_index]["value"] = None
-                            logger.info(
-                                f"Cleared value for interactive component: {ctx_triggered_prop_id_index}"
-                            )
+            #         # For interactive components, clear their values in the interactive_components_dict
+            #         if component_type == "interactive":
+            #             if ctx_triggered_prop_id_index in interactive_components_dict:
+            #                 # Clear the value for this interactive component
+            #                 interactive_components_dict[ctx_triggered_prop_id_index]["value"] = None
+            #                 logger.info(
+            #                     f"Cleared value for interactive component: {ctx_triggered_prop_id_index}"
+            #                 )
 
-                    # For scatter plots, the filter_applied = False is sufficient
-                    elif component_type == "figure":
-                        visu_type = reset_component_metadata.get("visu_type", "")
-                        if visu_type.lower() == "scatter":
-                            logger.info(f"Reset scatter plot: {ctx_triggered_prop_id_index}")
+            #         # For scatter plots, the filter_applied = False is sufficient
+            #         elif component_type == "figure":
+            #             visu_type = reset_component_metadata.get("visu_type", "")
+            #             if visu_type.lower() == "scatter":
+            #                 logger.info(f"Reset scatter plot: {ctx_triggered_prop_id_index}")
 
-                new_children = update_interactive_component_sync(
-                    stored_metadata,
-                    interactive_components_dict,
-                    draggable_children,
-                    switch_state=unified_edit_mode_button,
-                    TOKEN=TOKEN,
-                    dashboard_id=dashboard_id,
-                    theme=theme,
-                )
-                return (
-                    new_children,
-                    dash.no_update,
-                    dash.no_update,
-                    dash.no_update,
-                )
+            #     new_children = update_interactive_component_sync(
+            #         stored_metadata,
+            #         interactive_components_dict,
+            #         draggable_children,
+            #         switch_state=unified_edit_mode_button,
+            #         TOKEN=TOKEN,
+            #         dashboard_id=dashboard_id,
+            #         theme=theme,
+            #     )
+            #     return (
+            #         new_children,
+            #         # dash.no_update,
+            #         # dash.no_update,
+            #         dash.no_update,
+            #     )
 
-            # Handle scenarios where the user clicks/select on a graph
-            elif "graph" in triggered_input:
-                logger.info("Graph callback triggered")
-                ctx_triggered = ctx.triggered
-                ctx_triggered = ctx_triggered[0]
-                ctx_triggered_prop_id = ctx_triggered["prop_id"]
-                ctx_triggered_prop_id_index = eval(ctx_triggered_prop_id.split(".")[0])["index"]
+            # # Handle scenarios where the user clicks/select on a graph
+            # elif "graph" in triggered_input:
+            #     logger.info("Graph callback triggered")
+            #     ctx_triggered = ctx.triggered
+            #     ctx_triggered = ctx_triggered[0]
+            #     ctx_triggered_prop_id = ctx_triggered["prop_id"]
+            #     ctx_triggered_prop_id_index = eval(ctx_triggered_prop_id.split(".")[0])["index"]
 
-                graph_metadata = [
-                    e for e in stored_metadata if e["index"] == ctx_triggered_prop_id_index
-                ]
-                if graph_metadata:
-                    graph_metadata = graph_metadata[0]
-                else:
-                    return (
-                        dash.no_update,
-                        dash.no_update,
-                        dash.no_update,
-                        dash.no_update,
-                    )
+            #     graph_metadata = [
+            #         e
+            #         for e in stored_metadata
+            #         if e is not None and e["index"] == ctx_triggered_prop_id_index
+            #     ]
+            #     if graph_metadata:
+            #         graph_metadata = graph_metadata[0]
+            #     else:
+            #         return (
+            #             dash.no_update,
+            #             # dash.no_update,
+            #             # dash.no_update,
+            #             dash.no_update,
+            #         )
 
-                # Restrict the callback to only scatter plots
-                if graph_metadata.get("visu_type", "").lower() == "scatter":
-                    # Handle scenarios where the user clicks on a specific point on the graph
-                    if "clickData" in ctx_triggered_prop_id:
-                        logger.info("Click data triggered")
-                        result = refresh_children_based_on_click_data(
-                            graph_click_data=graph_click_data,
-                            graph_ids=graph_ids,
-                            ctx_triggered_prop_id_index=ctx_triggered_prop_id_index,
-                            stored_metadata=stored_metadata,
-                            interactive_components_dict=interactive_components_dict,
-                            draggable_children=draggable_children,
-                            edit_components_mode_button=unified_edit_mode_button,
-                            TOKEN=TOKEN,
-                            dashboard_id=dashboard_id,
-                        )
-                        # Handle tuple return (new_children, updated_interactive_components)
-                        if isinstance(result, tuple):
-                            updated_children, _ = result
-                        else:
-                            updated_children = result
+            #     # Restrict the callback to only scatter plots
+            #     if graph_metadata.get("visu_type", "").lower() == "scatter":
+            #         # Handle scenarios where the user clicks on a specific point on the graph
+            #         if "clickData" in ctx_triggered_prop_id:
+            #             logger.info("Click data triggered")
+            #             result = refresh_children_based_on_click_data(
+            #                 graph_click_data=graph_click_data,
+            #                 graph_ids=graph_ids,
+            #                 ctx_triggered_prop_id_index=ctx_triggered_prop_id_index,
+            #                 stored_metadata=stored_metadata,
+            #                 interactive_components_dict=interactive_components_dict,
+            #                 draggable_children=draggable_children,
+            #                 edit_components_mode_button=unified_edit_mode_button,
+            #                 TOKEN=TOKEN,
+            #                 dashboard_id=dashboard_id,
+            #             )
+            #             # Handle tuple return (new_children, updated_interactive_components)
+            #             if isinstance(result, tuple):
+            #                 updated_children, _ = result
+            #             else:
+            #                 updated_children = result
 
-                        if updated_children:
-                            return (
-                                updated_children,
-                                dash.no_update,
-                                dash.no_update,
-                                dash.no_update,
-                            )
-                        else:
-                            return (
-                                draggable_children,
-                                dash.no_update,
-                                dash.no_update,
-                                dash.no_update,
-                            )
+            #             if updated_children:
+            #                 return (
+            #                     updated_children,
+            #                     # dash.no_update,
+            #                     # dash.no_update,
+            #                     dash.no_update,
+            #                 )
+            #             else:
+            #                 return (
+            #                     draggable_children,
+            #                     # dash.no_update,
+            #                     # dash.no_update,
+            #                     dash.no_update,
+            #                 )
 
-                    # Handle scenarios where the user selects a range on the graph
-                    elif "selectedData" in ctx_triggered_prop_id:
-                        logger.info("Selected data triggered")
-                        result = refresh_children_based_on_selected_data(
-                            graph_selected_data=graph_selected_data,
-                            graph_ids=graph_ids,
-                            ctx_triggered_prop_id_index=ctx_triggered_prop_id_index,
-                            stored_metadata=stored_metadata,
-                            interactive_components_dict=interactive_components_dict,
-                            draggable_children=draggable_children,
-                            edit_components_mode_button=unified_edit_mode_button,
-                            TOKEN=TOKEN,
-                            dashboard_id=dashboard_id,
-                        )
-                        # Handle tuple return (new_children, updated_interactive_components)
-                        if isinstance(result, tuple):
-                            updated_children, _ = result
-                        else:
-                            updated_children = result
+            #         # Handle scenarios where the user selects a range on the graph
+            #         elif "selectedData" in ctx_triggered_prop_id:
+            #             logger.info("Selected data triggered")
+            #             result = refresh_children_based_on_selected_data(
+            #                 graph_selected_data=graph_selected_data,
+            #                 graph_ids=graph_ids,
+            #                 ctx_triggered_prop_id_index=ctx_triggered_prop_id_index,
+            #                 stored_metadata=stored_metadata,
+            #                 interactive_components_dict=interactive_components_dict,
+            #                 draggable_children=draggable_children,
+            #                 edit_components_mode_button=unified_edit_mode_button,
+            #                 TOKEN=TOKEN,
+            #                 dashboard_id=dashboard_id,
+            #             )
+            #             # Handle tuple return (new_children, updated_interactive_components)
+            #             if isinstance(result, tuple):
+            #                 updated_children, _ = result
+            #             else:
+            #                 updated_children = result
 
-                        if updated_children:
-                            return (
-                                updated_children,
-                                dash.no_update,
-                                dash.no_update,
-                                dash.no_update,
-                            )
-                        else:
-                            return (
-                                draggable_children,
-                                dash.no_update,
-                                dash.no_update,
-                                dash.no_update,
-                            )
+            #             if updated_children:
+            #                 return (
+            #                     updated_children,
+            #                     # dash.no_update,
+            #                     # dash.no_update,
+            #                     dash.no_update,
+            #                 )
+            #             else:
+            #                 return (
+            #                     draggable_children,
+            #                     # dash.no_update,
+            #                     # dash.no_update,
+            #                     dash.no_update,
+            #                 )
 
-                    # Handle scenarios where the user relayouts the graph
-                    # TODO: Implement this
-                    elif "relayoutData" in ctx_triggered_prop_id:
-                        logger.info("Relayout data triggered")
-                        return (
-                            draggable_children,
-                            dash.no_update,
-                            dash.no_update,
-                            dash.no_update,
-                        )
+            #         # Handle scenarios where the user relayouts the graph
+            #         # TODO: Implement this
+            #         elif "relayoutData" in ctx_triggered_prop_id:
+            #             logger.info("Relayout data triggered")
+            #             return (
+            #                 draggable_children,
+            #                 # dash.no_update,
+            #                 # dash.no_update,
+            #                 dash.no_update,
+            #             )
 
-                    else:
-                        return (
-                            dash.no_update,
-                            dash.no_update,
-                            dash.no_update,
-                            dash.no_update,
-                        )
-                else:
-                    return (
-                        dash.no_update,
-                        dash.no_update,
-                        dash.no_update,
-                        dash.no_update,
-                    )
+            #         else:
+            #             return (
+            #                 dash.no_update,
+            #                 # dash.no_update,
+            #                 # dash.no_update,
+            #                 dash.no_update,
+            #             )
+            #     else:
+            #         return (
+            #             dash.no_update,
+            #             # dash.no_update,
+            #             # dash.no_update,
+            #             dash.no_update,
+            #         )
 
             elif (
                 "interactive-component" in triggered_input
@@ -1444,7 +1449,9 @@ def register_callbacks_draggable(app):
                     )
                     # remove parent indexes that are also child indexes
                     stored_metadata = [
-                        e for e in stored_metadata if e["index"] not in parent_indexes
+                        e
+                        for e in stored_metadata
+                        if e is not None and e["index"] not in parent_indexes
                     ]
                     return stored_metadata
 
@@ -1463,81 +1470,83 @@ def register_callbacks_draggable(app):
                 )
                 # REMOVED: state_stored_draggable_children storage to fix localStorage quota
 
-                if new_children:
-                    return (
-                        new_children,
-                        dash.no_update,
-                        dash.no_update,
-                        dash.no_update,
-                    )
-                else:
-                    return (
-                        draggable_children,
-                        dash.no_update,
-                        dash.no_update,
-                        dash.no_update,
-                    )
+                logger.info(f"New children : {new_children}")
+
+                # if new_children:
+                return (
+                    new_children,
+                    # dash.no_update,
+                    # dash.no_update,
+                    dash.no_update,
+                )
+                # else:
+                #     return (
+                #         draggable_children,
+                #         # dash.no_update,
+                #         # dash.no_update,
+                #         dash.no_update,
+                #     )
                 # return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
 
                 # return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
 
-            elif triggered_input == "stored-draggable-layouts":
-                # logger.info("Stored draggable layouts triggered")
-                # logger.info(f"Input draggable layouts: {input_draggable_layouts}")
-                # logger.info(f"State stored draggable layouts: {state_stored_draggable_layouts}")
+            # elif triggered_input == "stored-draggable-layouts":
+            #     # logger.info("Stored draggable layouts triggered")
+            #     # logger.info(f"Input draggable layouts: {input_draggable_layouts}")
+            #     # logger.info(f"State stored draggable layouts: {state_stored_draggable_layouts}")
 
-                # set_progress(str(0))
+            #     # set_progress(str(0))
 
-                if state_stored_draggable_layouts:
-                    if dashboard_id in state_stored_draggable_layouts:
-                        # Skip expensive render_dashboard for empty dashboards
-                        current_layouts = state_stored_draggable_layouts[dashboard_id]
+            #     if state_stored_draggable_layouts:
+            #         if dashboard_id in state_stored_draggable_layouts:
+            #             # Skip expensive render_dashboard for empty dashboards
+            #             current_layouts = state_stored_draggable_layouts[dashboard_id]
 
-                        # Ensure layouts are in list format
-                        if isinstance(current_layouts, dict):
-                            current_layouts = current_layouts.get("lg", [])
+            #             # Ensure layouts are in list format
+            #             if isinstance(current_layouts, dict):
+            #                 current_layouts = current_layouts.get("lg", [])
 
-                        # If no layouts (empty dashboard), return early without rendering
-                        if not current_layouts or len(current_layouts) == 0:
-                            logger.info("Empty dashboard detected - skipping render_dashboard call")
-                            return (
-                                [],  # Empty children for empty dashboard
-                                current_layouts,  # Empty layouts
-                                state_stored_draggable_layouts,
-                                dash.no_update,
-                            )
+            #             # If no layouts (empty dashboard), return early without rendering
+            #             if not current_layouts or len(current_layouts) == 0:
+            #                 logger.info("Empty dashboard detected - skipping render_dashboard call")
+            #                 return (
+            #                     [],  # Empty children for empty dashboard
+            #                     # current_layouts,  # Empty layouts
+            #                     # state_stored_draggable_layouts,
+            #                     dash.no_update,
+            #                 )
 
-                        # Only render dashboard if there are actual components
-                        children = render_dashboard(
-                            stored_metadata,
-                            unified_edit_mode_button,
-                            dashboard_id,
-                            theme,
-                            TOKEN,
-                        )
-                        logger.info(f"render_dashboard called with theme: {theme}")
+            #             # Only render dashboard if there are actual components
+            #             children = render_dashboard(
+            #                 stored_metadata,
+            #                 unified_edit_mode_button,
+            #                 dashboard_id,
+            #                 theme,
+            #                 TOKEN,
+            #             )
+            #             logger.info(f"render_dashboard called with theme: {theme}")
 
-                        return (
-                            children,
-                            current_layouts,
-                            state_stored_draggable_layouts,
-                            dash.no_update,
-                        )
-                    else:
-                        return (
-                            dash.no_update,
-                            dash.no_update,
-                            dash.no_update,
-                            dash.no_update,
-                        )
+            #             return (
+            #                 children,
+            #                 # current_layouts,
+            #                 # state_stored_draggable_layouts,
+            #                 dash.no_update,
+            #             )
+            #         else:
+            #             return (
+            #                 dash.no_update,
+            #                 # dash.no_update,
+            #                 # dash.no_update,
+            #                 dash.no_update,
+            #             )
 
-                else:
-                    return (
-                        dash.no_update,
-                        dash.no_update,
-                        dash.no_update,
-                        dash.no_update,
-                    )
+            #     else:
+            #         return (
+            #             dash.no_update,
+            #             # dash.no_update,
+            #             # dash.no_update,
+            #             dash.no_update,
+            #         )
 
             elif triggered_input == "remove-box-button":
                 logger.info("Remove box button clicked")
@@ -1571,8 +1580,8 @@ def register_callbacks_draggable(app):
 
                 return (
                     updated_children,
-                    updated_layouts,
-                    state_stored_draggable_layouts,
+                    # updated_layouts,
+                    # state_stored_draggable_layouts,
                     dash.no_update,
                 )
                 # return updated_children, draggable_layouts, state_stored_draggable_children, state_stored_draggable_layouts
@@ -1673,8 +1682,8 @@ def register_callbacks_draggable(app):
 
                 return (
                     updated_children,
-                    draggable_layouts,
-                    dash.no_update,
+                    # draggable_layouts,
+                    # dash.no_update,
                     input_id,
                 )
 
@@ -1882,8 +1891,8 @@ def register_callbacks_draggable(app):
 
                 return (
                     updated_children,
-                    draggable_layouts,
-                    state_stored_draggable_layouts,
+                    # draggable_layouts,
+                    # state_stored_draggable_layouts,
                     "",
                 )
 
@@ -1920,8 +1929,8 @@ def register_callbacks_draggable(app):
                     )
                     return (
                         dash.no_update,
-                        dash.no_update,
-                        dash.no_update,
+                        # dash.no_update,
+                        # dash.no_update,
                         dash.no_update,
                     )
 
@@ -1939,8 +1948,8 @@ def register_callbacks_draggable(app):
                         )
                         return (
                             dash.no_update,
-                            dash.no_update,
-                            dash.no_update,
+                            # dash.no_update,
+                            # dash.no_update,
                             dash.no_update,
                         )
 
@@ -1998,8 +2007,8 @@ def register_callbacks_draggable(app):
                     )
                     return (
                         dash.no_update,
-                        dash.no_update,
-                        dash.no_update,
+                        # dash.no_update,
+                        # dash.no_update,
                         dash.no_update,
                     )
 
@@ -2029,8 +2038,8 @@ def register_callbacks_draggable(app):
                     logger.warning(f"No metadata found for index {triggered_index}")
                     return (
                         dash.no_update,
-                        dash.no_update,
-                        dash.no_update,
+                        # dash.no_update,
+                        # dash.no_update,
                         dash.no_update,
                     )
 
@@ -2191,8 +2200,8 @@ def register_callbacks_draggable(app):
 
                 return (
                     updated_children,
-                    draggable_layouts,
-                    state_stored_draggable_layouts,
+                    # draggable_layouts,
+                    # state_stored_draggable_layouts,
                     dash.no_update,
                 )
 
@@ -2208,8 +2217,8 @@ def register_callbacks_draggable(app):
 
                 return (
                     [],  # Empty children
-                    empty_layouts,  # Empty layouts (list format)
-                    state_stored_draggable_layouts,
+                    # empty_layouts,  # Empty layouts (list format)
+                    # state_stored_draggable_layouts,
                     dash.no_update,
                 )
                 # return [], {}, {}, {}
@@ -2232,8 +2241,8 @@ def register_callbacks_draggable(app):
 
                 return (
                     new_children,
-                    dash.no_update,
-                    dash.no_update,
+                    # dash.no_update,
+                    # dash.no_update,
                     dash.no_update,
                 )
             elif triggered_input == "unified-edit-mode-button":
@@ -2261,16 +2270,16 @@ def register_callbacks_draggable(app):
                 logger.warning(f"Unexpected triggered_input: {triggered_input}")
                 return (
                     dash.no_update,
-                    dash.no_update,
-                    dash.no_update,
+                    # dash.no_update,
+                    # dash.no_update,
                     dash.no_update,
                 )
 
         else:
             return (
                 dash.no_update,
-                dash.no_update,
-                dash.no_update,
+                # dash.no_update,
+                # dash.no_update,
                 dash.no_update,
             )
 
@@ -2451,7 +2460,7 @@ def register_callbacks_draggable(app):
 
         # Start with existing interactive components
         stored_metadata_interactive = [
-            e for e in stored_metadata if e["component_type"] == "interactive"
+            e for e in stored_metadata if e is not None and e["component_type"] == "interactive"
         ]
         stored_metadata_interactive = remove_duplicates_by_index(stored_metadata_interactive)
 
@@ -2913,190 +2922,190 @@ def register_callbacks_draggable(app):
             return dash.no_update, updated_pending
 
     # Add callback to control grid edit mode like in the prototype
-    @app.callback(
-        [
-            Output("draggable", "showRemoveButton", allow_duplicate=True),
-            Output("draggable", "showResizeHandles", allow_duplicate=True),
-            Output("draggable", "className", allow_duplicate=True),
-        ],
-        Input("unified-edit-mode-button", "checked"),
-        prevent_initial_call=True,
-    )
-    def update_grid_edit_mode(edit_mode_enabled):
-        """Update draggable grid edit mode based on edit dashboard button state"""
-        logger.info(f"Grid edit mode toggled: {edit_mode_enabled}")
+    # @app.callback(
+    #     [
+    #         Output("draggable", "showRemoveButton", allow_duplicate=True),
+    #         Output("draggable", "showResizeHandles", allow_duplicate=True),
+    #         Output("draggable", "className", allow_duplicate=True),
+    #     ],
+    #     Input("unified-edit-mode-button", "checked"),
+    #     prevent_initial_call=True,
+    # )
+    # def update_grid_edit_mode(edit_mode_enabled):
+    #     """Update draggable grid edit mode based on edit dashboard button state"""
+    #     logger.info(f"Grid edit mode toggled: {edit_mode_enabled}")
 
-        if edit_mode_enabled:
-            # Keep layout consistent - CSS handles button visibility, not DashGridLayout properties
-            return False, False, "draggable-grid-container"
-        else:
-            # Keep layout consistent - CSS handles button visibility, not DashGridLayout properties
-            return False, False, "draggable-grid-container drag-handles-hidden"
+    #     if edit_mode_enabled:
+    #         # Keep layout consistent - CSS handles button visibility, not DashGridLayout properties
+    #         return False, False, "draggable-grid-container"
+    #     else:
+    #         # Keep layout consistent - CSS handles button visibility, not DashGridLayout properties
+    #         return False, False, "draggable-grid-container drag-handles-hidden"
 
-    @app.callback(
-        Output("draggable-wrapper", "children"),
-        [
-            Input("unified-edit-mode-button", "checked"),
-            Input("draggable", "items"),
-        ],
-        [
-            State("local-store", "data"),
-        ],
-    )
-    def update_empty_dashboard_wrapper(edit_mode_enabled, current_draggable_items, local_data):
-        """Update draggable wrapper to show empty state messages when dashboard is empty"""
-        logger.info(f"🔄 Updating draggable wrapper - Edit mode: {edit_mode_enabled}")
+    # @app.callback(
+    #     Output("draggable-wrapper", "children"),
+    #     [
+    #         Input("unified-edit-mode-button", "checked"),
+    #         Input("draggable", "items"),
+    #     ],
+    #     [
+    #         State("local-store", "data"),
+    #     ],
+    # )
+    # def update_empty_dashboard_wrapper(edit_mode_enabled, current_draggable_items, local_data):
+    #     """Update draggable wrapper to show empty state messages when dashboard is empty"""
+    #     logger.info(f"🔄 Updating draggable wrapper - Edit mode: {edit_mode_enabled}")
 
-        # Check if dashboard has stored components in database (more reliable than current_draggable_items)
-        stored_children_data = local_data.get("stored_children_data", []) if local_data else []
-        stored_layout_data = local_data.get("stored_layout_data", []) if local_data else []
+    #     # Check if dashboard has stored components in database (more reliable than current_draggable_items)
+    #     stored_children_data = local_data.get("stored_children_data", []) if local_data else []
+    #     stored_layout_data = local_data.get("stored_layout_data", []) if local_data else []
 
-        # If there are stored components or layouts, this is NOT an empty dashboard
-        if (stored_children_data and len(stored_children_data) > 0) or (
-            stored_layout_data and len(stored_layout_data) > 0
-        ):
-            logger.info(
-                f"Dashboard has stored components ({len(stored_children_data)} children, {len(stored_layout_data)} layouts) - keeping original draggable"
-            )
-            return dash.no_update
+    #     # If there are stored components or layouts, this is NOT an empty dashboard
+    #     if (stored_children_data and len(stored_children_data) > 0) or (
+    #         stored_layout_data and len(stored_layout_data) > 0
+    #     ):
+    #         logger.info(
+    #             f"Dashboard has stored components ({len(stored_children_data)} children, {len(stored_layout_data)} layouts) - keeping original draggable"
+    #         )
+    #         return dash.no_update
 
-        # Also check current draggable items as secondary check
-        if current_draggable_items and len(current_draggable_items) > 0:
-            logger.info("Dashboard has current draggable items, keeping original draggable")
-            return dash.no_update
+    #     # Also check current draggable items as secondary check
+    #     if current_draggable_items and len(current_draggable_items) > 0:
+    #         logger.info("Dashboard has current draggable items, keeping original draggable")
+    #         return dash.no_update
 
-        if not local_data:
-            logger.info("No local data available, keeping original draggable")
-            return dash.no_update
+    #     if not local_data:
+    #         logger.info("No local data available, keeping original draggable")
+    #         return dash.no_update
 
-        logger.info(f"Truly empty dashboard - Edit mode: {edit_mode_enabled}")
+    #     logger.info(f"Truly empty dashboard - Edit mode: {edit_mode_enabled}")
 
-        if not edit_mode_enabled:
-            logger.info("🔵 Empty dashboard + Edit mode OFF - showing welcome message")
-            # Welcome message (blue theme) - now clickable to enable edit mode
-            welcome_message = html.Div(
-                dmc.Center(
-                    dmc.Paper(
-                        [
-                            dmc.Stack(
-                                [
-                                    dmc.Center(
-                                        DashIconify(
-                                            icon="material-symbols:edit-outline",
-                                            width=64,
-                                            height=64,
-                                            color=colors["blue"],
-                                        )
-                                    ),
-                                    dmc.Text(
-                                        "Your dashboard is empty",
-                                        size="xl",
-                                        fw="bold",
-                                        ta="center",
-                                        c=colors["blue"],
-                                        style={"color": f"var(--app-text-color, {colors['blue']})"},
-                                    ),
-                                    dmc.Text(
-                                        "Enable Edit Mode to start building your dashboard",
-                                        size="md",
-                                        ta="center",
-                                        c="gray",
-                                        style={"color": "var(--app-text-color, #666)"},
-                                    ),
-                                ],
-                                gap="md",
-                                align="center",
-                            )
-                        ],
-                        p="xl",
-                        radius="lg",
-                        shadow="sm",
-                        withBorder=True,
-                        style={
-                            "backgroundColor": "var(--app-surface-color, #ffffff)",
-                            "border": f"1px solid var(--app-border-color, {colors['blue']}20)",
-                            "maxWidth": "500px",
-                            "marginTop": "2rem",
-                            "transition": "transform 0.1s ease",
-                        },
-                    ),
-                    style={
-                        "height": "50vh",
-                        "display": "flex",
-                        "alignItems": "center",
-                        "justifyContent": "center",
-                    },
-                ),
-                id="welcome-message-clickable",
-                style={"cursor": "pointer"},
-            )
-            # Create empty draggable component for callbacks
-            empty_draggable = html.Div(id="draggable")
-            return [welcome_message, empty_draggable]
-        else:
-            logger.info("🧡 Empty dashboard + Edit mode ON - showing add component message")
-            # Add component message (orange theme) - now clickable to trigger add button
-            add_component_message = html.Div(
-                dmc.Center(
-                    dmc.Paper(
-                        [
-                            dmc.Stack(
-                                [
-                                    dmc.Center(
-                                        DashIconify(
-                                            icon="material-symbols:add-circle-outline",
-                                            width=64,
-                                            height=64,
-                                            color=colors["orange"],
-                                        )
-                                    ),
-                                    dmc.Text(
-                                        "Add your first component",
-                                        size="xl",
-                                        fw="bold",
-                                        ta="center",
-                                        c=colors["orange"],
-                                        style={
-                                            "color": f"var(--app-text-color, {colors['orange']})"
-                                        },
-                                    ),
-                                    dmc.Text(
-                                        "Click here to choose from charts, tables, and more",
-                                        size="md",
-                                        ta="center",
-                                        c="gray",
-                                        style={"color": "var(--app-text-color, #666)"},
-                                    ),
-                                ],
-                                gap="md",
-                                align="center",
-                            )
-                        ],
-                        p="xl",
-                        radius="lg",
-                        shadow="sm",
-                        withBorder=True,
-                        style={
-                            "backgroundColor": "var(--app-surface-color, #ffffff)",
-                            "border": f"1px solid var(--app-border-color, {colors['orange']}20)",
-                            "maxWidth": "500px",
-                            "marginTop": "2rem",
-                            "transition": "transform 0.1s ease",
-                        },
-                    ),
-                    style={
-                        "height": "50vh",
-                        "display": "flex",
-                        "alignItems": "center",
-                        "justifyContent": "center",
-                    },
-                ),
-                id="add-component-message-clickable",
-                style={"cursor": "pointer"},
-            )
-            # Create empty draggable component for callbacks
-            empty_draggable = html.Div(id="draggable")
-            return [add_component_message, empty_draggable]
+    #     if not edit_mode_enabled:
+    #         logger.info("🔵 Empty dashboard + Edit mode OFF - showing welcome message")
+    #         # Welcome message (blue theme) - now clickable to enable edit mode
+    #         welcome_message = html.Div(
+    #             dmc.Center(
+    #                 dmc.Paper(
+    #                     [
+    #                         dmc.Stack(
+    #                             [
+    #                                 dmc.Center(
+    #                                     DashIconify(
+    #                                         icon="material-symbols:edit-outline",
+    #                                         width=64,
+    #                                         height=64,
+    #                                         color=colors["blue"],
+    #                                     )
+    #                                 ),
+    #                                 dmc.Text(
+    #                                     "Your dashboard is empty",
+    #                                     size="xl",
+    #                                     fw="bold",
+    #                                     ta="center",
+    #                                     c=colors["blue"],
+    #                                     style={"color": f"var(--app-text-color, {colors['blue']})"},
+    #                                 ),
+    #                                 dmc.Text(
+    #                                     "Enable Edit Mode to start building your dashboard",
+    #                                     size="md",
+    #                                     ta="center",
+    #                                     c="gray",
+    #                                     style={"color": "var(--app-text-color, #666)"},
+    #                                 ),
+    #                             ],
+    #                             gap="md",
+    #                             align="center",
+    #                         )
+    #                     ],
+    #                     p="xl",
+    #                     radius="lg",
+    #                     shadow="sm",
+    #                     withBorder=True,
+    #                     style={
+    #                         "backgroundColor": "var(--app-surface-color, #ffffff)",
+    #                         "border": f"1px solid var(--app-border-color, {colors['blue']}20)",
+    #                         "maxWidth": "500px",
+    #                         "marginTop": "2rem",
+    #                         "transition": "transform 0.1s ease",
+    #                     },
+    #                 ),
+    #                 style={
+    #                     "height": "50vh",
+    #                     "display": "flex",
+    #                     "alignItems": "center",
+    #                     "justifyContent": "center",
+    #                 },
+    #             ),
+    #             id="welcome-message-clickable",
+    #             style={"cursor": "pointer"},
+    #         )
+    #         # Create empty draggable component for callbacks
+    #         empty_draggable = html.Div(id="draggable")
+    #         return [welcome_message, empty_draggable]
+    #     else:
+    #         logger.info("🧡 Empty dashboard + Edit mode ON - showing add component message")
+    #         # Add component message (orange theme) - now clickable to trigger add button
+    #         add_component_message = html.Div(
+    #             dmc.Center(
+    #                 dmc.Paper(
+    #                     [
+    #                         dmc.Stack(
+    #                             [
+    #                                 dmc.Center(
+    #                                     DashIconify(
+    #                                         icon="material-symbols:add-circle-outline",
+    #                                         width=64,
+    #                                         height=64,
+    #                                         color=colors["orange"],
+    #                                     )
+    #                                 ),
+    #                                 dmc.Text(
+    #                                     "Add your first component",
+    #                                     size="xl",
+    #                                     fw="bold",
+    #                                     ta="center",
+    #                                     c=colors["orange"],
+    #                                     style={
+    #                                         "color": f"var(--app-text-color, {colors['orange']})"
+    #                                     },
+    #                                 ),
+    #                                 dmc.Text(
+    #                                     "Click here to choose from charts, tables, and more",
+    #                                     size="md",
+    #                                     ta="center",
+    #                                     c="gray",
+    #                                     style={"color": "var(--app-text-color, #666)"},
+    #                                 ),
+    #                             ],
+    #                             gap="md",
+    #                             align="center",
+    #                         )
+    #                     ],
+    #                     p="xl",
+    #                     radius="lg",
+    #                     shadow="sm",
+    #                     withBorder=True,
+    #                     style={
+    #                         "backgroundColor": "var(--app-surface-color, #ffffff)",
+    #                         "border": f"1px solid var(--app-border-color, {colors['orange']}20)",
+    #                         "maxWidth": "500px",
+    #                         "marginTop": "2rem",
+    #                         "transition": "transform 0.1s ease",
+    #                     },
+    #                 ),
+    #                 style={
+    #                     "height": "50vh",
+    #                     "display": "flex",
+    #                     "alignItems": "center",
+    #                     "justifyContent": "center",
+    #                 },
+    #             ),
+    #             id="add-component-message-clickable",
+    #             style={"cursor": "pointer"},
+    #         )
+    #         # Create empty draggable component for callbacks
+    #         empty_draggable = html.Div(id="draggable")
+    #         return [add_component_message, empty_draggable]
 
     # Make welcome message clickable to enable edit mode
     @app.callback(
@@ -3238,10 +3247,8 @@ def design_draggable(
                 ),
             ]
         )
-        display_style = "none"  # Hide the draggable layout
         core_children = [message]
     else:
-        display_style = "flex"  # Show the draggable layout
         core_children = []
 
     # logger.info(f"Init layout: {init_layout}")
@@ -3260,7 +3267,6 @@ def design_draggable(
     # Create the draggable layout using dash-dynamic-grid-layout
     # Since enable_box_edit_mode now returns DraggableWrapper components,
     # we can use them directly without additional wrapping
-    draggable_items = init_children  # These are already DraggableWrapper components
 
     # dash-dynamic-grid-layout expects: [{"i": "id", "x": 0, "y": 0, "w": 4, "h": 4}, ...]
     # We now work directly with this format
@@ -3283,24 +3289,32 @@ def design_draggable(
         for i, layout_item in enumerate(current_layout):
             logger.debug(f"🔍 GRID DEBUG - layout item {i}: {layout_item}")
 
-    draggable = dgl.DashGridLayout(
+    # draggable = dgl.DashGridLayout(
+    #     id="draggable",
+    #     items=draggable_items,
+    #     itemLayout=current_layout,
+    #     rowHeight=50,  # Larger row height for better component display
+    #     cols={"lg": 12, "md": 10, "sm": 6, "xs": 4, "xxs": 2},
+    #     showRemoveButton=False,  # Keep consistent - CSS handles visibility
+    #     showResizeHandles=True,  # Enable resize functionality for vertical growing behavior
+    #     className="draggable-grid-container",  # CSS class for styling
+    #     allowOverlap=False,
+    #     # Additional parameters to try to disable responsive scaling
+    #     autoSize=True,  # Let grid auto-size instead of using responsive breakpoints
+    #     style={
+    #         "display": display_style,
+    #         "flex-grow": 1,
+    #         "width": "100%",
+    #         "height": "auto",
+    #     },
+    # )
+
+    # Simple container for the two-panel layout
+    draggable = dmc.Container(
         id="draggable",
-        items=draggable_items,
-        itemLayout=current_layout,
-        rowHeight=50,  # Larger row height for better component display
-        cols={"lg": 12, "md": 10, "sm": 6, "xs": 4, "xxs": 2},
-        showRemoveButton=False,  # Keep consistent - CSS handles visibility
-        showResizeHandles=True,  # Enable resize functionality for vertical growing behavior
-        className="draggable-grid-container",  # CSS class for styling
-        allowOverlap=False,
-        # Additional parameters to try to disable responsive scaling
-        autoSize=True,  # Let grid auto-size instead of using responsive breakpoints
-        style={
-            "display": display_style,
-            "flex-grow": 1,
-            "width": "100%",
-            "height": "auto",
-        },
+        children=init_children,
+        fluid=True,
+        style={"width": "100%", "padding": "10px"},
     )
 
     # Create a wrapper for the draggable that can show empty state messages

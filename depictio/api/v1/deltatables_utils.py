@@ -512,8 +512,24 @@ def load_deltatable_lite(
         raise Exception("Invalid response: missing 'delta_table_location'")
 
     # Initialize the Delta table scan
-    delta_scan = pl.scan_delta(file_id, storage_options=polars_s3_config)
+    try:
+        delta_scan = pl.scan_delta(file_id, storage_options=polars_s3_config)
+    except TypeError as e:
+        if "'deltalake._internal.Schema' object is not iterable" in str(e):
+            # Compatibility fix for newer Polars versions with DeltaLake
+            logger.warning(
+                f"DeltaLake-Polars compatibility issue detected, using alternative approach: {e}"
+            )
 
+            # Alternative: Use deltalake directly then convert to polars
+            import deltalake as dl
+
+            delta_table = dl.DeltaTable(file_id, storage_options=polars_s3_config)
+            arrow_table = delta_table.to_pyarrow_table()
+            df = pl.from_arrow(arrow_table)
+            delta_scan = df.lazy()
+        else:
+            raise
     # ADAPTIVE LOADING STRATEGY
     if size_bytes == -1:
         # UNKNOWN SIZE: Use dynamic estimation approach

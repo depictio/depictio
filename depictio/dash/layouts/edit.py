@@ -495,6 +495,7 @@ def enable_box_edit_mode(
     box_uuid = f"box-{str(btn_index)}"
 
     logger.info(f"Creating DraggableWrapper with UUID: {box_uuid}")
+    switch_state = False
 
     if switch_state:
         # Create content div with embedded buttons (matching prototype pattern)
@@ -632,17 +633,19 @@ def enable_box_edit_mode(
         handleText="Drag",  # Handle text for dragging
     )
 
-    # Return with responsive-wrapper class to match working prototype pattern
-    return html.Div(
-        draggable_wrapper,
-        id=box_uuid,  # CRITICAL: Add the ID to the outer wrapper so it can be found for duplication
-        className="responsive-wrapper",  # Critical: This class makes it work!
-        style={
-            "position": "relative",
-            "width": "100%",
-            "height": "100%",
-            "display": "flex",
-            "flexDirection": "column",
-            "flex": "1",  # Critical: Allow vertical growing
-        },
-    )
+    return content_div
+
+    # # Return with responsive-wrapper class to match working prototype pattern
+    # return html.Div(
+    #     draggable_wrapper,
+    #     id=box_uuid,  # CRITICAL: Add the ID to the outer wrapper so it can be found for duplication
+    #     className="responsive-wrapper",  # Critical: This class makes it work!
+    #     style={
+    #         "position": "relative",
+    #         "width": "100%",
+    #         "height": "100%",
+    #         "display": "flex",
+    #         "flexDirection": "column",
+    #         "flex": "1",  # Critical: Allow vertical growing
+    #     },
+    # )

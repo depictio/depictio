@@ -1299,7 +1299,7 @@ def build_interactive(**kwargs):
 
     # Apply custom color if specified, otherwise let Mantine handle theming
     title_style = {
-        "marginBottom": "0.5rem",
+        "marginBottom": "0.2rem",
     }
     if color:
         title_style["color"] = color
@@ -1309,7 +1309,7 @@ def build_interactive(**kwargs):
     else:
         logger.debug("Using Mantine's native theming for title")
 
-    card_title_h5 = dmc.Text(card_title, size="md", fw="bold", style=title_style)
+    card_title_h5 = dmc.Text(card_title, size="sm", fw="bold", style=title_style)
 
     # Generate default state information for the component
     # For select-type components, pass unique values if available
@@ -1363,7 +1363,7 @@ def build_interactive(**kwargs):
             "width": "100%",
             "height": "auto",  # Use natural height, don't force 100%
             "maxWidth": "500px",
-            "padding": "10px",
+            "padding": "4px",
             "boxSizing": "border-box",
             # Center the stack within its container
             "margin": "0 auto",

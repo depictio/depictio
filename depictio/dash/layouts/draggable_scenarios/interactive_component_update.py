@@ -1,7 +1,9 @@
 import collections
 from typing import Any
 
+import dash_mantine_components as dmc
 import pandas as pd
+from dash import html
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import (
@@ -253,36 +255,36 @@ def render_raw_children(
         # Return empty results if there's an error during build
         return [], []
 
-    # Enable edit mode on the native component (no JSON conversion needed)
-    try:
-        logger.info(f"Processing {comp_type} component as native Dash component")
+    # # Enable edit mode on the native component (no JSON conversion needed)
+    # try:
+    #     logger.info(f"Processing {comp_type} component as native Dash component")
 
-        # Pass the native component directly to enable_box_edit_mode
-        # This preserves dcc.Loading wrappers and eliminates JSON conversion overhead
-        child = enable_box_edit_mode(
-            child,  # Native Dash component
-            switch_state=switch_state,
-            dashboard_id=dashboard_id,
-            component_data=component,
-            TOKEN=TOKEN,
-        )
-    except Exception as e:
-        logger.error(f"Error processing {comp_type} component in interactive update: {e}")
-        # Fallback to prevent dashboard failure
-        fallback_child = {
-            "type": "Div",
-            "props": {
-                "id": {"index": component.get("index", "unknown")},
-                "children": f"Error loading {comp_type} component",
-            },
-        }
-        child = enable_box_edit_mode(
-            fallback_child,
-            switch_state=switch_state,
-            dashboard_id=dashboard_id,
-            component_data=component,
-            TOKEN=TOKEN,
-        )
+    #     # Pass the native component directly to enable_box_edit_mode
+    #     # This preserves dcc.Loading wrappers and eliminates JSON conversion overhead
+    #     child = enable_box_edit_mode(
+    #         child,  # Native Dash component
+    #         switch_state=switch_state,
+    #         dashboard_id=dashboard_id,
+    #         component_data=component,
+    #         TOKEN=TOKEN,
+    #     )
+    # except Exception as e:
+    #     logger.error(f"Error processing {comp_type} component in interactive update: {e}")
+    #     # Fallback to prevent dashboard failure
+    #     fallback_child = {
+    #         "type": "Div",
+    #         "props": {
+    #             "id": {"index": component.get("index", "unknown")},
+    #             "children": f"Error loading {comp_type} component",
+    #         },
+    #     }
+    #     child = enable_box_edit_mode(
+    #         fallback_child,
+    #         switch_state=switch_state,
+    #         dashboard_id=dashboard_id,
+    #         component_data=component,
+    #         TOKEN=TOKEN,
+    #     )
 
     # Append the processed child
     children.append(child)
@@ -509,35 +511,53 @@ def update_interactive_component_sync(
             )
 
             # Pass the native component directly - preserves Loading wrappers and improves performance
-            child = enable_box_edit_mode(
-                child,  # Native Dash component
-                switch_state=switch_state,
-                dashboard_id=dashboard_id,
-                TOKEN=TOKEN,
-            )
+            # child = enable_box_edit_mode(
+            #     child,  # Native Dash component
+            #     switch_state=switch_state,
+            #     dashboard_id=dashboard_id,
+            #     TOKEN=TOKEN,
+            # )
 
             if component["component_type"] == "text":
                 logger.info(f"DEBUG text component {child.id} with content: {child}")
 
-            # except Exception as e:
-            #     logger.error(
-            #         f"Error processing {component['component_type']} component (line 460 path): {e}"
-            #     )
-            #     # Fallback to prevent dashboard failure
-            #     fallback_child = {
-            #         "type": "Div",
-            #         "props": {
-            #             "id": {"index": component.get("index", "unknown")},
-            #             "children": f"Error loading {component['component_type']} component",
-            #         },
-            #     }
-            #     child = enable_box_edit_mode(
-            #         fallback_child,
-            #         switch_state=switch_state,
-            #         dashboard_id=dashboard_id,
-            #         TOKEN=TOKEN,
-            #     )
-            children.append(child)
+            # Wrap child in a visible frame with fixed dimensions
+            component_type = component.get("component_type", "")
+
+            # Define sizes based on component type
+            if component_type == "interactive":
+                width = "100%"
+                min_height = "100px"
+                max_height = "150px"
+            elif component_type == "card":
+                width = "220px"  # Fixed width for cards to fit 4 in a row
+                min_height = "100px"
+                max_height = "140px"
+            elif component_type == "figure":
+                width = "100%"
+                min_height = "300px"
+                max_height = "500px"
+            else:
+                width = "100%"
+                min_height = "200px"
+                max_height = "400px"
+
+            framed_child = dmc.Paper(
+                children=child,
+                p="sm",
+                radius="md",
+                withBorder=True,
+                style={
+                    "border": "2px solid #339af0",
+                    "borderRadius": "8px",
+                    "width": width,
+                    "height": "auto",
+                    "minHeight": min_height,
+                    "maxHeight": max_height,
+                    "overflow": "visible",
+                },
+            )
+            children.append(framed_child)
 
         elif component["component_type"] == "jbrowse":
             component["stored_metadata_jbrowse"] = stored_metadata_jbrowse_components
@@ -564,6 +584,65 @@ def update_interactive_component_sync(
             children.append(child)
         # logger.info(f"ITERATIVE - len(children) - {len(children)}")
 
+    # Separate interactive components from others
+    interactive_children = []
+    other_children = []
+
+    for i, component in enumerate(stored_metadata):
+        if i < len(children):
+            if component.get("component_type") == "interactive":
+                interactive_children.append(children[i])
+            else:
+                other_children.append(children[i])
+
+    # Create left panel for interactive components
+    left_panel = dmc.Paper(
+        children=dmc.Stack(children=interactive_children, gap="md"),
+        p="md",
+        radius="md",
+        withBorder=True,
+        style={
+            "width": "100%",
+            "minHeight": "400px",
+            "overflowY": "auto",
+            "backgroundColor": "var(--app-surface-color, #f8f9fa)",
+        },
+    )
+
+    # Create right panel for other components with horizontal wrapping layout
+    right_panel = dmc.Paper(
+        children=dmc.Group(
+            children=other_children,
+            gap="md",
+            justify="flex-start",
+            align="flex-start",
+            style={"flexWrap": "wrap"}
+        ),
+        p="md",
+        radius="md",
+        withBorder=True,
+        style={
+            "width": "100%",
+            "minHeight": "400px",
+            "overflowY": "auto",
+            "backgroundColor": "var(--app-surface-color, #ffffff)",
+        },
+    )
+
+    # Create two-column layout with fixed left panel and growing right panel
+    two_panel_layout = html.Div(
+        children=[
+            html.Div(left_panel, style={"width": "400px", "flexShrink": 0}),
+            html.Div(right_panel, style={"flex": "1 1 auto", "minWidth": 0}),
+        ],
+        style={
+            "width": "100%",
+            "display": "flex",
+            "flexDirection": "row",
+            "gap": "16px",
+        },
+    )
+
     # logger.info(f"Len children - {len(children)}")
-    # logger.info(f"Children - {children}")
-    return children
+    # logger.info(f"Interactive children: {len(interactive_children)}, Other children: {len(other_children)}")
+    return [two_panel_layout]
