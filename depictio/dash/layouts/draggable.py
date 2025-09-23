@@ -12,10 +12,6 @@ from depictio.api.v1.configs.logging_init import logger
 # Import centralized component dimensions from metadata
 from depictio.dash.component_metadata import get_component_dimensions_dict
 from depictio.dash.layouts.draggable_scenarios.add_component import add_new_component
-from depictio.dash.layouts.draggable_scenarios.graphs_interactivity import (
-    refresh_children_based_on_click_data,
-    refresh_children_based_on_selected_data,
-)
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import (
     render_raw_children,
     # update_interactive_component_async,

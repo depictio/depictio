@@ -616,7 +616,7 @@ def update_interactive_component_sync(
             gap="md",
             justify="flex-start",
             align="flex-start",
-            style={"flexWrap": "wrap"}
+            style={"flexWrap": "wrap"},
         ),
         p="md",
         radius="md",
