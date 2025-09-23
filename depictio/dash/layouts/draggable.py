@@ -3013,37 +3013,35 @@ def register_callbacks_draggable(app):
             welcome_message = html.Div(
                 dmc.Center(
                     dmc.Paper(
-                        [
-                            dmc.Stack(
-                                [
-                                    dmc.Center(
-                                        DashIconify(
-                                            icon="material-symbols:edit-outline",
-                                            width=64,
-                                            height=64,
-                                            color=colors["blue"],
-                                        )
-                                    ),
-                                    dmc.Text(
-                                        "Your dashboard is empty",
-                                        size="xl",
-                                        fw="bold",
-                                        ta="center",
-                                        c=colors["blue"],
-                                        style={"color": f"var(--app-text-color, {colors['blue']})"},
-                                    ),
-                                    dmc.Text(
-                                        "Enable Edit Mode to start building your dashboard",
-                                        size="md",
-                                        ta="center",
-                                        c="gray",
-                                        style={"color": "var(--app-text-color, #666)"},
-                                    ),
-                                ],
-                                gap="md",
-                                align="center",
-                            )
-                        ],
+                        dmc.Stack(
+                            [
+                                dmc.Center(
+                                    DashIconify(
+                                        icon="material-symbols:edit-outline",
+                                        width=64,
+                                        height=64,
+                                        color=colors["blue"],
+                                    )
+                                ),
+                                dmc.Text(
+                                    "Your dashboard is empty",
+                                    size="xl",
+                                    fw="bold",
+                                    ta="center",
+                                    c=colors["blue"],
+                                    style={"color": f"var(--app-text-color, {colors['blue']})"},
+                                ),
+                                dmc.Text(
+                                    "Enable Edit Mode to start building your dashboard",
+                                    size="md",
+                                    ta="center",
+                                    c="gray",
+                                    style={"color": "var(--app-text-color, #666)"},
+                                ),
+                            ],
+                            gap="md",
+                            align="center",
+                        ),
                         p="xl",
                         radius="lg",
                         shadow="sm",
@@ -3075,39 +3073,35 @@ def register_callbacks_draggable(app):
             add_component_message = html.Div(
                 dmc.Center(
                     dmc.Paper(
-                        [
-                            dmc.Stack(
-                                [
-                                    dmc.Center(
-                                        DashIconify(
-                                            icon="material-symbols:add-circle-outline",
-                                            width=64,
-                                            height=64,
-                                            color=colors["orange"],
-                                        )
-                                    ),
-                                    dmc.Text(
-                                        "Add your first component",
-                                        size="xl",
-                                        fw="bold",
-                                        ta="center",
-                                        c=colors["orange"],
-                                        style={
-                                            "color": f"var(--app-text-color, {colors['orange']})"
-                                        },
-                                    ),
-                                    dmc.Text(
-                                        "Click here to choose from charts, tables, and more",
-                                        size="md",
-                                        ta="center",
-                                        c="gray",
-                                        style={"color": "var(--app-text-color, #666)"},
-                                    ),
-                                ],
-                                gap="md",
-                                align="center",
-                            )
-                        ],
+                        dmc.Stack(
+                            [
+                                dmc.Center(
+                                    DashIconify(
+                                        icon="tabler:square-plus",
+                                        width=64,
+                                        height=64,
+                                        color=colors["orange"],
+                                    )
+                                ),
+                                dmc.Text(
+                                    "Add your first component",
+                                    size="xl",
+                                    fw="bold",
+                                    ta="center",
+                                    c=colors["orange"],
+                                    style={"color": f"var(--app-text-color, {colors['orange']})"},
+                                ),
+                                dmc.Text(
+                                    "Click here to choose from charts, tables, and more",
+                                    size="md",
+                                    ta="center",
+                                    c="gray",
+                                    style={"color": "var(--app-text-color, #666)"},
+                                ),
+                            ],
+                            gap="md",
+                            align="center",
+                        ),
                         p="xl",
                         radius="lg",
                         shadow="sm",
@@ -3197,82 +3191,135 @@ def design_draggable(
     project = Project.from_mongo(project_json)
     # logger.info(f"design_draggable - Project: {project}")
     workflows = project.workflows
-    delta_table_locations = []
+    data_available = False  # Track if any data (DeltaTables or MultiQC) is available
 
-    # Collect all data collection IDs for batch checking
-    all_dc_ids = []
+    # Collect all data collections by type
+    deltatable_dc_ids = []
+    multiqc_dc_ids = []
     for wf in workflows:
         for dc in wf.data_collections:
-            all_dc_ids.append(str(dc.id))
+            dc_type = dc.config.type if dc.config else None
+            if dc_type == "multiqc":
+                multiqc_dc_ids.append(str(dc.id))
+            else:
+                # All non-multiqc types use deltatables
+                deltatable_dc_ids.append(str(dc.id))
 
-    if all_dc_ids:
+    # Check for DeltaTables
+    if deltatable_dc_ids:
         # Single batch API call to check deltatable existence
-        logger.info(f"🚀 DESIGN_DRAGGABLE: Batch checking {len(all_dc_ids)} deltatables")
+        logger.info(f"🚀 DESIGN_DRAGGABLE: Batch checking {len(deltatable_dc_ids)} deltatables")
         try:
             batch_response = httpx.post(
                 f"{API_BASE_URL}/depictio/api/v1/deltatables/batch/exists",
                 headers={"Authorization": f"Bearer {TOKEN}"},
-                json=all_dc_ids,
+                json=deltatable_dc_ids,
             )
             if batch_response.status_code == 200:
                 batch_results = batch_response.json()
                 for dc_id, result in batch_results.items():
                     if result.get("exists") and result.get("delta_table_location"):
-                        delta_table_locations.append(result["delta_table_location"])
+                        data_available = True
                         logger.info(f"✅ Delta table found: {result['delta_table_location']}")
                     else:
                         logger.warning(f"⚠️  No deltatable found for data collection '{dc_id}'")
-                logger.info(
-                    f"✅ Batch check complete: {len(delta_table_locations)} deltatables found"
-                )
+                logger.info(f"✅ Batch deltatable check complete: data_available={data_available}")
             else:
                 logger.error(f"❌ Batch deltatable check failed: {batch_response.text}")
         except Exception as e:
             logger.error(f"❌ Batch deltatable check exception: {e}")
             # Fallback to individual checks if batch fails
             logger.warning("🔄 Falling back to individual deltatable checks")
-            for wf in workflows:
-                for dc in wf.data_collections:
-                    try:
-                        response = httpx.get(
-                            f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{str(dc.id)}",
-                            headers={"Authorization": f"Bearer {TOKEN}"},
-                        )
-                        if response.status_code == 200:
-                            delta_table_location = response.json()["delta_table_location"]
-                            delta_table_locations.append(delta_table_location)
-                    except Exception as fallback_e:
-                        logger.error(f"❌ Fallback check failed for {dc.id}: {fallback_e}")
-    # logger.info(f"Delta table locations: {delta_table_locations}")
+            for dc_id in deltatable_dc_ids:
+                try:
+                    response = httpx.get(
+                        f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{dc_id}",
+                        headers={"Authorization": f"Bearer {TOKEN}"},
+                    )
+                    if response.status_code == 200:
+                        data_available = True
+                        logger.info(f"✅ Delta table found via fallback for {dc_id}")
+                except Exception as fallback_e:
+                    logger.error(f"❌ Fallback deltatable check failed for {dc_id}: {fallback_e}")
 
-    if len(delta_table_locations) == 0:
+    # Check for MultiQC data
+    if multiqc_dc_ids and not data_available:  # Only check if no deltatables found
+        logger.info(f"🧬 DESIGN_DRAGGABLE: Checking {len(multiqc_dc_ids)} MultiQC collections")
+        for dc_id in multiqc_dc_ids:
+            try:
+                response = httpx.get(
+                    f"{API_BASE_URL}/depictio/api/v1/multiqc/reports/data-collection/{dc_id}",
+                    headers={"Authorization": f"Bearer {TOKEN}"},
+                    params={"limit": 1},  # Just check if any reports exist
+                )
+                if response.status_code == 200:
+                    result = response.json()
+                    if result.get("total_count", 0) > 0:
+                        data_available = True
+                        logger.info(f"✅ MultiQC reports found for data collection '{dc_id}'")
+                        break  # At least one MultiQC collection has data
+                    else:
+                        logger.warning(f"⚠️  No MultiQC reports for data collection '{dc_id}'")
+            except Exception as e:
+                logger.error(f"❌ MultiQC check failed for {dc_id}: {e}")
+
+    logger.info(f"📊 DESIGN_DRAGGABLE: Final data availability check: {data_available}")
+
+    if not data_available:
         # When there are no workflows, log information and prepare a message
         # logger.info(f"init_children {init_children}")
         # logger.info(f"init_layout {init_layout}")
         # message = html.Div(["No workflows available."])
         message = html.Div(
-            [
-                html.Hr(),
-                dmc.Center(
-                    dmc.Group(
+            dmc.Center(
+                dmc.Paper(
+                    dmc.Stack(
                         [
-                            DashIconify(icon="feather:info", color="red", width=40),
-                            dmc.Text(
-                                "No data available.",
-                                variant="gradient",
-                                gradient={"from": "red", "to": "orange", "deg": 45},
-                                style={"fontSize": 30, "textAlign": "center"},
+                            dmc.Center(
+                                DashIconify(
+                                    icon="tabler:database-off",
+                                    width=64,
+                                    height=64,
+                                    color=colors["red"],
+                                )
                             ),
-                        ]
-                    )
+                            dmc.Text(
+                                "No data available",
+                                size="xl",
+                                fw="bold",
+                                ta="center",
+                                c=colors["red"],
+                                style={"color": f"var(--app-text-color, {colors['red']})"},
+                            ),
+                            dmc.Text(
+                                "Please first register workflows and data using Depictio CLI",
+                                size="md",
+                                ta="center",
+                                c="gray",
+                                style={"color": "var(--app-text-color, #666)"},
+                            ),
+                        ],
+                        gap="md",
+                        align="center",
+                    ),
+                    p="xl",
+                    radius="lg",
+                    shadow="sm",
+                    withBorder=True,
+                    style={
+                        "backgroundColor": "var(--app-surface-color, #ffffff)",
+                        "border": f"1px solid var(--app-border-color, {colors['red']}20)",
+                        "maxWidth": "500px",
+                        "marginTop": "2rem",
+                    },
                 ),
-                dmc.Text(
-                    "Please first register workflows and data using Depictio CLI.",
-                    variant="gradient",
-                    gradient={"from": "red", "to": "orange", "deg": 45},
-                    style={"fontSize": 25, "textAlign": "center"},
-                ),
-            ]
+                style={
+                    "height": "50vh",
+                    "display": "flex",
+                    "alignItems": "center",
+                    "justifyContent": "center",
+                },
+            )
         )
         display_style = "none"  # Hide the draggable layout
         core_children = [message]
