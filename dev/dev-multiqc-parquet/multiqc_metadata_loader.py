@@ -7,30 +7,23 @@ Extracts metadata from the MultiQC metadata JSON for proper table configuration
 import collections
 import json
 import re
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
+
+import pandas as pd
+import yaml
 
 
 def load_multiqc_config_defaults():
-    """Load default config values from MultiQC config schema"""
-    config_schema_path = "/Users/tweber/Gits/workspaces/MultiQC-MegaQC/multiqc_latest/multiqc/utils/config_schema.json"
+    """Load default config values from MultiQC config_defaults.yaml"""
+    config_defaults_path = "/Users/tweber/Gits/workspaces/MultiQC-MegaQC/multiqc_latest/multiqc/config_defaults.yaml"
 
-    # Default values based on config schema
-    default_config = {
-        "base_count_prefix": None,
-        "read_count_prefix": None,
-        "long_read_count_prefix": None,
-    }
+    default_config = {}
 
     try:
-        with open(config_schema_path, "r") as f:
-            schema = json.load(f)
-            properties = schema.get("properties", {})
-
-            for key in default_config.keys():
-                if key in properties:
-                    default_config[key] = properties[key].get("default", None)
+        with open(config_defaults_path, "r") as f:
+            default_config = yaml.safe_load(f) or {}
     except Exception as e:
-        print(f"Warning: Could not load config schema: {e}")
+        print(f"Warning: Could not load config defaults from YAML: {e}")
 
     return default_config
 
@@ -73,6 +66,35 @@ def resolve_config_expressions(title: str, config: Dict[str, Any] = None) -> str
     title = title.strip()
 
     return title
+
+
+def apply_modify_function(value, modify_str: str, config: Dict[str, Any] = None):
+    """Apply a modify function from metadata to a value.
+
+    Args:
+        value: The value to modify
+        modify_str: The modify function as a string (e.g., "lambda x: x * 100.0")
+        config: Config values to use in the lambda function
+
+    Returns:
+        Modified value
+    """
+    if not modify_str or value is None or pd.isna(value):
+        return value
+
+    if config is None:
+        config = load_multiqc_config_defaults()
+
+    try:
+        # Create a safe namespace with config values
+        namespace = {"config": type('Config', (), config), "pd": pd}
+        # Evaluate the lambda function
+        modify_func = eval(modify_str, namespace)
+        # Apply to the value
+        return modify_func(value)
+    except Exception as e:
+        print(f"Warning: Could not apply modify function '{modify_str}': {e}")
+        return value
 
 
 class MultiQCMetadataLoader:
@@ -156,14 +178,16 @@ class MultiQCMetadataLoader:
         headers = self.get_all_module_headers()
 
         mappings = collections.defaultdict(dict)
-        i = 0
         for module_name, module_headers in headers.items():
-            if module_name in ["fastp"]:
-                for column_key, config in module_headers.items():
+            # Process all modules, not just fastp
+            for column_key, config in module_headers.items():
 
                     # Resolve config expressions in title
                     title = config.get("title", column_key)
                     resolved_title = resolve_config_expressions(title)
+
+                    # Include modify function if present
+                    modify_str = config.get("modify", None)
 
                     mappings[module_name][column_key] = {
                         "title": resolved_title,
@@ -174,13 +198,8 @@ class MultiQCMetadataLoader:
                         "min": config.get("min", None),
                         "max": config.get("max", None),
                         "hidden": config.get("hidden", False),
+                        "modify": modify_str,  # Store modify function as string
                     }
-                i += 1
-                # if i == 10:
-                #     break
-
-        from pprint import pprint
-        # pprint(mappings)
         return mappings
 
 

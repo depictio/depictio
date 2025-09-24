@@ -17,21 +17,17 @@ import plotly.graph_objects as go
 import polars as pl
 from dash import Dash, Input, Output, dash_table, dcc
 from dash.dash_table.Format import Format, Symbol
-from multiqc_metadata_loader import MultiQCMetadataLoader, resolve_config_expressions
+from matplotlib import colormaps
+from multiqc_metadata_loader import (
+    MultiQCMetadataLoader,
+    apply_modify_function,
+    load_multiqc_config_defaults,
+    resolve_config_expressions,
+)
 
-# Fix matplotlib deprecation warning
-try:
-    # Try new API first (matplotlib >= 3.7)
-    from matplotlib import colormaps
 
-    def get_colormap(name):
-        return colormaps[name]
-except ImportError:
-    # Fallback to old API
-    from matplotlib.cm import get_cmap
-
-    def get_colormap(name):
-        return get_cmap(name)
+def get_colormap(name):
+    return colormaps[name]
 
 
 def sanitize_column_name(name):
@@ -112,14 +108,22 @@ def process_multiqc_data(parquet_path, metadata_path):
     # Apply column mapping
     df_multiqc_real = df_pivot.rename(columns=column_mapping)
 
-    # Selectively convert 0-1 percentage columns to 0-100 for consistent display
-    # Only convert specific columns that are known to be in 0-1 format
+    # Apply modify functions from metadata to transform values
+    config_values = load_multiqc_config_defaults()
+
     for orig_col, display_name in column_mapping.items():
-        if display_name in percentage_columns and display_name in df_multiqc_real.columns:
-            # Check if this specific column needs conversion (0-1 to 0-100)
-            # These specific fastp columns are known to be in 0-1 format
-            if orig_col in ['after_filtering_gc_content', 'after_filtering_q30_rate']:
-                df_multiqc_real[display_name] = df_multiqc_real[display_name] * 100
+        if display_name in df_multiqc_real.columns and orig_col != "sample":
+            # Find the modify function for this column in metadata
+            modify_str = None
+            for tool in tools:
+                if tool in column_metadata and orig_col in column_metadata[tool]:
+                    modify_str = column_metadata[tool][orig_col].get("modify", None)
+                    if modify_str:
+                        # Apply modify function to the entire column
+                        df_multiqc_real[display_name] = df_multiqc_real[display_name].apply(
+                            lambda x: apply_modify_function(x, modify_str, config_values)
+                        )
+                    break
 
     # Auto-format large numbers (>1M) to millions using metadata
     for col in df_multiqc_real.columns:
@@ -272,13 +276,14 @@ def multiqc_data_bars_colormap(
 # =============================================================================
 
 
-def create_multiqc_violin_plot(df_general_stats, metadata_loader):
+def create_multiqc_violin_plot(df_general_stats, reformatted_column_metadata, display_to_original_mapping=None):
     """
     Create MultiQC-style violin plot from general stats DataFrame.
 
     Args:
         df_general_stats: DataFrame from parquet with general_stats_table anchor
-        metadata_loader: MultiQCMetadataLoader instance
+        reformatted_column_metadata: dict mapping display column names to tool names
+        display_to_original_mapping: dict mapping display column names to original column names
 
     Returns:
         Plotly figure object
@@ -287,7 +292,8 @@ def create_multiqc_violin_plot(df_general_stats, metadata_loader):
     VIOLIN_HEIGHT = 70  # Exact from MultiQC
     EXTRA_HEIGHT = 63  # Exact from MultiQC
 
-    # Get unique metrics (column names) - excluding Sample Name
+    
+    # # Get unique metrics (column names) - excluding Sample Name - combination with tool name
     metrics = [col for col in df_general_stats.columns if col != "Sample Name"]
 
     # Handle case where no metrics are available
@@ -407,11 +413,25 @@ def create_multiqc_violin_plot(df_general_stats, metadata_loader):
         layout[f"xaxis{metric_idx + 1}"] = x_axis_config
 
         # Configure Y-axis with metric label (Module name from data)
-        # Use generic module name since we don't have access to raw metrics data
-        module_name = "MultiQC"
+        # Try to get the module name using the proper mapping
+        module_name = "Unknown Tool"
+
+        # First try direct lookup with display name
+        if metric in reformatted_column_metadata:
+            module_name = reformatted_column_metadata[metric]
+        # If we have display-to-original mapping, try that
+        elif display_to_original_mapping and metric in display_to_original_mapping:
+            original_name = display_to_original_mapping[metric]
+            # Look up the original name in reformatted_column_metadata
+            module_name = reformatted_column_metadata.get(original_name, "Unknown Tool")
+
+        # Clean up module name (capitalize first letter, replace underscores)
+        if module_name != "Unknown Tool":
+            module_name = module_name.replace("_", " ").title()
 
         # Create label with module name and metric on separate lines
-        label_text = f"{module_name}<br>{metric}"
+        label_text = f"{metric}"
+        # label_text = f"{module_name}<br>{metric}"
 
         layout[f"yaxis{metric_idx + 1}"] = {
             "automargin": True,
@@ -687,16 +707,20 @@ def create_multiqc_table_component(df_data, all_styles, column_display_mapping=N
     )
 
 
-def create_multiqc_violin_component(df_data, metadata_loader):
+def create_multiqc_violin_component(df_data, reformatted_column_metadata, display_to_original_mapping=None):
     """Create MultiQC violin plot component."""
-    violin_fig = create_multiqc_violin_plot(df_data, metadata_loader)
+    violin_fig = create_multiqc_violin_plot(df_data, reformatted_column_metadata, display_to_original_mapping)
     return dcc.Graph(figure=violin_fig, config={"displayModeBar": False})
 
 
-def create_multiqc_dashboard(df_display_data, df_numeric_data, metadata_loader, all_styles, internal_to_display):
+def create_multiqc_dashboard(df_display_data, df_numeric_data, reformatted_column_metadata, all_styles, internal_to_display):
     """Create complete MultiQC dashboard with toggle."""
     table_component = create_multiqc_table_component(df_display_data, all_styles, internal_to_display)
-    violin_component = create_multiqc_violin_component(df_numeric_data, metadata_loader)
+
+    # Create display to original mapping from internal_to_display
+    display_to_original_mapping = {v: k for k, v in internal_to_display.items()} if internal_to_display else None
+
+    violin_component = create_multiqc_violin_component(df_numeric_data, reformatted_column_metadata, display_to_original_mapping)
 
     return dmc.Stack(
         [
@@ -733,10 +757,17 @@ def create_app(parquet_path, metadata_path, port=8052):
     # Create Dash app
     app = Dash(__name__)
 
-    # Create components (use column identity mapping)
+    # Create components - need to create proper mapping for violin component
+    # Map original column names to tool names
+    original_to_tool_mapping = {col: tool for tool, cols in column_metadata.items() for col in cols}
+    print(f"Original to tool mapping: {original_to_tool_mapping}")
+
+    # Create display to original mapping from internal_to_display
+    display_to_original_mapping = {v: k for k, v in internal_to_display.items()} if internal_to_display else None
+
     table_component = create_multiqc_table_component(df_for_display, all_styles, {}, percentage_columns, column_formats)
-    violin_component = create_multiqc_violin_component(df_for_display, metadata_loader)
-    dashboard = create_multiqc_dashboard(df_for_display, df_for_display, metadata_loader, all_styles, internal_to_display)
+    violin_component = create_multiqc_violin_component(df_for_display, original_to_tool_mapping, display_to_original_mapping)
+    dashboard = create_multiqc_dashboard(df_for_display, df_for_display, original_to_tool_mapping, all_styles, internal_to_display)
 
     # Set app layout
     app.layout = dmc.MantineProvider(dmc.Container(dashboard, p="md"))
@@ -801,7 +832,12 @@ def get_multiqc_table_component(df_data, metadata_loader, internal_to_display=No
 
 def get_multiqc_violin_component(df_data, metadata_loader):
     """Get standalone MultiQC violin plot component (no app required)."""
-    return create_multiqc_violin_component(df_data, metadata_loader)
+    # For standalone use, create identity mapping
+    column_metadata = metadata_loader.get_all_column_mappings()
+    original_to_tool_mapping = {col: tool for tool, cols in column_metadata.items() for col in cols}
+    print(f"Original to tool mapping: {original_to_tool_mapping}")
+
+    return create_multiqc_violin_component(df_data, original_to_tool_mapping)
 
 
 def get_multiqc_dashboard_component(df_data, metadata_loader):
@@ -837,7 +873,9 @@ def get_multiqc_dashboard_component(df_data, metadata_loader):
 
     # Create internal_to_display mapping
     internal_to_display = {col: col for col in df_data.columns}
-    return create_multiqc_dashboard(df_data, df_data, metadata_loader, all_styles, internal_to_display)
+
+
+    return create_multiqc_dashboard(df_data, df_data, original_to_tool_mapping, all_styles, internal_to_display)
 
 
 def parse_arguments():
