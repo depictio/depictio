@@ -4,8 +4,10 @@ MultiQC Components - Clean DMC Implementation
 Modular components for MultiQC table and violin plot with DMC styling
 """
 
+import argparse
 import collections
 import re
+import sys
 
 import dash_mantine_components as dmc
 import matplotlib.colors as mcolors
@@ -45,90 +47,87 @@ def sanitize_column_name(name):
     return sanitized
 
 
-# =============================================================================
-# 1. LOAD METADATA AND PROCESS DATA FROM PARQUET
-# =============================================================================
+def process_multiqc_data(parquet_path, metadata_path):
+    """Process MultiQC parquet data and return formatted DataFrames."""
+    # Load MultiQC metadata
+    metadata_loader = MultiQCMetadataLoader(metadata_path)
+    column_metadata = metadata_loader.get_all_column_mappings()
 
-# Load MultiQC metadata
-metadata_path = "/Users/tweber/Gits/workspaces/depictio-workspace/depictio/dev/dev-multiqc-parquet/multiqc_metadata_extraction.json"
-metadata_loader = MultiQCMetadataLoader(metadata_path)
-column_metadata = metadata_loader.get_all_column_mappings()
+    # Load the parquet file
+    df_raw = pl.read_parquet(parquet_path)
 
-print("=== MultiQC Metadata Loaded ===")
-# Display all available columns regardless of hidden status
+    # Filter for general stats table data and convert to pandas
+    df_general_stats = df_raw.filter(pl.col("anchor") == "general_stats_table")
+    df_explore = df_general_stats.to_pandas()
 
-# Load the parquet file
-df_raw = pl.read_parquet(
-    "/Users/tweber/Gits/workspaces/MultiQC-MegaQC/MultiQC_TestData/multiqc_output_fastp_v1_31_0/multiqc_data/multiqc.parquet"
-)
+    # Filter to just the data rows (not metadata rows)
+    df_metrics = df_explore[df_explore["type"] == "plot_input_row"].copy()
 
-# Filter for general stats table data and convert to pandas
-df_general_stats = df_raw.filter(pl.col("anchor") == "general_stats_table")
-df_explore = df_general_stats.to_pandas()
+    # Pivot the data to get samples as rows and metrics as columns
+    df_pivot = df_metrics.pivot_table(
+        index="sample", columns="metric", values="val_raw", aggfunc="first"
+    ).reset_index()
 
-# Filter to just the data rows (not metadata rows)
-df_metrics = df_explore[df_explore["type"] == "plot_input_row"].copy()
+    tools = df_metrics["section_key"].unique()
 
-# Pivot the data to get samples as rows and metrics as columns
-df_pivot = df_metrics.pivot_table(
-    index="sample", columns="metric", values="val_raw", aggfunc="first"
-).reset_index()
-# Tools used 
-tools = df_metrics["section_key"].unique()
+    # Create unified column mapping using metadata
+    column_mapping = {}
+    percentage_columns = []
 
-# Create column mapping using metadata titles
-column_mapping = collections.defaultdict(dict)
-
-
-# Handle all columns that exist in both data and metadata
-for tool in tools:
-    print(f"\n=== Processing tool: {tool} ===")
-    for key, config in column_metadata[tool].items():
-        if key in df_pivot.columns:
-            # Use actual metadata title
-            display_title = config["title"]
-            # Add suffix to title if it exists
-            # if config["suffix"]:
-            #     display_title += f" ({config['suffix'].strip()})"
-            column_mapping[tool][key] = display_title
-            print(f"Mapped metadata column: {key} -> {display_title}")
-
-# Handle any remaining columns not in metadata
-for tool in tools:
+    # Process each column in the pivoted data
     for col in df_pivot.columns:
-        if col not in column_mapping[tool] and col != "sample":
-            # Create a readable title from the metric name
-            display_title = col.replace("_", " ").title()
-            # Handle common patterns
-            if "pct_" in col:
-                display_title = display_title.replace("Pct ", "") + " (%)"
-            elif "rate" in col.lower():
-                display_title = display_title + " (%)"
-            elif "content" in col.lower():
-                display_title = display_title + " (%)"
+        if col == "sample":
+            column_mapping[col] = "Sample Name"
+            continue
 
-            column_mapping[tool][col] = display_title
-            print(f"Unmapped column: {col} -> {display_title}")
+        # Find metadata for this column across all tools
+        display_name = None
+        config = None
 
-        elif col == "sample":
-            column_mapping[tool][col] = "Sample Name"
-print(df_pivot)
-print(column_mapping[tool])
-df_multiqc_real = df_pivot.rename(columns=column_mapping[tool])
-print(df_multiqc_real)
+        for tool in tools:
+            if tool in column_metadata and col in column_metadata[tool]:
+                config = column_metadata[tool][col]
+                display_name = config["title"]
+                # Apply suffix from metadata
+                if config["suffix"] and not display_name.endswith(f" ({config['suffix']})"):
+                    display_name = f"{display_name} ({config['suffix']})"
+                break
 
-# Auto-format large numbers (>1M) to millions for any column
-columns_to_process = list(df_multiqc_real.columns)
-for tool in tools:
-    for col in columns_to_process:
+        # Fallback for columns not in metadata
+        if display_name is None:
+            display_name = col.replace("_", " ").title()
+            # Auto-detect percentage columns by name patterns
+            if "pct_" in col or "rate" in col.lower() or "content" in col.lower():
+                if not display_name.endswith(" (%))"):
+                    display_name = display_name.replace("Pct ", "") + " (%)"
+
+        column_mapping[col] = display_name
+
+        # Track percentage columns based on metadata suffix
+        if config and config["suffix"] == "%":
+            percentage_columns.append(display_name)
+        elif display_name.endswith(" (%)"):
+            percentage_columns.append(display_name)
+
+    # Apply column mapping
+    df_multiqc_real = df_pivot.rename(columns=column_mapping)
+
+    # Selectively convert 0-1 percentage columns to 0-100 for consistent display
+    # Only convert specific columns that are known to be in 0-1 format
+    for orig_col, display_name in column_mapping.items():
+        if display_name in percentage_columns and display_name in df_multiqc_real.columns:
+            # Check if this specific column needs conversion (0-1 to 0-100)
+            # These specific fastp columns are known to be in 0-1 format
+            if orig_col in ['after_filtering_gc_content', 'after_filtering_q30_rate']:
+                df_multiqc_real[display_name] = df_multiqc_real[display_name] * 100
+
+    # Auto-format large numbers (>1M) to millions using metadata
+    for col in df_multiqc_real.columns:
         if col != "Sample Name" and df_multiqc_real[col].dtype in ["int64", "float64"]:
-            # Check if column values are generally >1M
-            col_mean = df_multiqc_real[col].mean()
-            if col_mean > 1_000_000:
-                # Create millions column - if it already has units in parentheses, update them
+            if df_multiqc_real[col].mean() > 1_000_000:
+                # Remove existing suffix and add millions suffix
                 if "(" in col and col.endswith(")"):
-                    # Replace existing units with millions
-                    base_name = col[: col.rfind("(")].strip()
+                    base_name = col[:col.rfind("(")].strip()
                     millions_col = f"{base_name} (M)"
                 else:
                     millions_col = f"{col} (M)"
@@ -136,90 +135,40 @@ for tool in tools:
                 df_multiqc_real[millions_col] = (df_multiqc_real[col] / 1_000_000).round(2)
                 df_multiqc_real = df_multiqc_real.drop(columns=[col])
 
-                # Update column mapping to track the change
-                for orig_key, mapped_name in column_mapping[tool].items():
-                    if mapped_name == col:
-                        column_mapping[tool][orig_key] = millions_col
-                        break
-                print(f"Auto-formatted large numbers: {col} -> {millions_col}")
+                # Update percentage columns list if needed
+                if col in percentage_columns:
+                    percentage_columns.remove(col)
+                    percentage_columns.append(millions_col)
 
-# Sanitize column names for DataTable JavaScript compatibility
-sanitized_columns = {}
-display_to_internal = {}  # Map display names to internal safe names for DataTable
-print(df_multiqc_real.columns)
-for col in df_multiqc_real.columns:
-    print(f"Original column: {col}")
-    if col == "Sample Name":
-        sanitized_columns[col] = col  # Keep Sample Name as is
-        display_to_internal[col] = col
-    else:
-        sanitized = sanitize_column_name(col)
-        # Ensure uniqueness
-        counter = 1
-        original_sanitized = sanitized
-        while sanitized in sanitized_columns.values():
-            sanitized = f"{original_sanitized}_{counter}"
-            counter += 1
+    # Sanitize column names for DataTable JavaScript compatibility
+    sanitized_columns = {}
+    display_to_internal = {}
 
-        sanitized_columns[col] = sanitized
-        display_to_internal[col] = sanitized
-        if col != sanitized:
-            print(f"Sanitized column: {col} -> {sanitized}")
+    for col in df_multiqc_real.columns:
+        if col == "Sample Name":
+            sanitized_columns[col] = col
+            display_to_internal[col] = col
+        else:
+            sanitized = sanitize_column_name(col)
+            counter = 1
+            original_sanitized = sanitized
+            while sanitized in sanitized_columns.values():
+                sanitized = f"{original_sanitized}_{counter}"
+                counter += 1
+            sanitized_columns[col] = sanitized
+            display_to_internal[col] = sanitized
 
-# Create reverse mapping for display names (internal -> display)
-internal_to_display = {v: k for k, v in display_to_internal.items()}
+    internal_to_display = {v: k for k, v in display_to_internal.items()}
+    df_multiqc_real = df_multiqc_real.rename(columns=sanitized_columns)
 
-# Rename columns in DataFrame to use sanitized names for DataTable
-df_multiqc_real = df_multiqc_real.rename(columns=sanitized_columns)
+    # Prepare display DataFrame - no conversion needed, just copy
+    df_for_display = df_multiqc_real.copy()
 
-# For columns with units in the title, the suffix is already included
-# This is a workaround since Dash DataTable doesn't support suffix formatting
+    return df_multiqc_real, df_for_display, metadata_loader, internal_to_display, tools, column_metadata, percentage_columns
 
-# Keep numeric data - formatting will be handled by FormatTemplate and metadata
-# For percentage columns, convert to decimal (0-1 range) for percentage FormatTemplate
-df_for_display = df_multiqc_real.copy()
-
-# Identify percentage columns from metadata and patterns
-percentage_columns = []
-for tool in tools:
-    for orig_key, display_name in column_mapping[tool].items():
-        # Check metadata first
-        if orig_key in column_metadata[tool] and column_metadata[tool][orig_key]["suffix"] == "%":
-            percentage_columns.append(display_name)
-        # Check display name patterns for non-metadata columns
-        elif (
-            display_name.endswith(" (%)")
-            or "rate" in orig_key.lower()
-            or "pct_" in orig_key.lower()
-            or "content" in orig_key.lower()
-        ):
-            percentage_columns.append(display_name)
-
-    for col in percentage_columns:
-        if col in df_for_display.columns:
-            # Convert percentage values to decimal for FormatTemplate.percentage
-            df_for_display[col] = df_for_display[col] / 100
-
-print(f"DF for display: {df_for_display.head()}")
-
-# Select ALL available columns (ignore hidden property completely)
-visible_columns = ["Sample Name"]
-
-# Add ALL columns that exist in the DataFrame
-for col in df_multiqc_real.columns:
-    if col != "Sample Name" and col not in visible_columns:
-        visible_columns.append(col)
-
-# Filter to available columns (should be all columns now)
-available_columns = [col for col in visible_columns if col in df_multiqc_real.columns]
-df_multiqc_real = df_multiqc_real[available_columns]  # Keep original for data bars
-df_for_display = df_for_display[available_columns]  # Use for display with converted percentages
-
-print(f"\nLoaded {len(df_multiqc_real)} samples from parquet")
-print(f"Displaying columns: {available_columns}")
 
 # =============================================================================
-# 2. DATA BARS FUNCTION
+# DATA BARS FUNCTION
 # =============================================================================
 
 
@@ -267,10 +216,6 @@ def multiqc_data_bars_colormap(
         if fixed_scale:
             # For fixed scales, max_bound is actual data value, normalize to percentage
             max_bound_percentage = ((max_bound - col_min) / (col_max - col_min)) * 100
-            if column == "Dups (%)" and i <= 3:  # Debug first few values
-                print(
-                    f"DEBUG BAR: {column} max_bound={max_bound}, col_min={col_min}, col_max={col_max}, percentage={max_bound_percentage}"
-                )
         else:
             # For auto scales, use bounds directly
             max_bound_percentage = bounds[i] * 100
@@ -428,16 +373,9 @@ def create_multiqc_violin_plot(df_general_stats, metadata_loader):
         # Get values for this metric (convert from display format back to numeric)
         values = []
         samples = []
-        print(df_general_stats)
-        print(df_general_stats.columns)
         for _, row in df_general_stats.iterrows():
             sample_name = row["Sample Name"]
             value = row[metric]
-
-            # Convert percentage display values (0-1) back to 0-100 for visualization
-            if metric_data["is_percentage"] and value <= 1.0:
-                value = value * 100
-
             values.append(value)
             samples.append(sample_name)
 
@@ -469,24 +407,8 @@ def create_multiqc_violin_plot(df_general_stats, metadata_loader):
         layout[f"xaxis{metric_idx + 1}"] = x_axis_config
 
         # Configure Y-axis with metric label (Module name from data)
-        # Auto-detect module name from parquet data
+        # Use generic module name since we don't have access to raw metrics data
         module_name = "MultiQC"
-        try:
-            # Get the module name from the parquet data where this metric appears
-            print(metric_data)
-            print(df_metrics)
-            print(df_metrics[df_metrics["metric"] == metric].to_dict(orient="records"))
-            metric_modules = (
-                df_metrics[df_metrics["metric"] == metric]["section_key"]
-                .str.split("_")
-                .str[0]
-                .unique()
-            )
-            if len(metric_modules) > 0:
-                module_name = metric_modules[0].title()
-        except Exception:
-            # Fallback to generic name if detection fails
-            module_name = "MultiQC"
 
         # Create label with module name and metric on separate lines
         label_text = f"{module_name}<br>{metric}"
@@ -549,149 +471,116 @@ def create_multiqc_violin_plot(df_general_stats, metadata_loader):
     return fig
 
 
-# =============================================================================
-# 4. CREATE DASH TABLE WITH DATA BARS
-# =============================================================================
+def generate_data_bar_styles(df_for_display, tools, column_metadata, internal_to_display, percentage_columns):
+    """Generate colormap-based data bar styles for columns using metadata."""
+    # Map MultiQC scale names to matplotlib colormap names and reverse flags
+    scale_mapping = {
+        "RdYlGn-rev": ("RdYlGn_r", False),  # Use reversed colormap directly
+        "RdYlGn": ("RdYlGn", False),  # Red-Yellow-Green
+        "PuRd": ("PuRd", False),  # Purple-Red
+        "Reds": ("Reds", False),  # Red scale
+        "Blues": ("Blues", False),  # Blue scale
+        "Greens": ("Greens", False),  # Green scale
+        "Oranges": ("Oranges", False),  # Orange scale
+    }
 
-app = Dash(__name__)
+    column_formats = {}
+    all_styles = []
 
-# Generate column configurations from metadata
-column_colormaps = {}
-column_scales = {}
-column_formats = {}
+    # Process each column in the display dataframe
+    for internal_col in df_for_display.columns:
+        if internal_col == "Sample Name":
+            continue
 
-# Map MultiQC scale names to matplotlib colormap names and reverse flags
-scale_mapping = {
-    "RdYlGn-rev": ("RdYlGn_r", False),  # Use reversed colormap directly
-    "RdYlGn": ("RdYlGn", False),  # Red-Yellow-Green
-    "PuRd": ("PuRd", False),  # Purple-Red
-    "Reds": ("Reds", False),  # Red scale
-    "Blues": ("Blues", False),  # Blue scale
-    "Greens": ("Greens", False),  # Green scale
-    "Oranges": ("Oranges", False),  # Orange scale
-}
+        # Get display name for this column
+        display_name = internal_to_display.get(internal_col, internal_col)
 
-print("\n=== Column Configuration from Metadata ===")
-column_reverse_flags = {}  # Store reverse flags for each column
+        # Find metadata for this column by searching original data column names
+        config = None
+        for tool in tools:
+            if tool in column_metadata:
+                for orig_key, meta_config in column_metadata[tool].items():
+                    # Match by original key name or by title from metadata
+                    if (orig_key in display_name or
+                        display_name.startswith(meta_config.get("title", ""))):
+                        config = meta_config
+                        break
+            if config:
+                break
 
-for tool in tools:
-    for orig_key, config in column_metadata[tool].items():
-        if orig_key in column_mapping[tool]:
-            display_name = column_mapping[tool][orig_key]
+        # Set defaults if no metadata found
+        if config is None:
+            config = {
+                "scale": "Blues",
+                "format": "{:,.1f}",
+                "suffix": "",
+                "min": None,
+                "max": None
+            }
 
-            # Set colormap and reverse flag
-            scale_name = config["scale"]
-            if scale_name in scale_mapping:
-                colormap, reverse_flag = scale_mapping[scale_name]
-                column_colormaps[display_name] = colormap
-                column_reverse_flags[display_name] = reverse_flag
-            else:
-                # Use original scale name as fallback
-                column_colormaps[display_name] = scale_name
-                column_reverse_flags[display_name] = False
-
-            # Set fixed scale for percentages - use 0-1 for data bars to match display values
-            if config["suffix"] == "%":
-                if config["min"]:
-                    min_scale = config["min"] / 100.0
-                if config["max"]:
-                    max_scale = config["max"] / 100.0
-                # Apply only if min or max is defined, otherwise use data range
-                if config["min"] is not None or config["max"] is not None:
-                    column_scales[display_name] = (min_scale if config["min"] is not None else 0,
-                                                   max_scale if config["max"] is not None else 1)
-                else:
-                    column_scales[display_name] = None  # Use data range
-            elif config["min"] is not None and config["max"] is not None:
-                column_scales[display_name] = (config["min"], config["max"])
-            else:
-                column_scales[display_name] = None  # Use data range
-
-            # Store format information
-            column_formats[display_name] = {"format": config["format"], "suffix": config["suffix"]}
-
-            print(
-                f"{display_name}: {colormap} | Scale: {column_scales[display_name]} | Format: {config['format']}"
-            )
-
-# Add the millions column configuration
-# millions_col = f"{column_metadata.get('total_sequences', {}).get('title', 'Seqs')} (M)"
-# if millions_col in available_columns:
-#     column_colormaps[millions_col] = "Blues"
-#     column_reverse_flags[millions_col] = False  # No reverse for Blues
-#     column_scales[millions_col] = None  # Use data range
-#     column_formats[millions_col] = {"format": "{:,.2f}", "suffix": "M"}
-
-# Generate colormap-based data bar styles for each column using original numeric data (0-100 scale)
-# But the styles need to target the display data values (0-1 scale for percentages)
-all_styles = []
-
-
-# Create a mapping function to convert display values back to original scale for color calculation
-def get_color_calculation_value(column_name, display_df, original_df):
-    """Convert display values back to original scale for color calculations"""
-    if column_name in ["Dups (%)", "GC (%)", "Failed (%)"]:
-        # Display is 0-1, original is 0-100, so multiply by 100 for color calculation
-        return original_df[column_name]  # Use original 0-100 values
-    else:
-        return display_df[column_name]  # Use display values as-is
-
-
-# Generate styles using original data for calculations but targeting display column names
-for column in df_for_display.columns:
-    if column != "Sample Name":
-        cmap_name = column_colormaps.get(column, "Blues")  # Default to Blues
-        fixed_scale = column_scales.get(column, None)
-
-        # For percentages, use display data (0-1) for both calculation and targeting
-        if column in percentage_columns:
-            color_data_df = df_for_display  # Use 0-1 scale for both calculation and targeting
+        # Set colormap and reverse flag from metadata
+        scale_name = config.get("scale", "Blues")
+        if scale_name in scale_mapping:
+            colormap, reverse_flag = scale_mapping[scale_name]
         else:
-            color_data_df = df_for_display  # Use display scale
+            colormap = scale_name
+            reverse_flag = False
 
-        # Get reverse flag for this column
-        reverse_colors = column_reverse_flags.get(column, False)
+        # Set fixed scale based on metadata and column type
+        fixed_scale = None
+        if display_name in percentage_columns:
+            # For percentage columns, use 0-100 range (raw values)
+            min_val = config.get("min")
+            max_val = config.get("max")
+            if min_val is not None and max_val is not None:
+                fixed_scale = (min_val, max_val)
+            # else:
+            #     fixed_scale = (0, 100)
+        elif config.get("min") is not None and config.get("max") is not None:
+            fixed_scale = (config["min"], config["max"])
 
+        # Store format information for later use
+        column_formats[display_name] = {
+            "format": config.get("format", "{:,.1f}"),
+            "suffix": config.get("suffix", "")
+        }
+
+        # Generate styles for this column
         all_styles.extend(
             multiqc_data_bars_colormap(
-                color_data_df,
-                column,
-                cmap_name,
+                df_for_display,
+                internal_col,
+                colormap,
                 opacity=0.3,
                 fixed_scale=fixed_scale,
-                reverse_colors=reverse_colors,
+                reverse_colors=reverse_flag,
             )
         )
 
+    return all_styles, column_formats
+
 
 # Define column format function based on metadata
-def get_column_format(column_name):
+def get_column_format(column_name, percentage_columns, column_formats):
     """Get appropriate Dash DataTable format for a column based on metadata."""
     if column_name == "Sample Name":
         return None
 
-    # Debug output
-    print(f"DEBUG: Formatting column '{column_name}'")
-
-    # Check if it's a percentage column (converted to 0-1 range)
+    # Check if it's a percentage column (raw values 0-100)
     if column_name in percentage_columns:
-        print(f"DEBUG: {column_name} is percentage column")
-        # Always use 1 decimal place for percentage columns to match MultiQC
-        return dash_table.FormatTemplate.percentage(1)  # 1 decimal place (e.g., 45.2%)
+        # Format as numbers with % suffix, 1 decimal place
+        return Format(symbol=Symbol.yes, symbol_suffix="%").precision(1).scheme("f")
 
     # Handle millions column with M suffix BEFORE checking column_formats
     if "(M)" in column_name:
-        print(f"DEBUG: {column_name} matches M suffix pattern")
         return Format(symbol=Symbol.yes, symbol_suffix=" M").precision(2).scheme("f")
 
     # Handle bp columns BEFORE checking column_formats
     if "bp" in column_name:
-        print(f"DEBUG: {column_name} matches bp suffix pattern")
         return Format(symbol=Symbol.yes, symbol_suffix=" bp").precision(0).scheme("f")
 
     # Check for specific format from metadata and add suffixes
     if column_name in column_formats:
-        print(f"DEBUG: {column_name} found in column_formats")
         format_info = column_formats[column_name]
         format_str = format_info["format"]
         suffix = format_info.get("suffix", "")
@@ -710,8 +599,6 @@ def get_column_format(column_name):
             return Format(precision=1, scheme="f", group=True)
         elif ".2f" in format_str:
             return Format(precision=2, scheme="f", group=True)
-    else:
-        print(f"DEBUG: {column_name} NOT found in column_formats")
 
     # Default length columns
     if "len" in column_name.lower():
@@ -725,11 +612,15 @@ def get_column_format(column_name):
 # =============================================================================
 
 
-def create_multiqc_table_component(df_data, all_styles, column_display_mapping=None):
+def create_multiqc_table_component(df_data, all_styles, column_display_mapping=None, percentage_columns=None, column_formats=None):
     """Create MultiQC table component with data bars."""
     # Use display names for headers if mapping is provided
     if column_display_mapping is None:
         column_display_mapping = {}
+    if percentage_columns is None:
+        percentage_columns = []
+    if column_formats is None:
+        column_formats = {}
 
     return dash_table.DataTable(
         id="multiqc-table",
@@ -739,7 +630,7 @@ def create_multiqc_table_component(df_data, all_styles, column_display_mapping=N
                 "name": column_display_mapping.get(col, col),  # Use display name for header
                 "id": col,  # Use internal name for data reference
                 "type": "numeric" if col != "Sample Name" else "text",
-                "format": get_column_format(column_display_mapping.get(col, col)),
+                "format": get_column_format(column_display_mapping.get(col, col), percentage_columns, column_formats),
             }
             for col in df_data.columns
         ],
@@ -798,12 +689,11 @@ def create_multiqc_table_component(df_data, all_styles, column_display_mapping=N
 
 def create_multiqc_violin_component(df_data, metadata_loader):
     """Create MultiQC violin plot component."""
-    print(f"Metadata loader in violin component: {metadata_loader.get_all_column_mappings()}")
     violin_fig = create_multiqc_violin_plot(df_data, metadata_loader)
     return dcc.Graph(figure=violin_fig, config={"displayModeBar": False})
 
 
-def create_multiqc_dashboard(df_display_data, df_numeric_data, metadata_loader, all_styles):
+def create_multiqc_dashboard(df_display_data, df_numeric_data, metadata_loader, all_styles, internal_to_display):
     """Create complete MultiQC dashboard with toggle."""
     table_component = create_multiqc_table_component(df_display_data, all_styles, internal_to_display)
     violin_component = create_multiqc_violin_component(df_numeric_data, metadata_loader)
@@ -832,24 +722,53 @@ def create_multiqc_dashboard(df_display_data, df_numeric_data, metadata_loader, 
     )
 
 
-# Create components - use same data for both since we're not modifying it anymore
-table_component = create_multiqc_table_component(df_for_display, all_styles, internal_to_display)
-violin_component = create_multiqc_violin_component(df_for_display, metadata_loader)
-dashboard = create_multiqc_dashboard(df_for_display, df_for_display, metadata_loader, all_styles)
+def create_app(parquet_path, metadata_path, port=8052):
+    """Create and configure the Dash app with MultiQC data."""
+    # Process data
+    df_multiqc_real, df_for_display, metadata_loader, internal_to_display, tools, column_metadata, percentage_columns = process_multiqc_data(parquet_path, metadata_path)
 
-# Create the app layout
-app.layout = dmc.MantineProvider(dmc.Container(dashboard, p="md"))
+    # Generate styles and formats
+    all_styles, column_formats = generate_data_bar_styles(df_for_display, tools, column_metadata, internal_to_display, percentage_columns)
+
+    # Create Dash app
+    app = Dash(__name__)
+
+    # Create components (use column identity mapping)
+    table_component = create_multiqc_table_component(df_for_display, all_styles, {}, percentage_columns, column_formats)
+    violin_component = create_multiqc_violin_component(df_for_display, metadata_loader)
+    dashboard = create_multiqc_dashboard(df_for_display, df_for_display, metadata_loader, all_styles, internal_to_display)
+
+    # Set app layout
+    app.layout = dmc.MantineProvider(dmc.Container(dashboard, p="md"))
+
+    # Add callback for view toggle
+    @app.callback(
+        [Output("table-container", "style"), Output("violin-container", "style")],
+        [Input("view-toggle", "value")],
+    )
+    def toggle_view(view_type):
+        """Toggle between table and violin plot view."""
+        if view_type == "table":
+            return {"display": "block"}, {"display": "none"}
+        else:
+            return {"display": "none"}, {"display": "block"}
+
+    return app
 
 # =============================================================================
 # 5. STANDALONE COMPONENT FUNCTIONS (NO DASH APP REQUIRED)
 # =============================================================================
 
 
-def get_multiqc_table_component(df_data, metadata_loader):
+def get_multiqc_table_component(df_data, metadata_loader, internal_to_display=None):
     """Get standalone MultiQC table component (no app required)."""
+    if internal_to_display is None:
+        internal_to_display = {}
+
     # Process data and generate styles
     column_metadata = metadata_loader.get_all_column_mappings()
     all_styles = []
+    percentage_columns = []
 
     for column in df_data.columns:
         if column != "Sample Name":
@@ -857,12 +776,13 @@ def get_multiqc_table_component(df_data, metadata_loader):
             fixed_scale = None
             reverse_colors = False
 
-            # Find matching metadata
-            for tool in tools:
-                for key, config in column_metadata[tool].items():
-                    if metadata_loader.get_column_title(key) in column:
+            # Find matching metadata from any tool
+            for tool_name, tool_metadata in column_metadata.items():
+                for key, config in tool_metadata.items():
+                    if key in column or config.get("title", "") in column:
                         if config["suffix"] == "%":
                             fixed_scale = (0, 1)
+                            percentage_columns.append(column)
                         break
 
             all_styles.extend(
@@ -876,7 +796,7 @@ def get_multiqc_table_component(df_data, metadata_loader):
                 )
             )
 
-    return create_multiqc_table_component(df_data, all_styles, internal_to_display)
+    return create_multiqc_table_component(df_data, all_styles, internal_to_display, percentage_columns, {})
 
 
 def get_multiqc_violin_component(df_data, metadata_loader):
@@ -896,9 +816,10 @@ def get_multiqc_dashboard_component(df_data, metadata_loader):
             fixed_scale = None
             reverse_colors = False
 
-            for tool in tools:
-                for key, config in column_metadata[tool].items():
-                    if metadata_loader.get_column_title(key) in column:
+            # Find matching metadata from any tool
+            for tool_name, tool_metadata in column_metadata.items():
+                for key, config in tool_metadata.items():
+                    if key in column or config.get("title", "") in column:
                         if config["suffix"] == "%":
                             fixed_scale = (0, 1)
                         break
@@ -914,30 +835,40 @@ def get_multiqc_dashboard_component(df_data, metadata_loader):
                 )
             )
 
-    return create_multiqc_dashboard(df_data, metadata_loader, all_styles)
+    # Create internal_to_display mapping
+    internal_to_display = {col: col for col in df_data.columns}
+    return create_multiqc_dashboard(df_data, df_data, metadata_loader, all_styles, internal_to_display)
 
 
-# =============================================================================
-# 6. ADD CALLBACK FOR VIEW TOGGLE
-# =============================================================================
+def parse_arguments():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(description="MultiQC Components - Clean DMC Implementation")
+    parser.add_argument("parquet_path", help="Path to MultiQC parquet file")
+    parser.add_argument("metadata_path", help="Path to MultiQC metadata JSON file")
+    parser.add_argument("--port", type=int, default=8052, help="Port to run the dashboard on (default: 8052)")
+    parser.add_argument("--debug", action="store_true", help="Run in debug mode")
+    return parser.parse_args()
 
 
-@app.callback(
-    [Output("table-container", "style"), Output("violin-container", "style")],
-    [Input("view-toggle", "value")],
-)
-def toggle_view(view_type):
-    """Toggle between table and violin plot view."""
-    if view_type == "table":
-        return {"display": "block"}, {"display": "none"}
-    else:
-        return {"display": "none"}, {"display": "block"}
+def main():
+    """Main function to run the MultiQC dashboard."""
+    args = parse_arguments()
 
+    try:
+        # Create and run the app
+        app = create_app(args.parquet_path, args.metadata_path, args.port)
+        print(f"🚀 Starting MultiQC Table Dashboard on http://localhost:{args.port}")
+        app.run(debug=args.debug, port=args.port)
+    except FileNotFoundError as e:
+        print(f"Error: File not found - {e}")
+        sys.exit(1)
+    except Exception as e:
+        import traceback
+        print(f"Error: {e}")
+        if args.debug:
+            traceback.print_exc()
+        sys.exit(1)
 
-# =============================================================================
-# 5. RUN THE APP
-# =============================================================================
 
 if __name__ == "__main__":
-    print("🚀 Starting MultiQC Table Dashboard on http://localhost:8052")
-    app.run(debug=True, port=8052)
+    main()
