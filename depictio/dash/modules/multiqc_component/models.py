@@ -189,7 +189,9 @@ class MultiQCDashboardComponent(BaseModel):
         """Convert component to storable metadata format with essential info only."""
         # Only store essential visualization state - no duplication
         essential_metadata = {
-            "index": self.index,
+            "index": self.index.replace("-tmp", "")
+            if self.index
+            else "unknown",  # Clean index for btn-done matching
             "component_type": self.component_type,
             "workflow_id": self.workflow_id,
             "data_collection_id": self.data_collection_id,
