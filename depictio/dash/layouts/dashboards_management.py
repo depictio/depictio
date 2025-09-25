@@ -596,7 +596,9 @@ def register_callbacks_dashboards_management(app):
             if not os.path.exists(thumbnail_fs_path):
                 logger.warning(f"Thumbnail not found at path: {thumbnail_fs_path}")
                 # Use the default thumbnail from static/
-                default_thumbnail_url = "/assets/images/backgrounds/default_thumbnail.png"
+                default_thumbnail_url = dash.get_asset_url(
+                    "images/backgrounds/default_thumbnail.png"
+                )
 
                 thumbnail = html.Div(
                     [
