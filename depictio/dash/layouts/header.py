@@ -1070,101 +1070,95 @@ def design_header(data, local_store):
                 [
                     html.Div(
                         [
-                            dmc.Group(
+                            dmc.Stack(
                                 [
-                                    # Depictio favicon - positioned immediately to the left of title
-                                    html.Img(
-                                        id="header-favicon",
-                                        src=dash.get_asset_url("images/icons/favicon.ico"),
+                                    # Row for logo and title
+                                    dmc.Group(
+                                        [
+                                            # Depictio favicon - positioned immediately to the left of title
+                                            html.Img(
+                                                id="header-favicon",
+                                                src=dash.get_asset_url("images/icons/favicon.ico"),
+                                                style={
+                                                    "height": "24px",
+                                                    "width": "24px",
+                                                    # Initially hidden, shown when sidebar is collapsed
+                                                    "display": "none",
+                                                },
+                                            ),
+                                            dmc.Title(
+                                                f"{data['title']}",
+                                                order=1,
+                                                id="dashboard-title",
+                                                style={
+                                                    "fontWeight": "bold",
+                                                    "fontSize": "24px",
+                                                    "margin": "0",
+                                                },
+                                            ),
+                                        ],
+                                        gap="xs",
+                                        align="center",
                                         style={
-                                            "height": "24px",
-                                            "width": "24px",
-                                            # Initially hidden, shown when sidebar is collapsed
-                                            "display": "none",
+                                            "display": "flex",
+                                            "flexDirection": "row",
+                                            "alignItems": "center",
                                         },
                                     ),
-                                    html.Div(
+                                    # Badges below title
+                                    dmc.Group(
                                         [
-                                            dmc.Center(
-                                                dmc.Stack(
-                                                    [
-                                                        dmc.Title(
-                                                            f"{data['title']}",
-                                                            order=1,
-                                                            id="dashboard-title",
-                                                            style={
-                                                                "fontWeight": "bold",
-                                                                "fontSize": "24px",
-                                                                "margin": "0",
-                                                            },
-                                                        ),
-                                                        dmc.Group(
-                                                            [
-                                                                # Edit status badge - directly below title - now clickable
-                                                                html.Div(
-                                                                    dmc.Badge(
-                                                                        id="edit-status-badge-2",
-                                                                        children="Edit OFF",
-                                                                        size="sm",
-                                                                        color="gray",
-                                                                        leftSection=DashIconify(
-                                                                            icon="mdi:pencil-off",
-                                                                            width=8,
-                                                                            color="white",
-                                                                        ),
-                                                                        style={
-                                                                            "marginTop": "1px",
-                                                                            "fontSize": "10px",
-                                                                            "height": "18px",
-                                                                            "padding": "2px 8px",
-                                                                            "cursor": "pointer",
-                                                                        },
-                                                                    ),
-                                                                    id="edit-status-badge-clickable-2",
-                                                                ),
-                                                                # Live interactivity status badge - next to edit badge - clickable
-                                                                html.Div(
-                                                                    dmc.Badge(
-                                                                        id="live-interactivity-badge",
-                                                                        children="Live OFF",
-                                                                        size="sm",
-                                                                        color="gray",
-                                                                        leftSection=DashIconify(
-                                                                            icon="mdi:lightning-bolt-outline",
-                                                                            width=8,
-                                                                            color="white",
-                                                                        ),
-                                                                        style={
-                                                                            "marginTop": "1px",
-                                                                            "fontSize": "10px",
-                                                                            "height": "18px",
-                                                                            "padding": "2px 8px",
-                                                                            "cursor": "pointer",
-                                                                        },
-                                                                    ),
-                                                                    id="live-interactivity-badge-clickable",
-                                                                    style={
-                                                                        "cursor": "pointer !important"
-                                                                    },
-                                                                ),
-                                                            ],
-                                                            justify="center",
-                                                        ),
-                                                    ],
-                                                    align="center",
-                                                )
-                                            )
-                                        ]
+                                            # Edit status badge - directly below title - now clickable
+                                            html.Div(
+                                                dmc.Badge(
+                                                    id="edit-status-badge-2",
+                                                    children="Edit OFF",
+                                                    size="sm",
+                                                    color="gray",
+                                                    leftSection=DashIconify(
+                                                        icon="mdi:pencil-off",
+                                                        width=8,
+                                                        color="white",
+                                                    ),
+                                                    style={
+                                                        "marginTop": "1px",
+                                                        "fontSize": "10px",
+                                                        "height": "18px",
+                                                        "padding": "2px 8px",
+                                                        "cursor": "pointer",
+                                                    },
+                                                ),
+                                                id="edit-status-badge-clickable-2",
+                                            ),
+                                            # Live interactivity status badge - next to edit badge - clickable
+                                            html.Div(
+                                                dmc.Badge(
+                                                    id="live-interactivity-badge",
+                                                    children="Live OFF",
+                                                    size="sm",
+                                                    color="gray",
+                                                    leftSection=DashIconify(
+                                                        icon="mdi:lightning-bolt-outline",
+                                                        width=8,
+                                                        color="white",
+                                                    ),
+                                                    style={
+                                                        "marginTop": "1px",
+                                                        "fontSize": "10px",
+                                                        "height": "18px",
+                                                        "padding": "2px 8px",
+                                                        "cursor": "pointer",
+                                                    },
+                                                ),
+                                                id="live-interactivity-badge-clickable",
+                                                style={"cursor": "pointer !important"},
+                                            ),
+                                        ],
+                                        justify="center",
                                     ),
                                 ],
-                                gap="md",
                                 align="center",
-                                style={
-                                    "display": "inline-flex",
-                                    "flexDirection": "column",
-                                    "alignItems": "center",
-                                    "gap": "4px",
-                                },
+                                gap="xs",
                             ),
                         ],
                         style={
