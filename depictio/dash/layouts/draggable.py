@@ -3288,11 +3288,12 @@ def design_draggable(
         items=draggable_items,
         itemLayout=current_layout,
         rowHeight=50,  # Larger row height for better component display
-        cols={"lg": 12, "md": 10, "sm": 6, "xs": 4, "xxs": 2},
+        cols={"lg": 16, "md": 10, "sm": 6, "xs": 4, "xxs": 2},
         showRemoveButton=False,  # Keep consistent - CSS handles visibility
         showResizeHandles=True,  # Enable resize functionality for vertical growing behavior
         className="draggable-grid-container",  # CSS class for styling
         allowOverlap=False,
+        margin=[5, 5],  # Reduce margin between grid items from default [10, 10] to [5, 5]
         # Additional parameters to try to disable responsive scaling
         autoSize=True,  # Let grid auto-size instead of using responsive breakpoints
         style={
