@@ -124,8 +124,8 @@ COMPONENT_METADATA = {
         "enabled": True,  # Enable by default
         "build_function": build_multiqc,
         "default_dimensions": {
-            "w": 2,
-            "h": 2,
+            "w": 8,
+            "h": 12,
         },  # Adjusted for 12-column grid - MultiQC reports need good space
     },
 }

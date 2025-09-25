@@ -241,6 +241,7 @@ def _create_component_buttons(
         },
         "table": {"orientation": "horizontal", "buttons": ["drag", "remove"]},
         "jbrowse": {"orientation": "horizontal", "buttons": ["drag", "remove"]},
+        "multiqc": {"orientation": "vertical", "buttons": ["drag", "remove"]},
         "text": {
             "orientation": "horizontal",
             "buttons": ["drag", "remove", "duplicate", "alignment"],
@@ -338,9 +339,13 @@ def enable_box_edit_mode(
         logger.warning(f"Component missing id, generated fallback: {fallback_id}")
         return fallback_id
 
-    btn_index = extract_component_id(box)
-
-    logger.debug(f"ENABLE BOX EDIT MODE - index: {btn_index}")
+    # Prioritize component_data index if available, otherwise extract from component
+    if component_data and "index" in component_data:
+        btn_index = component_data["index"]
+        logger.debug(f"ENABLE BOX EDIT MODE - Using index from component_data: {btn_index}")
+    else:
+        btn_index = extract_component_id(box)
+        logger.debug(f"ENABLE BOX EDIT MODE - Extracted index from component: {btn_index}")
 
     component_type = None
     if not component_data:

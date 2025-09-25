@@ -69,14 +69,11 @@ def build_multiqc(**kwargs: Any):
     s3_locations = kwargs.get("s3_locations", [])
     stepper = kwargs.get("stepper", False)
 
-    # Handle -tmp suffix for stepper mode like card component
-    if stepper:
-        component_id = f"{component_id}-tmp"
-
     # Metadata management - Create a store component to store the metadata (following card pattern)
     # For stepper mode, use the temporary index to avoid conflicts with existing components
     # For normal mode, use the original index (remove -tmp suffix if present)
     if stepper:
+        component_id = f"{component_id}-tmp"  # Apply -tmp suffix once here
         store_index = component_id  # Use the temporary index with -tmp suffix
         data_index = (
             component_id.replace("-tmp", "") if component_id else "unknown"
@@ -174,7 +171,8 @@ def build_multiqc(**kwargs: Any):
             )
 
     # Return container with both plot and store (following card pattern)
-    return html.Div([plot_component, store_component])
+    # CRITICAL: Add the component ID so enable_box_edit_mode can extract it properly
+    return html.Div([plot_component, store_component], id=component_id)
 
 
 def get_multiqc_reports_for_data_collection(data_collection_id: str, token: str) -> list:

@@ -796,7 +796,7 @@ def register_callbacks_draggable(app):
         # logger.info(f"Stored draggable layouts: {state_stored_draggable_layouts}")
         # logger.info(f"Stored draggable children: {state_stored_draggable_children}")
         # logger.info(f"Input stored draggable children: {input_stored_draggable_children}")
-        # logger.info(f"Stored metadata: {stored_metadata}")
+        logger.info(f"Stored metadata: {stored_metadata}")
         logger.info("\n")
 
         # Extract dashboard_id from the pathname
@@ -949,8 +949,10 @@ def register_callbacks_draggable(app):
         logger.info(f"Theme store value: {theme_store}")
 
         # FIXME: Remove duplicates from stored_metadata
+        logger.info(f"Stored metadata entries before cleaning: {len(stored_metadata)}")
         # Remove duplicates from stored_metadata
         stored_metadata = remove_duplicates_by_index(stored_metadata)
+        logger.info(f"Stored metadata entries after cleaning: {len(stored_metadata)}")
 
         dashboard_id = pathname.split("/")[-1]
         stored_metadata_interactive = [
@@ -1544,6 +1546,7 @@ def register_callbacks_draggable(app):
                             )
 
                         # Only render dashboard if there are actual components
+                        logger.info(f"Stored metadata: {stored_metadata}")
                         children = render_dashboard(
                             stored_metadata,
                             unified_edit_mode_button,
@@ -2973,15 +2976,19 @@ def register_callbacks_draggable(app):
         Output("draggable-wrapper", "children"),
         [
             Input("unified-edit-mode-button", "checked"),
-            Input("draggable", "items"),
         ],
         [
             State("local-store", "data"),
+            State("draggable", "children"),
         ],
+        prevent_initial_call=True,
     )
-    def update_empty_dashboard_wrapper(edit_mode_enabled, current_draggable_items, local_data):
+    def update_empty_dashboard_wrapper(edit_mode_enabled, local_data, current_draggable_items):
         """Update draggable wrapper to show empty state messages when dashboard is empty"""
         logger.info(f"🔄 Updating draggable wrapper - Edit mode: {edit_mode_enabled}")
+        logger.info(
+            f"🔄 Current draggable items: {len(current_draggable_items) if current_draggable_items else 0}"
+        )
 
         # Check if dashboard has stored components in database (more reliable than current_draggable_items)
         stored_children_data = local_data.get("stored_children_data", []) if local_data else []
@@ -3371,7 +3378,13 @@ def design_draggable(
         items=draggable_items,
         itemLayout=current_layout,
         rowHeight=50,  # Larger row height for better component display
-        cols={"lg": 12, "md": 10, "sm": 6, "xs": 4, "xxs": 2},
+        cols={
+            "lg": 12,
+            "md": 12,
+            "sm": 12,
+            "xs": 12,
+            "xxs": 12,
+        },  # FIXED: Use 12 columns consistently across all breakpoints
         showRemoveButton=False,  # Keep consistent - CSS handles visibility
         showResizeHandles=True,  # Enable resize functionality for vertical growing behavior
         className="draggable-grid-container",  # CSS class for styling
