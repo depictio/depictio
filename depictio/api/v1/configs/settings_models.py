@@ -301,6 +301,20 @@ class PerformanceConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_PERFORMANCE_")
 
 
+class S3CacheConfig(BaseSettings):
+    """S3 file caching configuration for MultiQC and other S3 operations."""
+
+    # Cache directory for S3 files
+    cache_dir: str = Field(
+        default="/tmp/depictio_s3_cache", description="Local directory for S3 file cache"
+    )
+
+    # FUSE mount points (optional, comma-separated)
+    mount_points: str = Field(default="", description="Comma-separated S3 FUSE mount points")
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_S3_")
+
+
 class CacheConfig(BaseSettings):
     """Redis cache configuration settings."""
 
@@ -570,6 +584,7 @@ class Settings(BaseSettings):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     jbrowse: JBrowseConfig = Field(default_factory=JBrowseConfig)
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
+    s3_cache: S3CacheConfig = Field(default_factory=S3CacheConfig)
     cache: CacheConfig = Field(default_factory=CacheConfig)
     celery: CeleryConfig = Field(default_factory=CeleryConfig)
     backup: BackupConfig = Field(default_factory=BackupConfig)
