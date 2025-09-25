@@ -1,91 +1,180 @@
 from typing import Any
 
-import dash_mantine_components as dmc
 import httpx
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.modules.multiqc_component.models import (
-    MultiQCDashboardComponent,
-)
 
 
-def build_multiqc(**kwargs: Any) -> dmc.Paper:
-    """
-    Build MultiQC component for dashboard display using Pydantic models.
-
-    Args:
-        **kwargs: Component metadata including:
-            - index: Component ID
-            - workflow_id/wf_id: Workflow ID
-            - data_collection_id/dc_id: Data collection ID
-            - selected_module: Selected MultiQC module
-            - selected_plot: Selected plot
-            - selected_dataset: Selected dataset
-            - s3_locations: S3 data locations
-            - metadata: MultiQC metadata
-            - access_token: Authentication token
-            - theme: UI theme
-
-    Returns:
-        Dash component for MultiQC visualization
-    """
-    from depictio.dash.modules.multiqc_component.frontend import design_multiqc_from_model
-
-    logger.info(f"Building MultiQC component with kwargs keys: {list(kwargs.keys())}")
+def add_multiqc_logo_overlay(fig, logo_size_px=45):
+    """Add MultiQC logo overlay to any plotly figure using Dash assets"""
 
     try:
-        # Create MultiQC component from stored metadata using Pydantic model
-        multiqc_component = MultiQCDashboardComponent.from_stored_metadata(kwargs)
-        logger.info(f"Created MultiQC component model: {multiqc_component.index}")
-        logger.info(
-            f"Component state: module={multiqc_component.state.selected_module}, "
-            f"plot={multiqc_component.state.selected_plot}"
+        # Use Dash assets URL - this will work in web deployment
+        # Dash automatically serves files from assets/ directory
+        logo_url = "/assets/images/logos/multiqc.png"
+
+        # Get figure dimensions
+        width = fig.layout.width or 700
+        height = fig.layout.height or 450
+        sizex = logo_size_px / width
+        sizey = logo_size_px / height
+
+        # Add logo overlay (top-right corner) using assets URL
+        fig.add_layout_image(
+            dict(
+                source=logo_url,  # Dash assets URL
+                xref="paper",
+                yref="paper",
+                x=0.95,
+                y=0.95,  # Top-right corner
+                sizex=sizex,
+                sizey=sizey,
+                xanchor="right",
+                yanchor="top",
+                opacity=0.6,
+                layer="above",
+            )
         )
 
-        # Create the Dash component using the model
-        dash_component = design_multiqc_from_model(multiqc_component)
-        return dash_component
+        logger.debug("Added MultiQC logo overlay using Dash assets")
 
     except Exception as e:
-        logger.error(f"Error building MultiQC component with models: {e}")
-        # Fallback to legacy method if model creation fails
-        return _build_multiqc_legacy(**kwargs)
+        logger.warning(f"Failed to add MultiQC logo overlay: {e}")
+
+    return fig
 
 
-def _build_multiqc_legacy(**kwargs: Any) -> dmc.Paper:
+def build_multiqc(**kwargs: Any):
     """
-    Legacy fallback method for building MultiQC components.
+    Build MultiQC component for dashboard display - PLOT ONLY (no controls).
 
     Args:
-        **kwargs: Component metadata in legacy format
+        **kwargs: Component metadata including selected_module, selected_plot, selected_dataset, s3_locations
 
     Returns:
-        Dash component for MultiQC visualization
+        Dash component with MultiQC plot and metadata store
     """
-    from depictio.dash.modules.multiqc_component.frontend import design_multiqc
+    from dash import dcc, html
 
-    logger.info("Using legacy MultiQC component build method")
+    from depictio.dash.modules.figure_component.multiqc_vis import create_multiqc_plot
 
-    # Extract basic parameters
+    logger.info(f"Building MultiQC plot component with kwargs keys: {list(kwargs.keys())}")
+
+    # Extract required parameters
     component_id = kwargs.get("index", "multiqc-component")
-    workflow_id = kwargs.get("workflow_id") or kwargs.get("wf_id")
-    data_collection_id = kwargs.get("data_collection_id") or kwargs.get("dc_id")
-    local_data = kwargs.get("local_data") or kwargs.get("access_token")
+    selected_module = kwargs.get("selected_module")
+    selected_plot = kwargs.get("selected_plot")
+    selected_dataset = kwargs.get("selected_dataset")
+    s3_locations = kwargs.get("s3_locations", [])
+    stepper = kwargs.get("stepper", False)
 
-    # Convert ObjectId to string if needed
-    if isinstance(workflow_id, dict) and "$oid" in workflow_id:
-        workflow_id = workflow_id["$oid"]
-    if isinstance(data_collection_id, dict) and "$oid" in data_collection_id:
-        data_collection_id = data_collection_id["$oid"]
+    # Handle -tmp suffix for stepper mode like card component
+    if stepper:
+        component_id = f"{component_id}-tmp"
 
-    return design_multiqc(
-        id=component_id,
-        workflow_id=str(workflow_id) if workflow_id else None,
-        data_collection_id=str(data_collection_id) if data_collection_id else None,
-        local_data=local_data,
-        **kwargs,  # Pass through any additional state
+    # Metadata management - Create a store component to store the metadata (following card pattern)
+    # For stepper mode, use the temporary index to avoid conflicts with existing components
+    # For normal mode, use the original index (remove -tmp suffix if present)
+    if stepper:
+        store_index = component_id  # Use the temporary index with -tmp suffix
+        data_index = (
+            component_id.replace("-tmp", "") if component_id else "unknown"
+        )  # Clean index for data
+    else:
+        store_index = component_id.replace("-tmp", "") if component_id else "unknown"
+        data_index = store_index
+
+    store_component = dcc.Store(
+        id={
+            "type": "stored-metadata-component",
+            "index": str(store_index),
+        },
+        data={
+            "index": str(data_index),
+            "component_type": "multiqc",
+            "workflow_id": kwargs.get("workflow_id"),
+            "data_collection_id": kwargs.get("data_collection_id"),
+            "selected_module": selected_module,
+            "selected_plot": selected_plot,
+            "selected_dataset": selected_dataset,
+            "s3_locations": s3_locations,
+        },
     )
+
+    # Check if we have the minimum required information for a plot
+    if not selected_module or not selected_plot or not s3_locations:
+        plot_component = dcc.Graph(
+            id=component_id,
+            figure={
+                "data": [],
+                "layout": {
+                    "title": "MultiQC Component - Configure in edit mode",
+                    "xaxis": {"visible": False},
+                    "yaxis": {"visible": False},
+                    "annotations": [
+                        {
+                            "text": "No data available",
+                            "xref": "paper",
+                            "yref": "paper",
+                            "x": 0.5,
+                            "y": 0.5,
+                            "showarrow": False,
+                            "font": {"size": 16, "color": "gray"},
+                        }
+                    ],
+                },
+            },
+            style={"height": "400px", "width": "100%"},
+        )
+    else:
+        try:
+            # Create the MultiQC plot
+            fig = create_multiqc_plot(
+                s3_locations=s3_locations,
+                module=selected_module,
+                plot=selected_plot,
+                dataset_id=selected_dataset,
+            )
+
+            # Add MultiQC logo overlay
+            fig = add_multiqc_logo_overlay(fig)
+
+            plot_component = dcc.Graph(
+                id=component_id,
+                figure=fig,
+                style={"height": "400px", "width": "100%"},
+                config={"displayModeBar": True, "responsive": True},
+            )
+
+        except Exception as e:
+            logger.error(f"Error creating MultiQC plot: {e}")
+            plot_component = dcc.Graph(
+                id=component_id,
+                figure={
+                    "data": [],
+                    "layout": {
+                        "title": f"Error loading MultiQC: {str(e)[:50]}...",
+                        "xaxis": {"visible": False},
+                        "yaxis": {"visible": False},
+                        "annotations": [
+                            {
+                                "text": "Failed to load plot",
+                                "xref": "paper",
+                                "yref": "paper",
+                                "x": 0.5,
+                                "y": 0.5,
+                                "showarrow": False,
+                                "font": {"size": 16, "color": "red"},
+                            }
+                        ],
+                    },
+                },
+                style={"height": "400px", "width": "100%"},
+            )
+
+    # Return container with both plot and store (following card pattern)
+    return html.Div([plot_component, store_component])
 
 
 def get_multiqc_reports_for_data_collection(data_collection_id: str, token: str) -> list:
