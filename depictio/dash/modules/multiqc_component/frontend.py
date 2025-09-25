@@ -82,7 +82,7 @@ def design_multiqc(id, workflow_id=None, data_collection_id=None, local_data=Non
 
     # Extract string ID if id is a dictionary (from stepper context)
     if isinstance(id, dict):
-        # If id is a button ID dict, extract the index value
+        # If id is a button ID dict, extract the index value (preserves -tmp suffix for stepper)
         component_id = id.get("index", "multiqc-component")
     else:
         component_id = str(id)  # Ensure it's a string
@@ -243,15 +243,25 @@ def design_multiqc(id, workflow_id=None, data_collection_id=None, local_data=Non
                 data=[],
             ),
             # CRITICAL: stored-metadata-component store for save functionality
+            # Follow same pattern as card component for -tmp suffix handling
             dcc.Store(
-                id={"type": "stored-metadata-component", "index": component_id},
-                data={
+                id={
+                    "type": "stored-metadata-component",
                     "index": component_id,
+                },  # Store ID includes -tmp
+                data={
+                    "index": component_id.replace("-tmp", "")
+                    if component_id
+                    else "unknown",  # Data index clean for btn-done matching
                     "component_type": "multiqc",  # Use lowercase for helpers mapping compatibility
                     "workflow_id": workflow_id,
                     "data_collection_id": data_collection_id,
                     "wf_id": workflow_id,
                     "dc_id": data_collection_id,
+                    # Include initial selection state if provided
+                    "selected_module": initial_module,
+                    "selected_plot": initial_plot,
+                    "selected_dataset": initial_dataset,
                 },
             ),
         ],
