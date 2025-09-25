@@ -5,81 +5,230 @@ This module provides a simple wrapper around MultiQC's plotting functionality,
 allowing users to visualize MultiQC reports within Depictio dashboards.
 """
 
+import os
 import tempfile
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import fsspec
 import plotly.graph_objects as go
 
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 
 
-def _get_local_path_for_s3(s3_location: str, temp_dir: Path) -> str:
+def _get_s3_filesystem_config() -> Dict[str, Any]:
     """
-    Download S3 file to temporary directory and return local path.
+    Get S3 filesystem configuration from settings.
+
+    Returns:
+        Dictionary with S3 configuration parameters
+    """
+    config = {
+        "endpoint_url": settings.minio.endpoint_url,
+        "key": settings.minio.root_user,
+        "secret": settings.minio.root_password,
+    }
+    logger.debug(f"S3 filesystem config: endpoint={config['endpoint_url']}, user={config['key']}")
+    return config
+
+
+def _get_s3_filesystem():
+    """
+    Create a simple S3 filesystem for direct file operations.
+
+    Returns:
+        S3 filesystem instance
+    """
+    s3_config = _get_s3_filesystem_config()
+    return fsspec.filesystem("s3", **s3_config)
+
+
+def _check_s3_fuse_mount(s3_location: str) -> Optional[str]:
+    """
+    Check if S3 is FUSE-mounted and return local path if available.
+
+    This is the most efficient method as it provides direct filesystem access
+    without any downloading or caching.
 
     Args:
         s3_location: S3 path (s3://bucket/key)
-        temp_dir: Temporary directory path
 
     Returns:
-        Local file path
+        Local mounted path if available, None otherwise
     """
-    if not s3_location.startswith("s3://"):
-        # Already a local path
-        return s3_location
-
     # Parse S3 path
     path_parts = s3_location.replace("s3://", "").split("/", 1)
     bucket = path_parts[0]
     key = path_parts[1] if len(path_parts) > 1 else ""
 
-    # Preserve the full S3 directory structure in the temp directory
-    # e.g., s3://bucket/DCID/MQC_REPORT_ID/multiqc.parquet -> /tmp/tmpXXX/DCID/MQC_REPORT_ID/multiqc.parquet
-    local_path = temp_dir / key
+    # Get mount points from settings
+    mount_points = (
+        settings.s3_cache.mount_points.split(",") if settings.s3_cache.mount_points else []
+    )
 
-    # Create parent directories if they don't exist
-    local_path.parent.mkdir(parents=True, exist_ok=True)
+    # Check configured mount points
+    for mount_point in mount_points:
+        # Try both /mount/bucket/key and /mount/key patterns
+        potential_paths = [
+            os.path.join(mount_point, bucket, key),  # /mnt/s3/bucket/key
+            os.path.join(mount_point, key),  # /mnt/s3/key (if bucket is mount point)
+        ]
 
-    # Download file using fsspec
+        for local_path in potential_paths:
+            if os.path.exists(local_path):
+                logger.info(f"Found S3 FUSE mount: {s3_location} -> {local_path}")
+                return local_path
+
+    logger.debug(f"No S3 FUSE mount found for {s3_location}")
+    return None
+
+
+def _get_local_path_for_s3(s3_location: str, use_cache: bool = True) -> str:
+    """
+    Get a local path for S3 file using fsspec caching mechanisms.
+
+    Since MultiQC requires actual file paths (not file handles), we use
+    filecache which downloads and caches entire files locally.
+
+    Args:
+        s3_location: S3 path (s3://bucket/key) or local path
+        use_cache: Whether to use caching (default True)
+
+    Returns:
+        Local file path that can be accessed by MultiQC
+    """
+    if not s3_location.startswith("s3://"):
+        logger.debug(f"Path is already local: {s3_location}")
+        return s3_location
+
+    logger.info(f"Processing S3 location: {s3_location}")
+
+    # First, check if S3 is FUSE-mounted (most efficient)
+    fuse_path = _check_s3_fuse_mount(s3_location)
+    if fuse_path:
+        return fuse_path
+
+    if not use_cache:
+        logger.info("Cache disabled, falling back to direct download")
+        return _download_s3_file_direct(s3_location)
+
     try:
-        from depictio.api.v1.configs.config import settings
+        # Get S3 filesystem for operations
+        fs = _get_s3_filesystem()
 
-        # Use settings from config
-        fs = fsspec.filesystem(
-            "s3",
-            endpoint_url=settings.minio.endpoint_url,
-            key=settings.minio.root_user,
-            secret=settings.minio.root_password,
-        )
-    except ImportError:
-        # Fallback to boto3 if s3fs is not available
-        import boto3
-        from botocore.client import Config
+        # First, ensure the file exists and is accessible
+        logger.debug(f"Checking S3 file existence: {s3_location}")
+        if not fs.exists(s3_location):
+            raise FileNotFoundError(f"S3 file does not exist: {s3_location}")
 
-        from depictio.api.v1.configs.config import settings
+        # Get file info for logging
+        file_info = fs.info(s3_location)
+        file_size = file_info.get("size", 0)
+        logger.info(f"S3 file found - size: {file_size} bytes")
 
-        s3_client = boto3.client(
-            "s3",
-            aws_access_key_id=settings.minio.root_user,
-            aws_secret_access_key=settings.minio.root_password,
-            endpoint_url=settings.minio.endpoint_url,
-            config=Config(signature_version="s3v4"),
-        )
-        logger.info(f"Downloading {s3_location} to {local_path} using boto3")
-        s3_client.download_file(bucket, key, str(local_path))
-        return str(local_path)
+        # For MultiQC compatibility, we need an actual file path.
+        # Since fsspec's caching doesn't reliably provide local paths,
+        # we'll use a simpler approach: download to a persistent cache directory
 
-    logger.info(f"Downloading {s3_location} to {local_path}")
-    with fs.open(f"{bucket}/{key}", "rb") as remote_file:
-        with open(local_path, "wb") as local_file:
-            local_file.write(remote_file.read())
+        # Create a cache directory structure that mirrors S3
+        cache_base = settings.s3_cache.cache_dir
+        os.makedirs(cache_base, exist_ok=True)
 
-    return str(local_path)
+        # Parse S3 path to create cache path
+        path_parts = s3_location.replace("s3://", "").split("/", 1)
+        bucket = path_parts[0]
+        key = path_parts[1] if len(path_parts) > 1 else ""
+
+        # Create cache path that mirrors S3 structure
+        cache_path = os.path.join(cache_base, bucket, key)
+        cache_dir = os.path.dirname(cache_path)
+        os.makedirs(cache_dir, exist_ok=True)
+
+        # Check if file is already cached and fresh
+        if os.path.exists(cache_path):
+            # Check if cached file is still valid (compare size with S3)
+            cached_size = os.path.getsize(cache_path)
+            if cached_size == file_size:
+                logger.info(f"Using cached file (size match): {cache_path}")
+                return cache_path
+            else:
+                logger.info(f"Cache size mismatch ({cached_size} != {file_size}), re-downloading")
+                os.remove(cache_path)
+
+        # Download file to cache location
+        logger.info(f"Downloading to cache: {s3_location} -> {cache_path}")
+        try:
+            fs.get(s3_location, cache_path)
+            logger.info(f"Successfully cached S3 file at: {cache_path}")
+            return cache_path
+        except Exception as download_error:
+            logger.error(f"Failed to download to cache: {download_error}")
+            # Clean up partial download
+            if os.path.exists(cache_path):
+                os.remove(cache_path)
+            # Fall back to temporary download
+            return _download_s3_file_direct(s3_location)
+
+    except Exception as e:
+        logger.error(f"Failed to access S3 file with caching: {e}")
+        logger.info("Falling back to direct download method")
+        return _download_s3_file_direct(s3_location)
 
 
-def get_multiqc_modules(s3_location: str) -> List[str]:
+def _download_s3_file_direct(s3_location: str) -> str:
+    """
+    Direct download of S3 file to temporary location (fallback method).
+
+    Args:
+        s3_location: S3 path (s3://bucket/key)
+
+    Returns:
+        Local file path
+    """
+    logger.info(f"Direct download of S3 file: {s3_location}")
+
+    # Parse S3 path
+    path_parts = s3_location.replace("s3://", "").split("/", 1)
+    key = path_parts[1] if len(path_parts) > 1 else ""
+
+    # Create temporary file with proper extension
+    file_extension = Path(key).suffix or ".tmp"
+    temp_file = tempfile.NamedTemporaryFile(suffix=file_extension, delete=False)
+    local_path = temp_file.name
+    temp_file.close()
+
+    logger.debug(f"Downloading {s3_location} to {local_path}")
+
+    try:
+        s3_config = _get_s3_filesystem_config()
+        fs = fsspec.filesystem("s3", **s3_config)
+
+        # Check file exists and get size for progress logging
+        if fs.exists(s3_location):
+            file_info = fs.info(s3_location)
+            file_size = file_info.get("size", "unknown")
+            logger.info(f"Downloading file of size: {file_size} bytes")
+        else:
+            raise FileNotFoundError(f"S3 file does not exist: {s3_location}")
+
+        # Download file
+        fs.get(s3_location, local_path)
+        logger.info(f"Successfully downloaded S3 file to: {local_path}")
+
+        return local_path
+
+    except Exception as e:
+        # Clean up failed download
+        try:
+            os.unlink(local_path)
+        except OSError:
+            pass
+        logger.error(f"Failed to download S3 file directly: {e}")
+        raise
+
+
+def get_multiqc_modules(s3_location: str, use_s3_cache: bool = True) -> List[str]:
     """
     Get available MultiQC modules from a parquet file.
 
@@ -89,6 +238,8 @@ def get_multiqc_modules(s3_location: str) -> List[str]:
     Returns:
         List of available module names
     """
+    logger.info(f"Getting MultiQC modules from: {s3_location}")
+
     try:
         logger.debug("Attempting to import MultiQC in get_multiqc_modules...")
         import multiqc
@@ -97,25 +248,29 @@ def get_multiqc_modules(s3_location: str) -> List[str]:
             f"MultiQC imported successfully in get_multiqc_modules. Version: {getattr(multiqc, '__version__', 'unknown')}"
         )
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            local_file = _get_local_path_for_s3(s3_location, temp_path)
+        # Get local path using S3 mounting/caching
+        local_file = _get_local_path_for_s3(s3_location, use_cache=use_s3_cache)
+        logger.debug(f"Using local file path: {local_file}")
 
-            # Reset MultiQC state and load the parquet file
-            multiqc.reset()
-            multiqc.parse_logs(local_file)
+        # Reset MultiQC state and load the parquet file
+        logger.debug("Resetting MultiQC state")
+        multiqc.reset()
 
-            # Get available modules
-            modules = multiqc.list_modules()
-            logger.info(f"Found MultiQC modules: {modules}")
-            return modules
+        logger.debug(f"Parsing MultiQC logs from: {local_file}")
+        multiqc.parse_logs(local_file)
+
+        # Get available modules
+        logger.debug("Retrieving available MultiQC modules")
+        modules = multiqc.list_modules()
+        logger.info(f"Found {len(modules)} MultiQC modules: {modules}")
+        return modules
 
     except Exception as e:
-        logger.error(f"Error getting MultiQC modules: {e}")
+        logger.error(f"Error getting MultiQC modules from {s3_location}: {e}", exc_info=True)
         return []
 
 
-def get_multiqc_plots(s3_location: str, module: str) -> List[str]:
+def get_multiqc_plots(s3_location: str, module: str, use_s3_cache: bool = True) -> List[str]:
     """
     Get available plots for a specific MultiQC module.
 
@@ -126,26 +281,35 @@ def get_multiqc_plots(s3_location: str, module: str) -> List[str]:
     Returns:
         List of available plot names for the module
     """
+    logger.info(f"Getting MultiQC plots for module '{module}' from: {s3_location}")
+
     try:
         import multiqc
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            local_file = _get_local_path_for_s3(s3_location, temp_path)
+        # Get local path using S3 mounting/caching
+        local_file = _get_local_path_for_s3(s3_location, use_cache=use_s3_cache)
+        logger.debug(f"Using local file path: {local_file}")
 
-            # Reset MultiQC state and load the parquet file
-            multiqc.reset()
-            multiqc.parse_logs(local_file)
+        # Reset MultiQC state and load the parquet file
+        logger.debug("Resetting MultiQC state")
+        multiqc.reset()
 
-            # Get available plots
-            all_plots = multiqc.list_plots()
-            module_plots = all_plots.get(module, [])
+        logger.debug(f"Parsing MultiQC logs from: {local_file}")
+        multiqc.parse_logs(local_file)
 
-            logger.info(f"Found plots for module {module}: {module_plots}")
-            return module_plots
+        # Get available plots
+        logger.debug("Retrieving all available MultiQC plots")
+        all_plots = multiqc.list_plots()
+        module_plots = all_plots.get(module, [])
+
+        logger.info(f"Found {len(module_plots)} plots for module {module}: {module_plots}")
+        return module_plots
 
     except Exception as e:
-        logger.error(f"Error getting MultiQC plots for module {module}: {e}")
+        logger.error(
+            f"Error getting MultiQC plots for module {module} from {s3_location}: {e}",
+            exc_info=True,
+        )
         return []
 
 
@@ -226,7 +390,11 @@ def get_multiqc_datasets(metadata_plots: dict, module: str, plot: str) -> List[s
 
 
 def create_multiqc_plot(
-    s3_locations: List[str], module: str, plot: str, dataset_id: Optional[str] = None
+    s3_locations: List[str],
+    module: str,
+    plot: str,
+    dataset_id: Optional[str] = None,
+    use_s3_cache: bool = True,
 ) -> go.Figure:
     """
     Create a Plotly figure from MultiQC data - SIMPLE VERSION.
@@ -242,40 +410,87 @@ def create_multiqc_plot(
     """
     import multiqc
 
-    logger.info(f"Creating simple MultiQC plot: {module}/{plot}")
+    logger.info(f"Creating MultiQC plot: {module}/{plot} from {len(s3_locations)} files")
+    logger.debug(f"S3 locations: {s3_locations}")
 
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir)
+    # Reset MultiQC state
+    logger.debug("Resetting MultiQC state")
+    multiqc.reset()
 
-        # Reset and parse all files
-        multiqc.reset()
-        for s3_location in s3_locations:
-            local_file = _get_local_path_for_s3(s3_location, temp_path)
+    # Parse all files
+    parsed_files = 0
+    local_files = []
+
+    for i, s3_location in enumerate(s3_locations):
+        logger.info(f"Processing file {i + 1}/{len(s3_locations)}: {s3_location}")
+        try:
+            # Get local path using S3 mounting/caching
+            local_file = _get_local_path_for_s3(s3_location, use_cache=use_s3_cache)
+            local_files.append(local_file)
+            logger.debug(f"Using local file path: {local_file}")
+
+            # Parse the file
+            logger.debug(f"Parsing MultiQC logs from: {local_file}")
             multiqc.parse_logs(local_file)
+            parsed_files += 1
+            logger.info(f"Successfully parsed file {i + 1}: {s3_location}")
 
-        # Get first available plot and generate figure
-        plot_obj = multiqc.get_plot(module, plot)
+        except Exception as e:
+            logger.warning(f"Error parsing MultiQC file {i + 1} from {s3_location}: {e}")
+            # Continue with other files if one fails
+            continue
 
-        # Type guard: ensure plot_obj has get_figure method
-        if not plot_obj or not hasattr(plot_obj, "get_figure"):
-            raise ValueError(f"Failed to get plot object for {module}/{plot}")
+    # Check if we successfully parsed any files
+    if parsed_files == 0:
+        logger.error("No MultiQC files could be parsed successfully")
+        raise ValueError("Failed to parse any MultiQC data files")
 
+    logger.info(f"Successfully parsed {parsed_files}/{len(s3_locations)} MultiQC files")
+
+    # Get plot object and generate figure
+    logger.debug(f"Getting plot object for {module}/{plot}")
+    plot_obj = multiqc.get_plot(module, plot)
+
+    # Type guard: ensure plot_obj has get_figure method
+    if not plot_obj or not hasattr(plot_obj, "get_figure"):
+        logger.error(f"Failed to get valid plot object for {module}/{plot}")
+        raise ValueError(f"Failed to get plot object for {module}/{plot}")
+
+    logger.debug("Plot object retrieved successfully, generating figure")
+
+    try:
         if dataset_id:
+            logger.debug(f"Creating figure with dataset_id: {dataset_id}")
             fig = plot_obj.get_figure(dataset_id=dataset_id)
         else:
             # Use index 0 for first dataset instead of the dataset object
+            logger.debug("Creating figure with dataset_id: 0")
             fig = plot_obj.get_figure(dataset_id=0)
+    except Exception as e:
+        logger.error(f"Error generating figure: {e}")
+        raise
 
-        # Basic styling
-        fig.update_layout(
-            title=f"{module.upper()}: {plot}",
-            template="plotly_white",
-            autosize=True,
-            margin=dict(t=60, l=60, r=60, b=60),
-        )
+    # Basic styling
+    logger.debug("Applying styling to figure")
+    fig.update_layout(
+        title=f"{module.upper()}: {plot}",
+        template="plotly_white",
+        autosize=True,
+        margin=dict(t=60, l=60, r=60, b=60),
+    )
 
-        logger.info(f"Created MultiQC plot with {len(fig.data)} traces")
-        return fig
+    logger.info(f"Successfully created MultiQC plot with {len(fig.data)} traces")
+
+    # Clean up temporary files if direct download was used
+    for local_file in local_files:
+        if local_file.startswith(tempfile.gettempdir()):
+            try:
+                os.unlink(local_file)
+                logger.debug(f"Cleaned up temporary file: {local_file}")
+            except Exception as cleanup_error:
+                logger.debug(f"Could not clean up temporary file {local_file}: {cleanup_error}")
+
+    return fig
 
 
 def filter_samples_in_plot(fig: go.Figure, samples_to_show: List[str]) -> go.Figure:
@@ -299,9 +514,12 @@ def filter_samples_in_plot(fig: go.Figure, samples_to_show: List[str]) -> go.Fig
                 # Keep traces without names visible (usually summary data)
                 trace.visible = True
 
-        logger.info(f"Filtered plot to show {len(samples_to_show)} samples")
+        visible_traces = sum(1 for trace in fig.data if getattr(trace, "visible", True))
+        logger.info(
+            f"Filtered plot to show {len(samples_to_show)} samples ({visible_traces} visible traces)"
+        )
         return fig
 
     except Exception as e:
-        logger.error(f"Error filtering samples in plot: {e}")
+        logger.error(f"Error filtering samples in plot: {e}", exc_info=True)
         return fig
