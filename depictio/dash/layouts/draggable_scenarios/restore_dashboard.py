@@ -112,21 +112,22 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
         # Build the child using the appropriate function and kwargs
         child = build_function(**child_metadata)
         # logger.debug(f"child : ")
-        # Store child with its component type for later processing
-        children.append((child, component_type))
+        # Store child with its component type and metadata for later processing
+        children.append((child, component_type, child_metadata))
     # logger.info(f"Children: {children}")
 
     interactive_components_dict = return_interactive_components_dict(stored_metadata)
 
     # Process children with special handling for text components to avoid circular JSON
     processed_children = []
-    for child, component_type in children:
+    for child, component_type, child_metadata in children:
         logger.info(f"Processing child component of type {component_type}")
 
         processed_child = enable_box_edit_mode(
-            child.to_plotly_json(),
+            child,  # Pass native Dash component directly
             switch_state=edit_components_button,
             dashboard_id=dashboard_id,
+            component_data=child_metadata,  # Pass component metadata to help with ID extraction
             TOKEN=TOKEN,
         )
         processed_children.append(processed_child)

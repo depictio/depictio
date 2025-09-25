@@ -455,7 +455,7 @@ def update_interactive_component_sync(
     for component in stored_metadata:
         logger.info(f"DEBUG - interactive_component_update - Processing component: {component}")
 
-        if component["component_type"] not in ["jbrowse"]:
+        if component["component_type"] not in ["jbrowse", "multiqc"]:
             # retrieve the key from df_dict_processed based on the wf_id and dc_id, checking which join encompasses the dc_id
             for key, df in df_dict_processed[component["wf_id"]].items():
                 if component["dc_id"] in key:
@@ -566,6 +566,32 @@ def update_interactive_component_sync(
             logger.debug(f"JBROWSE CHILD - {child}")
 
             # Process jbrowse component as native Dash component
+            child = enable_box_edit_mode(
+                child,  # Native Dash component (no JSON conversion needed)
+                switch_state=switch_state,
+                dashboard_id=dashboard_id,
+                TOKEN=TOKEN,
+            )
+
+            children.append(child)
+
+        elif component["component_type"] == "multiqc":
+            # Handle MultiQC components specially - they don't use data joins
+            # Apply proper index normalization for MultiQC components
+            component["index"] = component["index"].replace("-tmp", "")
+
+            # Set component parameters
+            component["refresh"] = True
+            component["access_token"] = TOKEN
+            component["theme"] = theme
+
+            # Convert component type to lowercase for helpers mapping compatibility
+            component_type_lower = component["component_type"].lower()
+            child = helpers_mapping[component_type_lower](**component)
+
+            logger.debug(f"MULTIQC CHILD - {child}")
+
+            # Process multiqc component as native Dash component
             child = enable_box_edit_mode(
                 child,  # Native Dash component (no JSON conversion needed)
                 switch_state=switch_state,
