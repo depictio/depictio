@@ -10,7 +10,7 @@
   "license": "ISC",
   "description": "",
   "devDependencies": {
-    "cypress": "^14.3.3",
+    "cypress": "^15.0.0",
     "js-yaml": "^4.1.0"
   }
 }
