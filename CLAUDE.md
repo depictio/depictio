@@ -472,3 +472,4 @@ await temp_container.screenshot(path=output_file)
 - **Timing**: Uses smart waiting for component rendering with proper dimensions
 - **Error Handling**: Graceful fallback to traditional methods if component targeting fails
 - **Cleanup**: Properly removes temporary DOM elements after screenshot
+- dash v3 is using app.run not run_server
