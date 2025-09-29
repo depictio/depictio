@@ -231,6 +231,7 @@ ldap_db/
 !iris.csv
 !demographic_data.csv
 !physical_features.csv
+!sample_metadata.csv
 
 # Cypress
 depictio/tests/e2e-tests/node_modules/

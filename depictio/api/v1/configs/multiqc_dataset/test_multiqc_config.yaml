@@ -15,3 +15,20 @@ workflows:
         description: "MultiQC report data"
         config:
           type: "MultiQC"
+      - data_collection_tag: "sample_metadata"
+        description: "Sample metadata table for MultiQC integration"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: single
+            scan_parameters:
+              filename: "../api/v1/configs/multiqc_dataset/sample_metadata.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              "sample_id": "Sample identifier matching MultiQC sample names"
+              "treatment": "Treatment condition applied to the sample"
+              "batch": "Batch identifier for experimental runs"
