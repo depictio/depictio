@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from depictio.api.v1.endpoints.multiqc_endpoints.utils import (
+    check_duplicate_multiqc_report,
     create_multiqc_report_in_db,
     delete_multiqc_report_by_id,
     generate_multiqc_download_url,
@@ -72,6 +73,39 @@ async def create_multiqc_report(
     )
 
     return response
+
+
+@router.get(
+    "/reports/check-duplicate",
+    response_model=dict,
+    summary="Check if a MultiQC report already exists",
+)
+async def check_duplicate_report(
+    data_collection_id: str = Query(..., description="ID of the data collection"),
+    original_file_path: str = Query(..., description="Original file path of the MultiQC report"),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Check if a MultiQC report already exists for the same data collection and file path.
+
+    Args:
+        data_collection_id: ID of the data collection
+        original_file_path: Original local file path of the MultiQC report
+        current_user: Authenticated user
+
+    Returns:
+        Dict with exists flag and report data if found
+    """
+    existing_report = await check_duplicate_multiqc_report(data_collection_id, original_file_path)
+
+    if existing_report:
+        return {
+            "exists": True,
+            "report_id": str(existing_report.id),
+            "report": existing_report.model_dump(mode="json"),
+        }
+    else:
+        return {"exists": False, "report_id": None, "report": None}
 
 
 @router.get(

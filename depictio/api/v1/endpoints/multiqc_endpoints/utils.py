@@ -1,13 +1,49 @@
 """Utility functions for MultiQC endpoints."""
 
-from typing import List
+from typing import List, Optional
 
 from bson import ObjectId
 from fastapi import HTTPException
 
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import multiqc_collection
+from depictio.api.v1.s3 import s3_client
 from depictio.models.models.multiqc_reports import MultiQCReport
+
+
+async def check_duplicate_multiqc_report(
+    data_collection_id: str, original_file_path: str
+) -> Optional[MultiQCReport]:
+    """
+    Check if a MultiQC report already exists for the same data collection and file path.
+
+    Args:
+        data_collection_id: ID of the data collection
+        original_file_path: Original local file path of the MultiQC report
+
+    Returns:
+        Existing MultiQC report if found, None otherwise
+    """
+    try:
+        query = {
+            "data_collection_id": data_collection_id,
+            "original_file_path": original_file_path,
+        }
+        report_doc = multiqc_collection.find_one(query)
+
+        if report_doc:
+            report_doc["id"] = str(report_doc["_id"])
+            logger.info(
+                f"Found existing MultiQC report for DC {data_collection_id}, file {original_file_path}"
+            )
+            return MultiQCReport(**report_doc)
+
+        return None
+
+    except Exception as e:
+        logger.warning(f"Failed to check for duplicate MultiQC report: {e}")
+        return None
 
 
 async def create_multiqc_report_in_db(report: MultiQCReport) -> MultiQCReport:
@@ -149,10 +185,43 @@ async def delete_multiqc_report_by_id(report_id: str, delete_s3_file: bool = Fal
         s3_file_deleted = False
         if delete_s3_file and report.s3_location:
             try:
-                # TODO: Implement S3 deletion when S3 utility functions are available
-                # await delete_s3_object(report.s3_location)
-                s3_file_deleted = True
-                logger.info(f"S3 file deletion requested for: {report.s3_location}")
+                # Parse S3 location to get bucket and key
+                # Format: s3://bucket/data_collection_id/timestamp_id/multiqc.parquet
+                s3_path = report.s3_location.replace("s3://", "")
+                bucket_name = settings.minio.bucket
+
+                # Extract the prefix (everything after bucket name)
+                if "/" in s3_path:
+                    s3_key_prefix = s3_path.split("/", 1)[1]
+
+                    # List all objects with this prefix and delete them
+                    paginator = s3_client.get_paginator("list_objects_v2")
+                    pages = paginator.paginate(Bucket=bucket_name, Prefix=s3_key_prefix)
+
+                    objects_to_delete = []
+                    for page in pages:
+                        if "Contents" in page:
+                            for obj in page["Contents"]:
+                                objects_to_delete.append({"Key": obj["Key"]})
+
+                    if objects_to_delete:
+                        # Delete in batches of 1000 (S3 limit)
+                        batch_size = 1000
+                        for i in range(0, len(objects_to_delete), batch_size):
+                            batch = objects_to_delete[i : i + batch_size]
+                            s3_client.delete_objects(Bucket=bucket_name, Delete={"Objects": batch})
+
+                        logger.info(
+                            f"Deleted {len(objects_to_delete)} S3 objects from: {report.s3_location}"
+                        )
+                        s3_file_deleted = True
+                    else:
+                        logger.warning(f"No S3 objects found at: {report.s3_location}")
+                        s3_file_deleted = False
+                else:
+                    logger.warning(f"Invalid S3 location format: {report.s3_location}")
+                    s3_file_deleted = False
+
             except Exception as s3_error:
                 logger.warning(f"Failed to delete S3 file: {s3_error}")
                 s3_file_deleted = False
