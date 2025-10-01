@@ -195,6 +195,8 @@ class MultiQCDashboardComponent(BaseModel):
             "component_type": self.component_type,
             "workflow_id": self.workflow_id,
             "data_collection_id": self.data_collection_id,
+            "wf_id": self.workflow_id,  # Alias for compatibility
+            "dc_id": self.data_collection_id,  # Alias for compatibility
         }
 
         # Add visualization state only if user has made selections
@@ -209,6 +211,10 @@ class MultiQCDashboardComponent(BaseModel):
         if self.state.s3_locations:
             essential_metadata["s3_locations"] = self.state.s3_locations
 
+        # Add access token if available
+        if self.access_token:
+            essential_metadata["token"] = self.access_token
+
         # Only store minimal metadata - modules and plots structure for dropdown restoration
         if self.state.metadata:
             minimal_metadata = {}
@@ -216,6 +222,8 @@ class MultiQCDashboardComponent(BaseModel):
                 minimal_metadata["modules"] = self.state.metadata["modules"]
             if "plots" in self.state.metadata:
                 minimal_metadata["plots"] = self.state.metadata["plots"]
+            if "samples" in self.state.metadata:
+                minimal_metadata["samples"] = self.state.metadata["samples"]
             if minimal_metadata:
                 essential_metadata["metadata"] = minimal_metadata
 
