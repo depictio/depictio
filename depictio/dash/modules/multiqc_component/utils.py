@@ -219,8 +219,7 @@ def build_multiqc(**kwargs: Any):
                 theme=theme,
             )
 
-            # Add MultiQC logo overlay
-            fig = add_multiqc_logo_overlay(fig)
+            # Logo overlay is now handled at Dash component level (see plot_component below)
 
             # Analyze plot structure and store trace metadata for patching
             trace_metadata = analyze_multiqc_plot_structure(fig)
@@ -233,11 +232,38 @@ def build_multiqc(**kwargs: Any):
                 f"{trace_metadata.get('summary', {}).get('traces', 0)} traces"
             )
 
-            plot_component = dcc.Graph(
-                id={"type": "multiqc-graph", "index": str(component_id)},
-                figure=fig,
-                style={"height": "100%", "width": "100%"},
-                config={"displayModeBar": "hover", "responsive": True},
+            # Wrap dcc.Graph with logo overlay at component level for consistent sizing
+            plot_component = html.Div(
+                style={
+                    "position": "relative",
+                    "height": "100%",
+                    "width": "100%",
+                    "display": "flex",
+                    "flexDirection": "column",
+                },
+                children=[
+                    dcc.Graph(
+                        id={"type": "multiqc-graph", "index": str(component_id)},
+                        figure=fig,
+                        style={"flex": "1", "minHeight": "0"},
+                        config={"displayModeBar": "hover", "responsive": True},
+                    ),
+                    # MultiQC logo overlay - CSS positioned for consistent size across all plots
+                    html.Img(
+                        src="/assets/images/logos/multiqc.png",
+                        style={
+                            "position": "absolute",
+                            "top": "10px",
+                            "right": "10px",
+                            "width": "40px",
+                            "height": "40px",
+                            "opacity": "0.6",
+                            "pointerEvents": "none",
+                            "zIndex": "1000",
+                        },
+                        title="Generated with MultiQC",
+                    ),
+                ],
             )
 
         except Exception as e:

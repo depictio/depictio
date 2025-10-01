@@ -220,6 +220,7 @@ def design_multiqc(id, workflow_id=None, data_collection_id=None, local_data=Non
                                 style={"height": "400px"},
                             )
                         ],
+                        style={"height": "100%"},
                     ),
                 ]
             ),
@@ -434,6 +435,7 @@ def design_multiqc_from_model(component: MultiQCDashboardComponent) -> dmc.Paper
                                 style={"height": "400px"},
                             )
                         ],
+                        style={"height": "100%"},
                     ),
                 ]
             ),
@@ -935,7 +937,7 @@ def register_callbacks_multiqc_component(app):
         else:
             return [], dash.no_update, {"display": "none"}
 
-    # Callback to generate the actual plot
+    # Background callback to generate the actual plot (Celery-backed for multi-worker performance)
     @app.callback(
         Output({"type": "multiqc-plot-container", "index": MATCH}, "children"),
         Input({"type": "multiqc-module-select", "index": MATCH}, "value"),
@@ -943,6 +945,7 @@ def register_callbacks_multiqc_component(app):
         Input({"type": "multiqc-dataset-select", "index": MATCH}, "value"),
         State({"type": "multiqc-s3-store", "index": MATCH}, "data"),
         State("theme-store", "data"),
+        background=True,
     )
     def generate_multiqc_plot(
         selected_module, selected_plot, selected_dataset, s3_locations, theme_data
@@ -962,7 +965,7 @@ def register_callbacks_multiqc_component(app):
         else:
             theme = "light"
 
-        # Create the plot with theme
+        # Create the plot with theme (Celery worker will cache this automatically)
         fig = create_multiqc_plot(
             s3_locations=s3_locations,
             module=selected_module,
@@ -971,7 +974,34 @@ def register_callbacks_multiqc_component(app):
             theme=theme,
         )
 
-        return dcc.Graph(figure=fig, style={"height": "100%"})
+        # Wrap with logo overlay for consistent sizing across all plots
+        return html.Div(
+            style={
+                "position": "relative",
+                "height": "100%",
+                "width": "100%",
+                "display": "flex",
+                "flexDirection": "column",
+            },
+            children=[
+                dcc.Graph(figure=fig, style={"flex": "1", "minHeight": "0"}),
+                # MultiQC logo overlay - CSS positioned for consistent size
+                html.Img(
+                    src="/assets/images/logos/multiqc.png",
+                    style={
+                        "position": "absolute",
+                        "top": "10px",
+                        "right": "10px",
+                        "width": "40px",
+                        "height": "40px",
+                        "opacity": "0.6",
+                        "pointerEvents": "none",
+                        "zIndex": "1000",
+                    },
+                    title="Generated with MultiQC",
+                ),
+            ],
+        )
 
     @app.callback(
         Output({"type": "multiqc-metadata-store", "index": MATCH}, "data"),
@@ -1164,9 +1194,16 @@ def register_callbacks_multiqc_component(app):
         # Build interactive_components_dict in the format expected by iterative_join
         # Structure: {component_index: {"index": ..., "value": [...], "metadata": {...}}}
         interactive_components_dict = {}
+        has_active_filters = False  # Track if any filters have actual values
+
         if "interactive_components_values" in interactive_values:
             for component_data in interactive_values["interactive_components_values"]:
                 component_index = component_data.get("index")
+                component_value = component_data.get("value", [])
+
+                # Check if this component has any active filter values
+                if component_value and len(component_value) > 0:
+                    has_active_filters = True
                 if component_index:
                     interactive_components_dict[component_index] = component_data
                     comp_metadata = component_data.get("metadata", {})
@@ -1177,9 +1214,31 @@ def register_callbacks_multiqc_component(app):
                         f"value={component_data.get('value')}"
                     )
 
+        # Early exit if no interactive components exist
         if not interactive_components_dict:
             logger.info("No interactive components - skipping patching")
             return dash.no_update
+
+        # Check if figure has been previously filtered by looking at the figure layout
+        # We store a custom flag _depictio_filter_applied when patching
+        figure_was_patched = False
+        if current_figure and isinstance(current_figure, dict):
+            layout = current_figure.get("layout", {})
+            # Check if filters were previously applied to this figure
+            figure_was_patched = layout.get("_depictio_filter_applied", False)
+
+        # Early exit if no filters are active AND figure hasn't been patched before
+        # (This prevents unnecessary patching on initial load with empty filters)
+        # BUT allow patching if figure was previously filtered (user is clearing filters)
+        if not has_active_filters and not figure_was_patched:
+            logger.info("No active filters on initial load - skipping patching")
+            return dash.no_update
+
+        # If user is clearing filters (no active filters but was previously patched),
+        # we need to restore the original unfiltered data
+        if not has_active_filters and figure_was_patched:
+            logger.info("Clearing filters - restoring original unfiltered data")
+            # We'll let the patching continue with empty selected_samples to restore all data
 
         try:
             # Extract metadata DC ID and join column from joins_dict
@@ -1237,8 +1296,15 @@ def register_callbacks_multiqc_component(app):
 
             # Return the patched figure
             if patched_figures:
-                logger.info("Successfully patched MultiQC figure without regenerating")
-                return patched_figures[0]
+                patched_fig = patched_figures[0]
+                # Mark the figure as having been patched so we know to restore when filters are cleared
+                if "layout" not in patched_fig:
+                    patched_fig["layout"] = {}
+                patched_fig["layout"]["_depictio_filter_applied"] = has_active_filters
+                logger.info(
+                    f"Successfully patched MultiQC figure (filter_applied={has_active_filters})"
+                )
+                return patched_fig
             else:
                 logger.warning("No data available after filtering")
                 return dash.no_update
