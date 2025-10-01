@@ -29,6 +29,10 @@ workflows:
             polars_kwargs:
               separator: ","
             columns_description:
-              "sample_id": "Sample identifier matching MultiQC sample names"
+              "sample": "Sample identifier matching MultiQC sample names"
               "treatment": "Treatment condition applied to the sample"
               "batch": "Batch identifier for experimental runs"
+          join:
+            on_columns: ["sample"]
+            how: "inner"
+            with_dc: ["multiqc_data"]
