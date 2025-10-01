@@ -6,7 +6,11 @@ Uses MultiQC Python module to extract samples, modules, and plots.
 from pathlib import Path
 from typing import Any, Dict
 
-from depictio.cli.cli.utils.api_calls import api_create_multiqc_report
+from depictio.cli.cli.utils.api_calls import (
+    api_check_duplicate_multiqc_report,
+    api_create_multiqc_report,
+    api_delete_multiqc_report,
+)
 from depictio.cli.cli.utils.rich_utils import rich_print_multiqc_processing_summary
 from depictio.cli.cli_logging import logger
 
@@ -315,6 +319,129 @@ def process_multiqc_data_collection(
                 multiqc_version = file_meta["multiqc_version"]
 
                 try:
+                    # Check if this report already exists
+                    logger.info(
+                        f"Checking for duplicate report {i + 1}/{len(individual_file_metadata)}"
+                    )
+                    logger.info(f"  Data collection ID: {data_collection.id}")
+                    logger.info(f"  File path for duplicate check: {file_path}")
+                    existing_report = api_check_duplicate_multiqc_report(
+                        str(data_collection.id), file_path, CLI_config
+                    )
+
+                    if existing_report:
+                        report_id = existing_report.get("id")
+
+                        if overwrite:
+                            logger.info(
+                                f"🔄 Overwrite enabled - deleting existing report with ID: {report_id}"
+                            )
+                            logger.info(f"   Original path: {file_path}")
+                            logger.info(
+                                f"   Existing S3 location: {existing_report.get('s3_location', 'N/A')}"
+                            )
+
+                            # Rich print for non-verbose users
+                            from depictio.cli.cli.utils.rich_utils import console
+
+                            # Extract run name from file path
+                            # For sequencing-runs structure: /path/to/run_id/multiqc/multiqc_data/multiqc.parquet
+                            # Find the parent directory that contains 'multiqc/' subdirectory
+                            file_path_obj = Path(file_path)
+                            run_name = "unknown"
+
+                            # Look for 'multiqc' in the path parts and get its parent
+                            path_parts = file_path_obj.parts
+                            for idx, part in enumerate(path_parts):
+                                if part == "multiqc" and idx > 0:
+                                    run_name = path_parts[idx - 1]
+                                    break
+
+                            # Format as run_id/filename for display
+                            display_path = (
+                                f"{run_name}/{file_path_obj.name}"
+                                if run_name != "unknown"
+                                else file_path_obj.name
+                            )
+
+                            console.print(
+                                f"[yellow]🔄 Overwriting existing report:[/yellow] [cyan]{report_id}[/cyan] [dim]({display_path})[/dim]"
+                            )
+
+                            # Delete the existing report (including S3 file)
+                            try:
+                                delete_response = api_delete_multiqc_report(
+                                    report_id, delete_s3_file=True, CLI_config=CLI_config
+                                )
+
+                                if delete_response and delete_response.status_code == 200:
+                                    logger.info(
+                                        f"✅ Successfully deleted existing report {report_id}"
+                                    )
+                                    console.print(
+                                        "[green]✅ Deleted existing report and S3 file[/green]"
+                                    )
+                                else:
+                                    logger.warning(
+                                        f"⚠️  Failed to delete existing report {report_id}: {delete_response.text if delete_response else 'No response'}"
+                                    )
+                                    console.print(
+                                        "[yellow]⚠️  Warning: Failed to delete existing report[/yellow]"
+                                    )
+                            except Exception as delete_error:
+                                logger.warning(
+                                    f"⚠️  Error deleting existing report {report_id}: {delete_error}"
+                                )
+                                console.print(
+                                    "[yellow]⚠️  Warning: Error deleting existing report[/yellow]"
+                                )
+
+                            # Continue to upload the new report
+                            logger.info(f"Proceeding with upload of new report for {file_path}")
+                        else:
+                            logger.info(
+                                f"⏭️  Skipping file {i + 1} - report already exists with ID: {report_id}"
+                            )
+                            logger.info(f"   Original path: {file_path}")
+                            logger.info(
+                                f"   Existing S3 location: {existing_report.get('s3_location', 'N/A')}"
+                            )
+                            logger.info("   Use --overwrite to replace this report")
+
+                            # Rich print for non-verbose users
+                            from depictio.cli.cli.utils.rich_utils import console
+
+                            # Extract run name from file path
+                            # For sequencing-runs structure: /path/to/run_id/multiqc/multiqc_data/multiqc.parquet
+                            # Find the parent directory that contains 'multiqc/' subdirectory
+                            file_path_obj = Path(file_path)
+                            run_name = "unknown"
+
+                            # Look for 'multiqc' in the path parts and get its parent
+                            path_parts = file_path_obj.parts
+                            for idx, part in enumerate(path_parts):
+                                if part == "multiqc" and idx > 0:
+                                    run_name = path_parts[idx - 1]
+                                    break
+
+                            # Format as run_id/filename for display
+                            display_path = (
+                                f"{run_name}/{file_path_obj.name}"
+                                if run_name != "unknown"
+                                else file_path_obj.name
+                            )
+
+                            console.print(
+                                f"[cyan]⏭️  Skipping duplicate report:[/cyan] [dim]{display_path}[/dim]"
+                            )
+                            console.print(f"   [dim]Existing report ID: {report_id}[/dim]")
+                            console.print(
+                                "   [yellow]💡 Tip: Use --overwrite to replace this report[/yellow]"
+                            )
+
+                            created_reports.append(report_id)
+                            continue
+
                     # Upload this specific file to S3
                     # Use timestamp + index to create unique path, but keep filename as multiqc.parquet
                     file_name = "multiqc.parquet"
@@ -389,7 +516,7 @@ def process_multiqc_data_collection(
                         logger.warning(f"Failed to save MultiQC report {i + 1} to database: {e}")
 
                 except Exception as e:
-                    logger.error(f"Failed to upload file {i + 1} ({file_path}) to S3: {e}")
+                    logger.error(f"Failed to process file {i + 1} ({file_path}): {e}")
                     continue
 
         except ImportError:
