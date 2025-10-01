@@ -945,7 +945,7 @@ def register_callbacks_multiqc_component(app):
         Input({"type": "multiqc-dataset-select", "index": MATCH}, "value"),
         State({"type": "multiqc-s3-store", "index": MATCH}, "data"),
         State("theme-store", "data"),
-        background=True,
+        # background=True,
     )
     def generate_multiqc_plot(
         selected_module, selected_plot, selected_dataset, s3_locations, theme_data
@@ -1315,7 +1315,7 @@ def register_callbacks_multiqc_component(app):
 
     # Callback to update MultiQC figures when theme changes (matches figure component pattern)
     @app.callback(
-        Output({"type": "multiqc-graph", "index": MATCH}, "figure"),
+        Output({"type": "multiqc-graph", "index": MATCH}, "figure", allow_duplicate=True),
         Input("theme-store", "data"),
         prevent_initial_call=True,
     )
@@ -1341,6 +1341,187 @@ def register_callbacks_multiqc_component(app):
 
         logger.info(f"🎨 MultiQC THEME PATCH: Applied {template_name} (theme_data: {theme_data})")
         return patch
+
+    # Background callback to render MultiQC plots during dashboard restoration
+    @app.callback(
+        Output({"type": "multiqc-graph", "index": MATCH}, "figure"),
+        Output({"type": "multiqc-trace-metadata", "index": MATCH}, "data"),
+        Input({"type": "multiqc-trigger", "index": MATCH}, "data"),
+        background=False,  # Disabled background mode - using synchronous rendering
+        prevent_initial_call=False,
+    )
+    def render_multiqc_plot_background(trigger_data):
+        """Generate MultiQC plot for dashboard restoration."""
+        # Move import to top to avoid issues in background context
+        from depictio.dash.modules.multiqc_component.utils import analyze_multiqc_plot_structure
+
+        logger.info("=" * 80)
+        logger.info("🎬 RENDER CALLBACK STARTED")
+        logger.info(f"🔍 Trigger data received: {trigger_data}")
+
+        if not trigger_data:
+            logger.warning("⚠️ No trigger_data - returning no_update")
+            return dash.no_update, dash.no_update
+
+        logger.info(f"✅ Trigger data is valid, type: {type(trigger_data)}")
+
+        try:
+            # Log each extracted parameter
+            logger.info("📦 Extracting parameters from trigger_data...")
+            s3_locations = trigger_data.get("s3_locations", [])
+            logger.info(f"  - s3_locations: {s3_locations} (count: {len(s3_locations)})")
+
+            module = trigger_data.get("module")
+            logger.info(f"  - module: {module}")
+
+            plot = trigger_data.get("plot")
+            logger.info(f"  - plot: {plot}")
+
+            dataset_id = trigger_data.get("dataset_id")
+            logger.info(f"  - dataset_id: {dataset_id}")
+
+            theme = trigger_data.get("theme", "light")
+            logger.info(f"  - theme: {theme}")
+
+            component_id = trigger_data.get("component_id")
+            logger.info(f"  - component_id: {component_id}")
+
+            # Validate required parameters
+            if not s3_locations:
+                logger.error("❌ ERROR: s3_locations is empty!")
+                error_fig = {
+                    "data": [],
+                    "layout": {
+                        "title": "Error: No S3 locations",
+                        "xaxis": {"visible": False},
+                        "yaxis": {"visible": False},
+                        "annotations": [
+                            {
+                                "text": "Missing S3 locations for MultiQC data",
+                                "xref": "paper",
+                                "yref": "paper",
+                                "x": 0.5,
+                                "y": 0.5,
+                                "showarrow": False,
+                                "font": {"size": 16, "color": "red"},
+                            }
+                        ],
+                    },
+                }
+                return error_fig, {}
+
+            if not module:
+                logger.error("❌ ERROR: module is missing!")
+                error_fig = {
+                    "data": [],
+                    "layout": {
+                        "title": "Error: No module specified",
+                        "xaxis": {"visible": False},
+                        "yaxis": {"visible": False},
+                        "annotations": [
+                            {
+                                "text": "MultiQC module not specified",
+                                "xref": "paper",
+                                "yref": "paper",
+                                "x": 0.5,
+                                "y": 0.5,
+                                "showarrow": False,
+                                "font": {"size": 16, "color": "red"},
+                            }
+                        ],
+                    },
+                }
+                return error_fig, {}
+
+            if not plot:
+                logger.error("❌ ERROR: plot is missing!")
+                error_fig = {
+                    "data": [],
+                    "layout": {
+                        "title": "Error: No plot specified",
+                        "xaxis": {"visible": False},
+                        "yaxis": {"visible": False},
+                        "annotations": [
+                            {
+                                "text": "MultiQC plot name not specified",
+                                "xref": "paper",
+                                "yref": "paper",
+                                "x": 0.5,
+                                "y": 0.5,
+                                "showarrow": False,
+                                "font": {"size": 16, "color": "red"},
+                            }
+                        ],
+                    },
+                }
+                return error_fig, {}
+
+            logger.info("✅ All required parameters present")
+            logger.info(f"🎨 Rendering MultiQC plot: {module}/{plot}")
+
+            # Call create_multiqc_plot with extensive logging
+            logger.info("📞 Calling create_multiqc_plot...")
+            logger.info(
+                f"   Parameters: module={module}, plot={plot}, dataset_id={dataset_id}, theme={theme}"
+            )
+            logger.info(f"   S3 locations: {s3_locations}")
+
+            fig = create_multiqc_plot(
+                s3_locations=s3_locations,
+                module=module,
+                plot=plot,
+                dataset_id=dataset_id,
+                theme=theme,
+            )
+
+            logger.info("✅ create_multiqc_plot returned successfully")
+            logger.info(f"   Figure type: {type(fig)}")
+            logger.info(
+                f"   Figure has {len(fig.data) if hasattr(fig, 'data') else 'unknown'} traces"
+            )
+
+            # Analyze plot structure
+            logger.info("🔍 Analyzing plot structure...")
+            trace_metadata = analyze_multiqc_plot_structure(fig)
+            logger.info("✅ Plot structure analyzed")
+            logger.info(f"   Trace count: {trace_metadata.get('summary', {}).get('traces', 0)}")
+
+            # Return figure object directly (dcc.Graph already exists in DOM)
+            logger.info("✅ Returning figure object for dcc.Graph")
+            logger.info(f"   Figure type: {type(fig)}")
+            logger.info(f"   Figure traces: {len(fig.data)}")
+
+            logger.info("🎉 RENDER CALLBACK COMPLETED SUCCESSFULLY")
+            logger.info("=" * 80)
+            return fig, trace_metadata
+
+        except Exception as e:
+            logger.error("=" * 80)
+            logger.error(f"❌ EXCEPTION in render callback: {type(e).__name__}")
+            logger.error(f"❌ Exception message: {str(e)}")
+            logger.error("❌ Exception details:", exc_info=True)
+            logger.error("=" * 80)
+
+            error_fig = {
+                "data": [],
+                "layout": {
+                    "title": "Error Rendering MultiQC Plot",
+                    "xaxis": {"visible": False},
+                    "yaxis": {"visible": False},
+                    "annotations": [
+                        {
+                            "text": f"{type(e).__name__}: {str(e)}",
+                            "xref": "paper",
+                            "yref": "paper",
+                            "x": 0.5,
+                            "y": 0.5,
+                            "showarrow": False,
+                            "font": {"size": 14, "color": "red"},
+                        }
+                    ],
+                },
+            }
+            return error_fig, {}
 
         # # Early exit if basic requirements not met
         # if not selected_module or not selected_plot or not s3_locations or not interactive_values:
