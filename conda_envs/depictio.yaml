@@ -33,7 +33,7 @@ dependencies:
   # - playwright==1.50.1
   - plotly_express
   # - plotly_express=0.4.1
-  - polars==1.22.0
+  # polars will be installed via pip below
   - pydantic==2.10.6
   - pydantic-settings==2.7.1
   - pyjwt==2.10.1
@@ -64,3 +64,4 @@ dependencies:
     - dash-ace==0.2.1
     - dash-dynamic-grid-layout
     - multiqc==1.31.0
+    - polars-lts-cpu==1.19.0

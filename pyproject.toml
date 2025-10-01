@@ -38,7 +38,7 @@ dependencies = [
   # "playwright==1.50.1",
   "plotly_express",
   # "plotly_express==0.4.1",
-  "polars==1.22.0",
+  "polars-lts-cpu==1.19.0",
   "pydantic[email]==2.10.6",
   "pydantic-settings==2.7.1",
   "pyjwt==2.10.1",
