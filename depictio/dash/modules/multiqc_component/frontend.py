@@ -574,7 +574,7 @@ def create_sample_filter_patch(selected_samples, metadata=None):
     return patch
 
 
-def patch_multiqc_figures(figures, selected_samples, metadata=None):
+def patch_multiqc_figures(figures, selected_samples, metadata=None, trace_metadata=None):
     """
     Apply sample filtering to MultiQC figures based on interactive selections.
 
@@ -582,6 +582,7 @@ def patch_multiqc_figures(figures, selected_samples, metadata=None):
         figures: List of Plotly figure objects to patch
         selected_samples: List of selected sample names for filtering
         metadata: Optional metadata dictionary with plot information
+        trace_metadata: Original trace metadata with x, y, z arrays and orientation
 
     Returns:
         List of patched figure objects
@@ -612,42 +613,94 @@ def patch_multiqc_figures(figures, selected_samples, metadata=None):
         logger.info(f"  Figure has {len(all_samples)} total samples")
         logger.info(f"  Selected samples: {selected_samples}")
 
+        # Get original trace data from metadata (critical for proper patching)
+        original_traces = []
+        if trace_metadata and "original_data" in trace_metadata:
+            original_traces = trace_metadata["original_data"]
+            logger.debug(f"  Using stored trace metadata with {len(original_traces)} traces")
+
         for i, trace in enumerate(patched_fig.get("data", [])):
             trace_type = trace.get("type", "").lower()
             trace_name = trace.get("name", "")
 
-            # Get original data from figure metadata store if available
-            original_x = trace.get("x")
-            original_y = trace.get("y")
-            original_z = trace.get("z")
+            # Get original data from trace metadata if available, otherwise use current trace
+            if i < len(original_traces):
+                trace_info = original_traces[i]
+                original_x = trace_info.get("original_x", [])
+                original_y = trace_info.get("original_y", [])
+                original_z = trace_info.get("original_z", [])
+                orientation = trace_info.get("orientation", "v")
+                logger.debug(
+                    f"    Trace {i}: Using stored original data - "
+                    f"x_len={len(original_x)}, y_len={len(original_y)}, orientation={orientation}"
+                )
+            else:
+                # Fallback to current trace data
+                original_x = trace.get("x", [])
+                original_y = trace.get("y", [])
+                original_z = trace.get("z", [])
+                orientation = trace.get("orientation", "v")
+                logger.debug(f"    Trace {i}: Using current trace data (no stored metadata)")
 
             logger.info(f"    Trace {i}: type='{trace_type}', name='{trace_name}'")
 
-            # Method 1: Handle bar charts (vertical orientation - samples in X-axis)
-            if trace_type == "bar" and trace.get("orientation") != "h":
-                if original_x and original_y:
-                    # Filter from original data based on selected samples AND valid Y values
-                    filtered_indices = [
-                        idx
-                        for idx, sample in enumerate(original_x)
-                        if sample in selected_samples
-                        and idx < len(original_y)
-                        and str(original_y[idx]).lower() != "nan"
-                        and original_y[idx] is not None
-                    ]
-                    if filtered_indices:
-                        new_x = [original_x[idx] for idx in filtered_indices]
-                        new_y = [original_y[idx] for idx in filtered_indices]
-                        patched_fig["data"][i]["x"] = (
-                            tuple(new_x) if isinstance(original_x, tuple) else new_x
-                        )
-                        patched_fig["data"][i]["y"] = (
-                            tuple(new_y) if isinstance(original_y, tuple) else new_y
-                        )
-                        patched_fig["data"][i]["visible"] = True
-                        logger.info(f"      Filtered bar chart: {len(new_x)} samples")
-                    else:
-                        patched_fig["data"][i]["visible"] = False
+            # Method 1: Handle bar charts - check orientation to determine sample axis
+            if trace_type == "bar":
+                logger.debug(f"      Processing bar plot with orientation '{orientation}'")
+                if orientation == "h":
+                    # Horizontal bars: samples are in Y-axis
+                    if original_y and original_x:
+                        # Filter from original data based on selected samples AND valid X values
+                        filtered_indices = [
+                            idx
+                            for idx, sample in enumerate(original_y)
+                            if sample in selected_samples
+                            and idx < len(original_x)
+                            and str(original_x[idx]).lower() != "nan"
+                            and original_x[idx] is not None
+                        ]
+                        if filtered_indices:
+                            new_y = [original_y[idx] for idx in filtered_indices]
+                            new_x = [original_x[idx] for idx in filtered_indices]
+                            patched_fig["data"][i]["y"] = (
+                                tuple(new_y) if isinstance(original_y, tuple) else new_y
+                            )
+                            patched_fig["data"][i]["x"] = (
+                                tuple(new_x) if isinstance(original_x, tuple) else new_x
+                            )
+                            patched_fig["data"][i]["visible"] = True
+                            logger.info(
+                                f"      Filtered horizontal bar chart: {len(new_y)} samples"
+                            )
+                        else:
+                            patched_fig["data"][i]["visible"] = False
+                            logger.debug("      No valid data after filtering - hiding trace")
+                else:
+                    # Vertical bars: samples are in X-axis
+                    if original_x and original_y:
+                        # Filter from original data based on selected samples AND valid Y values
+                        filtered_indices = [
+                            idx
+                            for idx, sample in enumerate(original_x)
+                            if sample in selected_samples
+                            and idx < len(original_y)
+                            and str(original_y[idx]).lower() != "nan"
+                            and original_y[idx] is not None
+                        ]
+                        if filtered_indices:
+                            new_x = [original_x[idx] for idx in filtered_indices]
+                            new_y = [original_y[idx] for idx in filtered_indices]
+                            patched_fig["data"][i]["x"] = (
+                                tuple(new_x) if isinstance(original_x, tuple) else new_x
+                            )
+                            patched_fig["data"][i]["y"] = (
+                                tuple(new_y) if isinstance(original_y, tuple) else new_y
+                            )
+                            patched_fig["data"][i]["visible"] = True
+                            logger.info(f"      Filtered vertical bar chart: {len(new_x)} samples")
+                        else:
+                            patched_fig["data"][i]["visible"] = False
+                            logger.debug("      No valid data after filtering - hiding trace")
 
             # Method 2: Handle heatmaps - Return full figure (Patch doesn't handle Y-axis properly)
             elif trace_type == "heatmap":
@@ -918,7 +971,7 @@ def register_callbacks_multiqc_component(app):
             theme=theme,
         )
 
-        return dcc.Graph(figure=fig, style={"height": "500px"})
+        return dcc.Graph(figure=fig, style={"height": "100%"})
 
     @app.callback(
         Output({"type": "multiqc-metadata-store", "index": MATCH}, "data"),
@@ -1012,6 +1065,7 @@ def register_callbacks_multiqc_component(app):
         Input("interactive-values-store", "data"),
         State({"type": "stored-metadata-component", "index": MATCH}, "data"),
         State({"type": "multiqc-graph", "index": MATCH}, "figure"),
+        State({"type": "multiqc-trace-metadata", "index": MATCH}, "data"),
         State("local-store", "data"),
         prevent_initial_call=True,
     )
@@ -1019,6 +1073,7 @@ def register_callbacks_multiqc_component(app):
         interactive_values,
         stored_metadata,
         current_figure,
+        trace_metadata,
         local_data,
     ):
         """Patch MultiQC plots when interactive filtering is applied (only for joined workflows).
@@ -1164,11 +1219,21 @@ def register_callbacks_multiqc_component(app):
                 logger.warning("No current figure available for patching")
                 return dash.no_update
 
+            # Check if we have trace metadata for proper patching
+            if not trace_metadata or not trace_metadata.get("original_data"):
+                logger.warning("No trace metadata available - cannot perform proper patching")
+                return dash.no_update
+
             # Use existing figure and patch it directly (no regeneration)
             logger.info(f"Patching existing figure with {len(selected_samples)} selected samples")
+            logger.debug(
+                f"Trace metadata available: {len(trace_metadata.get('original_data', []))} traces"
+            )
 
             # Apply patching to filter the plot with the resolved sample names
-            patched_figures = patch_multiqc_figures([current_figure], selected_samples, metadata)
+            patched_figures = patch_multiqc_figures(
+                [current_figure], selected_samples, metadata, trace_metadata
+            )
 
             # Return the patched figure
             if patched_figures:

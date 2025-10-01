@@ -1,9 +1,78 @@
 from typing import Any
 
 import httpx
+import plotly.graph_objects as go
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
+
+
+def analyze_multiqc_plot_structure(fig: go.Figure) -> dict:
+    """
+    Analyze how samples are represented in the MultiQC plot and store original data.
+
+    This function preserves the original trace data (x, y, z arrays and orientation)
+    which is essential for proper patching operations when filtering by samples.
+
+    Args:
+        fig: Plotly Figure object to analyze
+
+    Returns:
+        Dictionary containing original trace data and summary information
+    """
+    if not fig or not hasattr(fig, "data"):
+        return {"original_data": [], "summary": "No data"}
+
+    # Store complete original data for each trace
+    original_data = []
+    trace_types = []
+    sample_mapping = []
+
+    for i, trace in enumerate(fig.data):
+        trace_info = {
+            "index": i,
+            "type": trace.type if hasattr(trace, "type") else "",
+            "name": trace.name if hasattr(trace, "name") else "",
+            "orientation": trace.orientation if hasattr(trace, "orientation") else "v",
+            # Store original data as tuples or lists (preserve type for Plotly compatibility)
+            "original_x": (
+                tuple(trace.x)
+                if hasattr(trace, "x") and trace.x is not None and isinstance(trace.x, tuple)
+                else (list(trace.x) if hasattr(trace, "x") and trace.x is not None else [])
+            ),
+            "original_y": (
+                tuple(trace.y)
+                if hasattr(trace, "y") and trace.y is not None and isinstance(trace.y, tuple)
+                else (list(trace.y) if hasattr(trace, "y") and trace.y is not None else [])
+            ),
+            "original_z": (
+                tuple(trace.z)
+                if hasattr(trace, "z") and trace.z is not None and isinstance(trace.z, tuple)
+                else (list(trace.z) if hasattr(trace, "z") and trace.z is not None else [])
+            ),
+        }
+        original_data.append(trace_info)
+
+        # Collect metadata for display
+        trace_types.append(trace.type if hasattr(trace, "type") else "unknown")
+        if hasattr(trace, "name") and trace.name:
+            sample_mapping.append(trace.name)
+
+    # Create summary for display
+    unique_types = list(set(trace_types))
+    summary = {
+        "traces": len(original_data),
+        "types": ", ".join(unique_types),
+        "samples_in_traces": len(sample_mapping),
+        "sample_names": ", ".join(sample_mapping[:3]) + ("..." if len(sample_mapping) > 3 else ""),
+    }
+
+    logger.debug(
+        f"Analyzed MultiQC plot: {summary['traces']} traces, "
+        f"types: {summary['types']}, samples: {summary['samples_in_traces']}"
+    )
+
+    return {"original_data": original_data, "summary": summary}
 
 
 def add_multiqc_logo_overlay(fig, logo_size_px=45):
@@ -108,6 +177,12 @@ def build_multiqc(**kwargs: Any):
         data=component_metadata,
     )
 
+    # Initialize trace metadata store (empty by default)
+    trace_metadata_store = dcc.Store(
+        id={"type": "multiqc-trace-metadata", "index": str(component_id)},
+        data={},
+    )
+
     # Check if we have the minimum required information for a plot
     if not selected_module or not selected_plot or not s3_locations:
         plot_component = dcc.Graph(
@@ -131,7 +206,7 @@ def build_multiqc(**kwargs: Any):
                     ],
                 },
             },
-            style={"height": "400px", "width": "100%"},
+            style={"height": "100%", "width": "100%"},
         )
     else:
         try:
@@ -147,11 +222,22 @@ def build_multiqc(**kwargs: Any):
             # Add MultiQC logo overlay
             fig = add_multiqc_logo_overlay(fig)
 
+            # Analyze plot structure and store trace metadata for patching
+            trace_metadata = analyze_multiqc_plot_structure(fig)
+            trace_metadata_store = dcc.Store(
+                id={"type": "multiqc-trace-metadata", "index": str(component_id)},
+                data=trace_metadata,
+            )
+            logger.debug(
+                f"Stored trace metadata for {component_id}: "
+                f"{trace_metadata.get('summary', {}).get('traces', 0)} traces"
+            )
+
             plot_component = dcc.Graph(
                 id={"type": "multiqc-graph", "index": str(component_id)},
                 figure=fig,
-                style={"height": "400px", "width": "100%"},
-                config={"displayModeBar": True, "responsive": True},
+                style={"height": "100%", "width": "100%"},
+                config={"displayModeBar": "hover", "responsive": True},
             )
 
         except Exception as e:
@@ -177,12 +263,12 @@ def build_multiqc(**kwargs: Any):
                         ],
                     },
                 },
-                style={"height": "400px", "width": "100%"},
+                style={"height": "100%", "width": "100%"},
             )
 
-    # Return container with both plot and store (following card pattern)
+    # Return container with plot, stores, and trace metadata (following card pattern)
     # CRITICAL: Add the component ID so enable_box_edit_mode can extract it properly
-    return html.Div([plot_component, store_component], id=component_id)
+    return html.Div([plot_component, store_component, trace_metadata_store], id=component_id)
 
 
 def get_multiqc_reports_for_data_collection(data_collection_id: str, token: str) -> list:
