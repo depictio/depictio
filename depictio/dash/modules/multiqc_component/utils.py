@@ -2,6 +2,7 @@ from typing import Any
 
 import httpx
 import plotly.graph_objects as go
+from dash import dcc, html
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
@@ -124,9 +125,6 @@ def build_multiqc(**kwargs: Any):
     Returns:
         Dash component with MultiQC plot and metadata store
     """
-    from dash import dcc, html
-
-    from depictio.dash.modules.figure_component.multiqc_vis import create_multiqc_plot
 
     logger.info(f"Building MultiQC plot component with kwargs keys: {list(kwargs.keys())}")
 
@@ -209,88 +207,60 @@ def build_multiqc(**kwargs: Any):
             style={"height": "100%", "width": "100%"},
         )
     else:
-        try:
-            # Create the MultiQC plot with theme
-            fig = create_multiqc_plot(
-                s3_locations=s3_locations,
-                module=selected_module,
-                plot=selected_plot,
-                dataset_id=selected_dataset,
-                theme=theme,
-            )
-
-            # Logo overlay is now handled at Dash component level (see plot_component below)
-
-            # Analyze plot structure and store trace metadata for patching
-            trace_metadata = analyze_multiqc_plot_structure(fig)
-            trace_metadata_store = dcc.Store(
-                id={"type": "multiqc-trace-metadata", "index": str(component_id)},
-                data=trace_metadata,
-            )
-            logger.debug(
-                f"Stored trace metadata for {component_id}: "
-                f"{trace_metadata.get('summary', {}).get('traces', 0)} traces"
-            )
-
-            # Wrap dcc.Graph with logo overlay at component level for consistent sizing
-            plot_component = html.Div(
-                style={
-                    "position": "relative",
-                    "height": "100%",
-                    "width": "100%",
-                    "display": "flex",
-                    "flexDirection": "column",
-                },
-                children=[
-                    dcc.Graph(
-                        id={"type": "multiqc-graph", "index": str(component_id)},
-                        figure=fig,
-                        style={"flex": "1", "minHeight": "0"},
-                        config={"displayModeBar": "hover", "responsive": True},
-                    ),
-                    # MultiQC logo overlay - CSS positioned for consistent size across all plots
-                    html.Img(
-                        src="/assets/images/logos/multiqc.png",
-                        style={
-                            "position": "absolute",
-                            "top": "10px",
-                            "right": "10px",
-                            "width": "40px",
-                            "height": "40px",
-                            "opacity": "0.6",
-                            "pointerEvents": "none",
-                            "zIndex": "1000",
+        # Lazy loading: return placeholder and trigger background generation
+        plot_component = html.Div(
+            id={"type": "multiqc-plot-wrapper", "index": str(component_id)},
+            style={
+                "position": "relative",
+                "height": "100%",
+                "width": "100%",
+                "display": "flex",
+                "flexDirection": "column",
+            },
+            children=[
+                # Actual dcc.Graph component - will be populated by background callback via figure property
+                dcc.Graph(
+                    id={"type": "multiqc-graph", "index": str(component_id)},
+                    figure={
+                        "data": [],
+                        "layout": {
+                            "title": "Loading MultiQC plot...",
+                            "xaxis": {"visible": False},
+                            "yaxis": {"visible": False},
                         },
-                        title="Generated with MultiQC",
-                    ),
-                ],
-            )
-
-        except Exception as e:
-            logger.error(f"Error creating MultiQC plot: {e}")
-            plot_component = dcc.Graph(
-                id={"type": "multiqc-graph", "index": str(component_id)},
-                figure={
-                    "data": [],
-                    "layout": {
-                        "title": f"Error loading MultiQC: {str(e)[:50]}...",
-                        "xaxis": {"visible": False},
-                        "yaxis": {"visible": False},
-                        "annotations": [
-                            {
-                                "text": "Failed to load plot",
-                                "xref": "paper",
-                                "yref": "paper",
-                                "x": 0.5,
-                                "y": 0.5,
-                                "showarrow": False,
-                                "font": {"size": 16, "color": "red"},
-                            }
-                        ],
                     },
-                },
-                style={"height": "100%", "width": "100%"},
-            )
+                    style={"flex": "1", "minHeight": "0"},
+                    config={"displayModeBar": "hover", "responsive": True},
+                ),
+                # MultiQC logo overlay - CSS positioned for consistent size across all plots
+                html.Img(
+                    src="/assets/images/logos/multiqc.png",
+                    style={
+                        "position": "absolute",
+                        "top": "10px",
+                        "right": "10px",
+                        "width": "40px",
+                        "height": "40px",
+                        "opacity": "0.6",
+                        "pointerEvents": "none",
+                        "zIndex": "1000",
+                    },
+                    title="Generated with MultiQC",
+                ),
+                # Trigger store for background callback
+                dcc.Store(
+                    id={"type": "multiqc-trigger", "index": str(component_id)},
+                    data={
+                        "s3_locations": s3_locations,
+                        "module": selected_module,
+                        "plot": selected_plot,
+                        "dataset_id": selected_dataset,
+                        "theme": theme,
+                        "component_id": str(component_id),
+                    },
+                ),
+            ],
+        )
 
     # Return container with plot, stores, and trace metadata (following card pattern)
     # CRITICAL: Add the component ID so enable_box_edit_mode can extract it properly
