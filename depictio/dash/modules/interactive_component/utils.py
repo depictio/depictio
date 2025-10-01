@@ -691,7 +691,7 @@ def build_interactive(**kwargs):
             logger.error(f"❌ SCHEMA MISMATCH: Column '{column_name}' not found in DataFrame")
             logger.error(f"Available columns: {df.columns}")
             # Return empty component to prevent crash
-            return dmc.Text(f"Error: Column '{column_name}' not found", color="red")
+            return dmc.Text(f"Error: Column '{column_name}' not found", c="red")
 
         data = sorted(df[column_name].drop_nulls().unique())[:100]  # Limit to 100 options
 
@@ -1271,7 +1271,7 @@ def build_interactive(**kwargs):
         interactive_component = dmc.Text(
             f"Unsupported component type: {interactive_component_type} for {column_type} data",
             id={"type": value_div_type, "index": str(index)},
-            color="red",
+            c="red",
         )
 
     # If no title is provided, use the aggregation value on the selected column
