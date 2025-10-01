@@ -68,6 +68,7 @@ def build_multiqc(**kwargs: Any):
     selected_dataset = kwargs.get("selected_dataset")
     s3_locations = kwargs.get("s3_locations", [])
     stepper = kwargs.get("stepper", False)
+    theme = kwargs.get("theme", "light")
 
     # Metadata management - Create a store component to store the metadata (following card pattern)
     # For stepper mode, use the temporary index to avoid conflicts with existing components
@@ -82,27 +83,35 @@ def build_multiqc(**kwargs: Any):
         store_index = component_id.replace("-tmp", "") if component_id else "unknown"
         data_index = store_index
 
+    # Create comprehensive metadata for the component including interactive filtering support
+    component_metadata = {
+        "index": str(data_index),
+        "component_type": "multiqc",
+        "workflow_id": kwargs.get("workflow_id"),
+        "data_collection_id": kwargs.get("data_collection_id"),
+        "wf_id": kwargs.get("workflow_id"),  # Alias for compatibility
+        "dc_id": kwargs.get("data_collection_id"),  # Alias for compatibility
+        "selected_module": selected_module,
+        "selected_plot": selected_plot,
+        "selected_dataset": selected_dataset,
+        "s3_locations": s3_locations,
+        # Additional metadata needed for interactive filtering
+        "metadata": kwargs.get("metadata", {}),  # MultiQC metadata (modules, plots, samples)
+        "interactive_patching_enabled": True,  # Flag to enable interactive patching
+    }
+
     store_component = dcc.Store(
         id={
             "type": "stored-metadata-component",
             "index": str(store_index),
         },
-        data={
-            "index": str(data_index),
-            "component_type": "multiqc",
-            "workflow_id": kwargs.get("workflow_id"),
-            "data_collection_id": kwargs.get("data_collection_id"),
-            "selected_module": selected_module,
-            "selected_plot": selected_plot,
-            "selected_dataset": selected_dataset,
-            "s3_locations": s3_locations,
-        },
+        data=component_metadata,
     )
 
     # Check if we have the minimum required information for a plot
     if not selected_module or not selected_plot or not s3_locations:
         plot_component = dcc.Graph(
-            id=component_id,
+            id={"type": "multiqc-graph", "index": str(component_id)},
             figure={
                 "data": [],
                 "layout": {
@@ -126,19 +135,20 @@ def build_multiqc(**kwargs: Any):
         )
     else:
         try:
-            # Create the MultiQC plot
+            # Create the MultiQC plot with theme
             fig = create_multiqc_plot(
                 s3_locations=s3_locations,
                 module=selected_module,
                 plot=selected_plot,
                 dataset_id=selected_dataset,
+                theme=theme,
             )
 
             # Add MultiQC logo overlay
             fig = add_multiqc_logo_overlay(fig)
 
             plot_component = dcc.Graph(
-                id=component_id,
+                id={"type": "multiqc-graph", "index": str(component_id)},
                 figure=fig,
                 style={"height": "400px", "width": "100%"},
                 config={"displayModeBar": True, "responsive": True},
@@ -147,7 +157,7 @@ def build_multiqc(**kwargs: Any):
         except Exception as e:
             logger.error(f"Error creating MultiQC plot: {e}")
             plot_component = dcc.Graph(
-                id=component_id,
+                id={"type": "multiqc-graph", "index": str(component_id)},
                 figure={
                     "data": [],
                     "layout": {
