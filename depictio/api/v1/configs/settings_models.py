@@ -125,7 +125,7 @@ class FastAPIConfig(ServiceConfig):
     service_port: int = Field(default=8058)
     external_port: int = Field(default=8058)
     host: str = Field(default="0.0.0.0")
-    workers: int = Field(default=1)
+    workers: int = Field(default=4)
     ssl: bool = Field(default=False)
     logging_level: str = Field(default="INFO")
 
@@ -137,7 +137,7 @@ class DashConfig(ServiceConfig):
     service_port: int = Field(default=5080)
     external_port: int = Field(default=5080)
     host: str = Field(default="0.0.0.0")
-    workers: int = Field(default=1)
+    workers: int = Field(default=4)
     debug: bool = Field(default=True)
     auto_generate_figures: bool = Field(
         default=False, description="Enable automatic figure generation in UI mode"
