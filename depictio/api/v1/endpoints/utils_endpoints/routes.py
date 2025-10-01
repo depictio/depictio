@@ -16,7 +16,10 @@ from depictio.api.v1.db import (
     workflows_collection,
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
-from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
+from depictio.api.v1.endpoints.utils_endpoints.core_functions import (
+    cleanup_orphaned_s3_files,
+    create_bucket,
+)
 from depictio.api.v1.endpoints.utils_endpoints.infrastructure_diagnostics import (
     run_comprehensive_diagnostics,
 )
@@ -104,6 +107,39 @@ async def status():
     logger.info("Server is online.")
 
     return {"status": "online", "version": get_version()}
+
+
+@utils_endpoint_router.post("/cleanup-orphaned-s3-files")
+async def cleanup_orphaned_s3_files_endpoint(
+    dry_run: bool = True,
+    force: bool = False,
+    current_user: UserBeanie = Depends(get_current_user),
+):
+    """
+    Clean up S3 files from data collections that no longer exist in MongoDB.
+
+    This endpoint requires admin privileges.
+
+    Args:
+        dry_run: If True, only report what would be deleted without actually deleting (default: True)
+        force: If True, bypass safety check when all prefixes appear orphaned (default: False)
+        current_user: Authenticated user (must be admin)
+
+    Returns:
+        Cleanup results with statistics
+    """
+    # Validate user is an admin
+    if not current_user.is_admin:
+        logger.warning(f"Unauthorized S3 cleanup attempt by user: {current_user.email}")
+        raise HTTPException(status_code=403, detail="Admin privileges required")
+
+    logger.info(
+        f"S3 cleanup requested by admin {current_user.email} (dry_run={dry_run}, force={force})"
+    )
+
+    results = await cleanup_orphaned_s3_files(dry_run=dry_run, force=force)
+
+    return results
 
 
 @utils_endpoint_router.post("/process_initial_data_collections")
