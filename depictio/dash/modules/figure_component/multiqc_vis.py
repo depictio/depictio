@@ -15,6 +15,7 @@ import plotly.graph_objects as go
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.modules.figure_component.utils import _get_theme_template
 
 
 def _get_s3_filesystem_config() -> Dict[str, Any]:
@@ -395,6 +396,7 @@ def create_multiqc_plot(
     plot: str,
     dataset_id: Optional[str] = None,
     use_s3_cache: bool = True,
+    theme: str = "light",
 ) -> go.Figure:
     """
     Create a Plotly figure from MultiQC data - SIMPLE VERSION.
@@ -404,6 +406,8 @@ def create_multiqc_plot(
         module: MultiQC module name (e.g., 'fastqc')
         plot: Plot name (e.g., 'Sequence Counts')
         dataset_id: Not used in simple version
+        use_s3_cache: Whether to use S3 caching (default True)
+        theme: Theme for plot styling - "light" or "dark" (default "light")
 
     Returns:
         Plotly Figure object
@@ -470,11 +474,11 @@ def create_multiqc_plot(
         logger.error(f"Error generating figure: {e}")
         raise
 
-    # Basic styling
-    logger.debug("Applying styling to figure")
+    # Basic styling with theme support
+    logger.debug(f"Applying styling to figure with theme: {theme}")
     fig.update_layout(
         title=f"{module.upper()}: {plot}",
-        template="plotly_white",
+        template=_get_theme_template(theme),
         autosize=True,
         margin=dict(t=60, l=60, r=60, b=60),
     )
