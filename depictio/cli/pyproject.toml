@@ -10,7 +10,7 @@ dependencies = [
   "colorlog",
   "httpx==0.28.1",
   "devtools",
-  "polars[numpy,pandas,pyarrow,excel,deltalake]==1.22.0",
+  "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.19.0",
   "deltalake==0.24.0",
   "python-jose",
   "pyyaml",
@@ -34,7 +34,7 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-lts-cpu = ["polars-lts-cpu"]
+lts-cpu = ["polars-lts-cpu==1.19.0"]
 multiqc = ["multiqc>=1.31.0"]
 
 [project.scripts]
