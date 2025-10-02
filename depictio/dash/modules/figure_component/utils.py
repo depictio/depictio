@@ -768,6 +768,461 @@ def create_figure_placeholder(theme: str = "light", visu_type: str = "scatter") 
     return placeholder_fig
 
 
+def analyze_figure_structure(fig: Any, dict_kwargs: dict, visu_type: str) -> dict:
+    """
+    Analyze figure structure and store original trace data for efficient patching.
+
+    Inspired by MultiQC's analyze_multiqc_plot_structure - stores original trace data
+    and parameter mappings to enable efficient Dash Patch operations.
+
+    Args:
+        fig: Plotly Figure object to analyze
+        dict_kwargs: Parameter dictionary used to create the figure
+        visu_type: Visualization type name
+
+    Returns:
+        Dictionary containing:
+            - original_data: List of trace info with original x, y, z, marker, line data
+            - parameter_mapping: Which columns mapped to which parameters
+            - visu_type: Visualization type
+            - summary: Trace count and metadata summary
+    """
+
+    if not fig or not hasattr(fig, "data"):
+        return {"original_data": [], "parameter_mapping": {}, "summary": "No data"}
+
+    # Store complete original data for each trace
+    original_data = []
+    trace_types = []
+
+    for i, trace in enumerate(fig.data):
+        trace_info = {
+            "index": i,
+            "type": trace.type if hasattr(trace, "type") else "",
+            "name": trace.name if hasattr(trace, "name") else "",
+            "mode": trace.mode if hasattr(trace, "mode") else "",
+            "orientation": trace.orientation if hasattr(trace, "orientation") else "v",
+            # Store original data arrays (preserve type for Plotly compatibility)
+            "original_x": (
+                tuple(trace.x)
+                if hasattr(trace, "x") and trace.x is not None and isinstance(trace.x, tuple)
+                else (list(trace.x) if hasattr(trace, "x") and trace.x is not None else [])
+            ),
+            "original_y": (
+                tuple(trace.y)
+                if hasattr(trace, "y") and trace.y is not None and isinstance(trace.y, tuple)
+                else (list(trace.y) if hasattr(trace, "y") and trace.y is not None else [])
+            ),
+            "original_z": (
+                tuple(trace.z)
+                if hasattr(trace, "z") and trace.z is not None and isinstance(trace.z, tuple)
+                else (list(trace.z) if hasattr(trace, "z") and trace.z is not None else [])
+            ),
+            # Store styling info for efficient patching
+            "original_marker": trace.marker.to_plotly_json() if hasattr(trace, "marker") else {},
+            "original_line": trace.line.to_plotly_json() if hasattr(trace, "line") else {},
+            "visible": trace.visible if hasattr(trace, "visible") else True,
+        }
+        original_data.append(trace_info)
+        trace_types.append(trace.type if hasattr(trace, "type") else "unknown")
+
+    # Extract parameter mapping from dict_kwargs
+    parameter_mapping = {
+        "x": dict_kwargs.get("x"),
+        "y": dict_kwargs.get("y"),
+        "z": dict_kwargs.get("z"),
+        "color": dict_kwargs.get("color"),
+        "size": dict_kwargs.get("size"),
+        "symbol": dict_kwargs.get("symbol"),
+        "facet_row": dict_kwargs.get("facet_row"),
+        "facet_col": dict_kwargs.get("facet_col"),
+        "animation_frame": dict_kwargs.get("animation_frame"),
+    }
+    # Remove None values
+    parameter_mapping = {k: v for k, v in parameter_mapping.items() if v is not None}
+
+    # Extract color mapping if present (for categorical colors)
+    color_discrete_map = dict_kwargs.get("color_discrete_map", {})
+
+    # Create summary
+    unique_types = list(set(trace_types))
+    summary = {
+        "traces": len(original_data),
+        "types": ", ".join(unique_types),
+        "has_color": "color" in parameter_mapping,
+        "has_size": "size" in parameter_mapping,
+        "has_facets": any(k in parameter_mapping for k in ["facet_row", "facet_col"]),
+    }
+
+    logger.debug(
+        f"Analyzed figure structure: {summary['traces']} traces, "
+        f"types: {summary['types']}, color: {summary['has_color']}"
+    )
+
+    return {
+        "original_data": original_data,
+        "parameter_mapping": parameter_mapping,
+        "color_discrete_map": color_discrete_map,
+        "visu_type": visu_type,
+        "summary": summary,
+    }
+
+
+def extract_needed_columns(
+    new_params: dict,
+    trace_metadata: dict | None = None,
+    interactive_components: dict | None = None,
+    join_columns: list[str] | None = None,
+) -> list[str]:
+    """
+    Extract all columns needed for figure rendering and interactive filtering.
+
+    This enables column projection in load_deltatable_lite() for efficient data loading.
+    Only loads the 3-5 columns actually needed instead of all 50+ columns in wide tables.
+
+    Args:
+        new_params: Figure parameters (x, y, z, color, etc.)
+        trace_metadata: Existing trace metadata with original column mappings
+        interactive_components: Interactive component values (range sliders, dropdowns)
+        join_columns: Join columns if this is a joined DC (CRITICAL for join integrity)
+
+    Returns:
+        List of column names needed for the figure
+    """
+    columns = set()
+
+    # 1. PLOT PARAMETERS: Extract columns from visualization parameters
+    plot_columns = [
+        "x",
+        "y",
+        "z",
+        "color",
+        "symbol",
+        "size",
+        "facet_col",
+        "facet_row",
+        "error_x",
+        "error_y",
+        "error_z",
+        "text",
+    ]
+
+    for param in plot_columns:
+        if param in new_params and new_params[param]:
+            col = new_params[param]
+            if isinstance(col, str):
+                columns.add(col)
+
+    # 2. HOVER DATA: Extract columns from hover_data configuration
+    if "hover_data" in new_params and new_params["hover_data"]:
+        hover_data = new_params["hover_data"]
+        if isinstance(hover_data, list):
+            columns.update(hover_data)
+        elif isinstance(hover_data, dict):
+            columns.update(hover_data.keys())
+
+    # 3. CUSTOM DATA: Extract columns from custom_data
+    if "custom_data" in new_params and new_params["custom_data"]:
+        custom_data = new_params["custom_data"]
+        if isinstance(custom_data, list):
+            columns.update(custom_data)
+
+    # 4. TRACE METADATA: Extract columns from existing trace data
+    if trace_metadata and "parameter_mapping" in trace_metadata:
+        param_mapping = trace_metadata["parameter_mapping"]
+        for key in ["x_column", "y_column", "z_column", "color_column", "symbol_column"]:
+            if key in param_mapping and param_mapping[key]:
+                columns.add(param_mapping[key])
+
+    # 5. INTERACTIVE COMPONENTS: Extract columns from interactive filters
+    # This would be for range sliders, dropdowns, etc. targeting specific columns
+    if interactive_components:
+        # Extract column names from interactive component values
+        # Format: {"column_name": {"min": 0, "max": 100}} for range sliders
+        # or {"column_name": ["value1", "value2"]} for dropdowns
+        for key in interactive_components.keys():
+            # Check if key is a column name (not a metadata field)
+            if not key.startswith("_") and key not in ["mode", "theme"]:
+                columns.add(key)
+
+    # 6. ESSENTIAL COLUMNS: Always include these if they exist
+    essential_columns = [
+        "depictio_run_id",  # Required for joins and run isolation
+    ]
+    columns.update(essential_columns)
+
+    # 7. JOIN COLUMNS: CRITICAL - include all join columns for joined DCs
+    if join_columns:
+        columns.update(join_columns)
+        logger.debug(f"Added {len(join_columns)} join columns to projection: {join_columns}")
+
+    # Filter out None values and return sorted list
+    result = sorted([col for col in columns if col is not None and col != ""])
+
+    logger.debug(f"Extracted {len(result)} needed columns for data loading: {result}")
+
+    return result
+
+
+def get_parameter_impact_type(param_name: str) -> str:
+    """
+    Determine impact type for a parameter change.
+
+    Args:
+        param_name: Name of the parameter
+
+    Returns:
+        Impact type: "categorical" | "continuous" | "axis" | "layout"
+    """
+    # Axis parameters - require data swap
+    if param_name in ["x", "y", "z", "r", "theta"]:
+        return "axis"
+
+    # Layout parameters - only update layout, no data changes
+    if param_name in [
+        "title",
+        "template",
+        "showlegend",
+        "width",
+        "height",
+        "xaxis_title",
+        "yaxis_title",
+        "range_x",
+        "range_y",
+        "range_z",
+        "log_x",
+        "log_y",
+        "log_z",
+    ]:
+        return "layout"
+
+    # Categorical parameters - may add/remove traces or change grouping
+    if param_name in [
+        "color",
+        "symbol",
+        "line_dash",
+        "pattern_shape",
+        "facet_row",
+        "facet_col",
+        "animation_frame",
+        "animation_group",
+    ]:
+        return "categorical"
+
+    # Continuous parameters - update properties only
+    # opacity, size (when continuous), line_width, marker properties
+    return "continuous"
+
+
+def detect_parameter_changes(old_params: dict, new_params: dict, visu_type: str) -> dict:
+    """
+    Detect what changed between parameter sets and categorize by impact.
+
+    Args:
+        old_params: Current parameter dictionary
+        new_params: New parameter dictionary
+        visu_type: Visualization type name
+
+    Returns:
+        Dictionary with categorized changes and re-render flag:
+        {
+            "categorical_changes": ["color", "symbol"],
+            "continuous_changes": ["opacity", "marker_size"],
+            "axis_changes": ["x", "y"],
+            "layout_changes": ["title", "template"],
+            "requires_full_rerender": bool,
+        }
+    """
+    changes = {
+        "categorical_changes": [],
+        "continuous_changes": [],
+        "axis_changes": [],
+        "layout_changes": [],
+        "requires_full_rerender": False,
+    }
+
+    # Only check parameters that are in new_params
+    # Parameters in old_params but not in new_params are not being updated
+    for key in new_params.keys():
+        old_value = old_params.get(key)
+        new_value = new_params.get(key)
+
+        # Skip if values are the same
+        if old_value == new_value:
+            continue
+
+        # Detect impact type
+        impact = get_parameter_impact_type(key)
+
+        if impact == "categorical":
+            changes["categorical_changes"].append(key)
+        elif impact == "continuous":
+            changes["continuous_changes"].append(key)
+        elif impact == "axis":
+            changes["axis_changes"].append(key)
+        elif impact == "layout":
+            changes["layout_changes"].append(key)
+
+    # Determine if full re-render is required
+    # Categorical changes or visualization type change requires full re-render
+    if changes["categorical_changes"]:
+        changes["requires_full_rerender"] = True
+
+    # Check if visualization type changed (requires full re-render)
+    if old_params.get("visu_type") != new_params.get("visu_type"):
+        changes["requires_full_rerender"] = True
+
+    logger.debug(
+        f"Parameter changes detected: "
+        f"categorical={len(changes['categorical_changes'])}, "
+        f"continuous={len(changes['continuous_changes'])}, "
+        f"axis={len(changes['axis_changes'])}, "
+        f"layout={len(changes['layout_changes'])}, "
+        f"full_rerender={changes['requires_full_rerender']}"
+    )
+
+    return changes
+
+
+def patch_layout_parameter(patch: Any, param_name: str, new_value: Any) -> Any:
+    """
+    Patch layout-only parameter changes (most efficient).
+
+    Args:
+        patch: Dash Patch object
+        param_name: Parameter name to update
+        new_value: New value for the parameter
+
+    Returns:
+        Updated Patch object
+    """
+    from dash import Patch
+
+    if not isinstance(patch, Patch):
+        patch = Patch()
+
+    if param_name == "title":
+        patch["layout"]["title"]["text"] = new_value
+    elif param_name == "template":
+        # Template needs to be a template object, not string
+        import plotly.io as pio
+
+        if new_value in pio.templates:
+            patch["layout"]["template"] = pio.templates[new_value]
+    elif param_name == "showlegend":
+        patch["layout"]["showlegend"] = new_value
+    elif param_name == "xaxis_title":
+        patch["layout"]["xaxis"]["title"]["text"] = new_value
+    elif param_name == "yaxis_title":
+        patch["layout"]["yaxis"]["title"]["text"] = new_value
+    elif param_name == "range_x":
+        patch["layout"]["xaxis"]["range"] = new_value
+    elif param_name == "range_y":
+        patch["layout"]["yaxis"]["range"] = new_value
+    elif param_name == "range_z":
+        patch["layout"]["zaxis"]["range"] = new_value
+    elif param_name == "log_x":
+        patch["layout"]["xaxis"]["type"] = "log" if new_value else "linear"
+    elif param_name == "log_y":
+        patch["layout"]["yaxis"]["type"] = "log" if new_value else "linear"
+    elif param_name == "log_z":
+        patch["layout"]["zaxis"]["type"] = "log" if new_value else "linear"
+
+    logger.debug(f"Patched layout parameter: {param_name} = {new_value}")
+    return patch
+
+
+def patch_continuous_parameter(
+    patch: Any, param_name: str, new_value: Any, trace_indices: list[int] | None = None
+) -> Any:
+    """
+    Patch continuous parameter changes (very efficient).
+
+    Args:
+        patch: Dash Patch object
+        param_name: Parameter name to update
+        new_value: New value for the parameter
+        trace_indices: Specific trace indices to update (default: all)
+
+    Returns:
+        Updated Patch object
+    """
+    from dash import Patch
+
+    if not isinstance(patch, Patch):
+        patch = Patch()
+
+    # If no trace indices specified, will apply to all traces via dict update
+    if trace_indices is None:
+        # Apply to all traces using wildcard pattern
+        if param_name == "opacity":
+            patch["data"][0]["marker"]["opacity"] = new_value
+        elif param_name == "marker_size" or param_name == "size":
+            patch["data"][0]["marker"]["size"] = new_value
+        elif param_name == "line_width":
+            patch["data"][0]["line"]["width"] = new_value
+    else:
+        # Apply to specific traces
+        for i in trace_indices:
+            if param_name == "opacity":
+                patch["data"][i]["marker"]["opacity"] = new_value
+            elif param_name == "marker_size" or param_name == "size":
+                patch["data"][i]["marker"]["size"] = new_value
+            elif param_name == "line_width":
+                patch["data"][i]["line"]["width"] = new_value
+
+    logger.debug(
+        f"Patched continuous parameter: {param_name} = {new_value} "
+        f"(traces: {trace_indices or 'all'})"
+    )
+    return patch
+
+
+def patch_axis_parameter(
+    fig_dict: dict,
+    trace_metadata: dict,
+    param_name: str,
+    new_value: str,
+    df: pl.DataFrame,
+) -> dict:
+    """
+    Patch axis parameter changes (moderate - requires data loading).
+
+    Args:
+        fig_dict: Figure dictionary (from current_figure)
+        trace_metadata: Original trace metadata with parameter mappings
+        param_name: Parameter name ('x', 'y', or 'z')
+        new_value: New column name
+        df: DataFrame with new data
+
+    Returns:
+        Updated figure dictionary
+    """
+    import copy
+
+    patched_fig = copy.deepcopy(fig_dict)
+    original_data = trace_metadata.get("original_data", [])
+
+    # Update each trace with new data from the specified column
+    for i, _trace_info in enumerate(original_data):
+        if i < len(patched_fig.get("data", [])):
+            try:
+                if param_name == "x":
+                    patched_fig["data"][i]["x"] = df[new_value].to_list()
+                elif param_name == "y":
+                    patched_fig["data"][i]["y"] = df[new_value].to_list()
+                elif param_name == "z":
+                    patched_fig["data"][i]["z"] = df[new_value].to_list()
+
+                logger.debug(f"Patched trace {i} axis {param_name} with column {new_value}")
+            except Exception as e:
+                logger.error(f"Failed to patch trace {i} axis {param_name}: {e}")
+                continue
+
+    logger.info(f"Patched axis parameter: {param_name} → {new_value}")
+    return patched_fig
+
+
 def _should_defer_umap_computation(df: pl.DataFrame, context: str = "unknown") -> bool:
     """Determine if UMAP computation should be deferred based on data size and context."""
     if df is None or df.is_empty():
@@ -1173,6 +1628,11 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
                 "code_content": kwargs.get("code_content") if is_code_mode else None,
                 "timestamp": datetime.now().isoformat(),
             },
+        ),
+        # CALLBACK ARCHITECTURE: Add trace metadata store for efficient patching
+        dcc.Store(
+            id={"type": "figure-trace-metadata", "index": index},
+            data={},  # Will be populated by render callback
         ),
     ]
 
