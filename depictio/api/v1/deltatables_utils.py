@@ -198,6 +198,7 @@ def _load_joined_deltatable(
     limit_rows: int | None = None,
     load_for_options: bool = False,
     load_for_preview: bool = False,
+    select_columns: list[str] | None = None,
 ) -> pl.DataFrame:
     """
     Load and join data collections based on a joined data collection ID.
@@ -209,6 +210,7 @@ def _load_joined_deltatable(
         TOKEN (Optional[str]): Authorization token.
         limit_rows (Optional[int]): Maximum number of rows to return.
         load_for_options (bool): Whether loading for component options.
+        select_columns (Optional[list[str]]): Columns to select (applied after join).
 
     Returns:
         pl.DataFrame: The joined DataFrame.
@@ -292,6 +294,22 @@ def _load_joined_deltatable(
         joined_df = df1.join(df2, on=join_columns, how=join_how)
         logger.info(f"Successfully joined DataFrames. Result shape: {joined_df.shape}")
 
+        # Apply column projection AFTER join (if specified)
+        if select_columns:
+            # Ensure join columns are included if not already specified
+            columns_to_select = list(select_columns)
+            for join_col in join_columns:
+                if join_col not in columns_to_select:
+                    columns_to_select.append(join_col)
+
+            # Filter to only columns that exist in the joined DataFrame
+            available_columns = [col for col in columns_to_select if col in joined_df.columns]
+            if available_columns:
+                joined_df = joined_df.select(available_columns)
+                logger.debug(
+                    f"Applied column projection after join: {len(available_columns)} columns"
+                )
+
         # Apply row limit if specified
         if limit_rows:
             joined_df = joined_df.limit(limit_rows)
@@ -347,6 +365,7 @@ def load_deltatable_lite(
     limit_rows: int | None = None,
     load_for_options: bool = False,  # New parameter to load unfiltered data for component options
     load_for_preview: bool = False,  # New parameter to separate preview cache from full data cache
+    select_columns: list[str] | None = None,  # Column projection for efficient data loading
 ) -> pl.DataFrame:
     """
     Load a Delta table with adaptive memory management based on DataFrame size.
@@ -354,6 +373,11 @@ def load_deltatable_lite(
     ADAPTIVE MEMORY STRATEGY:
     - Small DataFrames (<1GB): Cached in memory for fast filtering
     - Large DataFrames (>=1GB): Always use lazy loading to prevent OOM
+
+    COLUMN PROJECTION:
+    - Specify select_columns to load only needed columns (10-50x I/O reduction for wide tables)
+    - Projection happens at scan level (Polars predicate pushdown)
+    - For joined DCs, projection applied after join to preserve join columns
 
     Supports both regular data collection IDs and joined data collection IDs (format: "dc1--dc2").
 
@@ -364,6 +388,8 @@ def load_deltatable_lite(
         TOKEN (Optional[str], optional): Authorization token. Defaults to None.
         limit_rows (Optional[int], optional): Maximum number of rows to return. Defaults to None.
         load_for_options (bool): Whether loading unfiltered data for component options.
+        load_for_preview (bool): Whether loading for preview (separate cache).
+        select_columns (Optional[list[str]]): Columns to select for projection (None = all columns).
 
     Returns:
         pl.DataFrame: The loaded and optionally filtered DataFrame.
@@ -374,7 +400,7 @@ def load_deltatable_lite(
     # Check if this is a joined data collection ID
     data_collection_id_str = str(data_collection_id)
     if isinstance(data_collection_id, str) and "--" in data_collection_id:
-        # Handle joined data collection - use original logic for now
+        # Handle joined data collection - pass column selection through
         logger.info(f"Loading joined data collection: {data_collection_id}")
         return _load_joined_deltatable(
             workflow_id,
@@ -384,6 +410,7 @@ def load_deltatable_lite(
             limit_rows,
             load_for_options,
             load_for_preview,
+            select_columns,
         )
 
     # Convert ObjectId to string for regular data collections
@@ -410,9 +437,19 @@ def load_deltatable_lite(
 
     # PERFORMANCE OPTIMIZATION: Early cache check to skip expensive operations
     # Separate cache keys for preview vs full data to prevent conflicts
+    # Include column selection in cache key to avoid conflicts between different projections
     cache_suffix = "preview" if load_for_preview else "base"
-    base_cache_key = f"{workflow_id_str}_{data_collection_id_str}_{cache_suffix}"
-    logger.debug(f"🔑 Generated cache key: {base_cache_key} (load_for_preview={load_for_preview})")
+    if select_columns:
+        # Create deterministic string from sorted column list
+        columns_key = "_".join(sorted(select_columns))
+        base_cache_key = (
+            f"{workflow_id_str}_{data_collection_id_str}_{cache_suffix}_cols_{columns_key}"
+        )
+    else:
+        base_cache_key = f"{workflow_id_str}_{data_collection_id_str}_{cache_suffix}"
+    logger.debug(
+        f"🔑 Generated cache key: {base_cache_key} (load_for_preview={load_for_preview}, columns={len(select_columns) if select_columns else 'all'})"
+    )
 
     # REDIS INTEGRATION: Check Redis cache first, then fallback to memory
     try:
@@ -425,12 +462,20 @@ def load_deltatable_lite(
                 f"📊 CACHED DATAFRAME SIZE: {redis_cached_df.height:,} rows × {redis_cached_df.width} columns"
             )
 
-            # Apply metadata filters in memory first (very fast)
-            if metadata and not load_for_options:
-                df = apply_runtime_filters(redis_cached_df, metadata)
-                logger.debug(f"📊 AFTER FILTERS: {df.height:,} rows × {df.width} columns")
+            # Apply column projection first (if specified and not already applied in cache)
+            if select_columns and not any(
+                col for col in select_columns if col not in redis_cached_df.columns
+            ):
+                # All requested columns exist - apply projection
+                df = redis_cached_df.select(select_columns)
+                logger.debug(f"Applied column projection from cache: {len(select_columns)} columns")
             else:
                 df = redis_cached_df
+
+            # Apply metadata filters in memory (very fast)
+            if metadata and not load_for_options:
+                df = apply_runtime_filters(df, metadata)
+                logger.debug(f"📊 AFTER FILTERS: {df.height:,} rows × {df.width} columns")
 
             # Apply row limit AFTER filters
             if limit_rows:
@@ -452,18 +497,27 @@ def load_deltatable_lite(
         logger.info(f"💾 MEMORY CACHE HIT: Skipping DB/HTTP calls for key: {base_cache_key}")
         update_cache_timestamp(base_cache_key)
 
-        # Get cached DataFrame and apply filters in memory
+        # Get cached DataFrame and apply column projection if needed
         cached_df = _dataframe_memory_cache[base_cache_key]
         logger.info(
             f"📊 MEMORY CACHED DATAFRAME SIZE: {cached_df.height:,} rows × {cached_df.width} columns"
         )
 
-        # Apply metadata filters in memory first (very fast)
-        if metadata and not load_for_options:
-            df = apply_runtime_filters(cached_df, metadata)
-            logger.debug(f"📊 AFTER FILTERS: {df.height:,} rows × {df.width} columns")
+        # Apply column projection first (if specified and not already applied in cache)
+        if select_columns and not any(
+            col for col in select_columns if col not in cached_df.columns
+        ):
+            df = cached_df.select(select_columns)
+            logger.debug(
+                f"Applied column projection from memory cache: {len(select_columns)} columns"
+            )
         else:
             df = cached_df
+
+        # Apply metadata filters in memory (very fast)
+        if metadata and not load_for_options:
+            df = apply_runtime_filters(df, metadata)
+            logger.debug(f"📊 AFTER FILTERS: {df.height:,} rows × {df.width} columns")
 
         # Apply row limit AFTER filters to avoid limiting joined data prematurely
         if limit_rows:
@@ -513,6 +567,14 @@ def load_deltatable_lite(
 
     # Initialize the Delta table scan
     delta_scan = pl.scan_delta(file_id, storage_options=polars_s3_config)
+
+    # COLUMN PROJECTION: Apply column selection at scan level for efficient I/O
+    # This is predicate pushdown - only read specified columns from storage
+    if select_columns:
+        # Filter to only columns that exist (defensive programming)
+        # Note: We can't validate columns at scan time, so we'll let Polars handle errors
+        delta_scan = delta_scan.select(select_columns)
+        logger.debug(f"Applied column projection at scan level: {len(select_columns)} columns")
 
     # ADAPTIVE LOADING STRATEGY
     if size_bytes == -1:
@@ -1142,6 +1204,7 @@ def iterative_join(
     joins_dict: dict,
     metadata_dict: dict,
     TOKEN: str | None = None,
+    dc_type_mapping: dict[str, str] | None = None,
 ):
     # Create cache key for this specific join operation
     cache_key = f"{workflow_id}_{hash(str(joins_dict))}_{hash(str(metadata_dict))}"
@@ -1153,6 +1216,9 @@ def iterative_join(
     # logger.debug(
     #     f"IterativeJoin: Processing workflow {workflow_id} with {len(joins_dict)} join groups"
     # )
+    logger.debug(f"Joins dict: {joins_dict}")
+    logger.debug(f"Metadata dict: {metadata_dict}")
+    logger.debug(f"DC type mapping: {dc_type_mapping}")
 
     # Optimize: Pre-filter interactive components once
     interactive_components_list = [
@@ -1162,9 +1228,26 @@ def iterative_join(
     ]
 
     if not joins_dict:
+        dc_id = next(iter(metadata_dict.values()))["metadata"]["dc_id"]
+
+        # Check if this is a non-table type (multiqc, jbrowse) that doesn't use deltatables
+        if dc_type_mapping:
+            normalized_mapping = {str(k): v for k, v in dc_type_mapping.items()}
+            dc_type = normalized_mapping.get(str(dc_id), "table")
+            if dc_type in ["multiqc", "jbrowse"]:
+                logger.info(
+                    f"IterativeJoin: Skipping deltatable load for {dc_type} dc_id {dc_id} (no joins required)"
+                )
+                # Return empty dataframe for non-table types
+                import polars as pl
+
+                result = pl.DataFrame()
+                _iterative_join_cache[cache_key] = result
+                return result
+
         result = load_deltatable_lite(
             workflow_id,
-            next(iter(metadata_dict.values()))["metadata"]["dc_id"],
+            dc_id,
             interactive_components_list,
             TOKEN=TOKEN,
         )
@@ -1175,6 +1258,77 @@ def iterative_join(
     all_dc_ids = set()
     for join_key_tuple in joins_dict.keys():
         all_dc_ids.update(join_key_tuple)
+
+    # Filter out non-table dc_ids (jbrowse, multiqc) that don't have deltatable storage
+    if dc_type_mapping:
+        # Normalize mapping keys to strings for consistent lookup
+        normalized_mapping = {str(k): v for k, v in dc_type_mapping.items()}
+        logger.debug(f"IterativeJoin: Normalized dc_type_mapping: {normalized_mapping}")
+
+        table_dc_ids = {
+            dc_id for dc_id in all_dc_ids if normalized_mapping.get(str(dc_id), "table") == "table"
+        }
+        excluded_dc_ids = all_dc_ids - table_dc_ids
+        if excluded_dc_ids:
+            logger.info(
+                f"IterativeJoin: Excluding non-table dc_ids from deltatable loading: {excluded_dc_ids}"
+            )
+        all_dc_ids = table_dc_ids
+
+        # Also filter joins_dict to remove any joins involving non-table dc_ids
+        filtered_joins_dict = {}
+        for join_key_tuple, join_list in joins_dict.items():
+            # Only keep this join group if ALL dc_ids in the tuple are table types
+            if all(dc_id in table_dc_ids for dc_id in join_key_tuple):
+                filtered_joins_dict[join_key_tuple] = join_list
+            else:
+                logger.debug(
+                    f"IterativeJoin: Filtering out join group {join_key_tuple} (contains non-table dc_ids)"
+                )
+        joins_dict = filtered_joins_dict
+        logger.info(f"IterativeJoin: After filtering, {len(joins_dict)} join groups remain")
+    else:
+        logger.warning(
+            "IterativeJoin: No dc_type_mapping provided, attempting to load all dc_ids as tables"
+        )
+
+    # Check if we have any joins left after filtering
+    if not joins_dict:
+        logger.warning("IterativeJoin: No valid joins remaining after filtering non-table dc_ids")
+        # Return the first available loaded dataframe or empty result
+        if all_dc_ids:
+            # Double-check that first_dc_id is actually a table type
+            first_dc_id = next(iter(all_dc_ids))
+            if dc_type_mapping:
+                normalized_mapping = {str(k): v for k, v in dc_type_mapping.items()}
+                dc_type = normalized_mapping.get(str(first_dc_id), "table")
+                if dc_type != "table":
+                    logger.warning(
+                        f"IterativeJoin: Filtered dc_id {first_dc_id} is type {dc_type}, returning empty dataframe"
+                    )
+                    import polars as pl
+
+                    result = pl.DataFrame()
+                    _iterative_join_cache[cache_key] = result
+                    return result
+
+            result = load_deltatable_lite(
+                workflow_id,
+                first_dc_id,
+                interactive_components_list,
+                TOKEN=TOKEN,
+            )
+            _iterative_join_cache[cache_key] = result
+            return result
+        else:
+            logger.info(
+                "IterativeJoin: No table-type data collections available, returning empty dataframe"
+            )
+            import polars as pl
+
+            result = pl.DataFrame()
+            _iterative_join_cache[cache_key] = result
+            return result
 
     # logger.debug(f"IterativeJoin: Loading {len(all_dc_ids)} unique data collections")
 
@@ -1252,11 +1406,26 @@ def iterative_join(
     # logger.debug(
     #     f"IterativeJoin: [PID:{process_id}|TID:{thread_id}] Executing {sum(len(join_list) for join_list in joins_dict.values())} total joins"
     # )
-    # Initialize merged_df with the first dataframe in the first join
-    initial_dc_id = next(iter(joins_dict.keys()))[0]
+
+    # Initialize merged_df with the first loaded dataframe (skip non-loaded dc_ids)
+    initial_dc_id = None
+    for join_key_tuple in joins_dict.keys():
+        for dc_id in join_key_tuple:
+            if dc_id in loaded_dfs:
+                initial_dc_id = dc_id
+                break
+        if initial_dc_id:
+            break
+
+    if not initial_dc_id:
+        logger.error("IterativeJoin: No loaded dataframes found to initialize merged_df")
+        import polars as pl
+
+        return pl.DataFrame()
+
     merged_df = loaded_dfs[initial_dc_id]
     used_dcs.add(initial_dc_id)
-    # logger.debug(f"IterativeJoin: Starting with {initial_dc_id} (shape: {merged_df.shape})")
+    logger.debug(f"IterativeJoin: Starting with {initial_dc_id} (shape: {merged_df.shape})")
 
     join_count = 0
     # Iteratively join dataframes based on joins_dict
@@ -1269,6 +1438,13 @@ def iterative_join(
             join_id, join_details = list(join.items())[0]
             dc_id1, dc_id2 = join_id.split("--")
             join_count += 1
+
+            # Skip joins where one or both dc_ids weren't loaded (filtered out as non-table types)
+            if dc_id1 not in loaded_dfs or dc_id2 not in loaded_dfs:
+                logger.debug(
+                    f"IterativeJoin: Skipping join {join_id} - one or both dc_ids not in loaded_dfs (dc_id1={dc_id1 in loaded_dfs}, dc_id2={dc_id2 in loaded_dfs})"
+                )
+                continue
 
             # Optimize: Skip already processed joins
             if dc_id1 in used_dcs and dc_id2 in used_dcs:
@@ -1398,13 +1574,20 @@ def get_join_tables(wf, TOKEN):
     return {}
 
 
-def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None):
+def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None, dc_type_mapping=None):
     # logger.info(f"wf - {wf}")
     # logger.info(f"return_joins_dict - stored_metadata - {stored_metadata}")
     # Extract all the data collection IDs from the stored metadata
     dc_ids_all_components = list(
-        set([v["dc_id"] for v in stored_metadata if v["component_type"] not in ["jbrowse"]])
+        set(
+            [
+                v["dc_id"]
+                for v in stored_metadata
+                if v["component_type"] not in ["jbrowse", "multiqc"]
+            ]
+        )
     )
+    logger.debug(f"Initial DCs from components: {dc_ids_all_components}")
     if extra_dc:
         dc_ids_all_components += [extra_dc]
     # logger.info(f"dc_ids_all_components - {dc_ids_all_components}")
@@ -1445,9 +1628,20 @@ def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None):
     # Extract the intersection between dc_ids_all_joins and join_tables_for_wf[wf].keys()
     # PLUS include any joins that contain DCs with interactive components
     filtered_joins = {}
+
+    # Defensive check: ensure workflow exists in join_tables_for_wf
+    if wf not in join_tables_for_wf:
+        logger.warning(
+            f"Workflow {wf} not found in join_tables_for_wf. Available workflows: {list(join_tables_for_wf.keys())}"
+        )
+        logger.debug(f"dc_ids_all_joins: {dc_ids_all_joins}")
+        logger.debug(f"dc_ids_all_components: {dc_ids_all_components}")
+        return {"joins": filtered_joins, "dc_ids": dc_ids_all_components}
+
     logger.debug(f"Available join keys: {list(join_tables_for_wf[wf].keys())}")
     logger.debug(f"dc_ids_all_joins: {dc_ids_all_joins}")
     logger.debug(f"dc_ids_all_components: {dc_ids_all_components}")
+    logger.debug(f"join_tables_for_wf: {join_tables_for_wf}")
 
     for join_key, join_config in join_tables_for_wf[wf].items():
         # Include join if it's between current dashboard components (original logic)
@@ -1460,13 +1654,36 @@ def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None):
             logger.debug(f"Including join (interactive DC dependency): {join_key}")
 
             # Also add the constituent DCs to the components list if not already present
+            # Filter out non-table types (multiqc, jbrowse) using dc_type_mapping
             dc_id1, dc_id2 = join_key.split("--")
+
+            # Check if dc_id1 is a table type
             if dc_id1 not in dc_ids_all_components:
-                dc_ids_all_components.append(dc_id1)
-                logger.debug(f"Added DC to components list: {dc_id1}")
+                if dc_type_mapping:
+                    dc1_type = dc_type_mapping.get(dc_id1, "table")
+                    if dc1_type == "table":
+                        dc_ids_all_components.append(dc_id1)
+                        logger.debug(f"Added DC to components list: {dc_id1} (type: {dc1_type})")
+                    else:
+                        logger.debug(f"Skipping DC {dc_id1} (non-table type: {dc1_type})")
+                else:
+                    # No mapping available, add anyway (legacy behavior)
+                    dc_ids_all_components.append(dc_id1)
+                    logger.debug(f"Added DC to components list: {dc_id1} (no type mapping)")
+
+            # Check if dc_id2 is a table type
             if dc_id2 not in dc_ids_all_components:
-                dc_ids_all_components.append(dc_id2)
-                logger.debug(f"Added DC to components list: {dc_id2}")
+                if dc_type_mapping:
+                    dc2_type = dc_type_mapping.get(dc_id2, "table")
+                    if dc2_type == "table":
+                        dc_ids_all_components.append(dc_id2)
+                        logger.debug(f"Added DC to components list: {dc_id2} (type: {dc2_type})")
+                    else:
+                        logger.debug(f"Skipping DC {dc_id2} (non-table type: {dc2_type})")
+                else:
+                    # No mapping available, add anyway (legacy behavior)
+                    dc_ids_all_components.append(dc_id2)
+                    logger.debug(f"Added DC to components list: {dc_id2} (no type mapping)")
         else:
             logger.debug(
                 f"Skipping join {join_key} - no match for dashboard components or interactive DCs"
