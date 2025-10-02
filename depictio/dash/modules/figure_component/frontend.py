@@ -2295,12 +2295,12 @@ def register_callbacks_figure_component(app):
             # Extract interactive component values (range sliders, dropdowns, etc.)
             interactive_components_values = filter_data.get("interactive_components_values", [])
 
+            # RESET SUPPORT: Allow empty filter list to reload unfiltered data
+            # When reset button is clicked, store is cleared, triggering this callback with empty filters
             if not interactive_components_values:
-                logger.info("⏭️  No interactive component changes detected")
-                logger.info("=" * 80)
-                raise dash.exceptions.PreventUpdate
-
-            logger.info(f"📝 Detected {len(interactive_components_values)} interactive filters")
+                logger.info("🔄 RESET DETECTED: Empty filter list - reloading unfiltered data")
+            else:
+                logger.info(f"📝 Detected {len(interactive_components_values)} interactive filters")
 
             # Get workflow and data collection info
             TOKEN = local_data.get("access_token") if local_data else None
@@ -2323,29 +2323,96 @@ def register_callbacks_figure_component(app):
                 render_figure,
             )
 
-            # COLUMN PROJECTION: Extract only needed columns for efficient loading
-            select_columns = extract_needed_columns(
-                new_params=current_params,
-                trace_metadata=trace_metadata,
-                interactive_components=None,
-                join_columns=None,  # TODO: Get join columns from API if dc_id contains "--"
-            )
+            # Build interactive components dict and group filters by DC
+            # Format: {"column_name": value} from interactive_components_values
+            interactive_components_dict = {}
+            filters_by_dc = {}  # Group filters by DC ID for multi-DC joins
 
-            # Load filtered data with column projection
+            for component in interactive_components_values:
+                column_name = component.get("metadata", {}).get("column_name")
+                component_dc_id = component.get("metadata", {}).get("dc_id")
+                if column_name:
+                    interactive_components_dict[column_name] = component.get("value")
+                    # Group filters by DC
+                    if component_dc_id:
+                        dc_key = str(component_dc_id)
+                        if dc_key not in filters_by_dc:
+                            filters_by_dc[dc_key] = []
+                        filters_by_dc[dc_key].append(component)
+
             logger.info(
-                f"📂 Loading filtered data: {wf_id}:{dc_id} "
-                f"({len(interactive_components_values)} filters, {len(select_columns)} columns)"
+                f"🔍 Extracted {len(interactive_components_dict)} filter columns: {list(interactive_components_dict.keys())}"
             )
+            logger.info(f"📋 Filters span {len(filters_by_dc)} DC(s): {list(filters_by_dc.keys())}")
 
-            if isinstance(dc_id, str) and "--" in dc_id:
-                df = load_deltatable_lite(
-                    ObjectId(wf_id),
-                    dc_id,
-                    metadata=interactive_components_values,
-                    TOKEN=TOKEN,
-                    select_columns=select_columns,
+            # AUTO-DETECT: If filters span multiple DCs, use merge_multiple_dataframes
+            has_multi_dc_filters = len(filters_by_dc) > 1
+
+            if has_multi_dc_filters:
+                logger.info(f"🔗 MULTI-DC FILTERING: Loading and joining {len(filters_by_dc)} DCs")
+
+                from depictio.api.v1.deltatables_utils import merge_multiple_dataframes
+
+                # Get join config from component metadata
+                first_component = interactive_components_values[0]
+                dc_config = first_component.get("metadata", {}).get("dc_config", {})
+                join_config = dc_config.get("join", {})
+
+                if not join_config or not join_config.get("on_columns"):
+                    raise Exception("Multi-DC filtering detected but no join config found")
+
+                # Load each DC with all columns (rely on cache for performance)
+                dataframes = {}
+                for dc_key, dc_filters in filters_by_dc.items():
+                    logger.info(
+                        f"📂 Loading DC {dc_key} with {len(dc_filters)} filters (all columns)"
+                    )
+                    dc_df = load_deltatable_lite(
+                        ObjectId(wf_id),
+                        ObjectId(dc_key),
+                        metadata=dc_filters,
+                        TOKEN=TOKEN,
+                        select_columns=None,  # Load all columns, rely on cache
+                    )
+                    dataframes[dc_key] = dc_df
+                    logger.info(f"   Loaded {dc_df.height:,} rows × {dc_df.width} columns")
+
+                # Build join instructions for merge_multiple_dataframes
+                dc_ids = sorted(filters_by_dc.keys())
+                join_instructions = [
+                    {
+                        "left": dc_ids[0],
+                        "right": dc_ids[1],
+                        "how": join_config.get("how", "inner"),
+                        "on": join_config.get("on_columns", []),
+                    }
+                ]
+
+                logger.info(f"🔗 Joining DCs: {join_instructions}")
+
+                # Merge DataFrames
+                df = merge_multiple_dataframes(
+                    dataframes=dataframes, join_instructions=join_instructions
                 )
+
+                logger.info(f"📊 Joined result: {df.height:,} rows × {df.width} columns")
+
             else:
+                # SINGLE DC: Standard loading with column projection
+                logger.info("📄 Single DC filtering - using standard loading")
+
+                select_columns = extract_needed_columns(
+                    new_params=current_params,
+                    trace_metadata=trace_metadata,
+                    interactive_components=interactive_components_dict,
+                    join_columns=None,
+                )
+
+                logger.info(
+                    f"📂 Loading filtered data: {wf_id}:{dc_id} "
+                    f"({len(interactive_components_values)} filters, {len(select_columns)} columns)"
+                )
+
                 df = load_deltatable_lite(
                     ObjectId(wf_id),
                     ObjectId(dc_id),
