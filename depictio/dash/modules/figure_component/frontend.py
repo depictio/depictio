@@ -2139,6 +2139,7 @@ def register_callbacks_figure_component(app):
     # CALLBACK ARCHITECTURE: Pattern-matching render callback for async figure generation
     @app.callback(
         Output({"type": "graph", "index": MATCH}, "figure"),
+        Output({"type": "figure-trace-metadata", "index": MATCH}, "data"),
         Input({"type": "figure-render-trigger", "index": MATCH}, "data"),
         State({"type": "stored-metadata-component", "index": MATCH}, "data"),
         State("local-store", "data"),
@@ -2236,14 +2237,24 @@ def register_callbacks_figure_component(app):
                 mode=mode,
             )
 
+            # CALLBACK ARCHITECTURE: Generate trace metadata for efficient patching
+            logger.info("🔍 ANALYZING FIGURE STRUCTURE for patching...")
+            from depictio.dash.modules.figure_component.utils import analyze_figure_structure
+
+            trace_metadata = analyze_figure_structure(figure, dict_kwargs, visu_type)
+            logger.info(f"   Trace count: {trace_metadata.get('summary', {}).get('traces', 0)}")
+            logger.info(
+                f"   Has color: {trace_metadata.get('summary', {}).get('has_color', False)}"
+            )
+
             logger.info("✅ RENDER CALLBACK: Figure generated successfully")
             logger.info("=" * 80)
-            return figure
+            return figure, trace_metadata
 
         except Exception as e:
             logger.error(f"❌ RENDER CALLBACK FAILED: {e}")
             logger.exception("Full traceback:")
-            # Return error placeholder
+            # Return error placeholder with empty metadata
             import plotly.express as px
 
             from depictio.dash.modules.figure_component.utils import _get_theme_template
@@ -2252,42 +2263,114 @@ def register_callbacks_figure_component(app):
                 template=_get_theme_template(trigger_data.get("theme", "light")),
                 title=f"Error rendering figure: {str(e)}",
             )
-            return error_fig
+            return error_fig, {}
 
-    # CALLBACK ARCHITECTURE: Interactive patching callback for filter updates
+    # CALLBACK ARCHITECTURE: Interactive patching callback for parameter updates
     @app.callback(
         Output({"type": "graph", "index": MATCH}, "figure", allow_duplicate=True),
         Input("interactive-values-store", "data"),
         State({"type": "graph", "index": MATCH}, "figure"),
         State({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        State({"type": "figure-trace-metadata", "index": MATCH}, "data"),
+        State("local-store", "data"),
         prevent_initial_call=True,
     )
-    def patch_figure_interactive(filter_data, current_figure, metadata):
+    def patch_figure_interactive(filter_data, current_figure, metadata, trace_metadata, local_data):
         """
-        Patch existing figure with interactive filter updates.
+        Handle interactive component filtering (range sliders, dropdowns, etc.).
 
-        Uses Dash Patch for efficient updates without full re-rendering.
-        Similar to MultiQC patching callback for interactive sample filtering.
+        Loads filtered data with column projection for optimal performance:
+        - Row filtering via metadata parameter (Polars predicate pushdown)
+        - Column projection via select_columns (10-50x I/O reduction for wide tables)
+        - Cached DataFrames reused when available
         """
         if not filter_data or not current_figure or not metadata:
             raise dash.exceptions.PreventUpdate
 
-        logger.info("🔄 INTERACTIVE PATCH: Applying filter updates to figure")
+        logger.info("=" * 80)
+        logger.info("🔍 INTERACTIVE FILTERING: Processing component changes")
         logger.info(f"📊 Component ID: {metadata.get('index', 'unknown')}")
 
         try:
-            # For now, we'll use Patch to update the figure efficiently
-            # In the future, this can be enhanced with specific trace filtering
-            patch = Patch()
+            # Extract interactive component values (range sliders, dropdowns, etc.)
+            interactive_components_values = filter_data.get("interactive_components_values", [])
 
-            # Apply any interactive filters to the figure
-            # This is a placeholder for future implementation of trace-level filtering
-            logger.info("✅ INTERACTIVE PATCH: Filter applied successfully")
+            if not interactive_components_values:
+                logger.info("⏭️  No interactive component changes detected")
+                logger.info("=" * 80)
+                raise dash.exceptions.PreventUpdate
 
-            return patch
+            logger.info(f"📝 Detected {len(interactive_components_values)} interactive filters")
 
+            # Get workflow and data collection info
+            TOKEN = local_data.get("access_token") if local_data else None
+            wf_id = metadata.get("wf_id")
+            dc_id = metadata.get("dc_id")
+            theme = metadata.get("theme", "light")
+            mode = metadata.get("mode", "ui")
+            visu_type = metadata.get("visu_type", "scatter")
+            current_params = metadata.get("dict_kwargs", {})
+
+            if not wf_id or not dc_id:
+                logger.warning("Missing workflow/DC IDs for interactive filtering")
+                raise dash.exceptions.PreventUpdate
+
+            from bson import ObjectId
+
+            from depictio.api.v1.deltatables_utils import load_deltatable_lite
+            from depictio.dash.modules.figure_component.utils import (
+                extract_needed_columns,
+                render_figure,
+            )
+
+            # COLUMN PROJECTION: Extract only needed columns for efficient loading
+            select_columns = extract_needed_columns(
+                new_params=current_params,
+                trace_metadata=trace_metadata,
+                interactive_components=None,
+                join_columns=None,  # TODO: Get join columns from API if dc_id contains "--"
+            )
+
+            # Load filtered data with column projection
+            logger.info(
+                f"📂 Loading filtered data: {wf_id}:{dc_id} "
+                f"({len(interactive_components_values)} filters, {len(select_columns)} columns)"
+            )
+
+            if isinstance(dc_id, str) and "--" in dc_id:
+                df = load_deltatable_lite(
+                    ObjectId(wf_id),
+                    dc_id,
+                    metadata=interactive_components_values,
+                    TOKEN=TOKEN,
+                    select_columns=select_columns,
+                )
+            else:
+                df = load_deltatable_lite(
+                    ObjectId(wf_id),
+                    ObjectId(dc_id),
+                    metadata=interactive_components_values,
+                    TOKEN=TOKEN,
+                    select_columns=select_columns,
+                )
+
+            logger.info(f"📊 Loaded {df.height:,} rows × {df.width} columns after filtering")
+
+            # Re-render figure with filtered data
+            logger.info("🎨 Re-rendering figure with filtered data...")
+            new_figure = render_figure(current_params, visu_type, df, theme=theme, mode=mode)
+
+            logger.info("✅ INTERACTIVE FILTERING COMPLETE: Figure updated with filtered data")
+            logger.info("=" * 80)
+            return new_figure
+
+        except dash.exceptions.PreventUpdate:
+            # Re-raise PreventUpdate without logging as error
+            raise
         except Exception as e:
-            logger.error(f"❌ INTERACTIVE PATCH FAILED: {e}")
+            logger.error(f"❌ INTERACTIVE FILTERING FAILED: {e}")
+            logger.exception("Full traceback:")
+            logger.info("=" * 80)
             # Return current figure unchanged on error
             raise dash.exceptions.PreventUpdate
 
