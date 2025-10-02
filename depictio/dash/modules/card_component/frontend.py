@@ -405,6 +405,243 @@ def register_callbacks_card_component(app):
 
         return new_card_body, aggregation_description, columns_description_df
 
+    # PATTERN-MATCHING: Render callback for initial card value computation
+    @app.callback(
+        Output({"type": "card-value", "index": MATCH}, "children"),
+        Output({"type": "card-metadata", "index": MATCH}, "data"),
+        Input({"type": "card-trigger", "index": MATCH}, "data"),
+        prevent_initial_call=False,
+    )
+    def render_card_value_background(trigger_data):
+        """
+        PATTERN-MATCHING: Render callback for initial card value computation.
+
+        Triggers when card component mounts and trigger store is populated.
+        Loads full dataset, computes aggregation value, stores reference value.
+
+        Args:
+            trigger_data: Data from card-trigger store containing all necessary params
+
+        Returns:
+            tuple: (formatted_value, metadata_dict)
+        """
+        from bson import ObjectId
+
+        from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+        logger.info(f"🔄 CARD RENDER: Starting value computation for trigger: {trigger_data}")
+
+        if not trigger_data:
+            logger.warning("No trigger data provided")
+            return "...", {}
+
+        # Extract parameters from trigger store
+        wf_id = trigger_data.get("wf_id")
+        dc_id = trigger_data.get("dc_id")
+        column_name = trigger_data.get("column_name")
+        aggregation = trigger_data.get("aggregation")
+        access_token = trigger_data.get("access_token")
+        cols_json = trigger_data.get("cols_json", {})
+
+        # Validate required parameters
+        if not all([wf_id, dc_id, column_name, aggregation]):
+            logger.error(
+                f"Missing required parameters - wf_id: {wf_id}, dc_id: {dc_id}, "
+                f"column_name: {column_name}, aggregation: {aggregation}"
+            )
+            return "Error", {"error": "Missing parameters"}
+
+        try:
+            # Load full dataset
+            logger.debug(f"Loading dataset for {wf_id}:{dc_id}")
+            if isinstance(dc_id, str) and "--" in dc_id:
+                # Joined data collection - keep as string
+                data = load_deltatable_lite(
+                    workflow_id=ObjectId(wf_id),
+                    data_collection_id=dc_id,
+                    TOKEN=access_token,
+                )
+            else:
+                # Regular data collection - convert to ObjectId
+                data = load_deltatable_lite(
+                    workflow_id=ObjectId(wf_id),
+                    data_collection_id=ObjectId(dc_id),
+                    TOKEN=access_token,
+                )
+
+            logger.debug(f"Loaded data shape: {data.shape}")
+
+            # Compute aggregation value
+            from depictio.dash.modules.card_component.utils import compute_value
+
+            value = compute_value(data, column_name, aggregation)
+            logger.debug(f"Computed value: {value}")
+
+            # Format value
+            try:
+                if value is not None:
+                    formatted_value = str(round(float(value), 4))
+                else:
+                    formatted_value = "N/A"
+            except (ValueError, TypeError):
+                formatted_value = "Error"
+
+            # Store metadata for patching callback
+            metadata = {
+                "reference_value": value,
+                "column_name": column_name,
+                "aggregation": aggregation,
+                "wf_id": wf_id,
+                "dc_id": dc_id,
+                "cols_json": cols_json,
+            }
+
+            logger.info(f"✅ CARD RENDER: Value computed successfully: {formatted_value}")
+            return formatted_value, metadata
+
+        except Exception as e:
+            logger.error(f"❌ CARD RENDER: Error computing value: {e}", exc_info=True)
+            return "Error", {"error": str(e)}
+
+    # PATTERN-MATCHING: Patching callback for filter-based updates
+    @app.callback(
+        Output({"type": "card-value", "index": MATCH}, "children", allow_duplicate=True),
+        Output({"type": "card-comparison", "index": MATCH}, "children", allow_duplicate=True),
+        Input("interactive-values-store", "data"),
+        State({"type": "card-metadata", "index": MATCH}, "data"),
+        State({"type": "card-trigger", "index": MATCH}, "data"),
+        prevent_initial_call=True,
+    )
+    def patch_card_with_filters(filters_data, metadata, trigger_data):
+        """
+        PATTERN-MATCHING: Patching callback for filter-based card updates.
+
+        Triggers when interactive filters change. Applies filters to data,
+        computes new value, and creates comparison with reference value.
+
+        Args:
+            filters_data: Interactive filter selections
+            metadata: Card metadata with reference_value
+            trigger_data: Original trigger data with card config
+
+        Returns:
+            tuple: (formatted_value, comparison_components)
+        """
+        from bson import ObjectId
+
+        from depictio.api.v1.deltatables_utils import load_deltatable_lite
+        from depictio.dash.modules.card_component.utils import compute_value
+
+        logger.info("🔄 CARD PATCH: Applying filters to card")
+
+        if not metadata or not trigger_data:
+            logger.warning("Missing metadata or trigger data")
+            return "...", []
+
+        # Extract parameters
+        wf_id = trigger_data.get("wf_id")
+        dc_id = trigger_data.get("dc_id")
+        column_name = trigger_data.get("column_name")
+        aggregation = trigger_data.get("aggregation")
+        access_token = trigger_data.get("access_token")
+        reference_value = metadata.get("reference_value")
+
+        if not all([wf_id, dc_id, column_name, aggregation]):
+            logger.error("Missing required parameters for patching")
+            return "Error", []
+
+        try:
+            # Extract interactive components from filters_data
+            # filters_data format: {"interactive_components_values": [component1, component2, ...]}
+            metadata_list = (
+                filters_data.get("interactive_components_values") if filters_data else None
+            )
+
+            logger.debug(
+                f"Loading dataset with {len(metadata_list) if metadata_list else 0} filters for: {wf_id}:{dc_id}"
+            )
+
+            # Load dataset with filters applied via load_deltatable_lite's metadata parameter
+            if isinstance(dc_id, str) and "--" in dc_id:
+                data = load_deltatable_lite(
+                    workflow_id=ObjectId(wf_id),
+                    data_collection_id=dc_id,
+                    metadata=metadata_list,
+                    TOKEN=access_token,
+                )
+            else:
+                data = load_deltatable_lite(
+                    workflow_id=ObjectId(wf_id),
+                    data_collection_id=ObjectId(dc_id),
+                    metadata=metadata_list,
+                    TOKEN=access_token,
+                )
+
+            logger.debug(f"Loaded filtered data shape: {data.shape}")
+
+            # Compute new value on filtered data
+            current_value = compute_value(data, column_name, aggregation)
+            logger.debug(f"Computed filtered value: {current_value}")
+
+            # Format current value
+            try:
+                if current_value is not None:
+                    formatted_value = str(round(float(current_value), 4))
+                    current_val = float(current_value)
+                else:
+                    formatted_value = "N/A"
+                    current_val = None
+            except (ValueError, TypeError):
+                formatted_value = "Error"
+                current_val = None
+
+            # Create comparison components
+            comparison_components = []
+            if reference_value is not None and current_val is not None:
+                try:
+                    ref_val = float(reference_value)
+
+                    # Calculate percentage change
+                    if ref_val != 0:
+                        change_pct = ((current_val - ref_val) / ref_val) * 100
+                        if change_pct > 0:
+                            comparison_text = f"+{change_pct:.1f}% vs unfiltered ({ref_val})"
+                            comparison_color = "green"
+                            comparison_icon = "mdi:trending-up"
+                        elif change_pct < 0:
+                            comparison_text = f"{change_pct:.1f}% vs unfiltered ({ref_val})"
+                            comparison_color = "red"
+                            comparison_icon = "mdi:trending-down"
+                        else:
+                            comparison_text = f"Same as unfiltered ({ref_val})"
+                            comparison_color = "gray"
+                            comparison_icon = "mdi:trending-neutral"
+                    else:
+                        comparison_text = f"Reference: {ref_val}"
+                        comparison_color = "gray"
+                        comparison_icon = "mdi:information-outline"
+
+                    # Build comparison UI
+                    comparison_components = [
+                        DashIconify(icon=comparison_icon, width=14, color=comparison_color),
+                        dmc.Text(
+                            comparison_text,
+                            size="xs",
+                            c=comparison_color,
+                            fw="normal",
+                            style={"margin": "0"},
+                        ),
+                    ]
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Error creating comparison: {e}")
+
+            logger.info(f"✅ CARD PATCH: Value updated successfully: {formatted_value}")
+            return formatted_value, comparison_components
+
+        except Exception as e:
+            logger.error(f"❌ CARD PATCH: Error applying filters: {e}", exc_info=True)
+            return "Error", []
+
 
 def design_card(id, df):
     left_column = dmc.GridCol(

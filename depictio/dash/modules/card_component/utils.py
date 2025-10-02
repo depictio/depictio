@@ -2,7 +2,6 @@ import dash_mantine_components as dmc
 import numpy as np
 import pandas as pd
 from dash import dcc
-from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -208,199 +207,59 @@ def build_card_frame(index, children=None, show_border=False):
 
 
 def build_card(**kwargs):
+    """
+    Build card component structure with pattern-matching callback architecture.
+
+    This function creates the card component UI structure but does NOT compute values.
+    Value computation happens asynchronously in render_card_value_background callback.
+
+    Pattern-matching IDs enable independent rendering of each card instance:
+    - {"type": "card-trigger", "index": component_id} - Initiates rendering
+    - {"type": "card-value", "index": component_id} - Updated by callbacks
+    - {"type": "card-comparison", "index": component_id} - Shows filter comparison
+    - {"type": "card-metadata", "index": component_id} - Stores reference data
+    """
     # DUPLICATION TRACKING: Log card component builds
     logger.info(
         f"🔍 BUILD CARD CALLED - Index: {kwargs.get('index', 'UNKNOWN')}, Stepper: {kwargs.get('stepper', False)}"
     )
-    # def build_card(index, title, wf_id, dc_id, dc_config, column_name, column_type, aggregation, v, build_frame=False):
 
     index = kwargs.get("index")
-    title = kwargs.get("title", "Default Title")  # Example of default parameter
+    title = kwargs.get("title", "Default Title")
     wf_id = kwargs.get("wf_id")
     dc_id = kwargs.get("dc_id")
     dc_config = kwargs.get("dc_config")
     column_name = kwargs.get("column_name")
     column_type = kwargs.get("column_type")
     aggregation = kwargs.get("aggregation")
-    v = kwargs.get("value")
+    v = kwargs.get("value")  # Legacy support - may still be provided
     build_frame = kwargs.get("build_frame", False)
-    refresh = kwargs.get("refresh", False)
     stepper = kwargs.get("stepper", False)
-    filter_applied = kwargs.get("filter_applied", False)
-    color = kwargs.get("color", None)  # Custom color from user
-    cols_json = kwargs.get("cols_json", {})  # Column specifications for reference values
+    color = kwargs.get("color", None)
+    cols_json = kwargs.get("cols_json", {})
+    access_token = kwargs.get("access_token")
+    parent_index = kwargs.get("parent_index", None)
 
     if stepper:
         index = f"{index}-tmp"
-    else:
-        index = index
 
-    # logger.debug(f"Card kwargs: {kwargs}")
+    # PATTERN-MATCHING ARCHITECTURE: All data loading and value computation moved to callbacks
+    # This function only creates the UI structure - values populate asynchronously via:
+    # - render_card_value_background() for initial values
+    # - patch_card_with_filters() for filter updates
+    # - update_card_theme() for theme changes
 
-    # Variables to track filtered vs unfiltered values for comparison
-    reference_value = None
-    is_filtered_data = False
+    logger.debug(f"Creating card structure for index: {index}")
 
-    # CRITICAL FIX: Card components MUST always recalculate values when data is provided
-    # even if refresh=False, because they need to compute aggregations on filtered data
-    if refresh or not v or kwargs.get("df") is not None:
-        import polars as pl
-
-        data = kwargs.get("df", pl.DataFrame())
-
-        # logger.info(f"Existing data: {data}")
-        # logger.info(f"Existing data columns: {list(data.to_pandas().columns)}")
-
-        if data.is_empty():
-            # Check if we're in a refresh context where we should load new data
-            if kwargs.get("refresh", True):
-                from bson import ObjectId
-
-                from depictio.api.v1.deltatables_utils import load_deltatable_lite
-
-                logger.info(
-                    f"Card component {index}: Loading delta table for {wf_id}:{dc_id} (no pre-loaded df)"
-                )
-
-                # Validate that we have valid IDs before calling load_deltatable_lite
-                if not wf_id or not dc_id:
-                    logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
-                    data = pl.DataFrame()  # Return empty DataFrame if IDs are missing
-                else:
-                    # Handle joined data collection IDs - don't convert to ObjectId
-                    if isinstance(dc_id, str) and "--" in dc_id:
-                        # For joined data collections, pass the DC ID as string
-                        data = load_deltatable_lite(
-                            workflow_id=ObjectId(wf_id),
-                            data_collection_id=dc_id,  # Keep as string for joined DCs
-                            TOKEN=kwargs.get("access_token"),
-                        )
-                    else:
-                        # Regular data collection - convert to ObjectId
-                        data = load_deltatable_lite(
-                            workflow_id=ObjectId(wf_id),
-                            data_collection_id=ObjectId(dc_id),
-                            TOKEN=kwargs.get("access_token"),
-                        )
-                    # When we load the full data from database (no pre-existing df), this is NOT filtered
-                    is_filtered_data = False
-                    logger.debug(
-                        f"Card component {index}: Loaded full dataset from database (shape: {data.shape})"
-                    )
-            else:
-                # If refresh=False and data is empty, this means filters resulted in no data
-                # Keep the empty DataFrame and compute appropriate "no data" value
-                is_filtered_data = True  # Empty due to filtering
-                logger.info(
-                    f"Card component {index}: Using empty DataFrame from filters (shape: {data.shape}) - filters exclude all data"
-                )
-        else:
-            logger.debug(
-                f"Card component {index}: Recalculating value with provided DataFrame (shape: {data.shape})"
-            )
-
-        # Determine if current data is filtered (only if we have non-empty data and haven't already determined this)
-        if (
-            not data.is_empty()
-            and kwargs.get("df") is not None
-            and wf_id
-            and dc_id
-            and kwargs.get("access_token")
-        ):
-            # A DataFrame was explicitly provided - need to check if it's different from full dataset
-            try:
-                from bson import ObjectId
-
-                from depictio.api.v1.deltatables_utils import load_deltatable_lite
-
-                # Handle joined data collection IDs - don't convert to ObjectId
-                if isinstance(dc_id, str) and "--" in dc_id:
-                    # For joined data collections, pass the DC ID as string
-                    full_data = load_deltatable_lite(
-                        workflow_id=ObjectId(wf_id),
-                        data_collection_id=dc_id,  # Keep as string for joined DCs
-                        TOKEN=kwargs.get("access_token"),
-                    )
-                else:
-                    # Regular data collection - convert to ObjectId
-                    full_data = load_deltatable_lite(
-                        workflow_id=ObjectId(wf_id),
-                        data_collection_id=ObjectId(dc_id),
-                        TOKEN=kwargs.get("access_token"),
-                    )
-
-                # Compare provided data with full dataset
-                data_differs = (
-                    data.shape[0] != full_data.shape[0]
-                    or data.shape[1] != full_data.shape[1]
-                    or set(data.columns) != set(full_data.columns)
-                )
-
-                is_filtered_data = filter_applied or data_differs
-
-                # Only compute reference value if data is actually filtered
-                if is_filtered_data:
-                    # Try to get reference value from cols_json first (more efficient)
-                    reference_value = get_reference_value_from_cols_json(
-                        cols_json, column_name, aggregation
-                    )
-
-                    if reference_value is None:
-                        # Fallback to computing from full data if not available in cols_json
-                        reference_value = compute_value(full_data, column_name, aggregation)
-                        logger.debug(
-                            f"Card component {index}: Used fallback computation (cols_json unavailable)"
-                        )
-                    else:
-                        logger.debug(
-                            f"Card component {index}: Used cols_json reference value: {reference_value}"
-                        )
-
-                    logger.debug(
-                        f"Card component {index}: Detected filtered data (current: {data.shape}, full: {full_data.shape})"
-                    )
-                else:
-                    logger.debug(
-                        f"Card component {index}: Provided data matches full dataset, no filtering detected"
-                    )
-
-            except Exception as e:
-                logger.warning(f"Failed to load full dataset for comparison: {e}")
-                # Fallback: assume filtered if filter flag is set
-                is_filtered_data = filter_applied
-        elif not data.is_empty() and filter_applied:
-            # filter_applied flag is set but no df provided - treat as filtered
-            is_filtered_data = True
-
-        # Always recalculate value when we have data (filtered or unfiltered)
-        v = compute_value(data, column_name, aggregation)
-        logger.debug(f"Card component {index}: Computed new value: {v}")
-
-    try:
-        if v is not None:
-            v = round(float(v), 4)
-        else:
-            v = "N/A"  # Default value when None - indicates no data
-    except (ValueError, TypeError):
-        v = "Error"  # Default value for invalid conversions
-
-    # Format reference value for comparison
-    if reference_value is not None:
-        try:
-            reference_value = round(float(reference_value), 4)
-        except (ValueError, TypeError):
-            reference_value = None
-
-    # Metadata management - Create a store component to store the metadata of the card
-    # For stepper mode, use the temporary index to avoid conflicts with existing components
-    # For normal mode, use the original index (remove -tmp suffix if present)
+    # Metadata management
     if stepper:
-        store_index = index  # Use the temporary index with -tmp suffix
-        data_index = index.replace("-tmp", "") if index else "unknown"  # Clean index for data
+        store_index = index
+        data_index = index.replace("-tmp", "") if index else "unknown"
     else:
         store_index = index.replace("-tmp", "") if index else "unknown"
         data_index = store_index
 
+    # Component metadata store (for dashboard save/restore)
     store_component = dcc.Store(
         id={
             "type": "stored-metadata-component",
@@ -416,13 +275,42 @@ def build_card(**kwargs):
             "aggregation": aggregation,
             "column_type": column_type,
             "column_name": column_name,
-            "value": v,
-            "parent_index": kwargs.get("parent_index", None),
+            "value": v,  # Legacy support - may be None for new pattern-matching cards
+            "parent_index": parent_index,
         },
     )
 
-    # Create improved card using DMC 2.0+ components
-    # Handle potential None aggregation value
+    # PATTERN-MATCHING: Trigger store - initiates async rendering
+    # This store triggers the render_card_value_background callback
+    trigger_store = dcc.Store(
+        id={
+            "type": "card-trigger",
+            "index": str(index),
+        },
+        data={
+            "wf_id": wf_id,
+            "dc_id": dc_id,
+            "column_name": column_name,
+            "column_type": column_type,
+            "aggregation": aggregation,
+            "title": title,
+            "color": color,
+            "cols_json": cols_json,
+            "access_token": access_token,
+            "stepper": stepper,
+        },
+    )
+
+    # PATTERN-MATCHING: Metadata store - for callbacks (reference values, etc.)
+    metadata_store = dcc.Store(
+        id={
+            "type": "card-metadata",
+            "index": str(index),
+        },
+        data={},  # Populated by render callback with reference_value
+    )
+
+    # Create card title
     if aggregation and hasattr(aggregation, "title"):
         agg_display = aggregation.title()
     else:
@@ -430,77 +318,23 @@ def build_card(**kwargs):
 
     card_title = title if title else f"{agg_display} of {column_name}"
 
-    # Create comparison text if reference value is available
-    comparison_text = None
-    comparison_icon = None
-    comparison_color = "gray"  # Use valid DMC color for secondary text
+    # PATTERN-MATCHING ARCHITECTURE: Create card with placeholder content
+    # Actual values will be populated by render_card_value_background callback
+    # Comparison text will be added by patch_card_with_filters callback
 
-    if reference_value is not None and is_filtered_data and v != "N/A" and v != "Error":
-        try:
-            current_val = float(v)
-            ref_val = float(reference_value)
-
-            # Calculate percentage change
-            if ref_val != 0:
-                change_pct = ((current_val - ref_val) / ref_val) * 100
-                if change_pct > 0:
-                    comparison_text = f"+{change_pct:.1f}% vs unfiltered ({ref_val})"
-                    comparison_color = "green"
-                    comparison_icon = "mdi:trending-up"
-                elif change_pct < 0:
-                    comparison_text = f"{change_pct:.1f}% vs unfiltered ({ref_val})"
-                    comparison_color = "red"
-                    comparison_icon = "mdi:trending-down"
-                else:
-                    comparison_text = f"Same as unfiltered ({ref_val})"
-                    comparison_color = "gray"  # Use valid DMC color for neutral trends
-                    comparison_icon = "mdi:trending-neutral"
-            else:
-                comparison_text = f"Reference: {ref_val}"
-                comparison_color = "gray"  # Use valid DMC color for reference text
-                comparison_icon = "mdi:information-outline"
-        except (ValueError, TypeError):
-            comparison_text = f"Reference: {reference_value}"
-            comparison_color = "gray"  # Use valid DMC color for error text
-            comparison_icon = "mdi:information-outline"
-
-    # Create card content using modern DMC components with theme-aware colors
-    # Use theme-aware color system for better dark/light mode compatibility
-    # Ensure all color values are strings for DMC compatibility
     def ensure_string_color(color_value, default_color="gray"):
         """Ensure color value is a string that DMC can parse."""
         if color_value is None:
-            return default_color  # Use provided default
+            return default_color
         elif isinstance(color_value, str):
             return color_value
         else:
-            # Convert non-string values to string
             return str(color_value) if color_value else default_color
 
-    title_color = (
-        ensure_string_color(color) if color else "gray"
-    )  # 'gray' is a valid DMC color for secondary text
-    value_color = (
-        ensure_string_color(color)
-        if color and v not in ["N/A", "Error"]
-        else (
-            "red" if v in ["N/A", "Error"] else None
-        )  # Use None for default theme-aware text color
-    )
+    title_color = ensure_string_color(color) if color else "gray"
 
-    # Create value text component with conditional color handling
-    value_text_props = {
-        "children": str(v),
-        "size": "xl",
-        "fw": "bold",
-        "id": {
-            "type": "card-value",
-            "index": str(index),
-        },
-    }
-    # Only add color if it's not None (let DMC use default theme-aware color)
-    if value_color is not None:
-        value_text_props["c"] = value_color
+    # Use legacy value if provided (for backward compatibility), otherwise show loading placeholder
+    display_value = str(v) if v is not None else "..."
 
     card_content = [
         dmc.Text(
@@ -510,35 +344,34 @@ def build_card(**kwargs):
             fw="bold",
             style={"margin": "0", "marginLeft": "-2px"},
         ),
-        dmc.Text(**value_text_props, style={"margin": "0", "marginLeft": "-2px"}),
+        dmc.Text(
+            display_value,
+            size="xl",
+            fw="bold",
+            id={
+                "type": "card-value",
+                "index": str(index),
+            },
+            style={"margin": "0", "marginLeft": "-2px"},
+        ),
+        # PATTERN-MATCHING: Comparison container - populated by patching callback
+        dmc.Group(
+            [],
+            id={
+                "type": "card-comparison",
+                "index": str(index),
+            },
+            gap="xs",
+            align="center",
+            justify="flex-start",
+            style={"margin": "0", "marginLeft": "-2px"},
+        ),
+        # Legacy metadata store (for dashboard save/restore)
+        store_component,
+        # Pattern-matching stores (for async rendering)
+        trigger_store,
+        metadata_store,
     ]
-
-    # Add comparison text if available
-    if comparison_text:
-        card_content.append(
-            dmc.Group(
-                [
-                    DashIconify(
-                        icon=comparison_icon, width=14, color=ensure_string_color(comparison_color)
-                    )
-                    if comparison_icon
-                    else None,
-                    dmc.Text(
-                        comparison_text,
-                        size="xs",
-                        c=ensure_string_color(comparison_color),
-                        fw="normal",
-                        style={"margin": "0"},
-                    ),  # type: ignore
-                ],
-                gap="xs",
-                align="center",
-                justify="flex-start",
-                style={"margin": "0", "marginLeft": "-2px"},
-            )
-        )
-
-    card_content.append(store_component)
 
     # Create the modern card body using DMC Card component
     # When in stepper mode without frame, use minimal styling to avoid double box
