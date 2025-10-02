@@ -1109,13 +1109,22 @@ def register_callbacks_multiqc_component(app):
         """Patch MultiQC plots when interactive filtering is applied (only for joined workflows).
 
         Uses existing figure and patches it directly without regenerating from S3.
+
+        RESET SUPPORT: Empty interactive_values reloads unfiltered data.
         """
         logger.info("MultiQC patching callback triggered")
 
-        # Early exit if no data
-        if not stored_metadata or not interactive_values:
-            logger.debug("No stored metadata or interactive values - skipping")
+        # Early exit if no stored metadata (interactive_values can be empty for reset)
+        if not stored_metadata:
+            logger.debug("No stored metadata - skipping")
             return dash.no_update
+
+        # RESET SUPPORT: Allow empty interactive_values to reload unfiltered data
+        if not interactive_values:
+            logger.info(
+                "🔄 RESET DETECTED: Empty interactive values - reloading unfiltered MultiQC data"
+            )
+            interactive_values = {"interactive_components_values": []}
 
         # Get authentication token
         token = local_data.get("access_token") if local_data else None
