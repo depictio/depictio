@@ -5,17 +5,23 @@ This module provides a simple wrapper around MultiQC's plotting functionality,
 allowing users to visualize MultiQC reports within Depictio dashboards.
 """
 
+import hashlib
 import os
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import fsspec
 import plotly.graph_objects as go
 
+from depictio.api.cache import get_cache
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.modules.figure_component.utils import _get_theme_template
+
+# Global lock to prevent concurrent MultiQC operations (MultiQC global state is not thread-safe)
+_multiqc_lock = threading.RLock()
 
 
 def _get_s3_filesystem_config() -> Dict[str, Any]:
@@ -390,6 +396,115 @@ def get_multiqc_datasets(metadata_plots: dict, module: str, plot: str) -> List[s
         return []
 
 
+def _generate_cache_key(s3_locations: List[str]) -> str:
+    """Generate deterministic cache key from S3 locations."""
+    sorted_locations = sorted(s3_locations)
+    locations_str = "|".join(sorted_locations)
+    hash_digest = hashlib.sha256(locations_str.encode()).hexdigest()[:16]
+    return f"multiqc:state:{hash_digest}"
+
+
+def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = True) -> bool:
+    """
+    Get cached MultiQC parsed state or parse logs and cache the result.
+
+    This caches the FULL MultiQC report object including all internal plot data,
+    avoiding re-parsing for every plot.
+
+    THREAD-SAFE: Uses global lock to prevent concurrent MultiQC operations.
+
+    Args:
+        s3_locations: List of S3 paths to MultiQC parquet files
+        use_s3_cache: Whether to use S3 file caching
+
+    Returns:
+        True if parsing succeeded (from cache or fresh parse)
+    """
+    import multiqc
+
+    logger.info("📦 _get_or_parse_multiqc_logs called")
+    logger.info(f"   Files: {len(s3_locations)}")
+    logger.info(f"   Use S3 cache: {use_s3_cache}")
+
+    cache_key = _generate_cache_key(s3_locations)
+    logger.info(f"   Cache key: {cache_key}")
+
+    cache = get_cache()
+    logger.info("   Cache instance retrieved")
+
+    # Try to get cached report object (check cache OUTSIDE lock - read-only, safe)
+    logger.info("🔍 Checking for cached report...")
+    cached_report = cache.get(cache_key)
+
+    if cached_report is not None:
+        logger.info(f"🚀 Cache HIT for {len(s3_locations)} files")
+        # ACQUIRE LOCK before modifying MultiQC global state
+        with _multiqc_lock:
+            logger.info("🔒 Acquired MultiQC lock for cache restore")
+            try:
+                logger.info("   Restoring cached report to multiqc.report...")
+                # Restore the ENTIRE report object
+                multiqc.report = cached_report
+                logger.info(f"✅ Restored report with {len(multiqc.report.modules)} modules")
+                logger.info("🔓 Released MultiQC lock")
+                return True
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to restore cached report: {e}")
+                logger.info("   Falling through to fresh parsing...")
+                logger.info("🔓 Released MultiQC lock")
+                # Lock will be re-acquired below for parsing
+    else:
+        logger.info(f"📦 Cache MISS for {len(s3_locations)} files - will parse fresh")
+
+    # Cache miss - parse logs
+    # ACQUIRE LOCK for parsing (modifies MultiQC global state)
+    with _multiqc_lock:
+        logger.info("🔒 Acquired MultiQC lock for parsing")
+        logger.info("🔄 Resetting MultiQC state...")
+        multiqc.reset()
+        logger.info("✅ MultiQC reset complete")
+
+        # Parse all files
+        parsed_files = 0
+        for i, s3_location in enumerate(s3_locations):
+            logger.info(f"📄 Processing file {i + 1}/{len(s3_locations)}: {s3_location}")
+            try:
+                logger.info("   Getting local path for S3 file...")
+                local_file = _get_local_path_for_s3(s3_location, use_cache=use_s3_cache)
+                logger.info(f"   Local path: {local_file}")
+
+                logger.info("   Parsing with MultiQC...")
+                multiqc.parse_logs(local_file)
+                logger.info(f"✅ Successfully parsed file {i + 1}")
+                parsed_files += 1
+
+            except Exception as e:
+                logger.warning(
+                    f"⚠️ Error parsing file {i + 1} from {s3_location}: {e}", exc_info=True
+                )
+                continue
+
+        logger.info(f"📊 Parsed {parsed_files}/{len(s3_locations)} files")
+
+        if parsed_files == 0:
+            logger.error("❌ No files could be parsed")
+            logger.info("🔓 Released MultiQC lock")
+            return False
+
+        # Cache the FULL report object (includes all plot data)
+        logger.info("💾 Caching MultiQC report...")
+        try:
+            cache.set(cache_key, multiqc.report, ttl=7200)
+            logger.info(f"✅ Report cached: {cache_key}")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to cache report: {e}")
+
+        logger.info("✅ _get_or_parse_multiqc_logs completed successfully")
+        logger.info("🔓 Released MultiQC lock")
+
+    return True
+
+
 def create_multiqc_plot(
     s3_locations: List[str],
     module: str,
@@ -399,14 +514,18 @@ def create_multiqc_plot(
     theme: str = "light",
 ) -> go.Figure:
     """
-    Create a Plotly figure from MultiQC data - SIMPLE VERSION.
+    Create a Plotly figure from MultiQC data with parsed state caching.
+
+    This function uses caching to avoid re-parsing the same MultiQC files
+    multiple times. The parsed state is cached and reused across different
+    plots, reducing operations from N_plots × N_reports to N_reports.
 
     Args:
         s3_locations: List of S3 paths to MultiQC parquet files
         module: MultiQC module name (e.g., 'fastqc')
         plot: Plot name (e.g., 'Sequence Counts')
-        dataset_id: Not used in simple version
-        use_s3_cache: Whether to use S3 caching (default True)
+        dataset_id: Dataset ID for plots with multiple datasets
+        use_s3_cache: Whether to use S3 file caching (default True)
         theme: Theme for plot styling - "light" or "dark" (default "light")
 
     Returns:
@@ -414,85 +533,62 @@ def create_multiqc_plot(
     """
     import multiqc
 
-    logger.info(f"Creating MultiQC plot: {module}/{plot} from {len(s3_locations)} files")
-    logger.debug(f"S3 locations: {s3_locations}")
+    logger.info("=" * 60)
+    logger.info("📊 CREATE_MULTIQC_PLOT called")
+    logger.info(f"   Module: {module}")
+    logger.info(f"   Plot: {plot}")
+    logger.info(f"   Dataset ID: {dataset_id}")
+    logger.info(f"   Theme: {theme}")
+    logger.info(f"   S3 locations: {len(s3_locations)} files")
+    for i, loc in enumerate(s3_locations):
+        logger.info(f"     [{i + 1}] {loc}")
 
-    # Reset MultiQC state
-    logger.debug("Resetting MultiQC state")
-    multiqc.reset()
+    # Get cached report or parse logs (caches full MultiQC report object)
+    logger.info("🔄 Calling _get_or_parse_multiqc_logs...")
+    parse_success = _get_or_parse_multiqc_logs(s3_locations, use_s3_cache=use_s3_cache)
+    logger.info(f"✅ Parse result: {parse_success}")
 
-    # Parse all files
-    parsed_files = 0
-    local_files = []
-
-    for i, s3_location in enumerate(s3_locations):
-        logger.info(f"Processing file {i + 1}/{len(s3_locations)}: {s3_location}")
-        try:
-            # Get local path using S3 mounting/caching
-            local_file = _get_local_path_for_s3(s3_location, use_cache=use_s3_cache)
-            local_files.append(local_file)
-            logger.debug(f"Using local file path: {local_file}")
-
-            # Parse the file
-            logger.debug(f"Parsing MultiQC logs from: {local_file}")
-            multiqc.parse_logs(local_file)
-            parsed_files += 1
-            logger.info(f"Successfully parsed file {i + 1}: {s3_location}")
-
-        except Exception as e:
-            logger.warning(f"Error parsing MultiQC file {i + 1} from {s3_location}: {e}")
-            # Continue with other files if one fails
-            continue
-
-    # Check if we successfully parsed any files
-    if parsed_files == 0:
-        logger.error("No MultiQC files could be parsed successfully")
+    if not parse_success:
+        logger.error("❌ Failed to parse MultiQC files")
         raise ValueError("Failed to parse any MultiQC data files")
 
-    logger.info(f"Successfully parsed {parsed_files}/{len(s3_locations)} MultiQC files")
-
     # Get plot object and generate figure
-    logger.debug(f"Getting plot object for {module}/{plot}")
+    logger.info(f"🎯 Getting plot object for {module}/{plot}...")
     plot_obj = multiqc.get_plot(module, plot)
+    logger.info(f"✅ Plot object retrieved: {type(plot_obj)}")
 
     # Type guard: ensure plot_obj has get_figure method
     if not plot_obj or not hasattr(plot_obj, "get_figure"):
-        logger.error(f"Failed to get valid plot object for {module}/{plot}")
+        logger.error(f"❌ Invalid plot object for {module}/{plot}")
         raise ValueError(f"Failed to get plot object for {module}/{plot}")
 
-    logger.debug("Plot object retrieved successfully, generating figure")
-
+    # Generate figure
+    logger.info("📈 Generating figure...")
     try:
         if dataset_id:
-            logger.debug(f"Creating figure with dataset_id: {dataset_id}")
+            logger.info(f"   Using dataset_id: {dataset_id}")
             fig = plot_obj.get_figure(dataset_id=dataset_id)
         else:
-            # Use index 0 for first dataset instead of the dataset object
-            logger.debug("Creating figure with dataset_id: 0")
+            logger.info("   Using dataset_id: 0 (default)")
             fig = plot_obj.get_figure(dataset_id=0)
+        logger.info("✅ Figure generated successfully")
     except Exception as e:
-        logger.error(f"Error generating figure: {e}")
+        logger.error(f"❌ Error generating figure: {e}", exc_info=True)
         raise
 
     # Basic styling with theme support
-    logger.debug(f"Applying styling to figure with theme: {theme}")
+    logger.info(f"🎨 Applying theme: {theme}")
     fig.update_layout(
         title=f"{module.upper()}: {plot}",
         template=_get_theme_template(theme),
         autosize=True,
+        width=None,  # Remove any explicit width set by MultiQC
+        height=None,  # Remove any explicit height set by MultiQC
         margin=dict(t=60, l=60, r=60, b=60),
     )
 
-    logger.info(f"Successfully created MultiQC plot with {len(fig.data)} traces")
-
-    # Clean up temporary files if direct download was used
-    for local_file in local_files:
-        if local_file.startswith(tempfile.gettempdir()):
-            try:
-                os.unlink(local_file)
-                logger.debug(f"Cleaned up temporary file: {local_file}")
-            except Exception as cleanup_error:
-                logger.debug(f"Could not clean up temporary file {local_file}: {cleanup_error}")
+    logger.info(f"✅ MultiQC plot created: {len(fig.data)} traces")
+    logger.info("=" * 60)
 
     return fig
 
