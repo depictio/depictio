@@ -371,19 +371,18 @@ def render_figure(
         dict_kwargs, visu_type, df_hash, cutoff, selected_point_clean, theme
     )
 
-    # TEMPORARY: Disable figure cache to test async rendering performance
-    logger.info(f"🚧 CACHE DISABLED: Generating fresh {visu_type} figure for performance testing")
+    # PERFORMANCE OPTIMIZATION: Check figure result cache first
+    import time
 
-    # Clean cache and check for existing result
-    # _clean_figure_cache()
-    # if cache_key in _figure_result_cache:
-    #     cached_figure, timestamp = _figure_result_cache[cache_key]
-    #     logger.info(
-    #         f"🚀 FIGURE CACHE HIT: Using cached figure for {visu_type} (saved {int((time.time() - timestamp) * 1000)}ms ago)"
-    #     )
-    #     return cached_figure
+    _clean_figure_cache()
+    if cache_key in _figure_result_cache:
+        cached_figure, timestamp = _figure_result_cache[cache_key]
+        logger.info(
+            f"🚀 FIGURE CACHE HIT: Using cached figure for {visu_type} (saved {int((time.time() - timestamp) * 1000)}ms ago)"
+        )
+        return cached_figure
 
-    # logger.info(f"📊 FIGURE CACHE MISS: Generating new {visu_type} figure")
+    logger.info(f"📊 FIGURE CACHE MISS: Generating new {visu_type} figure")
 
     # Check if it's a clustering visualization
     is_clustering = visu_type.lower() in ["umap"]
@@ -663,9 +662,9 @@ def render_figure(
         if selected_point and "x" in cleaned_kwargs and "y" in cleaned_kwargs:
             _highlight_selected_point(figure, df, cleaned_kwargs, selected_point)
 
-        # TEMPORARY: Disable figure cache writing for performance testing
-        # _figure_result_cache[cache_key] = (figure, time.time())
-        logger.info(f"🚧 CACHE DISABLED: Skipping figure cache storage for {visu_type}")
+        # PERFORMANCE OPTIMIZATION: Cache the generated figure
+        _figure_result_cache[cache_key] = (figure, time.time())
+        logger.info(f"💾 FIGURE CACHE STORED: Cached {visu_type} figure for future use")
 
         return figure
 
@@ -677,9 +676,9 @@ def render_figure(
             title=f"Error: {str(e)}",
         )
 
-        # TEMPORARY: Disable fallback figure cache writing for performance testing
-        # _figure_result_cache[cache_key] = (fallback_figure, time.time())
-        logger.info("🚧 CACHE DISABLED: Skipping fallback figure cache storage")
+        # Cache the fallback figure to avoid repeated errors
+        _figure_result_cache[cache_key] = (fallback_figure, time.time())
+        logger.info("💾 FALLBACK CACHE STORED: Cached error figure")
 
         return fallback_figure
 
@@ -1119,87 +1118,16 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         else:
             logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
 
-    # Create the figure
-    logger.info("CALLING render_figure WITH:")
+    # CALLBACK ARCHITECTURE: Create placeholder figure instead of synchronous rendering
+    # Figure will be rendered by pattern-matching callback in frontend.py
+    logger.info("🔄 CALLBACK ARCHITECTURE: Creating placeholder for async rendering")
     logger.info(f"  validated_kwargs: {validated_kwargs}")
     logger.info(f"  visu_type: {visu_type}")
-    logger.info(f"  df shape: {df.shape if df is not None else 'None'}")
     logger.info(f"  theme: {theme}")
     logger.info(f"  is_code_mode: {is_code_mode}")
 
-    try:
-        # Handle code mode with potential preprocessing
-        if is_code_mode:
-            df_for_figure = df  # Default to original dataframe
-            code_content = kwargs.get("code_content", "")
-
-            if code_content:
-                from .code_mode import analyze_constrained_code
-
-                analysis = analyze_constrained_code(code_content)
-
-                if analysis["is_valid"] and analysis["has_preprocessing"]:
-                    logger.info("🔄 CODE MODE: Executing preprocessing step for build_figure")
-
-                    # Execute preprocessing using SimpleCodeExecutor
-                    try:
-                        from .simple_code_executor import SimpleCodeExecutor
-
-                        executor = SimpleCodeExecutor()
-                        success, df_for_figure, message = executor.execute_preprocessing_only(
-                            code_content, df
-                        )
-                        logger.info(f"CODE MODE: Preprocessing message: {message}")
-                        logger.info(f"CODE MODE: Preprocessing success: {success}")
-
-                        # Safety check: if preprocessing failed or returned None, use original df
-                        if not success or df_for_figure is None:
-                            logger.warning(
-                                "CODE MODE: Preprocessing failed or returned None, using original df"
-                            )
-                            df_for_figure = df
-                        else:
-                            # Additional safety check before calling head()
-                            if df_for_figure is not None:
-                                logger.info(
-                                    f"CODE MODE: Preprocessing dataframe: {df_for_figure.head()}"
-                                )
-                            else:
-                                logger.warning(
-                                    "CODE MODE: df_for_figure is None after preprocessing"
-                                )
-                                df_for_figure = df
-
-                    except Exception as e:
-                        logger.error(
-                            f"❌ CODE MODE: Preprocessing execution failed: {e}, using original df"
-                        )
-                        df_for_figure = df  # Fallback to original DataFrame
-            else:
-                # No code content provided for code mode - this indicates a metadata flow issue
-                logger.error(
-                    f"❌ CODE MODE: Component marked as code mode but no code_content provided. "
-                    f"This indicates the component metadata pipeline is not preserving code_content during interactive updates. "
-                    f"Expected columns like '{validated_kwargs.get('y')}' will not exist. "
-                    f"FIX NEEDED: Ensure stored_metadata includes code_content field."
-                )
-                df_for_figure = df
-
-            figure = render_figure(
-                validated_kwargs,
-                visu_type,
-                df_for_figure,
-                theme=theme,
-                skip_validation=True,
-                mode="code",
-            )
-        else:
-            figure = render_figure(validated_kwargs, visu_type, df, theme=theme, mode="ui")
-
-        logger.info(f"render_figure SUCCESS: figure type = {type(figure)}")
-    except Exception as e:
-        logger.error(f"Failed to render figure: {e}")
-        figure = px.scatter(title=f"Error: {str(e)}")
+    # Create placeholder figure with theme-aware template
+    # placeholder_figure = create_figure_placeholder(theme=theme, visu_type=visu_type)
 
     # Create info badges
     badges = _create_info_badges(
@@ -1215,13 +1143,13 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     figure_components = [
         badges,
         dcc.Graph(
-            figure=figure,
+            # figure=placeholder_figure,  # Use placeholder instead of synchronously rendered figure
             id={"type": "graph", "index": index},
             config={
                 "editable": True,
                 "scrollZoom": True,
                 "responsive": True,
-                "displayModeBar": True,
+                "displayModeBar": "hover",
             },
             className="responsive-graph",  # Add responsive graph class for vertical growing
             # style={
@@ -1231,6 +1159,20 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
             #     "backgroundColor": "transparent",  # Fix white background issue
             #     # "minHeight": "200px",  # Minimum height for usability
             # },
+        ),
+        # CALLBACK ARCHITECTURE: Add render trigger store for pattern-matching callback
+        dcc.Store(
+            id={"type": "figure-render-trigger", "index": index},
+            data={
+                "dict_kwargs": validated_kwargs,
+                "visu_type": visu_type,
+                "wf_id": wf_id,
+                "dc_id": dc_id,
+                "theme": theme,
+                "mode": kwargs.get("mode", "ui"),
+                "code_content": kwargs.get("code_content") if is_code_mode else None,
+                "timestamp": datetime.now().isoformat(),
+            },
         ),
     ]
 
