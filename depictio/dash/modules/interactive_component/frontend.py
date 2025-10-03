@@ -613,14 +613,15 @@ def register_callbacks_interactive_component(app):
         Input({"type": "reset-selection-graph-button", "index": MATCH}, "n_clicks"),
         Input("reset-all-filters-button", "n_clicks"),
         State({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        State("interactive-values-store", "data"),
         prevent_initial_call=True,
     )
     def reset_interactive_component_to_default(
-        individual_reset_clicks, reset_all_clicks, component_metadata
+        individual_reset_clicks, reset_all_clicks, component_metadata, store_data
     ):
         """
-        Reset interactive component to its default state.
-        Triggered by: individual reset button or reset-all-filters button.
+        Reset interactive component to its default state ONLY when reset buttons are clicked.
+        On page load/refresh, preserves existing values from store.
         Generic for all current and future interactive component types.
         """
         from dash import ctx, no_update
@@ -638,6 +639,27 @@ def register_callbacks_interactive_component(app):
         component_type = component_metadata.get("interactive_component_type")
         triggered_id = ctx.triggered_id
 
+        # Check if this is actually a reset button click (not just a store update)
+        is_reset_trigger = "reset-selection-graph-button" in str(
+            triggered_id
+        ) or "reset-all-filters-button" in str(triggered_id)
+
+        if not is_reset_trigger:
+            # Not a reset button - preserve existing value from store
+            logger.debug(f"📥 Non-reset trigger for {component_index}, preserving store value")
+            if store_data:
+                components = store_data.get("interactive_components_values", [])
+                for component in components:
+                    if component.get("index") == component_index:
+                        existing_value = component.get("value")
+                        logger.info(
+                            f"✅ Preserving existing value for {component_index}: {existing_value}"
+                        )
+                        return existing_value
+            logger.debug(f"No store value found for {component_index}, no update")
+            return no_update
+
+        # RESET TRIGGERED - return default value
         logger.info(
             f"🔄 Reset triggered for component {component_index} ({component_type}) by {triggered_id}"
         )
