@@ -20,6 +20,25 @@ from depictio.dash.modules.table_component.frontend import design_table
 def return_design_component(
     component_selected, id, df, btn_component, wf_id=None, dc_id=None, local_data=None
 ):
+    # Check if DC is MultiQC type and override component selection
+    # MultiQC data collections should use standalone MultiQC component, not Figure
+    if component_selected == "Figure" and dc_id and local_data:
+        try:
+            TOKEN = local_data.get("access_token")
+            response = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/datacollections/{dc_id}",
+                headers={"Authorization": f"Bearer {TOKEN}"},
+            )
+            if response.status_code == 200:
+                dc_type = response.json().get("config", {}).get("type", "").lower()
+                if dc_type == "multiqc":
+                    logger.info(
+                        "🔄 ROUTING: MultiQC DC detected - routing to MultiQC component instead of Figure"
+                    )
+                    component_selected = "MultiQC"  # Override to MultiQC
+        except Exception as e:
+            logger.warning(f"Failed to detect DC type for routing: {e}")
+
     # Wrap all components in full-width container, but give Figure extra width treatment
     if component_selected == "Figure":
         component_content = design_figure(
