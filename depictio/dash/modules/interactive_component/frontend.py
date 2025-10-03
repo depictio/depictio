@@ -608,6 +608,60 @@ def register_callbacks_interactive_component(app):
             columns_description_df,
         )
 
+    @app.callback(
+        Output({"type": "interactive-component-value", "index": MATCH}, "value"),
+        Input({"type": "reset-selection-graph-button", "index": MATCH}, "n_clicks"),
+        Input("reset-all-filters-button", "n_clicks"),
+        State({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        prevent_initial_call=True,
+    )
+    def reset_interactive_component_to_default(
+        individual_reset_clicks, reset_all_clicks, component_metadata
+    ):
+        """
+        Reset interactive component to its default state.
+        Triggered by: individual reset button or reset-all-filters button.
+        Generic for all current and future interactive component types.
+        """
+        from dash import ctx, no_update
+
+        # Check if callback was triggered (not just initial call)
+        if not ctx.triggered_id:
+            logger.debug("No trigger detected, skipping reset")
+            return no_update
+
+        if not component_metadata:
+            logger.warning("No component metadata available for reset")
+            return no_update
+
+        component_index = component_metadata.get("index")
+        component_type = component_metadata.get("interactive_component_type")
+        triggered_id = ctx.triggered_id
+
+        logger.info(
+            f"🔄 Reset triggered for component {component_index} ({component_type}) by {triggered_id}"
+        )
+
+        # Get default state from metadata
+        default_state = component_metadata.get("default_state", {})
+
+        # Generic default value logic (extendable for future components)
+        if "default_range" in default_state:
+            default_value = default_state["default_range"]
+            logger.info(f"✅ Resetting {component_index} to default_range: {default_value}")
+            return default_value
+        elif "default_value" in default_state:
+            default_value = default_state["default_value"]
+            logger.info(f"✅ Resetting {component_index} to default_value: {default_value}")
+            return default_value
+        else:
+            # Fallback based on component type
+            fallback_value = [] if component_type == "MultiSelect" else None
+            logger.info(
+                f"✅ Resetting {component_index} ({component_type}) to fallback: {fallback_value}"
+            )
+            return fallback_value
+
 
 def design_interactive(id, df):
     left_column = dmc.GridCol(
