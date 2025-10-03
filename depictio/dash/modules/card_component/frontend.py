@@ -557,27 +557,101 @@ def register_callbacks_card_component(app):
                 filters_data.get("interactive_components_values") if filters_data else None
             )
 
-            logger.debug(
-                f"Loading dataset with {len(metadata_list) if metadata_list else 0} filters for: {wf_id}:{dc_id}"
-            )
+            # MULTI-DC SUPPORT: Group filters by DC to detect cross-DC filtering scenarios
+            filters_by_dc = {}
+            if metadata_list:
+                for component in metadata_list:
+                    component_dc = str(component.get("metadata", {}).get("dc_id"))
+                    if component_dc not in filters_by_dc:
+                        filters_by_dc[component_dc] = []
+                    filters_by_dc[component_dc].append(component)
 
-            # Load dataset with filters applied via load_deltatable_lite's metadata parameter
-            if isinstance(dc_id, str) and "--" in dc_id:
-                data = load_deltatable_lite(
-                    workflow_id=ObjectId(wf_id),
-                    data_collection_id=dc_id,
-                    metadata=metadata_list,
-                    TOKEN=access_token,
+                logger.debug(
+                    f"🔍 CARD PATCH: {len(metadata_list)} total filters across "
+                    f"{len(filters_by_dc)} DC(s): {list(filters_by_dc.keys())}"
                 )
+
+            # Detect multi-DC filtering scenario (requires joins)
+            has_multi_dc = len(filters_by_dc) > 1
+
+            if has_multi_dc and metadata_list:
+                # MULTI-DC PATH: Use iterative_join for cross-DC filtering
+                from depictio.api.v1.deltatables_utils import iterative_join, return_joins_dict
+
+                logger.info(
+                    f"🔗 MULTI-DC CARD: Filters span {len(filters_by_dc)} DCs - using iterative_join"
+                )
+
+                # Build joins_dict from card metadata (need to create minimal stored_metadata structure)
+                # Extract DC config from trigger_data if available
+                dc_config = trigger_data.get("dc_config", {})
+
+                # Create minimal metadata structure for return_joins_dict
+                card_metadata = {
+                    "wf_id": wf_id,
+                    "dc_id": dc_id,
+                    "dc_config": dc_config,
+                    "component_type": "card",
+                }
+
+                # Add interactive component metadata for join detection
+                stored_metadata_for_join = [card_metadata]
+                for component in metadata_list:
+                    comp_meta = component.get("metadata", {}).copy()
+                    comp_meta["component_type"] = "interactive"
+                    stored_metadata_for_join.append(comp_meta)
+
+                # Build joins dict
+                joins_dict = return_joins_dict(
+                    wf_id, stored_metadata_for_join, access_token, extra_dc=None
+                )
+
+                logger.debug(f"🔗 CARD: Built joins_dict: {joins_dict}")
+
+                # Convert metadata_list to dictionary format expected by iterative_join
+                interactive_dict = {
+                    f"filter_{idx}": component for idx, component in enumerate(metadata_list)
+                }
+
+                # Use iterative_join to load and filter data across DCs
+                data = iterative_join(ObjectId(wf_id), joins_dict, interactive_dict, access_token)
+
+                # Clone to break Polars borrow checker (allows .to_pandas() in compute_value)
+                data = data.clone()
+
+                logger.info("✅ MULTI-DC CARD: Loaded joined+filtered data")
+
             else:
-                data = load_deltatable_lite(
-                    workflow_id=ObjectId(wf_id),
-                    data_collection_id=ObjectId(dc_id),
-                    metadata=metadata_list,
-                    TOKEN=access_token,
-                )
+                # SINGLE-DC PATH: Standard filtering with load_deltatable_lite
+                logger.debug(f"📄 SINGLE-DC CARD: Using standard load for DC {dc_id}")
 
-            logger.debug(f"Loaded filtered data shape: {data.shape}")
+                # Filter metadata to only include filters for THIS card's DC
+                filtered_metadata = filters_by_dc.get(str(dc_id), []) if filters_by_dc else None
+
+                if filtered_metadata:
+                    logger.debug(
+                        f"🔍 Applying {len(filtered_metadata)} filter(s) to card's DC {dc_id}"
+                    )
+                else:
+                    logger.debug("🔍 No filters for card's DC - loading unfiltered data")
+
+                # Load dataset with filters applied
+                if isinstance(dc_id, str) and "--" in dc_id:
+                    data = load_deltatable_lite(
+                        workflow_id=ObjectId(wf_id),
+                        data_collection_id=dc_id,
+                        metadata=filtered_metadata,
+                        TOKEN=access_token,
+                    )
+                else:
+                    data = load_deltatable_lite(
+                        workflow_id=ObjectId(wf_id),
+                        data_collection_id=ObjectId(dc_id),
+                        metadata=filtered_metadata,
+                        TOKEN=access_token,
+                    )
+
+            logger.debug("Loaded filtered data")
 
             # Compute new value on filtered data
             current_value = compute_value(data, column_name, aggregation)
