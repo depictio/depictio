@@ -811,3 +811,46 @@ def api_create_multiqc_report(multiqc_report: dict, CLI_config: "CLIConfig"):
     except httpx.RequestError as e:
         logger.error(f"HTTP request failed: {e}")
         raise
+
+
+def api_update_multiqc_report(report_id: str, multiqc_report: dict, CLI_config: "CLIConfig"):
+    """
+    Update an existing MultiQC report on the server.
+
+    This function is primarily used during overwrite operations to update report
+    metadata while preserving the report ID.
+
+    Args:
+        report_id: ID of the MultiQC report to update
+        multiqc_report: Updated MultiQC report data as dictionary
+        CLI_config: CLI configuration containing API URL and credentials
+
+    Returns:
+        httpx.Response: API response
+    """
+    logger.info(f"Updating MultiQC report {report_id} on server...")
+
+    url = f"{CLI_config.api_base_url}/depictio/api/v1/multiqc/reports/{report_id}"
+    headers = generate_api_headers(CLI_config)
+
+    logger.debug(f"PUT URL: {url}")
+    logger.debug(f"Headers: {headers}")
+    logger.debug(
+        f"Payload keys: {list(multiqc_report.keys()) if isinstance(multiqc_report, dict) else 'not a dict'}"
+    )
+
+    try:
+        response = httpx.put(
+            url,
+            json=multiqc_report,
+            headers=headers,
+            timeout=30.0,  # Add timeout
+        )
+        logger.debug(f"HTTP response received: {response.status_code}")
+        return response
+    except httpx.TimeoutException:
+        logger.error("API request timed out after 30 seconds")
+        raise
+    except httpx.RequestError as e:
+        logger.error(f"HTTP request failed: {e}")
+        raise

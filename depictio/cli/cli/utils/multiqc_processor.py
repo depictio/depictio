@@ -9,7 +9,7 @@ from typing import Any, Dict
 from depictio.cli.cli.utils.api_calls import (
     api_check_duplicate_multiqc_report,
     api_create_multiqc_report,
-    api_delete_multiqc_report,
+    api_update_multiqc_report,
 )
 from depictio.cli.cli.utils.rich_utils import rich_print_multiqc_processing_summary
 from depictio.cli.cli_logging import logger
@@ -331,15 +331,14 @@ def process_multiqc_data_collection(
 
                     if existing_report:
                         report_id = existing_report.get("id")
+                        existing_s3_location = existing_report.get("s3_location")
 
                         if overwrite:
                             logger.info(
-                                f"🔄 Overwrite enabled - deleting existing report with ID: {report_id}"
+                                f"🔄 Overwrite enabled - updating existing report with ID: {report_id}"
                             )
                             logger.info(f"   Original path: {file_path}")
-                            logger.info(
-                                f"   Existing S3 location: {existing_report.get('s3_location', 'N/A')}"
-                            )
+                            logger.info(f"   Existing S3 location: {existing_s3_location}")
 
                             # Rich print for non-verbose users
                             from depictio.cli.cli.utils.rich_utils import console
@@ -368,36 +367,85 @@ def process_multiqc_data_collection(
                                 f"[yellow]🔄 Overwriting existing report:[/yellow] [cyan]{report_id}[/cyan] [dim]({display_path})[/dim]"
                             )
 
-                            # Delete the existing report (including S3 file)
-                            try:
-                                delete_response = api_delete_multiqc_report(
-                                    report_id, delete_s3_file=True, CLI_config=CLI_config
-                                )
-
-                                if delete_response and delete_response.status_code == 200:
-                                    logger.info(
-                                        f"✅ Successfully deleted existing report {report_id}"
-                                    )
-                                    console.print(
-                                        "[green]✅ Deleted existing report and S3 file[/green]"
-                                    )
-                                else:
+                            # Extract S3 key from existing S3 location to preserve path
+                            # Format: s3://bucket/data_collection_id/timestamp_id/multiqc.parquet
+                            if existing_s3_location:
+                                try:
+                                    s3_path = existing_s3_location.replace("s3://", "")
+                                    if "/" in s3_path:
+                                        # Skip bucket name, get the rest as s3_key
+                                        s3_key = s3_path.split("/", 1)[1]
+                                        logger.info(f"Preserving S3 key: {s3_key}")
+                                    else:
+                                        # Fallback: generate new key if parsing fails
+                                        logger.warning(
+                                            "Failed to parse S3 location, generating new key"
+                                        )
+                                        s3_key = None
+                                except Exception as parse_error:
                                     logger.warning(
-                                        f"⚠️  Failed to delete existing report {report_id}: {delete_response.text if delete_response else 'No response'}"
+                                        f"Error parsing S3 location: {parse_error}, generating new key"
                                     )
-                                    console.print(
-                                        "[yellow]⚠️  Warning: Failed to delete existing report[/yellow]"
-                                    )
-                            except Exception as delete_error:
-                                logger.warning(
-                                    f"⚠️  Error deleting existing report {report_id}: {delete_error}"
+                                    s3_key = None
+                            else:
+                                logger.warning("No existing S3 location found, generating new key")
+                                s3_key = None
+
+                            # Upload to the SAME S3 location (overwrite in S3) or create new if parsing failed
+                            if not s3_key:
+                                file_name = "multiqc.parquet"
+                                s3_key = (
+                                    f"{str(data_collection.id)}/{timestamp}_{i + 1}/{file_name}"
                                 )
-                                console.print(
-                                    "[yellow]⚠️  Warning: Error deleting existing report[/yellow]"
+                                logger.info(f"Using new S3 key: {s3_key}")
+
+                            logger.info(f"Uploading file to S3: {file_path} -> {s3_key}")
+                            s3_client.upload_file(file_path, CLI_config.s3_storage.bucket, s3_key)
+                            s3_location = f"s3://{CLI_config.s3_storage.bucket}/{s3_key}"
+                            logger.info(f"Successfully uploaded {file_path} to {s3_location}")
+
+                            # Prepare updated report data
+                            metadata_for_report = {
+                                k: v for k, v in metadata.items() if k != "multiqc_version"
+                            }
+
+                            multiqc_report = MultiQCReport(
+                                data_collection_id=str(data_collection.id),
+                                metadata=MultiQCMetadata(**metadata_for_report),
+                                s3_location=s3_location,
+                                original_file_path=file_path,
+                                file_size_bytes=file_size_bytes,
+                                multiqc_version=multiqc_version,
+                                report_name=f"MultiQC Report {i + 1} - {data_collection.data_collection_tag}",
+                            )
+
+                            # UPDATE existing report instead of creating new one
+                            try:
+                                report_data = multiqc_report.model_dump(exclude={"id"}, mode="json")
+                                logger.info(f"Updating MultiQC report {report_id}...")
+                                response = api_update_multiqc_report(
+                                    report_id, report_data, CLI_config
                                 )
 
-                            # Continue to upload the new report
-                            logger.info(f"Proceeding with upload of new report for {file_path}")
+                                if response.status_code == 200:
+                                    logger.info(
+                                        f"✅ Successfully updated MultiQC report {report_id}"
+                                    )
+                                    console.print("[green]✅ Updated existing report[/green]")
+                                    created_reports.append(report_id)
+                                else:
+                                    logger.error(
+                                        f"Failed to update report: {response.status_code} - {response.text}"
+                                    )
+                                    console.print(
+                                        "[yellow]⚠️  Warning: Failed to update report[/yellow]"
+                                    )
+                            except Exception as update_error:
+                                logger.error(f"Error updating report: {update_error}")
+                                console.print("[yellow]⚠️  Warning: Error updating report[/yellow]")
+
+                            # Skip the normal upload and create flow (continue to next file)
+                            continue
                         else:
                             logger.info(
                                 f"⏭️  Skipping file {i + 1} - report already exists with ID: {report_id}"

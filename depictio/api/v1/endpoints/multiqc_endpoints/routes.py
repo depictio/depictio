@@ -21,6 +21,7 @@ from depictio.api.v1.endpoints.multiqc_endpoints.utils import (
     get_multiqc_report_by_id,
     get_multiqc_report_metadata_by_id,
     get_multiqc_reports_by_data_collection,
+    update_multiqc_report_by_id,
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.models.models.multiqc_reports import MultiQCReport
@@ -68,6 +69,42 @@ async def create_multiqc_report(
 
     response = MultiQCReportResponse(
         report=saved_report,
+        data_collection_tag="multiqc_data",  # Could be retrieved from data collection if needed
+        workflow_name="multiqc_workflow",  # Could be retrieved from workflow if needed
+    )
+
+    return response
+
+
+@router.put(
+    "/reports/{report_id}",
+    response_model=MultiQCReportResponse,
+    summary="Update an existing MultiQC report",
+)
+async def update_multiqc_report(
+    report_id: str,
+    report: MultiQCReport,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Update an existing MultiQC report in the database.
+
+    This endpoint is primarily used for overwrite operations where the S3 file
+    is updated in place and the metadata needs to be refreshed while preserving
+    the report ID.
+
+    Args:
+        report_id: ID of the report to update
+        report: Updated MultiQC report data
+        current_user: Authenticated user
+
+    Returns:
+        Updated MultiQC report with preserved ID
+    """
+    updated_report = await update_multiqc_report_by_id(report_id, report)
+
+    response = MultiQCReportResponse(
+        report=updated_report,
         data_collection_tag="multiqc_data",  # Could be retrieved from data collection if needed
         workflow_name="multiqc_workflow",  # Could be retrieved from workflow if needed
     )

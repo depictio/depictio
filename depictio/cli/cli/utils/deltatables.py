@@ -69,7 +69,9 @@ def fetch_file_data(dc_id: str, CLI_config: CLIConfig) -> list[File]:
     logger.info(f"Retrieved {len(files_data)} file(s) for Data Collection {dc_id}.")
     if not files_data:
         error_msg = f"No files found for Data Collection {dc_id}."
-        logger.error(error_msg)
+        logger.debug(
+            error_msg
+        )  # Changed from ERROR to DEBUG - this is expected for some data collection types
         raise Exception(error_msg)
 
     files = convert_to_file_objects(files_data)
@@ -396,12 +398,16 @@ def client_aggregate_data(
 
     if destination_exists and not overwrite:
         logger.debug("Destination already exists, overwrite mode is disabled")
-        rich_print_checked_statement(
-            "Destination already exists, overwrite mode is disabled", "info"
-        )
+
+        from depictio.cli.cli.utils.rich_utils import console
+
+        console.print("[yellow]⚠️  Destination already exists and overwrite is disabled[/yellow]")
+        console.print(f"   [dim]Destination: {destination_prefix}[/dim]")
+        console.print("   [cyan]💡 Tip: Use --overwrite flag to replace existing data[/cyan]")
+
         return {
             "result": "error",
-            "message": f"Destination {destination_prefix} already exists and overwrite is disabled.",
+            "message": f"Destination {destination_prefix} already exists and overwrite is disabled. Use --overwrite to replace.",
         }
 
     dc_id = data_collection.id

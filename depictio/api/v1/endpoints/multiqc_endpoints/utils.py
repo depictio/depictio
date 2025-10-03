@@ -85,6 +85,54 @@ async def create_multiqc_report_in_db(report: MultiQCReport) -> MultiQCReport:
         raise HTTPException(status_code=500, detail=f"Failed to create MultiQC report: {str(e)}")
 
 
+async def update_multiqc_report_by_id(
+    report_id: str, updated_report: MultiQCReport
+) -> MultiQCReport:
+    """
+    Update an existing MultiQC report in the database.
+
+    Args:
+        report_id: ID of the MultiQC report to update
+        updated_report: Updated MultiQC report data
+
+    Returns:
+        Updated MultiQC report
+
+    Raises:
+        HTTPException: If report not found or update fails
+    """
+    try:
+        # Verify the report exists
+        existing_doc = multiqc_collection.find_one({"_id": ObjectId(report_id)})
+        if not existing_doc:
+            raise HTTPException(status_code=404, detail="MultiQC report not found")
+
+        # Convert updated report to dict, excluding id fields
+        update_dict = updated_report.model_dump(exclude={"id"}, exclude_none=True)
+
+        # Update the document
+        result = multiqc_collection.update_one({"_id": ObjectId(report_id)}, {"$set": update_dict})
+
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="MultiQC report not found")
+
+        if result.modified_count == 0:
+            logger.warning(f"MultiQC report {report_id} was matched but not modified")
+
+        # Fetch and return the updated report
+        updated_doc = multiqc_collection.find_one({"_id": ObjectId(report_id)})
+        if updated_doc:
+            updated_doc["id"] = str(updated_doc["_id"])
+            return MultiQCReport(**updated_doc)
+        else:
+            raise HTTPException(status_code=500, detail="Failed to retrieve updated report")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update MultiQC report: {str(e)}")
+
+
 async def get_multiqc_reports_by_data_collection(
     data_collection_id: str, limit: int = 50, offset: int = 0
 ) -> tuple[List[MultiQCReport], int]:
