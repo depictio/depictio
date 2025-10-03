@@ -20,8 +20,6 @@ from depictio.dash.layouts.draggable_scenarios.graphs_interactivity import (
 )
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import (
     render_raw_children,
-    # update_interactive_component_async,
-    update_interactive_component_sync,
 )
 from depictio.dash.layouts.draggable_scenarios.restore_dashboard import render_dashboard
 
@@ -680,7 +678,7 @@ def register_callbacks_draggable(app):
         ),
         Input("reset-all-filters-button", "n_clicks"),
         Input("remove-all-components-button", "n_clicks"),
-        Input("interactive-values-store", "data"),
+        State("interactive-values-store", "data"),
         State("live-interactivity-toggle", "checked"),
         State("unified-edit-mode-button", "checked"),
         Input("unified-edit-mode-button", "checked"),
@@ -796,7 +794,7 @@ def register_callbacks_draggable(app):
         # logger.info(f"Stored draggable layouts: {state_stored_draggable_layouts}")
         # logger.info(f"Stored draggable children: {state_stored_draggable_children}")
         # logger.info(f"Input stored draggable children: {input_stored_draggable_children}")
-        logger.info(f"Stored metadata: {stored_metadata}")
+        # logger.info(f"Stored metadata: {stored_metadata}")
         logger.info("\n")
 
         # Extract dashboard_id from the pathname
@@ -808,6 +806,9 @@ def register_callbacks_draggable(app):
             draggable_layouts = draggable_layouts.get("lg", [])
         elif draggable_layouts is None:
             draggable_layouts = []
+
+        if draggable_children is None:
+            draggable_children = []
 
         # Initialize layouts from stored layouts if available
         if dashboard_id in state_stored_draggable_layouts:
@@ -1277,55 +1278,16 @@ def register_callbacks_draggable(app):
                         dash.no_update,
                     )
 
-            # Handle scenarios where the user resets a component using the reset button
+            # REMOVED: reset-selection-graph-button handler
+            # Individual reset now handled via store pattern:
+            # 1. Reset button click → update_interactive_values_store removes filters
+            # 2. Store change → component-level callbacks (figure/table/multiqc) reload data
+            # This eliminates redundant full re-renders and uses efficient patching
             elif "reset-selection-graph-button" in triggered_input:
-                logger.info("Reset selection button triggered")
-
-                # Find the component being reset
-                reset_component_metadata = None
-                ctx_triggered = ctx.triggered[0]
-                ctx_triggered_prop_id = ctx_triggered["prop_id"]
-                ctx_triggered_prop_id_index = eval(ctx_triggered_prop_id.split(".")[0])["index"]
-
-                for metadata in stored_metadata:
-                    if metadata["index"] == ctx_triggered_prop_id_index:
-                        metadata["filter_applied"] = False
-                        reset_component_metadata = metadata
-                        break
-
-                # Handle specific reset logic based on component type
-                if reset_component_metadata:
-                    component_type = reset_component_metadata.get("component_type")
-                    logger.info(
-                        f"Resetting {component_type} component: {ctx_triggered_prop_id_index}"
-                    )
-
-                    # For interactive components, clear their values in the interactive_components_dict
-                    if component_type == "interactive":
-                        if ctx_triggered_prop_id_index in interactive_components_dict:
-                            # Clear the value for this interactive component
-                            interactive_components_dict[ctx_triggered_prop_id_index]["value"] = None
-                            logger.info(
-                                f"Cleared value for interactive component: {ctx_triggered_prop_id_index}"
-                            )
-
-                    # For scatter plots, the filter_applied = False is sufficient
-                    elif component_type == "figure":
-                        visu_type = reset_component_metadata.get("visu_type", "")
-                        if visu_type.lower() == "scatter":
-                            logger.info(f"Reset scatter plot: {ctx_triggered_prop_id_index}")
-
-                new_children = update_interactive_component_sync(
-                    stored_metadata,
-                    interactive_components_dict,
-                    draggable_children,
-                    switch_state=unified_edit_mode_button,
-                    TOKEN=TOKEN,
-                    dashboard_id=dashboard_id,
-                    theme=theme,
-                )
+                logger.info("Reset selection button triggered - delegating to store-based pattern")
+                # Store update callback handles filter removal, component callbacks handle re-rendering
                 return (
-                    new_children,
+                    dash.no_update,
                     dash.no_update,
                     dash.no_update,
                     dash.no_update,
@@ -1457,67 +1419,35 @@ def register_callbacks_draggable(app):
                 or triggered_input == "theme-store"
                 or triggered_input == "dashboard-title"
             ):
+                # PATTERN-MATCHING ARCHITECTURE: All data components handle their own updates
+                # - Cards: patch_card_with_filters() listens to interactive-values-store
+                # - Figures: patch_figure_interactive() listens to interactive-values-store
+                # - Tables: Infinite scroll callback listens to interactive-values-store
+                # - MultiQC: Pattern-matching callback handles updates
+                # No sync rebuild needed - components are independent and self-updating
+
                 if triggered_input == "interactive-values-store":
                     logger.info(
-                        "🔄 Interactive values store changed - applying filters to all components"
+                        "✅ Interactive values store changed - pattern-matching callbacks handle all updates"
                     )
+                    # No action needed - each component updates itself via pattern-matching callback
+                    raise dash.exceptions.PreventUpdate
+
                 elif triggered_input == "theme-store":
-                    logger.info("Theme store triggered - updating all components with new theme")
+                    logger.info("⚠️ Theme store triggered - TODO: Add theme callbacks to components")
+                    # TODO: Pattern-matching callbacks should listen to theme-store as Input
+                    # For now, prevent update - components use theme from State only
+                    raise dash.exceptions.PreventUpdate
+
                 elif triggered_input == "dashboard-title":
-                    logger.info(
-                        "Dashboard title style changed - updating all components with new theme"
-                    )
+                    logger.info("Dashboard title style changed")
+                    # Dashboard title changes don't affect component data
+                    raise dash.exceptions.PreventUpdate
+
                 else:
-                    logger.info("Interactive component triggered")
-
-                def clean_stored_metadata(stored_metadata):
-                    # Remove duplicates from stored_metadata by checking parent_index and index
-                    stored_metadata = remove_duplicates_by_index(stored_metadata)
-                    parent_indexes = set(
-                        [
-                            e["parent_index"]
-                            for e in stored_metadata
-                            if "parent_index" in e and e["parent_index"] is not None
-                        ]
-                    )
-                    # remove parent indexes that are also child indexes
-                    stored_metadata = [
-                        e for e in stored_metadata if e["index"] not in parent_indexes
-                    ]
-                    return stored_metadata
-
-                stored_metadata = clean_stored_metadata(stored_metadata)
-
-                logger.info(f"Updating components with theme: {theme}")
-
-                new_children = update_interactive_component_sync(
-                    stored_metadata,
-                    interactive_components_dict,
-                    draggable_children,
-                    switch_state=unified_edit_mode_button,
-                    TOKEN=TOKEN,
-                    dashboard_id=dashboard_id,
-                    theme=theme,
-                )
-                # REMOVED: state_stored_draggable_children storage to fix localStorage quota
-
-                if new_children:
-                    return (
-                        new_children,
-                        dash.no_update,
-                        dash.no_update,
-                        dash.no_update,
-                    )
-                else:
-                    return (
-                        draggable_children,
-                        dash.no_update,
-                        dash.no_update,
-                        dash.no_update,
-                    )
-                # return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
-
-                # return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
+                    logger.info("Interactive component value changed (legacy trigger)")
+                    # Legacy trigger - should not happen with new architecture
+                    raise dash.exceptions.PreventUpdate
 
             elif triggered_input == "stored-draggable-layouts":
                 # logger.info("Stored draggable layouts triggered")
@@ -2253,24 +2183,13 @@ def register_callbacks_draggable(app):
                 )
                 # return [], {}, {}, {}
             elif triggered_input == "reset-all-filters-button":
-                logger.info("Reset all filters button clicked")
-                new_children = list()
-                for metadata in stored_metadata:
-                    metadata["filter_applied"] = False
-
-                    new_child, index = render_raw_children(
-                        metadata,
-                        unified_edit_mode_button,
-                        dashboard_id,
-                        TOKEN=TOKEN,
-                        theme=theme,
-                    )
-                    new_children.append(new_child)
-
-                # state_stored_draggable_children[dashboard_id] = new_children
-
+                # SIMPLIFIED: Reset-all now handled via store pattern
+                # 1. Reset button click → update_interactive_values_store clears all filters
+                # 2. Store change → component-level callbacks (figure/table/multiqc) reload data
+                # No need to re-render all components here - let store propagation handle it
+                logger.info("Reset all filters button clicked - delegating to store-based pattern")
                 return (
-                    new_children,
+                    dash.no_update,
                     dash.no_update,
                     dash.no_update,
                     dash.no_update,
@@ -2436,8 +2355,9 @@ def register_callbacks_draggable(app):
         ],
         [
             Input({"type": "interactive-component-value", "index": ALL}, "value"),
-            Input({"type": "graph", "index": ALL}, "clickData"),
-            Input({"type": "graph", "index": ALL}, "selectedData"),
+            # TODO: Re-enable graph interactions later
+            # Input({"type": "graph", "index": ALL}, "clickData"),
+            # Input({"type": "graph", "index": ALL}, "selectedData"),
             Input({"type": "reset-selection-graph-button", "index": ALL}, "n_clicks"),
             Input("reset-all-filters-button", "n_clicks"),
         ],
@@ -2455,8 +2375,9 @@ def register_callbacks_draggable(app):
     )
     def update_interactive_values_store(
         interactive_values,
-        graph_click_data,
-        graph_selected_data,
+        # TODO: Re-enable graph interactions later
+        # graph_click_data,
+        # graph_selected_data,
         reset_button_clicks,
         reset_all_clicks,
         ids,
@@ -2468,10 +2389,8 @@ def register_callbacks_draggable(app):
         live_interactivity_on,
         pending_changes,
     ):
-        from depictio.dash.layouts.draggable_scenarios.graphs_interactivity import (
-            process_click_data,
-            process_selected_data,
-        )
+        # FIXME
+        live_interactivity_on = True
 
         logger.info("Callback 'update_interactive_values_store' triggered.")
 
@@ -2495,11 +2414,13 @@ def register_callbacks_draggable(app):
         stored_metadata_interactive = remove_duplicates_by_index(stored_metadata_interactive)
 
         components = []
-        scatter_plot_components = {}
+        # scatter_plot_components = {}
         reset_action_performed = False  # Track if an individual reset was performed
 
         # Check trigger types
-        graph_triggered = any("graph" in prop_id for prop_id in triggered_prop_ids)
+        # TODO: Re-enable graph interactions later
+        # graph_triggered = any("graph" in prop_id for prop_id in triggered_prop_ids)
+        graph_triggered = False  # Disabled for now
         interactive_triggered = any(
             "interactive-component-value" in prop_id for prop_id in triggered_prop_ids
         )
@@ -2509,7 +2430,7 @@ def register_callbacks_draggable(app):
         )
 
         logger.info(
-            f"🎯 Trigger analysis: graph={graph_triggered}, interactive={interactive_triggered}, reset={reset_triggered}"
+            f"🎯 Trigger analysis: graph={graph_triggered} (disabled), interactive={interactive_triggered}, reset={reset_triggered}"
         )
 
         # Handle reset buttons first (they take priority)
@@ -2623,13 +2544,14 @@ def register_callbacks_draggable(app):
                             else:
                                 filtered_components = current_components
 
-                            # Update components list for individual reset and let normal flow handle it
-                            components = filtered_components
-                            # Mark this as a reset action for special pending logic
-                            reset_action_performed = True
+                            # CRITICAL FIX: Return immediately to bypass filter preservation logic
+                            # Individual reset should work like reset-all with early return
+                            output_data = {"interactive_components_values": filtered_components}
                             logger.info(
-                                f"🔄 Individual reset completed: {len(components)} components - continuing with normal flow"
+                                f"✅ Individual reset completed: {len(filtered_components)} components - returning immediately"
                             )
+                            # Individual reset always applies immediately (like reset-all)
+                            return output_data, {}
 
                     except Exception as e:
                         logger.error(f"Error processing individual reset: {e}")
@@ -2640,24 +2562,26 @@ def register_callbacks_draggable(app):
             f"🎯 Current store has {len(current_store_data.get('interactive_components_values', [])) if current_store_data else 0} existing components"
         )
 
-        # Check if we have any actual graph data to process (needed early for filter preservation logic)
-        has_actual_graph_data = False
-        if graph_triggered:
-            if graph_click_data:
-                has_actual_graph_data = any(
-                    click_data and click_data.get("points") and len(click_data["points"]) > 0
-                    for click_data in graph_click_data
-                )
-
-            if graph_selected_data and not has_actual_graph_data:
-                has_actual_graph_data = any(
-                    selected_data
-                    and selected_data.get("points")
-                    and len(selected_data["points"]) > 0
-                    for selected_data in graph_selected_data
-                )
-
-            logger.info(f"🎯 Has actual graph data to process: {has_actual_graph_data}")
+        # TODO: Re-enable graph interactions later
+        # # Check if we have any actual graph data to process (needed early for filter preservation logic)
+        # has_actual_graph_data = False
+        # if graph_triggered:
+        #     if graph_click_data:
+        #         has_actual_graph_data = any(
+        #             click_data and click_data.get("points") and len(click_data["points"]) > 0
+        #             for click_data in graph_click_data
+        #         )
+        #
+        #     if graph_selected_data and not has_actual_graph_data:
+        #         has_actual_graph_data = any(
+        #             selected_data
+        #             and selected_data.get("points")
+        #             and len(selected_data["points"]) > 0
+        #             for selected_data in graph_selected_data
+        #         )
+        #
+        #     logger.info(f"🎯 Has actual graph data to process: {has_actual_graph_data}")
+        # has_actual_graph_data = False  # Disabled for now
 
         # Handle regular interactive component updates
         if (
@@ -2673,182 +2597,184 @@ def register_callbacks_draggable(app):
                     {"value": value, "metadata": metadata, "index": metadata["index"]}
                 )
 
-        # Get the graph that was triggered (if any) to avoid duplicate filters
-        triggered_graph_index = None
-        if graph_triggered:
-            for prop_id in triggered_prop_ids:
-                if "graph" in prop_id:
-                    try:
-                        graph_id_str = prop_id.split(".")[0]
-                        graph_id_dict = eval(graph_id_str)
-                        triggered_graph_index = graph_id_dict["index"]
-                        break
-                    except Exception:
-                        continue
+        # TODO: Re-enable graph interactions later
+        # # Get the graph that was triggered (if any) to avoid duplicate filters
+        # triggered_graph_index = None
+        # if graph_triggered:
+        #     for prop_id in triggered_prop_ids:
+        #         if "graph" in prop_id:
+        #             try:
+        #                 graph_id_str = prop_id.split(".")[0]
+        #                 graph_id_dict = eval(graph_id_str)
+        #                 triggered_graph_index = graph_id_dict["index"]
+        #                 break
+        #             except Exception:
+        #                 continue
+        #
+        # # Always preserve existing scatter plot filters unless we're specifically updating them
+        # if current_store_data and "interactive_components_values" in current_store_data:
+        #     # Find existing scatter plot filters and preserve them (except for triggered graph)
+        #     for existing_component in current_store_data["interactive_components_values"]:
+        #         if isinstance(existing_component, dict):
+        #             component_index = existing_component.get("index", "")
+        #             # Check if this is a scatter plot generated filter (starts with "filter_")
+        #             if component_index.startswith("filter_"):
+        #                 # Only remove if this is the same graph AND we have actual new data
+        #                 should_replace = (
+        #                     triggered_graph_index
+        #                     and triggered_graph_index in component_index
+        #                     and has_actual_graph_data
+        #                 )
+        #
+        #                 if not should_replace:
+        #                     components.append(existing_component)
+        #                     logger.info(
+        #                         f"🎯 Preserved existing scatter plot filter: {component_index}"
+        #                     )
+        #                 else:
+        #                     logger.info(
+        #                         f"🎯 Removing old filter for triggered graph (will be replaced): {component_index}"
+        #                     )
 
-        # Always preserve existing scatter plot filters unless we're specifically updating them
-        if current_store_data and "interactive_components_values" in current_store_data:
-            # Find existing scatter plot filters and preserve them (except for triggered graph)
-            for existing_component in current_store_data["interactive_components_values"]:
-                if isinstance(existing_component, dict):
-                    component_index = existing_component.get("index", "")
-                    # Check if this is a scatter plot generated filter (starts with "filter_")
-                    if component_index.startswith("filter_"):
-                        # Only remove if this is the same graph AND we have actual new data
-                        should_replace = (
-                            triggered_graph_index
-                            and triggered_graph_index in component_index
-                            and has_actual_graph_data
-                        )
-
-                        if not should_replace:
-                            components.append(existing_component)
-                            logger.info(
-                                f"🎯 Preserved existing scatter plot filter: {component_index}"
-                            )
-                        else:
-                            logger.info(
-                                f"🎯 Removing old filter for triggered graph (will be replaced): {component_index}"
-                            )
-
-        # Handle scatter plot interactions
-        if graph_triggered:
-            logger.info("🎯 Graph interaction detected in store update")
-
-            # Only process graph interactions if we have actual data
-            # This prevents clearing filters when Dash sends empty data on subsequent triggers
-            if has_actual_graph_data:
-                # Find which graph was triggered
-                for prop_id in triggered_prop_ids:
-                    if "graph" in prop_id:
-                        try:
-                            # Parse the triggered graph index
-                            graph_id_str = prop_id.split(".")[0]
-                            graph_id_dict = eval(graph_id_str)
-                            ctx_triggered_prop_id_index = graph_id_dict["index"]
-
-                            # Get the corresponding graph metadata
-                            graph_metadata = None
-                            for meta in stored_metadata:
-                                if meta.get("index") == ctx_triggered_prop_id_index:
-                                    graph_metadata = meta
-                                    break
-
-                            if (
-                                not graph_metadata
-                                or graph_metadata.get("visu_type", "").lower() != "scatter"
-                            ):
-                                continue
-
-                            logger.info(
-                                f"🎯 Processing scatter plot interaction for {ctx_triggered_prop_id_index}"
-                            )
-
-                            # Get token from local store
-                            TOKEN = None
-                            if local_store and "access_token" in local_store:
-                                TOKEN = local_store["access_token"]
-
-                            if not TOKEN:
-                                logger.warning(
-                                    "No access token available for scatter plot processing"
-                                )
-                                continue
-
-                            # Process click data
-                            if "clickData" in prop_id and graph_click_data:
-                                logger.info(f"🎯 Processing clickData: {graph_click_data}")
-                                for i, click_data in enumerate(graph_click_data):
-                                    logger.info(
-                                        f"🎯 Checking click_data[{i}]: {click_data} for graph {graph_ids[i]['index'] if i < len(graph_ids) else 'N/A'}"
-                                    )
-                                    if (
-                                        click_data
-                                        and i < len(graph_ids)
-                                        and graph_ids[i]["index"] == ctx_triggered_prop_id_index
-                                    ):
-                                        # Only process if there are actual clicked points
-                                        if (
-                                            click_data.get("points")
-                                            and len(click_data["points"]) > 0
-                                        ):
-                                            dict_graph_data = {
-                                                "value": click_data["points"][0],
-                                                "metadata": graph_metadata,
-                                            }
-                                            scatter_plot_components = process_click_data(
-                                                dict_graph_data, {}, TOKEN
-                                            )
-                                            logger.info(
-                                                f"🎯 Click data processed: {len(scatter_plot_components)} components"
-                                            )
-                                        else:
-                                            logger.info(
-                                                f"🎯 No click points - click_data: {click_data}"
-                                            )
-                                        break
-
-                            # Process selected data
-                            elif "selectedData" in prop_id and graph_selected_data:
-                                logger.info(f"🎯 Processing selectedData: {graph_selected_data}")
-                                for i, selected_data in enumerate(graph_selected_data):
-                                    logger.info(
-                                        f"🎯 Checking selected_data[{i}]: {selected_data} for graph {graph_ids[i]['index'] if i < len(graph_ids) else 'N/A'}"
-                                    )
-                                    if (
-                                        selected_data
-                                        and i < len(graph_ids)
-                                        and graph_ids[i]["index"] == ctx_triggered_prop_id_index
-                                    ):
-                                        # Only process if there are actual selected points
-                                        if (
-                                            selected_data.get("points")
-                                            and len(selected_data["points"]) > 0
-                                        ):
-                                            dict_graph_data = {
-                                                "value": selected_data["points"],
-                                                "metadata": graph_metadata,
-                                            }
-                                            scatter_plot_components = process_selected_data(
-                                                dict_graph_data, {}, TOKEN
-                                            )
-                                            logger.info(
-                                                f"🎯 Selected data processed: {len(scatter_plot_components)} components"
-                                            )
-                                        else:
-                                            logger.info(
-                                                f"🎯 No selected points - selected_data: {selected_data}"
-                                            )
-                                        break
-
-                        except Exception as e:
-                            logger.error(f"Error processing graph interaction: {e}")
-                            continue
-            else:
-                logger.info(
-                    "🎯 No actual graph data - preserving existing filters and skipping graph processing"
-                )
-
-        # Add scatter plot generated components to the store
-        if scatter_plot_components:
-            for component_key, component_data in scatter_plot_components.items():
-                if isinstance(component_data, dict) and component_data.get("metadata"):
-                    # Enhance metadata to match expected format for table filtering
-                    enhanced_metadata = component_data.get("metadata", {}).copy()
-                    enhanced_metadata["component_type"] = (
-                        "interactive"  # Critical for table filtering
-                    )
-                    enhanced_metadata["index"] = component_key  # Ensure proper index
-
-                    _tmp_metadata = {
-                        "value": component_data.get("value"),
-                        "metadata": enhanced_metadata,
-                        "index": component_key,
-                    }
-                    components.append(_tmp_metadata)
-                    logger.info(
-                        f"🎯 Added scatter plot component: {component_key} with enhanced metadata: {_tmp_metadata}"
-                    )
+        # TODO: Re-enable graph interactions later
+        # # Handle scatter plot interactions
+        # if graph_triggered:
+        #     logger.info("🎯 Graph interaction detected in store update")
+        #
+        #     # Only process graph interactions if we have actual data
+        #     # This prevents clearing filters when Dash sends empty data on subsequent triggers
+        #     if has_actual_graph_data:
+        #         # Find which graph was triggered
+        #         for prop_id in triggered_prop_ids:
+        #             if "graph" in prop_id:
+        #                 try:
+        #                     # Parse the triggered graph index
+        #                     graph_id_str = prop_id.split(".")[0]
+        #                     graph_id_dict = eval(graph_id_str)
+        #                     ctx_triggered_prop_id_index = graph_id_dict["index"]
+        #
+        #                     # Get the corresponding graph metadata
+        #                     graph_metadata = None
+        #                     for meta in stored_metadata:
+        #                         if meta.get("index") == ctx_triggered_prop_id_index:
+        #                             graph_metadata = meta
+        #                             break
+        #
+        #                     if (
+        #                         not graph_metadata
+        #                         or graph_metadata.get("visu_type", "").lower() != "scatter"
+        #                     ):
+        #                         continue
+        #
+        #                     logger.info(
+        #                         f"🎯 Processing scatter plot interaction for {ctx_triggered_prop_id_index}"
+        #                     )
+        #
+        #                     # Get token from local store
+        #                     TOKEN = None
+        #                     if local_store and "access_token" in local_store:
+        #                         TOKEN = local_store["access_token"]
+        #
+        #                     if not TOKEN:
+        #                         logger.warning(
+        #                             "No access token available for scatter plot processing"
+        #                         )
+        #                         continue
+        #
+        #                     # Process click data
+        #                     if "clickData" in prop_id and graph_click_data:
+        #                         logger.info(f"🎯 Processing clickData: {graph_click_data}")
+        #                         for i, click_data in enumerate(graph_click_data):
+        #                             logger.info(
+        #                                 f"🎯 Checking click_data[{i}]: {click_data} for graph {graph_ids[i]['index'] if i < len(graph_ids) else 'N/A'}"
+        #                             )
+        #                             if (
+        #                                 click_data
+        #                                 and i < len(graph_ids)
+        #                                 and graph_ids[i]["index"] == ctx_triggered_prop_id_index
+        #                             ):
+        #                                 # Only process if there are actual clicked points
+        #                                 if (
+        #                                     click_data.get("points")
+        #                                     and len(click_data["points"]) > 0
+        #                                 ):
+        #                                     dict_graph_data = {
+        #                                         "value": click_data["points"][0],
+        #                                         "metadata": graph_metadata,
+        #                                     }
+        #                                     scatter_plot_components = process_click_data(
+        #                                         dict_graph_data, {}, TOKEN
+        #                                     )
+        #                                     logger.info(
+        #                                         f"🎯 Click data processed: {len(scatter_plot_components)} components"
+        #                                     )
+        #                                 else:
+        #                                     logger.info(
+        #                                         f"🎯 No click points - click_data: {click_data}"
+        #                                     )
+        #                                 break
+        #
+        #                     # Process selected data
+        #                     elif "selectedData" in prop_id and graph_selected_data:
+        #                         logger.info(f"🎯 Processing selectedData: {graph_selected_data}")
+        #                         for i, selected_data in enumerate(graph_selected_data):
+        #                             logger.info(
+        #                                 f"🎯 Checking selected_data[{i}]: {selected_data} for graph {graph_ids[i]['index'] if i < len(graph_ids) else 'N/A'}"
+        #                             )
+        #                             if (
+        #                                 selected_data
+        #                                 and i < len(graph_ids)
+        #                                 and graph_ids[i]["index"] == ctx_triggered_prop_id_index
+        #                             ):
+        #                                 # Only process if there are actual selected points
+        #                                 if (
+        #                                     selected_data.get("points")
+        #                                     and len(selected_data["points"]) > 0
+        #                                 ):
+        #                                     dict_graph_data = {
+        #                                         "value": selected_data["points"],
+        #                                         "metadata": graph_metadata,
+        #                                     }
+        #                                     scatter_plot_components = process_selected_data(
+        #                                         dict_graph_data, {}, TOKEN
+        #                                     )
+        #                                     logger.info(
+        #                                         f"🎯 Selected data processed: {len(scatter_plot_components)} components"
+        #                                     )
+        #                                 else:
+        #                                     logger.info(
+        #                                         f"🎯 No selected points - selected_data: {selected_data}"
+        #                                     )
+        #                                 break
+        #
+        #                 except Exception as e:
+        #                     logger.error(f"Error processing graph interaction: {e}")
+        #                     continue
+        #     else:
+        #         logger.info(
+        #             "🎯 No actual graph data - preserving existing filters and skipping graph processing"
+        #         )
+        #
+        # # Add scatter plot generated components to the store
+        # if scatter_plot_components:
+        #     for component_key, component_data in scatter_plot_components.items():
+        #         if isinstance(component_data, dict) and component_data.get("metadata"):
+        #             # Enhance metadata to match expected format for table filtering
+        #             enhanced_metadata = component_data.get("metadata", {}).copy()
+        #             enhanced_metadata["component_type"] = (
+        #                 "interactive"  # Critical for table filtering
+        #             )
+        #             enhanced_metadata["index"] = component_key  # Ensure proper index
+        #
+        #             _tmp_metadata = {
+        #                 "value": component_data.get("value"),
+        #                 "metadata": enhanced_metadata,
+        #                 "index": component_key,
+        #             }
+        #             components.append(_tmp_metadata)
+        #             logger.info(
+        #                 f"🎯 Added scatter plot component: {component_key} with enhanced metadata: {_tmp_metadata}"
+        #             )
 
         # Final check: prevent accidental loss of scatter plot filters
         scatter_filters_before = 0
