@@ -1250,7 +1250,6 @@ def register_callbacks_figure_component(app):
         [
             Output({"type": "ui-mode-content", "index": MATCH}, "style"),
             Output({"type": "code-mode-content", "index": MATCH}, "style"),
-            Output({"type": "multiqc-mode-content", "index": MATCH}, "style"),
             Output({"type": "code-mode-interface", "index": MATCH}, "children"),
             Output({"type": "figure-mode-store", "index": MATCH}, "data"),
         ],
@@ -1266,7 +1265,7 @@ def register_callbacks_figure_component(app):
         prevent_initial_call=False,  # Handle both initial load and user toggles
     )
     def handle_mode_switch(mode, current_mode, dict_kwargs, visu_type_label, current_code):
-        """Handle initial setup and user toggling between UI, Code, and MultiQC modes"""
+        """Handle initial setup and user toggling between UI and Code modes"""
         logger.info(f"🔄 MODE TOGGLE: {current_mode} -> {mode}")
 
         # Get component index for code interface creation
@@ -1287,30 +1286,15 @@ def register_callbacks_figure_component(app):
         action_type = "INITIAL SETUP" if is_initial_setup else "USER TOGGLE"
         logger.info(f"{action_type}: Setting {mode} mode for component {component_index}")
 
-        # Initialize styles
+        # Initialize styles - only UI and Code modes supported
         ui_content_style = {"display": "none"}
         code_content_style = {"display": "none"}
-        multiqc_content_style = {"display": "none"}
 
         if mode == "code":
             # Switch to code mode interface
             code_content_style = {"display": "block"}
             code_interface_children = create_code_mode_interface(component_index)
             logger.info(f"Switched to CODE MODE for {component_index}")
-        elif mode == "multiqc":
-            # Switch to MultiQC mode interface
-            multiqc_content_style = {"display": "block"}
-            # Create hidden code-status component to ensure callbacks work
-            code_interface_children = [
-                dmc.Alert(
-                    id={"type": "code-status", "index": component_index},
-                    title="MultiQC Mode",
-                    color="green",
-                    children="Component in MultiQC mode",
-                    style={"display": "none"},  # Hidden in MultiQC mode
-                )
-            ]
-            logger.info(f"Switched to MULTIQC MODE for {component_index}")
         else:
             # Switch to UI mode interface (default)
             ui_content_style = {"display": "block"}
@@ -1329,7 +1313,6 @@ def register_callbacks_figure_component(app):
         return (
             ui_content_style,
             code_content_style,
-            multiqc_content_style,
             code_interface_children,
             mode,
         )
@@ -2506,59 +2489,14 @@ def design_figure(
         # Use the visualization name (lowercase) as value
         default_value = component_data["visu_type"].lower()
 
-    # Detect data collection type to determine available modes
-    data_collection_info = None
-    is_multiqc_collection = False
-
-    logger.info(
-        f"🔍 MULTIQC DETECTION: wf_id={workflow_id}, dc_id={data_collection_id}, local_data={'available' if local_data else 'None'}"
-    )
-
-    if workflow_id and data_collection_id and local_data:
-        try:
-            TOKEN = local_data.get("access_token")
-            logger.info(
-                f"🔍 MULTIQC DETECTION: Making API call to get DC info for {data_collection_id}"
-            )
-            # Get data collection info to check type
-            response = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/datacollections/{data_collection_id}",
-                headers={"Authorization": f"Bearer {TOKEN}"},
-            )
-
-            logger.info(f"🔍 MULTIQC DETECTION: API response status: {response.status_code}")
-            if response.status_code == 200:
-                data_collection_info = response.json()
-                dc_type = data_collection_info.get("config", {}).get("type", "").lower()
-                logger.info(f"🔍 MULTIQC DETECTION: DC type = '{dc_type}'")
-                is_multiqc_collection = dc_type == "multiqc"
-                logger.info(
-                    f"🔍 MULTIQC DETECTION: is_multiqc_collection = {is_multiqc_collection}"
-                )
-
-                if is_multiqc_collection:
-                    logger.info(
-                        f"✅ Detected MultiQC data collection: {data_collection_info.get('data_collection_tag', '')}"
-                    )
-            else:
-                logger.warning(f"Failed to get data collection info: {response.status_code}")
-        except Exception as e:
-            logger.warning(f"Failed to detect data collection type: {e}")
-    else:
-        logger.warning("🔍 MULTIQC DETECTION: Missing required parameters - skipping detection")
-
-    # Set initial mode based on component_data mode field and data collection type
+    # Set initial mode based on component_data mode field only
+    # Figure component only supports "ui" and "code" modes
+    # MultiQC data collections should use the standalone MultiQC component
     initial_mode = "ui"  # Default to UI mode
-    logger.info(f"🔍 INITIAL MODE DETECTION: is_multiqc_collection = {is_multiqc_collection}")
     if component_data and component_data.get("mode") == "code":
         initial_mode = "code"
         logger.info(
             f"🔧 Setting initial mode to CODE for component {id['index']} based on stored metadata"
-        )
-    elif is_multiqc_collection:
-        initial_mode = "multiqc"
-        logger.info(
-            f"🔧 Setting initial mode to MULTIQC for component {id['index']} based on data collection type"
         )
     else:
         logger.info(f"🔧 Setting initial mode to UI for component {id['index']}")
@@ -2567,25 +2505,18 @@ def design_figure(
 
     # Create layout optimized for fullscreen modal
     figure_row = [
-        # Mode toggle (central and prominent) - conditional based on data collection type
+        # Mode toggle (central and prominent) - UI and Code modes only
         dmc.Center(
             [
                 dmc.SegmentedControl(
                     id={"type": "figure-mode-toggle", "index": id["index"]},
                     data=[
                         {
-                            "value": "multiqc" if is_multiqc_collection else "ui",
+                            "value": "ui",
                             "label": dmc.Center(
                                 [
-                                    DashIconify(
-                                        icon="tabler:chart-bar"
-                                        if is_multiqc_collection
-                                        else "tabler:eye",
-                                        width=16,
-                                    ),
-                                    html.Span(
-                                        "MultiQC Mode" if is_multiqc_collection else "UI Mode"
-                                    ),
+                                    DashIconify(icon="tabler:eye", width=16),
+                                    html.Span("UI Mode"),
                                 ],
                                 style={
                                     "gap": 10,
@@ -2606,25 +2537,8 @@ def design_figure(
                                 },
                             ),
                         },
-                    ]
-                    if not is_multiqc_collection
-                    else [
-                        # For MultiQC collections, only show MultiQC mode (no Code mode)
-                        {
-                            "value": "multiqc",
-                            "label": dmc.Center(
-                                [
-                                    DashIconify(icon="tabler:chart-bar", width=16),
-                                    html.Span("MultiQC Mode"),
-                                ],
-                                style={
-                                    "gap": 10,
-                                    "width": "250px",
-                                },
-                            ),
-                        },
                     ],
-                    value="multiqc" if is_multiqc_collection else initial_mode,
+                    value=initial_mode,
                     size="lg",
                     style={"marginBottom": "15px"},
                 )
@@ -2759,114 +2673,6 @@ def design_figure(
                                 ),
                             ],
                             id={"type": "code-mode-content", "index": id["index"]},
-                            style={"display": "none"},
-                        ),
-                        # MultiQC Mode Layout (hidden by default) - MultiQC-specific interface
-                        html.Div(
-                            [
-                                html.Div(
-                                    [
-                                        # MultiQC Module Selector
-                                        dmc.Group(
-                                            [
-                                                DashIconify(
-                                                    icon="tabler:chart-bar",
-                                                    width=18,
-                                                    height=18,
-                                                ),
-                                                dmc.Text(
-                                                    "MultiQC Module:",
-                                                    fw="bold",
-                                                    size="md",
-                                                    style={"fontSize": "16px"},
-                                                ),
-                                            ],
-                                            gap="xs",
-                                            align="center",
-                                            style={"marginBottom": "10px"},
-                                        ),
-                                        dmc.Select(
-                                            id={
-                                                "type": "multiqc-module-select",
-                                                "index": id["index"],
-                                            },
-                                            placeholder="Select MultiQC module...",
-                                            clearable=False,
-                                            style={"marginBottom": "20px"},
-                                        ),
-                                        # MultiQC Plot Selector
-                                        dmc.Group(
-                                            [
-                                                DashIconify(
-                                                    icon="tabler:chart-line",
-                                                    width=18,
-                                                    height=18,
-                                                ),
-                                                dmc.Text(
-                                                    "Plot:",
-                                                    fw="bold",
-                                                    size="md",
-                                                    style={"fontSize": "16px"},
-                                                ),
-                                            ],
-                                            gap="xs",
-                                            align="center",
-                                            style={"marginBottom": "10px"},
-                                        ),
-                                        dmc.Select(
-                                            id={
-                                                "type": "multiqc-plot-select",
-                                                "index": id["index"],
-                                            },
-                                            placeholder="Select plot...",
-                                            clearable=False,
-                                            style={"marginBottom": "20px"},
-                                        ),
-                                        # MultiQC Dataset Selector (optional)
-                                        dmc.Group(
-                                            [
-                                                DashIconify(
-                                                    icon="tabler:database",
-                                                    width=18,
-                                                    height=18,
-                                                ),
-                                                dmc.Text(
-                                                    "Dataset (Optional):",
-                                                    fw="bold",
-                                                    size="md",
-                                                    style={"fontSize": "16px"},
-                                                ),
-                                            ],
-                                            gap="xs",
-                                            align="center",
-                                            style={"marginBottom": "10px"},
-                                        ),
-                                        dmc.Select(
-                                            id={
-                                                "type": "multiqc-dataset-select",
-                                                "index": id["index"],
-                                            },
-                                            placeholder="Select dataset (optional)...",
-                                            clearable=True,
-                                            style={"marginBottom": "20px"},
-                                        ),
-                                        # Generate Plot Button
-                                        dmc.Button(
-                                            "Generate MultiQC Plot",
-                                            id={
-                                                "type": "multiqc-generate-button",
-                                                "index": id["index"],
-                                            },
-                                            leftSection=DashIconify(icon="tabler:chart-bar"),
-                                            size="lg",
-                                            fullWidth=True,
-                                            style={"marginTop": "20px"},
-                                        ),
-                                    ],
-                                    style={"padding": "20px"},
-                                ),
-                            ],
-                            id={"type": "multiqc-mode-content", "index": id["index"]},
                             style={"display": "none"},
                         ),
                     ],
