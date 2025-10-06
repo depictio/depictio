@@ -43,11 +43,30 @@ def generate_join_dict(workflow: dict) -> dict[str, dict[str, dict]]:
     logger.info(f"Workflow ID: {wf_id}")
     join_dict[wf_id] = {}
 
+    # Start with all table-type data collections (they can have join configurations)
     dc_ids = {
         str(dc["_id"]): dc
         for dc in workflow["data_collections"]
         if dc["config"]["type"].lower() == "table"
     }
+
+    # Add data collections that are referenced in join configurations, regardless of type
+    # This ensures MultiQC and other non-table types are included if they're part of joins
+    all_dc_lookup = {dc["data_collection_tag"]: dc for dc in workflow["data_collections"]}
+
+    for dc in workflow["data_collections"]:
+        if dc["config"]["type"].lower() == "table" and "join" in dc["config"]:
+            join_info = dc["config"]["join"]
+            if join_info and "with_dc" in join_info:
+                for related_dc_tag in join_info["with_dc"]:
+                    if related_dc_tag in all_dc_lookup:
+                        related_dc = all_dc_lookup[related_dc_tag]
+                        related_dc_id = str(related_dc["_id"])
+                        if related_dc_id not in dc_ids:
+                            dc_ids[related_dc_id] = related_dc
+                            logger.debug(
+                                f"Added non-table DC to joins: {related_dc_tag} ({related_dc_id})"
+                            )
     logger.debug(f"Data collections: {dc_ids}")
     visited = set()
 
