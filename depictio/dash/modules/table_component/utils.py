@@ -156,6 +156,16 @@ def build_table(**kwargs):
                 elif cols[c]["type"] == "datetime":
                     cols[c]["filter"] = "agDateColumnFilter"
                     cols[c]["floatingFilter"] = True
+                elif cols[c]["type"] == "bool":
+                    cols[c]["filter"] = "agTextColumnFilter"  # Use text filter for boolean
+                    cols[c]["floatingFilter"] = True
+                else:
+                    # Default filter for unknown types
+                    cols[c]["filter"] = "agTextColumnFilter"
+                    cols[c]["floatingFilter"] = True
+                    logger.debug(
+                        f"Using default text filter for column '{c}' with type '{cols[c]['type']}'"
+                    )
 
     # Add ID column (removed SpinnerCellRenderer to avoid AG Grid error)
     columnDefs = [{"field": "ID", "maxWidth": 100}]
@@ -169,7 +179,7 @@ def build_table(**kwargs):
                     word.capitalize() for word in c.split(".")
                 ),  # Transform display name
                 "headerTooltip": f"Column type: {e['type']}",
-                "filter": e["filter"],
+                "filter": e.get("filter", "agTextColumnFilter"),  # Default to text filter
                 "floatingFilter": e.get("floatingFilter", False),
                 "filterParams": e.get("filterParams", {}),
                 "sortable": True,  # Enable sorting for all columns
