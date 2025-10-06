@@ -273,14 +273,83 @@ def _load_joined_deltatable(
     if not join_columns:
         raise ValueError(f"No join columns specified for {joined_data_collection_id}")
 
-    # Always include depictio_run_id in join if both dataframes have it
-    # This prevents cross-joining between different runs/batches
+    # Fetch metatypes for both data collections to determine join strategy
+    # Only add depictio_run_id to join if BOTH collections are Aggregate type
+    # For Metadata collections, drop depictio_run_id to avoid mismatches
     if "depictio_run_id" in df1.columns and "depictio_run_id" in df2.columns:
-        if "depictio_run_id" not in join_columns:
-            join_columns.append("depictio_run_id")
-            logger.debug(
-                "LoadJoinedDeltatable: Added depictio_run_id to join columns for proper run isolation"
+        try:
+            from depictio.api.v1.db import data_collections_collection
+
+            # Fetch data collections to get metatypes
+            dc1_doc = data_collections_collection.find_one({"_id": ObjectId(dc1_id)})
+            dc2_doc = data_collections_collection.find_one({"_id": ObjectId(dc2_id)})
+
+            dc1_metatype = (
+                dc1_doc.get("config", {}).get("metatype")
+                if dc1_doc and "config" in dc1_doc
+                else None
             )
+            dc2_metatype = (
+                dc2_doc.get("config", {}).get("metatype")
+                if dc2_doc and "config" in dc2_doc
+                else None
+            )
+
+            logger.debug(f"DC1 ({dc1_id}) metatype: {dc1_metatype}")
+            logger.debug(f"DC2 ({dc2_id}) metatype: {dc2_metatype}")
+
+            # Only add depictio_run_id to join keys if BOTH are explicitly Aggregate tables
+            # SAFE DEFAULT: If metatype is None/missing, DON'T add depictio_run_id (prevents metadata join failures)
+            both_aggregate = (
+                dc1_metatype is not None
+                and dc2_metatype is not None
+                and dc1_metatype.lower() == "aggregate"
+                and dc2_metatype.lower() == "aggregate"
+            )
+
+            if both_aggregate and "depictio_run_id" not in join_columns:
+                join_columns.append("depictio_run_id")
+                logger.debug(
+                    f"✅ LoadJoinedDeltatable: Added depictio_run_id to join columns (both {dc1_id} and {dc2_id} are Aggregate tables)"
+                )
+            else:
+                # Drop depictio_run_id from Metadata tables OR when metatype is unknown
+                # This prevents join failures when collections have different depictio_run_id values
+                if dc1_metatype is None or (dc1_metatype and dc1_metatype.lower() == "metadata"):
+                    if "depictio_run_id" in df1.columns:
+                        logger.debug(
+                            f"🗑️ LoadJoinedDeltatable: Dropping depictio_run_id from DC1 {dc1_id} (metatype={dc1_metatype})"
+                        )
+                        df1 = df1.drop("depictio_run_id")
+
+                if dc2_metatype is None or (dc2_metatype and dc2_metatype.lower() == "metadata"):
+                    if "depictio_run_id" in df2.columns:
+                        logger.debug(
+                            f"🗑️ LoadJoinedDeltatable: Dropping depictio_run_id from DC2 {dc2_id} (metatype={dc2_metatype})"
+                        )
+                        df2 = df2.drop("depictio_run_id")
+
+                logger.debug(
+                    f"⏭️ LoadJoinedDeltatable: Skipped depictio_run_id join key (DC1 metatype={dc1_metatype}, DC2 metatype={dc2_metatype})"
+                )
+
+        except Exception as e:
+            logger.warning(
+                f"Failed to fetch metatypes for join decision: {e}. Using safe default (drop depictio_run_id)."
+            )
+            # Safe default: Drop depictio_run_id if we can't determine metatypes
+            # This prevents join failures at the cost of potentially mixing runs (less common issue)
+            if "depictio_run_id" in df1.columns:
+                logger.debug(
+                    "🗑️ LoadJoinedDeltatable: Dropping depictio_run_id from DC1 (fallback - metatype fetch failed)"
+                )
+                df1 = df1.drop("depictio_run_id")
+
+            if "depictio_run_id" in df2.columns:
+                logger.debug(
+                    "🗑️ LoadJoinedDeltatable: Dropping depictio_run_id from DC2 (fallback - metatype fetch failed)"
+                )
+                df2 = df2.drop("depictio_run_id")
 
     logger.info(f"Joining DataFrames on columns {join_columns} using {join_how} join")
     logger.debug(f"DF1 shape: {df1.shape}, columns: {df1.columns}")
@@ -723,6 +792,7 @@ def merge_multiple_dataframes(
     dataframes: dict[str, pl.DataFrame],
     join_instructions: list[dict],
     essential_cols: set[str] = set(),
+    dc_metatypes: dict[str, str] | None = None,
 ) -> pl.DataFrame:
     """
     Merge multiple Polars DataFrames based on join instructions, handling type alignment and overlapping columns.
@@ -738,6 +808,10 @@ def merge_multiple_dataframes(
             - 'on': List[str] - Columns to join on.
     - essential_cols: Set[str] (optional)
         A set of column names that should not be renamed during the join process to preserve their integrity.
+    - dc_metatypes: Dict[str, str] (optional)
+        A dictionary mapping DC IDs to their metatype ('Metadata' or 'Aggregate').
+        Used to determine whether to include depictio_run_id in join keys.
+        If not provided, depictio_run_id will be included by default when present in both DataFrames.
     - logger: logging.Logger (optional)
         A logger instance for logging information and warnings. If not provided, a default logger is created.
 
@@ -745,6 +819,16 @@ def merge_multiple_dataframes(
     - pl.DataFrame
         The final merged DataFrame after performing all join operations.
     """
+
+    # Define metadata columns that should never be join keys
+    # These are timestamp/tracking columns that may differ between tables
+    METADATA_COLS_EXCLUDE = {
+        "aggregation_time",
+        "depictio_aggregation_time",
+        "timestamp",
+        "created_at",
+        "updated_at",
+    }
 
     logger.info("Starting the merge process.")
 
@@ -801,19 +885,62 @@ def merge_multiple_dataframes(
         how = join_step["how"]
         on = join_step["on"].copy()  # Make a copy to modify
 
-        # Always include depictio_run_id in join if both dataframes have it
-        # This prevents cross-joining between different runs/batches
+        # Handle depictio_run_id based on table types (Metadata vs Aggregate)
+        # Only include depictio_run_id in join when BOTH tables are Aggregate type
+        # For Metadata tables, drop depictio_run_id to avoid mismatches (auto-generated values)
         if merged_df is None:
             left_df = dataframes[left_id]
         else:
             left_df = merged_df
         right_df = dataframes[right_id]
 
+        # Check if depictio_run_id exists in both DataFrames
         if "depictio_run_id" in left_df.columns and "depictio_run_id" in right_df.columns:
-            if "depictio_run_id" not in on:
+            # Get metatypes for both DCs (default to None if not provided)
+            left_metatype = dc_metatypes.get(left_id) if dc_metatypes else None
+            right_metatype = dc_metatypes.get(right_id) if dc_metatypes else None
+
+            # Only add depictio_run_id to join keys if BOTH are Aggregate tables
+            both_aggregate = (
+                left_metatype
+                and right_metatype
+                and left_metatype.lower() == "aggregate"
+                and right_metatype.lower() == "aggregate"
+            )
+
+            if both_aggregate and "depictio_run_id" not in on:
                 on.append("depictio_run_id")
                 logger.debug(
-                    "MergeMultipleDataframes: Added depictio_run_id to join columns for proper run isolation"
+                    f"✅ Added depictio_run_id to join keys (both {left_id} and {right_id} are Aggregate tables)"
+                )
+            elif not both_aggregate and dc_metatypes:
+                # Drop depictio_run_id from Metadata tables to avoid mismatches
+                # Keep it in Aggregate tables
+                if left_metatype and left_metatype.lower() == "metadata":
+                    logger.debug(
+                        f"🗑️ Dropping depictio_run_id from left table {left_id} (Metadata table)"
+                    )
+                    left_df = left_df.drop("depictio_run_id")
+                    if merged_df is None:
+                        dataframes[left_id] = left_df
+                    else:
+                        merged_df = left_df
+
+                if right_metatype and right_metatype.lower() == "metadata":
+                    logger.debug(
+                        f"🗑️ Dropping depictio_run_id from right table {right_id} (Metadata table)"
+                    )
+                    right_df = right_df.drop("depictio_run_id")
+                    dataframes[right_id] = right_df
+
+                logger.debug(
+                    f"⏭️ Skipped depictio_run_id join key ({left_id}={left_metatype}, {right_id}={right_metatype})"
+                )
+            elif "depictio_run_id" not in on and not dc_metatypes:
+                # Fallback: If metatypes not provided, include depictio_run_id (backward compatibility)
+                on.append("depictio_run_id")
+                logger.debug(
+                    "⚠️ Added depictio_run_id to join keys (metatypes not provided - backward compatibility)"
                 )
 
         logger.debug(
@@ -834,12 +961,22 @@ def merge_multiple_dataframes(
 
         logger.debug(f"Overlapping essential columns detected: {overlapping_essential_cols}")
 
-        # # Add overlapping essential columns to 'on' list and drop them from right_df
-        if overlapping_cols:
-            logger.debug(
-                f"Overlapping essential columns detected: {overlapping_cols}. Adding to join keys."
-            )
-            on += list(overlapping_cols)
+        # FIX: Exclude metadata columns from being added as join keys
+        # Only add essential columns that aren't metadata timestamps
+        if overlapping_essential_cols:
+            cols_to_add = overlapping_essential_cols - METADATA_COLS_EXCLUDE
+            if cols_to_add:
+                logger.debug(f"Adding essential overlapping columns to join keys: {cols_to_add}")
+                on += list(cols_to_add)
+
+        # Handle metadata overlapping columns by dropping them from right_df
+        # These columns may have different values (timestamps) and shouldn't be join keys
+        metadata_overlap = overlapping_cols & METADATA_COLS_EXCLUDE
+        if metadata_overlap:
+            logger.debug(f"Dropping metadata columns from right DataFrame: {metadata_overlap}")
+            right_df = right_df.drop(list(metadata_overlap))
+            # Update the dataframes dict
+            dataframes[right_id] = right_df
         #     # # Drop these columns from the right DataFrame to prevent duplication
         #     # right_df = right_df.drop(list(overlapping_essential_cols))
         #     # logger.info(f"Dropped overlapping essential columns {overlapping_essential_cols} from right DataFrame '{right_id}'.")
@@ -868,12 +1005,34 @@ def merge_multiple_dataframes(
                 f"Right DataFrame '{right_id}' shape: {right_df.shape} and columns: {right_df.columns}"
             )
 
+            # Diagnostic logging to debug join failures
+            logger.debug(f"🔍 JOIN DIAGNOSTIC - Join columns: {on}")
+            if "sample" in on and "sample" in left_df.columns and "sample" in right_df.columns:
+                left_samples = left_df.select("sample").unique().to_series().to_list()
+                right_samples = right_df.select("sample").unique().to_series().to_list()
+                logger.debug(f"🔍 Left sample values ({len(left_samples)}): {left_samples[:10]}")
+                logger.debug(f"🔍 Right sample values ({len(right_samples)}): {right_samples[:10]}")
+            if (
+                "depictio_run_id" in on
+                and "depictio_run_id" in left_df.columns
+                and "depictio_run_id" in right_df.columns
+            ):
+                left_run_ids = left_df.select("depictio_run_id").unique().to_series().to_list()
+                right_run_ids = right_df.select("depictio_run_id").unique().to_series().to_list()
+                logger.debug(f"🔍 Left depictio_run_id values: {left_run_ids}")
+                logger.debug(f"🔍 Right depictio_run_id values: {right_run_ids}")
+
             if merged_df is None:
                 # Initial merge
                 merged_df = left_df.join(right_df, on=on, how=how)
                 logger.debug(
                     f"Joined '{left_id}' and '{right_id}'. Merged DataFrame shape: {merged_df.shape}"
                 )
+
+                # Warn if join returned 0 rows
+                if merged_df.height == 0:
+                    logger.warning("⚠️ JOIN RETURNED 0 ROWS - No matching values found!")
+                    logger.warning(f"⚠️ Check if {on} column values match between tables")
             else:
                 # Subsequent merges
                 merged_df = left_df.join(right_df, on=on, how=how)
@@ -1141,14 +1300,39 @@ def apply_runtime_filters(df: pl.DataFrame, metadata: list[dict] | None) -> pl.D
         f"Applying runtime filters to cached DataFrame with {len(metadata)} filter criteria"
     )
 
+    # Get DataFrame columns for validation
+    df_columns = set(df.columns)
+
+    # Validate that all filter columns exist in the DataFrame
+    for component in metadata:
+        if "metadata" in component:
+            column_name = component["metadata"].get("column_name")
+        else:
+            column_name = component.get("column_name")
+
+        if column_name and column_name not in df_columns:
+            logger.warning(
+                f"⚠️ Skipping filter for column '{column_name}' - not present in DataFrame. "
+                f"Available columns: {sorted(df_columns)}"
+            )
+            # Return unfiltered DataFrame if any column is missing
+            # This prevents ColumnNotFoundError
+            return df
+
     filter_expressions = process_metadata_and_filter(metadata)
     if filter_expressions:
-        # Apply filters using Polars expressions on materialized DataFrame
-        combined_filter = filter_expressions[0]
-        for filt in filter_expressions[1:]:
-            combined_filter &= filt
-        df = df.filter(combined_filter)
-        logger.debug(f"Filtered DataFrame shape: {df.shape}")
+        try:
+            # Apply filters using Polars expressions on materialized DataFrame
+            combined_filter = filter_expressions[0]
+            for filt in filter_expressions[1:]:
+                combined_filter &= filt
+            df = df.filter(combined_filter)
+            logger.debug(f"Filtered DataFrame shape: {df.shape}")
+        except pl.exceptions.ColumnNotFoundError as e:
+            logger.error(f"❌ Column not found when applying filters: {e}")
+            logger.error(f"Available columns: {sorted(df_columns)}")
+            # Return unfiltered DataFrame instead of crashing
+            return df
 
     return df
 
@@ -1469,16 +1653,101 @@ def iterative_join(
 
             # Optimize: Build join columns efficiently
             base_columns = join_details["on_columns"]
-
-            # Always include depictio_run_id in join if both dataframes have it
-            # This prevents cross-joining between different runs/batches
             join_columns = base_columns.copy()
+
+            # Determine which DC IDs are involved in this specific join
+            # This helps us check metatypes for depictio_run_id join strategy
+            if dc_id1 in used_dcs:
+                joining_dc_id = dc_id2  # right_df is from dc_id2
+                other_dc_ids = list(used_dcs)  # merged_df contains these DCs
+            elif dc_id2 in used_dcs:
+                joining_dc_id = dc_id1  # right_df is from dc_id1
+                other_dc_ids = list(used_dcs)  # merged_df contains these DCs
+            else:
+                # Initial join case
+                joining_dc_id = dc_id2
+                other_dc_ids = [dc_id1]
+
+            # Apply metatype-aware depictio_run_id handling (same logic as _load_joined_deltatable)
+            # Only add depictio_run_id to join if ALL involved DCs are explicitly Aggregate type
             if "depictio_run_id" in merged_df.columns and "depictio_run_id" in right_df.columns:
-                if "depictio_run_id" not in join_columns:
-                    join_columns.append("depictio_run_id")
-                    logger.debug(
-                        "IterativeJoin: Added depictio_run_id to join columns for proper run isolation"
+                try:
+                    from depictio.api.v1.db import data_collections_collection
+
+                    # Fetch metatype for the DC being joined (right_df)
+                    joining_dc_doc = data_collections_collection.find_one(
+                        {"_id": ObjectId(joining_dc_id)}
                     )
+                    joining_dc_metatype = (
+                        joining_dc_doc.get("config", {}).get("metatype")
+                        if joining_dc_doc and "config" in joining_dc_doc
+                        else None
+                    )
+
+                    # For merged_df, check if ALL constituent DCs are aggregate
+                    # If any DC in the merge is metadata/None, don't use depictio_run_id
+                    all_aggregate = (
+                        joining_dc_metatype is not None
+                        and joining_dc_metatype.lower() == "aggregate"
+                    )
+
+                    # Check all DCs that contributed to merged_df
+                    for other_dc_id in other_dc_ids:
+                        other_dc_doc = data_collections_collection.find_one(
+                            {"_id": ObjectId(other_dc_id)}
+                        )
+                        other_dc_metatype = (
+                            other_dc_doc.get("config", {}).get("metatype")
+                            if other_dc_doc and "config" in other_dc_doc
+                            else None
+                        )
+                        if other_dc_metatype is None or (
+                            other_dc_metatype and other_dc_metatype.lower() != "aggregate"
+                        ):
+                            all_aggregate = False
+                            break
+
+                    logger.debug(
+                        f"IterativeJoin: Metatype check for {joining_dc_id} -> {joining_dc_metatype}, all_aggregate={all_aggregate}"
+                    )
+
+                    if all_aggregate and "depictio_run_id" not in join_columns:
+                        join_columns.append("depictio_run_id")
+                        logger.debug(
+                            "✅ IterativeJoin: Added depictio_run_id to join columns (all DCs are Aggregate)"
+                        )
+                    else:
+                        # Drop depictio_run_id from dataframes if NOT all aggregate
+                        # This prevents join failures when collections have different depictio_run_id values
+                        if joining_dc_metatype is None or (
+                            joining_dc_metatype and joining_dc_metatype.lower() == "metadata"
+                        ):
+                            if "depictio_run_id" in right_df.columns:
+                                logger.debug(
+                                    f"🗑️ IterativeJoin: Dropping depictio_run_id from right_df ({joining_dc_id}, metatype={joining_dc_metatype})"
+                                )
+                                right_df = right_df.drop("depictio_run_id")
+
+                        # Also drop from merged_df if it contains metadata/None DCs
+                        if not all_aggregate and "depictio_run_id" in merged_df.columns:
+                            logger.debug(
+                                "🗑️ IterativeJoin: Dropping depictio_run_id from merged_df (contains non-aggregate DCs)"
+                            )
+                            merged_df = merged_df.drop("depictio_run_id")
+
+                        logger.debug(
+                            "⏭️ IterativeJoin: Skipped depictio_run_id join key (not all DCs are aggregate)"
+                        )
+
+                except Exception as e:
+                    logger.warning(
+                        f"IterativeJoin: Failed to fetch metatypes for join decision: {e}. Using safe default (drop depictio_run_id)."
+                    )
+                    # Safe default: drop depictio_run_id to prevent join failures
+                    if "depictio_run_id" in merged_df.columns:
+                        merged_df = merged_df.drop("depictio_run_id")
+                    if "depictio_run_id" in right_df.columns:
+                        right_df = right_df.drop("depictio_run_id")
 
             logger.debug(f"IterativeJoin: Final join columns: {join_columns}")
 
@@ -1496,12 +1765,13 @@ def iterative_join(
     # Apply post-join filtering based on interactive components
     if interactive_components_list:
         # Filter to only components that have actual filtering criteria
+        # Exclude components with empty/falsy values that don't provide filtering
         filterable_components = [
             comp
             for comp in interactive_components_list
             if comp.get("metadata", {}).get("interactive_component_type") is not None
             and comp.get("metadata", {}).get("column_name") is not None
-            and comp.get("value") is not None
+            and comp.get("value") not in [None, [], "", False]
         ]
 
         logger.debug(
