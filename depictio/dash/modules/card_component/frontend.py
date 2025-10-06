@@ -160,6 +160,7 @@ def register_callbacks_card_component(app):
             Input({"type": "card-input", "index": MATCH}, "value"),
             Input({"type": "card-dropdown-column", "index": MATCH}, "value"),
             Input({"type": "card-dropdown-aggregation", "index": MATCH}, "value"),
+            Input({"type": "card-dropdown-theme", "index": MATCH}, "value"),
             # Input({"type": "card-color-picker", "index": MATCH}, "value"),  # Disabled color picker
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
@@ -176,6 +177,7 @@ def register_callbacks_card_component(app):
         input_value,
         column_name,
         aggregation_value,
+        theme_value,
         # color_value,  # Disabled color picker
         wf_id,
         dc_id,
@@ -196,6 +198,7 @@ def register_callbacks_card_component(app):
         logger.info(f"input_value: {input_value}")
         logger.info(f"column_name: {column_name}")
         logger.info(f"aggregation_value: {aggregation_value}")
+        logger.info(f"theme_value: {theme_value}")
 
         color_value = None  # Default value since color picker is disabled
 
@@ -391,6 +394,7 @@ def register_callbacks_card_component(app):
             "build_frame": False,  # Don't build frame - return just the content for the card-body container
             "color": color_value,
             "cols_json": cols_json,  # Pass cols_json for reference values
+            "metric_theme": theme_value,  # User-selected theme for icon and background
         }
 
         if relevant_metadata:
@@ -571,85 +575,270 @@ def register_callbacks_card_component(app):
                     f"{len(filters_by_dc)} DC(s): {list(filters_by_dc.keys())}"
                 )
 
-            # Detect multi-DC filtering scenario (requires joins)
-            has_multi_dc = len(filters_by_dc) > 1
+            # CRITICAL FIX: Filter out non-table DCs (MultiQC, JBrowse2) from filters_by_dc
+            # These DC types don't support deltatable loading and would cause 404 errors
+            filters_by_dc_table_only = {}
+            for dc_key, dc_filters in filters_by_dc.items():
+                if dc_filters:  # Has filters, check DC type
+                    component_dc_config = dc_filters[0].get("metadata", {}).get("dc_config", {})
+                    dc_type = component_dc_config.get("type", "table")
+                    if dc_type == "table":
+                        filters_by_dc_table_only[dc_key] = dc_filters
+                    else:
+                        logger.info(
+                            f"⏭️ Excluding DC {dc_key} from filtering (type: {dc_type}) - "
+                            f"non-table DCs don't support deltatable operations"
+                        )
+            filters_by_dc = filters_by_dc_table_only
 
-            if has_multi_dc and metadata_list:
-                # MULTI-DC PATH: Use iterative_join for cross-DC filtering
-                from depictio.api.v1.deltatables_utils import iterative_join, return_joins_dict
-
+            # Check if card's DC is MultiQC/JBrowse2 - if so, skip filtering entirely
+            dc_config = trigger_data.get("dc_config", {})
+            card_dc_type = dc_config.get("type", "table")
+            if card_dc_type in ["multiqc", "jbrowse2"]:
                 logger.info(
-                    f"🔗 MULTI-DC CARD: Filters span {len(filters_by_dc)} DCs - using iterative_join"
+                    f"⏭️ CARD PATCH SKIP: Card DC type '{card_dc_type}' does not support filtering - "
+                    f"returning reference value"
                 )
+                # Return reference value with no comparison
+                if reference_value is not None:
+                    try:
+                        formatted_value = str(round(float(reference_value), 4))
+                    except (ValueError, TypeError):
+                        formatted_value = str(reference_value)
+                else:
+                    formatted_value = "N/A"
+                return formatted_value, []
 
-                # Build joins_dict from card metadata (need to create minimal stored_metadata structure)
-                # Extract DC config from trigger_data if available
-                dc_config = trigger_data.get("dc_config", {})
-
-                # Create minimal metadata structure for return_joins_dict
-                card_metadata = {
-                    "wf_id": wf_id,
-                    "dc_id": dc_id,
-                    "dc_config": dc_config,
-                    "component_type": "card",
-                }
-
-                # Add interactive component metadata for join detection
-                stored_metadata_for_join = [card_metadata]
+            # Determine if filters have active (non-empty) values
+            has_active_filters = False
+            if metadata_list:
                 for component in metadata_list:
-                    comp_meta = component.get("metadata", {}).copy()
-                    comp_meta["component_type"] = "interactive"
-                    stored_metadata_for_join.append(comp_meta)
+                    value = component.get("value")
+                    if value is not None and value != [] and value != "" and value is not False:
+                        has_active_filters = True
+                        break
 
-                # Build joins dict
-                joins_dict = return_joins_dict(
-                    wf_id, stored_metadata_for_join, access_token, extra_dc=None
+            if has_active_filters:
+                logger.info("🔍 Active filters detected - loading filtered data")
+            else:
+                logger.info("🔄 No active filters - loading ALL unfiltered data")
+
+            # AUTO-DETECT: Determine if we need to join DCs
+            # Two scenarios:
+            # 1. Same-DC: Card's DC has filters → Apply filters directly
+            # 2. Joined-DC: Card's DC is joined with DC(s) that have filters → Join needed
+            card_dc_str = str(dc_id)
+            has_filters_for_card_dc = card_dc_str in filters_by_dc
+
+            # Get join config to check DC relationships
+            join_config = dc_config.get("join", {})
+
+            # Determine if we need to perform a join
+            needs_join = False
+            if not has_filters_for_card_dc and len(filters_by_dc) > 0:
+                # Filters are on different DC(s) - need to join with card DC
+                needs_join = True
+                logger.info("🔍 Filters on different DC(s), join required")
+
+            logger.info(f"🔍 Card DC: {card_dc_str}")
+            logger.info(f"🔍 Has filters for card DC: {has_filters_for_card_dc}")
+            logger.info(f"🔍 Needs join: {needs_join}")
+            logger.info(f"🔍 Filters on {len(filters_by_dc)} DC(s)")
+
+            from depictio.api.v1.deltatables_utils import get_join_tables, load_deltatable_lite
+
+            # If no explicit join config but join is needed, query workflow join tables
+            if needs_join and (not join_config or not join_config.get("on_columns")):
+                logger.info("🔍 No explicit join config in DC - querying workflow join tables")
+                workflow_join_tables = get_join_tables(wf_id, access_token)
+
+                if workflow_join_tables and wf_id in workflow_join_tables:
+                    wf_joins = workflow_join_tables[wf_id]
+                    logger.debug(f"🔍 Workflow join tables: {list(wf_joins.keys())}")
+
+                    # Search for join between card DC and any filter DC
+                    # Join keys are formatted as "dc1--dc2"
+                    for filter_dc in filters_by_dc.keys():
+                        # Try both directions: card--filter and filter--card
+                        join_key_1 = f"{card_dc_str}--{filter_dc}"
+                        join_key_2 = f"{filter_dc}--{card_dc_str}"
+
+                        if join_key_1 in wf_joins:
+                            join_config = wf_joins[join_key_1]
+                            logger.info(f"✅ Found join config in workflow tables: {join_key_1}")
+                            logger.debug(f"   Join config: {join_config}")
+                            break
+                        elif join_key_2 in wf_joins:
+                            join_config = wf_joins[join_key_2]
+                            logger.info(f"✅ Found join config in workflow tables: {join_key_2}")
+                            logger.debug(f"   Join config: {join_config}")
+                            break
+
+                    if not join_config or not join_config.get("on_columns"):
+                        logger.warning(
+                            "⚠️ No join config found in workflow tables for card DC and filter DCs"
+                        )
+                else:
+                    logger.warning(f"⚠️ No workflow join tables found for workflow {wf_id}")
+
+            # Determine the filtering path
+            # JOINED-DC: Filters on different DCs + join config available
+            # SAME-DC: Filters on card DC only, or multiple DCs but no join config
+            use_joined_path = needs_join and join_config and join_config.get("on_columns")
+
+            # If filters on multiple DCs but no join config, fall back to SAME-DC
+            if len(filters_by_dc) > 1 and not use_joined_path:
+                logger.warning(
+                    f"⚠️ Filters on {len(filters_by_dc)} DCs but no join config - "
+                    f"falling back to SAME-DC filtering (card DC only)"
+                )
+                # Keep only card DC filters
+                if card_dc_str in filters_by_dc:
+                    filters_by_dc = {card_dc_str: filters_by_dc[card_dc_str]}
+                else:
+                    filters_by_dc = {}
+
+            if use_joined_path:
+                # JOINED-DC PATH: Manual loading + merge_multiple_dataframes
+                logger.info(
+                    f"🔗 JOINED-DC FILTERING: Loading and joining DCs "
+                    f"(card DC + {len(filters_by_dc)} filter DC(s))"
                 )
 
-                logger.debug(f"🔗 CARD: Built joins_dict: {joins_dict}")
+                from depictio.api.v1.deltatables_utils import merge_multiple_dataframes
 
-                # Convert metadata_list to dictionary format expected by iterative_join
-                interactive_dict = {
-                    f"filter_{idx}": component for idx, component in enumerate(metadata_list)
-                }
+                # Include card's DC in the join if it's not already in filters_by_dc
+                if card_dc_str not in filters_by_dc:
+                    logger.info(f"📂 Adding card DC {card_dc_str} to join (no filters)")
+                    filters_by_dc[card_dc_str] = []
 
-                # Use iterative_join to load and filter data across DCs
-                data = iterative_join(ObjectId(wf_id), joins_dict, interactive_dict, access_token)
+                # Extract DC metatypes from component metadata (already cached in Store)
+                dc_metatypes = {}
+                for dc_key, dc_filters in filters_by_dc.items():
+                    if dc_filters:
+                        component_dc_config = dc_filters[0].get("metadata", {}).get("dc_config", {})
+                        metatype = component_dc_config.get("metatype")
+                        if metatype:
+                            dc_metatypes[dc_key] = metatype
+                            logger.debug(
+                                f"📋 DC {dc_key} metatype: {metatype} (from cached metadata)"
+                            )
 
-                # Clone to break Polars borrow checker (allows .to_pandas() in compute_value)
-                data = data.clone()
+                # If card DC not in dc_metatypes, get from trigger_data
+                if card_dc_str not in dc_metatypes:
+                    card_metatype = dc_config.get("metatype")
+                    if card_metatype:
+                        dc_metatypes[card_dc_str] = card_metatype
+                        logger.debug(f"📋 Card DC {card_dc_str} metatype: {card_metatype}")
 
-                logger.info("✅ MULTI-DC CARD: Loaded joined+filtered data")
+                # Load each DC with all columns (rely on cache for performance)
+                dataframes = {}
+                for dc_key, dc_filters in filters_by_dc.items():
+                    if has_active_filters:
+                        # Filter out components with empty values
+                        active_filters = [
+                            c for c in dc_filters if c.get("value") not in [None, [], "", False]
+                        ]
+                        logger.info(
+                            f"📂 Loading DC {dc_key} with {len(active_filters)} active filters"
+                        )
+                        metadata_to_pass = active_filters
+                    else:
+                        # Clearing filters - load ALL unfiltered data
+                        logger.info(f"📂 Loading DC {dc_key} with NO filters (clearing)")
+                        metadata_to_pass = []
+
+                    dc_df = load_deltatable_lite(
+                        ObjectId(wf_id),
+                        ObjectId(dc_key),
+                        metadata=metadata_to_pass,
+                        TOKEN=access_token,
+                        select_columns=None,  # Load all columns, rely on cache
+                    )
+                    dataframes[dc_key] = dc_df
+                    logger.info(f"   Loaded {dc_df.height:,} rows × {dc_df.width} columns")
+
+                # Build join instructions for merge_multiple_dataframes
+                dc_ids = sorted(filters_by_dc.keys())
+                join_instructions = [
+                    {
+                        "left": dc_ids[0],
+                        "right": dc_ids[1],
+                        "how": join_config.get("how", "inner"),
+                        "on": join_config.get("on_columns", []),
+                    }
+                ]
+
+                logger.info(f"🔗 Joining DCs: {join_instructions}")
+                logger.info(f"📋 DC metatypes for join: {dc_metatypes}")
+
+                # Merge DataFrames with table type awareness
+                data = merge_multiple_dataframes(
+                    dataframes=dataframes,
+                    join_instructions=join_instructions,
+                    dc_metatypes=dc_metatypes,
+                )
+
+                logger.info(f"📊 Joined result: {data.height:,} rows × {data.width} columns")
 
             else:
-                # SINGLE-DC PATH: Standard filtering with load_deltatable_lite
-                logger.debug(f"📄 SINGLE-DC CARD: Using standard load for DC {dc_id}")
+                # SAME-DC PATH: Card's DC has filters, apply them directly
+                relevant_filters = filters_by_dc.get(card_dc_str, [])
 
-                # Filter metadata to only include filters for THIS card's DC
-                filtered_metadata = filters_by_dc.get(str(dc_id), []) if filters_by_dc else None
-
-                if filtered_metadata:
-                    logger.debug(
-                        f"🔍 Applying {len(filtered_metadata)} filter(s) to card's DC {dc_id}"
+                if has_active_filters:
+                    # Filter out components with empty values
+                    active_filters = [
+                        c for c in relevant_filters if c.get("value") not in [None, [], "", False]
+                    ]
+                    logger.info(
+                        f"📄 SAME-DC filtering - applying {len(active_filters)} active filters to card DC"
                     )
+                    metadata_to_pass = active_filters
                 else:
-                    logger.debug("🔍 No filters for card's DC - loading unfiltered data")
+                    # Clearing filters - load ALL unfiltered data
+                    logger.info("📄 SAME-DC clearing filters - loading ALL unfiltered data")
+                    metadata_to_pass = []
 
-                # Load dataset with filters applied
-                if isinstance(dc_id, str) and "--" in dc_id:
-                    data = load_deltatable_lite(
-                        workflow_id=ObjectId(wf_id),
-                        data_collection_id=dc_id,
-                        metadata=filtered_metadata,
-                        TOKEN=access_token,
-                    )
-                else:
-                    data = load_deltatable_lite(
-                        workflow_id=ObjectId(wf_id),
-                        data_collection_id=ObjectId(dc_id),
-                        metadata=filtered_metadata,
-                        TOKEN=access_token,
-                    )
+                logger.info(f"📂 Loading data: {wf_id}:{dc_id} ({len(metadata_to_pass)} filters)")
+
+                data = load_deltatable_lite(
+                    ObjectId(wf_id),
+                    ObjectId(dc_id),
+                    metadata=metadata_to_pass,
+                    TOKEN=access_token,
+                )
+
+                logger.info(f"📊 Loaded {data.height:,} rows × {data.width} columns")
+
+            # else:
+            #     # SINGLE-DC PATH: Standard filtering with load_deltatable_lite
+            #     logger.debug(f"📄 SINGLE-DC CARD: Using standard load for DC {dc_id}")
+
+            #     # Filter metadata to only include filters for THIS card's DC
+            #     filtered_metadata = filters_by_dc.get(str(dc_id), []) if filters_by_dc else None
+
+            #     if filtered_metadata:
+            #         logger.debug(
+            #             f"🔍 Applying {len(filtered_metadata)} filter(s) to card's DC {dc_id}"
+            #         )
+            #     else:
+            #         logger.debug("🔍 No filters for card's DC - loading unfiltered data")
+
+            #     # Load dataset with filters applied
+            #     if isinstance(dc_id, str) and "--" in dc_id:
+            #         data = load_deltatable_lite(
+            #             workflow_id=ObjectId(wf_id),
+            #             data_collection_id=dc_id,
+            #             metadata=filtered_metadata,
+            #             TOKEN=access_token,
+            #         )
+            #     else:
+            #         data = load_deltatable_lite(
+            #             workflow_id=ObjectId(wf_id),
+            #             data_collection_id=ObjectId(dc_id),
+            #             metadata=filtered_metadata,
+            #             TOKEN=access_token,
+            #         )
 
             logger.debug("Loaded filtered data")
 
@@ -753,6 +942,48 @@ def design_card(id, df):
                                         "index": id["index"],
                                     },
                                     value=None,
+                                ),
+                                # Dropdown for the metric theme selection
+                                dmc.Select(
+                                    label="Select metric theme",
+                                    description="Choose a visual theme with icon and background color",
+                                    id={
+                                        "type": "card-dropdown-theme",
+                                        "index": id["index"],
+                                    },
+                                    data=[
+                                        {"label": "🌡️ Temperature", "value": "temperature"},
+                                        {"label": "💧 Salinity", "value": "salinity"},
+                                        {"label": "🧪 pH Level", "value": "ph"},
+                                        {"label": "💨 Oxygen", "value": "oxygen"},
+                                        {"label": "⚡ Conductivity", "value": "conductivity"},
+                                        {"label": "📊 Pressure", "value": "pressure"},
+                                        {"label": "💦 Humidity", "value": "humidity"},
+                                        {"label": "📏 Depth", "value": "depth"},
+                                        {"label": "🌫️ Turbidity", "value": "turbidity"},
+                                        {"label": "🌿 Chlorophyll", "value": "chlorophyll"},
+                                        {"label": "✅ Quality Score", "value": "quality"},
+                                        {"label": "🎯 Accuracy", "value": "accuracy"},
+                                        {"label": "🎪 Precision", "value": "precision"},
+                                        {"label": "⚗️ Purity", "value": "purity"},
+                                        {"label": "🛡️ Coverage", "value": "coverage"},
+                                        {"label": "📈 Variance", "value": "variance"},
+                                        {"label": "🔗 Correlation", "value": "correlation"},
+                                        {"label": "⚠️ Error Rate", "value": "error"},
+                                        {"label": "🔢 Count", "value": "count"},
+                                        {"label": "📡 Frequency", "value": "frequency"},
+                                        {"label": "🧬 Concentration", "value": "concentration"},
+                                        {"label": "⚙️ Performance", "value": "performance"},
+                                        {"label": "⚡ Throughput", "value": "throughput"},
+                                        {"label": "📊 Efficiency", "value": "efficiency"},
+                                        {"label": "🧬 Reads", "value": "reads"},
+                                        {"label": "🗺️ Mapping Rate", "value": "mapping"},
+                                        {"label": "📋 Duplication", "value": "duplication"},
+                                        {"label": "📊 Default", "value": "default"},
+                                    ],
+                                    value="default",
+                                    searchable=True,
+                                    clearable=False,
                                 ),
                                 # dmc.Stack(  # Disabled color picker
                                 #     [
