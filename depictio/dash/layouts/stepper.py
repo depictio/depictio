@@ -115,7 +115,7 @@ def register_callbacks_stepper(app):
         mapping_component_data_collection = {
             "table": ["Figure", "Card", "Interactive", "Table", "Text"],
             "jbrowse2": ["JBrowse2"],
-            "multiqc": ["MultiQC", "Figure"],
+            "multiqc": ["MultiQC"],
         }
 
         logger.info(f"Component selected: {component_selected}")
@@ -193,7 +193,7 @@ def register_callbacks_stepper(app):
         mapping_component_data_collection = {
             "table": ["Figure", "Card", "Interactive", "Table", "Text"],
             "jbrowse2": ["JBrowse2"],
-            "multiqc": ["MultiQC", "Figure"],
+            "multiqc": ["MultiQC"],
         }
 
         logger.info(f"Component selected: {component_selected}")
@@ -229,12 +229,29 @@ def register_callbacks_stepper(app):
                         for dc in selected_wf_data["data_collections"]
                     }
 
+                    # Create a mapping from DC ID to DC type for filtering
+                    dc_id_to_type = {
+                        dc["id"]: dc["config"]["type"]
+                        for dc in selected_wf_data["data_collections"]
+                    }
+
                     # Add joined DC options
                     for join_key, join_config in workflow_joins.items():
                         # Extract DC IDs from join key (format: "dc_id1--dc_id2")
                         dc_ids = join_key.split("--")
                         if len(dc_ids) == 2:
                             dc1_id, dc2_id = dc_ids
+
+                            # Skip joins involving multiqc data collections
+                            # MultiQC data should only be accessible via MultiQC component
+                            dc1_type = dc_id_to_type.get(dc1_id, "")
+                            dc2_type = dc_id_to_type.get(dc2_id, "")
+                            if dc1_type == "multiqc" or dc2_type == "multiqc":
+                                logger.debug(
+                                    f"Skipping join {join_key} involving multiqc data collection"
+                                )
+                                continue
+
                             dc1_tag = dc_id_to_tag.get(dc1_id, dc1_id)
                             dc2_tag = dc_id_to_tag.get(dc2_id, dc2_id)
 
