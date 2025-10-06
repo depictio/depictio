@@ -693,7 +693,7 @@ def build_interactive(**kwargs):
             # Return empty component to prevent crash
             return dmc.Text(f"Error: Column '{column_name}' not found", c="red")
 
-        data = sorted(df[column_name].drop_nulls().unique())[:100]  # Limit to 100 options
+        data = sorted(df[column_name].drop_nulls().unique())
 
         # CRITICAL: If DataFrame is empty but we have a preserved value, include those values in options
         # This ensures the component can display the preserved selection even when filtered data is empty
@@ -824,6 +824,7 @@ def build_interactive(**kwargs):
             multiselect_kwargs = {
                 "searchable": True,
                 "clearable": True,
+                "limit": 100,  # Limit to 100 options displayed at once for performance
                 # "clearSearchOnChange": False,
                 "persistence_type": "local",
                 # "dropdownPosition": "bottom",
