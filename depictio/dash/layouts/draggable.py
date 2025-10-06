@@ -1264,8 +1264,15 @@ def register_callbacks_draggable(app):
 
                     # REMOVED: updated_stored_children logic to fix localStorage quota exceeded
 
+                    # FIX: Use dash.no_update for children to prevent component re-mounting during resize/move
+                    # Returning children (even if unchanged) causes React to re-render and reset component stores
+                    # (figure-render-trigger, stored-metadata-component), resulting in blank figures
+                    # See: depictio/dash/modules/figure_component/frontend.py:2123 (prevent_initial_call=False)
+                    logger.info(
+                        "🔄 LAYOUT UPDATE - Preserving component state by using dash.no_update for children"
+                    )
                     return (
-                        draggable_children,
+                        dash.no_update,  # Preserve component state during layout changes
                         fixed_layouts,  # Return the normalized layout array
                         state_stored_draggable_layouts,
                         dash.no_update,
