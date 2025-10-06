@@ -454,9 +454,52 @@ def render_figure(
                 cleaned_kwargs[k] = v
 
     # Parse JSON string parameters that Plotly expects as Python objects
-    json_params = ["color_discrete_map", "color_discrete_sequence", "category_orders", "labels"]
+    json_params = [
+        "color_discrete_map",
+        "color_discrete_sequence",
+        "color_continuous_scale",
+        "category_orders",
+        "labels",
+        "path",  # For sunburst/treemap hierarchical visualizations
+    ]
     for param_name in json_params:
         if param_name in cleaned_kwargs and isinstance(cleaned_kwargs[param_name], str):
+            # Special handling for color sequences/scales: check for Plotly named color palettes
+            if param_name in ["color_discrete_sequence", "color_continuous_scale"]:
+                param_value = cleaned_kwargs[param_name]
+                # Try to get named color sequence from px.colors.qualitative (discrete)
+                if hasattr(px.colors.qualitative, param_value):
+                    color_sequence = getattr(px.colors.qualitative, param_value)
+                    cleaned_kwargs[param_name] = color_sequence
+                    logger.debug(
+                        f"Resolved Plotly qualitative color '{param_value}' to {len(color_sequence)} colors"
+                    )
+                    continue
+                # Also check px.colors.sequential for sequential/continuous color scales
+                elif hasattr(px.colors.sequential, param_value):
+                    color_sequence = getattr(px.colors.sequential, param_value)
+                    cleaned_kwargs[param_name] = color_sequence
+                    logger.debug(
+                        f"Resolved Plotly sequential color '{param_value}' to {len(color_sequence)} colors"
+                    )
+                    continue
+                # Also check px.colors.diverging for diverging color scales
+                elif hasattr(px.colors.diverging, param_value):
+                    color_sequence = getattr(px.colors.diverging, param_value)
+                    cleaned_kwargs[param_name] = color_sequence
+                    logger.debug(
+                        f"Resolved Plotly diverging color '{param_value}' to {len(color_sequence)} colors"
+                    )
+                    continue
+                # Also check px.colors.cyclical for cyclical color scales
+                elif hasattr(px.colors.cyclical, param_value):
+                    color_sequence = getattr(px.colors.cyclical, param_value)
+                    cleaned_kwargs[param_name] = color_sequence
+                    logger.debug(
+                        f"Resolved Plotly cyclical color '{param_value}' to {len(color_sequence)} colors"
+                    )
+                    continue
+
             try:
                 # First try JSON parsing
                 parsed_value = json.loads(cleaned_kwargs[param_name])
@@ -549,6 +592,26 @@ def render_figure(
 
     # Special handling for hierarchical charts (sunburst, treemap)
     if visu_type.lower() in ["sunburst", "treemap"]:
+        # Filter out non-leaf rows (rows with empty hierarchy values)
+        if "path" in cleaned_kwargs and cleaned_kwargs["path"]:
+            path_columns = cleaned_kwargs["path"]
+            original_rows = df.height
+
+            # Filter out rows where any path column is empty/null
+            for col in path_columns:
+                if col in df.columns:
+                    df = df.filter(
+                        (pl.col(col).is_not_null())
+                        & (pl.col(col) != "")
+                        & (pl.col(col).str.strip_chars() != "")
+                    )
+
+            filtered_rows = original_rows - df.height
+            if filtered_rows > 0:
+                logger.info(
+                    f"🌳 Filtered {filtered_rows} non-leaf rows from {visu_type} data (empty hierarchy values)"
+                )
+
         # Ensure parents parameter is handled correctly
         if "parents" in cleaned_kwargs and cleaned_kwargs["parents"] == "":
             # Empty string is valid for root-level hierarchical charts
@@ -606,6 +669,30 @@ def render_figure(
             # Handle standard Plotly visualizations
             plot_function = PLOTLY_FUNCTIONS[visu_type.lower()]
 
+            # PRE-PROCESSING: For box/violin plots without 'color' param, extract color params
+            # to handle manually in post-processing (Plotly Express ignores them without 'color')
+            manual_color_map = None
+            manual_color_sequence = None
+
+            if visu_type.lower() in ["box", "violin", "strip"] and "color" not in cleaned_kwargs:
+                # Extract color parameters that will be applied manually
+                if "color_discrete_map" in cleaned_kwargs:
+                    manual_color_map = cleaned_kwargs.pop("color_discrete_map")
+                    logger.info(
+                        f"🎨 Extracted color_discrete_map for manual application: {len(manual_color_map)} colors - {list(manual_color_map.keys())}"
+                    )
+                if "color_discrete_sequence" in cleaned_kwargs:
+                    manual_color_sequence = cleaned_kwargs.pop("color_discrete_sequence")
+                    logger.info(
+                        f"🎨 Extracted color_discrete_sequence for manual application: {len(manual_color_sequence)} colors"
+                    )
+            else:
+                # For plots WITH color parameter, color_discrete_map should be used by Plotly
+                if "color_discrete_map" in cleaned_kwargs:
+                    logger.info(
+                        f"🎨 Keeping color_discrete_map in kwargs for Plotly: {len(cleaned_kwargs['color_discrete_map'])} colors - {list(cleaned_kwargs['color_discrete_map'].keys())}"
+                    )
+
             # Handle large datasets with sampling
             if df.height > cutoff:
                 cache_key = f"{id(df)}_{cutoff}_{hash(str(cleaned_kwargs))}"
@@ -631,7 +718,6 @@ def render_figure(
                 logger.warning(f"🕐 PLOTLY FUNCTION TIME: {(plot_end - plot_start) * 1000:.0f}ms")
             else:
                 # Use full dataset
-                # pandas_df = df.to_pandas()
                 logger.info("=== CALLING PLOTLY FUNCTION ===")
                 logger.info(f"Function: {plot_function.__name__}")
                 logger.info(f"Parameters: {cleaned_kwargs}")
@@ -639,6 +725,210 @@ def render_figure(
                     f"Boolean params: {[(k, v) for k, v in cleaned_kwargs.items() if isinstance(v, bool)]}"
                 )
                 figure = plot_function(df, **cleaned_kwargs)
+
+            # POST-PROCESSING: Apply color_discrete_sequence OR color_discrete_map to box/violin plots
+            # When colors are provided WITHOUT a color parameter, manually apply colors
+            # This avoids the spacing/grouping issues that occur when using color parameter
+            if (
+                visu_type.lower() in ["box", "violin", "strip"]
+                and (manual_color_sequence or manual_color_map)
+                and "color" not in cleaned_kwargs
+            ):
+                color_map = manual_color_map
+                color_sequence = manual_color_sequence
+                # Validate that we have at least one color source
+                if (isinstance(color_sequence, (list, tuple)) and len(color_sequence) > 0) or (
+                    isinstance(color_map, dict) and len(color_map) > 0
+                ):
+                    # When no color param is used, px creates ONE trace with multiple boxes
+                    # We need to color each box individually, not the trace as a whole
+                    if len(figure.data) == 1:
+                        trace = figure.data[0]
+                        # Determine which axis has categorical data (boxes)
+                        # For vertical: x is categorical, y is numeric
+                        # For horizontal: y is categorical, x is numeric
+                        orientation = cleaned_kwargs.get("orientation", "v")
+                        categorical_column = (
+                            cleaned_kwargs.get("x")
+                            if orientation == "v"
+                            else cleaned_kwargs.get("y")
+                        )
+
+                        if categorical_column and categorical_column in df.columns:
+                            # Check if user specified category_orders for this column
+                            category_orders = cleaned_kwargs.get("category_orders", {})
+                            if (
+                                isinstance(category_orders, dict)
+                                and categorical_column in category_orders
+                            ):
+                                # Use user-specified order
+                                unique_categories = category_orders[categorical_column]
+                                logger.debug(
+                                    f"Using user-specified category order for '{categorical_column}': {unique_categories}"
+                                )
+                            else:
+                                # Preserve order of first appearance to ensure consistent category ordering
+                                unique_categories = (
+                                    df.get_column(categorical_column)
+                                    .unique(maintain_order=True)
+                                    .to_list()
+                                )
+                                logger.debug(
+                                    f"Using dataframe order for '{categorical_column}': {unique_categories}"
+                                )
+                            num_boxes = len(unique_categories)
+
+                            # WORKAROUND: Box plots don't support color arrays in a single trace
+                            # Solution: Recreate with individual traces (one per category)
+                            if visu_type.lower() in ["box", "violin"]:
+                                import plotly.graph_objects as go
+
+                                # Get original parameters
+                                numeric_column = (
+                                    cleaned_kwargs.get("y")
+                                    if orientation == "v"
+                                    else cleaned_kwargs.get("x")
+                                )
+
+                                # Type guard: ensure numeric_column is a string
+                                if isinstance(numeric_column, str):
+                                    # Clear existing traces
+                                    figure.data = []
+
+                                    # Create one trace per category with its own color
+                                    for i, category in enumerate(unique_categories):
+                                        # Filter data for this category
+                                        category_data = df.filter(
+                                            pl.col(categorical_column) == category
+                                        )
+                                        values = category_data.get_column(numeric_column).to_list()
+
+                                        # Determine color: use color_map if available, else color_sequence
+                                        category_str = str(category)
+                                        if color_map:
+                                            logger.debug(
+                                                f"🎨 Looking for color for '{category_str}' in color_map keys: {list(color_map.keys())}"
+                                            )
+                                            if category_str in color_map:
+                                                color = color_map[category_str]
+                                                logger.debug(
+                                                    f"✅ Found color for '{category_str}': {color}"
+                                                )
+                                            else:
+                                                # Fallback to default if not in map
+                                                color = px.colors.qualitative.Plotly[i % 10]
+                                                logger.warning(
+                                                    f"⚠️ Category '{category_str}' not found in color_map, using default color"
+                                                )
+                                        elif color_sequence:
+                                            color = color_sequence[i % len(color_sequence)]
+                                        else:
+                                            # Fallback to default plotly color
+                                            color = px.colors.qualitative.Plotly[i % 10]
+
+                                        # Create box/violin trace with explicit positioning
+                                        if visu_type.lower() == "box":
+                                            box_params = {
+                                                "name": str(category),
+                                                "marker_color": color,
+                                                "boxmean": cleaned_kwargs.get("boxmean"),
+                                                "notched": cleaned_kwargs.get("notched", False),
+                                                "boxpoints": cleaned_kwargs.get(
+                                                    "points"
+                                                ),  # all, outliers, suspectedoutliers, False
+                                                "showlegend": False,
+                                            }
+                                            if orientation == "v":
+                                                trace_obj = go.Box(
+                                                    y=values,
+                                                    x=[str(category)]
+                                                    * len(values),  # Explicit x position
+                                                    **box_params,
+                                                )
+                                            else:
+                                                trace_obj = go.Box(
+                                                    x=values,
+                                                    y=[str(category)]
+                                                    * len(values),  # Explicit y position
+                                                    **box_params,
+                                                )
+                                        else:  # violin
+                                            if orientation == "v":
+                                                trace_obj = go.Violin(
+                                                    y=values,
+                                                    x=[str(category)] * len(values),
+                                                    name=str(category),
+                                                    marker_color=color,
+                                                    showlegend=False,
+                                                )
+                                            else:
+                                                trace_obj = go.Violin(
+                                                    x=values,
+                                                    y=[str(category)] * len(values),
+                                                    name=str(category),
+                                                    marker_color=color,
+                                                    showlegend=False,
+                                                )
+
+                                        figure.add_trace(trace_obj)
+
+                                    # Ensure categorical axis maintains order and minimize gaps
+                                    if orientation == "v":
+                                        figure.update_xaxes(
+                                            type="category",
+                                            categoryorder="array",
+                                            categoryarray=[str(c) for c in unique_categories],
+                                        )
+                                    else:
+                                        figure.update_yaxes(
+                                            type="category",
+                                            categoryorder="array",
+                                            categoryarray=[str(c) for c in unique_categories],
+                                        )
+
+                                    # Use overlay mode to minimize spacing (like px.box with color param)
+                                    figure.update_layout(
+                                        boxmode="overlay",  # Overlay mode for compact positioning
+                                    )
+
+                                    color_source = (
+                                        "color_discrete_map"
+                                        if color_map
+                                        else "color_discrete_sequence"
+                                    )
+                                    logger.debug(
+                                        f"Recreated {num_boxes} {visu_type} traces using {color_source}, preserving order, minimal spacing"
+                                    )
+                            elif visu_type.lower() == "strip":
+                                # Strip plots: set single color (limitation without color param)
+                                if color_sequence:
+                                    trace.marker.color = color_sequence[0]
+                                    logger.debug(
+                                        "Applied first color from sequence to strip plot (single trace limitation)"
+                                    )
+                    else:
+                        # Multiple traces: apply one color per trace
+                        for i, trace in enumerate(figure.data):
+                            trace_name = trace.name if hasattr(trace, "name") else None
+                            # Try color_map first (by trace name), then color_sequence
+                            applied_color = None
+                            if color_map and trace_name and str(trace_name) in color_map:
+                                applied_color = color_map[str(trace_name)]
+                                trace.marker.color = applied_color
+                            elif color_sequence:
+                                color_idx = i % len(color_sequence)
+                                applied_color = color_sequence[color_idx]
+                                trace.marker.color = applied_color
+                            # Also update line color for consistency
+                            if hasattr(trace, "line") and applied_color:
+                                trace.line.color = applied_color
+                        if color_map:
+                            color_source = f"color_discrete_map ({len(color_map)} colors)"
+                        elif color_sequence:
+                            color_source = f"color_discrete_sequence ({len(color_sequence)} colors)"
+                        else:
+                            color_source = "default colors"
+                        logger.debug(f"Applied {color_source} to {len(figure.data)} traces")
 
         # Fix for marginal plots: Disable axis matches to prevent infinite loop warnings
         # When using marginal_x and marginal_y, Plotly Express creates conflicting axis constraints
