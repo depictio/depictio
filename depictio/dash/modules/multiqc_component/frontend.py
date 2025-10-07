@@ -481,6 +481,43 @@ def design_multiqc_from_model(component: MultiQCDashboardComponent) -> dmc.Paper
     return multiqc_content
 
 
+def expand_canonical_samples_to_variants(canonical_samples, sample_mappings):
+    """
+    Expand canonical sample IDs to all their MultiQC variants using stored mappings.
+
+    Args:
+        canonical_samples: List of canonical sample IDs from external metadata (e.g., ['SRR10070130'])
+        sample_mappings: Dictionary mapping canonical IDs to variants
+                        (e.g., {'SRR10070130': ['SRR10070130', 'SRR10070130_1', ...]})
+
+    Returns:
+        List of all sample variants to filter MultiQC plots
+    """
+    if not sample_mappings:
+        logger.warning("No sample mappings available - returning canonical samples as-is")
+        return canonical_samples
+
+    expanded_samples = []
+    for canonical_id in canonical_samples:
+        # Get all variants for this canonical ID
+        variants = sample_mappings.get(canonical_id, [])
+
+        if variants:
+            expanded_samples.extend(variants)
+            logger.debug(
+                f"Expanded '{canonical_id}' to {len(variants)} variants: {variants[:3]}..."
+            )
+        else:
+            # If no mapping found, include the canonical ID itself
+            expanded_samples.append(canonical_id)
+            logger.debug(f"No variants found for '{canonical_id}' - using as-is")
+
+    logger.info(
+        f"Expanded {len(canonical_samples)} canonical IDs to {len(expanded_samples)} MultiQC variants"
+    )
+    return expanded_samples
+
+
 def get_samples_from_metadata_filter(
     workflow_id, metadata_dc_id, join_column, interactive_components_dict, token
 ):
@@ -495,7 +532,7 @@ def get_samples_from_metadata_filter(
         token: Auth token
 
     Returns:
-        List of sample names that match the filters
+        List of canonical sample names that match the filters (not expanded to variants)
     """
     from bson import ObjectId
 
@@ -535,9 +572,11 @@ def get_samples_from_metadata_filter(
         )
         return []
 
-    samples = df[join_column].unique().to_list()
-    logger.info(f"Found {len(samples)} samples after filtering: {samples}")
-    return samples
+    canonical_samples = df[join_column].unique().to_list()
+    logger.info(
+        f"Found {len(canonical_samples)} canonical samples after filtering: {canonical_samples}"
+    )
+    return canonical_samples
 
 
 def create_sample_filter_patch(selected_samples, metadata=None):
@@ -708,10 +747,14 @@ def patch_multiqc_figures(figures, selected_samples, metadata=None, trace_metada
             elif trace_type == "heatmap":
                 logger.info("      Processing heatmap - using full figure replacement")
                 if original_y:
-                    # Filter Y-axis (samples) and corresponding Z data from original data
+                    # Always filter from original data (even when restoring all samples)
+                    # This matches the working dev pattern and ensures clean state
                     filtered_indices = [
                         idx for idx, sample in enumerate(original_y) if sample in selected_samples
                     ]
+                    logger.info(
+                        f"      Filtering heatmap: {len(filtered_indices)}/{len(original_y)} samples selected"
+                    )
 
                     if filtered_indices:
                         new_y = [original_y[idx] for idx in filtered_indices]
@@ -730,6 +773,12 @@ def patch_multiqc_figures(figures, selected_samples, metadata=None, trace_metada
                                 tuple(new_z) if isinstance(original_z, tuple) else new_z
                             )
 
+                        if original_x:
+                            # X-axis typically doesn't need filtering for heatmaps, but update if needed
+                            full_fig["data"][i]["x"] = (
+                                tuple(original_x) if isinstance(original_x, tuple) else original_x
+                            )
+
                         # Ensure proper heatmap axis configuration
                         if "layout" in full_fig and "yaxis" in full_fig["layout"]:
                             # Clear any pre-set tickvals/ticktext that might override the y data
@@ -740,11 +789,12 @@ def patch_multiqc_figures(figures, selected_samples, metadata=None, trace_metada
                             # Ensure y-axis shows all ticks
                             full_fig["layout"]["yaxis"]["type"] = "category"
 
-                        logger.info(f"      Replaced heatmap figure with {len(new_y)} samples")
+                        logger.info(f"      ✅ Heatmap updated with {len(new_y)} samples")
                         patched_figures.append(full_fig)
                         figure_replaced = True
                         break  # Skip normal patch processing for this figure
                     else:
+                        logger.warning("      No valid data after filtering - hiding heatmap")
                         patched_fig["data"][i]["visible"] = False
 
             # Method 3: Handle other plot types (scatter, line, etc.)
@@ -966,13 +1016,21 @@ def register_callbacks_multiqc_component(app):
             theme = "light"
 
         # Create the plot with theme (Celery worker will cache this automatically)
-        fig = create_multiqc_plot(
-            s3_locations=s3_locations,
-            module=selected_module,
-            plot=selected_plot,
-            dataset_id=selected_dataset,
-            theme=theme,
-        )
+        try:
+            fig = create_multiqc_plot(
+                s3_locations=s3_locations,
+                module=selected_module,
+                plot=selected_plot,
+                dataset_id=selected_dataset,
+                theme=theme,
+            )
+        except ValueError as e:
+            # Plot doesn't exist for this module (transition state when switching modules)
+            logger.debug(f"Plot validation error (expected during module switch): {e}")
+            return dmc.Center(
+                [dmc.Text(f"Loading plots for {selected_module}...", c="gray")],
+                style={"height": "400px"},
+            )
 
         # Wrap with logo overlay for consistent sizing across all plots
         return html.Div(
@@ -1256,21 +1314,53 @@ def register_callbacks_multiqc_component(app):
 
             for join_key, join_configs in joins_dict.items():
                 if multiqc_dc_id in join_key:
-                    # Get the other DC (metadata table)
-                    metadata_dc_id = [dc for dc in join_key if dc != multiqc_dc_id][0]
-                    # Get join column from config
+                    # Get the other DC (metadata table) from the join key
+                    other_dcs = [dc for dc in join_key if dc != multiqc_dc_id]
+
+                    if other_dcs:
+                        # Standard case: join_key contains both MultiQC and metadata DC
+                        metadata_dc_id = other_dcs[0]
+                    else:
+                        # Fallback: join_key only contains MultiQC DC
+                        # Extract metadata DC from interactive components
+                        logger.debug(
+                            f"Join key {join_key} only contains MultiQC DC, "
+                            "extracting metadata DC from interactive components"
+                        )
+                        for comp_data in interactive_components_dict.values():
+                            comp_dc_id = comp_data.get("metadata", {}).get("dc_id")
+                            if comp_dc_id and comp_dc_id != multiqc_dc_id:
+                                metadata_dc_id = comp_dc_id
+                                logger.info(
+                                    f"Found metadata DC from interactive component: {metadata_dc_id}"
+                                )
+                                break
+
+                    # Get join column from config (if available)
                     for join_config_dict in join_configs:
                         for join_info in join_config_dict.values():
                             join_column = join_info.get("on_columns", [None])[0]
                             break
+
+                    # Fallback: If join_column not found in joins_dict, use default 'sample'
+                    if not join_column:
+                        logger.warning(
+                            "Join column not found in joins_dict, using default 'sample'"
+                        )
+                        join_column = "sample"
+
                     break
 
             if not metadata_dc_id or not join_column:
-                logger.error("Could not find metadata DC or join column in joins_dict")
+                logger.error(
+                    f"Could not find metadata DC or join column. "
+                    f"metadata_dc_id={metadata_dc_id}, join_column={join_column}, "
+                    f"joins_dict={joins_dict}"
+                )
                 return dash.no_update
 
-            # Use the dedicated function to get filtered sample names
-            selected_samples = get_samples_from_metadata_filter(
+            # Get canonical sample IDs from filtered metadata table
+            canonical_samples = get_samples_from_metadata_filter(
                 workflow_id=workflow_id,
                 metadata_dc_id=metadata_dc_id,
                 join_column=join_column,
@@ -1278,8 +1368,18 @@ def register_callbacks_multiqc_component(app):
                 token=token,
             )
 
+            if not canonical_samples:
+                logger.warning("No canonical samples found after filtering")
+                return dash.no_update
+
+            # Expand canonical IDs to all MultiQC variants using stored mappings
+            sample_mappings = metadata.get("sample_mappings", {})
+            selected_samples = expand_canonical_samples_to_variants(
+                canonical_samples, sample_mappings
+            )
+
             if not selected_samples:
-                logger.warning("No samples found after filtering")
+                logger.warning("No samples found after expansion")
                 return dash.no_update
 
             # Check if we have a current figure to patch
