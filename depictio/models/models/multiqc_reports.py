@@ -25,6 +25,17 @@ class MultiQCMetadata(BaseModel):
     plots: Dict[str, Any] = Field(
         default_factory=dict, description="Plot configuration and data from MultiQC"
     )
+    sample_mappings: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="Mapping from canonical sample IDs to all their MultiQC variants. "
+        "Example: {'SRR10070130': ['SRR10070130', 'SRR10070130_1', 'SRR10070130_2', "
+        "'SRR10070130 - First read: Adapter 1', ...]}",
+    )
+    canonical_samples: List[str] = Field(
+        default_factory=list,
+        description="List of normalized canonical sample IDs (without suffixes or annotations). "
+        "Used for joining with external metadata tables.",
+    )
 
     class Config:
         extra = "forbid"
