@@ -746,35 +746,85 @@ def patch_multiqc_figures(figures, selected_samples, metadata=None, trace_metada
             # Method 2: Handle heatmaps - Return full figure (Patch doesn't handle Y-axis properly)
             elif trace_type == "heatmap":
                 logger.info("      Processing heatmap - using full figure replacement")
-                if original_y:
+                if original_y and original_z:
+                    # DIAGNOSTIC: Log sample names and filtering details
+                    logger.info(
+                        f"      DEBUG: original_y samples: {original_y[:5]}... (total: {len(original_y)})"
+                    )
+                    logger.info(
+                        f"      DEBUG: selected_samples: {list(selected_samples)[:5]}... (total: {len(selected_samples)})"
+                    )
+
+                    # Convert selected_samples to a set for faster lookup
+                    selected_samples_set = set(selected_samples)
+
+                    # CRITICAL FIX: Heatmaps may use canonical names while selected_samples has variants
+                    # Check if Y-axis sample name is either:
+                    # 1. Directly in selected_samples (exact match)
+                    # 2. A prefix match for any selected sample (e.g., "SRR10070130" matches "SRR10070130_1")
+                    # 3. Any selected sample is a variant of the Y-axis sample
+                    def sample_matches(y_sample, selected_set):
+                        """Check if a heatmap Y-axis sample should be included based on selected samples."""
+                        # Direct match
+                        if y_sample in selected_set:
+                            return True
+
+                        # Check if y_sample is a canonical name and any variants are selected
+                        # e.g., y_sample="SRR10070130" matches selected="SRR10070130_1" or "SRR10070130_2"
+                        for selected in selected_set:
+                            if selected.startswith(y_sample + "_") or selected.startswith(
+                                y_sample + "-"
+                            ):
+                                return True
+
+                        # Check if any selected sample is the canonical form of y_sample
+                        # e.g., y_sample="SRR10070130_1" matches selected="SRR10070130"
+                        for selected in selected_set:
+                            if y_sample.startswith(selected + "_") or y_sample.startswith(
+                                selected + "-"
+                            ):
+                                return True
+
+                        return False
+
                     # Always filter from original data (even when restoring all samples)
-                    # This matches the working dev pattern and ensures clean state
+                    # CRITICAL: We must rebuild from trace_metadata, not copy current_figure
+                    # because current_figure may be in a filtered state from previous operations
                     filtered_indices = [
-                        idx for idx, sample in enumerate(original_y) if sample in selected_samples
+                        idx
+                        for idx, sample in enumerate(original_y)
+                        if sample_matches(sample, selected_samples_set)
                     ]
+
+                    logger.info(
+                        f"      DEBUG: Matched samples after fuzzy matching: {len(filtered_indices)}/{len(original_y)}"
+                    )
+                    if filtered_indices:
+                        matched_samples = [original_y[idx] for idx in filtered_indices[:5]]
+                        logger.info(f"      DEBUG: First 5 matched Y samples: {matched_samples}")
                     logger.info(
                         f"      Filtering heatmap: {len(filtered_indices)}/{len(original_y)} samples selected"
                     )
 
                     if filtered_indices:
-                        new_y = [original_y[idx] for idx in filtered_indices]
-
-                        # For heatmaps, replace with full figure instead of Patch
+                        # Start from current figure structure but rebuild data from original trace metadata
                         full_fig = copy.deepcopy(fig)
 
-                        # Update the heatmap data properly
+                        # Rebuild Y-axis from original metadata (filtered)
+                        new_y = [original_y[idx] for idx in filtered_indices]
                         full_fig["data"][i]["y"] = (
                             tuple(new_y) if isinstance(original_y, tuple) else new_y
                         )
 
-                        if original_z:
-                            new_z = [original_z[idx] for idx in filtered_indices]
-                            full_fig["data"][i]["z"] = (
-                                tuple(new_z) if isinstance(original_z, tuple) else new_z
-                            )
+                        # CRITICAL FIX: Rebuild Z-data from ORIGINAL trace metadata (not current figure)
+                        # This ensures Y and Z dimensions match after filtering
+                        new_z = [original_z[idx] for idx in filtered_indices]
+                        full_fig["data"][i]["z"] = (
+                            tuple(new_z) if isinstance(original_z, tuple) else new_z
+                        )
 
+                        # Restore original X-axis (typically doesn't need filtering for heatmaps)
                         if original_x:
-                            # X-axis typically doesn't need filtering for heatmaps, but update if needed
                             full_fig["data"][i]["x"] = (
                                 tuple(original_x) if isinstance(original_x, tuple) else original_x
                             )
@@ -789,13 +839,21 @@ def patch_multiqc_figures(figures, selected_samples, metadata=None, trace_metada
                             # Ensure y-axis shows all ticks
                             full_fig["layout"]["yaxis"]["type"] = "category"
 
-                        logger.info(f"      ✅ Heatmap updated with {len(new_y)} samples")
+                        logger.info(
+                            f"      ✅ Heatmap rebuilt from trace metadata: {len(new_y)} samples, "
+                            f"{len(new_z)} Z-rows"
+                        )
                         patched_figures.append(full_fig)
                         figure_replaced = True
                         break  # Skip normal patch processing for this figure
                     else:
                         logger.warning("      No valid data after filtering - hiding heatmap")
                         patched_fig["data"][i]["visible"] = False
+                elif original_y and not original_z:
+                    logger.error(
+                        "      Heatmap has Y data but no Z data in trace metadata - cannot filter"
+                    )
+                    patched_fig["data"][i]["visible"] = True  # Keep visible with original data
 
             # Method 3: Handle other plot types (scatter, line, etc.)
             else:
