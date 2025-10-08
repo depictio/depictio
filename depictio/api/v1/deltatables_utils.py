@@ -541,10 +541,20 @@ def load_deltatable_lite(
             else:
                 df = redis_cached_df
 
+            # DEBUG: Check filter application conditions
+            logger.debug(
+                f"🔍 PRE-FILTER CHECK: metadata={metadata is not None}, "
+                f"load_for_options={load_for_options}, "
+                f"metadata_len={len(metadata) if metadata else 0}"
+            )
+
             # Apply metadata filters in memory (very fast)
             if metadata and not load_for_options:
+                logger.info(f"🎯 APPLYING FILTERS: {len(metadata)} filter(s) to cached DataFrame")
                 df = apply_runtime_filters(df, metadata)
-                logger.debug(f"📊 AFTER FILTERS: {df.height:,} rows × {df.width} columns")
+                logger.info(f"📊 AFTER FILTERS: {df.height:,} rows × {df.width} columns")
+            else:
+                logger.debug("⏭️  SKIPPING FILTERS: metadata empty or load_for_options=True")
 
             # Apply row limit AFTER filters
             if limit_rows:
