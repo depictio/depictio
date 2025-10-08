@@ -146,6 +146,8 @@ def register_callbacks_save(app):
         n_clicks_apply,
         live_interactivity_on,
     ):
+        logger.info("=== SAVE CALLBACK TRIGGERED ===")
+        logger.info(f"CTX TRIGGERED: {dash.ctx.triggered_id}")
         logger.info("Saving dashboard data...")
         logger.info(
             f"📊 SAVE DEBUG - Raw stored_metadata count: {len(stored_metadata) if stored_metadata else 0}"
@@ -178,7 +180,7 @@ def register_callbacks_save(app):
             for elem in stored_metadata
         ]
         logger.info(f"Stored metadata for logging: {stored_metadata_for_logging}")
-        logger.info(f"Stored complete metadata: {stored_metadata}")
+        # logger.info(f"Stored complete metadata: {stored_metadata}")
 
         # Early return if user is not logged in
         if not local_store:
@@ -257,11 +259,11 @@ def register_callbacks_save(app):
         # Check if trigger is interactive component value change
         # If so, check if live interactivity is enabled
         triggered_by_interactive = "interactive-component-value" in triggered_id
-        if triggered_by_interactive and not live_interactivity_on:
-            logger.info(
-                "⏸️ NON-LIVE MODE: Interactive component value changed but live interactivity is OFF - ignoring save"
-            )
-            raise dash.exceptions.PreventUpdate
+        # if triggered_by_interactive and not live_interactivity_on:
+        #     logger.info(
+        #         "⏸️ NON-LIVE MODE: Interactive component value changed but live interactivity is OFF - ignoring save"
+        #     )
+        #     raise dash.exceptions.PreventUpdate
 
         # Check if trigger is apply filters button
         if "apply-filters-button" in triggered_id and not live_interactivity_on:
@@ -369,7 +371,7 @@ def register_callbacks_save(app):
             unique_metadata.append(best_metadata)
             seen_indexes.add(index)
 
-        logger.info(f"📊 SAVE DEBUG - Unique metadata: {unique_metadata}")
+        # logger.info(f"📊 SAVE DEBUG - Unique metadata: {unique_metadata}")
 
         # Summary logging of deduplication results
         # logger.info(
@@ -644,9 +646,10 @@ def register_callbacks_save(app):
 
         # Apply interactive component values to metadata when Apply button is clicked or live mode is active
         # This uses the interactive_component_values parameter that's automatically collected from all components
-        if ("apply-filters-button" in triggered_id and not live_interactivity_on) or (
-            triggered_by_interactive and live_interactivity_on
-        ):
+        if triggered_by_interactive:
+            # if ("apply-filters-button" in triggered_id and not live_interactivity_on) or (
+            #     triggered_by_interactive and live_interactivity_on
+            # ):
             logger.info("🔄 UPDATING METADATA WITH CURRENT INTERACTIVE COMPONENT VALUES")
 
             # Get interactive components from metadata to match with values
