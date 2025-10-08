@@ -147,6 +147,126 @@ def _get_default_parameters(visu_type: str, columns_specs: Dict[str, List[str]])
     return {k: v for k, v in defaults.items() if v is not None}
 
 
+# ========================================================================
+# HELPER FUNCTIONS: Interactive filtering support
+# ========================================================================
+
+
+def _extract_and_group_filters(interactive_values):
+    """
+    Extract filter components and group by data collection ID.
+
+    Args:
+        interactive_values: List of interactive component values from Store
+
+    Returns:
+        tuple: (filters_by_dc, interactive_dict)
+            - filters_by_dc: Dict[str, List[dict]] - Filters grouped by DC ID
+            - interactive_dict: Dict[str, Any] - Column name to value mapping
+    """
+    interactive_dict = {}
+    filters_by_dc = {}
+
+    for component in interactive_values:
+        column_name = component.get("metadata", {}).get("column_name")
+        component_dc_id = component.get("metadata", {}).get("dc_id")
+        if column_name:
+            interactive_dict[column_name] = component.get("value")
+            # Group filters by DC
+            if component_dc_id:
+                dc_key = str(component_dc_id)
+                if dc_key not in filters_by_dc:
+                    filters_by_dc[dc_key] = []
+                filters_by_dc[dc_key].append(component)
+
+    logger.debug(
+        "Extracted %d filter columns across %d DCs",
+        len(interactive_dict),
+        len(filters_by_dc),
+    )
+
+    return filters_by_dc, interactive_dict
+
+
+def _filter_relevant_dcs(filters_by_dc, figure_dc_id, workflow_id, token):
+    """
+    Filter out unrelated DCs that have no join relationship with figure DC.
+
+    Args:
+        filters_by_dc: Dict[str, List[dict]] - Filters grouped by DC ID
+        figure_dc_id: Target figure component's DC ID
+        workflow_id: Workflow ID for join table lookup
+        token: Authentication token
+
+    Returns:
+        dict: Filtered filters_by_dc with only relevant DCs
+    """
+    from depictio.api.v1.deltatables_utils import get_join_tables
+
+    figure_dc_str = str(figure_dc_id)
+
+    # Fetch join tables to validate DC relationships
+    join_tables_for_wf = get_join_tables(str(workflow_id), token)
+    workflow_joins = join_tables_for_wf.get(str(workflow_id), {})
+
+    # Keep only filter DCs that have a join relationship with figure DC
+    relevant_filters_by_dc = {}
+    filtered_out_dcs = []
+
+    for filter_dc_id, filters in filters_by_dc.items():
+        logger.debug(
+            "Comparing: filter_dc=%s vs figure_dc=%s, equal=%s",
+            filter_dc_id,
+            figure_dc_str,
+            filter_dc_id == figure_dc_str,
+        )
+
+        if filter_dc_id == figure_dc_str:
+            # Same DC - always relevant
+            relevant_filters_by_dc[filter_dc_id] = filters
+            logger.debug("Including filter DC %s (same as figure DC)", filter_dc_id)
+        else:
+            # Check if join relationship exists
+            join_key1 = f"{figure_dc_str}--{filter_dc_id}"
+            join_key2 = f"{filter_dc_id}--{figure_dc_str}"
+
+            logger.debug("Checking joins: %s or %s", join_key1, join_key2)
+            logger.debug("Available joins: %s", list(workflow_joins.keys()))
+
+            if join_key1 in workflow_joins or join_key2 in workflow_joins:
+                relevant_filters_by_dc[filter_dc_id] = filters
+                logger.debug("Including filter DC %s (has join with figure DC)", filter_dc_id)
+            else:
+                filtered_out_dcs.append(filter_dc_id)
+                logger.debug("Excluding filter DC %s (no join with figure DC)", filter_dc_id)
+
+    if filtered_out_dcs:
+        logger.debug("Filtered out %d unrelated DCs: %s", len(filtered_out_dcs), filtered_out_dcs)
+
+    logger.debug("Relevant filters: %d DCs", len(relevant_filters_by_dc))
+
+    return relevant_filters_by_dc
+
+
+def _check_active_filters(filters_by_dc):
+    """
+    Check if any filters have active (non-empty) values.
+
+    Args:
+        filters_by_dc: Dict[str, List[dict]] - Filters grouped by DC ID
+
+    Returns:
+        bool: True if at least one filter has a non-empty value
+    """
+    for dc_filters in filters_by_dc.values():
+        for component in dc_filters:
+            value = component.get("value")
+            # Check if value is non-empty (list, string, number, etc.)
+            if value is not None and value != [] and value != "" and value is not False:
+                return True
+    return False
+
+
 def register_callbacks_figure_component(app):
     """Register all callbacks for the robust figure component system."""
 
@@ -2247,124 +2367,6 @@ def register_callbacks_figure_component(app):
                 title=f"Error rendering figure: {str(e)}",
             )
             return error_fig, {}
-
-    # ========================================================================
-    # HELPER FUNCTIONS: Interactive filtering support
-    # ========================================================================
-
-    def _extract_and_group_filters(interactive_values):
-        """
-        Extract filter components and group by data collection ID.
-
-        Args:
-            interactive_values: List of interactive component values from Store
-
-        Returns:
-            tuple: (filters_by_dc, interactive_dict)
-                - filters_by_dc: Dict[str, List[dict]] - Filters grouped by DC ID
-                - interactive_dict: Dict[str, Any] - Column name to value mapping
-        """
-        interactive_dict = {}
-        filters_by_dc = {}
-
-        for component in interactive_values:
-            column_name = component.get("metadata", {}).get("column_name")
-            component_dc_id = component.get("metadata", {}).get("dc_id")
-            if column_name:
-                interactive_dict[column_name] = component.get("value")
-                # Group filters by DC
-                if component_dc_id:
-                    dc_key = str(component_dc_id)
-                    if dc_key not in filters_by_dc:
-                        filters_by_dc[dc_key] = []
-                    filters_by_dc[dc_key].append(component)
-
-        logger.debug(
-            "Extracted %d filter columns across %d DCs",
-            len(interactive_dict),
-            len(filters_by_dc),
-        )
-
-        return filters_by_dc, interactive_dict
-
-    def _filter_relevant_dcs(filters_by_dc, figure_dc_id, workflow_id, token):
-        """
-        Filter out unrelated DCs that have no join relationship with figure DC.
-
-        Args:
-            filters_by_dc: Dict[str, List[dict]] - Filters grouped by DC ID
-            figure_dc_id: Target figure component's DC ID
-            workflow_id: Workflow ID for join table lookup
-            token: Authentication token
-
-        Returns:
-            dict: Filtered filters_by_dc with only relevant DCs
-        """
-        from depictio.api.v1.deltatables_utils import get_join_tables
-
-        figure_dc_str = str(figure_dc_id)
-
-        # Fetch join tables to validate DC relationships
-        join_tables_for_wf = get_join_tables(str(workflow_id), token)
-        workflow_joins = join_tables_for_wf.get(str(workflow_id), {})
-
-        # Keep only filter DCs that have a join relationship with figure DC
-        relevant_filters_by_dc = {}
-        filtered_out_dcs = []
-
-        for filter_dc_id, filters in filters_by_dc.items():
-            logger.debug(
-                "Comparing: filter_dc=%s vs figure_dc=%s, equal=%s",
-                filter_dc_id,
-                figure_dc_str,
-                filter_dc_id == figure_dc_str,
-            )
-
-            if filter_dc_id == figure_dc_str:
-                # Same DC - always relevant
-                relevant_filters_by_dc[filter_dc_id] = filters
-                logger.debug("Including filter DC %s (same as figure DC)", filter_dc_id)
-            else:
-                # Check if join relationship exists
-                join_key1 = f"{figure_dc_str}--{filter_dc_id}"
-                join_key2 = f"{filter_dc_id}--{figure_dc_str}"
-
-                logger.debug("Checking joins: %s or %s", join_key1, join_key2)
-                logger.debug("Available joins: %s", list(workflow_joins.keys()))
-
-                if join_key1 in workflow_joins or join_key2 in workflow_joins:
-                    relevant_filters_by_dc[filter_dc_id] = filters
-                    logger.debug("Including filter DC %s (has join with figure DC)", filter_dc_id)
-                else:
-                    filtered_out_dcs.append(filter_dc_id)
-                    logger.debug("Excluding filter DC %s (no join with figure DC)", filter_dc_id)
-
-        if filtered_out_dcs:
-            logger.debug(
-                "Filtered out %d unrelated DCs: %s", len(filtered_out_dcs), filtered_out_dcs
-            )
-
-        logger.debug("Relevant filters: %d DCs", len(relevant_filters_by_dc))
-
-        return relevant_filters_by_dc
-
-    def _check_active_filters(filters_by_dc):
-        """
-        Check if any filters have active (non-empty) values.
-
-        Args:
-            filters_by_dc: Dict[str, List[dict]] - Filters grouped by DC ID
-
-        Returns:
-            bool: True if at least one filter has a non-empty value
-        """
-        for dc_filters in filters_by_dc.values():
-            for component in dc_filters:
-                value = component.get("value")
-                # Check if value is non-empty (list, string, number, etc.)
-                if value is not None and value != [] and value != "" and value is not False:
-                    return True
-        return False
 
     def _determine_join_strategy(filters_by_dc, figure_dc_str):
         """
