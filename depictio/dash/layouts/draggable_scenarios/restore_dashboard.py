@@ -1,12 +1,7 @@
-import collections
-
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, api_call_get_dashboard
 from depictio.dash.component_metadata import DISPLAY_NAME_TO_TYPE_MAPPING, get_build_functions
-from depictio.dash.layouts.draggable_scenarios.interactive_component_update import (
-    update_interactive_component_sync,
-)
 from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
     create_skeleton_component,
 )
@@ -16,35 +11,6 @@ from depictio.models.utils import convert_model_to_dict
 
 # Get build functions from centralized metadata
 build_functions = get_build_functions()
-
-
-def return_interactive_components_dict(dashboard_data):
-    # logger.info(f"Dashboard data: {dashboard_data}")
-
-    # logger.debug(f"Dashboard data: {dashboard_data}")
-    # logger.debug(f"Dashboard data type: {type(dashboard_data)}")
-
-    interactive_components_dict = collections.defaultdict(dict)
-
-    for e in dashboard_data:
-        # logger.debug(f"e: {e}")
-
-        if "component_type" not in e:
-            logger.debug(f"Component type not found in e: {e}")
-            continue
-
-        if e["component_type"] == "interactive":
-            # logger.debug(f"e: {e}")
-            # logger.debug(f"e['value']: {e['value']}")
-            # logger.debug(f"e['component_type']: {e['component_type']}")
-            interactive_components_dict[e["index"]] = {
-                "value": e["value"],
-                "metadata": e,
-            }
-
-    # interactive_components_dict = {e["index"]: {"value": e["value"], "metadata": e} for e in dashboard_data if e["component_type"] == "interactive"}
-    # logger.debug(f"Interactive components dict: {interactive_components_dict}")
-    return interactive_components_dict
 
 
 def render_dashboard(stored_metadata, edit_components_button, dashboard_id, theme, TOKEN):
@@ -116,8 +82,6 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
         children.append((child, component_type, child_metadata))
     # logger.info(f"Children: {children}")
 
-    interactive_components_dict = return_interactive_components_dict(stored_metadata)
-
     # Process children with special handling for text components to avoid circular JSON
     processed_children = []
     for child, component_type, child_metadata in children:
@@ -132,21 +96,13 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
         )
         processed_children.append(processed_child)
 
-    children = processed_children
-    # logger.info(f"Children: {children}")
-
-    children = update_interactive_component_sync(
-        stored_metadata,
-        interactive_components_dict,
-        children,
-        switch_state=edit_components_button,
-        TOKEN=TOKEN,
-        dashboard_id=dashboard_id,
-        theme=theme,  # Pass theme to interactive component updates
+    # Pattern-matching callbacks handle initial value population (prevent_initial_call=False)
+    # No need for sync rebuild - cards, figures, tables all self-initialize
+    logger.info(
+        f"✅ Dashboard restored with {len(processed_children)} components - pattern-matching callbacks will populate values"
     )
-    # logger.info(f"Updated children after interactive component processing: {children}")
 
-    return children
+    return processed_children
 
 
 def render_dashboard_with_skeletons(
