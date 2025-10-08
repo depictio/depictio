@@ -1,8 +1,10 @@
 import collections
 from typing import Any
 
+import httpx
 import pandas as pd
 
+from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import (
     iterative_join,
@@ -351,7 +353,7 @@ def update_interactive_component_sync(
         # Filter stored_metadata based on the workflow id
         # logger.info(f"wf - {wf}")
         # logger.info(f"stored_metadata_raw - {stored_metadata_raw}")
-        stored_metadata = [v for v in stored_metadata_raw if v["wf_id"] == wf]
+        stored_metadata = [v for v in stored_metadata_raw if v.get("wf_id") == wf]
         # stored_metadata_interactive_components = [
         #     e for e in stored_metadata if e["component_type"] in ["interactive"]
         # ]
@@ -365,7 +367,57 @@ def update_interactive_component_sync(
             e for e in stored_metadata if e["component_type"] in ["jbrowse"]
         ]
 
-        joins_dict = return_joins_dict(wf, stored_metadata, TOKEN)
+        # Create dc_type mapping BEFORE calling return_joins_dict() to filter non-table types early
+        # Fetch ALL data collections for this workflow to get complete type mapping
+        dc_type_mapping = {}
+
+        try:
+            # Fetch workflow data to get all data collections
+            logger.info(f"Fetching workflow data for wf={wf} to build dc_type_mapping")
+            response = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/workflows/get/from_id",
+                params={"workflow_id": wf},
+                headers={"Authorization": f"Bearer {TOKEN}"},
+                timeout=5.0,
+            )
+            logger.info(f"Workflow fetch response: status={response.status_code}")
+            if response.status_code == 200:
+                workflow_data = response.json()
+                data_collections = workflow_data.get("data_collections", [])
+                logger.info(f"Found {len(data_collections)} data collections in workflow {wf}")
+                for dc in data_collections:
+                    dc_id = str(dc.get("_id"))
+                    config = dc.get("config", {})
+                    dc_type = config.get("type", "table")
+                    dc_type_mapping[dc_id] = dc_type
+                    logger.info(f"Mapped {dc_id} -> {dc_type} (from workflow data)")
+            else:
+                logger.warning(
+                    f"Failed to fetch workflow data: HTTP {response.status_code}, response={response.text}"
+                )
+        except Exception as e:
+            logger.error(f"Error fetching workflow data for dc types: {e}", exc_info=True)
+
+        # Also map from stored_metadata components for any missing dc_ids
+        for component in stored_metadata:
+            dc_id = component.get("dc_id") or component.get("data_collection_id")
+            component_type = component.get("component_type")
+
+            if dc_id and dc_id not in dc_type_mapping:
+                # Fallback: infer from component type if not in workflow data
+                if component_type in ["jbrowse", "multiqc"]:
+                    dc_type_mapping[dc_id] = component_type
+                    logger.debug(f"Mapped {dc_id} -> {component_type} (from component type)")
+                elif component_type in ["table", "figure", "card", "interactive"]:
+                    dc_type_mapping[dc_id] = "table"
+                    logger.debug(f"Mapped {dc_id} -> table (from component type)")
+
+        logger.info(f"DC type mapping (before joins): {dc_type_mapping}")
+
+        # Now call return_joins_dict with complete dc_type_mapping available
+        joins_dict = return_joins_dict(
+            wf, stored_metadata, TOKEN, extra_dc=None, dc_type_mapping=dc_type_mapping
+        )
 
         logger.info(f"Updated joins_dict - {joins_dict}")
 
@@ -377,7 +429,9 @@ def update_interactive_component_sync(
             )
 
             # logger.info(f"Interactive components dict: {interactive_components_dict}")
-            merged_df = iterative_join(wf, joins_dict, interactive_components_dict, TOKEN)
+            merged_df = iterative_join(
+                wf, joins_dict, interactive_components_dict, TOKEN, dc_type_mapping
+            )
 
             logger.info(f"Batch join completed for workflow {wf} (shape: {merged_df.shape})")
 
@@ -577,7 +631,9 @@ def update_interactive_component_sync(
 
         elif component["component_type"] == "multiqc":
             # Handle MultiQC components specially - they don't use data joins
-            # Apply proper index normalization for MultiQC components
+            # The dedicated patch_multiqc_plot_with_interactive_filtering callback
+            # will update the figure property separately, so we keep the component
+            # structure intact here
             component["index"] = component["index"].replace("-tmp", "")
 
             # Set component parameters
@@ -589,7 +645,7 @@ def update_interactive_component_sync(
             component_type_lower = component["component_type"].lower()
             child = helpers_mapping[component_type_lower](**component)
 
-            logger.debug(f"MULTIQC CHILD - {child}")
+            logger.debug(f"MULTIQC CHILD (no data filtering applied here) - {child}")
 
             # Process multiqc component as native Dash component
             child = enable_box_edit_mode(
