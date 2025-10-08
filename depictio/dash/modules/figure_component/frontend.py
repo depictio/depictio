@@ -2307,6 +2307,7 @@ def register_callbacks_figure_component(app):
             dc_id = metadata.get("dc_id")
             theme = metadata.get("theme", "light")
             mode = metadata.get("mode", "ui")
+            code_content = metadata.get("code_content")  # Retrieve code_content for code mode
             visu_type = metadata.get("visu_type", "scatter")
             current_params = metadata.get("dict_kwargs", {})
 
@@ -2357,14 +2358,18 @@ def register_callbacks_figure_component(app):
 
             # For joined DCs, check if filters target constituent DCs
             if is_joined_dc:
+                logger.debug(f"🔗 Figure DC {figure_dc_str} is a joined DC")
                 filter_dc_ids = set(filters_by_dc.keys())
                 all_filters_on_constituents = filter_dc_ids.issubset(constituent_dc_ids)
                 has_filters_for_figure_dc = all_filters_on_constituents
-                logger.info(f"🔗 Joined DC detected: {figure_dc_str}")
-                logger.info(f"   Constituent DCs: {constituent_dc_ids}")
-                logger.info(f"   Filter DCs: {filter_dc_ids}")
-                logger.info(f"   All filters on constituents: {all_filters_on_constituents}")
+                logger.debug(f"🔗 Joined DC detected: {figure_dc_str}")
+                logger.debug(f"   Constituent DCs: {constituent_dc_ids}")
+                logger.debug(f"   Filter DCs: {filter_dc_ids}")
+                logger.debug(f"   All filters on constituents: {all_filters_on_constituents}")
             else:
+                logger.debug(f"📂 Figure DC {figure_dc_str} is a regular DC")
+                logger.debug(f"   Filter DCs: {list(filters_by_dc.keys())}")
+                logger.debug(f"   Figure DC: {figure_dc_str}")
                 has_filters_for_figure_dc = figure_dc_str in filters_by_dc
                 all_filters_on_constituents = False
 
@@ -2391,9 +2396,9 @@ def register_callbacks_figure_component(app):
                     needs_join = True
                     logger.info("🔍 Filters on different DC(s), manual join required")
 
-            logger.info(f"🔍 Figure DC: {figure_dc_str}")
-            logger.info(f"🔍 Has filters for figure DC: {has_filters_for_figure_dc}")
-            logger.info(f"🔍 Needs join: {needs_join}")
+            logger.debug(f"🔍 Figure DC: {figure_dc_str}")
+            logger.debug(f"🔍 Has filters for figure DC: {has_filters_for_figure_dc}")
+            logger.debug(f"🔍 Needs join: {needs_join}")
 
             # Determine if manual join is needed
             # For joined DCs with constituent filters from multiple DCs, use manual join
@@ -2403,7 +2408,7 @@ def register_callbacks_figure_component(app):
             )
 
             if requires_manual_join:
-                logger.info(
+                logger.debug(
                     f"🔗 MULTI-DC FILTERING: Loading and joining DCs "
                     f"({len(filters_by_dc)} filter DC(s))"
                 )
@@ -2420,7 +2425,7 @@ def register_callbacks_figure_component(app):
                         "on_columns": ["sample_id"],  # Common join column for joined DCs
                         "how": "inner",
                     }
-                    logger.info(
+                    logger.debug(
                         f"📋 Using inferred join config for joined DC: {join_config_to_use}"
                     )
 
@@ -2428,7 +2433,7 @@ def register_callbacks_figure_component(app):
                     for constituent_dc in constituent_list:
                         if constituent_dc not in filters_by_dc:
                             filters_by_dc[constituent_dc] = []
-                            logger.info(
+                            logger.debug(
                                 f"📂 Adding constituent DC {constituent_dc} to join (no filters)"
                             )
                 else:
@@ -2439,7 +2444,7 @@ def register_callbacks_figure_component(app):
 
                     # Include figure's DC in the join if it's not already in filters_by_dc
                     if figure_dc_str not in filters_by_dc:
-                        logger.info(f"📂 Adding figure DC {figure_dc_str} to join (no filters)")
+                        logger.debug(f"📂 Adding figure DC {figure_dc_str} to join (no filters)")
                         filters_by_dc[figure_dc_str] = []
 
                 # Extract DC metatypes from component metadata (already cached in Store)
@@ -2519,6 +2524,7 @@ def register_callbacks_figure_component(app):
                 logger.info(f"📊 Joined result: {df.height:,} rows × {df.width} columns")
 
             else:
+                logger.debug("📄 SAME-DC FILTERING: Loading single DC with filters")
                 # SAME-DC or JOINED-DC with constituent filters: Apply filters directly
                 # For joined DCs, collect filters from all constituent DCs
                 if is_joined_dc and constituent_dc_ids:
@@ -2531,7 +2537,11 @@ def register_callbacks_figure_component(app):
                     )
                 else:
                     # Regular same-DC filtering
+                    logger.info("📂 Regular same-DC filtering")
                     relevant_filters = filters_by_dc.get(figure_dc_str, [])
+                    logger.info(
+                        f"📂 Collected {len(relevant_filters)} filters for DC {figure_dc_str}"
+                    )
 
                 # FIX: When clearing filters, pass empty metadata to load ALL data
                 # When applying filters, only pass components with non-empty values
@@ -2580,6 +2590,27 @@ def register_callbacks_figure_component(app):
                     )
 
             logger.info(f"📊 Loaded {df.height:,} rows × {df.width} columns after filtering")
+
+            # Handle code mode preprocessing (if applicable)
+            if mode == "code" and code_content:
+                logger.info("🔄 CODE MODE: Executing preprocessing for filtered data")
+                try:
+                    from .code_mode import analyze_constrained_code
+                    from .simple_code_executor import SimpleCodeExecutor
+
+                    analysis = analyze_constrained_code(code_content)
+                    if analysis["is_valid"] and analysis["has_preprocessing"]:
+                        executor = SimpleCodeExecutor()
+                        success, df_preprocessed, message = executor.execute_preprocessing_only(
+                            code_content, df
+                        )
+                        if success and df_preprocessed is not None:
+                            df = df_preprocessed
+                            logger.info("✅ CODE MODE: Preprocessing successful for filtered data")
+                        else:
+                            logger.warning(f"⚠️ CODE MODE: Preprocessing failed: {message}")
+                except Exception as e:
+                    logger.error(f"❌ CODE MODE: Preprocessing error: {e}")
 
             # Re-render figure with filtered data
             logger.info("🎨 Re-rendering figure with filtered data...")

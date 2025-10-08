@@ -561,6 +561,63 @@ def render_figure(
         f"Boolean parameters in cleaned_kwargs: {[(k, v, type(v)) for k, v in cleaned_kwargs.items() if isinstance(v, bool)]}"
     )
 
+    # PARAMETER CONVERSION: Handle line_dash and symbol parameters
+    # These parameters can be either:
+    # 1. A column name (for categorical grouping by dash/symbol)
+    # 2. A style literal (for uniform styling)
+    # When a style literal is provided, convert to _sequence parameter
+    VALID_DASH_STYLES = ["solid", "dot", "dash", "longdash", "dashdot", "longdashdot"]
+    VALID_SYMBOL_STYLES = [
+        "circle",
+        "square",
+        "diamond",
+        "cross",
+        "x",
+        "triangle-up",
+        "triangle-down",
+        "triangle-left",
+        "triangle-right",
+        "pentagon",
+        "hexagon",
+        "star",
+    ]
+
+    # Handle line_dash parameter conversion
+    if "line_dash" in cleaned_kwargs:
+        dash_value = cleaned_kwargs["line_dash"]
+        if dash_value in VALID_DASH_STYLES:
+            # Convert style literal to line_dash_sequence for uniform styling
+            cleaned_kwargs["line_dash_sequence"] = [dash_value]
+            del cleaned_kwargs["line_dash"]
+            logger.debug(
+                f"Converted line_dash style '{dash_value}' to line_dash_sequence for uniform styling"
+            )
+        elif dash_value not in df.columns:
+            # Invalid column name - remove to avoid Plotly error
+            logger.warning(
+                f"line_dash value '{dash_value}' is not a valid column or style. Removing parameter."
+            )
+            del cleaned_kwargs["line_dash"]
+        # else: valid column name, keep as-is for categorical grouping
+
+    # Handle symbol parameter conversion (same pattern as line_dash)
+    if "symbol" in cleaned_kwargs:
+        symbol_value = cleaned_kwargs["symbol"]
+        if symbol_value in VALID_SYMBOL_STYLES:
+            # Convert style literal to symbol_sequence for uniform styling
+            cleaned_kwargs["symbol_sequence"] = [symbol_value]
+            del cleaned_kwargs["symbol"]
+            logger.debug(
+                f"Converted symbol style '{symbol_value}' to symbol_sequence for uniform styling"
+            )
+        elif symbol_value not in df.columns:
+            # Invalid column name - remove to avoid Plotly error
+            logger.warning(
+                f"symbol value '{symbol_value}' is not a valid column or style. Removing parameter."
+            )
+            del cleaned_kwargs["symbol"]
+        # else: valid column name, keep as-is for categorical grouping
+
     # Check if required parameters are missing for the visualization type (skip in code mode)
     if not skip_validation:
         required_params = _get_required_parameters(visu_type.lower())
