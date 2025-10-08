@@ -37,6 +37,10 @@ def build_interactive_frame(index, children=None, show_border=False):
                     style={
                         "minHeight": "150px",
                         "height": "100%",
+                        "width": "100%",
+                        "display": "flex",
+                        "alignItems": "center",
+                        "justifyContent": "center",
                     },
                 )
             ],
@@ -62,7 +66,11 @@ def build_interactive_frame(index, children=None, show_border=False):
                     style={
                         "overflow": "visible",
                         "height": "100%",
+                        "width": "100%",
                         "position": "relative",
+                        "display": "flex",
+                        "alignItems": "center",  # Center vertically
+                        "justifyContent": "center",  # Center horizontally
                     },
                 )
             ],
@@ -77,6 +85,8 @@ def build_interactive_frame(index, children=None, show_border=False):
             style={
                 "overflow": "visible",
                 "position": "relative",
+                "display": "flex",
+                "flexDirection": "column",
             },
             withBorder=show_border,
         )
@@ -119,7 +129,7 @@ def format_mark_label(value):
         return None
 
 
-def generate_equally_spaced_marks(min_val, max_val, marks_count=5, use_log_scale=False):
+def generate_equally_spaced_marks(min_val, max_val, marks_count=2, use_log_scale=False):
     """
     Generate equally spaced marks for sliders.
     Always includes min and max values.
@@ -127,15 +137,15 @@ def generate_equally_spaced_marks(min_val, max_val, marks_count=5, use_log_scale
     Args:
         min_val (float): Minimum value
         max_val (float): Maximum value
-        marks_count (int): Number of marks to generate (minimum 3)
+        marks_count (int): Number of marks to generate (minimum 2 for min/max only)
         use_log_scale (bool): Whether to use logarithmic spacing
 
     Returns:
         dict: Dictionary of mark positions and their labels
     """
     try:
-        # Ensure minimum of 3 marks (min, middle, max)
-        marks_count = max(3, marks_count)
+        # Ensure minimum of 2 marks (min and max only)
+        marks_count = max(2, marks_count)
 
         marks = {}
 
@@ -560,7 +570,7 @@ def build_interactive(**kwargs):
     parent_index = kwargs.get("parent_index", None)
     scale = kwargs.get("scale", "linear")  # Default to linear scale
     color = kwargs.get("color", None)  # Default to no custom color
-    marks_number = kwargs.get("marks_number", 5)  # Default to 5 marks
+    marks_number = kwargs.get("marks_number", 2)  # Default to 2 marks (min/max only)
 
     # logger.info(f"Interactive - kwargs: {kwargs}")
     logger.info(
@@ -716,7 +726,19 @@ def build_interactive(**kwargs):
                 )
 
         # Prepare kwargs for all component types to preserve value
-        component_kwargs = {"data": data, "id": {"type": value_div_type, "index": str(index)}}
+        component_kwargs = {
+            "data": data,
+            "id": {"type": value_div_type, "index": str(index)},
+            # UI/UX improvements for better space utilization
+            "w": "100%",  # Fill container width
+            "size": "md",  # Medium size for better readability
+            "styles": {
+                "root": {
+                    "width": "100%",
+                    "minWidth": "50px",
+                },  # Ultra-compact minimum width for tight layouts
+            },
+        }
 
         # CRITICAL: Preserve value for ALL interactive component types, but handle SegmentedControl specially
         if value is not None:
@@ -809,11 +831,15 @@ def build_interactive(**kwargs):
 
         # Apply custom color to DMC components if specified
         if color and interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
-            component_kwargs["styles"] = {
+            # Merge color styles with existing base styles
+            existing_styles = component_kwargs.get("styles", {})
+            color_styles = {
                 "input": {"borderColor": color},
                 "dropdown": {"borderColor": color},
                 "label": {"color": color},
             }
+            # Merge dictionaries - color_styles will override existing_styles for conflicting keys
+            component_kwargs["styles"] = {**existing_styles, **color_styles}
 
         # WARNING: This is a temporary solution to avoid modifying dashboard data - the -tmp suffix is added to the id and removed once clicked on the btn-done D
         interactive_component = func_name(**component_kwargs)
@@ -1078,6 +1104,19 @@ def build_interactive(**kwargs):
             # Keep it simple - no step, precision, or label parameters initially
             "step": 0.01,  # Default step for DMC sliders
             "persistence_type": "local",
+            # UI/UX improvements for better space utilization
+            "w": "100%",  # Fill container width
+            "size": "lg",  # Larger size for better visibility and usability
+            "styles": {
+                "root": {
+                    "width": "100%",
+                    "paddingLeft": "12px",  # Increased padding to prevent thumb overflow on left
+                    "paddingRight": "12px",  # Increased padding to prevent thumb overflow on right
+                },
+                "track": {
+                    "minWidth": "50px",  # Ultra-compact minimum width for tight layouts
+                },
+            },
         }
 
         # Add minRange only for RangeSlider (not supported by regular Slider)
@@ -1165,7 +1204,7 @@ def build_interactive(**kwargs):
 
         # Generate marks based on scale type and marks_number parameter
         # For DMC sliders, always generate default marks if none specified
-        effective_marks_number = marks_number if marks_number and marks_number > 0 else 5
+        effective_marks_number = marks_number if marks_number and marks_number > 0 else 2
 
         logger.info(
             f"Generating {effective_marks_number} marks for DMC slider (requested: {marks_number})"
@@ -1300,7 +1339,7 @@ def build_interactive(**kwargs):
 
     # Apply custom color if specified, otherwise let Mantine handle theming
     title_style = {
-        "marginBottom": "0.5rem",
+        "marginBottom": "0.25rem",  # Reduced from 0.5rem for tighter spacing
     }
     if color:
         title_style["color"] = color
@@ -1359,17 +1398,16 @@ def build_interactive(**kwargs):
     # Create wrapper with proper sizing for interactive components
     new_interactive_component = dmc.Stack(
         [card_title_h5, interactive_component, store_component],
-        gap="xs",
+        gap="0",  # No gap - use title marginBottom instead for tighter control
         style={
-            "width": "100%",
-            "height": "auto",  # Use natural height, don't force 100%
-            "maxWidth": "500px",
-            "padding": "10px",
+            "width": "100%",  # Fill container width
+            "minHeight": "120px",  # Ensure minimum height for better usability
+            "padding": "0.5rem 1rem 0.5rem 0.5rem",  # top right bottom left - reduced padding for compact layout
             "boxSizing": "border-box",
-            # Center the stack within its container
-            "margin": "0 auto",
-            # Allow components to grow horizontally but not vertically
-            "alignSelf": "flex-start",
+            "display": "flex",
+            "flexDirection": "column",
+            "justifyContent": "flex-start",  # Align content to top instead of center
+            "alignItems": "stretch",  # Stretch children to fill width
         },
     )
 
