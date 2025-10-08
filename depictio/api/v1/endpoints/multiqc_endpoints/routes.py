@@ -233,6 +233,37 @@ async def delete_multiqc_report(
 
 
 @router.get(
+    "/reports/{report_id}/sample-mappings",
+    response_model=dict,
+    summary="Get sample mappings for MultiQC report",
+)
+async def get_sample_mappings(
+    report_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get sample ID mappings from canonical IDs to MultiQC variants.
+
+    This endpoint returns the mapping that allows filtering MultiQC visualizations
+    based on canonical sample IDs from external metadata tables.
+
+    Args:
+        report_id: ID of the MultiQC report
+        current_user: Authenticated user
+
+    Returns:
+        Dictionary with:
+        - sample_mappings: Dict mapping canonical IDs to variant lists
+        - canonical_samples: List of all canonical sample IDs
+    """
+    metadata = await get_multiqc_report_metadata_by_id(report_id)
+    return {
+        "sample_mappings": metadata.get("sample_mappings", {}),
+        "canonical_samples": metadata.get("canonical_samples", []),
+    }
+
+
+@router.get(
     "/reports/{report_id}/metadata",
     response_model=dict,
     summary="Get MultiQC report metadata",
