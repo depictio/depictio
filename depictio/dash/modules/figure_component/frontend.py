@@ -2248,6 +2248,420 @@ def register_callbacks_figure_component(app):
             )
             return error_fig, {}
 
+    # ========================================================================
+    # HELPER FUNCTIONS: Interactive filtering support
+    # ========================================================================
+
+    def _extract_and_group_filters(interactive_values):
+        """
+        Extract filter components and group by data collection ID.
+
+        Args:
+            interactive_values: List of interactive component values from Store
+
+        Returns:
+            tuple: (filters_by_dc, interactive_dict)
+                - filters_by_dc: Dict[str, List[dict]] - Filters grouped by DC ID
+                - interactive_dict: Dict[str, Any] - Column name to value mapping
+        """
+        interactive_dict = {}
+        filters_by_dc = {}
+
+        for component in interactive_values:
+            column_name = component.get("metadata", {}).get("column_name")
+            component_dc_id = component.get("metadata", {}).get("dc_id")
+            if column_name:
+                interactive_dict[column_name] = component.get("value")
+                # Group filters by DC
+                if component_dc_id:
+                    dc_key = str(component_dc_id)
+                    if dc_key not in filters_by_dc:
+                        filters_by_dc[dc_key] = []
+                    filters_by_dc[dc_key].append(component)
+
+        logger.debug(
+            "Extracted %d filter columns across %d DCs",
+            len(interactive_dict),
+            len(filters_by_dc),
+        )
+
+        return filters_by_dc, interactive_dict
+
+    def _filter_relevant_dcs(filters_by_dc, figure_dc_id, workflow_id, token):
+        """
+        Filter out unrelated DCs that have no join relationship with figure DC.
+
+        Args:
+            filters_by_dc: Dict[str, List[dict]] - Filters grouped by DC ID
+            figure_dc_id: Target figure component's DC ID
+            workflow_id: Workflow ID for join table lookup
+            token: Authentication token
+
+        Returns:
+            dict: Filtered filters_by_dc with only relevant DCs
+        """
+        from depictio.api.v1.deltatables_utils import get_join_tables
+
+        figure_dc_str = str(figure_dc_id)
+
+        # Fetch join tables to validate DC relationships
+        join_tables_for_wf = get_join_tables(str(workflow_id), token)
+        workflow_joins = join_tables_for_wf.get(str(workflow_id), {})
+
+        # Keep only filter DCs that have a join relationship with figure DC
+        relevant_filters_by_dc = {}
+        filtered_out_dcs = []
+
+        for filter_dc_id, filters in filters_by_dc.items():
+            logger.debug(
+                "Comparing: filter_dc=%s vs figure_dc=%s, equal=%s",
+                filter_dc_id,
+                figure_dc_str,
+                filter_dc_id == figure_dc_str,
+            )
+
+            if filter_dc_id == figure_dc_str:
+                # Same DC - always relevant
+                relevant_filters_by_dc[filter_dc_id] = filters
+                logger.debug("Including filter DC %s (same as figure DC)", filter_dc_id)
+            else:
+                # Check if join relationship exists
+                join_key1 = f"{figure_dc_str}--{filter_dc_id}"
+                join_key2 = f"{filter_dc_id}--{figure_dc_str}"
+
+                logger.debug("Checking joins: %s or %s", join_key1, join_key2)
+                logger.debug("Available joins: %s", list(workflow_joins.keys()))
+
+                if join_key1 in workflow_joins or join_key2 in workflow_joins:
+                    relevant_filters_by_dc[filter_dc_id] = filters
+                    logger.debug("Including filter DC %s (has join with figure DC)", filter_dc_id)
+                else:
+                    filtered_out_dcs.append(filter_dc_id)
+                    logger.debug("Excluding filter DC %s (no join with figure DC)", filter_dc_id)
+
+        if filtered_out_dcs:
+            logger.debug(
+                "Filtered out %d unrelated DCs: %s", len(filtered_out_dcs), filtered_out_dcs
+            )
+
+        logger.debug("Relevant filters: %d DCs", len(relevant_filters_by_dc))
+
+        return relevant_filters_by_dc
+
+    def _check_active_filters(filters_by_dc):
+        """
+        Check if any filters have active (non-empty) values.
+
+        Args:
+            filters_by_dc: Dict[str, List[dict]] - Filters grouped by DC ID
+
+        Returns:
+            bool: True if at least one filter has a non-empty value
+        """
+        for dc_filters in filters_by_dc.values():
+            for component in dc_filters:
+                value = component.get("value")
+                # Check if value is non-empty (list, string, number, etc.)
+                if value is not None and value != [] and value != "" and value is not False:
+                    return True
+        return False
+
+    def _determine_join_strategy(filters_by_dc, figure_dc_str):
+        """
+        Determine if manual join is required based on filter distribution.
+
+        Args:
+            filters_by_dc: Dict[str, List[dict]] - Filters grouped by DC ID
+            figure_dc_str: Figure component's DC ID as string
+
+        Returns:
+            tuple: (requires_manual_join, is_joined_dc, constituent_dc_ids)
+        """
+        # Detect if figure DC is a joined DC (contains "--")
+        is_joined_dc = isinstance(figure_dc_str, str) and "--" in figure_dc_str
+        constituent_dc_ids = set(figure_dc_str.split("--")) if is_joined_dc else set()
+
+        # For joined DCs, check if filters target constituent DCs
+        if is_joined_dc:
+            logger.debug("Figure DC %s is a joined DC", figure_dc_str)
+            filter_dc_ids = set(filters_by_dc.keys())
+            all_filters_on_constituents = filter_dc_ids.issubset(constituent_dc_ids)
+            has_filters_for_figure_dc = all_filters_on_constituents
+            logger.debug(
+                "Joined DC: constituents=%s, filters=%s", constituent_dc_ids, filter_dc_ids
+            )
+        else:
+            logger.debug("Figure DC %s is a regular DC", figure_dc_str)
+            has_filters_for_figure_dc = figure_dc_str in filters_by_dc
+            all_filters_on_constituents = False
+
+        # Determine if we need to perform a manual join
+        needs_join = False
+        if not has_filters_for_figure_dc and len(filters_by_dc) > 0:
+            # OPTIMIZATION: For joined DCs with filters on constituent DCs,
+            # skip manual join (load_deltatable_lite handles it internally)
+            if is_joined_dc and all_filters_on_constituents:
+                needs_join = False
+                logger.debug("Joined DC with constituent filters - using direct filtering")
+            else:
+                # Filters are on different DC(s) - need manual join
+                needs_join = True
+                logger.debug("Filters on different DCs - manual join required")
+
+        # Determine if manual join is needed
+        # For joined DCs with constituent filters from multiple DCs, use manual join
+        # to apply filters separately to each DC before joining
+        requires_manual_join = (needs_join or len(filters_by_dc) > 1) and not (
+            is_joined_dc and all_filters_on_constituents and len(filters_by_dc) == 1
+        )
+
+        logger.debug(
+            "Join strategy: requires_manual=%s, filters_count=%d",
+            requires_manual_join,
+            len(filters_by_dc),
+        )
+
+        return requires_manual_join, is_joined_dc, constituent_dc_ids
+
+    def _load_and_join_data(
+        filters_by_dc,
+        wf_id,
+        token,
+        has_active_filters,
+        is_joined_dc,
+        constituent_dc_ids,
+        figure_dc_str,
+        metadata,
+        join_config,
+    ):
+        """
+        Load and join multiple data collections.
+
+        Args:
+            filters_by_dc: Dict[str, List[dict]] - Filters grouped by DC ID
+            wf_id: Workflow ID
+            token: Authentication token
+            has_active_filters: Whether any filters are active
+            is_joined_dc: Whether figure DC is a joined DC
+            constituent_dc_ids: Set of constituent DC IDs (for joined DCs)
+            figure_dc_str: Figure DC ID as string
+            metadata: Component metadata (for metatype extraction)
+            join_config: Join configuration from component
+
+        Returns:
+            pl.DataFrame: Joined dataframe
+        """
+        from bson import ObjectId
+
+        from depictio.api.v1.deltatables_utils import (
+            load_deltatable_lite,
+            merge_multiple_dataframes,
+        )
+
+        logger.debug("Multi-DC filtering: joining %d DCs", len(filters_by_dc))
+
+        # Determine join config
+        if is_joined_dc:
+            join_config_to_use = {
+                "on_columns": ["sample_id"],
+                "how": "inner",
+            }
+            logger.debug("Using inferred join config for joined DC")
+
+            # Ensure all constituent DCs are in filters_by_dc (even if no filters)
+            for constituent_dc in constituent_dc_ids:
+                if constituent_dc not in filters_by_dc:
+                    filters_by_dc[constituent_dc] = []
+                    logger.debug("Adding constituent DC %s to join (no filters)", constituent_dc)
+        else:
+            if not join_config or not join_config.get("on_columns"):
+                raise Exception("Join required but no join config found")
+            join_config_to_use = join_config
+
+            # Include figure's DC in the join if it's not already in filters_by_dc
+            if figure_dc_str not in filters_by_dc:
+                logger.debug("Adding figure DC %s to join (no filters)", figure_dc_str)
+                filters_by_dc[figure_dc_str] = []
+
+        # Extract DC metatypes from component metadata
+        dc_metatypes = {}
+        for dc_key, dc_filters in filters_by_dc.items():
+            if dc_filters:
+                component_dc_config = dc_filters[0].get("metadata", {}).get("dc_config", {})
+                metatype = component_dc_config.get("metatype")
+                if metatype:
+                    dc_metatypes[dc_key] = metatype
+                    logger.debug("DC %s metatype: %s", dc_key, metatype)
+
+        # If figure DC not in filters_by_dc, get its metatype from metadata State
+        if figure_dc_str not in dc_metatypes and metadata:
+            figure_dc_config = metadata.get("dc_config", {})
+            figure_metatype = figure_dc_config.get("metatype")
+            if figure_metatype:
+                dc_metatypes[figure_dc_str] = figure_metatype
+                logger.debug("Figure DC %s metatype: %s", figure_dc_str, figure_metatype)
+
+        # Load each DC
+        dataframes = {}
+        for dc_key, dc_filters in filters_by_dc.items():
+            if has_active_filters:
+                active_filters = [
+                    c for c in dc_filters if c.get("value") not in [None, [], "", False]
+                ]
+                logger.debug("Loading DC %s with %d active filters", dc_key, len(active_filters))
+                metadata_to_pass = active_filters
+            else:
+                logger.debug("Loading DC %s with NO filters (clearing)", dc_key)
+                metadata_to_pass = []
+
+            dc_df = load_deltatable_lite(
+                ObjectId(wf_id),
+                ObjectId(dc_key),
+                metadata=metadata_to_pass,
+                TOKEN=token,
+                select_columns=None,
+            )
+            dataframes[dc_key] = dc_df
+            logger.debug("Loaded DC %s: %d rows × %d cols", dc_key, dc_df.height, dc_df.width)
+
+        # Build join instructions
+        dc_ids = sorted(filters_by_dc.keys())
+        join_instructions = [
+            {
+                "left": dc_ids[0],
+                "right": dc_ids[1],
+                "how": join_config_to_use.get("how", "inner"),
+                "on": join_config_to_use.get("on_columns", []),
+            }
+        ]
+
+        logger.debug("Join instructions: %s", join_instructions)
+        logger.debug("DC metatypes: %s", dc_metatypes)
+
+        # Merge DataFrames
+        df = merge_multiple_dataframes(
+            dataframes=dataframes,
+            join_instructions=join_instructions,
+            dc_metatypes=dc_metatypes,
+        )
+
+        logger.debug("Joined result: %d rows × %d cols", df.height, df.width)
+        return df
+
+    def _load_single_dc(
+        filters_by_dc,
+        wf_id,
+        dc_id,
+        token,
+        has_active_filters,
+        is_joined_dc,
+        constituent_dc_ids,
+        figure_dc_str,
+        select_columns,
+    ):
+        """
+        Load single data collection with optional filtering.
+
+        Args:
+            filters_by_dc: Dict[str, List[dict]] - Filters grouped by DC ID
+            wf_id: Workflow ID
+            dc_id: Data collection ID
+            token: Authentication token
+            has_active_filters: Whether any filters are active
+            is_joined_dc: Whether figure DC is a joined DC
+            constituent_dc_ids: Set of constituent DC IDs (for joined DCs)
+            figure_dc_str: Figure DC ID as string
+            select_columns: List of columns to select for projection
+
+        Returns:
+            pl.DataFrame: Loaded dataframe
+        """
+        from bson import ObjectId
+
+        from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+        logger.debug("Same-DC filtering: loading single DC")
+
+        # Collect relevant filters
+        if is_joined_dc and constituent_dc_ids:
+            relevant_filters = []
+            for constituent_dc in constituent_dc_ids:
+                relevant_filters.extend(filters_by_dc.get(constituent_dc, []))
+            logger.debug(
+                "Joined DC: collected %d filters from %d constituents",
+                len(relevant_filters),
+                len(constituent_dc_ids),
+            )
+        else:
+            relevant_filters = filters_by_dc.get(figure_dc_str, [])
+            logger.debug("Regular DC: collected %d filters", len(relevant_filters))
+
+        # Prepare metadata for loading
+        if has_active_filters:
+            active_filters = [
+                c for c in relevant_filters if c.get("value") not in [None, [], "", False]
+            ]
+            logger.debug("Applying %d active filters to figure DC", len(active_filters))
+            metadata_to_pass = active_filters
+        else:
+            logger.debug("Loading ALL unfiltered data (clearing filters)")
+            metadata_to_pass = []
+
+        # Handle joined DC IDs (don't convert to ObjectId if it contains "--")
+        if is_joined_dc:
+            df = load_deltatable_lite(
+                ObjectId(wf_id),
+                dc_id,  # Keep as string for joined DCs
+                metadata=metadata_to_pass,
+                TOKEN=token,
+                select_columns=select_columns,
+            )
+        else:
+            df = load_deltatable_lite(
+                ObjectId(wf_id),
+                ObjectId(dc_id),
+                metadata=metadata_to_pass,
+                TOKEN=token,
+                select_columns=select_columns,
+            )
+
+        logger.debug("Loaded single DC: %d rows × %d cols", df.height, df.width)
+        return df
+
+    def _apply_code_preprocessing(code_content, df):
+        """
+        Apply code preprocessing to filtered data (code mode only).
+
+        Args:
+            code_content: User's code content
+            df: Input dataframe
+
+        Returns:
+            pl.DataFrame: Preprocessed dataframe (or original if preprocessing fails/not needed)
+        """
+        logger.debug("Code mode: executing preprocessing for filtered data")
+        try:
+            from .code_mode import analyze_constrained_code
+            from .simple_code_executor import SimpleCodeExecutor
+
+            analysis = analyze_constrained_code(code_content)
+            if analysis["is_valid"] and analysis["has_preprocessing"]:
+                executor = SimpleCodeExecutor()
+                success, df_preprocessed, message = executor.execute_preprocessing_only(
+                    code_content, df
+                )
+                if success and df_preprocessed is not None:
+                    logger.debug("Code preprocessing successful")
+                    return df_preprocessed
+                else:
+                    logger.warning("Code preprocessing failed: %s", message)
+            else:
+                logger.debug("No preprocessing needed")
+        except Exception as e:
+            logger.error("Code preprocessing error: %s", e)
+
+        return df
+
     # CALLBACK ARCHITECTURE: Interactive patching callback for parameter updates
     @app.callback(
         Output({"type": "graph", "index": MATCH}, "figure", allow_duplicate=True),
@@ -2270,31 +2684,22 @@ def register_callbacks_figure_component(app):
         if not filter_data or not current_figure or not metadata:
             raise dash.exceptions.PreventUpdate
 
-        logger.info("=" * 80)
-        logger.info("🔍 INTERACTIVE FILTERING: Processing component changes")
-        logger.info(f"📊 Component ID: {metadata.get('index', 'unknown')}")
+        logger.info("🔍 Interactive filtering: component %s", metadata.get("index", "unknown"))
 
         try:
-            # Extract interactive component values (range sliders, dropdowns, etc.)
-            interactive_components_values = filter_data.get("interactive_components_values", [])
+            from depictio.dash.modules.figure_component.utils import (
+                extract_needed_columns,
+                render_figure,
+            )
 
-            # RESET SUPPORT: Allow empty filter list to reload unfiltered data
-            # When reset button is clicked, store is cleared, triggering this callback with empty filters
-            if not interactive_components_values:
-                logger.info("🔄 RESET DETECTED: Empty filter list - reloading unfiltered data")
-            else:
-                logger.info(f"📝 Detected {len(interactive_components_values)} interactive filters")
-
-            # NOTE: has_active_filters determination moved AFTER DC filtering
-            # to ensure we only check filters relevant to the current figure DC
-
-            # Get workflow and data collection info
-            TOKEN = local_data.get("access_token") if local_data else None
+            # Extract context
+            interactive_values = filter_data.get("interactive_components_values", [])
+            token = local_data.get("access_token") if local_data else None
             wf_id = metadata.get("wf_id")
             dc_id = metadata.get("dc_id")
             theme = metadata.get("theme", "light")
             mode = metadata.get("mode", "ui")
-            code_content = metadata.get("code_content")  # Retrieve code_content for code mode
+            code_content = metadata.get("code_content")
             visu_type = metadata.get("visu_type", "scatter")
             current_params = metadata.get("dict_kwargs", {})
 
@@ -2302,435 +2707,88 @@ def register_callbacks_figure_component(app):
                 logger.warning("Missing workflow/DC IDs for interactive filtering")
                 raise dash.exceptions.PreventUpdate
 
-            from bson import ObjectId
+            # 1. Extract and group filters
+            filters_by_dc, interactive_dict = _extract_and_group_filters(interactive_values)
 
-            from depictio.api.v1.deltatables_utils import load_deltatable_lite
-            from depictio.dash.modules.figure_component.utils import (
-                extract_needed_columns,
-                render_figure,
-            )
+            # 2. Filter relevant DCs
+            filters_by_dc = _filter_relevant_dcs(filters_by_dc, dc_id, wf_id, token)
 
-            # Build interactive components dict and group filters by DC
-            # Format: {"column_name": value} from interactive_components_values
-            interactive_components_dict = {}
-            filters_by_dc = {}  # Group filters by DC ID for multi-DC joins
-
-            for component in interactive_components_values:
-                column_name = component.get("metadata", {}).get("column_name")
-                component_dc_id = component.get("metadata", {}).get("dc_id")
-                if column_name:
-                    interactive_components_dict[column_name] = component.get("value")
-                    # Group filters by DC
-                    if component_dc_id:
-                        dc_key = str(component_dc_id)
-                        if dc_key not in filters_by_dc:
-                            filters_by_dc[dc_key] = []
-                        filters_by_dc[dc_key].append(component)
-
-            logger.info(
-                f"🔍 Extracted {len(interactive_components_dict)} filter columns: {list(interactive_components_dict.keys())}"
-            )
-            logger.info(f"📋 Filters span {len(filters_by_dc)} DC(s): {list(filters_by_dc.keys())}")
-
-            # Filter out unrelated DCs that have no join relationship with figure DC
-            # This prevents cross-contamination where filters from unrelated DCs
-            # incorrectly trigger join operations
-            from depictio.api.v1.deltatables_utils import get_join_tables
-
-            figure_dc_str = str(dc_id)
-
-            # DEBUG: Log the figure DC and all filter DCs for comparison
-            logger.info(f"🎯 Figure component DC: {figure_dc_str}")
-            logger.info(f"🔍 Filter DCs before validation: {list(filters_by_dc.keys())}")
-
-            # Fetch join tables to validate DC relationships
-            join_tables_for_wf = get_join_tables(str(wf_id), TOKEN)
-            workflow_joins = join_tables_for_wf.get(str(wf_id), {})
-
-            # Keep only filter DCs that have a join relationship with figure DC
-            relevant_filters_by_dc = {}
-            filtered_out_dcs = []
-
-            for filter_dc_id, filters in filters_by_dc.items():
-                # DEBUG: Show exact comparison
-                logger.debug(
-                    f"🔍 Comparing: filter_dc={filter_dc_id} vs figure_dc={figure_dc_str}, equal={filter_dc_id == figure_dc_str}"
-                )
-
-                if filter_dc_id == figure_dc_str:
-                    # Same DC - always relevant
-                    relevant_filters_by_dc[filter_dc_id] = filters
-                    logger.debug(f"✅ Including filter DC {filter_dc_id} (same as figure DC)")
-                else:
-                    # Check if join relationship exists
-                    join_key1 = f"{figure_dc_str}--{filter_dc_id}"
-                    join_key2 = f"{filter_dc_id}--{figure_dc_str}"
-
-                    logger.debug(f"🔍 Checking joins: {join_key1} or {join_key2}")
-                    logger.debug(f"🔍 Available joins: {list(workflow_joins.keys())}")
-
-                    if join_key1 in workflow_joins or join_key2 in workflow_joins:
-                        relevant_filters_by_dc[filter_dc_id] = filters
-                        logger.debug(
-                            f"✅ Including filter DC {filter_dc_id} (has join with figure DC)"
-                        )
-                    else:
-                        filtered_out_dcs.append(filter_dc_id)
-                        logger.debug(
-                            f"🚫 Excluding filter DC {filter_dc_id} (no join with figure DC)"
-                        )
-
-            if filtered_out_dcs:
-                logger.info(
-                    f"🚫 Filtered out {len(filtered_out_dcs)} unrelated DC(s): {filtered_out_dcs}"
-                )
-
-            # Replace filters_by_dc with filtered version
-            filters_by_dc = relevant_filters_by_dc
-
-            # Always log the result of filtering, even if empty
-            if filters_by_dc:
-                logger.info(
-                    f"✅ Relevant filters: {len(filters_by_dc)} DC(s): {list(filters_by_dc.keys())}"
-                )
-            else:
-                logger.info(
-                    f"ℹ️  No relevant filters remain after filtering for figure DC {figure_dc_str}"
-                )
-
-            # Rebuild interactive_components_dict with only columns from relevant DCs
+            # 2b. Rebuild interactive_dict with only columns from relevant DCs
             # This prevents trying to load columns from filtered-out DCs
-            relevant_interactive_components_dict = {}
+            interactive_dict = {}
             for dc_filters in filters_by_dc.values():
                 for component in dc_filters:
                     column_name = component.get("metadata", {}).get("column_name")
                     if column_name:
-                        relevant_interactive_components_dict[column_name] = component.get("value")
+                        interactive_dict[column_name] = component.get("value")
 
-            logger.debug(
-                f"🔍 Column filtering: "
-                f"ALL={list(interactive_components_dict.keys())}, "
-                f"RELEVANT={list(relevant_interactive_components_dict.keys())}"
+            # 3. Check for active filters
+            has_active = _check_active_filters(filters_by_dc)
+            logger.info("Filtering mode: %s", "filtered" if has_active else "unfiltered")
+
+            # 4. Determine join strategy
+            requires_join, is_joined, constituents = _determine_join_strategy(
+                filters_by_dc, str(dc_id)
             )
 
-            # Replace with filtered version to prevent ColumnNotFoundError
-            interactive_components_dict = relevant_interactive_components_dict
+            # 5. Load data
+            if requires_join:
+                # Get join config from first component
+                first_component = interactive_values[0] if interactive_values else {}
+                dc_config = first_component.get("metadata", {}).get("dc_config", {})
+                join_config = dc_config.get("join", {})
 
-            # Determine if RELEVANT filters have active (non-empty) values
-            # This check happens AFTER filtering unrelated DCs to avoid false positives
-            has_active_filters = False
-            for dc_filters in filters_by_dc.values():
-                for component in dc_filters:
-                    value = component.get("value")
-                    # Check if value is non-empty (list, string, number, etc.)
-                    if value is not None and value != [] and value != "" and value is not False:
-                        has_active_filters = True
-                        break
-                if has_active_filters:
-                    break
-
-            if has_active_filters:
-                logger.info("🔍 Active RELEVANT filters detected - loading filtered data")
+                df = _load_and_join_data(
+                    filters_by_dc,
+                    wf_id,
+                    token,
+                    has_active,
+                    is_joined,
+                    constituents,
+                    str(dc_id),
+                    metadata,
+                    join_config,
+                )
             else:
-                logger.info("🔄 No active RELEVANT filters - loading ALL unfiltered data")
-
-            # AUTO-DETECT: Determine if we need to join DCs
-            # Three scenarios:
-            # 1. Same-DC: Figure's DC has filters → Apply filters directly
-            # 2. Joined-DC with constituent filters: Figure DC is "A--B", filters on A or B → Direct filtering
-            # 3. Joined-DC: Figure's DC is joined with DC(s) that have filters → Manual join needed
-
-            # Detect if figure DC is a joined DC (contains "--")
-            is_joined_dc = isinstance(figure_dc_str, str) and "--" in figure_dc_str
-            constituent_dc_ids = set(figure_dc_str.split("--")) if is_joined_dc else set()
-
-            # For joined DCs, check if filters target constituent DCs
-            if is_joined_dc:
-                logger.debug(f"🔗 Figure DC {figure_dc_str} is a joined DC")
-                filter_dc_ids = set(filters_by_dc.keys())
-                all_filters_on_constituents = filter_dc_ids.issubset(constituent_dc_ids)
-                has_filters_for_figure_dc = all_filters_on_constituents
-                logger.debug(f"🔗 Joined DC detected: {figure_dc_str}")
-                logger.debug(f"   Constituent DCs: {constituent_dc_ids}")
-                logger.debug(f"   Filter DCs: {filter_dc_ids}")
-                logger.debug(f"   All filters on constituents: {all_filters_on_constituents}")
-            else:
-                logger.debug(f"📂 Figure DC {figure_dc_str} is a regular DC")
-                logger.debug(f"   Filter DCs: {list(filters_by_dc.keys())}")
-                logger.debug(f"   Figure DC: {figure_dc_str}")
-                has_filters_for_figure_dc = figure_dc_str in filters_by_dc
-                all_filters_on_constituents = False
-
-            # Check if figure DC is joined with any filter DCs
-            # Get join config to check DC relationships
-            first_component = (
-                interactive_components_values[0] if interactive_components_values else {}
-            )
-            dc_config = first_component.get("metadata", {}).get("dc_config", {})
-            join_config = dc_config.get("join", {})
-
-            # Determine if we need to perform a manual join
-            needs_join = False
-            if not has_filters_for_figure_dc and len(filters_by_dc) > 0:
-                # OPTIMIZATION: For joined DCs with filters on constituent DCs,
-                # skip manual join (load_deltatable_lite handles it internally)
-                if is_joined_dc and all_filters_on_constituents:
-                    needs_join = False
-                    logger.info(
-                        "✅ Joined DC with constituent filters - using direct filtering (no manual join needed)"
-                    )
-                else:
-                    # Filters are on different DC(s) - need manual join
-                    needs_join = True
-                    logger.info("🔍 Filters on different DC(s), manual join required")
-
-            logger.debug(f"🔍 Figure DC: {figure_dc_str}")
-            logger.debug(f"🔍 Has filters for figure DC: {has_filters_for_figure_dc}")
-            logger.debug(f"🔍 Needs join: {needs_join}")
-
-            # Determine if manual join is needed
-            # For joined DCs with constituent filters from multiple DCs, use manual join
-            # to apply filters separately to each DC before joining
-            requires_manual_join = (needs_join or len(filters_by_dc) > 1) and not (
-                is_joined_dc and all_filters_on_constituents and len(filters_by_dc) == 1
-            )
-
-            logger.info(
-                f"🔀 CODE PATH DECISION: requires_manual_join={requires_manual_join}, filters_by_dc_count={len(filters_by_dc)}"
-            )
-
-            if requires_manual_join:
-                logger.debug(
-                    f"🔗 MULTI-DC FILTERING: Loading and joining DCs "
-                    f"({len(filters_by_dc)} filter DC(s))"
+                select_cols = extract_needed_columns(
+                    current_params,
+                    trace_metadata,
+                    interactive_dict,
+                    None,
+                )
+                df = _load_single_dc(
+                    filters_by_dc,
+                    wf_id,
+                    dc_id,
+                    token,
+                    has_active,
+                    is_joined,
+                    constituents,
+                    str(dc_id),
+                    select_cols,
                 )
 
-                from depictio.api.v1.deltatables_utils import merge_multiple_dataframes
+            logger.info("Loaded %d rows × %d cols", df.height, df.width)
 
-                # For joined DCs, get join config from the joined DC's metadata
-                # For regular multi-DC scenarios, use component metadata join config
-                if is_joined_dc:
-                    # Get join config from the joined DC structure
-                    # The joined DC already encodes the join relationship
-                    constituent_list = list(constituent_dc_ids)
-                    join_config_to_use = {
-                        "on_columns": ["sample_id"],  # Common join column for joined DCs
-                        "how": "inner",
-                    }
-                    logger.debug(
-                        f"📋 Using inferred join config for joined DC: {join_config_to_use}"
-                    )
-
-                    # Ensure all constituent DCs are in filters_by_dc (even if no filters)
-                    for constituent_dc in constituent_list:
-                        if constituent_dc not in filters_by_dc:
-                            filters_by_dc[constituent_dc] = []
-                            logger.debug(
-                                f"📂 Adding constituent DC {constituent_dc} to join (no filters)"
-                            )
-                else:
-                    # Regular multi-DC join
-                    if not join_config or not join_config.get("on_columns"):
-                        raise Exception("Join required but no join config found")
-                    join_config_to_use = join_config
-
-                    # Include figure's DC in the join if it's not already in filters_by_dc
-                    if figure_dc_str not in filters_by_dc:
-                        logger.debug(f"📂 Adding figure DC {figure_dc_str} to join (no filters)")
-                        filters_by_dc[figure_dc_str] = []
-
-                # Extract DC metatypes from component metadata (already cached in Store)
-                # This avoids additional API calls by using existing cached dc_config
-                dc_metatypes = {}
-                for dc_key, dc_filters in filters_by_dc.items():
-                    # Try to get metatype from any component in this DC
-                    if dc_filters:
-                        component_dc_config = dc_filters[0].get("metadata", {}).get("dc_config", {})
-                        metatype = component_dc_config.get("metatype")
-                        if metatype:
-                            dc_metatypes[dc_key] = metatype
-                            logger.debug(
-                                f"📋 DC {dc_key} metatype: {metatype} (from cached metadata)"
-                            )
-
-                # If figure DC not in filters_by_dc, get its metatype from metadata State
-                if figure_dc_str not in dc_metatypes and metadata:
-                    figure_dc_config = metadata.get("dc_config", {})
-                    figure_metatype = figure_dc_config.get("metatype")
-                    if figure_metatype:
-                        dc_metatypes[figure_dc_str] = figure_metatype
-                        logger.debug(
-                            f"📋 Figure DC {figure_dc_str} metatype: {figure_metatype} (from figure metadata)"
-                        )
-
-                # Load each DC with all columns (rely on cache for performance)
-                # FIX: When clearing filters, pass empty metadata to load ALL data
-                # When applying filters, only pass components with non-empty values
-                dataframes = {}
-                for dc_key, dc_filters in filters_by_dc.items():
-                    if has_active_filters:
-                        # Filter out components with empty values (only pass actual filters)
-                        active_filters = [
-                            c for c in dc_filters if c.get("value") not in [None, [], "", False]
-                        ]
-                        logger.info(
-                            f"📂 Loading DC {dc_key} with {len(active_filters)} active filters (all columns)"
-                        )
-                        metadata_to_pass = active_filters
-                    else:
-                        # Clearing filters - load ALL unfiltered data
-                        logger.info(f"📂 Loading DC {dc_key} with NO filters (clearing)")
-                        metadata_to_pass = []
-
-                    dc_df = load_deltatable_lite(
-                        ObjectId(wf_id),
-                        ObjectId(dc_key),
-                        metadata=metadata_to_pass,
-                        TOKEN=TOKEN,
-                        select_columns=None,  # Load all columns, rely on cache
-                    )
-                    dataframes[dc_key] = dc_df
-                    logger.info(f"   Loaded {dc_df.height:,} rows × {dc_df.width} columns")
-
-                # Build join instructions for merge_multiple_dataframes
-                dc_ids = sorted(filters_by_dc.keys())
-                join_instructions = [
-                    {
-                        "left": dc_ids[0],
-                        "right": dc_ids[1],
-                        "how": join_config_to_use.get("how", "inner"),
-                        "on": join_config_to_use.get("on_columns", []),
-                    }
-                ]
-
-                logger.info(f"🔗 Joining DCs: {join_instructions}")
-                logger.info(f"📋 DC metatypes for join: {dc_metatypes}")
-
-                # Merge DataFrames with table type awareness
-                df = merge_multiple_dataframes(
-                    dataframes=dataframes,
-                    join_instructions=join_instructions,
-                    dc_metatypes=dc_metatypes,
-                )
-
-                logger.info(f"📊 Joined result: {df.height:,} rows × {df.width} columns")
-
-            else:
-                logger.debug("📄 SAME-DC FILTERING: Loading single DC with filters")
-                # SAME-DC or JOINED-DC with constituent filters: Apply filters directly
-                # For joined DCs, collect filters from all constituent DCs
-                if is_joined_dc and constituent_dc_ids:
-                    # Collect filters from all constituent DCs
-                    relevant_filters = []
-                    for constituent_dc in constituent_dc_ids:
-                        relevant_filters.extend(filters_by_dc.get(constituent_dc, []))
-                    logger.info(
-                        f"🔗 Joined DC: Collected {len(relevant_filters)} filters from {len(constituent_dc_ids)} constituent DCs"
-                    )
-                else:
-                    # Regular same-DC filtering
-                    logger.info("📂 Regular same-DC filtering")
-                    relevant_filters = filters_by_dc.get(figure_dc_str, [])
-                    logger.info(
-                        f"📂 Collected {len(relevant_filters)} filters for DC {figure_dc_str}"
-                    )
-
-                # FIX: When clearing filters, pass empty metadata to load ALL data
-                # When applying filters, only pass components with non-empty values
-                if has_active_filters:
-                    # Filter out components with empty values (only pass actual filters)
-                    active_filters = [
-                        c for c in relevant_filters if c.get("value") not in [None, [], "", False]
-                    ]
-                    logger.info(
-                        f"📄 SAME-DC filtering - applying {len(active_filters)} active filters to figure DC"
-                    )
-                    metadata_to_pass = active_filters
-                else:
-                    # Clearing filters - load ALL unfiltered data
-                    logger.info("📄 SAME-DC clearing filters - loading ALL unfiltered data")
-                    metadata_to_pass = []
-
-                select_columns = extract_needed_columns(
-                    new_params=current_params,
-                    trace_metadata=trace_metadata,
-                    interactive_components=interactive_components_dict,
-                    join_columns=None,
-                )
-
-                logger.info(
-                    f"📂 Loading data: {wf_id}:{dc_id} "
-                    f"({len(metadata_to_pass)} filters, {len(select_columns)} columns)"
-                )
-                logger.debug(f"📋 metadata_to_pass content: {metadata_to_pass}")
-                logger.info(
-                    f"🎯 ABOUT TO CALL load_deltatable_lite: metadata_len={len(metadata_to_pass)}, dc_id={dc_id}"
-                )
-
-                # Handle joined DC IDs (don't convert to ObjectId if it contains "--")
-                if is_joined_dc:
-                    df = load_deltatable_lite(
-                        ObjectId(wf_id),
-                        dc_id,  # Keep as string for joined DCs
-                        metadata=metadata_to_pass,
-                        TOKEN=TOKEN,
-                        select_columns=select_columns,
-                    )
-                else:
-                    df = load_deltatable_lite(
-                        ObjectId(wf_id),
-                        ObjectId(dc_id),
-                        metadata=metadata_to_pass,
-                        TOKEN=TOKEN,
-                        select_columns=select_columns,
-                    )
-
-            logger.info(f"✅ LOAD COMPLETE: Received {df.height:,} rows × {df.width} columns")
-            logger.info(f"📊 Loaded {df.height:,} rows × {df.width} columns after filtering")
-
-            # Handle code mode preprocessing (if applicable)
+            # 6. Code preprocessing if needed
             if mode == "code" and code_content:
-                logger.info("🔄 CODE MODE: Executing preprocessing for filtered data")
-                try:
-                    from .code_mode import analyze_constrained_code
-                    from .simple_code_executor import SimpleCodeExecutor
+                df = _apply_code_preprocessing(code_content, df)
 
-                    analysis = analyze_constrained_code(code_content)
-                    if analysis["is_valid"] and analysis["has_preprocessing"]:
-                        executor = SimpleCodeExecutor()
-                        success, df_preprocessed, message = executor.execute_preprocessing_only(
-                            code_content, df
-                        )
-                        if success and df_preprocessed is not None:
-                            df = df_preprocessed
-                            logger.info("✅ CODE MODE: Preprocessing successful for filtered data")
-                        else:
-                            logger.warning(f"⚠️ CODE MODE: Preprocessing failed: {message}")
-                except Exception as e:
-                    logger.error(f"❌ CODE MODE: Preprocessing error: {e}")
-
-            # Re-render figure with filtered data
-            logger.info("🎨 Re-rendering figure with filtered data...")
+            # 7. Render figure
             new_figure = render_figure(current_params, visu_type, df, theme=theme, mode=mode)
 
-            # Mark figure as patched (for reset detection)
+            # Mark filter state
             if isinstance(new_figure, dict):
-                if "layout" not in new_figure:
-                    new_figure["layout"] = {}
-                new_figure["layout"]["_depictio_filter_applied"] = has_active_filters
+                new_figure.setdefault("layout", {})["_depictio_filter_applied"] = has_active
 
-            logger.info("✅ INTERACTIVE FILTERING COMPLETE: Figure updated with filtered data")
-            logger.info("=" * 80)
+            logger.info("✅ Filtering complete")
             return new_figure
 
         except dash.exceptions.PreventUpdate:
-            # Re-raise PreventUpdate without logging as error
             raise
         except Exception as e:
-            logger.error(f"❌ INTERACTIVE FILTERING FAILED: {e}")
-            logger.exception("Full traceback:")
-            logger.info("=" * 80)
-            # Return current figure unchanged on error
+            logger.error("Filtering failed: %s", e)
+            logger.debug("Full traceback:", exc_info=True)
             raise dash.exceptions.PreventUpdate
 
 
