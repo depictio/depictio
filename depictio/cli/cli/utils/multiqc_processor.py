@@ -23,16 +23,20 @@ def extract_multiqc_metadata(parquet_path: str) -> Dict[str, Any]:
     1. multiqc.reset() to clear state
     2. multiqc.parse_logs(parquet_path) to load parquet file
     3. Use list_samples(), list_modules(), list_plots() to extract metadata
+    4. Build sample mappings for canonical ID to variants
 
     Args:
         parquet_path: Path to the MultiQC parquet file
 
     Returns:
-        Dict containing samples, modules, and plots extracted from parquet
+        Dict containing samples, modules, plots, sample_mappings, and canonical_samples
     """
     try:
         # Import multiqc here to avoid dependency issues if not installed
         import multiqc
+
+        # Import sample mapping utility
+        from depictio.api.v1.endpoints.multiqc_endpoints.utils import build_sample_mapping
 
         logger.info(f"Extracting MultiQC metadata from: {parquet_path}")
 
@@ -59,15 +63,22 @@ def extract_multiqc_metadata(parquet_path: str) -> Dict[str, Any]:
             logger.warning(f"Could not extract plots from MultiQC parquet: {e}")
             plots = {}
 
+        # Build sample mappings from canonical IDs to variants
+        sample_mappings = build_sample_mapping(samples)
+        canonical_samples = list(sample_mappings.keys())
+
         metadata = {
             "samples": samples,
             "modules": modules,
             "plots": plots,
+            "sample_mappings": sample_mappings,
+            "canonical_samples": canonical_samples,
             "multiqc_version": multiqc_version,
         }
 
         logger.info(
-            f"Extracted metadata: {len(samples)} samples, {len(modules)} modules, {len(plots)} plot groups"
+            f"Extracted metadata: {len(samples)} samples, {len(canonical_samples)} canonical IDs, "
+            f"{len(modules)} modules, {len(plots)} plot groups"
         )
         if multiqc_version:
             logger.info(f"MultiQC version: {multiqc_version}")
