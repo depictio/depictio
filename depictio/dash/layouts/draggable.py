@@ -34,7 +34,7 @@ from depictio.dash.utils import (
 )
 
 # Get component dimensions from centralized metadata
-# Adjusted for 12-column grid with rowHeight=50 - optimized dimensions per component type
+# Adjusted for 48-column grid with rowHeight=20 - ultra-fine precision for component placement
 component_dimensions = get_component_dimensions_dict()
 # No longer using breakpoints - working with direct list format
 
@@ -46,12 +46,12 @@ def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
         f"🔄 CALCULATE_NEW_LAYOUT_POSITION CALLED: {child_type} with {n} existing components"
     )
     dimensions = component_dimensions.get(
-        child_type, {"w": 6, "h": 8}
-    )  # Default 6x8 for 12-column grid with rowHeight=50
+        child_type, {"w": 24, "h": 20}
+    )  # Default 24x20 for 48-column grid with rowHeight=20
     logger.info(f"📐 Selected dimensions: {dimensions} for {child_type}")
     logger.info(f"📋 Existing layouts: {existing_layouts}")
 
-    columns_per_row = 12  # Updated for 12-column grid
+    columns_per_row = 48  # Updated for 48-column grid
     components_per_row = columns_per_row // dimensions["w"]
     if components_per_row == 0:
         components_per_row = 1
@@ -88,8 +88,8 @@ def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
                     if isinstance(layout, dict):
                         existing_x = layout.get("x", 0)
                         existing_y = layout.get("y", 0)
-                        existing_w = layout.get("w", 6)  # Use 12-column grid compatible default
-                        existing_h = layout.get("h", 8)  # Use rowHeight=50 compatible default
+                        existing_w = layout.get("w", 24)  # Use 48-column grid compatible default
+                        existing_h = layout.get("h", 20)  # Use rowHeight=20 compatible default
 
                         existing_x_range = set(range(existing_x, existing_x + existing_w))
                         existing_y_range = set(range(existing_y, existing_y + existing_h))
@@ -165,7 +165,7 @@ def fix_responsive_scaling(layout_data, metadata_list):
         if meta.get("index") and meta.get("component_type"):
             comp_id = f"box-{meta['index']}"
             comp_type = meta["component_type"]
-            default_dims = component_dimensions.get(comp_type, {"w": 6, "h": 8})
+            default_dims = component_dimensions.get(comp_type, {"w": 24, "h": 20})
             expected_dimensions[comp_id] = default_dims
 
     fixed_layouts = []
@@ -227,15 +227,15 @@ def clean_layout_data(layouts):
                 logger.warning(f"Filtering out corrupted layout entry (path-like ID): {layout_id}")
                 continue
 
-            # Check for invalid dimensions or positions (outside 12-column grid)
+            # Check for invalid dimensions or positions (outside 48-column grid)
             x = layout.get("x", 0)
             w = layout.get("w", 0)
 
             # Filter out layouts that:
-            # 1. Have x position >= 12 (outside grid)
-            # 2. Have width > 12 (too wide for grid)
-            # 3. Have x + width > 12 (extend beyond grid)
-            if x >= 12 or w > 12 or (x + w > 12 and x > 0):
+            # 1. Have x position >= 48 (outside grid)
+            # 2. Have width > 48 (too wide for grid)
+            # 3. Have x + width > 48 (extend beyond grid)
+            if x >= 48 or w > 48 or (x + w > 48 and x > 0):
                 logger.warning(
                     f"Filtering out layout entry with invalid position/size: ID={layout_id}, x={x}, w={w}"
                 )
@@ -582,28 +582,28 @@ def register_callbacks_draggable(app):
             },
             "id",
         ),
-        Input(
+        State(
             {
                 "type": "interactive-component-value",
                 "index": ALL,
             },
             "value",
         ),
-        Input(
+        State(
             {
                 "type": "graph",
                 "index": ALL,
             },
             "selectedData",
         ),
-        Input(
+        State(
             {
                 "type": "graph",
                 "index": ALL,
             },
             "clickData",
         ),
-        Input(
+        State(
             {
                 "type": "graph",
                 "index": ALL,
@@ -636,7 +636,6 @@ def register_callbacks_draggable(app):
         State("draggable", "currentLayout"),
         Input("draggable", "currentLayout"),
         State("stored-draggable-layouts", "data"),
-        Input("stored-draggable-layouts", "data"),
         Input(
             {"type": "remove-box-button", "index": ALL},
             "n_clicks",
@@ -677,11 +676,11 @@ def register_callbacks_draggable(app):
             "n_clicks",
         ),
         Input("reset-all-filters-button", "n_clicks"),
-        Input("remove-all-components-button", "n_clicks"),
+        State("remove-all-components-button", "n_clicks"),
         State("interactive-values-store", "data"),
         State("live-interactivity-toggle", "checked"),
         State("unified-edit-mode-button", "checked"),
-        Input("unified-edit-mode-button", "checked"),
+        # Input("unified-edit-mode-button", "checked"),
         State("url", "pathname"),
         State("local-store", "data"),
         State("theme-store", "data"),
@@ -747,7 +746,7 @@ def register_callbacks_draggable(app):
         draggable_layouts,
         input_draggable_layouts,
         state_stored_draggable_layouts,
-        input_stored_draggable_layouts,
+        # input_stored_draggable_layouts,
         remove_box_button_values,
         edit_box_button_values,
         tmp_edit_component_metadata_values,
@@ -759,7 +758,7 @@ def register_callbacks_draggable(app):
         interactive_values_store,
         toggle_interactivity_button,
         unified_edit_mode_button,
-        input_unified_edit_mode_button,
+        # input_unified_edit_mode_button,
         pathname,
         local_data,
         theme_store,  # State parameter for theme data
@@ -2045,7 +2044,7 @@ def register_callbacks_draggable(app):
                 # DEBUG: Check for responsive scaling in existing layouts
                 logger.debug("🔍 RESPONSIVE DEBUG - Checking existing layouts after fixes:")
                 expected_dims = component_dimensions.get(
-                    metadata["component_type"], {"w": 6, "h": 8}
+                    metadata["component_type"], {"w": 24, "h": 20}
                 )
                 logger.debug(
                     f"🔍 RESPONSIVE DEBUG - Expected dimensions for {metadata['component_type']}: {expected_dims}"
@@ -2082,8 +2081,8 @@ def register_callbacks_draggable(app):
                     )
 
                     # Find a collision-free position near the original component
-                    original_w = original_layout.get("w", 6)
-                    original_h = original_layout.get("h", 8)
+                    original_w = original_layout.get("w", 24)
+                    original_h = original_layout.get("h", 20)
 
                     # Simple approach: just place the duplicate below all existing components
                     # Find the bottom-most position of all existing components
@@ -2126,7 +2125,7 @@ def register_callbacks_draggable(app):
                 logger.debug(f"🔍 DUPLICATE DEBUG - Component type: {metadata['component_type']}")
                 logger.debug(f"🔍 DUPLICATE DEBUG - New layout created: {new_layout}")
                 logger.debug(
-                    f"🔍 DUPLICATE DEBUG - Expected dimensions for {metadata['component_type']}: {component_dimensions.get(metadata['component_type'], {'w': 6, 'h': 8})}"
+                    f"🔍 DUPLICATE DEBUG - Expected dimensions for {metadata['component_type']}: {component_dimensions.get(metadata['component_type'], {'w': 24, 'h': 20})}"
                 )
 
                 # Create the new component using render_raw_children to ensure proper setup
@@ -2569,6 +2568,19 @@ def register_callbacks_draggable(app):
             f"🎯 Current store has {len(current_store_data.get('interactive_components_values', [])) if current_store_data else 0} existing components"
         )
 
+        # Guard clause: Prevent spurious updates on initialization
+        # If no actual user interaction occurred (e.g., reset button with value 0, empty component lists)
+        # Return no_update to prevent triggering save callback unnecessarily
+        if not interactive_triggered and not reset_action_performed:
+            # Check if we have any stored interactive metadata (i.e., interactive components exist)
+            has_interactive_components = bool(stored_metadata_interactive)
+
+            if not has_interactive_components:
+                logger.info(
+                    "🔴 GUARD: No interactive components - skipping store update to prevent spurious save"
+                )
+                return dash.no_update, dash.no_update
+
         # TODO: Re-enable graph interactions later
         # # Check if we have any actual graph data to process (needed early for filter preservation logic)
         # has_actual_graph_data = False
@@ -2905,168 +2917,167 @@ def register_callbacks_draggable(app):
             # Keep layout consistent - CSS handles button visibility, not DashGridLayout properties
             return False, False, "draggable-grid-container drag-handles-hidden"
 
-    @app.callback(
-        Output("draggable-wrapper", "children"),
-        [
-            Input("unified-edit-mode-button", "checked"),
-        ],
-        [
-            State("local-store", "data"),
-            State("draggable", "children"),
-        ],
-        prevent_initial_call=True,
-    )
-    def update_empty_dashboard_wrapper(edit_mode_enabled, local_data, current_draggable_items):
-        """Update draggable wrapper to show empty state messages when dashboard is empty"""
-        logger.info(f"🔄 Updating draggable wrapper - Edit mode: {edit_mode_enabled}")
-        logger.info(
-            f"🔄 Current draggable items: {len(current_draggable_items) if current_draggable_items else 0}"
-        )
+    # @app.callback(
+    #     Output("draggable-wrapper", "children"),
+    #     [
+    #         Input("unified-edit-mode-button", "checked"),
+    #     ],
+    #     [
+    #         State("local-store", "data"),
+    #         State("draggable", "children"),
+    #     ],
+    #     prevent_initial_call=False,
+    # )
+    # def update_empty_dashboard_wrapper(edit_mode_enabled, local_data, current_draggable_items):
+    #     """Update draggable wrapper to show empty state messages when dashboard is empty"""
+    #     logger.info(f"🔄 update_empty_dashboard_wrapper triggered - Edit mode: {edit_mode_enabled}")
+    #     logger.info(f"🔄 Trigger: {ctx.triggered_id}, Current items: {len(current_draggable_items) if current_draggable_items else 0}")
+    #     return html.Div(id="draggable")
 
-        # Check if dashboard has stored components in database (more reliable than current_draggable_items)
-        stored_children_data = local_data.get("stored_children_data", []) if local_data else []
-        stored_layout_data = local_data.get("stored_layout_data", []) if local_data else []
+    #     # Guard clause: If dashboard has stored components, always keep the draggable (don't show empty state)
+    #     # This prevents showing empty state during initial load when components are being populated
+    #     stored_children_data = local_data.get("stored_children_data", []) if local_data else []
+    #     stored_layout_data = local_data.get("stored_layout_data", []) if local_data else []
 
-        # If there are stored components or layouts, this is NOT an empty dashboard
-        if (stored_children_data and len(stored_children_data) > 0) or (
-            stored_layout_data and len(stored_layout_data) > 0
-        ):
-            logger.info(
-                f"Dashboard has stored components ({len(stored_children_data)} children, {len(stored_layout_data)} layouts) - keeping original draggable"
-            )
-            return dash.no_update
+    #     if (stored_children_data and len(stored_children_data) > 0) or (
+    #         stored_layout_data and len(stored_layout_data) > 0
+    #     ):
+    #         logger.info(
+    #             f"Dashboard has stored components ({len(stored_children_data)} children, {len(stored_layout_data)} layouts) - keeping original draggable"
+    #         )
+    #         return dash.no_update
 
-        # Also check current draggable items as secondary check
-        if current_draggable_items and len(current_draggable_items) > 0:
-            logger.info("Dashboard has current draggable items, keeping original draggable")
-            return dash.no_update
+    #     # Also check current draggable items as secondary check
+    #     if current_draggable_items and len(current_draggable_items) > 0:
+    #         logger.info("Dashboard has current draggable items, keeping original draggable")
+    #         return dash.no_update
 
-        if not local_data:
-            logger.info("No local data available, keeping original draggable")
-            return dash.no_update
+    #     if not local_data:
+    #         logger.info("No local data available, keeping original draggable")
+    #         return dash.no_update
 
-        logger.info(f"Truly empty dashboard - Edit mode: {edit_mode_enabled}")
+    #     logger.info(f"Truly empty dashboard - Edit mode: {edit_mode_enabled}")
 
-        if not edit_mode_enabled:
-            logger.info("🔵 Empty dashboard + Edit mode OFF - showing welcome message")
-            # Welcome message (blue theme) - now clickable to enable edit mode
-            welcome_message = html.Div(
-                dmc.Center(
-                    dmc.Paper(
-                        dmc.Stack(
-                            [
-                                dmc.Center(
-                                    DashIconify(
-                                        icon="material-symbols:edit-outline",
-                                        width=64,
-                                        height=64,
-                                        color=colors["blue"],
-                                    )
-                                ),
-                                dmc.Text(
-                                    "Your dashboard is empty",
-                                    size="xl",
-                                    fw="bold",
-                                    ta="center",
-                                    c=colors["blue"],
-                                    style={"color": f"var(--app-text-color, {colors['blue']})"},
-                                ),
-                                dmc.Text(
-                                    "Enable Edit Mode to start building your dashboard",
-                                    size="md",
-                                    ta="center",
-                                    c="gray",
-                                    style={"color": "var(--app-text-color, #666)"},
-                                ),
-                            ],
-                            gap="md",
-                            align="center",
-                        ),
-                        p="xl",
-                        radius="lg",
-                        shadow="sm",
-                        withBorder=True,
-                        style={
-                            "backgroundColor": "var(--app-surface-color, #ffffff)",
-                            "border": f"1px solid var(--app-border-color, {colors['blue']}20)",
-                            "maxWidth": "500px",
-                            "marginTop": "2rem",
-                            "transition": "transform 0.1s ease",
-                        },
-                    ),
-                    style={
-                        "height": "50vh",
-                        "display": "flex",
-                        "alignItems": "center",
-                        "justifyContent": "center",
-                    },
-                ),
-                id="welcome-message-clickable",
-                style={"cursor": "pointer"},
-            )
-            # Create empty draggable component for callbacks
-            empty_draggable = html.Div(id="draggable")
-            return [welcome_message, empty_draggable]
-        else:
-            logger.info("🧡 Empty dashboard + Edit mode ON - showing add component message")
-            # Add component message (orange theme) - now clickable to trigger add button
-            add_component_message = html.Div(
-                dmc.Center(
-                    dmc.Paper(
-                        dmc.Stack(
-                            [
-                                dmc.Center(
-                                    DashIconify(
-                                        icon="tabler:square-plus",
-                                        width=64,
-                                        height=64,
-                                        color=colors["orange"],
-                                    )
-                                ),
-                                dmc.Text(
-                                    "Add your first component",
-                                    size="xl",
-                                    fw="bold",
-                                    ta="center",
-                                    c=colors["orange"],
-                                    style={"color": f"var(--app-text-color, {colors['orange']})"},
-                                ),
-                                dmc.Text(
-                                    "Click here to choose from charts, tables, and more",
-                                    size="md",
-                                    ta="center",
-                                    c="gray",
-                                    style={"color": "var(--app-text-color, #666)"},
-                                ),
-                            ],
-                            gap="md",
-                            align="center",
-                        ),
-                        p="xl",
-                        radius="lg",
-                        shadow="sm",
-                        withBorder=True,
-                        style={
-                            "backgroundColor": "var(--app-surface-color, #ffffff)",
-                            "border": f"1px solid var(--app-border-color, {colors['orange']}20)",
-                            "maxWidth": "500px",
-                            "marginTop": "2rem",
-                            "transition": "transform 0.1s ease",
-                        },
-                    ),
-                    style={
-                        "height": "50vh",
-                        "display": "flex",
-                        "alignItems": "center",
-                        "justifyContent": "center",
-                    },
-                ),
-                id="add-component-message-clickable",
-                style={"cursor": "pointer"},
-            )
-            # Create empty draggable component for callbacks
-            empty_draggable = html.Div(id="draggable")
-            return [add_component_message, empty_draggable]
+    #     if not edit_mode_enabled:
+    #         logger.info("🔵 Empty dashboard + Edit mode OFF - showing welcome message")
+    #         # Welcome message (blue theme) - now clickable to enable edit mode
+    #         welcome_message = html.Div(
+    #             dmc.Center(
+    #                 dmc.Paper(
+    #                     dmc.Stack(
+    #                         [
+    #                             dmc.Center(
+    #                                 DashIconify(
+    #                                     icon="material-symbols:edit-outline",
+    #                                     width=64,
+    #                                     height=64,
+    #                                     color=colors["blue"],
+    #                                 )
+    #                             ),
+    #                             dmc.Text(
+    #                                 "Your dashboard is empty",
+    #                                 size="xl",
+    #                                 fw="bold",
+    #                                 ta="center",
+    #                                 c=colors["blue"],
+    #                                 style={"color": f"var(--app-text-color, {colors['blue']})"},
+    #                             ),
+    #                             dmc.Text(
+    #                                 "Enable Edit Mode to start building your dashboard",
+    #                                 size="md",
+    #                                 ta="center",
+    #                                 c="gray",
+    #                                 style={"color": "var(--app-text-color, #666)"},
+    #                             ),
+    #                         ],
+    #                         gap="md",
+    #                         align="center",
+    #                     ),
+    #                     p="xl",
+    #                     radius="lg",
+    #                     shadow="sm",
+    #                     withBorder=True,
+    #                     style={
+    #                         "backgroundColor": "var(--app-surface-color, #ffffff)",
+    #                         "border": f"1px solid var(--app-border-color, {colors['blue']}20)",
+    #                         "maxWidth": "500px",
+    #                         "marginTop": "2rem",
+    #                         "transition": "transform 0.1s ease",
+    #                     },
+    #                 ),
+    #                 style={
+    #                     "height": "50vh",
+    #                     "display": "flex",
+    #                     "alignItems": "center",
+    #                     "justifyContent": "center",
+    #                 },
+    #             ),
+    #             id="welcome-message-clickable",
+    #             style={"cursor": "pointer"},
+    #         )
+    #         # Create empty draggable component for callbacks
+    #         empty_draggable = html.Div(id="draggable")
+    #         return [welcome_message, empty_draggable]
+    #     else:
+    #         logger.info("🧡 Empty dashboard + Edit mode ON - showing add component message")
+    #         # Add component message (orange theme) - now clickable to trigger add button
+    #         add_component_message = html.Div(
+    #             dmc.Center(
+    #                 dmc.Paper(
+    #                     dmc.Stack(
+    #                         [
+    #                             dmc.Center(
+    #                                 DashIconify(
+    #                                     icon="tabler:square-plus",
+    #                                     width=64,
+    #                                     height=64,
+    #                                     color=colors["orange"],
+    #                                 )
+    #                             ),
+    #                             dmc.Text(
+    #                                 "Add your first component",
+    #                                 size="xl",
+    #                                 fw="bold",
+    #                                 ta="center",
+    #                                 c=colors["orange"],
+    #                                 style={"color": f"var(--app-text-color, {colors['orange']})"},
+    #                             ),
+    #                             dmc.Text(
+    #                                 "Click here to choose from charts, tables, and more",
+    #                                 size="md",
+    #                                 ta="center",
+    #                                 c="gray",
+    #                                 style={"color": "var(--app-text-color, #666)"},
+    #                             ),
+    #                         ],
+    #                         gap="md",
+    #                         align="center",
+    #                     ),
+    #                     p="xl",
+    #                     radius="lg",
+    #                     shadow="sm",
+    #                     withBorder=True,
+    #                     style={
+    #                         "backgroundColor": "var(--app-surface-color, #ffffff)",
+    #                         "border": f"1px solid var(--app-border-color, {colors['orange']}20)",
+    #                         "maxWidth": "500px",
+    #                         "marginTop": "2rem",
+    #                         "transition": "transform 0.1s ease",
+    #                     },
+    #                 ),
+    #                 style={
+    #                     "height": "50vh",
+    #                     "display": "flex",
+    #                     "alignItems": "center",
+    #                     "justifyContent": "center",
+    #                 },
+    #             ),
+    #             id="add-component-message-clickable",
+    #             style={"cursor": "pointer"},
+    #         )
+    #         # Create empty draggable component for callbacks
+    #         empty_draggable = html.Div(id="draggable")
+    #         return [add_component_message, empty_draggable]
 
     # Make welcome message clickable to enable edit mode
     @app.callback(
@@ -3102,6 +3113,8 @@ def design_draggable(
     local_data: dict,
     cached_project_data: dict | None = None,
 ):
+    import time
+
     # logger.info("design_draggable - Initializing draggable layout")
     # logger.info(f"design_draggable - Dashboard ID: {dashboard_id}")
     # logger.info(f"design_draggable - Local data: {local_data}")
@@ -3114,16 +3127,25 @@ def design_draggable(
 
     # Use cached project data if available, otherwise fallback to HTTP call
     if cached_project_data and cached_project_data.get("cache_key") == f"project_{dashboard_id}":
-        logger.info(f"🚀 DESIGN_DRAGGABLE: Using cached project data for dashboard {dashboard_id}")
+        logger.info(
+            f"✅ DESIGN_DRAGGABLE: Cache HIT - using cached project data for dashboard {dashboard_id}"
+        )
+        logger.info(
+            f"✅ DESIGN_DRAGGABLE: Cache age: {time.time() - cached_project_data.get('timestamp', 0):.2f}s"
+        )
         project_json = cached_project_data["project"]
     else:
+        cache_info = f"cached_project_data={bool(cached_project_data)}, cache_key={cached_project_data.get('cache_key') if cached_project_data else None}, expected_key=project_{dashboard_id}"
         logger.warning(
-            f"⚠️  DESIGN_DRAGGABLE: Cache miss, falling back to HTTP call for dashboard {dashboard_id}"
+            f"❌ DESIGN_DRAGGABLE: Cache MISS ({cache_info}), making blocking HTTP call for dashboard {dashboard_id}"
         )
+        start_time = time.time()
         project_json = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/projects/get/from_dashboard_id/{dashboard_id}",
             headers={"Authorization": f"Bearer {TOKEN}"},
         ).json()
+        http_duration = time.time() - start_time
+        logger.warning(f"❌ DESIGN_DRAGGABLE: HTTP call took {http_duration * 1000:.0f}ms")
 
     # logger.info(f"design_draggable - Project: {project_json}")
     from depictio.models.models.projects import Project
@@ -3297,8 +3319,8 @@ def design_draggable(
 
     # Debug logging for grid configuration
     logger.debug("🔍 GRID DEBUG - Creating DashGridLayout with configuration:")
-    logger.debug("🔍 GRID DEBUG - rowHeight: 50")
-    logger.debug("🔍 GRID DEBUG - cols: {'lg': 12, 'md': 12, 'sm': 12, 'xs': 12, 'xxs': 12}")
+    logger.debug("🔍 GRID DEBUG - rowHeight: 20")
+    logger.debug("🔍 GRID DEBUG - cols: {'lg': 48, 'md': 48, 'sm': 48, 'xs': 48, 'xxs': 48}")
     logger.debug(
         f"🔍 GRID DEBUG - current_layout items: {len(current_layout) if current_layout else 0}"
     )
@@ -3310,20 +3332,21 @@ def design_draggable(
         id="draggable",
         items=draggable_items,
         itemLayout=current_layout,
-        rowHeight=50,  # Larger row height for better component display
+        rowHeight=20,  # Ultra-fine row height for maximum vertical precision
         cols={
-            "lg": 12,
-            "md": 12,
-            "sm": 12,
-            "xs": 12,
-            "xxs": 12,
-        },  # FIXED: Use 12 columns consistently across all breakpoints
+            "lg": 48,
+            "md": 48,
+            "sm": 48,
+            "xs": 48,
+            "xxs": 48,
+        },  # 48-column grid for ultimate layout flexibility and precision
         showRemoveButton=False,  # Keep consistent - CSS handles visibility
         showResizeHandles=True,  # Enable resize functionality for vertical growing behavior
         className="draggable-grid-container",  # CSS class for styling
         allowOverlap=False,
         # Additional parameters to try to disable responsive scaling
         autoSize=True,  # Let grid auto-size instead of using responsive breakpoints
+        margin=[2, 2],  # Minimal margin between grid items [x, y]
         style={
             "display": display_style,
             "flex-grow": 1,
