@@ -53,7 +53,7 @@ def register_callbacks_notes_footer(app):
 
                     /* Expanded state when toggled - High specificity - Override hidden state */
                     body #notes-footer-content.footer-visible, html #notes-footer-content.footer-visible {
-                        height: 165px !important;
+                        height: 265px !important;
                         opacity: 1 !important;
                         overflow: visible !important;
                         visibility: visible !important;  /* Override hidden visibility */
