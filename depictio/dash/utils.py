@@ -14,7 +14,7 @@ from depictio.api.v1.configs.logging_init import logger
 SELECTED_STYLE = {
     "display": "inline-block",
     "width": "250px",
-    "height": "100px",
+    "height": "80px",
     "border": "3px solid",
     "opacity": 1,
     "fontFamily": "Virgil",
@@ -23,7 +23,7 @@ SELECTED_STYLE = {
 UNSELECTED_STYLE = {
     "display": "inline-block",
     "width": "250px",
-    "height": "100px",
+    "height": "80px",
     "border": "3px solid",
     "opacity": 1,
     "fontFamily": "Virgil",
