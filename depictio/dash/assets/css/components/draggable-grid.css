@@ -9,10 +9,16 @@
    - Hover state transitions
 
    Grid Configuration (applied in draggable.py):
-   - cols: {"lg": 12, "md": 10, "sm": 6, "xs": 4, "xxs": 2}
-   - rowHeight: 50px
+   - cols: {"lg": 48, "md": 48, "sm": 48, "xs": 48, "xxs": 48}
+   - rowHeight: 20px
    - compactType: undefined (disabled for performance)
    ============================================================================= */
+
+/* Minimize spacing between grid items for compact layout */
+.react-grid-layout {
+    margin: 0 !important;
+    padding: 0 !important;
+}
 
 /* =============================================================================
    1. THEME INTEGRATION & VISUAL CONSISTENCY
@@ -199,7 +205,7 @@
 
 /* Normalize wrapper div padding between edit and non-edit modes - minimize white space */
 .react-grid-item > div {
-    padding: 2px !important;
+    padding: 0px !important;
     max-height: 100% !important;
     max-width: 100% !important;
     height: 100% !important;
@@ -289,13 +295,16 @@
 
 /* Base ActionIconGroup styling
    Purpose: Container for edit buttons (remove, edit, duplicate, reset)
-   Behavior: Hidden by default, shown on component hover
+   Behavior: Hidden by default, shown on component hover, positioned absolutely to overlap component
    Z-index: 1001 (above resize handles at 500) */
 .react-grid-item .mantine-ActionIconGroup-root {
     opacity: 0 !important;
     transition: opacity 0.2s ease !important; /* POTENTIAL PERFORMANCE ISSUE */
     pointer-events: none !important;
     z-index: 1001 !important;
+    position: absolute !important;
+    top: 4px !important;
+    right: 4px !important;
 }
 
 /* Individual action button base styling
