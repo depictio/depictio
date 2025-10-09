@@ -205,6 +205,17 @@ def _filter_relevant_dcs(filters_by_dc, figure_dc_id, workflow_id, token):
 
     figure_dc_str = str(figure_dc_id)
 
+    # Detect if figure DC is a joined DC and extract constituent DCs
+    is_joined_dc = "--" in figure_dc_str
+    constituent_dcs = figure_dc_str.split("--") if is_joined_dc else [figure_dc_str]
+
+    logger.debug(
+        "Target DC: %s (joined=%s, constituents=%s)",
+        figure_dc_str,
+        is_joined_dc,
+        constituent_dcs,
+    )
+
     # Fetch join tables to validate DC relationships
     join_tables_for_wf = get_join_tables(str(workflow_id), token)
     workflow_joins = join_tables_for_wf.get(str(workflow_id), {})
@@ -225,6 +236,14 @@ def _filter_relevant_dcs(filters_by_dc, figure_dc_id, workflow_id, token):
             # Same DC - always relevant
             relevant_filters_by_dc[filter_dc_id] = filters
             logger.debug("Including filter DC %s (same as figure DC)", filter_dc_id)
+        elif is_joined_dc and filter_dc_id in constituent_dcs:
+            # Filter DC is a constituent of the joined DC - always relevant
+            relevant_filters_by_dc[filter_dc_id] = filters
+            logger.debug(
+                "Including filter DC %s (constituent of joined DC %s)",
+                filter_dc_id,
+                figure_dc_str,
+            )
         else:
             # Check if join relationship exists
             join_key1 = f"{figure_dc_str}--{filter_dc_id}"
