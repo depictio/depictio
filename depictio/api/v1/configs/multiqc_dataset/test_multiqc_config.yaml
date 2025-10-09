@@ -36,3 +36,33 @@ workflows:
             on_columns: ["sample"]
             how: "inner"
             with_dc: ["multiqc_data"]
+      - data_collection_tag: "sample_qc_metrics"
+        description: "Per-sample quality control metrics and statistics"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "sample_qc_metrics.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              "sample": "Sample identifier"
+              "cell_id": "Individual cell or cellular compartment identifier"
+              "total_reads": "Total number of reads for this cell"
+              "mapped_reads": "Number of successfully mapped reads"
+              "mapping_rate": "Percentage of reads mapped to reference"
+              "duplicate_rate": "Percentage of duplicate reads"
+              "mean_coverage": "Mean genome coverage depth"
+              "median_insert_size": "Median insert size for paired-end reads"
+              "gc_content": "GC content percentage"
+              "q30_rate": "Percentage of bases with quality score >= 30"
+              "mean_quality": "Mean base quality score"
+          join:
+            on_columns: ["sample"]
+            how: "inner"
+            with_dc: ["sample_metadata", "multiqc_data"]
