@@ -5,7 +5,8 @@ from typing import Any, Dict, List
 import dash
 import dash_mantine_components as dmc
 import httpx
-from dash import ALL, MATCH, Input, Output, Patch, State, dcc, html
+from dash import ALL, MATCH, Input, Output, Patch, State, ctx, dcc, html
+from dash.exceptions import PreventUpdate
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL, settings
@@ -2382,6 +2383,12 @@ def register_callbacks_figure_component(app):
             updated_metadata["total_data_count"] = data_info.get("total_data_count", 0)
             updated_metadata["was_sampled"] = data_info.get("was_sampled", False)
 
+            # Preserve full_data_loaded flag if it exists (set by patch_figure_interactive)
+            # This ensures the popover continues to show the correct state after re-renders
+            if metadata and "full_data_loaded" in metadata:
+                updated_metadata["full_data_loaded"] = metadata["full_data_loaded"]
+                logger.info(f"🔒 Preserved full_data_loaded flag: {metadata['full_data_loaded']}")
+
             logger.info(f"   Trace count: {trace_metadata.get('summary', {}).get('traces', 0)}")
             logger.info(
                 f"   Has color: {trace_metadata.get('summary', {}).get('has_color', False)}"
@@ -2707,13 +2714,13 @@ def register_callbacks_figure_component(app):
         Output({"type": "graph", "index": MATCH}, "figure", allow_duplicate=True),
         Output({"type": "stored-metadata-component", "index": MATCH}, "data", allow_duplicate=True),
         Input("interactive-values-store", "data"),
+        Input({"type": "stored-metadata-component", "index": MATCH}, "data"),
         State({"type": "graph", "index": MATCH}, "figure"),
-        State({"type": "stored-metadata-component", "index": MATCH}, "data"),
         State({"type": "figure-trace-metadata", "index": MATCH}, "data"),
         State("local-store", "data"),
         prevent_initial_call=True,
     )
-    def patch_figure_interactive(filter_data, current_figure, metadata, trace_metadata, local_data):
+    def patch_figure_interactive(filter_data, metadata, current_figure, trace_metadata, local_data):
         """
         Handle interactive component filtering (range sliders, dropdowns, etc.).
 
@@ -2721,7 +2728,29 @@ def register_callbacks_figure_component(app):
         - Row filtering via metadata parameter (Polars predicate pushdown)
         - Column projection via select_columns (10-50x I/O reduction for wide tables)
         - Cached DataFrames reused when available
+
+        Also handles full data loading requests (bypassing sampling while preserving filters).
         """
+        # Determine what triggered this callback
+        trigger = ctx.triggered_id
+
+        # Check if this is a full data load request
+        full_data_requested = metadata.get("full_data_requested", False) if metadata else False
+
+        # Prevent update if triggered by metadata but NOT a full data request
+        if (
+            trigger
+            and isinstance(trigger, dict)
+            and trigger.get("type") == "stored-metadata-component"
+        ):
+            if not full_data_requested:
+                # Metadata changed for other reasons (e.g., theme change) - ignore
+                raise dash.exceptions.PreventUpdate
+            logger.info(
+                "🔓 Full data load requested for component %s - will apply filters and bypass sampling",
+                metadata.get("index", "unknown"),
+            )
+
         if not filter_data or not current_figure or not metadata:
             raise dash.exceptions.PreventUpdate
 
@@ -2815,9 +2844,14 @@ def register_callbacks_figure_component(app):
             if mode == "code" and code_content:
                 df = _apply_code_preprocessing(code_content, df)
 
-            # 7. Render figure
+            # 7. Render figure (with optional full data loading when requested)
             new_figure, data_info = render_figure(
-                current_params, visu_type, df, theme=theme, mode=mode
+                current_params,
+                visu_type,
+                df,
+                theme=theme,
+                mode=mode,
+                force_full_data=full_data_requested,
             )
 
             # Log data count information
@@ -2834,6 +2868,31 @@ def register_callbacks_figure_component(app):
             updated_metadata["displayed_data_count"] = data_info.get("displayed_data_count", 0)
             updated_metadata["total_data_count"] = data_info.get("total_data_count", 0)
             updated_metadata["was_sampled"] = data_info.get("was_sampled", False)
+
+            # Handle full data loading state based on actual sampling
+            was_sampled = data_info.get("was_sampled", False)
+
+            if full_data_requested:
+                # Just completed a full data load request
+                updated_metadata["full_data_loaded"] = True
+                updated_metadata["full_data_requested"] = False
+                logger.info(
+                    "✅ Full data loaded successfully (with filters applied): "
+                    f"displayed={updated_metadata['displayed_data_count']:,}, "
+                    f"total={updated_metadata['total_data_count']:,}"
+                )
+            else:
+                # Normal filter operation - flag reflects current reality
+                # If data is sampled → full data NOT loaded
+                # If data is not sampled → full data IS loaded (all data fits within limit)
+                updated_metadata["full_data_loaded"] = not was_sampled
+                if was_sampled and metadata.get("full_data_loaded", False):
+                    # Log when transitioning from full data back to sampled
+                    logger.info(
+                        f"🔄 Data sampled again after filter change: "
+                        f"displaying={updated_metadata['displayed_data_count']:,}, "
+                        f"total={updated_metadata['total_data_count']:,} - reset full_data_loaded flag"
+                    )
 
             logger.info("✅ Filtering complete, returning updated figure and metadata")
             return new_figure, updated_metadata
@@ -2888,36 +2947,65 @@ def register_callbacks_figure_component(app):
             total_count = metadata.get("total_data_count", cutoff)
             was_sampled = metadata.get("was_sampled", False)
 
+        # Check if full data has been loaded
+        full_data_loaded = metadata.get("full_data_loaded", False) if metadata else False
+
         logger.info(
             f"📊 [{component_index}] Recreating popover button from metadata change (trigger: {trigger}): "
-            f"displayed={displayed_count:,}, total={total_count:,}, sampled={was_sampled}"
+            f"displayed={displayed_count:,}, total={total_count:,}, sampled={was_sampled}, full_loaded={full_data_loaded}"
         )
 
-        # Create fresh popover content with current data counts
-        fresh_content = dmc.Stack(
-            [
-                dmc.Text("⚠️ Partial Data Displayed", size="sm", fw="bold", mb="xs"),
-                html.Div(
-                    [
-                        html.Div(
-                            f"Showing: {displayed_count:,} points",
-                            key=f"showing-{component_index}-{displayed_count}",
-                        ),
-                        html.Div(
-                            f"Total: {total_count:,} points",
-                            key=f"total-{component_index}-{total_count}",
-                        ),
-                        html.Div(
-                            "Full dataset available for analysis",
-                            style={"marginTop": "8px", "fontStyle": "italic", "fontSize": "0.9em"},
-                            key=f"footer-{component_index}",
-                        ),
-                    ],
-                    key=f"content-wrapper-{component_index}-{displayed_count}-{total_count}",
-                ),
-            ],
-            gap="xs",
-        )
+        # Create fresh popover content based on full data state
+        if full_data_loaded:
+            # Show success message - full data is loaded
+            fresh_content = dmc.Stack(
+                [
+                    dmc.Text("✅ Full Dataset Loaded", size="sm", fw="bold", mb="xs", c="green"),
+                    html.Div(f"Displaying all {displayed_count:,} points"),
+                ],
+                gap="xs",
+            )
+        else:
+            # Show warning + action button to load full data
+            fresh_content = dmc.Stack(
+                [
+                    dmc.Text("⚠️ Partial Data Displayed", size="sm", fw="bold", mb="xs"),
+                    html.Div(
+                        [
+                            html.Div(
+                                f"Showing: {displayed_count:,} points",
+                                key=f"showing-{component_index}-{displayed_count}",
+                            ),
+                            html.Div(
+                                f"Total: {total_count:,} points",
+                                key=f"total-{component_index}-{total_count}",
+                            ),
+                            html.Div(
+                                "Full dataset available for analysis",
+                                style={
+                                    "marginTop": "8px",
+                                    "fontStyle": "italic",
+                                    "fontSize": "0.9em",
+                                },
+                                key=f"footer-{component_index}",
+                            ),
+                        ],
+                        key=f"content-wrapper-{component_index}-{displayed_count}-{total_count}",
+                    ),
+                    # Action button to trigger full data load
+                    dmc.Button(
+                        f"Load All {total_count:,} Points",
+                        id={"type": "load-full-data-action", "index": component_index},
+                        size="xs",
+                        color="orange",
+                        variant="light",
+                        fullWidth=True,
+                        mt="sm",
+                        leftSection=DashIconify(icon="mdi:database-refresh", width=14),
+                    ),
+                ],
+                gap="xs",
+            )
 
         # Recreate entire Popover component to force refresh
         updated_button = dmc.Popover(
@@ -2949,6 +3037,42 @@ def register_callbacks_figure_component(app):
 
         logger.info(f"📊 [{component_index}] Returning recreated popover with fresh data")
         return updated_button
+
+    # Phase 2: Callback to set full_data_requested flag when button is clicked
+    @app.callback(
+        Output({"type": "stored-metadata-component", "index": MATCH}, "data", allow_duplicate=True),
+        Input({"type": "load-full-data-action", "index": MATCH}, "n_clicks"),
+        State({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        State({"type": "load-full-data-action", "index": MATCH}, "id"),
+        prevent_initial_call=True,
+    )
+    def trigger_full_data_load(n_clicks, metadata, button_id):
+        """Set flag to request full data loading.
+
+        This callback fires when the user clicks "Load All X Points" button in the popover.
+        It sets full_data_requested=True in metadata, which will trigger patch_figure_interactive
+        to reload the figure with all data points (no sampling).
+        """
+        if not n_clicks:
+            raise PreventUpdate
+
+        component_index = button_id["index"]
+        logger.info(
+            f"🔄 [{component_index}] Full data load requested via button click (n_clicks={n_clicks})"
+        )
+
+        # Update metadata to request full data
+        if metadata is None:
+            metadata = {}
+
+        metadata["full_data_requested"] = True
+
+        logger.info(
+            f"✅ [{component_index}] Set full_data_requested=True in metadata, "
+            f"will trigger patch_figure_interactive"
+        )
+
+        return metadata
 
 
 def design_figure(
