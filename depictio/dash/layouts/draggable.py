@@ -12,7 +12,7 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.colors import colors
 
 # Import centralized component dimensions from metadata
-from depictio.dash.component_metadata import get_component_dimensions_dict
+from depictio.dash.component_metadata import get_build_functions, get_component_dimensions_dict
 from depictio.dash.layouts.draggable_scenarios.add_component import add_new_component
 from depictio.dash.layouts.draggable_scenarios.graphs_interactivity import (
     refresh_children_based_on_click_data,
@@ -33,9 +33,10 @@ from depictio.dash.utils import (
     return_wf_tag_from_id,
 )
 
-# Get component dimensions from centralized metadata
+# Get component dimensions and build functions from centralized metadata
 # Adjusted for 48-column grid with rowHeight=20 - ultra-fine precision for component placement
 component_dimensions = get_component_dimensions_dict()
+build_functions = get_build_functions()
 # No longer using breakpoints - working with direct list format
 
 
@@ -684,6 +685,19 @@ def register_callbacks_draggable(app):
         State("url", "pathname"),
         State("local-store", "data"),
         State("theme-store", "data"),
+        # METADATA MERGE FIX: Add access to workflow/DC selections and figure parameters
+        State("local-store-components-metadata", "data"),  # Workflow/DC selections from stepper
+        State({"type": "dict_kwargs", "index": ALL}, "data"),  # Figure parameters
+        State({"type": "dict_kwargs", "index": ALL}, "id"),  # For index matching
+        # RACE CONDITION FIX: Read dropdown values directly to avoid race with store_wf_dc_selection
+        State(
+            {"type": "workflow-selection-label", "index": ALL}, "value"
+        ),  # Workflow dropdown values
+        State({"type": "workflow-selection-label", "index": ALL}, "id"),  # For index matching
+        State(
+            {"type": "datacollection-selection-label", "index": ALL}, "value"
+        ),  # DC dropdown values
+        State({"type": "datacollection-selection-label", "index": ALL}, "id"),  # For index matching
         # Input("dashboard-title", "style"),  # REMOVED: This was causing expensive rebuilds on theme change
         # Input("height-store", "data"),
         prevent_initial_call=True,
@@ -762,6 +776,15 @@ def register_callbacks_draggable(app):
         pathname,
         local_data,
         theme_store,  # State parameter for theme data
+        # METADATA MERGE FIX: New parameters for metadata merging
+        components_metadata_store,  # Workflow/DC selections from local-store-components-metadata
+        dict_kwargs_values,  # Figure parameters from dict_kwargs stores
+        dict_kwargs_ids,  # IDs for matching dict_kwargs to components
+        # RACE CONDITION FIX: Read dropdown values directly
+        wf_dropdown_values,  # Workflow dropdown values
+        wf_dropdown_ids,  # Workflow dropdown IDs
+        dc_dropdown_values,  # Data collection dropdown values
+        dc_dropdown_ids,  # Data collection dropdown IDs
         # height_store,
     ):
         if not local_data:
@@ -1137,20 +1160,173 @@ def register_callbacks_draggable(app):
                 tmp_stored_metadata = [
                     e for e in stored_metadata if f"{e['index']}-tmp" == f"{triggered_index}"
                 ]
-
+                logger.info(
+                    f"Tmp stored metadata: {tmp_stored_metadata} for triggered index: {triggered_index}"
+                )
                 if not tmp_stored_metadata:
+                    logger.error(
+                        f"❌ No temporary metadata found for index {triggered_index}, cannot add component"
+                    )
                     return (
                         dash.no_update,
                         dash.no_update,
                         dash.no_update,
                         dash.no_update,
                     )
-                child_metadata = tmp_stored_metadata[0]
+
+                # METADATA MERGE FIX: Merge metadata from all 3 stores
+                child_metadata = tmp_stored_metadata[0].copy()  # Copy to avoid mutation
                 child_index = child_metadata["index"]
                 child_type = child_metadata["component_type"]
 
+                logger.info(f"📊 METADATA MERGE - Component: {triggered_index}")
+                logger.info(
+                    f"   Base metadata: wf_id={child_metadata.get('wf_id')}, dc_id={child_metadata.get('dc_id')}, dict_kwargs_count={len(child_metadata.get('dict_kwargs', {}))}"
+                )
+
+                # DEBUG: Show what's in components_metadata_store
+                if components_metadata_store:
+                    logger.info(
+                        f"   🔍 DEBUG: components_metadata_store keys: {list(components_metadata_store.keys())}"
+                    )
+                    if triggered_index in components_metadata_store:
+                        logger.info(
+                            f"   🔍 DEBUG: Data for {triggered_index}: {components_metadata_store[triggered_index]}"
+                        )
+                    else:
+                        logger.warning(f"   ⚠️ DEBUG: {triggered_index} NOT found in store!")
+                        # Check if there's a key without -tmp
+                        index_without_tmp = triggered_index.replace("-tmp", "")
+                        if index_without_tmp in components_metadata_store:
+                            logger.info(
+                                f"   🔍 DEBUG: Found data under key without -tmp: {index_without_tmp}"
+                            )
+                            logger.info(
+                                f"   🔍 DEBUG: Data: {components_metadata_store[index_without_tmp]}"
+                            )
+                else:
+                    logger.warning("   ⚠️ DEBUG: components_metadata_store is empty or None!")
+
+                # Step 1: Merge workflow/DC from local-store-components-metadata
+                if components_metadata_store and triggered_index in components_metadata_store:
+                    component_selections = components_metadata_store[triggered_index]
+                    # Only update if values are present in selections store
+                    if "wf_id" in component_selections and component_selections["wf_id"]:
+                        child_metadata["wf_id"] = component_selections["wf_id"]
+                    if "dc_id" in component_selections and component_selections["dc_id"]:
+                        child_metadata["dc_id"] = component_selections["dc_id"]
+                    if "wf_tag" in component_selections:
+                        child_metadata["wf_tag"] = component_selections.get("wf_tag")
+                    if "dc_tag" in component_selections:
+                        child_metadata["dc_tag"] = component_selections.get("dc_tag")
+                    logger.info(
+                        f"   ✅ Merged workflow/DC from store: wf_id={child_metadata.get('wf_id')}, dc_id={child_metadata.get('dc_id')}"
+                    )
+                else:
+                    logger.warning(
+                        f"   ⚠️ No component selections found in store for {triggered_index}"
+                    )
+
+                # Step 1.5: RACE CONDITION FIX - If wf_id/dc_id are still None, read dropdown values directly
+                # This handles the case where Done button is clicked before store_wf_dc_selection completes
+                if child_metadata.get("wf_id") is None or child_metadata.get("dc_id") is None:
+                    logger.info(
+                        "   🔧 Attempting to read workflow/DC from dropdowns directly (race condition fallback)"
+                    )
+
+                    # Find matching workflow dropdown
+                    if child_metadata.get("wf_id") is None:
+                        for idx, wf_id in enumerate(wf_dropdown_ids):
+                            if wf_id and wf_id.get("index") == triggered_index:
+                                wf_value = wf_dropdown_values[idx]
+                                if wf_value:
+                                    child_metadata["wf_id"] = wf_value
+                                    logger.info(f"   ✅ Got wf_id from dropdown: {wf_value}")
+                                    # Get wf_tag from the API
+                                    try:
+                                        TOKEN = local_data.get("access_token")
+                                        wf_tag = return_wf_tag_from_id(
+                                            workflow_id=wf_value, TOKEN=TOKEN
+                                        )
+                                        child_metadata["wf_tag"] = wf_tag
+                                        logger.info(f"   ✅ Got wf_tag: {wf_tag}")
+                                    except Exception as e:
+                                        logger.warning(f"   ⚠️ Could not get wf_tag: {e}")
+                                break
+
+                    # Find matching data collection dropdown
+                    if child_metadata.get("dc_id") is None:
+                        for idx, dc_id in enumerate(dc_dropdown_ids):
+                            if dc_id and dc_id.get("index") == triggered_index:
+                                dc_value = dc_dropdown_values[idx]
+                                if dc_value:
+                                    child_metadata["dc_id"] = dc_value
+                                    logger.info(f"   ✅ Got dc_id from dropdown: {dc_value}")
+                                    # Get dc_tag from the API
+                                    try:
+                                        TOKEN = local_data.get("access_token")
+                                        dc_tag = return_dc_tag_from_id(
+                                            data_collection_id=dc_value, TOKEN=TOKEN
+                                        )
+                                        child_metadata["dc_tag"] = dc_tag
+                                        logger.info(f"   ✅ Got dc_tag: {dc_tag}")
+                                    except Exception as e:
+                                        logger.warning(f"   ⚠️ Could not get dc_tag: {e}")
+                                break
+
+                    logger.info(
+                        f"   ✅ Final workflow/DC after dropdown fallback: wf_id={child_metadata.get('wf_id')}, dc_id={child_metadata.get('dc_id')}"
+                    )
+
+                # Step 2: Merge dict_kwargs from dict_kwargs Store (only for figure components)
+                if child_type == "figure":
+                    matching_dict_kwargs = None
+                    for idx, dict_kwargs_id in enumerate(dict_kwargs_ids):
+                        if dict_kwargs_id and dict_kwargs_id.get("index") == triggered_index:
+                            matching_dict_kwargs = dict_kwargs_values[idx]
+                            break
+
+                    if matching_dict_kwargs:
+                        # Merge dict_kwargs, preserving existing if any
+                        current_dict_kwargs = child_metadata.get("dict_kwargs", {})
+                        if isinstance(current_dict_kwargs, dict) and isinstance(
+                            matching_dict_kwargs, dict
+                        ):
+                            # Update with new values from stepper
+                            current_dict_kwargs.update(matching_dict_kwargs)
+                            child_metadata["dict_kwargs"] = current_dict_kwargs
+                            logger.info(
+                                f"   ✅ Merged dict_kwargs: {len(current_dict_kwargs)} parameters"
+                            )
+                        else:
+                            logger.warning(
+                                f"   ⚠️ Invalid dict_kwargs format: current={type(current_dict_kwargs)}, matching={type(matching_dict_kwargs)}"
+                            )
+                    else:
+                        logger.warning(f"   ⚠️ No dict_kwargs found for {triggered_index}")
+
+                # Step 3: Validate merged metadata (only for figures)
+                if child_type == "figure":
+                    from depictio.dash.modules.figure_component.utils import (
+                        validate_figure_component_metadata,
+                    )
+
+                    is_valid, error_msg = validate_figure_component_metadata(child_metadata)
+                    if not is_valid:
+                        logger.error(f"   ❌ INVALID METADATA after merge: {error_msg}")
+                        logger.error(f"      Component index: {child_index}")
+                        logger.error(f"      Mode: {child_metadata.get('mode')}")
+                        logger.error(f"      Metadata: {child_metadata}")
+                    else:
+                        logger.info("   ✅ VALID METADATA after merge")
+
+                logger.info(
+                    f"   Final merged metadata: wf_id={child_metadata.get('wf_id')}, dc_id={child_metadata.get('dc_id')}, dict_kwargs_count={len(child_metadata.get('dict_kwargs', {}))}"
+                )
+
+                # Render component with merged metadata
                 child, index_returned = render_raw_children(
-                    tmp_stored_metadata[0],
+                    child_metadata,  # Use merged metadata instead of tmp_stored_metadata[0]
                     switch_state=unified_edit_mode_button,
                     dashboard_id=dashboard_id,
                     TOKEN=TOKEN,
@@ -1731,14 +1907,76 @@ def register_callbacks_draggable(app):
                         logger.info(f"Found child with index: {child_index}")
                         logger.info(f"Index: {index}")
                         logger.info(f"Metadata: {metadata}")
-                        edited_child = enable_box_edit_mode(
-                            child,
-                            unified_edit_mode_button,
-                            dashboard_id=dashboard_id,
-                            fresh=False,
-                            component_data=parent_metadata,
-                            TOKEN=TOKEN,
-                        )
+
+                        # CRITICAL FIX: Build FRESH component from metadata instead of reusing wrapped child
+                        # Child from test_container is already wrapped, passing it to enable_box_edit_mode causes double wrapping
+                        # Solution: Build fresh component from parent_metadata (like restore_dashboard.py does)
+
+                        # Type-safe check for parent_metadata
+                        if not parent_metadata or not isinstance(parent_metadata, dict):
+                            logger.error(f"❌ Invalid parent_metadata: {type(parent_metadata)}")
+                            continue
+
+                        component_type = parent_metadata.get("component_type")
+
+                        if component_type and component_type in build_functions:
+                            logger.info(
+                                f"🔧 EDIT FIX - Building fresh {component_type} component from metadata at index {child_index}"
+                            )
+
+                            # Prepare metadata for building (type-safe copy)
+                            build_metadata: dict[str, object] = {**parent_metadata}
+                            # DO NOT modify build_metadata["index"] - keep temp UUID for save.py!
+
+                            build_metadata["build_frame"] = True
+                            build_metadata["access_token"] = TOKEN
+                            build_metadata["theme"] = theme_store if theme_store else "light"
+
+                            # Build fresh component using the appropriate build function
+                            build_function = build_functions[component_type]
+                            try:
+                                fresh_component = build_function(**build_metadata)
+                                logger.info(
+                                    f"✅ EDIT FIX - Successfully built fresh {component_type} component"
+                                )
+
+                                # CRITICAL: Create SEPARATE wrapper metadata for enable_box_edit_mode
+                                # Use parent_index for wrapper ID, but keep original metadata for save.py
+                                wrapper_metadata: dict[str, object] = {**parent_metadata}
+                                if parent_index and wrapper_metadata.get("parent_index"):
+                                    logger.info(
+                                        f"🔧 EDIT FIX - Using parent_index {parent_index} for wrapper ID (metadata stays as temp UUID)"
+                                    )
+                                    wrapper_metadata["index"] = (
+                                        parent_index  # Override ONLY for wrapper
+                                    )
+
+                                # Wrap the fresh component
+                                # Pass wrapper_metadata (with parent UUID for wrapper ID)
+                                # parent_metadata stays unchanged (with temp UUID for save.py)
+                                edited_child = enable_box_edit_mode(
+                                    fresh_component,  # FRESH component
+                                    unified_edit_mode_button,
+                                    dashboard_id=dashboard_id,
+                                    fresh=False,
+                                    component_data=wrapper_metadata,  # Use wrapper_metadata for ID
+                                    TOKEN=TOKEN,
+                                )
+                                logger.info(
+                                    "✅ EDIT FIX - Wrapped fresh component (single wrapper, no double wrapping)"
+                                )
+                            except Exception as e:
+                                logger.error(
+                                    f"❌ Failed to build fresh component: {e}", exc_info=True
+                                )
+                                # Fallback: skip component or continue with next
+                                continue
+                        else:
+                            logger.error(
+                                f"❌ Cannot build component: type='{component_type}', available types={list(build_functions.keys())}"
+                            )
+                            # Fallback: skip component
+                            continue
 
                 if parent_index:
                     logger.info(
