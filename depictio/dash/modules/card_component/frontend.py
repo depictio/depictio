@@ -6,8 +6,14 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.colors import colors
 from depictio.dash.component_metadata import get_component_color, get_dmc_button_color, is_enabled
-from depictio.dash.modules.card_component.utils import agg_functions, build_card, build_card_frame
+from depictio.dash.modules.card_component.utils import (
+    agg_functions,
+    build_card,
+    build_card_frame,
+    get_adaptive_trend_colors,
+)
 
 # Depictio imports
 from depictio.dash.utils import (
@@ -160,11 +166,12 @@ def register_callbacks_card_component(app):
             Input({"type": "card-input", "index": MATCH}, "value"),
             Input({"type": "card-dropdown-column", "index": MATCH}, "value"),
             Input({"type": "card-dropdown-aggregation", "index": MATCH}, "value"),
-            Input({"type": "card-dropdown-theme", "index": MATCH}, "value"),
-            # Input({"type": "card-color-picker", "index": MATCH}, "value"),  # Disabled color picker
+            Input({"type": "card-color-background", "index": MATCH}, "value"),
+            Input({"type": "card-color-title", "index": MATCH}, "value"),
+            Input({"type": "card-icon-selector", "index": MATCH}, "value"),
+            Input({"type": "card-title-font-size", "index": MATCH}, "value"),
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-            # State("local-store-components-metadata", "data"),
             State("current-edit-parent-index", "data"),  # Retrieve parent_index
             State({"type": "card-dropdown-column", "index": MATCH}, "id"),
             State("local-store", "data"),
@@ -172,13 +179,14 @@ def register_callbacks_card_component(app):
         ],
         # prevent_initial_call=True,
     )
-    # def design_card_body(input_value, column_name, aggregation_value, wf_dc_store, id, local_data, pathname):
     def design_card_body(
         input_value,
         column_name,
         aggregation_value,
-        theme_value,
-        # color_value,  # Disabled color picker
+        background_color,
+        title_color,
+        icon_name,
+        title_font_size,
         wf_id,
         dc_id,
         parent_index,
@@ -198,9 +206,10 @@ def register_callbacks_card_component(app):
         logger.info(f"input_value: {input_value}")
         logger.info(f"column_name: {column_name}")
         logger.info(f"aggregation_value: {aggregation_value}")
-        logger.info(f"theme_value: {theme_value}")
-
-        color_value = None  # Default value since color picker is disabled
+        logger.info(f"background_color: {background_color}")
+        logger.info(f"title_color: {title_color}")
+        logger.info(f"icon_name: {icon_name}")
+        logger.info(f"title_font_size: {title_font_size}")
 
         if not local_data:
             return ([], None)
@@ -388,13 +397,17 @@ def register_callbacks_card_component(app):
             "column_name": column_name,
             "column_type": column_type,
             "aggregation": aggregation_value,
-            # "value": v,
             "access_token": TOKEN,
             "stepper": True,  # Show border during editing
             "build_frame": False,  # Don't build frame - return just the content for the card-body container
-            "color": color_value,
             "cols_json": cols_json,  # Pass cols_json for reference values
-            "metric_theme": theme_value,  # User-selected theme for icon and background
+            # New individual style parameters
+            "background_color": background_color,
+            "title_color": title_color,
+            "icon_name": icon_name,
+            "icon_color": title_color,  # Use same as title for consistency
+            "title_font_size": title_font_size,
+            "metric_theme": None,  # Not using themes anymore for new cards
         }
 
         if relevant_metadata:
@@ -858,6 +871,14 @@ def register_callbacks_card_component(app):
                 formatted_value = "Error"
                 current_val = None
 
+            # Get adaptive trend colors based on card background
+            # Convert empty string to None for proper handling
+            background_color = trigger_data.get("background_color") or None
+            trend_colors = get_adaptive_trend_colors(background_color)
+            logger.debug(
+                f"Using adaptive trend colors for background '{background_color}': {trend_colors}"
+            )
+
             # Create comparison components
             comparison_components = []
             if reference_value is not None and current_val is not None:
@@ -869,19 +890,19 @@ def register_callbacks_card_component(app):
                         change_pct = ((current_val - ref_val) / ref_val) * 100
                         if change_pct > 0:
                             comparison_text = f"+{change_pct:.1f}% vs unfiltered ({ref_val})"
-                            comparison_color = "green"
+                            comparison_color = trend_colors["positive"]
                             comparison_icon = "mdi:trending-up"
                         elif change_pct < 0:
                             comparison_text = f"{change_pct:.1f}% vs unfiltered ({ref_val})"
-                            comparison_color = "red"
+                            comparison_color = trend_colors["negative"]
                             comparison_icon = "mdi:trending-down"
                         else:
                             comparison_text = f"Same as unfiltered ({ref_val})"
-                            comparison_color = "gray"
+                            comparison_color = trend_colors["neutral"]
                             comparison_icon = "mdi:trending-neutral"
                     else:
                         comparison_text = f"Reference: {ref_val}"
-                        comparison_color = "gray"
+                        comparison_color = trend_colors["neutral"]
                         comparison_icon = "mdi:information-outline"
 
                     # Build comparison UI
@@ -943,47 +964,163 @@ def design_card(id, df):
                                     },
                                     value=None,
                                 ),
-                                # Dropdown for the metric theme selection
-                                dmc.Select(
-                                    label="Select metric theme",
-                                    description="Choose a visual theme with icon and background color",
-                                    id={
-                                        "type": "card-dropdown-theme",
-                                        "index": id["index"],
-                                    },
-                                    data=[
-                                        {"label": "🌡️ Temperature", "value": "temperature"},
-                                        {"label": "💧 Salinity", "value": "salinity"},
-                                        {"label": "🧪 pH Level", "value": "ph"},
-                                        {"label": "💨 Oxygen", "value": "oxygen"},
-                                        {"label": "⚡ Conductivity", "value": "conductivity"},
-                                        {"label": "📊 Pressure", "value": "pressure"},
-                                        {"label": "💦 Humidity", "value": "humidity"},
-                                        {"label": "📏 Depth", "value": "depth"},
-                                        {"label": "🌫️ Turbidity", "value": "turbidity"},
-                                        {"label": "🌿 Chlorophyll", "value": "chlorophyll"},
-                                        {"label": "✅ Quality Score", "value": "quality"},
-                                        {"label": "🎯 Accuracy", "value": "accuracy"},
-                                        {"label": "🎪 Precision", "value": "precision"},
-                                        {"label": "⚗️ Purity", "value": "purity"},
-                                        {"label": "🛡️ Coverage", "value": "coverage"},
-                                        {"label": "📈 Variance", "value": "variance"},
-                                        {"label": "🔗 Correlation", "value": "correlation"},
-                                        {"label": "⚠️ Error Rate", "value": "error"},
-                                        {"label": "🔢 Count", "value": "count"},
-                                        {"label": "📡 Frequency", "value": "frequency"},
-                                        {"label": "🧬 Concentration", "value": "concentration"},
-                                        {"label": "⚙️ Performance", "value": "performance"},
-                                        {"label": "⚡ Throughput", "value": "throughput"},
-                                        {"label": "📊 Efficiency", "value": "efficiency"},
-                                        {"label": "🧬 Reads", "value": "reads"},
-                                        {"label": "🗺️ Mapping Rate", "value": "mapping"},
-                                        {"label": "📋 Duplication", "value": "duplication"},
-                                        {"label": "📊 Default", "value": "default"},
+                                # Individual style controls
+                                dmc.Stack(
+                                    [
+                                        dmc.Text("Card Styling", size="sm", fw="bold"),
+                                        dmc.ColorInput(
+                                            label="Background Color",
+                                            description="Card background color (leave empty for auto theme)",
+                                            id={
+                                                "type": "card-color-background",
+                                                "index": id["index"],
+                                            },
+                                            value="",
+                                            format="hex",
+                                            placeholder="Auto (follows theme)",
+                                            swatches=[
+                                                colors["purple"],
+                                                colors["blue"],
+                                                colors["teal"],
+                                                colors["green"],
+                                                colors["yellow"],
+                                                colors["orange"],
+                                                colors["pink"],
+                                                colors["red"],
+                                                colors["grey"],
+                                            ],
+                                        ),
+                                        dmc.ColorInput(
+                                            label="Title Color",
+                                            description="Card title and value text color (leave empty for auto theme)",
+                                            id={
+                                                "type": "card-color-title",
+                                                "index": id["index"],
+                                            },
+                                            value="",
+                                            format="hex",
+                                            placeholder="Auto (follows theme)",
+                                            swatches=[
+                                                colors["purple"],
+                                                colors["blue"],
+                                                colors["teal"],
+                                                colors["green"],
+                                                colors["yellow"],
+                                                colors["orange"],
+                                                colors["pink"],
+                                                colors["red"],
+                                                colors["grey"],
+                                                colors["black"],
+                                            ],
+                                        ),
+                                        dmc.Select(
+                                            label="Icon",
+                                            description="Select an icon for your card",
+                                            id={
+                                                "type": "card-icon-selector",
+                                                "index": id["index"],
+                                            },
+                                            data=[
+                                                {
+                                                    "label": "📊 Chart Line",
+                                                    "value": "mdi:chart-line",
+                                                },
+                                                {
+                                                    "label": "🌡️ Thermometer",
+                                                    "value": "mdi:thermometer",
+                                                },
+                                                {"label": "💧 Water", "value": "mdi:water"},
+                                                {"label": "🧪 Flask", "value": "mdi:flask"},
+                                                {
+                                                    "label": "💨 Air Filter",
+                                                    "value": "mdi:air-filter",
+                                                },
+                                                {"label": "⚡ Flash", "value": "mdi:flash"},
+                                                {"label": "📊 Gauge", "value": "mdi:gauge"},
+                                                {
+                                                    "label": "💦 Water Percent",
+                                                    "value": "mdi:water-percent",
+                                                },
+                                                {"label": "📏 Ruler", "value": "mdi:ruler"},
+                                                {"label": "🌫️ Blur", "value": "mdi:blur"},
+                                                {"label": "🌿 Leaf", "value": "mdi:leaf"},
+                                                {
+                                                    "label": "✅ Check Circle",
+                                                    "value": "mdi:check-circle",
+                                                },
+                                                {"label": "🎯 Target", "value": "mdi:target"},
+                                                {
+                                                    "label": "🎪 Bullseye Arrow",
+                                                    "value": "mdi:bullseye-arrow",
+                                                },
+                                                {
+                                                    "label": "⚗️ Flask Empty",
+                                                    "value": "mdi:flask-empty",
+                                                },
+                                                {
+                                                    "label": "🛡️ Shield Check",
+                                                    "value": "mdi:shield-check",
+                                                },
+                                                {
+                                                    "label": "📈 Chart Bell Curve",
+                                                    "value": "mdi:chart-bell-curve",
+                                                },
+                                                {
+                                                    "label": "🔗 Scatter Plot",
+                                                    "value": "mdi:scatter-plot",
+                                                },
+                                                {
+                                                    "label": "⚠️ Alert Circle",
+                                                    "value": "mdi:alert-circle",
+                                                },
+                                                {"label": "🔢 Counter", "value": "mdi:counter"},
+                                                {"label": "📡 Sine Wave", "value": "mdi:sine-wave"},
+                                                {"label": "🧬 Beaker", "value": "mdi:beaker"},
+                                                {
+                                                    "label": "⚙️ Speedometer",
+                                                    "value": "mdi:speedometer",
+                                                },
+                                                {
+                                                    "label": "⚡ Flash Outline",
+                                                    "value": "mdi:flash-outline",
+                                                },
+                                                {
+                                                    "label": "📊 Trending Up",
+                                                    "value": "mdi:trending-up",
+                                                },
+                                                {"label": "🧬 DNA", "value": "mdi:dna"},
+                                                {
+                                                    "label": "🗺️ Map Marker Path",
+                                                    "value": "mdi:map-marker-path",
+                                                },
+                                                {
+                                                    "label": "📋 Content Copy",
+                                                    "value": "mdi:content-copy",
+                                                },
+                                            ],
+                                            value="mdi:chart-line",
+                                            searchable=True,
+                                            clearable=False,
+                                        ),
+                                        dmc.Select(
+                                            label="Title Font Size",
+                                            description="Font size for card title",
+                                            id={
+                                                "type": "card-title-font-size",
+                                                "index": id["index"],
+                                            },
+                                            data=[
+                                                {"label": "Extra Small", "value": "xs"},
+                                                {"label": "Small", "value": "sm"},
+                                                {"label": "Medium", "value": "md"},
+                                                {"label": "Large", "value": "lg"},
+                                                {"label": "Extra Large", "value": "xl"},
+                                            ],
+                                            value="md",
+                                            clearable=False,
+                                        ),
                                     ],
-                                    value="default",
-                                    searchable=True,
-                                    clearable=False,
+                                    gap="sm",
                                 ),
                                 # dmc.Stack(  # Disabled color picker
                                 #     [
