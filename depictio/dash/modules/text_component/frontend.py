@@ -258,10 +258,10 @@ def register_callbacks_text_component(app):
 
     # Sync text-store updates with stored-metadata-component for save functionality
     @app.callback(
-        Output({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        Output({"type": "stored-metadata-component", "index": MATCH}, "data", allow_duplicate=True),
         Input({"type": "text-store", "index": MATCH}, "data"),
         State({"type": "stored-metadata-component", "index": MATCH}, "data"),
-        prevent_initial_call=False,  # Allow initial call to sync alignment from restored text-store
+        prevent_initial_call=True,  # Required when using allow_duplicate=True
     )
     def sync_text_content_for_save(text_store_data, stored_metadata):
         """
