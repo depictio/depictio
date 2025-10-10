@@ -12,64 +12,68 @@ from depictio.dash.utils import get_component_data
 def register_partial_data_button_callbacks(app):
     """Register callbacks to update partial data warning popover content with real counts."""
 
-    @app.callback(
-        Output({"type": "partial-data-popover-content", "index": MATCH}, "children"),
-        Input({"type": "stored-metadata-component", "index": MATCH}, "data"),
-        State({"type": "partial-data-popover-content", "index": MATCH}, "id"),
-        prevent_initial_call=False,
-    )
-    def update_partial_data_popover(metadata, component_id):
-        """Update the partial data warning popover with actual data counts."""
-        from dash import callback_context
-
-        from depictio.dash.modules.figure_component.utils import ComponentConfig
-
-        config = ComponentConfig()
-        cutoff = config.max_data_points
-
-        # Extract counts from metadata
-        displayed_count = cutoff
-        total_count = cutoff
-        was_sampled = False
-
-        if metadata:
-            displayed_count = metadata.get("displayed_data_count", cutoff)
-            total_count = metadata.get("total_data_count", cutoff)
-            was_sampled = metadata.get("was_sampled", False)
-
-        # Get component index for logging
-        ctx = callback_context
-        trigger = ctx.triggered[0]["prop_id"] if ctx.triggered else "initial"
-        component_index = component_id.get("index", "unknown") if component_id else "unknown"
-
-        logger.info(
-            f"📊 [{component_index}] Popover update triggered by: {trigger}, data: displayed={displayed_count:,}, total={total_count:,}, sampled={was_sampled}"
-        )
-
-        # Create updated children - include values in keys to force React re-render
-        updated_children = html.Div(
-            [
-                html.Div(
-                    f"Showing: {displayed_count:,} points",
-                    key=f"showing-{component_index}-{displayed_count}",
-                ),
-                html.Div(
-                    f"Total: {total_count:,} points", key=f"total-{component_index}-{total_count}"
-                ),
-                html.Div(
-                    "Full dataset available for analysis",
-                    style={"marginTop": "8px", "fontStyle": "italic", "fontSize": "0.9em"},
-                    key=f"footer-{component_index}",
-                ),
-            ],
-            key=f"content-wrapper-{component_index}-{displayed_count}-{total_count}",
-        )
-
-        logger.info(
-            f"📊 [{component_index}] Returning updated children to partial-data-popover-content"
-        )
-
-        return updated_children
+    # NOTE: The popover content update callback has been moved to frontend.py
+    # (update_partial_data_popover_from_interactive) to avoid duplicate callbacks
+    # and ensure it's closer to the data source for better synchronization.
+    #
+    # @app.callback(
+    #     Output({"type": "partial-data-popover-content", "index": MATCH}, "children"),
+    #     Input({"type": "stored-metadata-component", "index": MATCH}, "data"),
+    #     State({"type": "partial-data-popover-content", "index": MATCH}, "id"),
+    #     prevent_initial_call=False,
+    # )
+    # def update_partial_data_popover(metadata, component_id):
+    #     """Update the partial data warning popover with actual data counts."""
+    #     from dash import callback_context
+    #
+    #     from depictio.dash.modules.figure_component.utils import ComponentConfig
+    #
+    #     config = ComponentConfig()
+    #     cutoff = config.max_data_points
+    #
+    #     # Extract counts from metadata
+    #     displayed_count = cutoff
+    #     total_count = cutoff
+    #     was_sampled = False
+    #
+    #     if metadata:
+    #         displayed_count = metadata.get("displayed_data_count", cutoff)
+    #         total_count = metadata.get("total_data_count", cutoff)
+    #         was_sampled = metadata.get("was_sampled", False)
+    #
+    #     # Get component index for logging
+    #     ctx = callback_context
+    #     trigger = ctx.triggered[0]["prop_id"] if ctx.triggered else "initial"
+    #     component_index = component_id.get("index", "unknown") if component_id else "unknown"
+    #
+    #     logger.info(
+    #         f"📊 [{component_index}] Popover update triggered by: {trigger}, data: displayed={displayed_count:,}, total={total_count:,}, sampled={was_sampled}"
+    #     )
+    #
+    #     # Create updated children - include values in keys to force React re-render
+    #     updated_children = html.Div(
+    #         [
+    #             html.Div(
+    #                 f"Showing: {displayed_count:,} points",
+    #                 key=f"showing-{component_index}-{displayed_count}",
+    #             ),
+    #             html.Div(
+    #                 f"Total: {total_count:,} points", key=f"total-{component_index}-{total_count}"
+    #             ),
+    #             html.Div(
+    #                 "Full dataset available for analysis",
+    #                 style={"marginTop": "8px", "fontStyle": "italic", "fontSize": "0.9em"},
+    #                 key=f"footer-{component_index}",
+    #             ),
+    #         ],
+    #         key=f"content-wrapper-{component_index}-{displayed_count}-{total_count}",
+    #     )
+    #
+    #     logger.info(
+    #         f"📊 [{component_index}] Returning updated children to partial-data-popover-content"
+    #     )
+    #
+    #     return updated_children
 
     # Server-side callback to control button wrapper visibility
     @app.callback(
