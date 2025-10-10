@@ -191,6 +191,7 @@ def register_callbacks_interactive_component(app):
             Input({"type": "input-dropdown-method", "index": MATCH}, "value"),
             Input({"type": "input-dropdown-scale", "index": MATCH}, "value"),
             Input({"type": "input-color-picker", "index": MATCH}, "value"),
+            Input({"type": "input-icon-selector", "index": MATCH}, "value"),
             Input({"type": "input-title-size", "index": MATCH}, "value"),
             Input({"type": "input-number-marks", "index": MATCH}, "value"),
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
@@ -209,6 +210,7 @@ def register_callbacks_interactive_component(app):
         aggregation_value,
         scale_value,
         color_value,
+        icon_name,
         title_size,
         marks_number,
         workflow_id,
@@ -228,6 +230,7 @@ def register_callbacks_interactive_component(app):
         logger.info(f"  aggregation_value: {aggregation_value}")
         logger.info(f"  scale_value: {scale_value}")
         logger.info(f"  color_value: {color_value}")
+        logger.info(f"  icon_name: {icon_name}")
         logger.info(f"  title_size: {title_size}")
         logger.info(f"  marks_number: {marks_number}")
         logger.info(f"  workflow_id: {workflow_id}")
@@ -332,6 +335,17 @@ def register_callbacks_interactive_component(app):
                 logger.info(f"Using title_size from component_data: {title_size}")
             else:
                 logger.info(f"Using title_size from form: {title_size}")
+
+            # Restore icon_name from component_data if not provided in form
+            if not icon_name:
+                saved_icon = component_data.get("icon_name", None)
+                if saved_icon:
+                    icon_name = saved_icon
+                    logger.info(f"Using saved icon_name from component_data: {icon_name}")
+                else:
+                    logger.info("No saved icon found, keeping icon_name as empty")
+            else:
+                logger.info(f"Using icon_name from form: {icon_name}")
 
         logger.info("Using final values:")
         logger.info(f"  column_value: {column_value}")
@@ -598,6 +612,7 @@ def register_callbacks_interactive_component(app):
             "build_frame": False,  # Don't build frame - return just the content for the input-body container
             "scale": scale_value,
             "color": color_value,
+            "icon_name": icon_name,
             "title_size": title_size,
             "marks_number": marks_number,
         }
@@ -766,6 +781,62 @@ def design_interactive(id, df):
                                         colors["violet"],
                                         colors["black"],
                                     ],
+                                ),
+                                dmc.Select(
+                                    label="Icon",
+                                    description="Select an icon for your component",
+                                    id={
+                                        "type": "input-icon-selector",
+                                        "index": id["index"],
+                                    },
+                                    data=[
+                                        {"label": "🎚️ Slider Alt", "value": "bx:slider-alt"},
+                                        {"label": "📊 Chart Line", "value": "mdi:chart-line"},
+                                        {"label": "🔢 Counter", "value": "mdi:counter"},
+                                        {"label": "🌡️ Thermometer", "value": "mdi:thermometer"},
+                                        {"label": "💧 Water", "value": "mdi:water"},
+                                        {"label": "🧪 Flask", "value": "mdi:flask"},
+                                        {"label": "💨 Air Filter", "value": "mdi:air-filter"},
+                                        {"label": "⚡ Flash", "value": "mdi:flash"},
+                                        {"label": "📊 Gauge", "value": "mdi:gauge"},
+                                        {"label": "💦 Water Percent", "value": "mdi:water-percent"},
+                                        {"label": "📏 Ruler", "value": "mdi:ruler"},
+                                        {"label": "🌫️ Blur", "value": "mdi:blur"},
+                                        {"label": "🌿 Leaf", "value": "mdi:leaf"},
+                                        {"label": "✅ Check Circle", "value": "mdi:check-circle"},
+                                        {"label": "🎯 Target", "value": "mdi:target"},
+                                        {
+                                            "label": "🎪 Bullseye Arrow",
+                                            "value": "mdi:bullseye-arrow",
+                                        },
+                                        {"label": "⚗️ Flask Empty", "value": "mdi:flask-empty"},
+                                        {"label": "🛡️ Shield Check", "value": "mdi:shield-check"},
+                                        {
+                                            "label": "📈 Chart Bell Curve",
+                                            "value": "mdi:chart-bell-curve",
+                                        },
+                                        {"label": "🔗 Scatter Plot", "value": "mdi:scatter-plot"},
+                                        {"label": "⚠️ Alert Circle", "value": "mdi:alert-circle"},
+                                        {"label": "📡 Sine Wave", "value": "mdi:sine-wave"},
+                                        {"label": "🧬 Beaker", "value": "mdi:beaker"},
+                                        {"label": "⚙️ Speedometer", "value": "mdi:speedometer"},
+                                        {"label": "⚡ Flash Outline", "value": "mdi:flash-outline"},
+                                        {"label": "📊 Trending Up", "value": "mdi:trending-up"},
+                                        {"label": "🧬 DNA", "value": "mdi:dna"},
+                                        {
+                                            "label": "🗺️ Map Marker Path",
+                                            "value": "mdi:map-marker-path",
+                                        },
+                                        {"label": "📋 Content Copy", "value": "mdi:content-copy"},
+                                        {"label": "🔽 Select", "value": "mdi:form-select"},
+                                        {"label": "🔘 Radio", "value": "mdi:radiobox-marked"},
+                                        {"label": "☑️ Checkbox", "value": "mdi:checkbox-marked"},
+                                        {"label": "🔀 Switch", "value": "mdi:toggle-switch"},
+                                        {"label": "📅 Calendar", "value": "mdi:calendar-range"},
+                                    ],
+                                    value="bx:slider-alt",
+                                    searchable=True,
+                                    clearable=False,
                                 ),
                                 dmc.Select(
                                     label="Title Size",
