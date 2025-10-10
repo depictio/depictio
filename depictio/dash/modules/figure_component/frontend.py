@@ -2258,10 +2258,11 @@ def register_callbacks_figure_component(app):
         )
         return patch
 
-    # CALLBACK ARCHITECTURE: Pattern-matching render callback for async figure generation
+    # CALLBACK ARCHITECTURE: Pattern-matching render callback for async figure generation (PRIMARY)
     @app.callback(
         Output({"type": "graph", "index": MATCH}, "figure"),
         Output({"type": "figure-trace-metadata", "index": MATCH}, "data"),
+        Output({"type": "stored-metadata-component", "index": MATCH}, "data"),
         Input({"type": "figure-render-trigger", "index": MATCH}, "data"),
         State({"type": "stored-metadata-component", "index": MATCH}, "data"),
         State("local-store", "data"),
@@ -2350,7 +2351,7 @@ def register_callbacks_figure_component(app):
 
             # Render figure
             logger.info("🎨 RENDERING FIGURE...")
-            figure = render_figure(
+            figure, data_info = render_figure(
                 dict_kwargs,
                 visu_type,
                 df,
@@ -2359,11 +2360,28 @@ def register_callbacks_figure_component(app):
                 mode=mode,
             )
 
+            # Log data count information
+            logger.info(
+                f"📊 DATA INFO: displayed={data_info.get('displayed_data_count', 0):,}, total={data_info.get('total_data_count', 0):,}, sampled={data_info.get('was_sampled', False)}"
+            )
+
             # CALLBACK ARCHITECTURE: Generate trace metadata for efficient patching
             logger.info("🔍 ANALYZING FIGURE STRUCTURE for patching...")
             from depictio.dash.modules.figure_component.utils import analyze_figure_structure
 
             trace_metadata = analyze_figure_structure(figure, dict_kwargs, visu_type)
+
+            # Store data counts in trace metadata for partial data warning button
+            trace_metadata["displayed_data_count"] = data_info.get("displayed_data_count", 0)
+            trace_metadata["total_data_count"] = data_info.get("total_data_count", 0)
+            trace_metadata["was_sampled"] = data_info.get("was_sampled", False)
+
+            # Also update stored metadata component so buttons can access the data counts
+            updated_metadata = metadata.copy() if metadata else {}
+            updated_metadata["displayed_data_count"] = data_info.get("displayed_data_count", 0)
+            updated_metadata["total_data_count"] = data_info.get("total_data_count", 0)
+            updated_metadata["was_sampled"] = data_info.get("was_sampled", False)
+
             logger.info(f"   Trace count: {trace_metadata.get('summary', {}).get('traces', 0)}")
             logger.info(
                 f"   Has color: {trace_metadata.get('summary', {}).get('has_color', False)}"
@@ -2371,7 +2389,7 @@ def register_callbacks_figure_component(app):
 
             logger.info("✅ RENDER CALLBACK: Figure generated successfully")
             logger.info("=" * 80)
-            return figure, trace_metadata
+            return figure, trace_metadata, updated_metadata
 
         except Exception as e:
             logger.error(f"❌ RENDER CALLBACK FAILED: {e}")
@@ -2385,7 +2403,8 @@ def register_callbacks_figure_component(app):
                 template=_get_theme_template(trigger_data.get("theme", "light")),
                 title=f"Error rendering figure: {str(e)}",
             )
-            return error_fig, {}
+            # Return original metadata unchanged on error
+            return error_fig, {}, metadata
 
     def _determine_join_strategy(filters_by_dc, figure_dc_str):
         """
@@ -2686,6 +2705,7 @@ def register_callbacks_figure_component(app):
     # CALLBACK ARCHITECTURE: Interactive patching callback for parameter updates
     @app.callback(
         Output({"type": "graph", "index": MATCH}, "figure", allow_duplicate=True),
+        Output({"type": "stored-metadata-component", "index": MATCH}, "data", allow_duplicate=True),
         Input("interactive-values-store", "data"),
         State({"type": "graph", "index": MATCH}, "figure"),
         State({"type": "stored-metadata-component", "index": MATCH}, "data"),
@@ -2796,14 +2816,27 @@ def register_callbacks_figure_component(app):
                 df = _apply_code_preprocessing(code_content, df)
 
             # 7. Render figure
-            new_figure = render_figure(current_params, visu_type, df, theme=theme, mode=mode)
+            new_figure, data_info = render_figure(
+                current_params, visu_type, df, theme=theme, mode=mode
+            )
+
+            # Log data count information
+            logger.info(
+                f"📊 FILTER DATA INFO: displayed={data_info.get('displayed_data_count', 0):,}, total={data_info.get('total_data_count', 0):,}, sampled={data_info.get('was_sampled', False)}"
+            )
 
             # Mark filter state
             if isinstance(new_figure, dict):
                 new_figure.setdefault("layout", {})["_depictio_filter_applied"] = has_active
 
-            logger.info("✅ Filtering complete")
-            return new_figure
+            # Update metadata with new data counts after filtering
+            updated_metadata = metadata.copy() if metadata else {}
+            updated_metadata["displayed_data_count"] = data_info.get("displayed_data_count", 0)
+            updated_metadata["total_data_count"] = data_info.get("total_data_count", 0)
+            updated_metadata["was_sampled"] = data_info.get("was_sampled", False)
+
+            logger.info("✅ Filtering complete, returning updated figure and metadata")
+            return new_figure, updated_metadata
 
         except dash.exceptions.PreventUpdate:
             raise
@@ -2811,6 +2844,111 @@ def register_callbacks_figure_component(app):
             logger.error("Filtering failed: %s", e)
             logger.debug("Full traceback:", exc_info=True)
             raise dash.exceptions.PreventUpdate
+
+    # Separate callback to recreate the entire popover button when metadata changes
+    # This listens to stored-metadata updates (triggered by patch_figure_interactive or initial render)
+    @app.callback(
+        Output(
+            {"type": "partial-data-button-wrapper", "index": MATCH},
+            "children",
+            allow_duplicate=True,
+        ),
+        Input({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        State({"type": "partial-data-button-wrapper", "index": MATCH}, "id"),
+        prevent_initial_call=True,
+    )
+    def update_partial_data_popover_from_interactive(metadata, wrapper_id):
+        """Recreate the entire partial data popover button when metadata changes.
+
+        This callback fires AFTER patch_figure_interactive updates the metadata,
+        ensuring we always have fresh data counts. By recreating the entire Popover
+        component, we force DMC to refresh its content (DMC Popover caches content).
+        """
+        from dash import callback_context
+
+        from depictio.dash.modules.figure_component.utils import ComponentConfig
+
+        # Get component index
+        component_index = wrapper_id.get("index", "unknown") if wrapper_id else "unknown"
+
+        # Get trigger info for debugging
+        ctx = callback_context
+        trigger = ctx.triggered[0]["prop_id"] if ctx.triggered else "initial"
+
+        # Extract data counts from metadata (freshly updated by patch_figure_interactive)
+        config = ComponentConfig()
+        cutoff = config.max_data_points
+
+        displayed_count = cutoff
+        total_count = cutoff
+        was_sampled = False
+
+        if metadata:
+            displayed_count = metadata.get("displayed_data_count", cutoff)
+            total_count = metadata.get("total_data_count", cutoff)
+            was_sampled = metadata.get("was_sampled", False)
+
+        logger.info(
+            f"📊 [{component_index}] Recreating popover button from metadata change (trigger: {trigger}): "
+            f"displayed={displayed_count:,}, total={total_count:,}, sampled={was_sampled}"
+        )
+
+        # Create fresh popover content with current data counts
+        fresh_content = dmc.Stack(
+            [
+                dmc.Text("⚠️ Partial Data Displayed", size="sm", fw="bold", mb="xs"),
+                html.Div(
+                    [
+                        html.Div(
+                            f"Showing: {displayed_count:,} points",
+                            key=f"showing-{component_index}-{displayed_count}",
+                        ),
+                        html.Div(
+                            f"Total: {total_count:,} points",
+                            key=f"total-{component_index}-{total_count}",
+                        ),
+                        html.Div(
+                            "Full dataset available for analysis",
+                            style={"marginTop": "8px", "fontStyle": "italic", "fontSize": "0.9em"},
+                            key=f"footer-{component_index}",
+                        ),
+                    ],
+                    key=f"content-wrapper-{component_index}-{displayed_count}-{total_count}",
+                ),
+            ],
+            gap="xs",
+        )
+
+        # Recreate entire Popover component to force refresh
+        updated_button = dmc.Popover(
+            [
+                dmc.PopoverTarget(
+                    dmc.Tooltip(
+                        label="Partial data displayed",
+                        position="top",
+                        openDelay=300,
+                        children=dmc.ActionIcon(
+                            id={"type": "partial-data-warning-button", "index": component_index},
+                            color="red",
+                            variant="filled",
+                            size="sm",
+                            radius=0,
+                            children=DashIconify(
+                                icon="mdi:alert-circle-outline", width=16, color="white"
+                            ),
+                        ),
+                    )
+                ),
+                dmc.PopoverDropdown(fresh_content),
+            ],
+            width=300,
+            position="bottom",
+            withArrow=True,
+            shadow="md",
+        )
+
+        logger.info(f"📊 [{component_index}] Returning recreated popover with fresh data")
+        return updated_button
 
 
 def design_figure(
@@ -3086,7 +3224,12 @@ def design_figure(
         dcc.Store(
             id={"type": "stored-metadata-component", "index": id["index"]},
             data={
-                "index": id["index"],
+                # METADATA INDEX FIX: Remove -tmp suffix to match card component pattern
+                # - Store ID has -tmp: "xxx-tmp"
+                # - Store data["index"] no -tmp: "xxx"
+                # - Done button matching: "xxx" + "-tmp" == "xxx-tmp" ✓
+                # This matches card_component/utils.py:676-678 pattern
+                "index": id["index"].replace("-tmp", ""),
                 "component_type": "figure",
                 "dict_kwargs": component_data.get("dict_kwargs", {}) if component_data else {},
                 "visu_type": component_data.get("visu_type", "scatter")

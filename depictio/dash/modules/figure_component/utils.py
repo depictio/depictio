@@ -302,23 +302,75 @@ def _get_figure_cache_key(
     return hashlib.md5(cache_str.encode()).hexdigest()
 
 
+def validate_figure_component_metadata(metadata: dict) -> tuple[bool, str]:
+    """
+    Validate figure component metadata to prevent empty components.
+
+    Args:
+        metadata: Component metadata dictionary
+
+    Returns:
+        (is_valid, error_message) tuple
+    """
+    component_type = metadata.get("component_type")
+    if component_type != "figure":
+        return True, ""
+
+    mode = metadata.get("mode", "ui")
+
+    if mode == "code":
+        # Code mode: requires code_content
+        code_content = metadata.get("code_content", "")
+        if not code_content or not code_content.strip():
+            return False, "Code mode figure requires code_content"
+    else:
+        # UI mode: requires wf_id, dc_id, AND dict_kwargs
+        wf_id = metadata.get("wf_id")
+        dc_id = metadata.get("dc_id")
+        dict_kwargs = metadata.get("dict_kwargs", {})
+
+        if not wf_id:
+            return False, "UI mode figure requires wf_id (workflow ID)"
+        if not dc_id:
+            return False, "UI mode figure requires dc_id (data collection ID)"
+        if not isinstance(dict_kwargs, dict) or len(dict_kwargs) == 0:
+            return False, "UI mode figure requires non-empty dict_kwargs"
+
+    return True, ""
+
+
 def _clean_figure_cache():
     """Remove expired entries from figure cache."""
     import time
 
     current_time = time.time()
-    expired_keys = [
-        key
-        for key, (_, timestamp) in _figure_result_cache.items()
-        if current_time - timestamp > FIGURE_CACHE_TTL
-    ]
+    expired_keys = []
+
+    for key, cached_result in _figure_result_cache.items():
+        # Handle both old format (figure, timestamp) and new format (figure, data_info, timestamp)
+        if isinstance(cached_result, tuple) and len(cached_result) == 3:
+            _, _, timestamp = cached_result
+        else:
+            # Old format - just figure and timestamp
+            _, timestamp = cached_result
+
+        if current_time - timestamp > FIGURE_CACHE_TTL:
+            expired_keys.append(key)
+
     for key in expired_keys:
         del _figure_result_cache[key]
 
     # If cache is still too large, remove oldest entries
     if len(_figure_result_cache) > FIGURE_CACHE_MAX_SIZE:
         # Sort by timestamp and remove oldest entries
-        sorted_items = sorted(_figure_result_cache.items(), key=lambda x: x[1][1])
+        def get_timestamp(item):
+            cached_result = item[1]
+            if isinstance(cached_result, tuple) and len(cached_result) == 3:
+                return cached_result[2]  # timestamp is third element
+            else:
+                return cached_result[1]  # timestamp is second element (old format)
+
+        sorted_items = sorted(_figure_result_cache.items(), key=get_timestamp)
         excess_count = len(_figure_result_cache) - FIGURE_CACHE_MAX_SIZE
         for key, _ in sorted_items[:excess_count]:
             del _figure_result_cache[key]
@@ -333,7 +385,7 @@ def render_figure(
     theme: str = "light",
     skip_validation: bool = False,
     mode: str = "ui",
-) -> Any:
+) -> tuple[Any, dict]:
     """Render a Plotly figure with robust parameter handling and result caching.
 
     Args:
@@ -347,14 +399,21 @@ def render_figure(
         mode: Component mode ('ui' or 'code') for parameter evaluation
 
     Returns:
-        Plotly figure object
+        Tuple of (Plotly figure object, data_info dict with counts)
     """
     # PERFORMANCE OPTIMIZATION: Check figure result cache first
+
+    # Initialize data counts - will be populated during rendering
+    data_info = {
+        "total_data_count": 0,
+        "displayed_data_count": 0,
+        "was_sampled": False,
+    }
 
     # Safety check: ensure df is not None
     if df is None:
         logger.error("DataFrame is None, cannot build figure")
-        return html.Div(
+        error_div = html.Div(
             dmc.Alert(
                 "Error: No data available to build figure",
                 title="Data Error",
@@ -362,6 +421,7 @@ def render_figure(
             ),
             style={"height": "400px", "display": "flex", "alignItems": "center"},
         )
+        return error_div, data_info
 
     # Generate cache key from all inputs
     df_hash = str(hash(str(df.hash_rows()) if df is not None and not df.is_empty() else "empty"))
@@ -376,11 +436,23 @@ def render_figure(
 
     _clean_figure_cache()
     if cache_key in _figure_result_cache:
-        cached_figure, timestamp = _figure_result_cache[cache_key]
+        cached_result = _figure_result_cache[cache_key]
+        # Handle both old format (just figure) and new format (figure, data_info, timestamp)
+        if isinstance(cached_result, tuple) and len(cached_result) == 3:
+            cached_figure, cached_data_info, timestamp = cached_result
+        else:
+            # Old format - just figure and timestamp
+            cached_figure, timestamp = cached_result
+            # Create default data_info for old cached entries
+            cached_data_info = {
+                "total_data_count": 0,
+                "displayed_data_count": 0,
+                "was_sampled": False,
+            }
         logger.info(
             f"🚀 FIGURE CACHE HIT: Using cached figure for {visu_type} (saved {int((time.time() - timestamp) * 1000)}ms ago)"
         )
-        return cached_figure
+        return cached_figure, cached_data_info
 
     logger.info(f"📊 FIGURE CACHE MISS: Generating new {visu_type} figure")
 
@@ -403,7 +475,12 @@ def render_figure(
 
         # Use context-aware decision making
         if _should_defer_umap_computation(df, context):
-            return _create_umap_placeholder(df, dict_kwargs, theme)
+            placeholder = _create_umap_placeholder(df, dict_kwargs, theme)
+            # UMAP placeholder - set data info with actual counts
+            data_info["total_data_count"] = df.height
+            data_info["displayed_data_count"] = 0  # Not computed yet
+            data_info["was_sampled"] = False
+            return placeholder, data_info
 
     # Add theme-appropriate template using Mantine-compatible themes
     # Apply theme template if no template is specified, if template is None, or if template is empty
@@ -428,7 +505,10 @@ def render_figure(
     # Handle empty or invalid data
     if df is None or df.is_empty():
         logger.warning("Empty or invalid dataframe, creating empty figure")
-        return _create_theme_aware_figure(dict_kwargs.get("template", _get_theme_template(theme)))
+        empty_fig = _create_theme_aware_figure(
+            dict_kwargs.get("template", _get_theme_template(theme))
+        )
+        return empty_fig, data_info
 
     # Clean parameters - remove None values and problematic empty strings
     # Keep certain parameters that can legitimately be empty strings (like parents for hierarchical charts)
@@ -630,9 +710,10 @@ def render_figure(
                     f"Missing required parameters for {visu_type}: need either X or Y. Available columns: {df.columns}"
                 )
                 title = f"Please select X or Y column to create {visu_type} plot"
-                return _create_theme_aware_figure(
+                validation_fig = _create_theme_aware_figure(
                     dict_kwargs.get("template", _get_theme_template(theme)), title=title
                 )
+                return validation_fig, data_info
         else:
             # Standard validation for specific requirements (pie: values, box: y, etc.)
             missing_params = [param for param in required_params if param not in cleaned_kwargs]
@@ -641,9 +722,10 @@ def render_figure(
                     f"Missing required parameters for {visu_type}: {missing_params}. Available columns: {df.columns}"
                 )
                 title = f"Please select {', '.join(missing_params).upper()} column(s) to create {visu_type} plot"
-                return _create_theme_aware_figure(
+                validation_fig = _create_theme_aware_figure(
                     dict_kwargs.get("template", _get_theme_template(theme)), title=title
                 )
+                return validation_fig, data_info
     else:
         logger.info(f"🚀 CODE MODE: Skipping parameter validation for {visu_type}")
 
@@ -693,10 +775,11 @@ def render_figure(
 
     if not valid_plot_params and not is_clustering:
         logger.info(f"No valid plotting parameters for {visu_type}, returning empty figure")
-        return _create_theme_aware_figure(
+        empty_params_fig = _create_theme_aware_figure(
             dict_kwargs.get("template", _get_theme_template(theme)),
             title=f"Select columns to create {visu_type} plot",
         )
+        return empty_params_fig, data_info
 
     try:
         if is_clustering:
@@ -750,6 +833,9 @@ def render_figure(
                         f"🎨 Keeping color_discrete_map in kwargs for Plotly: {len(cleaned_kwargs['color_discrete_map'])} colors - {list(cleaned_kwargs['color_discrete_map'].keys())}"
                     )
 
+            # Track data counts for partial data warning
+            data_info["total_data_count"] = df.height
+
             # Handle large datasets with sampling
             if df.height > cutoff:
                 cache_key = f"{id(df)}_{cutoff}_{hash(str(cleaned_kwargs))}"
@@ -762,9 +848,16 @@ def render_figure(
                     sampled_df = _sampling_cache[cache_key]
                     logger.info(f"Using cached sampled data: {cutoff} points")
 
+                # Track sampling info
+                data_info["displayed_data_count"] = sampled_df.height
+                data_info["was_sampled"] = True
+
                 logger.info("=== CALLING PLOTLY FUNCTION (SAMPLED DATA) ===")
                 logger.info(f"Function: {plot_function.__name__}")
                 logger.warning(f"🚨 SAMPLED DATA SIZE: {sampled_df.shape[0]:,} rows")
+                logger.warning(
+                    f"📊 DATA COUNTS: {data_info['displayed_data_count']:,} displayed / {data_info['total_data_count']:,} total"
+                )
 
                 # PERFORMANCE: Time the Plotly function call
                 import time
@@ -774,7 +867,10 @@ def render_figure(
                 plot_end = time.time()
                 logger.warning(f"🕐 PLOTLY FUNCTION TIME: {(plot_end - plot_start) * 1000:.0f}ms")
             else:
-                # Use full dataset
+                # Use full dataset - no sampling
+                data_info["displayed_data_count"] = df.height
+                data_info["was_sampled"] = False
+
                 logger.info("=== CALLING PLOTLY FUNCTION ===")
                 logger.info(f"Function: {plot_function.__name__}")
                 logger.info(f"Parameters: {cleaned_kwargs}")
@@ -959,10 +1055,16 @@ def render_figure(
                             elif visu_type.lower() == "strip":
                                 # Strip plots: set single color (limitation without color param)
                                 if color_sequence:
-                                    trace.marker.color = color_sequence[0]
-                                    logger.debug(
-                                        "Applied first color from sequence to strip plot (single trace limitation)"
-                                    )
+                                    try:
+                                        if hasattr(trace, "marker"):
+                                            trace["marker"]["color"] = color_sequence[0]
+                                        logger.debug(
+                                            "Applied first color from sequence to strip plot (single trace limitation)"
+                                        )
+                                    except (TypeError, KeyError) as e:
+                                        logger.debug(
+                                            f"Could not update trace marker color (trace may be immutable): {e}"
+                                        )
                     else:
                         # Multiple traces: apply one color per trace
                         for i, trace in enumerate(figure.data):
@@ -971,14 +1073,25 @@ def render_figure(
                             applied_color = None
                             if color_map and trace_name and str(trace_name) in color_map:
                                 applied_color = color_map[str(trace_name)]
-                                trace.marker.color = applied_color
+                                try:
+                                    if hasattr(trace, "marker"):
+                                        trace["marker"]["color"] = applied_color
+                                except (TypeError, KeyError) as e:
+                                    logger.debug(f"Could not update trace marker color: {e}")
                             elif color_sequence:
                                 color_idx = i % len(color_sequence)
                                 applied_color = color_sequence[color_idx]
-                                trace.marker.color = applied_color
+                                try:
+                                    if hasattr(trace, "marker"):
+                                        trace["marker"]["color"] = applied_color
+                                except (TypeError, KeyError) as e:
+                                    logger.debug(f"Could not update trace marker color: {e}")
                             # Also update line color for consistency
                             if hasattr(trace, "line") and applied_color:
-                                trace.line.color = applied_color
+                                try:
+                                    trace["line"]["color"] = applied_color
+                                except (TypeError, KeyError) as e:
+                                    logger.debug(f"Could not update trace line color: {e}")
                         if color_map:
                             color_source = f"color_discrete_map ({len(color_map)} colors)"
                         elif color_sequence:
@@ -1009,11 +1122,16 @@ def render_figure(
         if selected_point and "x" in cleaned_kwargs and "y" in cleaned_kwargs:
             _highlight_selected_point(figure, df, cleaned_kwargs, selected_point)
 
-        # PERFORMANCE OPTIMIZATION: Cache the generated figure
-        _figure_result_cache[cache_key] = (figure, time.time())
-        logger.info(f"💾 FIGURE CACHE STORED: Cached {visu_type} figure for future use")
+        # PERFORMANCE OPTIMIZATION: Cache the generated figure with data info
+        _figure_result_cache[cache_key] = (figure, data_info, time.time())
+        logger.info(
+            f"💾 FIGURE CACHE STORED: Cached {visu_type} figure with data counts for future use"
+        )
+        logger.info(
+            f"📊 FINAL DATA COUNTS: {data_info['displayed_data_count']:,} displayed / {data_info['total_data_count']:,} total (sampled: {data_info['was_sampled']})"
+        )
 
-        return figure
+        return figure, data_info
 
     except Exception as e:
         logger.error(f"Error creating figure: {e}")
@@ -1023,11 +1141,11 @@ def render_figure(
             title=f"Error: {str(e)}",
         )
 
-        # Cache the fallback figure to avoid repeated errors
-        _figure_result_cache[cache_key] = (fallback_figure, time.time())
+        # Cache the fallback figure to avoid repeated errors with default data info
+        _figure_result_cache[cache_key] = (fallback_figure, data_info, time.time())
         logger.info("💾 FALLBACK CACHE STORED: Cached error figure")
 
-        return fallback_figure
+        return fallback_figure, data_info
 
 
 def _create_umap_placeholder(df: pl.DataFrame, dict_kwargs: Dict[str, Any], theme: str) -> Any:
@@ -1768,10 +1886,23 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     # For stepper mode, use the temporary index to avoid conflicts with existing components
     # For normal mode, use the original index (remove -tmp suffix if present)
     if stepper:
-        store_index = index  # Use the temporary index with -tmp suffix
-        data_index = index.replace("-tmp", "") if index else "unknown"  # Clean index for data
+        # Defensive check: only append -tmp if not already present
+        if not str(index).endswith("-tmp"):
+            index = f"{index}-tmp"
+
+    # Metadata management - matches build_card pattern
+    if stepper:
+        # Remove -tmp suffix to match code mode behavior and Done button expectations
+        # Done button expects: metadata.index + "-tmp" == triggered_index
+        # This matches frontend.py:1912-1915 behavior for code mode
+        store_index = index.replace("-tmp", "") if index and "-tmp" in str(index) else index
+        data_index = index.replace("-tmp", "") if index else "unknown"
+        logger.info(
+            f"📝 STEPPER MODE: Storing metadata without -tmp suffix (index={index} -> store_index={store_index})"
+        )
     else:
         store_index = index.replace("-tmp", "") if index else "unknown"
+        data_index = store_index
 
     logger.info(f"Building figure component {index}")
     logger.info(
@@ -1785,9 +1916,6 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         target_id_format = f'{{"index":"{index}","type":"graph"}}'
         logger.info(f"🎯 target_components will use: {target_id_format}")
         logger.info(f'📍 Graph component ID will be: {{"type":"graph","index":"{index}"}}')
-
-    # Clean the component index
-    store_index = index.replace("-tmp", "") if index else "unknown"
 
     # Check if this is a code mode component
     is_code_mode = kwargs.get("mode") == "code" or kwargs.get("code_content") is not None
@@ -1817,6 +1945,15 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
             f"📝 STORED code_content for component {str(store_index)} (length: {len(kwargs['code_content'])})"
         )
     logger.info(f"Component metadata: {store_component_data}")
+
+    # Validate component completeness
+    is_valid, error_msg = validate_figure_component_metadata(store_component_data)
+    if not is_valid:
+        logger.warning(f"⚠️ INCOMPLETE COMPONENT CREATED: {error_msg}")
+        logger.warning(
+            f"⚠️ Component index: {store_index}, mode: {store_component_data.get('mode')}"
+        )
+        logger.warning("⚠️ This component may fail to save properly")
 
     # Log code mode component details
     if kwargs.get("mode") == "code":
@@ -1983,62 +2120,17 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         ),
     ]
 
-    # DUPLICATION FIX: Intelligent store creation based on component existence
-    # Check if this is a new component creation or editing existing component
-    def is_new_component(component_index, parent_index):
-        """
-        Check if this is a new component being created or an existing one being edited.
-
-        For new components:
-        - Component index might be temporary (e.g., contains "-tmp")
-        - No existing metadata in dashboard
-
-        For existing components:
-        - Component exists in the current dashboard
-        - Has persistent index and metadata
-        """
-        # If we have a parent_index, this suggests it's an edit operation on existing component
-        if parent_index and parent_index != component_index:
-            logger.info(
-                f"🔍 EDIT DETECTED: parent_index ({parent_index}) != component_index ({component_index})"
-            )
-            return False
-
-        # If index contains "-tmp", this is likely a temporary component during creation
-        if "-tmp" in str(component_index):
-            logger.info(f"🔍 NEW COMPONENT: temporary index detected ({component_index})")
-            return True
-
-        # For other cases, we could check if component exists in dashboard DB
-        # but for now, use the stepper flag as indicator of creation context
-        logger.info(f"🔍 STEPPER CONTEXT: stepper={stepper}, assuming new component")
-        return stepper
-
-    is_new = is_new_component(store_index, parent_index)
-
-    # Decision logic:
-    # 1. New components (stepper creation): ALWAYS create store
-    # 2. Edit modal (existing component): NEVER create store (design_figure already created it)
-    # 3. Dashboard restore: ALWAYS create store (no design_figure involved)
-
-    should_create_store = is_new or not stepper
-
-    logger.info(
-        f"🔍 STORE CREATION: build_frame={build_frame}, stepper={stepper}, is_new={is_new}, should_create={should_create_store}"
-    )
-
-    if should_create_store:
-        # This is new component creation or dashboard restore - store is needed
-        logger.info(f"✅ CREATING STORE: stored-metadata-component for index {store_index}")
+    # Component metadata store (for dashboard save/restore)
+    # IMPORTANT: Only create in NON-stepper mode to avoid duplicates
+    # In stepper mode, design_figure() already created this store (frontend.py:3088-3103)
+    # for pattern-matching callback compatibility
+    # When user clicks "Done", component transitions to non-stepper mode with proper metadata
+    if not stepper:
         figure_components.append(
             dcc.Store(
                 data=store_component_data,
                 id={"type": "stored-metadata-component", "index": store_index},
             )
-        )
-    else:
-        logger.info(
-            "❌ SKIPPING STORE: Not creating stored-metadata-component (editing existing component)"
         )
 
     figure_div = html.Div(
@@ -2098,35 +2190,15 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
 def _create_info_badges(
     index: str, df: pl.DataFrame, visu_type: str, filter_applied: bool, build_frame: bool
 ) -> html.Div:
-    """Create informational badges for the figure."""
+    """Create informational badges for the figure.
+
+    Note: Partial data warning has been moved to an ActionIcon button in edit.py
+    for better integration with component controls.
+    """
     if not build_frame:
         return html.Div()
 
     badges = []
-    cutoff = _config.max_data_points
-
-    # Partial data badge
-    if (
-        visu_type.lower() == "scatter"
-        and df is not None
-        and not df.is_empty()
-        and df.shape[0] > cutoff
-    ):
-        partial_badge = dmc.Tooltip(
-            children=dmc.Badge(
-                "Partial data displayed",
-                id={"type": "graph-partial-data-displayed", "index": index},
-                leftSection=DashIconify(icon="mdi:alert-circle", width=20),
-                size="lg",
-                radius="xl",
-                color="red",
-            ),
-            label=f"Showing {cutoff:,} of {df.shape[0]:,} points for performance.",
-            position="top",
-            openDelay=500,
-            withinPortal=False,
-        )
-        badges.append(partial_badge)
 
     # Filter applied badge
     if filter_applied:
