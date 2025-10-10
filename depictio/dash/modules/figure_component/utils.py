@@ -385,6 +385,7 @@ def render_figure(
     theme: str = "light",
     skip_validation: bool = False,
     mode: str = "ui",
+    force_full_data: bool = False,
 ) -> tuple[Any, dict]:
     """Render a Plotly figure with robust parameter handling and result caching.
 
@@ -397,6 +398,7 @@ def render_figure(
         theme: Theme ('light' or 'dark')
         skip_validation: Skip parameter validation
         mode: Component mode ('ui' or 'code') for parameter evaluation
+        force_full_data: If True, bypass sampling and load all data points
 
     Returns:
         Tuple of (Plotly figure object, data_info dict with counts)
@@ -455,6 +457,12 @@ def render_figure(
         return cached_figure, cached_data_info
 
     logger.info(f"📊 FIGURE CACHE MISS: Generating new {visu_type} figure")
+
+    # Log when full data loading is forced
+    if force_full_data:
+        logger.warning(
+            f"🔓 FORCE FULL DATA: Bypassing {cutoff:,} point sampling limit - will load all data!"
+        )
 
     # Check if it's a clustering visualization
     is_clustering = visu_type.lower() in ["umap"]
@@ -787,7 +795,7 @@ def render_figure(
             clustering_function = get_clustering_function(visu_type.lower())
 
             # Handle large datasets with sampling for clustering
-            if df.height > cutoff:
+            if df.height > cutoff and not force_full_data:
                 cache_key = f"{id(df)}_{cutoff}_{hash(str(cleaned_kwargs))}"
 
                 if cache_key not in _sampling_cache:
@@ -837,7 +845,7 @@ def render_figure(
             data_info["total_data_count"] = df.height
 
             # Handle large datasets with sampling
-            if df.height > cutoff:
+            if df.height > cutoff and not force_full_data:
                 cache_key = f"{id(df)}_{cutoff}_{hash(str(cleaned_kwargs))}"
 
                 if cache_key not in _sampling_cache:
