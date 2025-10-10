@@ -569,8 +569,10 @@ def build_interactive(**kwargs):
     stepper = kwargs.get("stepper", False)
     parent_index = kwargs.get("parent_index", None)
     scale = kwargs.get("scale", "linear")  # Default to linear scale
-    color = kwargs.get("color", None)  # Default to no custom color
+    # Check both "color" (from frontend) and "custom_color" (from saved metadata) for DMC compliance
+    color = kwargs.get("color") or kwargs.get("custom_color") or None
     marks_number = kwargs.get("marks_number", 2)  # Default to 2 marks (min/max only)
+    title_size = kwargs.get("title_size", "md")  # Default title size
 
     # logger.info(f"Interactive - kwargs: {kwargs}")
     logger.info(
@@ -625,6 +627,8 @@ def build_interactive(**kwargs):
         "parent_index": parent_index,
         "scale": scale,  # Save scale configuration for sliders
         "marks_number": marks_number,  # Save marks number configuration for sliders
+        "title_size": title_size,  # Save title size configuration
+        "custom_color": color,  # Save custom color configuration for DMC theme compliance
     }
 
     logger.debug(f"Interactive component {index}: store_data: {store_data}")
@@ -1106,7 +1110,7 @@ def build_interactive(**kwargs):
             "persistence_type": "local",
             # UI/UX improvements for better space utilization
             "w": "100%",  # Fill container width
-            "size": "lg",  # Larger size for better visibility and usability
+            "size": title_size,  # Use title_size for slider component size
             "styles": {
                 "root": {
                     "width": "100%",
@@ -1343,13 +1347,11 @@ def build_interactive(**kwargs):
     }
     if color:
         title_style["color"] = color
-        # Store color for component styling
-        store_data["custom_color"] = color
         logger.info(f"Applied custom color: {color}")
     else:
         logger.debug("Using Mantine's native theming for title")
 
-    card_title_h5 = dmc.Text(card_title, size="md", fw="bold", style=title_style)
+    card_title_h5 = dmc.Text(card_title, size=title_size, fw="bold", style=title_style)
 
     # Generate default state information for the component
     # For select-type components, pass unique values if available
