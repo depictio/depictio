@@ -63,6 +63,32 @@ def add_filter(
                 (pl.col(column_name) >= value[0]) & (pl.col(column_name) <= value[1])
             )
 
+    elif interactive_component_type == "DateRangePicker":
+        if value and isinstance(value, list) and len(value) == 2:
+            try:
+                # Convert date strings to datetime if needed
+                start_date = value[0]
+                end_date = value[1]
+
+                # Handle string dates - convert to datetime
+                if isinstance(start_date, str):
+                    start_date = pl.lit(start_date).str.strptime(pl.Datetime, "%Y-%m-%d")
+                if isinstance(end_date, str):
+                    end_date = pl.lit(end_date).str.strptime(pl.Datetime, "%Y-%m-%d")
+
+                logger.debug(
+                    f"Creating date range filter: column='{column_name}', range=[{start_date}, {end_date}]"
+                )
+
+                # Apply date range filter
+                # Cast column to datetime if it's not already
+                date_col = pl.col(column_name).cast(pl.Datetime)
+                filter_list.append((date_col >= start_date) & (date_col <= end_date))
+
+                logger.debug(f"Applied date range filter on column '{column_name}'")
+            except Exception as e:
+                logger.warning(f"Failed to apply date range filter on column '{column_name}': {e}")
+
 
 # Function to process metadata and build filter list
 def process_metadata_and_filter(metadata):
