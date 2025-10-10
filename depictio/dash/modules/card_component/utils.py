@@ -2,9 +2,388 @@ import dash_mantine_components as dmc
 import numpy as np
 import pandas as pd
 from dash import dcc
+from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.colors import colors
+
+
+def is_color_light(color_str: str) -> bool:
+    """
+    Determine if a color is light or dark using relative luminance.
+
+    Args:
+        color_str: Color string (hex like "#RRGGBB" or CSS variable)
+
+    Returns:
+        bool: True if color is light, False if dark
+
+    Notes:
+        - For CSS variables (var(...)), returns True (assumes light) as default
+        - Uses W3C relative luminance formula: https://www.w3.org/TR/WCAG20/#relativeluminancedef
+        - Luminance > 0.5 is considered light
+    """
+    # Handle CSS variables - default to light (they'll adapt with theme)
+    if color_str.startswith("var("):
+        return True
+
+    # Parse hex color
+    if color_str.startswith("#"):
+        hex_color = color_str.lstrip("#")
+
+        # Handle 3-digit hex (#RGB -> #RRGGBB)
+        if len(hex_color) == 3:
+            hex_color = "".join([c * 2 for c in hex_color])
+
+        # Convert to RGB
+        try:
+            r = int(hex_color[0:2], 16) / 255.0
+            g = int(hex_color[2:4], 16) / 255.0
+            b = int(hex_color[4:6], 16) / 255.0
+
+            # Calculate relative luminance (sRGB)
+            # https://www.w3.org/TR/WCAG20/#relativeluminancedef
+            def linearize(c):
+                if c <= 0.03928:
+                    return c / 12.92
+                return ((c + 0.055) / 1.055) ** 2.4
+
+            r_lin = linearize(r)
+            g_lin = linearize(g)
+            b_lin = linearize(b)
+
+            luminance = 0.2126 * r_lin + 0.7152 * g_lin + 0.0722 * b_lin
+
+            # Luminance > 0.5 is light
+            return luminance > 0.5
+
+        except (ValueError, IndexError):
+            # Invalid hex color - default to light
+            return True
+
+    # Unknown format - default to light
+    return True
+
+
+def get_adaptive_trend_colors(background_color: str | None) -> dict:
+    """
+    Get trend indicator colors that adapt to background color for optimal contrast.
+
+    Args:
+        background_color: Background color of the card (hex, CSS variable, or None for DMC theme)
+
+    Returns:
+        dict: Dictionary with 'positive', 'negative', and 'neutral' color keys
+
+    Examples:
+        >>> get_adaptive_trend_colors("#1a1a1a")  # Dark background
+        {'positive': '#90EE90', 'negative': '#FFB6C1', 'neutral': '#D3D3D3'}
+
+        >>> get_adaptive_trend_colors("#ffffff")  # Light background
+        {'positive': 'green', 'negative': 'red', 'neutral': 'gray'}
+
+        >>> get_adaptive_trend_colors(None)  # DMC auto theme - assume light
+        {'positive': 'green', 'negative': 'red', 'neutral': 'gray'}
+    """
+    # If None or empty, assume DMC default (light) theme
+    if not background_color:
+        is_light = True
+    else:
+        is_light = is_color_light(background_color)
+
+    if is_light:
+        # Light background - use standard dark colors
+        return {
+            "positive": "green",
+            "negative": "red",
+            "neutral": "gray",
+        }
+    else:
+        # Dark background - use bright/light colors for visibility
+        return {
+            "positive": "#90EE90",  # Light green
+            "negative": "#FFB6C1",  # Light pink/red
+            "neutral": "#D3D3D3",  # Light gray
+        }
+
+
+# Predefined metric themes for enhanced UX with icons and background colors
+# Icons from Iconify (https://icon-sets.iconify.design/mdi/)
+METRIC_THEMES = {
+    "temperature": {
+        "icon": "mdi:thermometer",
+        "background": colors["red"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Temperature",
+    },
+    "salinity": {
+        "icon": "mdi:water",
+        "background": colors["blue"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Salinity",
+    },
+    "ph": {
+        "icon": "mdi:flask",
+        "background": colors["purple"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "pH Level",
+    },
+    "oxygen": {
+        "icon": "mdi:air-filter",
+        "background": colors["teal"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Oxygen",
+    },
+    "conductivity": {
+        "icon": "mdi:flash",
+        "background": colors["orange"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Conductivity",
+    },
+    "pressure": {
+        "icon": "mdi:gauge",
+        "background": colors["purple"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Pressure",
+    },
+    "humidity": {
+        "icon": "mdi:water-percent",
+        "background": colors["teal"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Humidity",
+    },
+    "depth": {
+        "icon": "mdi:ruler",
+        "background": colors["grey"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Depth",
+    },
+    "turbidity": {
+        "icon": "mdi:blur",
+        "background": colors["grey"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Turbidity",
+    },
+    "chlorophyll": {
+        "icon": "mdi:leaf",
+        "background": colors["green"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Chlorophyll",
+    },
+    # Quality control and laboratory metrics
+    "quality": {
+        "icon": "mdi:check-circle",
+        "background": colors["green"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Quality Score",
+    },
+    "accuracy": {
+        "icon": "mdi:target",
+        "background": colors["orange"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Accuracy",
+    },
+    "precision": {
+        "icon": "mdi:bullseye-arrow",
+        "background": colors["orange"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Precision",
+    },
+    "purity": {
+        "icon": "mdi:flask-empty",
+        "background": colors["blue"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Purity",
+    },
+    "coverage": {
+        "icon": "mdi:shield-check",
+        "background": colors["teal"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Coverage",
+    },
+    # Statistical metrics
+    "variance": {
+        "icon": "mdi:chart-bell-curve",
+        "background": colors["blue"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Variance",
+    },
+    "correlation": {
+        "icon": "mdi:scatter-plot",
+        "background": colors["teal"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Correlation",
+    },
+    "error": {
+        "icon": "mdi:alert-circle",
+        "background": colors["red"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Error Rate",
+    },
+    # Count and quantity metrics
+    "count": {
+        "icon": "mdi:counter",
+        "background": colors["orange"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Count",
+    },
+    "frequency": {
+        "icon": "mdi:sine-wave",
+        "background": colors["purple"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Frequency",
+    },
+    "concentration": {
+        "icon": "mdi:beaker",
+        "background": colors["green"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Concentration",
+    },
+    # Performance metrics
+    "performance": {
+        "icon": "mdi:speedometer",
+        "background": colors["orange"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Performance",
+    },
+    "throughput": {
+        "icon": "mdi:flash-outline",
+        "background": colors["yellow"],
+        "icon_color": "#2c3e50",
+        "text_color": "#2c3e50",
+        "display_name": "Throughput",
+    },
+    "efficiency": {
+        "icon": "mdi:trending-up",
+        "background": colors["teal"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Efficiency",
+    },
+    # Sequencing/genomics metrics
+    "reads": {
+        "icon": "mdi:dna",
+        "background": colors["purple"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Reads",
+    },
+    "mapping": {
+        "icon": "mdi:map-marker-path",
+        "background": colors["blue"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Mapping Rate",
+    },
+    "duplication": {
+        "icon": "mdi:content-copy",
+        "background": colors["red"],
+        "icon_color": "#ffffff",
+        "text_color": "#ffffff",
+        "display_name": "Duplication",
+    },
+    # Generic/default theme (theme-aware for light/dark mode)
+    "default": {
+        "icon": "mdi:chart-line",
+        "background": "var(--app-surface-color, #ffffff)",
+        "icon_color": "var(--app-text-color, #000000)",
+        "text_color": "var(--app-text-color, #000000)",
+        "display_name": "Default",
+    },
+}
+
+
+def detect_metric_theme(column_name: str) -> str:
+    """
+    Auto-detect metric theme from column name using pattern matching.
+
+    Args:
+        column_name: Name of the column to analyze
+
+    Returns:
+        Theme key from METRIC_THEMES dictionary
+
+    Examples:
+        >>> detect_metric_theme("temperature_celsius")
+        'temperature'
+        >>> detect_metric_theme("salinity_psu")
+        'salinity'
+        >>> detect_metric_theme("my_custom_column")
+        'default'
+    """
+    if not column_name:
+        return "default"
+
+    column_lower = column_name.lower()
+
+    # Pattern matching for common metric types
+    theme_patterns = {
+        # Environmental/physical metrics
+        "temperature": ["temp", "temperature", "celsius", "fahrenheit", "kelvin"],
+        "salinity": ["salin", "salt", "psu", "pss"],
+        "ph": ["ph", "acidity", "alkalinity"],
+        "oxygen": ["oxygen", "o2", "dissolved_oxygen", "do"],
+        "conductivity": ["conduct", "ec", "electrical"],
+        "pressure": ["press", "bar", "pascal", "psi", "atm"],
+        "humidity": ["humid", "moisture", "rh"],
+        "depth": ["depth", "altitude", "elevation"],
+        "turbidity": ["turbid", "ntu", "clarity"],
+        "chlorophyll": ["chlor", "chl", "phyto"],
+        # Quality control metrics
+        "quality": ["quality", "qc", "quality_score", "q_score", "qscore"],
+        "accuracy": ["accuracy", "acc", "accurate"],
+        "precision": ["precision", "prec", "repeatability", "reproducibility"],
+        "purity": ["purity", "contam", "contamination", "pure"],
+        "coverage": ["coverage", "cov", "breadth", "completeness"],
+        # Statistical metrics
+        "variance": ["variance", "var", "std", "stdev", "deviation"],
+        "correlation": ["correlation", "corr", "pearson", "spearman", "r_value"],
+        "error": ["error", "err", "fail", "failure", "reject"],
+        # Count/quantity metrics
+        "count": ["count", "num", "number", "n_", "total"],
+        "frequency": ["frequency", "freq", "hz", "rate"],
+        "concentration": ["concentration", "conc", "molarity", "intensity", "level"],
+        # Performance metrics
+        "performance": ["performance", "perf", "score", "metric"],
+        "throughput": ["throughput", "tput", "processing_rate"],
+        "efficiency": ["efficiency", "eff", "yield"],
+        # Sequencing/genomics metrics
+        "reads": ["reads", "read_count", "sequences", "seq"],
+        "mapping": ["mapping", "mapped", "alignment", "align"],
+        "duplication": ["duplication", "dup", "duplicate", "pcr_dup"],
+    }
+
+    # Check each theme's patterns
+    for theme, patterns in theme_patterns.items():
+        if any(pattern in column_lower for pattern in patterns):
+            logger.debug(f"Auto-detected theme '{theme}' for column '{column_name}'")
+            return theme
+
+    logger.debug(f"No specific theme detected for column '{column_name}', using default")
+    return "default"
 
 
 def get_reference_value_from_cols_json(cols_json, column_name, aggregation):
@@ -239,9 +618,48 @@ def build_card(**kwargs):
     cols_json = kwargs.get("cols_json", {})
     access_token = kwargs.get("access_token")
     parent_index = kwargs.get("parent_index", None)
+    metric_theme = kwargs.get("metric_theme", None)
+
+    # New individual style parameters
+    # Convert empty strings to None for DMC theme compliance
+    background_color = kwargs.get("background_color") or None
+    title_color = kwargs.get("title_color") or None
+    icon_name = kwargs.get("icon_name", None)
+    icon_color = kwargs.get("icon_color") or None
+    title_font_size = kwargs.get("title_font_size", "md")
+    value_font_size = kwargs.get("value_font_size", "xl")
+
+    # Backward compatibility: Auto-detect theme if not provided and no individual styles set
+    # Only auto-detect if we don't have explicit style parameters
+    if not metric_theme and not any([background_color, title_color, icon_name]):
+        if column_name:
+            metric_theme = detect_metric_theme(column_name)
+        else:
+            metric_theme = "default"
+
+    # Extract styles from theme if metric_theme is provided (backward compatibility)
+    # Otherwise use individual parameters with DMC theme-aware defaults
+    if metric_theme and metric_theme != "default":
+        theme_config = METRIC_THEMES.get(metric_theme, METRIC_THEMES["default"])
+        # Use individual parameters if provided, otherwise fall back to theme
+        background_color = background_color or theme_config["background"]
+        title_color = title_color or theme_config["text_color"]
+        icon_name = icon_name or theme_config["icon"]
+        icon_color = icon_color or theme_config["icon_color"]
+        logger.debug(f"Using metric theme '{metric_theme}' for column '{column_name}'")
+    else:
+        # No theme - use individual parameters with DMC defaults (None = auto-theme)
+        # DMC compliance: None values let DMC theme system handle colors automatically
+        background_color = background_color  # None or user-specified
+        title_color = title_color  # None or user-specified
+        icon_name = icon_name or "mdi:chart-line"
+        icon_color = icon_color  # None or user-specified
+        logger.debug(f"Using DMC theme-compliant styling for column '{column_name}'")
 
     if stepper:
-        index = f"{index}-tmp"
+        # Defensive check: only append -tmp if not already present
+        if not str(index).endswith("-tmp"):
+            index = f"{index}-tmp"
 
     # PATTERN-MATCHING ARCHITECTURE: All data loading and value computation moved to callbacks
     # This function only creates the UI structure - values populate asynchronously via:
@@ -277,6 +695,14 @@ def build_card(**kwargs):
             "column_name": column_name,
             "value": v,  # Legacy support - may be None for new pattern-matching cards
             "parent_index": parent_index,
+            "metric_theme": metric_theme,  # Deprecated, kept for backward compatibility
+            # New individual style fields
+            "background_color": background_color,
+            "title_color": title_color,
+            "icon_name": icon_name,
+            "icon_color": icon_color,
+            "title_font_size": title_font_size,
+            "value_font_size": value_font_size,
         },
     )
 
@@ -298,6 +724,14 @@ def build_card(**kwargs):
             "cols_json": cols_json,
             "access_token": access_token,
             "stepper": stepper,
+            "metric_theme": metric_theme,  # Deprecated, kept for backward compatibility
+            # New individual style fields
+            "background_color": background_color,
+            "title_color": title_color,
+            "icon_name": icon_name,
+            "icon_color": icon_color,
+            "title_font_size": title_font_size,
+            "value_font_size": value_font_size,
         },
     )
 
@@ -322,37 +756,60 @@ def build_card(**kwargs):
     # Actual values will be populated by render_card_value_background callback
     # Comparison text will be added by patch_card_with_filters callback
 
-    def ensure_string_color(color_value, default_color="gray"):
-        """Ensure color value is a string that DMC can parse."""
-        if color_value is None:
-            return default_color
-        elif isinstance(color_value, str):
-            return color_value
-        else:
-            return str(color_value) if color_value else default_color
-
-    title_color = ensure_string_color(color) if color else "gray"
-
     # Use legacy value if provided (for backward compatibility), otherwise show loading placeholder
     display_value = str(v) if v is not None else "..."
 
+    # Add icon overlay (always show icon now, not just for themed cards)
+    # Build icon style conditionally - only set color if specified (DMC compliance)
+    icon_style = {
+        "opacity": "0.3",
+        "position": "absolute",
+        "right": "10px",
+        "top": "10px",
+    }
+    if icon_color:
+        icon_style["color"] = icon_color
+
+    icon_overlay_component = [
+        dmc.Group(
+            [
+                DashIconify(
+                    icon=icon_name,
+                    width=40,
+                    style=icon_style,
+                ),
+            ],
+            style={"position": "relative"},
+        )
+    ]
+
+    # Build text components with conditional color props (DMC compliance)
+    # Only set 'c' prop if title_color is specified, otherwise let DMC theme handle it
+    title_text_kwargs = {
+        "children": card_title,
+        "size": title_font_size,
+        "fw": "bold",
+        "style": {"margin": "0", "marginLeft": "-2px"},
+    }
+    if title_color:
+        title_text_kwargs["c"] = title_color
+
+    value_text_style = {"margin": "0", "marginLeft": "-2px"}
+    if title_color:
+        value_text_style["color"] = title_color
+
     card_content = [
-        dmc.Text(
-            card_title,
-            size="md",
-            c=title_color,
-            fw="bold",
-            style={"margin": "0", "marginLeft": "-2px"},
-        ),
+        *icon_overlay_component,  # Unpack the list here
+        dmc.Text(**title_text_kwargs),
         dmc.Text(
             display_value,
-            size="xl",
+            size=value_font_size,
             fw="bold",
             id={
                 "type": "card-value",
                 "index": str(index),
             },
-            style={"margin": "0", "marginLeft": "-2px"},
+            style=value_text_style,
         ),
         # PATTERN-MATCHING: Comparison container - populated by patching callback
         dmc.Group(
@@ -372,21 +829,45 @@ def build_card(**kwargs):
         trigger_store,
         metadata_store,
     ]
+    # Removed the conditional insert as icon_overlay_component is now unpacked directly
 
     # Create the modern card body using DMC Card component
     # When in stepper mode without frame, use minimal styling to avoid double box
+    # Determine card styling based on whether it's a custom styled card
+    # DMC compliance: Only set bg if background_color is specified (not None)
+    has_custom_styling = background_color is not None
+    card_radius = "8px" if has_custom_styling else "sm"
+    card_padding = "1rem" if has_custom_styling else "xs"
+
+    # Build CardSection kwargs conditionally (DMC compliance)
+    card_section_kwargs = {
+        "children": card_content,
+        "bdrs": card_radius,
+        "p": card_padding,
+        "style": {
+            "height": "100%",
+            "display": "flex",
+            "flexDirection": "column",
+            "justifyContent": "center",
+        },
+    }
+    # Only set bg prop if background_color is specified (DMC theme compliance)
+    if background_color:
+        card_section_kwargs["bg"] = background_color
+
     if stepper and not build_frame:
         # Return card with minimal styling - no extra borders or padding
+        card_style = {
+            "boxSizing": "content-box",
+            "height": "100%",
+            "minHeight": "120px",
+        }
+
         new_card_body = dmc.Card(
-            children=card_content,
-            withBorder=False,
-            style={
-                "boxSizing": "content-box",
-                "height": "100%",
-                "minHeight": "120px",
-                "padding": "0",
-                # Remove any styling that could create visual boundaries
-            },
+            children=[dmc.CardSection(**card_section_kwargs)],
+            withBorder=True,
+            shadow="sm",
+            style=card_style,
             id={
                 "type": "card",
                 "index": str(index),
@@ -394,17 +875,17 @@ def build_card(**kwargs):
         )
     else:
         # Normal mode with standard card styling
+        card_style = {
+            "boxSizing": "content-box",
+            "height": "100%",
+            "minHeight": "120px",
+        }
+
         new_card_body = dmc.Card(
-            children=card_content,
-            withBorder=False,
-            # shadow="sm",
-            # radius="md",
-            style={
-                "boxSizing": "content-box",
-                "height": "100%",
-                "minHeight": "120px",
-                "padding": "0",
-            },
+            children=[dmc.CardSection(**card_section_kwargs)],
+            withBorder=True,
+            shadow="sm",
+            style=card_style,
             id={
                 "type": "card",
                 "index": str(index),
