@@ -231,9 +231,10 @@ class TestMultiQCProcessor:
                 mock_glob.return_value = []
 
                 with patch("depictio.cli.cli.utils.multiqc_processor.Path") as mock_path:
+                    mock_cwd = MagicMock()
+                    mock_cwd.iterdir.return_value = []
+                    mock_path.cwd.return_value = mock_cwd
                     mock_path.return_value.exists.return_value = False
-                    mock_path.cwd.return_value = Path("/test")
-                    mock_path.return_value.iterdir.return_value = []
 
                     result = process_multiqc_data_collection(
                         sample_data_collection, sample_cli_config, workflow=sample_workflow
