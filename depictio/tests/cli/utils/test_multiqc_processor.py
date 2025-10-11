@@ -1,5 +1,6 @@
 """Tests for MultiQC processor utilities."""
 
+import builtins
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -10,6 +11,9 @@ from depictio.cli.cli.utils.multiqc_processor import (
     process_multiqc_data_collection,
     validate_multiqc_parquet,
 )
+
+# Save original __import__ before any mocking happens
+_original_import = builtins.__import__
 
 
 class TestMultiQCProcessor:
@@ -56,15 +60,24 @@ class TestMultiQCProcessor:
         workflow.data_location.locations = ["/test/data/location"]
         return workflow
 
+    @patch("depictio.cli.cli.utils.multiqc_processor.build_sample_mapping", create=True)
     @patch("builtins.__import__")
-    def test_extract_multiqc_metadata_success(self, mock_import, mock_multiqc_module):
+    def test_extract_multiqc_metadata_success(
+        self, mock_import, mock_build_mapping, mock_multiqc_module
+    ):
         """Test successful metadata extraction from MultiQC parquet file."""
+        # Mock build_sample_mapping to return simple 1:1 mapping
+        mock_build_mapping.return_value = {
+            "sample1": ["sample1"],
+            "sample2": ["sample2"],
+            "sample3": ["sample3"],
+        }
 
         def mock_import_func(name, *args, **kwargs):
             if name == "multiqc":
                 return mock_multiqc_module
             else:
-                return __import__(name, *args, **kwargs)
+                return _original_import(name, *args, **kwargs)
 
         mock_import.side_effect = mock_import_func
 
@@ -82,9 +95,19 @@ class TestMultiQCProcessor:
         assert result["modules"] == ["fastqc", "cutadapt"]
         assert result["plots"] == {"fastqc": ["quality", "length"], "cutadapt": ["trimmed"]}
 
+    @patch("depictio.cli.cli.utils.multiqc_processor.build_sample_mapping", create=True)
     @patch("builtins.__import__")
-    def test_extract_multiqc_metadata_plots_error(self, mock_import, mock_multiqc_module):
+    def test_extract_multiqc_metadata_plots_error(
+        self, mock_import, mock_build_mapping, mock_multiqc_module
+    ):
         """Test metadata extraction when plots extraction fails."""
+        # Mock build_sample_mapping to return simple 1:1 mapping
+        mock_build_mapping.return_value = {
+            "sample1": ["sample1"],
+            "sample2": ["sample2"],
+            "sample3": ["sample3"],
+        }
+
         # Configure plots to raise an exception
         mock_multiqc_module.list_plots.side_effect = Exception("Plots extraction failed")
 
@@ -92,7 +115,7 @@ class TestMultiQCProcessor:
             if name == "multiqc":
                 return mock_multiqc_module
             else:
-                return __import__(name, *args, **kwargs)
+                return _original_import(name, *args, **kwargs)
 
         mock_import.side_effect = mock_import_func
 
@@ -103,55 +126,104 @@ class TestMultiQCProcessor:
         assert result["modules"] == ["fastqc", "cutadapt"]
         assert result["plots"] == {}
 
-    def test_extract_multiqc_metadata_import_error(self):
+    @patch("depictio.cli.cli.utils.multiqc_processor.build_sample_mapping", create=True)
+    @patch("builtins.__import__")
+    def test_extract_multiqc_metadata_import_error(self, mock_import, mock_build_mapping):
         """Test handling of missing multiqc module."""
-        with patch("depictio.cli.cli.utils.multiqc_processor.multiqc", side_effect=ImportError):
-            with pytest.raises(ImportError):
-                extract_multiqc_metadata("/path/to/multiqc.parquet")
 
-    def test_extract_multiqc_metadata_parse_error(self, mock_multiqc_module):
+        def mock_import_func(name, *args, **kwargs):
+            if name == "multiqc":
+                raise ImportError("multiqc module not found")
+            else:
+                return _original_import(name, *args, **kwargs)
+
+        mock_import.side_effect = mock_import_func
+
+        with pytest.raises(ImportError):
+            extract_multiqc_metadata("/path/to/multiqc.parquet")
+
+    @patch("depictio.cli.cli.utils.multiqc_processor.build_sample_mapping", create=True)
+    @patch("builtins.__import__")
+    def test_extract_multiqc_metadata_parse_error(
+        self, mock_import, mock_build_mapping, mock_multiqc_module
+    ):
         """Test handling of parse errors."""
+        # Configure parse_logs to raise an exception
         mock_multiqc_module.parse_logs.side_effect = Exception("Parse failed")
 
-        with patch("depictio.cli.cli.utils.multiqc_processor.multiqc", mock_multiqc_module):
-            with pytest.raises(Exception) as exc_info:
-                extract_multiqc_metadata("/path/to/multiqc.parquet")
-            assert "Parse failed" in str(exc_info.value)
+        def mock_import_func(name, *args, **kwargs):
+            if name == "multiqc":
+                return mock_multiqc_module
+            else:
+                return _original_import(name, *args, **kwargs)
 
-    def test_validate_multiqc_parquet_success(self, mock_multiqc_module):
+        mock_import.side_effect = mock_import_func
+
+        with pytest.raises(Exception) as exc_info:
+            extract_multiqc_metadata("/path/to/multiqc.parquet")
+        assert "Parse failed" in str(exc_info.value)
+
+    @patch("builtins.__import__")
+    def test_validate_multiqc_parquet_success(self, mock_import, mock_multiqc_module):
         """Test successful validation of MultiQC parquet file."""
-        with patch("depictio.cli.cli.utils.multiqc_processor.multiqc", mock_multiqc_module):
-            result = validate_multiqc_parquet("/path/to/multiqc.parquet")
 
-            assert result is True
-            mock_multiqc_module.reset.assert_called_once()
-            mock_multiqc_module.parse_logs.assert_called_once_with("/path/to/multiqc.parquet")
+        def mock_import_func(name, *args, **kwargs):
+            if name == "multiqc":
+                return mock_multiqc_module
+            else:
+                return _original_import(name, *args, **kwargs)
 
-    def test_validate_multiqc_parquet_no_data(self, mock_multiqc_module):
+        mock_import.side_effect = mock_import_func
+
+        result = validate_multiqc_parquet("/path/to/multiqc.parquet")
+
+        assert result is True
+        mock_multiqc_module.reset.assert_called_once()
+        mock_multiqc_module.parse_logs.assert_called_once_with("/path/to/multiqc.parquet")
+
+    @patch("builtins.__import__")
+    def test_validate_multiqc_parquet_no_data(self, mock_import, mock_multiqc_module):
         """Test validation failure when no samples or modules found."""
         mock_multiqc_module.list_samples.return_value = []
         mock_multiqc_module.list_modules.return_value = []
 
-        with patch("depictio.cli.cli.utils.multiqc_processor.multiqc", mock_multiqc_module):
-            result = validate_multiqc_parquet("/path/to/multiqc.parquet")
+        def mock_import_func(name, *args, **kwargs):
+            if name == "multiqc":
+                return mock_multiqc_module
+            else:
+                return _original_import(name, *args, **kwargs)
 
-            assert result is False
+        mock_import.side_effect = mock_import_func
 
-    def test_validate_multiqc_parquet_exception(self, mock_multiqc_module):
+        result = validate_multiqc_parquet("/path/to/multiqc.parquet")
+
+        assert result is False
+
+    @patch("builtins.__import__")
+    def test_validate_multiqc_parquet_exception(self, mock_import, mock_multiqc_module):
         """Test validation handling of exceptions."""
         mock_multiqc_module.parse_logs.side_effect = Exception("Invalid file")
 
-        with patch("depictio.cli.cli.utils.multiqc_processor.multiqc", mock_multiqc_module):
-            result = validate_multiqc_parquet("/path/to/multiqc.parquet")
+        def mock_import_func(name, *args, **kwargs):
+            if name == "multiqc":
+                return mock_multiqc_module
+            else:
+                return _original_import(name, *args, **kwargs)
 
-            assert result is False
+        mock_import.side_effect = mock_import_func
+
+        result = validate_multiqc_parquet("/path/to/multiqc.parquet")
+
+        assert result is False
 
     def test_process_multiqc_data_collection_no_files_in_db(
         self, sample_data_collection, sample_cli_config, sample_workflow, mock_multiqc_module
     ):
         """Test processing when no files found in database."""
         # Mock no files found in database
-        with patch("depictio.cli.cli.utils.multiqc_processor.fetch_file_data") as mock_fetch:
+        with patch(
+            "depictio.cli.cli.utils.multiqc_processor.fetch_file_data", create=True
+        ) as mock_fetch:
             mock_fetch.side_effect = Exception("No files found")
 
             # Mock no files found in filesystem either
@@ -175,7 +247,9 @@ class TestMultiQCProcessor:
     ):
         """Test processing with file discovery from workflow data locations."""
         # Mock no files found in database
-        with patch("depictio.cli.cli.utils.multiqc_processor.fetch_file_data") as mock_fetch:
+        with patch(
+            "depictio.cli.cli.utils.multiqc_processor.fetch_file_data", create=True
+        ) as mock_fetch:
             mock_fetch.side_effect = Exception("No files found")
 
             # Mock glob finding files
@@ -194,7 +268,9 @@ class TestMultiQCProcessor:
 
                     # Mock S3 and API operations
                     with patch(
-                        "depictio.cli.cli.utils.multiqc_processor.multiqc", mock_multiqc_module
+                        "depictio.cli.cli.utils.multiqc_processor.multiqc",
+                        mock_multiqc_module,
+                        create=True,
                     ):
                         with patch(
                             "depictio.cli.cli.utils.multiqc_processor.turn_S3_config_into_polars_storage_options"
@@ -245,7 +321,9 @@ class TestMultiQCProcessor:
         mock_file = MagicMock()
         mock_file.file_location = "/path/to/multiqc.parquet"
 
-        with patch("depictio.cli.cli.utils.multiqc_processor.fetch_file_data") as mock_fetch:
+        with patch(
+            "depictio.cli.cli.utils.multiqc_processor.fetch_file_data", create=True
+        ) as mock_fetch:
             mock_fetch.return_value = [mock_file]
 
             # Mock file operations
@@ -256,7 +334,11 @@ class TestMultiQCProcessor:
                 mock_path.return_value = mock_path_instance
 
                 # Mock S3 and API operations
-                with patch("depictio.cli.cli.utils.multiqc_processor.multiqc", mock_multiqc_module):
+                with patch(
+                    "depictio.cli.cli.utils.multiqc_processor.multiqc",
+                    mock_multiqc_module,
+                    create=True,
+                ):
                     with patch(
                         "depictio.cli.cli.utils.multiqc_processor.turn_S3_config_into_polars_storage_options"
                     ) as mock_s3_opts:
@@ -300,7 +382,9 @@ class TestMultiQCProcessor:
         mock_file = MagicMock()
         mock_file.file_location = "/path/to/multiqc.parquet"
 
-        with patch("depictio.cli.cli.utils.multiqc_processor.fetch_file_data") as mock_fetch:
+        with patch(
+            "depictio.cli.cli.utils.multiqc_processor.fetch_file_data", create=True
+        ) as mock_fetch:
             mock_fetch.return_value = [mock_file]
 
             with patch("depictio.cli.cli.utils.multiqc_processor.Path") as mock_path:
@@ -308,7 +392,11 @@ class TestMultiQCProcessor:
                 mock_path_instance.exists.return_value = True
                 mock_path.return_value = mock_path_instance
 
-                with patch("depictio.cli.cli.utils.multiqc_processor.multiqc", mock_multiqc_module):
+                with patch(
+                    "depictio.cli.cli.utils.multiqc_processor.multiqc",
+                    mock_multiqc_module,
+                    create=True,
+                ):
                     with patch(
                         "depictio.cli.cli.utils.multiqc_processor.turn_S3_config_into_polars_storage_options"
                     ):
@@ -334,7 +422,9 @@ class TestMultiQCProcessor:
         mock_file = MagicMock()
         mock_file.file_location = "/path/to/multiqc.parquet"
 
-        with patch("depictio.cli.cli.utils.multiqc_processor.fetch_file_data") as mock_fetch:
+        with patch(
+            "depictio.cli.cli.utils.multiqc_processor.fetch_file_data", create=True
+        ) as mock_fetch:
             mock_fetch.return_value = [mock_file]
 
             with patch("depictio.cli.cli.utils.multiqc_processor.Path") as mock_path:
@@ -343,7 +433,11 @@ class TestMultiQCProcessor:
                 mock_path_instance.stat.return_value.st_size = 1024000
                 mock_path.return_value = mock_path_instance
 
-                with patch("depictio.cli.cli.utils.multiqc_processor.multiqc", mock_multiqc_module):
+                with patch(
+                    "depictio.cli.cli.utils.multiqc_processor.multiqc",
+                    mock_multiqc_module,
+                    create=True,
+                ):
                     with patch(
                         "depictio.cli.cli.utils.multiqc_processor.turn_S3_config_into_polars_storage_options"
                     ):
@@ -375,7 +469,9 @@ class TestMultiQCProcessor:
         mock_file = MagicMock()
         mock_file.file_location = "/path/to/data.txt"  # Non-parquet file
 
-        with patch("depictio.cli.cli.utils.multiqc_processor.fetch_file_data") as mock_fetch:
+        with patch(
+            "depictio.cli.cli.utils.multiqc_processor.fetch_file_data", create=True
+        ) as mock_fetch:
             mock_fetch.return_value = [mock_file]
 
             result = process_multiqc_data_collection(sample_data_collection, sample_cli_config)
@@ -408,7 +504,9 @@ class TestMultiQCProcessor:
                     "plots": {"cutadapt": ["trimmed"]},
                 }
 
-        with patch("depictio.cli.cli.utils.multiqc_processor.fetch_file_data") as mock_fetch:
+        with patch(
+            "depictio.cli.cli.utils.multiqc_processor.fetch_file_data", create=True
+        ) as mock_fetch:
             mock_fetch.return_value = [mock_file1, mock_file2]
 
             with patch("depictio.cli.cli.utils.multiqc_processor.Path") as mock_path:
@@ -483,11 +581,24 @@ class TestMultiQCProcessor:
             ]
         }
 
-        with patch("depictio.cli.cli.utils.multiqc_processor.multiqc", mock_multiqc_module):
-            result = extract_multiqc_metadata("/path/to/real_multiqc.parquet")
+        with patch(
+            "depictio.cli.cli.utils.multiqc_processor.build_sample_mapping", create=True
+        ) as mock_build_mapping:
+            mock_build_mapping.return_value = {
+                "NMP_R2_L1_2": ["NMP_R2_L1_2_val_2"],
+                "NMP_R1_L2_1": ["NMP_R1_L2_1_val_1", "NMP_R1_L2_1"],
+                "test_2": ["test_2"],
+                "test_1": ["test_1 - polya"],
+                "sample1_S1_L001_R2": ["sample1_S1_L001_R2_001"],
+                "NMP_R1_L1_1": ["NMP_R1_L1_1_val_1"],
+            }
+            with patch(
+                "depictio.cli.cli.utils.multiqc_processor.multiqc", mock_multiqc_module, create=True
+            ):
+                result = extract_multiqc_metadata("/path/to/real_multiqc.parquet")
 
-            assert len(result["samples"]) == 7
-            assert result["modules"] == ["fastqc"]
-            assert "fastqc" in result["plots"]
-            assert len(result["plots"]["fastqc"]) == 6
-            assert isinstance(result["plots"]["fastqc"][3], dict)  # Complex nested structure
+                assert len(result["samples"]) == 7
+                assert result["modules"] == ["fastqc"]
+                assert "fastqc" in result["plots"]
+                assert len(result["plots"]["fastqc"]) == 6
+                assert isinstance(result["plots"]["fastqc"][3], dict)  # Complex nested structure
