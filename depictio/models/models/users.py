@@ -323,10 +323,10 @@ class Permission(BaseModel):
 
     # Step 2: Validate permissions after field-level validation
     @model_validator(mode="after")
-    def ensure_owners_and_viewers_are_unique(cls, values):
-        owners = values.owners
-        editors = values.editors
-        viewers = values.viewers
+    def ensure_owners_and_viewers_are_unique(self):
+        owners = self.owners
+        editors = self.editors
+        viewers = self.viewers
         # logger.debug(f"Owners: {owners}")
         # logger.debug(f"Editors: {editors}")
         # logger.debug(f"Viewers: {viewers}")
@@ -342,7 +342,7 @@ class Permission(BaseModel):
         if not editor_ids.isdisjoint(viewer_ids):
             raise ValueError("A User cannot be both an editor and a viewer.")
 
-        return values
+        return self
 
 
 class RequestEditPassword(BaseModel):
