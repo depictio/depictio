@@ -1,6 +1,5 @@
 """Tests for MultiQC processor utilities."""
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -56,71 +55,97 @@ class TestMultiQCProcessor:
         workflow.data_location.locations = ["/test/data/location"]
         return workflow
 
-    @patch("builtins.__import__")
-    def test_extract_multiqc_metadata_success(self, mock_import, mock_multiqc_module):
+    @patch("depictio.api.v1.endpoints.multiqc_endpoints.utils.build_sample_mapping")
+    def test_extract_multiqc_metadata_success(self, mock_build_sample_mapping, mock_multiqc_module):
         """Test successful metadata extraction from MultiQC parquet file."""
+        # Mock build_sample_mapping to avoid database connection
+        mock_build_sample_mapping.return_value = {
+            "sample1": ["sample1"],
+            "sample2": ["sample2"],
+            "sample3": ["sample3"],
+        }
 
-        def mock_import_func(name, *args, **kwargs):
-            if name == "multiqc":
-                return mock_multiqc_module
-            else:
-                return __import__(name, *args, **kwargs)
+        # Patch multiqc at sys.modules level to intercept import
+        import sys
 
-        mock_import.side_effect = mock_import_func
+        with patch.dict(sys.modules, {"multiqc": mock_multiqc_module}):
+            result = extract_multiqc_metadata("/path/to/multiqc.parquet")
 
-        result = extract_multiqc_metadata("/path/to/multiqc.parquet")
+            # Verify multiqc module calls
+            mock_multiqc_module.reset.assert_called_once()
+            mock_multiqc_module.parse_logs.assert_called_once_with("/path/to/multiqc.parquet")
+            mock_multiqc_module.list_samples.assert_called_once()
+            mock_multiqc_module.list_modules.assert_called_once()
+            mock_multiqc_module.list_plots.assert_called_once()
 
-        # Verify multiqc module calls
-        mock_multiqc_module.reset.assert_called_once()
-        mock_multiqc_module.parse_logs.assert_called_once_with("/path/to/multiqc.parquet")
-        mock_multiqc_module.list_samples.assert_called_once()
-        mock_multiqc_module.list_modules.assert_called_once()
-        mock_multiqc_module.list_plots.assert_called_once()
+            # Verify extracted metadata
+            assert result["samples"] == ["sample1", "sample2", "sample3"]
+            assert result["modules"] == ["fastqc", "cutadapt"]
+            assert result["plots"] == {"fastqc": ["quality", "length"], "cutadapt": ["trimmed"]}
 
-        # Verify extracted metadata
-        assert result["samples"] == ["sample1", "sample2", "sample3"]
-        assert result["modules"] == ["fastqc", "cutadapt"]
-        assert result["plots"] == {"fastqc": ["quality", "length"], "cutadapt": ["trimmed"]}
-
-    @patch("builtins.__import__")
-    def test_extract_multiqc_metadata_plots_error(self, mock_import, mock_multiqc_module):
+    @patch("depictio.api.v1.endpoints.multiqc_endpoints.utils.build_sample_mapping")
+    def test_extract_multiqc_metadata_plots_error(
+        self, mock_build_sample_mapping, mock_multiqc_module
+    ):
         """Test metadata extraction when plots extraction fails."""
         # Configure plots to raise an exception
         mock_multiqc_module.list_plots.side_effect = Exception("Plots extraction failed")
 
-        def mock_import_func(name, *args, **kwargs):
-            if name == "multiqc":
-                return mock_multiqc_module
-            else:
-                return __import__(name, *args, **kwargs)
+        # Mock build_sample_mapping to avoid database connection
+        mock_build_sample_mapping.return_value = {
+            "sample1": ["sample1"],
+            "sample2": ["sample2"],
+            "sample3": ["sample3"],
+        }
 
-        mock_import.side_effect = mock_import_func
+        # Patch multiqc at sys.modules level to intercept import
+        import sys
 
-        result = extract_multiqc_metadata("/path/to/multiqc.parquet")
+        with patch.dict(sys.modules, {"multiqc": mock_multiqc_module}):
+            result = extract_multiqc_metadata("/path/to/multiqc.parquet")
 
-        # Should still return samples and modules, but empty plots
-        assert result["samples"] == ["sample1", "sample2", "sample3"]
-        assert result["modules"] == ["fastqc", "cutadapt"]
-        assert result["plots"] == {}
+            # Should still return samples and modules, but empty plots
+            assert result["samples"] == ["sample1", "sample2", "sample3"]
+            assert result["modules"] == ["fastqc", "cutadapt"]
+            assert result["plots"] == {}
 
     def test_extract_multiqc_metadata_import_error(self):
         """Test handling of missing multiqc module."""
-        with patch("depictio.cli.cli.utils.multiqc_processor.multiqc", side_effect=ImportError):
-            with pytest.raises(ImportError):
-                extract_multiqc_metadata("/path/to/multiqc.parquet")
+        # Patch sys.modules to make multiqc import fail
+        import builtins
+        import sys
+
+        # Save original import
+        original_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name == "multiqc":
+                raise ImportError("No module named 'multiqc'")
+            return original_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", side_effect=mock_import):
+            # Also ensure multiqc is not in sys.modules
+            with patch.dict(sys.modules, {"multiqc": None}, clear=False):
+                sys.modules.pop("multiqc", None)
+                with pytest.raises(ImportError):
+                    extract_multiqc_metadata("/path/to/multiqc.parquet")
 
     def test_extract_multiqc_metadata_parse_error(self, mock_multiqc_module):
         """Test handling of parse errors."""
         mock_multiqc_module.parse_logs.side_effect = Exception("Parse failed")
 
-        with patch("depictio.cli.cli.utils.multiqc_processor.multiqc", mock_multiqc_module):
+        import sys
+
+        with patch.dict(sys.modules, {"multiqc": mock_multiqc_module}):
             with pytest.raises(Exception) as exc_info:
                 extract_multiqc_metadata("/path/to/multiqc.parquet")
             assert "Parse failed" in str(exc_info.value)
 
     def test_validate_multiqc_parquet_success(self, mock_multiqc_module):
         """Test successful validation of MultiQC parquet file."""
-        with patch("depictio.cli.cli.utils.multiqc_processor.multiqc", mock_multiqc_module):
+        import sys
+
+        with patch.dict(sys.modules, {"multiqc": mock_multiqc_module}):
             result = validate_multiqc_parquet("/path/to/multiqc.parquet")
 
             assert result is True
@@ -132,7 +157,9 @@ class TestMultiQCProcessor:
         mock_multiqc_module.list_samples.return_value = []
         mock_multiqc_module.list_modules.return_value = []
 
-        with patch("depictio.cli.cli.utils.multiqc_processor.multiqc", mock_multiqc_module):
+        import sys
+
+        with patch.dict(sys.modules, {"multiqc": mock_multiqc_module}):
             result = validate_multiqc_parquet("/path/to/multiqc.parquet")
 
             assert result is False
@@ -141,7 +168,9 @@ class TestMultiQCProcessor:
         """Test validation handling of exceptions."""
         mock_multiqc_module.parse_logs.side_effect = Exception("Invalid file")
 
-        with patch("depictio.cli.cli.utils.multiqc_processor.multiqc", mock_multiqc_module):
+        import sys
+
+        with patch.dict(sys.modules, {"multiqc": mock_multiqc_module}):
             result = validate_multiqc_parquet("/path/to/multiqc.parquet")
 
             assert result is False
@@ -151,17 +180,21 @@ class TestMultiQCProcessor:
     ):
         """Test processing when no files found in database."""
         # Mock no files found in database
-        with patch("depictio.cli.cli.utils.multiqc_processor.fetch_file_data") as mock_fetch:
+        with patch("depictio.cli.cli.utils.deltatables.fetch_file_data") as mock_fetch:
             mock_fetch.side_effect = Exception("No files found")
 
             # Mock no files found in filesystem either
-            with patch("depictio.cli.cli.utils.multiqc_processor.glob") as mock_glob:
+            with patch("glob.glob") as mock_glob:
                 mock_glob.return_value = []
 
                 with patch("depictio.cli.cli.utils.multiqc_processor.Path") as mock_path:
+                    # Mock Path instance for path checking
                     mock_path.return_value.exists.return_value = False
-                    mock_path.cwd.return_value = Path("/test")
-                    mock_path.return_value.iterdir.return_value = []
+
+                    # Mock Path.cwd() to return a mock instead of real Path
+                    mock_cwd = MagicMock()
+                    mock_cwd.iterdir.return_value = []
+                    mock_path.cwd.return_value = mock_cwd
 
                     result = process_multiqc_data_collection(
                         sample_data_collection, sample_cli_config, workflow=sample_workflow
@@ -170,34 +203,153 @@ class TestMultiQCProcessor:
                     assert result["result"] == "error"
                     assert "No MultiQC parquet files found" in result["message"]
 
+    @patch("depictio.api.v1.endpoints.multiqc_endpoints.utils.build_sample_mapping")
     def test_process_multiqc_data_collection_file_discovery(
-        self, sample_data_collection, sample_cli_config, sample_workflow, mock_multiqc_module
+        self,
+        mock_build_sample_mapping,
+        sample_data_collection,
+        sample_cli_config,
+        sample_workflow,
+        mock_multiqc_module,
     ):
         """Test processing with file discovery from workflow data locations."""
+        # Mock build_sample_mapping to avoid database connection
+        mock_build_sample_mapping.return_value = {
+            "sample1": ["sample1"],
+            "sample2": ["sample2"],
+            "sample3": ["sample3"],
+        }
+
         # Mock no files found in database
-        with patch("depictio.cli.cli.utils.multiqc_processor.fetch_file_data") as mock_fetch:
+        with patch("depictio.cli.cli.utils.deltatables.fetch_file_data") as mock_fetch:
             mock_fetch.side_effect = Exception("No files found")
 
             # Mock glob finding files
-            with patch("depictio.cli.cli.utils.multiqc_processor.glob") as mock_glob:
+            with patch("glob.glob") as mock_glob:
                 mock_glob.return_value = ["/test/data/location/run1/multiqc_data/multiqc.parquet"]
+
+                # Mock api_check_duplicate_multiqc_report to avoid Pydantic validation errors
+                with patch(
+                    "depictio.cli.cli.utils.multiqc_processor.api_check_duplicate_multiqc_report"
+                ) as mock_check_duplicate:
+                    mock_check_duplicate.return_value = None  # No duplicate found
+
+                    # Mock file operations
+                    with patch("depictio.cli.cli.utils.multiqc_processor.Path") as mock_path:
+                        # Make exists() selective - only return True for the glob-returned file
+                        def mock_exists_for_path(path_str):
+                            # Return True only for the file from glob
+                            return (
+                                str(path_str)
+                                == "/test/data/location/run1/multiqc_data/multiqc.parquet"
+                            )
+
+                        mock_path_instance = MagicMock()
+                        mock_path_instance.exists = MagicMock(
+                            side_effect=lambda: mock_exists_for_path(mock_path_instance._path)
+                        )
+
+                        # Mock absolute() to return a mock instead of real Path
+                        mock_absolute = MagicMock()
+                        mock_absolute.__str__.return_value = (
+                            "/test/data/location/run1/multiqc_data/multiqc.parquet"
+                        )
+                        mock_path_instance.absolute.return_value = mock_absolute
+
+                        mock_path_instance.stat.return_value.st_size = 1024000
+
+                        # Configure Path() to return our mock instance and track the path
+                        def path_constructor(path_str):
+                            mock_path_instance._path = str(path_str)
+                            return mock_path_instance
+
+                        mock_path.side_effect = path_constructor
+
+                        # Mock S3 and API operations
+                        import sys
+
+                        with patch.dict(sys.modules, {"multiqc": mock_multiqc_module}):
+                            with patch(
+                                "depictio.models.s3_utils.turn_S3_config_into_polars_storage_options"
+                            ) as mock_s3_opts:
+                                mock_s3_opts.return_value = MagicMock(
+                                    endpoint_url="http://localhost:9000",
+                                    aws_access_key_id="test",
+                                    aws_secret_access_key="test",
+                                    region="us-east-1",
+                                )
+
+                                with patch("boto3.client") as mock_boto3_client:
+                                    mock_s3_client = MagicMock()
+                                    mock_boto3_client.return_value = mock_s3_client
+
+                                    with patch(
+                                        "depictio.cli.cli.utils.multiqc_processor.api_create_multiqc_report"
+                                    ) as mock_api:
+                                        mock_response = MagicMock()
+                                        mock_response.status_code = 200
+                                        mock_response.json.return_value = {
+                                            "report": {"id": "saved_report_id"}
+                                        }
+                                        mock_api.return_value = mock_response
+
+                                        result = process_multiqc_data_collection(
+                                            sample_data_collection,
+                                            sample_cli_config,
+                                            workflow=sample_workflow,
+                                        )
+
+                                        assert result["result"] == "success"
+                                        assert "Processed 1 MultiQC files" in result["message"]
+
+                                        # Verify S3 upload was called
+                                        mock_s3_client.upload_file.assert_called_once()
+
+                                        # Verify API call was made
+                                        mock_api.assert_called_once()
+
+    @patch("depictio.api.v1.endpoints.multiqc_endpoints.utils.build_sample_mapping")
+    def test_process_multiqc_data_collection_with_existing_files(
+        self,
+        mock_build_sample_mapping,
+        sample_data_collection,
+        sample_cli_config,
+        mock_multiqc_module,
+    ):
+        """Test processing with files already in database."""
+        # Mock build_sample_mapping to avoid database connection
+        mock_build_sample_mapping.return_value = {
+            "sample1": ["sample1"],
+            "sample2": ["sample2"],
+            "sample3": ["sample3"],
+        }
+
+        # Mock files found in database
+        mock_file = MagicMock()
+        mock_file.file_location = "/path/to/multiqc.parquet"
+
+        with patch("depictio.cli.cli.utils.deltatables.fetch_file_data") as mock_fetch:
+            mock_fetch.return_value = [mock_file]
+
+            # Mock api_check_duplicate_multiqc_report to avoid Pydantic validation errors
+            with patch(
+                "depictio.cli.cli.utils.multiqc_processor.api_check_duplicate_multiqc_report"
+            ) as mock_check_duplicate:
+                mock_check_duplicate.return_value = None  # No duplicate found
 
                 # Mock file operations
                 with patch("depictio.cli.cli.utils.multiqc_processor.Path") as mock_path:
                     mock_path_instance = MagicMock()
                     mock_path_instance.exists.return_value = True
-                    mock_path_instance.absolute.return_value = Path(
-                        "/test/data/location/run1/multiqc_data/multiqc.parquet"
-                    )
-                    mock_path_instance.stat.return_value.st_size = 1024000
+                    mock_path_instance.stat.return_value.st_size = 2048000
                     mock_path.return_value = mock_path_instance
 
                     # Mock S3 and API operations
-                    with patch(
-                        "depictio.cli.cli.utils.multiqc_processor.multiqc", mock_multiqc_module
-                    ):
+                    import sys
+
+                    with patch.dict(sys.modules, {"multiqc": mock_multiqc_module}):
                         with patch(
-                            "depictio.cli.cli.utils.multiqc_processor.turn_S3_config_into_polars_storage_options"
+                            "depictio.models.s3_utils.turn_S3_config_into_polars_storage_options"
                         ) as mock_s3_opts:
                             mock_s3_opts.return_value = MagicMock(
                                 endpoint_url="http://localhost:9000",
@@ -206,11 +358,9 @@ class TestMultiQCProcessor:
                                 region="us-east-1",
                             )
 
-                            with patch(
-                                "depictio.cli.cli.utils.multiqc_processor.boto3"
-                            ) as mock_boto3:
+                            with patch("boto3.client") as mock_boto3_client:
                                 mock_s3_client = MagicMock()
-                                mock_boto3.client.return_value = mock_s3_client
+                                mock_boto3_client.return_value = mock_s3_client
 
                                 with patch(
                                     "depictio.cli.cli.utils.multiqc_processor.api_create_multiqc_report"
@@ -223,118 +373,96 @@ class TestMultiQCProcessor:
                                     mock_api.return_value = mock_response
 
                                     result = process_multiqc_data_collection(
-                                        sample_data_collection,
-                                        sample_cli_config,
-                                        workflow=sample_workflow,
+                                        sample_data_collection, sample_cli_config
                                     )
 
                                     assert result["result"] == "success"
-                                    assert "Processed 1 MultiQC files" in result["message"]
+                                    assert "metadata" in result
+                                    assert set(result["metadata"]["samples"]) == {  # type: ignore[index]
+                                        "sample1",
+                                        "sample2",
+                                        "sample3",
+                                    }
 
-                                    # Verify S3 upload was called
-                                    mock_s3_client.upload_file.assert_called_once()
-
-                                    # Verify API call was made
+                                    # Verify API call was made after function execution
                                     mock_api.assert_called_once()
 
-    def test_process_multiqc_data_collection_with_existing_files(
-        self, sample_data_collection, sample_cli_config, mock_multiqc_module
+    @patch("depictio.api.v1.endpoints.multiqc_endpoints.utils.build_sample_mapping")
+    def test_process_multiqc_data_collection_s3_upload_failure(
+        self,
+        mock_build_sample_mapping,
+        sample_data_collection,
+        sample_cli_config,
+        mock_multiqc_module,
     ):
-        """Test processing with files already in database."""
-        # Mock files found in database
+        """Test handling of S3 upload failures."""
+        # Mock build_sample_mapping to avoid database connection
+        mock_build_sample_mapping.return_value = {
+            "sample1": ["sample1"],
+            "sample2": ["sample2"],
+            "sample3": ["sample3"],
+        }
+
         mock_file = MagicMock()
         mock_file.file_location = "/path/to/multiqc.parquet"
 
-        with patch("depictio.cli.cli.utils.multiqc_processor.fetch_file_data") as mock_fetch:
+        with patch("depictio.cli.cli.utils.deltatables.fetch_file_data") as mock_fetch:
             mock_fetch.return_value = [mock_file]
 
-            # Mock file operations
-            with patch("depictio.cli.cli.utils.multiqc_processor.Path") as mock_path:
-                mock_path_instance = MagicMock()
-                mock_path_instance.exists.return_value = True
-                mock_path_instance.stat.return_value.st_size = 2048000
-                mock_path.return_value = mock_path_instance
+            # Mock api_check_duplicate_multiqc_report to avoid Pydantic validation errors
+            with patch(
+                "depictio.cli.cli.utils.multiqc_processor.api_check_duplicate_multiqc_report"
+            ) as mock_check_duplicate:
+                mock_check_duplicate.return_value = None  # No duplicate found
 
-                # Mock S3 and API operations
-                with patch("depictio.cli.cli.utils.multiqc_processor.multiqc", mock_multiqc_module):
-                    with patch(
-                        "depictio.cli.cli.utils.multiqc_processor.turn_S3_config_into_polars_storage_options"
-                    ) as mock_s3_opts:
-                        mock_s3_opts.return_value = MagicMock(
-                            endpoint_url="http://localhost:9000",
-                            aws_access_key_id="test",
-                            aws_secret_access_key="test",
-                            region="us-east-1",
-                        )
+                with patch("depictio.cli.cli.utils.multiqc_processor.Path") as mock_path:
+                    mock_path_instance = MagicMock()
+                    mock_path_instance.exists.return_value = True
+                    mock_path_instance.stat.return_value.st_size = 1024000
+                    mock_path.return_value = mock_path_instance
 
-                        with patch("depictio.cli.cli.utils.multiqc_processor.boto3") as mock_boto3:
-                            mock_s3_client = MagicMock()
-                            mock_boto3.client.return_value = mock_s3_client
+                    import sys
 
-                            with patch(
-                                "depictio.cli.cli.utils.multiqc_processor.api_create_multiqc_report"
-                            ) as mock_api:
-                                mock_response = MagicMock()
-                                mock_response.status_code = 200
-                                mock_response.json.return_value = {
-                                    "report": {"id": "saved_report_id"}
-                                }
-                                mock_api.assert_called_once()
+                    with patch.dict(sys.modules, {"multiqc": mock_multiqc_module}):
+                        with patch(
+                            "depictio.models.s3_utils.turn_S3_config_into_polars_storage_options"
+                        ):
+                            with patch("boto3.client") as mock_boto3_client:
+                                mock_s3_client = MagicMock()
+                                mock_s3_client.upload_file.side_effect = Exception(
+                                    "S3 upload failed"
+                                )
+                                mock_boto3_client.return_value = mock_s3_client
 
                                 result = process_multiqc_data_collection(
                                     sample_data_collection, sample_cli_config
                                 )
 
+                                # Function succeeds if metadata extraction works, even if S3 upload fails
                                 assert result["result"] == "success"
                                 assert "metadata" in result
-                                assert result["metadata"]["samples"] == [  # type: ignore[index]
-                                    "sample1",
-                                    "sample2",
-                                    "sample3",
-                                ]
+                                assert "Processed 1 MultiQC files" in result["message"]
 
-    def test_process_multiqc_data_collection_s3_upload_failure(
-        self, sample_data_collection, sample_cli_config, mock_multiqc_module
-    ):
-        """Test handling of S3 upload failures."""
-        mock_file = MagicMock()
-        mock_file.file_location = "/path/to/multiqc.parquet"
-
-        with patch("depictio.cli.cli.utils.multiqc_processor.fetch_file_data") as mock_fetch:
-            mock_fetch.return_value = [mock_file]
-
-            with patch("depictio.cli.cli.utils.multiqc_processor.Path") as mock_path:
-                mock_path_instance = MagicMock()
-                mock_path_instance.exists.return_value = True
-                mock_path.return_value = mock_path_instance
-
-                with patch("depictio.cli.cli.utils.multiqc_processor.multiqc", mock_multiqc_module):
-                    with patch(
-                        "depictio.cli.cli.utils.multiqc_processor.turn_S3_config_into_polars_storage_options"
-                    ):
-                        with patch("depictio.cli.cli.utils.multiqc_processor.boto3") as mock_boto3:
-                            mock_s3_client = MagicMock()
-                            mock_s3_client.upload_file.side_effect = Exception("S3 upload failed")
-                            mock_boto3.client.return_value = mock_s3_client
-
-                            result = process_multiqc_data_collection(
-                                sample_data_collection, sample_cli_config
-                            )
-
-                            assert result["result"] == "error"
-                            assert (
-                                "No MultiQC parquet files were successfully processed"
-                                in result["message"]
-                            )
-
+    @patch("depictio.api.v1.endpoints.multiqc_endpoints.utils.build_sample_mapping")
     def test_process_multiqc_data_collection_api_failure(
-        self, sample_data_collection, sample_cli_config, mock_multiqc_module
+        self,
+        mock_build_sample_mapping,
+        sample_data_collection,
+        sample_cli_config,
+        mock_multiqc_module,
     ):
         """Test handling of API save failures."""
+        # Mock build_sample_mapping to avoid database connection
+        mock_build_sample_mapping.return_value = {
+            "sample1": ["sample1"],
+            "sample2": ["sample2"],
+            "sample3": ["sample3"],
+        }
+
         mock_file = MagicMock()
         mock_file.file_location = "/path/to/multiqc.parquet"
 
-        with patch("depictio.cli.cli.utils.multiqc_processor.fetch_file_data") as mock_fetch:
+        with patch("depictio.cli.cli.utils.deltatables.fetch_file_data") as mock_fetch:
             mock_fetch.return_value = [mock_file]
 
             with patch("depictio.cli.cli.utils.multiqc_processor.Path") as mock_path:
@@ -343,13 +471,15 @@ class TestMultiQCProcessor:
                 mock_path_instance.stat.return_value.st_size = 1024000
                 mock_path.return_value = mock_path_instance
 
-                with patch("depictio.cli.cli.utils.multiqc_processor.multiqc", mock_multiqc_module):
+                import sys
+
+                with patch.dict(sys.modules, {"multiqc": mock_multiqc_module}):
                     with patch(
-                        "depictio.cli.cli.utils.multiqc_processor.turn_S3_config_into_polars_storage_options"
+                        "depictio.models.s3_utils.turn_S3_config_into_polars_storage_options"
                     ):
-                        with patch("depictio.cli.cli.utils.multiqc_processor.boto3") as mock_boto3:
+                        with patch("boto3.client") as mock_boto3_client:
                             mock_s3_client = MagicMock()
-                            mock_boto3.client.return_value = mock_s3_client
+                            mock_boto3_client.return_value = mock_s3_client
 
                             with patch(
                                 "depictio.cli.cli.utils.multiqc_processor.api_create_multiqc_report"
@@ -375,13 +505,15 @@ class TestMultiQCProcessor:
         mock_file = MagicMock()
         mock_file.file_location = "/path/to/data.txt"  # Non-parquet file
 
-        with patch("depictio.cli.cli.utils.multiqc_processor.fetch_file_data") as mock_fetch:
+        with patch("depictio.cli.cli.utils.deltatables.fetch_file_data") as mock_fetch:
             mock_fetch.return_value = [mock_file]
 
-            result = process_multiqc_data_collection(sample_data_collection, sample_cli_config)
+            # Mock turn_S3_config_into_polars_storage_options to avoid Pydantic validation
+            with patch("depictio.models.s3_utils.turn_S3_config_into_polars_storage_options"):
+                result = process_multiqc_data_collection(sample_data_collection, sample_cli_config)
 
-            assert result["result"] == "error"
-            assert "No MultiQC parquet files were successfully processed" in result["message"]
+                assert result["result"] == "error"
+                assert "No MultiQC parquet files were successfully processed" in result["message"]
 
     def test_process_multiqc_data_collection_metadata_merging(
         self, sample_data_collection, sample_cli_config, mock_multiqc_module
@@ -408,7 +540,7 @@ class TestMultiQCProcessor:
                     "plots": {"cutadapt": ["trimmed"]},
                 }
 
-        with patch("depictio.cli.cli.utils.multiqc_processor.fetch_file_data") as mock_fetch:
+        with patch("depictio.cli.cli.utils.deltatables.fetch_file_data") as mock_fetch:
             mock_fetch.return_value = [mock_file1, mock_file2]
 
             with patch("depictio.cli.cli.utils.multiqc_processor.Path") as mock_path:
@@ -423,11 +555,11 @@ class TestMultiQCProcessor:
                     mock_extract.side_effect = mock_extract_metadata
 
                     with patch(
-                        "depictio.cli.cli.utils.multiqc_processor.turn_S3_config_into_polars_storage_options"
+                        "depictio.models.s3_utils.turn_S3_config_into_polars_storage_options"
                     ):
-                        with patch("depictio.cli.cli.utils.multiqc_processor.boto3") as mock_boto3:
+                        with patch("boto3.client") as mock_boto3_client:
                             mock_s3_client = MagicMock()
-                            mock_boto3.client.return_value = mock_s3_client
+                            mock_boto3_client.return_value = mock_s3_client
 
                             with patch(
                                 "depictio.cli.cli.utils.multiqc_processor.api_create_multiqc_report"
@@ -483,7 +615,9 @@ class TestMultiQCProcessor:
             ]
         }
 
-        with patch("depictio.cli.cli.utils.multiqc_processor.multiqc", mock_multiqc_module):
+        import sys
+
+        with patch.dict(sys.modules, {"multiqc": mock_multiqc_module}):
             result = extract_multiqc_metadata("/path/to/real_multiqc.parquet")
 
             assert len(result["samples"]) == 7

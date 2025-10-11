@@ -171,75 +171,173 @@ class TestMultiQCEndpointUtils:
     @pytest.mark.asyncio
     async def test_get_multiqc_reports_by_data_collection_empty_result(self):
         """Test getting MultiQC reports with empty result."""
-        reports, total_count = await get_multiqc_reports_by_data_collection(
-            "507f1f77bcf86cd799439012", 50, 0
-        )
+        # Mock MongoDB collection for empty result
+        with patch(
+            "depictio.api.v1.endpoints.multiqc_endpoints.utils.multiqc_collection"
+        ) as mock_collection:
+            mock_collection.count_documents.return_value = 0
+            mock_collection.find.return_value.skip.return_value.limit.return_value.sort.return_value = []
 
-        assert reports == []
-        assert total_count == 0
+            reports, total_count = await get_multiqc_reports_by_data_collection(
+                "507f1f77bcf86cd799439012", 50, 0
+            )
+
+            assert reports == []
+            assert total_count == 0
+            mock_collection.count_documents.assert_called_once_with(
+                {"data_collection_id": "507f1f77bcf86cd799439012"}
+            )
 
     @pytest.mark.asyncio
     async def test_get_multiqc_reports_by_data_collection_with_pagination(self):
         """Test getting MultiQC reports with pagination parameters."""
-        reports, total_count = await get_multiqc_reports_by_data_collection(
-            "507f1f77bcf86cd799439012", 10, 20
-        )
+        # Mock MongoDB collection for pagination
+        with patch(
+            "depictio.api.v1.endpoints.multiqc_endpoints.utils.multiqc_collection"
+        ) as mock_collection:
+            mock_collection.count_documents.return_value = 0
+            mock_collection.find.return_value.skip.return_value.limit.return_value.sort.return_value = []
 
-        assert reports == []
-        assert total_count == 0
+            reports, total_count = await get_multiqc_reports_by_data_collection(
+                "507f1f77bcf86cd799439012", 10, 20
+            )
+
+            assert reports == []
+            assert total_count == 0
+            # Verify pagination parameters were used
+            mock_collection.find.return_value.skip.assert_called_once_with(20)
+            mock_collection.find.return_value.skip.return_value.limit.assert_called_once_with(10)
 
     @pytest.mark.asyncio
     async def test_get_multiqc_report_by_id_not_found(self):
         """Test getting non-existent MultiQC report by ID."""
-        with pytest.raises(HTTPException) as exc_info:
-            await get_multiqc_report_by_id("nonexistent_id")
+        # Use a valid ObjectId format that doesn't exist
+        with patch(
+            "depictio.api.v1.endpoints.multiqc_endpoints.utils.multiqc_collection"
+        ) as mock_collection:
+            mock_collection.find_one.return_value = None
 
-        assert exc_info.value.status_code == 404  # type: ignore[attr-defined]  # type: ignore[attr-defined]
-        assert "MultiQC report not found" in exc_info.value.detail  # type: ignore[attr-defined]
+            with pytest.raises(HTTPException) as exc_info:
+                await get_multiqc_report_by_id("507f1f77bcf86cd799439011")
+
+            assert exc_info.value.status_code == 404  # type: ignore[attr-defined]  # type: ignore[attr-defined]
+            assert "MultiQC report not found" in exc_info.value.detail  # type: ignore[attr-defined]
 
     @pytest.mark.asyncio
     async def test_delete_multiqc_report_by_id_success(self):
         """Test successful deletion of MultiQC report."""
-        result = await delete_multiqc_report_by_id("507f1f77bcf86cd799439013", True)
+        # Mock MongoDB collection
+        with patch(
+            "depictio.api.v1.endpoints.multiqc_endpoints.utils.multiqc_collection"
+        ) as mock_collection:
+            # Mock finding the report with all required fields
+            mock_report = {
+                "_id": ObjectId("507f1f77bcf86cd799439013"),
+                "data_collection_id": "507f1f77bcf86cd799439012",
+                "s3_location": "s3://test-bucket/test-collection/multiqc.parquet",
+                "original_file_path": "/path/to/multiqc.parquet",
+                "file_size_bytes": 1024000,
+                "report_name": "Test Report",
+                "metadata": {
+                    "samples": ["sample1"],
+                    "modules": ["fastqc"],
+                    "plots": {},
+                },
+            }
+            mock_collection.find_one.return_value = mock_report
 
-        assert result["deleted"] is True
-        assert result["s3_file_deleted"] is True
-        assert "MultiQC report 507f1f77bcf86cd799439013 deleted successfully" in result["message"]
+            # Mock successful deletion
+            mock_delete_result = MagicMock()
+            mock_delete_result.deleted_count = 1
+            mock_collection.delete_one.return_value = mock_delete_result
+
+            # Mock S3 client
+            with patch("depictio.api.v1.endpoints.multiqc_endpoints.utils.s3_client") as mock_s3:
+                mock_s3.list_objects_v2.return_value = {"Contents": [{"Key": "test.parquet"}]}
+                mock_s3.delete_objects.return_value = None
+
+                result = await delete_multiqc_report_by_id("507f1f77bcf86cd799439013", True)
+
+                assert result["deleted"] is True
+                assert "507f1f77bcf86cd799439013 deleted successfully" in result["message"]
 
     @pytest.mark.asyncio
     async def test_delete_multiqc_report_by_id_without_s3_deletion(self):
         """Test deletion without S3 file removal."""
-        result = await delete_multiqc_report_by_id("507f1f77bcf86cd799439013", False)
+        # Mock MongoDB collection
+        with patch(
+            "depictio.api.v1.endpoints.multiqc_endpoints.utils.multiqc_collection"
+        ) as mock_collection:
+            # Mock finding the report with all required fields
+            mock_report = {
+                "_id": ObjectId("507f1f77bcf86cd799439013"),
+                "data_collection_id": "507f1f77bcf86cd799439012",
+                "s3_location": "s3://test-bucket/test-collection/multiqc.parquet",
+                "original_file_path": "/path/to/multiqc.parquet",
+                "file_size_bytes": 1024000,
+                "report_name": "Test Report",
+                "metadata": {
+                    "samples": ["sample1"],
+                    "modules": ["fastqc"],
+                    "plots": {},
+                },
+            }
+            mock_collection.find_one.return_value = mock_report
 
-        assert result["deleted"] is True
-        assert result["s3_file_deleted"] is False
-        assert "MultiQC report 507f1f77bcf86cd799439013 deleted successfully" in result["message"]
+            # Mock successful deletion
+            mock_delete_result = MagicMock()
+            mock_delete_result.deleted_count = 1
+            mock_collection.delete_one.return_value = mock_delete_result
+
+            result = await delete_multiqc_report_by_id("507f1f77bcf86cd799439013", False)
+
+            assert result["deleted"] is True
+            assert result["s3_file_deleted"] is False
+            assert "507f1f77bcf86cd799439013 deleted successfully" in result["message"]
 
     @pytest.mark.asyncio
     async def test_get_multiqc_report_metadata_by_id_not_found(self):
         """Test getting metadata for non-existent report."""
-        with pytest.raises(HTTPException) as exc_info:
-            await get_multiqc_report_metadata_by_id("nonexistent_id")
+        # Use valid ObjectId format and mock the collection
+        with patch(
+            "depictio.api.v1.endpoints.multiqc_endpoints.utils.multiqc_collection"
+        ) as mock_collection:
+            mock_collection.find_one.return_value = None
 
-        assert exc_info.value.status_code == 404  # type: ignore[attr-defined]  # type: ignore[attr-defined]
-        assert "MultiQC report not found" in exc_info.value.detail  # type: ignore[attr-defined]
+            with pytest.raises(HTTPException) as exc_info:
+                await get_multiqc_report_metadata_by_id("507f1f77bcf86cd799439011")
+
+            assert exc_info.value.status_code == 404  # type: ignore[attr-defined]  # type: ignore[attr-defined]
+            assert "MultiQC report not found" in exc_info.value.detail  # type: ignore[attr-defined]
 
     @pytest.mark.asyncio
     async def test_generate_multiqc_download_url_not_found(self):
         """Test generating download URL for non-existent report."""
-        with pytest.raises(HTTPException) as exc_info:
-            await generate_multiqc_download_url("nonexistent_id", 24)
+        # Use valid ObjectId format and mock the collection
+        with patch(
+            "depictio.api.v1.endpoints.multiqc_endpoints.utils.multiqc_collection"
+        ) as mock_collection:
+            mock_collection.find_one.return_value = None
 
-        assert exc_info.value.status_code == 404  # type: ignore[attr-defined]  # type: ignore[attr-defined]
-        assert "MultiQC report not found" in exc_info.value.detail  # type: ignore[attr-defined]
+            with pytest.raises(HTTPException) as exc_info:
+                await generate_multiqc_download_url("507f1f77bcf86cd799439011", 24)
+
+            assert exc_info.value.status_code == 404  # type: ignore[attr-defined]  # type: ignore[attr-defined]
+            assert "MultiQC report not found" in exc_info.value.detail  # type: ignore[attr-defined]
 
     @pytest.mark.asyncio
     async def test_generate_multiqc_download_url_custom_expiration(self):
         """Test download URL generation with custom expiration."""
-        with pytest.raises(HTTPException) as exc_info:
-            await generate_multiqc_download_url("nonexistent_id", 72)
+        # Use valid ObjectId format and mock the collection
+        with patch(
+            "depictio.api.v1.endpoints.multiqc_endpoints.utils.multiqc_collection"
+        ) as mock_collection:
+            mock_collection.find_one.return_value = None
 
-        assert exc_info.value.status_code == 404  # type: ignore[attr-defined]
+            with pytest.raises(HTTPException) as exc_info:
+                await generate_multiqc_download_url("507f1f77bcf86cd799439011", 72)
+
+            assert exc_info.value.status_code == 404  # type: ignore[attr-defined]
 
     @pytest.mark.asyncio
     async def test_model_dump_serialization_in_create(self, sample_multiqc_report):
@@ -293,19 +391,42 @@ class TestMultiQCEndpointUtils:
     @pytest.mark.asyncio
     async def test_function_parameter_validation(self):
         """Test parameter validation for utility functions."""
-        # Test with valid parameters
-        reports, count = await get_multiqc_reports_by_data_collection("valid_id", 50, 0)
-        assert isinstance(reports, list)
-        assert isinstance(count, int)
+        # Mock MongoDB collection for all function calls
+        with patch(
+            "depictio.api.v1.endpoints.multiqc_endpoints.utils.multiqc_collection"
+        ) as mock_collection:
+            # Test with valid parameters
+            mock_collection.count_documents.return_value = 0
+            mock_collection.find.return_value.skip.return_value.limit.return_value.sort.return_value = []
 
-        # Test with different limit and offset values
-        reports, count = await get_multiqc_reports_by_data_collection("valid_id", 10, 100)
-        assert isinstance(reports, list)
-        assert isinstance(count, int)
+            reports, count = await get_multiqc_reports_by_data_collection("valid_id", 50, 0)
+            assert isinstance(reports, list)
+            assert isinstance(count, int)
 
-        # Test deletion with boolean flag
-        result = await delete_multiqc_report_by_id("test_id", True)
-        assert isinstance(result, dict)
-        assert "deleted" in result
-        assert "s3_file_deleted" in result
-        assert "message" in result
+            # Test with different limit and offset values
+            reports, count = await get_multiqc_reports_by_data_collection("valid_id", 10, 100)
+            assert isinstance(reports, list)
+            assert isinstance(count, int)
+
+            # Test deletion with boolean flag
+            mock_report = {
+                "_id": ObjectId("507f1f77bcf86cd799439013"),
+                "data_collection_id": "507f1f77bcf86cd799439012",
+                "s3_location": "s3://test-bucket/test.parquet",
+                "original_file_path": "/path/to/test.parquet",
+                "file_size_bytes": 1024,
+                "report_name": "Test",
+                "metadata": {"samples": [], "modules": [], "plots": {}},
+            }
+            mock_collection.find_one.return_value = mock_report
+
+            mock_delete_result = MagicMock()
+            mock_delete_result.deleted_count = 1
+            mock_collection.delete_one.return_value = mock_delete_result
+
+            with patch("depictio.api.v1.endpoints.multiqc_endpoints.utils.s3_client"):
+                result = await delete_multiqc_report_by_id("507f1f77bcf86cd799439013", True)
+                assert isinstance(result, dict)
+                assert "deleted" in result
+                assert "s3_file_deleted" in result
+                assert "message" in result

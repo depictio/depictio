@@ -350,7 +350,8 @@ class TestGoogleOAuthCallback:
 
         token_response_mock = AsyncMock()
         token_response_mock.status_code = 400
-        token_response_mock.json.return_value = {"error": "invalid_grant"}
+        # json() is a synchronous method in httpx, not async
+        token_response_mock.json = MagicMock(return_value={"error": "invalid_grant"})
         mock_client_instance.post.return_value = token_response_mock
 
         with patch(
