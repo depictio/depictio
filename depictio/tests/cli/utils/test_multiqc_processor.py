@@ -273,7 +273,7 @@ class TestMultiQCProcessor:
                         create=True,
                     ):
                         with patch(
-                            "depictio.cli.cli.utils.multiqc_processor.turn_S3_config_into_polars_storage_options"
+                            "depictio.models.s3_utils.turn_S3_config_into_polars_storage_options"
                         ) as mock_s3_opts:
                             mock_s3_opts.return_value = MagicMock(
                                 endpoint_url="http://localhost:9000",
@@ -340,7 +340,7 @@ class TestMultiQCProcessor:
                     create=True,
                 ):
                     with patch(
-                        "depictio.cli.cli.utils.multiqc_processor.turn_S3_config_into_polars_storage_options"
+                        "depictio.models.s3_utils.turn_S3_config_into_polars_storage_options"
                     ) as mock_s3_opts:
                         mock_s3_opts.return_value = MagicMock(
                             endpoint_url="http://localhost:9000",
@@ -398,7 +398,7 @@ class TestMultiQCProcessor:
                     create=True,
                 ):
                     with patch(
-                        "depictio.cli.cli.utils.multiqc_processor.turn_S3_config_into_polars_storage_options"
+                        "depictio.models.s3_utils.turn_S3_config_into_polars_storage_options"
                     ):
                         with patch("depictio.cli.cli.utils.multiqc_processor.boto3") as mock_boto3:
                             mock_s3_client = MagicMock()
@@ -439,7 +439,7 @@ class TestMultiQCProcessor:
                     create=True,
                 ):
                     with patch(
-                        "depictio.cli.cli.utils.multiqc_processor.turn_S3_config_into_polars_storage_options"
+                        "depictio.models.s3_utils.turn_S3_config_into_polars_storage_options"
                     ):
                         with patch("depictio.cli.cli.utils.multiqc_processor.boto3") as mock_boto3:
                             mock_s3_client = MagicMock()
@@ -521,7 +521,7 @@ class TestMultiQCProcessor:
                     mock_extract.side_effect = mock_extract_metadata
 
                     with patch(
-                        "depictio.cli.cli.utils.multiqc_processor.turn_S3_config_into_polars_storage_options"
+                        "depictio.models.s3_utils.turn_S3_config_into_polars_storage_options"
                     ):
                         with patch("depictio.cli.cli.utils.multiqc_processor.boto3") as mock_boto3:
                             mock_s3_client = MagicMock()

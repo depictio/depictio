@@ -35,8 +35,8 @@ def extract_multiqc_metadata(parquet_path: str) -> Dict[str, Any]:
         # Import multiqc here to avoid dependency issues if not installed
         import multiqc
 
-        # Import sample mapping utility
-        from depictio.api.v1.endpoints.multiqc_endpoints.utils import build_sample_mapping
+        # Import sample mapping utility from CLI utils (no FastAPI dependency)
+        from depictio.cli.cli.utils.sample_mapping import build_sample_mapping
 
         logger.info(f"Extracting MultiQC metadata from: {parquet_path}")
 
