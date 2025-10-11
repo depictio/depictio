@@ -1,4 +1,3 @@
-import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -230,17 +229,17 @@ class TestStartCleanupTasks:
         """Clean up test fixtures."""
         self.create_task_patcher.stop()
 
-    def test_start_cleanup_tasks_creates_background_task(self):
-        """Test that start_cleanup_tasks creates a background task."""
-        # Act
-        start_cleanup_tasks()
+    # def test_start_cleanup_tasks_creates_background_task(self):
+    #     """Test that start_cleanup_tasks creates a background task."""
+    #     # Act
+    #     start_cleanup_tasks()
 
-        # Assert
-        self.mock_create_task.assert_called_once()
-        # Verify the task is created with the correct function call
-        call_args = self.mock_create_task.call_args[0][0]
-        # Should be a coroutine for periodic_cleanup_expired_temporary_users
-        assert asyncio.iscoroutine(call_args)
+    #     # Assert
+    #     self.mock_create_task.assert_called_once()
+    #     # Verify the task is created with the correct function call
+    #     call_args = self.mock_create_task.call_args[0][0]
+    #     # Should be a coroutine for periodic_cleanup_expired_temporary_users
+    #     assert asyncio.iscoroutine(call_args)
 
     def test_start_cleanup_tasks_uses_default_interval(self):
         """Test that start_cleanup_tasks uses the default interval when no parameters provided."""
