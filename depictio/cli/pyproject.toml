@@ -35,7 +35,7 @@ classifiers = [
 
 [project.optional-dependencies]
 lts-cpu = ["polars-lts-cpu==1.19.0"]
-multiqc = ["multiqc>=1.31.0"]
+multiqc = ["multiqc==1.31.0"]
 
 [project.scripts]
 depictio-cli = "depictio.cli.depictio_cli:main"
