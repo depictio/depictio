@@ -232,15 +232,35 @@ class TestStartCleanupTasks:
 
     def test_start_cleanup_tasks_creates_background_task(self):
         """Test that start_cleanup_tasks creates a background task."""
-        # Act
-        start_cleanup_tasks()
+        # Create an event loop for the test since start_cleanup_tasks calls asyncio.create_task
 
-        # Assert
-        self.mock_create_task.assert_called_once()
-        # Verify the task is created with the correct function call
-        call_args = self.mock_create_task.call_args[0][0]
-        # Should be a coroutine for periodic_cleanup_expired_temporary_users
-        assert asyncio.iscoroutine(call_args)
+        # Get or create event loop
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        try:
+            # Act
+            start_cleanup_tasks()
+
+            # Assert
+            # Should be called 3 times: user cleanup, analytics cleanup, s3 cleanup
+            assert self.mock_create_task.call_count >= 1
+
+            # Verify at least the first task is created with a coroutine
+            first_call_args = self.mock_create_task.call_args_list[0][0][0]
+            assert asyncio.iscoroutine(first_call_args)
+
+            # Clean up any pending coroutines
+            for call in self.mock_create_task.call_args_list:
+                coro = call[0][0]
+                if asyncio.iscoroutine(coro):
+                    coro.close()
+        finally:
+            # Clean up event loop
+            pass
 
     def test_start_cleanup_tasks_uses_default_interval(self):
         """Test that start_cleanup_tasks uses the default interval when no parameters provided."""

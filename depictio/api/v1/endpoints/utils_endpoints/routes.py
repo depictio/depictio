@@ -16,7 +16,10 @@ from depictio.api.v1.db import (
     workflows_collection,
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
-from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
+from depictio.api.v1.endpoints.utils_endpoints.core_functions import (
+    cleanup_orphaned_s3_files,
+    create_bucket,
+)
 from depictio.api.v1.endpoints.utils_endpoints.infrastructure_diagnostics import (
     run_comprehensive_diagnostics,
 )
@@ -104,6 +107,39 @@ async def status():
     logger.info("Server is online.")
 
     return {"status": "online", "version": get_version()}
+
+
+@utils_endpoint_router.post("/cleanup-orphaned-s3-files")
+async def cleanup_orphaned_s3_files_endpoint(
+    dry_run: bool = True,
+    force: bool = False,
+    current_user: UserBeanie = Depends(get_current_user),
+):
+    """
+    Clean up S3 files from data collections that no longer exist in MongoDB.
+
+    This endpoint requires admin privileges.
+
+    Args:
+        dry_run: If True, only report what would be deleted without actually deleting (default: True)
+        force: If True, bypass safety check when all prefixes appear orphaned (default: False)
+        current_user: Authenticated user (must be admin)
+
+    Returns:
+        Cleanup results with statistics
+    """
+    # Validate user is an admin
+    if not current_user.is_admin:
+        logger.warning(f"Unauthorized S3 cleanup attempt by user: {current_user.email}")
+        raise HTTPException(status_code=403, detail="Admin privileges required")
+
+    logger.info(
+        f"S3 cleanup requested by admin {current_user.email} (dry_run={dry_run}, force={force})"
+    )
+
+    results = await cleanup_orphaned_s3_files(dry_run=dry_run, force=force)
+
+    return results
 
 
 @utils_endpoint_router.post("/process_initial_data_collections")
@@ -624,68 +660,52 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
             except Exception as e:
                 logger.warning(f"⚠️ Timeout waiting for components to render: {e}")
 
-            # Component-based screenshot targeting (from working prototype)
+            # Direct dashboard content targeting, excluding navbar and header
             try:
-                components = await page.query_selector_all(".react-grid-item")
-                logger.info(f"📸 Found {len(components)} dashboard components")
-
-                if components and len(components) > 0:
-                    # Create composite view of all components (strategy from prototype)
-                    composite_element = await page.evaluate("""
-                        () => {
-                            const components = document.querySelectorAll('.react-grid-item');
-                            if (components.length === 0) return null;
-
-                            // Get bounding box of all components
-                            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-
-                            components.forEach(component => {
-                                const rect = component.getBoundingClientRect();
-                                minX = Math.min(minX, rect.left);
-                                minY = Math.min(minY, rect.top);
-                                maxX = Math.max(maxX, rect.right);
-                                maxY = Math.max(maxY, rect.bottom);
-                            });
-
-                            // Create an invisible div that encompasses all components
-                            const container = document.createElement('div');
-                            container.id = 'temp-screenshot-container';
-                            container.style.position = 'absolute';
-                            container.style.left = minX + 'px';
-                            container.style.top = minY + 'px';
-                            container.style.width = (maxX - minX) + 'px';
-                            container.style.height = (maxY - minY) + 'px';
-                            container.style.pointerEvents = 'none';
-                            container.style.border = '2px solid transparent';
-                            container.style.zIndex = '-1';
-
-                            document.body.appendChild(container);
-
-                            return {
-                                width: maxX - minX,
-                                height: maxY - minY,
-                                componentCount: components.length
-                            };
+                # Hide navbar AND header elements, and adjust layout before screenshot
+                await page.evaluate("""
+                    () => {
+                        // Hide navbar
+                        const navbar = document.querySelector('.mantine-AppShell-navbar');
+                        if (navbar) {
+                            navbar.style.display = 'none';
                         }
-                    """)
 
-                    if composite_element:
-                        # Screenshot the composite area
-                        temp_container = await page.query_selector("#temp-screenshot-container")
-                        if temp_container:
-                            await temp_container.screenshot(path=output_file)
-                            logger.info(
-                                f"📸 Component composite screenshot taken ({composite_element['width']:.0f}x{composite_element['height']:.0f})"
-                            )
+                        // Hide header (badges, title, buttons)
+                        const header = document.querySelector('.mantine-AppShell-header');
+                        if (header) {
+                            header.style.display = 'none';
+                        }
 
-                        # Clean up the temporary element
-                        await page.evaluate(
-                            "document.getElementById('temp-screenshot-container')?.remove()"
-                        )
-                    else:
-                        raise Exception("Failed to create composite element")
+                        // Remove any padding/margin from page-content to eliminate white space
+                        const pageContent = document.querySelector('#page-content');
+                        if (pageContent) {
+                            pageContent.style.padding = '0';
+                            pageContent.style.margin = '0';
+                        }
+
+                        // Remove padding from AppShell-main and ensure it takes full width
+                        const appShellMain = document.querySelector('.mantine-AppShell-main');
+                        if (appShellMain) {
+                            appShellMain.style.padding = '0';
+                            appShellMain.style.paddingLeft = '0';
+                            appShellMain.style.margin = '0';
+                        }
+                    }
+                """)
+
+                # Simple approach: screenshot the AppShell-main element directly
+                # This captures the full viewport content without navbar/header
+                main_element = await page.query_selector(".mantine-AppShell-main")
+                if main_element:
+                    await main_element.screenshot(path=output_file)
+                    logger.info("📸 Screenshot taken from .mantine-AppShell-main")
+                    screenshot_taken = True
                 else:
-                    raise Exception("No dashboard components found")
+                    raise Exception("Could not find .mantine-AppShell-main element")
+
+                if not screenshot_taken:
+                    raise Exception("Screenshot was not taken")
 
             except Exception as e:
                 logger.warning(f"Component-based screenshot failed: {e}, trying fallback")

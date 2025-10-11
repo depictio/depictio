@@ -117,7 +117,7 @@ def create_inline_svg_logo():
                 # Interval to trigger the clientside callback
                 dcc.Interval(
                     id="svg-trigger",
-                    interval=100,  # Fire once after 100ms
+                    interval=10,  # Fire once after 100ms
                     n_intervals=0,
                     max_intervals=1,
                 ),

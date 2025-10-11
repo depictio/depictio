@@ -8,6 +8,7 @@ from depictio.dash.modules.card_component.frontend import create_stepper_card_bu
 # Depictio components imports - button step
 from depictio.dash.modules.figure_component.frontend import create_stepper_figure_button
 from depictio.dash.modules.interactive_component.frontend import create_stepper_interactive_button
+from depictio.dash.modules.multiqc_component.frontend import create_stepper_multiqc_button
 from depictio.dash.modules.table_component.frontend import create_stepper_table_button
 from depictio.dash.modules.text_component.frontend import create_stepper_text_button
 
@@ -43,6 +44,9 @@ def register_callbacks_stepper_part_two(app):
         text_stepper_button, text_stepper_button_store = create_stepper_text_button(
             n, disabled=not is_enabled("text")
         )
+        multiqc_stepper_button, multiqc_stepper_button_store = create_stepper_multiqc_button(
+            n, disabled=not is_enabled("multiqc")
+        )
 
         standard_components = [
             figure_stepper_button,
@@ -50,6 +54,7 @@ def register_callbacks_stepper_part_two(app):
             interactive_stepper_button,
             table_stepper_button,
             text_stepper_button,
+            multiqc_stepper_button,
         ]
         # Hide special components (JBrowse, Graph, Map) as requested
         # special_components = [jbrowse_stepper_button]
@@ -115,6 +120,7 @@ def register_callbacks_stepper_part_two(app):
             interactive_stepper_button_store,
             table_stepper_button_store,
             text_stepper_button_store,
+            multiqc_stepper_button_store,
             dcc.Store(
                 id={"type": "last-button", "index": n},
                 data="None",

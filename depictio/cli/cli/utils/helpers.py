@@ -82,9 +82,14 @@ def process_data_collection_helper(
     if dc is None:
         raise ValueError(f"Data collection with id {dc_id} not found.")
 
+    # Only show metatype for table types where it's relevant
+    metatype_info = (
+        f" - metatype {dc.config.metatype}"
+        if dc.config.type.lower() == "table" and dc.config.metatype
+        else ""
+    )
     rich_print_checked_statement(
-        f"  ↪ {task} Data Collection: [bold]{dc.data_collection_tag}[/bold] - type {dc.config.type} - metatype {dc.config.metatype}",
-        # f"\t\t↪ Processing Data Collection: {dc.data_collection_tag} - type {dc.config.type} - metatype {dc.config.metatype}",
+        f"  ↪ {task} Data Collection: [bold]{dc.data_collection_tag}[/bold] - type {dc.config.type}{metatype_info}",
         "info",
     )
     logger.info(f"{task} Data collection: {dc.data_collection_tag}")
@@ -104,6 +109,7 @@ def process_data_collection_helper(
             data_collection=dc,
             CLI_config=CLI_config,
             command_parameters=command_parameters,
+            workflow=wf,
         )
         return result
     else:

@@ -337,18 +337,13 @@ def refresh_children_based_on_click_data(
                 metadata["filter_applied"] = True
         logger.info(f"TMP Stored metadata: {stored_metadata}")
 
-        new_children = update_interactive_component_sync(
-            stored_metadata,
-            updated_interactive_components,
-            draggable_children,
-            switch_state=edit_components_mode_button,
-            TOKEN=TOKEN,
-            dashboard_id=dashboard_id,
-            theme="light",  # TODO: Get theme from store
-        )
-        # state_stored_draggable_children[dashboard_id] = new_children
+        # PATTERN-MATCHING ARCHITECTURE: Components handle their own filter updates
+        # updated_interactive_components triggers interactive-values-store update
+        # Pattern-matching callbacks (cards, figures, tables) listen and update themselves
+        # No need to rebuild children - return unchanged and let callbacks handle updates
+        logger.info("✅ Click data processed - pattern-matching callbacks handle component updates")
 
-        return new_children, updated_interactive_components
+        return draggable_children, updated_interactive_components
 
 
 def refresh_children_based_on_selected_data(

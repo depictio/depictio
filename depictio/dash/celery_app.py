@@ -19,35 +19,12 @@ celery_app = Celery(
     backend=settings.celery.broker_url,
 )
 
-# Configure Celery with settings from config
+# Configure Celery - keep it simple for Dash background callbacks
 # celery_app.conf.update(
-#     # Task routing - Dash background callbacks will register their own routes
-#     task_routes={},
-#     # Serialization
 #     task_serializer="json",
 #     accept_content=["json"],
 #     result_serializer="json",
-#     timezone="UTC",
-#     enable_utc=True,
-#     # Result backend settings
-#     result_expires=settings.celery.result_expires,
-#     # Worker settings
-#     worker_prefetch_multiplier=settings.celery.worker_prefetch_multiplier,
-#     task_acks_late=True,
-#     worker_max_tasks_per_child=settings.celery.worker_max_tasks_per_child,
-#     # Task timeouts
-#     task_soft_time_limit=settings.celery.task_soft_time_limit,
-#     task_time_limit=settings.celery.task_time_limit,
-#     # Monitoring
-#     worker_send_task_events=settings.celery.worker_send_task_events,
-#     task_send_sent_event=settings.celery.task_send_sent_event,
-#     # Queue settings
-#     task_default_queue=settings.celery.default_queue,
-#     # Error handling
-#     task_reject_on_worker_lost=True,
-#     task_ignore_result=False,
-#     # Performance optimizations
-#     worker_disable_rate_limits=True,  # Better performance for background callbacks
+#     result_expires=7200,
 #     broker_connection_retry_on_startup=True,
 # )
 

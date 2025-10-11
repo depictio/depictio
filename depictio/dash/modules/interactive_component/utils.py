@@ -1,4 +1,5 @@
 import math
+from datetime import datetime
 
 import dash_mantine_components as dmc
 import numpy as np
@@ -6,6 +7,7 @@ import pandas as pd
 import polars as pl
 from bson import ObjectId
 from dash import dcc
+from dash_iconify import DashIconify
 
 # PERFORMANCE OPTIMIZATION: Use centralized config
 from depictio.api.v1.configs.config import settings
@@ -37,6 +39,10 @@ def build_interactive_frame(index, children=None, show_border=False):
                     style={
                         "minHeight": "150px",
                         "height": "100%",
+                        "width": "100%",
+                        "display": "flex",
+                        "alignItems": "center",
+                        "justifyContent": "center",
                     },
                 )
             ],
@@ -62,7 +68,11 @@ def build_interactive_frame(index, children=None, show_border=False):
                     style={
                         "overflow": "visible",
                         "height": "100%",
+                        "width": "100%",
                         "position": "relative",
+                        "display": "flex",
+                        "alignItems": "center",  # Center vertically
+                        "justifyContent": "center",  # Center horizontally
                     },
                 )
             ],
@@ -77,6 +87,8 @@ def build_interactive_frame(index, children=None, show_border=False):
             style={
                 "overflow": "visible",
                 "position": "relative",
+                "display": "flex",
+                "flexDirection": "column",
             },
             withBorder=show_border,
         )
@@ -119,7 +131,7 @@ def format_mark_label(value):
         return None
 
 
-def generate_equally_spaced_marks(min_val, max_val, marks_count=5, use_log_scale=False):
+def generate_equally_spaced_marks(min_val, max_val, marks_count=2, use_log_scale=False):
     """
     Generate equally spaced marks for sliders.
     Always includes min and max values.
@@ -127,15 +139,15 @@ def generate_equally_spaced_marks(min_val, max_val, marks_count=5, use_log_scale
     Args:
         min_val (float): Minimum value
         max_val (float): Maximum value
-        marks_count (int): Number of marks to generate (minimum 3)
+        marks_count (int): Number of marks to generate (minimum 2 for min/max only)
         use_log_scale (bool): Whether to use logarithmic spacing
 
     Returns:
         dict: Dictionary of mark positions and their labels
     """
     try:
-        # Ensure minimum of 3 marks (min, middle, max)
-        marks_count = max(3, marks_count)
+        # Ensure minimum of 2 marks (min and max only)
+        marks_count = max(2, marks_count)
 
         marks = {}
 
@@ -397,6 +409,38 @@ def get_default_state(interactive_component_type, column_name, cols_json, unique
             "default_value": False,
         }
 
+    elif interactive_component_type == "DateRangePicker":
+        # For date range pickers, default state is [min_date, max_date]
+        if cols_json and column_name in cols_json:
+            column_specs = cols_json[column_name].get("specs") or {}
+            min_date = column_specs.get("min")
+            max_date = column_specs.get("max")
+
+            if min_date is not None and max_date is not None:
+                # Convert to date strings if they're datetime objects
+                if hasattr(min_date, "date"):
+                    min_date = str(min_date.date() if callable(min_date.date) else min_date)
+                if hasattr(max_date, "date"):
+                    max_date = str(max_date.date() if callable(max_date.date) else max_date)
+
+                default_range = [min_date, max_date]
+                logger.debug(f"Date range picker default state: {default_range}")
+                return {
+                    "type": "date_range",
+                    "min_date": min_date,
+                    "max_date": max_date,
+                    "default_range": default_range,
+                }
+
+        # Fallback if no column specs available
+        logger.warning(f"No min/max date specs found for {column_name}")
+        return {
+            "type": "date_range",
+            "min_date": None,
+            "max_date": None,
+            "default_range": [None, None],
+        }
+
     else:
         # Generic fallback for unknown component types
         logger.warning(f"Unknown interactive component type: {interactive_component_type}")
@@ -559,8 +603,27 @@ def build_interactive(**kwargs):
     stepper = kwargs.get("stepper", False)
     parent_index = kwargs.get("parent_index", None)
     scale = kwargs.get("scale", "linear")  # Default to linear scale
-    color = kwargs.get("color", None)  # Default to no custom color
-    marks_number = kwargs.get("marks_number", 5)  # Default to 5 marks
+    # Check both "color" (from frontend) and "custom_color" (from saved metadata) for DMC compliance
+    color = kwargs.get("color") or kwargs.get("custom_color") or None
+
+    # Default icon mapping by component type for better UX
+    DEFAULT_ICONS = {
+        "Select": "mdi:form-select",
+        "MultiSelect": "mdi:form-select",
+        "SegmentedControl": "mdi:toggle-switch",
+        "Slider": "bx:slider-alt",
+        "RangeSlider": "bx:slider-alt",
+        "DateRangePicker": "mdi:calendar-range",
+        "Checkbox": "mdi:checkbox-marked",
+        "Switch": "mdi:toggle-switch",
+    }
+
+    # Get default icon based on component type, fallback to slider icon
+    default_icon = DEFAULT_ICONS.get(interactive_component_type, "bx:slider-alt")
+    icon_name = kwargs.get("icon_name") or default_icon
+
+    marks_number = kwargs.get("marks_number", 2)  # Default to 2 marks (min/max only)
+    title_size = kwargs.get("title_size", "md")  # Default title size
 
     # logger.info(f"Interactive - kwargs: {kwargs}")
     logger.info(
@@ -615,6 +678,9 @@ def build_interactive(**kwargs):
         "parent_index": parent_index,
         "scale": scale,  # Save scale configuration for sliders
         "marks_number": marks_number,  # Save marks number configuration for sliders
+        "title_size": title_size,  # Save title size configuration
+        "custom_color": color,  # Save custom color configuration for DMC theme compliance
+        "icon_name": icon_name,  # Save icon configuration
     }
 
     logger.debug(f"Interactive component {index}: store_data: {store_data}")
@@ -691,9 +757,9 @@ def build_interactive(**kwargs):
             logger.error(f"❌ SCHEMA MISMATCH: Column '{column_name}' not found in DataFrame")
             logger.error(f"Available columns: {df.columns}")
             # Return empty component to prevent crash
-            return dmc.Text(f"Error: Column '{column_name}' not found", color="red")
+            return dmc.Text(f"Error: Column '{column_name}' not found", c="red")
 
-        data = sorted(df[column_name].drop_nulls().unique())[:100]  # Limit to 100 options
+        data = sorted(df[column_name].drop_nulls().unique())
 
         # CRITICAL: If DataFrame is empty but we have a preserved value, include those values in options
         # This ensures the component can display the preserved selection even when filtered data is empty
@@ -716,7 +782,19 @@ def build_interactive(**kwargs):
                 )
 
         # Prepare kwargs for all component types to preserve value
-        component_kwargs = {"data": data, "id": {"type": value_div_type, "index": str(index)}}
+        component_kwargs = {
+            "data": data,
+            "id": {"type": value_div_type, "index": str(index)},
+            # UI/UX improvements for better space utilization
+            "w": "100%",  # Fill container width
+            "size": "md",  # Medium size for better readability
+            "styles": {
+                "root": {
+                    "width": "100%",
+                    "minWidth": "50px",
+                },  # Ultra-compact minimum width for tight layouts
+            },
+        }
 
         # CRITICAL: Preserve value for ALL interactive component types, but handle SegmentedControl specially
         if value is not None:
@@ -809,11 +887,15 @@ def build_interactive(**kwargs):
 
         # Apply custom color to DMC components if specified
         if color and interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
-            component_kwargs["styles"] = {
+            # Merge color styles with existing base styles
+            existing_styles = component_kwargs.get("styles", {})
+            color_styles = {
                 "input": {"borderColor": color},
                 "dropdown": {"borderColor": color},
                 "label": {"color": color},
             }
+            # Merge dictionaries - color_styles will override existing_styles for conflicting keys
+            component_kwargs["styles"] = {**existing_styles, **color_styles}
 
         # WARNING: This is a temporary solution to avoid modifying dashboard data - the -tmp suffix is added to the id and removed once clicked on the btn-done D
         interactive_component = func_name(**component_kwargs)
@@ -824,6 +906,7 @@ def build_interactive(**kwargs):
             multiselect_kwargs = {
                 "searchable": True,
                 "clearable": True,
+                "limit": 100,  # Limit to 100 options displayed at once for performance
                 # "clearSearchOnChange": False,
                 "persistence_type": "local",
                 # "dropdownPosition": "bottom",
@@ -1077,6 +1160,19 @@ def build_interactive(**kwargs):
             # Keep it simple - no step, precision, or label parameters initially
             "step": 0.01,  # Default step for DMC sliders
             "persistence_type": "local",
+            # UI/UX improvements for better space utilization
+            "w": "100%",  # Fill container width
+            "size": title_size,  # Use title_size for slider component size
+            "styles": {
+                "root": {
+                    "width": "100%",
+                    "paddingLeft": "12px",  # Increased padding to prevent thumb overflow on left
+                    "paddingRight": "12px",  # Increased padding to prevent thumb overflow on right
+                },
+                "track": {
+                    "minWidth": "50px",  # Ultra-compact minimum width for tight layouts
+                },
+            },
         }
 
         # Add minRange only for RangeSlider (not supported by regular Slider)
@@ -1164,7 +1260,7 @@ def build_interactive(**kwargs):
 
         # Generate marks based on scale type and marks_number parameter
         # For DMC sliders, always generate default marks if none specified
-        effective_marks_number = marks_number if marks_number and marks_number > 0 else 5
+        effective_marks_number = marks_number if marks_number and marks_number > 0 else 2
 
         logger.info(
             f"Generating {effective_marks_number} marks for DMC slider (requested: {marks_number})"
@@ -1235,6 +1331,118 @@ def build_interactive(**kwargs):
         else:
             store_data["original_value"] = value
 
+    # If the aggregation value is DateRangePicker (datetime data types)
+    elif interactive_component_type == "DateRangePicker":
+        logger.info(f"Column name: {column_name}")
+        logger.info("Building DateRangePicker component")
+
+        # Convert Polars DataFrame to Pandas for processing
+        df_pandas = df.to_pandas()
+
+        # LOG SCHEMA DEBUG INFO
+        logger.info("🔍 DATE RANGE PICKER SCHEMA DEBUG:")
+        logger.info(f"  - Component expects column: '{column_name}'")
+        logger.info(f"  - DataFrame shape: {df_pandas.shape}")
+        logger.info(f"  - Available columns: {list(df_pandas.columns)}")
+        logger.info(f"  - Column '{column_name}' present: {column_name in df_pandas.columns}")
+
+        # Check if column exists before processing
+        if column_name not in df_pandas.columns:
+            logger.error(f"❌ SCHEMA MISMATCH: Column '{column_name}' not found in DataFrame")
+            logger.error(f"Available columns: {list(df_pandas.columns)}")
+            return dmc.Text(f"Error: Column '{column_name}' not found", c="red")
+
+        # Ensure column is datetime type
+        if not pd.api.types.is_datetime64_any_dtype(df_pandas[column_name]):
+            logger.error(
+                f"Column '{column_name}' is not a datetime type: {df_pandas[column_name].dtype}"
+            )
+            return dmc.Text(f"Error: Column '{column_name}' must be datetime type", c="red")
+
+        # Get min and max dates from the column
+        df_pandas[column_name] = pd.to_datetime(df_pandas[column_name], errors="coerce")
+        df_pandas = df_pandas.dropna(subset=[column_name])
+
+        if df_pandas.empty:
+            logger.error(f"No valid datetime values found in column '{column_name}'")
+            return dmc.Text(f"Error: No valid dates in column '{column_name}'", c="red")
+
+        min_date = df_pandas[column_name].min()
+        max_date = df_pandas[column_name].max()
+
+        # Convert to Python date objects (DMC requires date, not datetime)
+        min_date_py = min_date.date()
+        max_date_py = max_date.date()
+
+        logger.info(f"Date range: {min_date_py} to {max_date_py}")
+
+        # Prepare kwargs for DMC DatePickerInput
+        kwargs_component = {
+            "type": "range",
+            "id": {"type": value_div_type, "index": str(index)},
+            "minDate": min_date_py,
+            "maxDate": max_date_py,
+            "persistence_type": "local",
+            # UI/UX improvements
+            "w": "100%",
+            "size": title_size,
+            "clearable": False,  # Don't allow clearing the date range
+            "styles": {
+                "root": {
+                    "width": "100%",
+                },
+            },
+        }
+
+        # Handle value persistence
+        if value is not None and isinstance(value, list) and len(value) == 2:
+            try:
+                # Convert string dates to date objects if needed
+                if isinstance(value[0], str):
+                    value[0] = datetime.strptime(value[0], "%Y-%m-%d").date()
+                if isinstance(value[1], str):
+                    value[1] = datetime.strptime(value[1], "%Y-%m-%d").date()
+
+                # Ensure dates are within bounds
+                value[0] = max(min_date_py, min(max_date_py, value[0]))
+                value[1] = max(min_date_py, min(max_date_py, value[1]))
+
+                kwargs_component["value"] = value
+                logger.info(f"Preserved date range value: {value}")
+            except Exception as e:
+                logger.warning(f"Failed to parse date range value {value}: {e}")
+                kwargs_component["value"] = [min_date_py, max_date_py]
+        else:
+            # Default to full range
+            kwargs_component["value"] = [min_date_py, max_date_py]
+            logger.info(f"Using default date range: [{min_date_py}, {max_date_py}]")
+
+        # Apply custom color if specified
+        if color:
+            # Merge color styles with existing styles
+            existing_styles = kwargs_component.get("styles", {})
+            color_styles = {
+                "input": {"borderColor": color},
+                "label": {"color": color},
+            }
+            kwargs_component["styles"] = {**existing_styles, **color_styles}
+            logger.info(f"Applied custom color: {color}")
+
+        interactive_component = func_name(**kwargs_component)
+
+        # Store date range information for later use
+        store_data["min_date"] = str(min_date_py)
+        store_data["max_date"] = str(max_date_py)
+
+        # Update default_state with actual min/max dates for proper reset functionality
+        store_data["default_state"] = {
+            "type": "date_range",
+            "min_date": str(min_date_py),
+            "max_date": str(max_date_py),
+            "default_range": [str(min_date_py), str(max_date_py)],
+        }
+        logger.info(f"Updated default_state for DateRangePicker: {store_data['default_state']}")
+
     # If the aggregation value is Checkbox or Switch (boolean data types)
     elif interactive_component_type in ["Checkbox", "Switch"]:
         logger.debug(f"Boolean component: {interactive_component_type}")
@@ -1271,7 +1479,7 @@ def build_interactive(**kwargs):
         interactive_component = dmc.Text(
             f"Unsupported component type: {interactive_component_type} for {column_type} data",
             id={"type": value_div_type, "index": str(index)},
-            color="red",
+            c="red",
         )
 
     # If no title is provided, use the aggregation value on the selected column
@@ -1299,17 +1507,36 @@ def build_interactive(**kwargs):
 
     # Apply custom color if specified, otherwise let Mantine handle theming
     title_style = {
-        "marginBottom": "0.5rem",
+        "marginBottom": "0.25rem",  # Reduced from 0.5rem for tighter spacing
     }
+    icon_color = color if color else None  # Use custom color for icon if specified
+
     if color:
         title_style["color"] = color
-        # Store color for component styling
-        store_data["custom_color"] = color
         logger.info(f"Applied custom color: {color}")
     else:
         logger.debug("Using Mantine's native theming for title")
 
-    card_title_h5 = dmc.Text(card_title, size="md", fw="bold", style=title_style)
+    # Create title with icon - build props conditionally to avoid None color assignment
+    icon_props = {
+        "icon": icon_name,
+        "width": int(title_size) if title_size.isdigit() else 20,  # Default to 20 for named sizes
+    }
+    if icon_color:
+        icon_props["color"] = icon_color
+        icon_props["style"] = {}
+    else:
+        icon_props["style"] = {"opacity": 0.9}
+
+    card_title_h5 = dmc.Group(
+        [
+            DashIconify(**icon_props),
+            dmc.Text(card_title, size=title_size, fw="bold", style={"margin": "0"}),
+        ],
+        gap="xs",
+        align="center",
+        style=title_style,
+    )
 
     # Generate default state information for the component
     # For select-type components, pass unique values if available
@@ -1343,11 +1570,17 @@ def build_interactive(**kwargs):
             unique_values = []
 
     # Generate and add default state to store_data
-    default_state = get_default_state(
-        interactive_component_type, column_name, cols_json, unique_values
-    )
-    store_data["default_state"] = default_state
-    logger.debug(f"Added default_state to {interactive_component_type}: {default_state}")
+    # Only set if not already set (e.g., by DateRangePicker which computes actual values)
+    if "default_state" not in store_data:
+        default_state = get_default_state(
+            interactive_component_type, column_name, cols_json, unique_values
+        )
+        store_data["default_state"] = default_state
+        logger.debug(f"Added default_state to {interactive_component_type}: {default_state}")
+    else:
+        logger.debug(
+            f"default_state already set, preserving existing: {store_data['default_state']}"
+        )
 
     store_component = dcc.Store(
         id={"type": "stored-metadata-component", "index": str(store_index)},
@@ -1358,17 +1591,16 @@ def build_interactive(**kwargs):
     # Create wrapper with proper sizing for interactive components
     new_interactive_component = dmc.Stack(
         [card_title_h5, interactive_component, store_component],
-        gap="xs",
+        gap="0",  # No gap - use title marginBottom instead for tighter control
         style={
-            "width": "100%",
-            "height": "auto",  # Use natural height, don't force 100%
-            "maxWidth": "500px",
-            "padding": "10px",
+            "width": "100%",  # Fill container width
+            "minHeight": "120px",  # Ensure minimum height for better usability
+            "padding": "0.5rem 1rem 0.5rem 0.5rem",  # top right bottom left - reduced padding for compact layout
             "boxSizing": "border-box",
-            # Center the stack within its container
-            "margin": "0 auto",
-            # Allow components to grow horizontally but not vertically
-            "alignSelf": "flex-start",
+            "display": "flex",
+            "flexDirection": "column",
+            "justifyContent": "flex-start",  # Align content to top instead of center
+            "alignItems": "stretch",  # Stretch children to fill width
         },
     )
 
@@ -1455,6 +1687,12 @@ agg_functions = {
     "datetime": {
         "title": "Datetime",
         "description": "Date and time values",
+        "input_methods": {
+            "DateRangePicker": {
+                "component": dmc.DatePickerInput,
+                "description": "Date range picker: will return data between the two selected dates",
+            },
+        },
     },
     "timedelta": {
         "title": "Timedelta",
@@ -1463,6 +1701,20 @@ agg_functions = {
     "category": {
         "title": "Category",
         "description": "Finite list of text values",
+        "input_methods": {
+            "Select": {
+                "component": dmc.Select,
+                "description": "Select: will return corresponding data to the selected value",
+            },
+            "MultiSelect": {
+                "component": dmc.MultiSelect,
+                "description": "MultiSelect: will return corresponding data to the selected values",
+            },
+            "SegmentedControl": {
+                "component": dmc.SegmentedControl,
+                "description": "SegmentedControl: will return corresponding data to the selected value (best for ≤5 options)",
+            },
+        },
     },
     "object": {
         "title": "Object",

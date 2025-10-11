@@ -302,23 +302,75 @@ def _get_figure_cache_key(
     return hashlib.md5(cache_str.encode()).hexdigest()
 
 
+def validate_figure_component_metadata(metadata: dict) -> tuple[bool, str]:
+    """
+    Validate figure component metadata to prevent empty components.
+
+    Args:
+        metadata: Component metadata dictionary
+
+    Returns:
+        (is_valid, error_message) tuple
+    """
+    component_type = metadata.get("component_type")
+    if component_type != "figure":
+        return True, ""
+
+    mode = metadata.get("mode", "ui")
+
+    if mode == "code":
+        # Code mode: requires code_content
+        code_content = metadata.get("code_content", "")
+        if not code_content or not code_content.strip():
+            return False, "Code mode figure requires code_content"
+    else:
+        # UI mode: requires wf_id, dc_id, AND dict_kwargs
+        wf_id = metadata.get("wf_id")
+        dc_id = metadata.get("dc_id")
+        dict_kwargs = metadata.get("dict_kwargs", {})
+
+        if not wf_id:
+            return False, "UI mode figure requires wf_id (workflow ID)"
+        if not dc_id:
+            return False, "UI mode figure requires dc_id (data collection ID)"
+        if not isinstance(dict_kwargs, dict) or len(dict_kwargs) == 0:
+            return False, "UI mode figure requires non-empty dict_kwargs"
+
+    return True, ""
+
+
 def _clean_figure_cache():
     """Remove expired entries from figure cache."""
     import time
 
     current_time = time.time()
-    expired_keys = [
-        key
-        for key, (_, timestamp) in _figure_result_cache.items()
-        if current_time - timestamp > FIGURE_CACHE_TTL
-    ]
+    expired_keys = []
+
+    for key, cached_result in _figure_result_cache.items():
+        # Handle both old format (figure, timestamp) and new format (figure, data_info, timestamp)
+        if isinstance(cached_result, tuple) and len(cached_result) == 3:
+            _, _, timestamp = cached_result
+        else:
+            # Old format - just figure and timestamp
+            _, timestamp = cached_result
+
+        if current_time - timestamp > FIGURE_CACHE_TTL:
+            expired_keys.append(key)
+
     for key in expired_keys:
         del _figure_result_cache[key]
 
     # If cache is still too large, remove oldest entries
     if len(_figure_result_cache) > FIGURE_CACHE_MAX_SIZE:
         # Sort by timestamp and remove oldest entries
-        sorted_items = sorted(_figure_result_cache.items(), key=lambda x: x[1][1])
+        def get_timestamp(item):
+            cached_result = item[1]
+            if isinstance(cached_result, tuple) and len(cached_result) == 3:
+                return cached_result[2]  # timestamp is third element
+            else:
+                return cached_result[1]  # timestamp is second element (old format)
+
+        sorted_items = sorted(_figure_result_cache.items(), key=get_timestamp)
         excess_count = len(_figure_result_cache) - FIGURE_CACHE_MAX_SIZE
         for key, _ in sorted_items[:excess_count]:
             del _figure_result_cache[key]
@@ -333,7 +385,8 @@ def render_figure(
     theme: str = "light",
     skip_validation: bool = False,
     mode: str = "ui",
-) -> Any:
+    force_full_data: bool = False,
+) -> tuple[Any, dict]:
     """Render a Plotly figure with robust parameter handling and result caching.
 
     Args:
@@ -345,16 +398,24 @@ def render_figure(
         theme: Theme ('light' or 'dark')
         skip_validation: Skip parameter validation
         mode: Component mode ('ui' or 'code') for parameter evaluation
+        force_full_data: If True, bypass sampling and load all data points
 
     Returns:
-        Plotly figure object
+        Tuple of (Plotly figure object, data_info dict with counts)
     """
     # PERFORMANCE OPTIMIZATION: Check figure result cache first
+
+    # Initialize data counts - will be populated during rendering
+    data_info = {
+        "total_data_count": 0,
+        "displayed_data_count": 0,
+        "was_sampled": False,
+    }
 
     # Safety check: ensure df is not None
     if df is None:
         logger.error("DataFrame is None, cannot build figure")
-        return html.Div(
+        error_div = html.Div(
             dmc.Alert(
                 "Error: No data available to build figure",
                 title="Data Error",
@@ -362,6 +423,7 @@ def render_figure(
             ),
             style={"height": "400px", "display": "flex", "alignItems": "center"},
         )
+        return error_div, data_info
 
     # Generate cache key from all inputs
     df_hash = str(hash(str(df.hash_rows()) if df is not None and not df.is_empty() else "empty"))
@@ -371,19 +433,36 @@ def render_figure(
         dict_kwargs, visu_type, df_hash, cutoff, selected_point_clean, theme
     )
 
-    # TEMPORARY: Disable figure cache to test async rendering performance
-    logger.info(f"🚧 CACHE DISABLED: Generating fresh {visu_type} figure for performance testing")
+    # PERFORMANCE OPTIMIZATION: Check figure result cache first
+    import time
 
-    # Clean cache and check for existing result
-    # _clean_figure_cache()
-    # if cache_key in _figure_result_cache:
-    #     cached_figure, timestamp = _figure_result_cache[cache_key]
-    #     logger.info(
-    #         f"🚀 FIGURE CACHE HIT: Using cached figure for {visu_type} (saved {int((time.time() - timestamp) * 1000)}ms ago)"
-    #     )
-    #     return cached_figure
+    _clean_figure_cache()
+    if cache_key in _figure_result_cache:
+        cached_result = _figure_result_cache[cache_key]
+        # Handle both old format (just figure) and new format (figure, data_info, timestamp)
+        if isinstance(cached_result, tuple) and len(cached_result) == 3:
+            cached_figure, cached_data_info, timestamp = cached_result
+        else:
+            # Old format - just figure and timestamp
+            cached_figure, timestamp = cached_result
+            # Create default data_info for old cached entries
+            cached_data_info = {
+                "total_data_count": 0,
+                "displayed_data_count": 0,
+                "was_sampled": False,
+            }
+        logger.info(
+            f"🚀 FIGURE CACHE HIT: Using cached figure for {visu_type} (saved {int((time.time() - timestamp) * 1000)}ms ago)"
+        )
+        return cached_figure, cached_data_info
 
-    # logger.info(f"📊 FIGURE CACHE MISS: Generating new {visu_type} figure")
+    logger.info(f"📊 FIGURE CACHE MISS: Generating new {visu_type} figure")
+
+    # Log when full data loading is forced
+    if force_full_data:
+        logger.warning(
+            f"🔓 FORCE FULL DATA: Bypassing {cutoff:,} point sampling limit - will load all data!"
+        )
 
     # Check if it's a clustering visualization
     is_clustering = visu_type.lower() in ["umap"]
@@ -404,7 +483,12 @@ def render_figure(
 
         # Use context-aware decision making
         if _should_defer_umap_computation(df, context):
-            return _create_umap_placeholder(df, dict_kwargs, theme)
+            placeholder = _create_umap_placeholder(df, dict_kwargs, theme)
+            # UMAP placeholder - set data info with actual counts
+            data_info["total_data_count"] = df.height
+            data_info["displayed_data_count"] = 0  # Not computed yet
+            data_info["was_sampled"] = False
+            return placeholder, data_info
 
     # Add theme-appropriate template using Mantine-compatible themes
     # Apply theme template if no template is specified, if template is None, or if template is empty
@@ -429,7 +513,10 @@ def render_figure(
     # Handle empty or invalid data
     if df is None or df.is_empty():
         logger.warning("Empty or invalid dataframe, creating empty figure")
-        return _create_theme_aware_figure(dict_kwargs.get("template", _get_theme_template(theme)))
+        empty_fig = _create_theme_aware_figure(
+            dict_kwargs.get("template", _get_theme_template(theme))
+        )
+        return empty_fig, data_info
 
     # Clean parameters - remove None values and problematic empty strings
     # Keep certain parameters that can legitimately be empty strings (like parents for hierarchical charts)
@@ -455,9 +542,52 @@ def render_figure(
                 cleaned_kwargs[k] = v
 
     # Parse JSON string parameters that Plotly expects as Python objects
-    json_params = ["color_discrete_map", "color_discrete_sequence", "category_orders", "labels"]
+    json_params = [
+        "color_discrete_map",
+        "color_discrete_sequence",
+        "color_continuous_scale",
+        "category_orders",
+        "labels",
+        "path",  # For sunburst/treemap hierarchical visualizations
+    ]
     for param_name in json_params:
         if param_name in cleaned_kwargs and isinstance(cleaned_kwargs[param_name], str):
+            # Special handling for color sequences/scales: check for Plotly named color palettes
+            if param_name in ["color_discrete_sequence", "color_continuous_scale"]:
+                param_value = cleaned_kwargs[param_name]
+                # Try to get named color sequence from px.colors.qualitative (discrete)
+                if hasattr(px.colors.qualitative, param_value):
+                    color_sequence = getattr(px.colors.qualitative, param_value)
+                    cleaned_kwargs[param_name] = color_sequence
+                    logger.debug(
+                        f"Resolved Plotly qualitative color '{param_value}' to {len(color_sequence)} colors"
+                    )
+                    continue
+                # Also check px.colors.sequential for sequential/continuous color scales
+                elif hasattr(px.colors.sequential, param_value):
+                    color_sequence = getattr(px.colors.sequential, param_value)
+                    cleaned_kwargs[param_name] = color_sequence
+                    logger.debug(
+                        f"Resolved Plotly sequential color '{param_value}' to {len(color_sequence)} colors"
+                    )
+                    continue
+                # Also check px.colors.diverging for diverging color scales
+                elif hasattr(px.colors.diverging, param_value):
+                    color_sequence = getattr(px.colors.diverging, param_value)
+                    cleaned_kwargs[param_name] = color_sequence
+                    logger.debug(
+                        f"Resolved Plotly diverging color '{param_value}' to {len(color_sequence)} colors"
+                    )
+                    continue
+                # Also check px.colors.cyclical for cyclical color scales
+                elif hasattr(px.colors.cyclical, param_value):
+                    color_sequence = getattr(px.colors.cyclical, param_value)
+                    cleaned_kwargs[param_name] = color_sequence
+                    logger.debug(
+                        f"Resolved Plotly cyclical color '{param_value}' to {len(color_sequence)} colors"
+                    )
+                    continue
+
             try:
                 # First try JSON parsing
                 parsed_value = json.loads(cleaned_kwargs[param_name])
@@ -519,6 +649,63 @@ def render_figure(
         f"Boolean parameters in cleaned_kwargs: {[(k, v, type(v)) for k, v in cleaned_kwargs.items() if isinstance(v, bool)]}"
     )
 
+    # PARAMETER CONVERSION: Handle line_dash and symbol parameters
+    # These parameters can be either:
+    # 1. A column name (for categorical grouping by dash/symbol)
+    # 2. A style literal (for uniform styling)
+    # When a style literal is provided, convert to _sequence parameter
+    VALID_DASH_STYLES = ["solid", "dot", "dash", "longdash", "dashdot", "longdashdot"]
+    VALID_SYMBOL_STYLES = [
+        "circle",
+        "square",
+        "diamond",
+        "cross",
+        "x",
+        "triangle-up",
+        "triangle-down",
+        "triangle-left",
+        "triangle-right",
+        "pentagon",
+        "hexagon",
+        "star",
+    ]
+
+    # Handle line_dash parameter conversion
+    if "line_dash" in cleaned_kwargs:
+        dash_value = cleaned_kwargs["line_dash"]
+        if dash_value in VALID_DASH_STYLES:
+            # Convert style literal to line_dash_sequence for uniform styling
+            cleaned_kwargs["line_dash_sequence"] = [dash_value]
+            del cleaned_kwargs["line_dash"]
+            logger.debug(
+                f"Converted line_dash style '{dash_value}' to line_dash_sequence for uniform styling"
+            )
+        elif dash_value not in df.columns:
+            # Invalid column name - remove to avoid Plotly error
+            logger.warning(
+                f"line_dash value '{dash_value}' is not a valid column or style. Removing parameter."
+            )
+            del cleaned_kwargs["line_dash"]
+        # else: valid column name, keep as-is for categorical grouping
+
+    # Handle symbol parameter conversion (same pattern as line_dash)
+    if "symbol" in cleaned_kwargs:
+        symbol_value = cleaned_kwargs["symbol"]
+        if symbol_value in VALID_SYMBOL_STYLES:
+            # Convert style literal to symbol_sequence for uniform styling
+            cleaned_kwargs["symbol_sequence"] = [symbol_value]
+            del cleaned_kwargs["symbol"]
+            logger.debug(
+                f"Converted symbol style '{symbol_value}' to symbol_sequence for uniform styling"
+            )
+        elif symbol_value not in df.columns:
+            # Invalid column name - remove to avoid Plotly error
+            logger.warning(
+                f"symbol value '{symbol_value}' is not a valid column or style. Removing parameter."
+            )
+            del cleaned_kwargs["symbol"]
+        # else: valid column name, keep as-is for categorical grouping
+
     # Check if required parameters are missing for the visualization type (skip in code mode)
     if not skip_validation:
         required_params = _get_required_parameters(visu_type.lower())
@@ -531,9 +718,10 @@ def render_figure(
                     f"Missing required parameters for {visu_type}: need either X or Y. Available columns: {df.columns}"
                 )
                 title = f"Please select X or Y column to create {visu_type} plot"
-                return _create_theme_aware_figure(
+                validation_fig = _create_theme_aware_figure(
                     dict_kwargs.get("template", _get_theme_template(theme)), title=title
                 )
+                return validation_fig, data_info
         else:
             # Standard validation for specific requirements (pie: values, box: y, etc.)
             missing_params = [param for param in required_params if param not in cleaned_kwargs]
@@ -542,14 +730,35 @@ def render_figure(
                     f"Missing required parameters for {visu_type}: {missing_params}. Available columns: {df.columns}"
                 )
                 title = f"Please select {', '.join(missing_params).upper()} column(s) to create {visu_type} plot"
-                return _create_theme_aware_figure(
+                validation_fig = _create_theme_aware_figure(
                     dict_kwargs.get("template", _get_theme_template(theme)), title=title
                 )
+                return validation_fig, data_info
     else:
         logger.info(f"🚀 CODE MODE: Skipping parameter validation for {visu_type}")
 
     # Special handling for hierarchical charts (sunburst, treemap)
     if visu_type.lower() in ["sunburst", "treemap"]:
+        # Filter out non-leaf rows (rows with empty hierarchy values)
+        if "path" in cleaned_kwargs and cleaned_kwargs["path"]:
+            path_columns = cleaned_kwargs["path"]
+            original_rows = df.height
+
+            # Filter out rows where any path column is empty/null
+            for col in path_columns:
+                if col in df.columns:
+                    df = df.filter(
+                        (pl.col(col).is_not_null())
+                        & (pl.col(col) != "")
+                        & (pl.col(col).str.strip_chars() != "")
+                    )
+
+            filtered_rows = original_rows - df.height
+            if filtered_rows > 0:
+                logger.info(
+                    f"🌳 Filtered {filtered_rows} non-leaf rows from {visu_type} data (empty hierarchy values)"
+                )
+
         # Ensure parents parameter is handled correctly
         if "parents" in cleaned_kwargs and cleaned_kwargs["parents"] == "":
             # Empty string is valid for root-level hierarchical charts
@@ -574,10 +783,11 @@ def render_figure(
 
     if not valid_plot_params and not is_clustering:
         logger.info(f"No valid plotting parameters for {visu_type}, returning empty figure")
-        return _create_theme_aware_figure(
+        empty_params_fig = _create_theme_aware_figure(
             dict_kwargs.get("template", _get_theme_template(theme)),
             title=f"Select columns to create {visu_type} plot",
         )
+        return empty_params_fig, data_info
 
     try:
         if is_clustering:
@@ -585,7 +795,7 @@ def render_figure(
             clustering_function = get_clustering_function(visu_type.lower())
 
             # Handle large datasets with sampling for clustering
-            if df.height > cutoff:
+            if df.height > cutoff and not force_full_data:
                 cache_key = f"{id(df)}_{cutoff}_{hash(str(cleaned_kwargs))}"
 
                 if cache_key not in _sampling_cache:
@@ -607,8 +817,35 @@ def render_figure(
             # Handle standard Plotly visualizations
             plot_function = PLOTLY_FUNCTIONS[visu_type.lower()]
 
+            # PRE-PROCESSING: For box/violin plots without 'color' param, extract color params
+            # to handle manually in post-processing (Plotly Express ignores them without 'color')
+            manual_color_map = None
+            manual_color_sequence = None
+
+            if visu_type.lower() in ["box", "violin", "strip"] and "color" not in cleaned_kwargs:
+                # Extract color parameters that will be applied manually
+                if "color_discrete_map" in cleaned_kwargs:
+                    manual_color_map = cleaned_kwargs.pop("color_discrete_map")
+                    logger.info(
+                        f"🎨 Extracted color_discrete_map for manual application: {len(manual_color_map)} colors - {list(manual_color_map.keys())}"
+                    )
+                if "color_discrete_sequence" in cleaned_kwargs:
+                    manual_color_sequence = cleaned_kwargs.pop("color_discrete_sequence")
+                    logger.info(
+                        f"🎨 Extracted color_discrete_sequence for manual application: {len(manual_color_sequence)} colors"
+                    )
+            else:
+                # For plots WITH color parameter, color_discrete_map should be used by Plotly
+                if "color_discrete_map" in cleaned_kwargs:
+                    logger.info(
+                        f"🎨 Keeping color_discrete_map in kwargs for Plotly: {len(cleaned_kwargs['color_discrete_map'])} colors - {list(cleaned_kwargs['color_discrete_map'].keys())}"
+                    )
+
+            # Track data counts for partial data warning
+            data_info["total_data_count"] = df.height
+
             # Handle large datasets with sampling
-            if df.height > cutoff:
+            if df.height > cutoff and not force_full_data:
                 cache_key = f"{id(df)}_{cutoff}_{hash(str(cleaned_kwargs))}"
 
                 if cache_key not in _sampling_cache:
@@ -619,9 +856,16 @@ def render_figure(
                     sampled_df = _sampling_cache[cache_key]
                     logger.info(f"Using cached sampled data: {cutoff} points")
 
+                # Track sampling info
+                data_info["displayed_data_count"] = sampled_df.height
+                data_info["was_sampled"] = True
+
                 logger.info("=== CALLING PLOTLY FUNCTION (SAMPLED DATA) ===")
                 logger.info(f"Function: {plot_function.__name__}")
                 logger.warning(f"🚨 SAMPLED DATA SIZE: {sampled_df.shape[0]:,} rows")
+                logger.warning(
+                    f"📊 DATA COUNTS: {data_info['displayed_data_count']:,} displayed / {data_info['total_data_count']:,} total"
+                )
 
                 # PERFORMANCE: Time the Plotly function call
                 import time
@@ -631,8 +875,10 @@ def render_figure(
                 plot_end = time.time()
                 logger.warning(f"🕐 PLOTLY FUNCTION TIME: {(plot_end - plot_start) * 1000:.0f}ms")
             else:
-                # Use full dataset
-                # pandas_df = df.to_pandas()
+                # Use full dataset - no sampling
+                data_info["displayed_data_count"] = df.height
+                data_info["was_sampled"] = False
+
                 logger.info("=== CALLING PLOTLY FUNCTION ===")
                 logger.info(f"Function: {plot_function.__name__}")
                 logger.info(f"Parameters: {cleaned_kwargs}")
@@ -640,6 +886,227 @@ def render_figure(
                     f"Boolean params: {[(k, v) for k, v in cleaned_kwargs.items() if isinstance(v, bool)]}"
                 )
                 figure = plot_function(df, **cleaned_kwargs)
+
+            # POST-PROCESSING: Apply color_discrete_sequence OR color_discrete_map to box/violin plots
+            # When colors are provided WITHOUT a color parameter, manually apply colors
+            # This avoids the spacing/grouping issues that occur when using color parameter
+            if (
+                visu_type.lower() in ["box", "violin", "strip"]
+                and (manual_color_sequence or manual_color_map)
+                and "color" not in cleaned_kwargs
+            ):
+                color_map = manual_color_map
+                color_sequence = manual_color_sequence
+                # Validate that we have at least one color source
+                if (isinstance(color_sequence, (list, tuple)) and len(color_sequence) > 0) or (
+                    isinstance(color_map, dict) and len(color_map) > 0
+                ):
+                    # When no color param is used, px creates ONE trace with multiple boxes
+                    # We need to color each box individually, not the trace as a whole
+                    if len(figure.data) == 1:
+                        trace = figure.data[0]
+                        # Determine which axis has categorical data (boxes)
+                        # For vertical: x is categorical, y is numeric
+                        # For horizontal: y is categorical, x is numeric
+                        orientation = cleaned_kwargs.get("orientation", "v")
+                        categorical_column = (
+                            cleaned_kwargs.get("x")
+                            if orientation == "v"
+                            else cleaned_kwargs.get("y")
+                        )
+
+                        if categorical_column and categorical_column in df.columns:
+                            # Check if user specified category_orders for this column
+                            category_orders = cleaned_kwargs.get("category_orders", {})
+                            if (
+                                isinstance(category_orders, dict)
+                                and categorical_column in category_orders
+                            ):
+                                # Use user-specified order
+                                unique_categories = category_orders[categorical_column]
+                                logger.debug(
+                                    f"Using user-specified category order for '{categorical_column}': {unique_categories}"
+                                )
+                            else:
+                                # Preserve order of first appearance to ensure consistent category ordering
+                                unique_categories = (
+                                    df.get_column(categorical_column)
+                                    .unique(maintain_order=True)
+                                    .to_list()
+                                )
+                                logger.debug(
+                                    f"Using dataframe order for '{categorical_column}': {unique_categories}"
+                                )
+                            num_boxes = len(unique_categories)
+
+                            # WORKAROUND: Box plots don't support color arrays in a single trace
+                            # Solution: Recreate with individual traces (one per category)
+                            if visu_type.lower() in ["box", "violin"]:
+                                import plotly.graph_objects as go
+
+                                # Get original parameters
+                                numeric_column = (
+                                    cleaned_kwargs.get("y")
+                                    if orientation == "v"
+                                    else cleaned_kwargs.get("x")
+                                )
+
+                                # Type guard: ensure numeric_column is a string
+                                if isinstance(numeric_column, str):
+                                    # Clear existing traces
+                                    figure.data = []
+
+                                    # Create one trace per category with its own color
+                                    for i, category in enumerate(unique_categories):
+                                        # Filter data for this category
+                                        category_data = df.filter(
+                                            pl.col(categorical_column) == category
+                                        )
+                                        values = category_data.get_column(numeric_column).to_list()
+
+                                        # Determine color: use color_map if available, else color_sequence
+                                        category_str = str(category)
+                                        if color_map:
+                                            logger.debug(
+                                                f"🎨 Looking for color for '{category_str}' in color_map keys: {list(color_map.keys())}"
+                                            )
+                                            if category_str in color_map:
+                                                color = color_map[category_str]
+                                                logger.debug(
+                                                    f"✅ Found color for '{category_str}': {color}"
+                                                )
+                                            else:
+                                                # Fallback to default if not in map
+                                                color = px.colors.qualitative.Plotly[i % 10]
+                                                logger.warning(
+                                                    f"⚠️ Category '{category_str}' not found in color_map, using default color"
+                                                )
+                                        elif color_sequence:
+                                            color = color_sequence[i % len(color_sequence)]
+                                        else:
+                                            # Fallback to default plotly color
+                                            color = px.colors.qualitative.Plotly[i % 10]
+
+                                        # Create box/violin trace with explicit positioning
+                                        if visu_type.lower() == "box":
+                                            box_params = {
+                                                "name": str(category),
+                                                "marker_color": color,
+                                                "boxmean": cleaned_kwargs.get("boxmean"),
+                                                "notched": cleaned_kwargs.get("notched", False),
+                                                "boxpoints": cleaned_kwargs.get(
+                                                    "points"
+                                                ),  # all, outliers, suspectedoutliers, False
+                                                "showlegend": False,
+                                            }
+                                            if orientation == "v":
+                                                trace_obj = go.Box(
+                                                    y=values,
+                                                    x=[str(category)]
+                                                    * len(values),  # Explicit x position
+                                                    **box_params,
+                                                )
+                                            else:
+                                                trace_obj = go.Box(
+                                                    x=values,
+                                                    y=[str(category)]
+                                                    * len(values),  # Explicit y position
+                                                    **box_params,
+                                                )
+                                        else:  # violin
+                                            if orientation == "v":
+                                                trace_obj = go.Violin(
+                                                    y=values,
+                                                    x=[str(category)] * len(values),
+                                                    name=str(category),
+                                                    marker_color=color,
+                                                    showlegend=False,
+                                                )
+                                            else:
+                                                trace_obj = go.Violin(
+                                                    x=values,
+                                                    y=[str(category)] * len(values),
+                                                    name=str(category),
+                                                    marker_color=color,
+                                                    showlegend=False,
+                                                )
+
+                                        figure.add_trace(trace_obj)
+
+                                    # Ensure categorical axis maintains order and minimize gaps
+                                    if orientation == "v":
+                                        figure.update_xaxes(
+                                            type="category",
+                                            categoryorder="array",
+                                            categoryarray=[str(c) for c in unique_categories],
+                                        )
+                                    else:
+                                        figure.update_yaxes(
+                                            type="category",
+                                            categoryorder="array",
+                                            categoryarray=[str(c) for c in unique_categories],
+                                        )
+
+                                    # Use overlay mode to minimize spacing (like px.box with color param)
+                                    figure.update_layout(
+                                        boxmode="overlay",  # Overlay mode for compact positioning
+                                    )
+
+                                    color_source = (
+                                        "color_discrete_map"
+                                        if color_map
+                                        else "color_discrete_sequence"
+                                    )
+                                    logger.debug(
+                                        f"Recreated {num_boxes} {visu_type} traces using {color_source}, preserving order, minimal spacing"
+                                    )
+                            elif visu_type.lower() == "strip":
+                                # Strip plots: set single color (limitation without color param)
+                                if color_sequence:
+                                    try:
+                                        if hasattr(trace, "marker"):
+                                            trace["marker"]["color"] = color_sequence[0]
+                                        logger.debug(
+                                            "Applied first color from sequence to strip plot (single trace limitation)"
+                                        )
+                                    except (TypeError, KeyError) as e:
+                                        logger.debug(
+                                            f"Could not update trace marker color (trace may be immutable): {e}"
+                                        )
+                    else:
+                        # Multiple traces: apply one color per trace
+                        for i, trace in enumerate(figure.data):
+                            trace_name = trace.name if hasattr(trace, "name") else None
+                            # Try color_map first (by trace name), then color_sequence
+                            applied_color = None
+                            if color_map and trace_name and str(trace_name) in color_map:
+                                applied_color = color_map[str(trace_name)]
+                                try:
+                                    if hasattr(trace, "marker"):
+                                        trace["marker"]["color"] = applied_color
+                                except (TypeError, KeyError) as e:
+                                    logger.debug(f"Could not update trace marker color: {e}")
+                            elif color_sequence:
+                                color_idx = i % len(color_sequence)
+                                applied_color = color_sequence[color_idx]
+                                try:
+                                    if hasattr(trace, "marker"):
+                                        trace["marker"]["color"] = applied_color
+                                except (TypeError, KeyError) as e:
+                                    logger.debug(f"Could not update trace marker color: {e}")
+                            # Also update line color for consistency
+                            if hasattr(trace, "line") and applied_color:
+                                try:
+                                    trace["line"]["color"] = applied_color
+                                except (TypeError, KeyError) as e:
+                                    logger.debug(f"Could not update trace line color: {e}")
+                        if color_map:
+                            color_source = f"color_discrete_map ({len(color_map)} colors)"
+                        elif color_sequence:
+                            color_source = f"color_discrete_sequence ({len(color_sequence)} colors)"
+                        else:
+                            color_source = "default colors"
+                        logger.debug(f"Applied {color_source} to {len(figure.data)} traces")
 
         # Fix for marginal plots: Disable axis matches to prevent infinite loop warnings
         # When using marginal_x and marginal_y, Plotly Express creates conflicting axis constraints
@@ -663,11 +1130,16 @@ def render_figure(
         if selected_point and "x" in cleaned_kwargs and "y" in cleaned_kwargs:
             _highlight_selected_point(figure, df, cleaned_kwargs, selected_point)
 
-        # TEMPORARY: Disable figure cache writing for performance testing
-        # _figure_result_cache[cache_key] = (figure, time.time())
-        logger.info(f"🚧 CACHE DISABLED: Skipping figure cache storage for {visu_type}")
+        # PERFORMANCE OPTIMIZATION: Cache the generated figure with data info
+        _figure_result_cache[cache_key] = (figure, data_info, time.time())
+        logger.info(
+            f"💾 FIGURE CACHE STORED: Cached {visu_type} figure with data counts for future use"
+        )
+        logger.info(
+            f"📊 FINAL DATA COUNTS: {data_info['displayed_data_count']:,} displayed / {data_info['total_data_count']:,} total (sampled: {data_info['was_sampled']})"
+        )
 
-        return figure
+        return figure, data_info
 
     except Exception as e:
         logger.error(f"Error creating figure: {e}")
@@ -677,11 +1149,11 @@ def render_figure(
             title=f"Error: {str(e)}",
         )
 
-        # TEMPORARY: Disable fallback figure cache writing for performance testing
-        # _figure_result_cache[cache_key] = (fallback_figure, time.time())
-        logger.info("🚧 CACHE DISABLED: Skipping fallback figure cache storage")
+        # Cache the fallback figure to avoid repeated errors with default data info
+        _figure_result_cache[cache_key] = (fallback_figure, data_info, time.time())
+        logger.info("💾 FALLBACK CACHE STORED: Cached error figure")
 
-        return fallback_figure
+        return fallback_figure, data_info
 
 
 def _create_umap_placeholder(df: pl.DataFrame, dict_kwargs: Dict[str, Any], theme: str) -> Any:
@@ -767,6 +1239,461 @@ def create_figure_placeholder(theme: str = "light", visu_type: str = "scatter") 
     )
 
     return placeholder_fig
+
+
+def analyze_figure_structure(fig: Any, dict_kwargs: dict, visu_type: str) -> dict:
+    """
+    Analyze figure structure and store original trace data for efficient patching.
+
+    Inspired by MultiQC's analyze_multiqc_plot_structure - stores original trace data
+    and parameter mappings to enable efficient Dash Patch operations.
+
+    Args:
+        fig: Plotly Figure object to analyze
+        dict_kwargs: Parameter dictionary used to create the figure
+        visu_type: Visualization type name
+
+    Returns:
+        Dictionary containing:
+            - original_data: List of trace info with original x, y, z, marker, line data
+            - parameter_mapping: Which columns mapped to which parameters
+            - visu_type: Visualization type
+            - summary: Trace count and metadata summary
+    """
+
+    if not fig or not hasattr(fig, "data"):
+        return {"original_data": [], "parameter_mapping": {}, "summary": "No data"}
+
+    # Store complete original data for each trace
+    original_data = []
+    trace_types = []
+
+    for i, trace in enumerate(fig.data):
+        trace_info = {
+            "index": i,
+            "type": trace.type if hasattr(trace, "type") else "",
+            "name": trace.name if hasattr(trace, "name") else "",
+            "mode": trace.mode if hasattr(trace, "mode") else "",
+            "orientation": trace.orientation if hasattr(trace, "orientation") else "v",
+            # Store original data arrays (preserve type for Plotly compatibility)
+            "original_x": (
+                tuple(trace.x)
+                if hasattr(trace, "x") and trace.x is not None and isinstance(trace.x, tuple)
+                else (list(trace.x) if hasattr(trace, "x") and trace.x is not None else [])
+            ),
+            "original_y": (
+                tuple(trace.y)
+                if hasattr(trace, "y") and trace.y is not None and isinstance(trace.y, tuple)
+                else (list(trace.y) if hasattr(trace, "y") and trace.y is not None else [])
+            ),
+            "original_z": (
+                tuple(trace.z)
+                if hasattr(trace, "z") and trace.z is not None and isinstance(trace.z, tuple)
+                else (list(trace.z) if hasattr(trace, "z") and trace.z is not None else [])
+            ),
+            # Store styling info for efficient patching
+            "original_marker": trace.marker.to_plotly_json() if hasattr(trace, "marker") else {},
+            "original_line": trace.line.to_plotly_json() if hasattr(trace, "line") else {},
+            "visible": trace.visible if hasattr(trace, "visible") else True,
+        }
+        original_data.append(trace_info)
+        trace_types.append(trace.type if hasattr(trace, "type") else "unknown")
+
+    # Extract parameter mapping from dict_kwargs
+    parameter_mapping = {
+        "x": dict_kwargs.get("x"),
+        "y": dict_kwargs.get("y"),
+        "z": dict_kwargs.get("z"),
+        "color": dict_kwargs.get("color"),
+        "size": dict_kwargs.get("size"),
+        "symbol": dict_kwargs.get("symbol"),
+        "facet_row": dict_kwargs.get("facet_row"),
+        "facet_col": dict_kwargs.get("facet_col"),
+        "animation_frame": dict_kwargs.get("animation_frame"),
+    }
+    # Remove None values
+    parameter_mapping = {k: v for k, v in parameter_mapping.items() if v is not None}
+
+    # Extract color mapping if present (for categorical colors)
+    color_discrete_map = dict_kwargs.get("color_discrete_map", {})
+
+    # Create summary
+    unique_types = list(set(trace_types))
+    summary = {
+        "traces": len(original_data),
+        "types": ", ".join(unique_types),
+        "has_color": "color" in parameter_mapping,
+        "has_size": "size" in parameter_mapping,
+        "has_facets": any(k in parameter_mapping for k in ["facet_row", "facet_col"]),
+    }
+
+    logger.debug(
+        f"Analyzed figure structure: {summary['traces']} traces, "
+        f"types: {summary['types']}, color: {summary['has_color']}"
+    )
+
+    return {
+        "original_data": original_data,
+        "parameter_mapping": parameter_mapping,
+        "color_discrete_map": color_discrete_map,
+        "visu_type": visu_type,
+        "summary": summary,
+    }
+
+
+def extract_needed_columns(
+    new_params: dict,
+    trace_metadata: dict | None = None,
+    interactive_components: dict | None = None,
+    join_columns: list[str] | None = None,
+) -> list[str]:
+    """
+    Extract all columns needed for figure rendering and interactive filtering.
+
+    This enables column projection in load_deltatable_lite() for efficient data loading.
+    Only loads the 3-5 columns actually needed instead of all 50+ columns in wide tables.
+
+    Args:
+        new_params: Figure parameters (x, y, z, color, etc.)
+        trace_metadata: Existing trace metadata with original column mappings
+        interactive_components: Interactive component values (range sliders, dropdowns)
+        join_columns: Join columns if this is a joined DC (CRITICAL for join integrity)
+
+    Returns:
+        List of column names needed for the figure
+    """
+    columns = set()
+
+    # 1. PLOT PARAMETERS: Extract columns from visualization parameters
+    plot_columns = [
+        "x",
+        "y",
+        "z",
+        "color",
+        "symbol",
+        "size",
+        "facet_col",
+        "facet_row",
+        "error_x",
+        "error_y",
+        "error_z",
+        "text",
+    ]
+
+    for param in plot_columns:
+        if param in new_params and new_params[param]:
+            col = new_params[param]
+            if isinstance(col, str):
+                columns.add(col)
+
+    # 2. HOVER DATA: Extract columns from hover_data configuration
+    if "hover_data" in new_params and new_params["hover_data"]:
+        hover_data = new_params["hover_data"]
+        if isinstance(hover_data, list):
+            columns.update(hover_data)
+        elif isinstance(hover_data, dict):
+            columns.update(hover_data.keys())
+
+    # 3. CUSTOM DATA: Extract columns from custom_data
+    if "custom_data" in new_params and new_params["custom_data"]:
+        custom_data = new_params["custom_data"]
+        if isinstance(custom_data, list):
+            columns.update(custom_data)
+
+    # 4. TRACE METADATA: Extract columns from existing trace data
+    if trace_metadata and "parameter_mapping" in trace_metadata:
+        param_mapping = trace_metadata["parameter_mapping"]
+        for key in ["x_column", "y_column", "z_column", "color_column", "symbol_column"]:
+            if key in param_mapping and param_mapping[key]:
+                columns.add(param_mapping[key])
+
+    # 5. INTERACTIVE COMPONENTS: Extract columns from interactive filters
+    # This would be for range sliders, dropdowns, etc. targeting specific columns
+    if interactive_components:
+        # Extract column names from interactive component values
+        # Format: {"column_name": {"min": 0, "max": 100}} for range sliders
+        # or {"column_name": ["value1", "value2"]} for dropdowns
+        for key in interactive_components.keys():
+            # Check if key is a column name (not a metadata field)
+            if not key.startswith("_") and key not in ["mode", "theme"]:
+                columns.add(key)
+
+    # 6. ESSENTIAL COLUMNS: Always include these if they exist
+    essential_columns = [
+        "depictio_run_id",  # Required for joins and run isolation
+    ]
+    columns.update(essential_columns)
+
+    # 7. JOIN COLUMNS: CRITICAL - include all join columns for joined DCs
+    if join_columns:
+        columns.update(join_columns)
+        logger.debug(f"Added {len(join_columns)} join columns to projection: {join_columns}")
+
+    # Filter out None values and return sorted list
+    result = sorted([col for col in columns if col is not None and col != ""])
+
+    logger.debug(f"Extracted {len(result)} needed columns for data loading: {result}")
+
+    return result
+
+
+def get_parameter_impact_type(param_name: str) -> str:
+    """
+    Determine impact type for a parameter change.
+
+    Args:
+        param_name: Name of the parameter
+
+    Returns:
+        Impact type: "categorical" | "continuous" | "axis" | "layout"
+    """
+    # Axis parameters - require data swap
+    if param_name in ["x", "y", "z", "r", "theta"]:
+        return "axis"
+
+    # Layout parameters - only update layout, no data changes
+    if param_name in [
+        "title",
+        "template",
+        "showlegend",
+        "width",
+        "height",
+        "xaxis_title",
+        "yaxis_title",
+        "range_x",
+        "range_y",
+        "range_z",
+        "log_x",
+        "log_y",
+        "log_z",
+    ]:
+        return "layout"
+
+    # Categorical parameters - may add/remove traces or change grouping
+    if param_name in [
+        "color",
+        "symbol",
+        "line_dash",
+        "pattern_shape",
+        "facet_row",
+        "facet_col",
+        "animation_frame",
+        "animation_group",
+    ]:
+        return "categorical"
+
+    # Continuous parameters - update properties only
+    # opacity, size (when continuous), line_width, marker properties
+    return "continuous"
+
+
+def detect_parameter_changes(old_params: dict, new_params: dict, visu_type: str) -> dict:
+    """
+    Detect what changed between parameter sets and categorize by impact.
+
+    Args:
+        old_params: Current parameter dictionary
+        new_params: New parameter dictionary
+        visu_type: Visualization type name
+
+    Returns:
+        Dictionary with categorized changes and re-render flag:
+        {
+            "categorical_changes": ["color", "symbol"],
+            "continuous_changes": ["opacity", "marker_size"],
+            "axis_changes": ["x", "y"],
+            "layout_changes": ["title", "template"],
+            "requires_full_rerender": bool,
+        }
+    """
+    changes = {
+        "categorical_changes": [],
+        "continuous_changes": [],
+        "axis_changes": [],
+        "layout_changes": [],
+        "requires_full_rerender": False,
+    }
+
+    # Only check parameters that are in new_params
+    # Parameters in old_params but not in new_params are not being updated
+    for key in new_params.keys():
+        old_value = old_params.get(key)
+        new_value = new_params.get(key)
+
+        # Skip if values are the same
+        if old_value == new_value:
+            continue
+
+        # Detect impact type
+        impact = get_parameter_impact_type(key)
+
+        if impact == "categorical":
+            changes["categorical_changes"].append(key)
+        elif impact == "continuous":
+            changes["continuous_changes"].append(key)
+        elif impact == "axis":
+            changes["axis_changes"].append(key)
+        elif impact == "layout":
+            changes["layout_changes"].append(key)
+
+    # Determine if full re-render is required
+    # Categorical changes or visualization type change requires full re-render
+    if changes["categorical_changes"]:
+        changes["requires_full_rerender"] = True
+
+    # Check if visualization type changed (requires full re-render)
+    if old_params.get("visu_type") != new_params.get("visu_type"):
+        changes["requires_full_rerender"] = True
+
+    logger.debug(
+        f"Parameter changes detected: "
+        f"categorical={len(changes['categorical_changes'])}, "
+        f"continuous={len(changes['continuous_changes'])}, "
+        f"axis={len(changes['axis_changes'])}, "
+        f"layout={len(changes['layout_changes'])}, "
+        f"full_rerender={changes['requires_full_rerender']}"
+    )
+
+    return changes
+
+
+def patch_layout_parameter(patch: Any, param_name: str, new_value: Any) -> Any:
+    """
+    Patch layout-only parameter changes (most efficient).
+
+    Args:
+        patch: Dash Patch object
+        param_name: Parameter name to update
+        new_value: New value for the parameter
+
+    Returns:
+        Updated Patch object
+    """
+    from dash import Patch
+
+    if not isinstance(patch, Patch):
+        patch = Patch()
+
+    if param_name == "title":
+        patch["layout"]["title"]["text"] = new_value
+    elif param_name == "template":
+        # Template needs to be a template object, not string
+        import plotly.io as pio
+
+        if new_value in pio.templates:
+            patch["layout"]["template"] = pio.templates[new_value]
+    elif param_name == "showlegend":
+        patch["layout"]["showlegend"] = new_value
+    elif param_name == "xaxis_title":
+        patch["layout"]["xaxis"]["title"]["text"] = new_value
+    elif param_name == "yaxis_title":
+        patch["layout"]["yaxis"]["title"]["text"] = new_value
+    elif param_name == "range_x":
+        patch["layout"]["xaxis"]["range"] = new_value
+    elif param_name == "range_y":
+        patch["layout"]["yaxis"]["range"] = new_value
+    elif param_name == "range_z":
+        patch["layout"]["zaxis"]["range"] = new_value
+    elif param_name == "log_x":
+        patch["layout"]["xaxis"]["type"] = "log" if new_value else "linear"
+    elif param_name == "log_y":
+        patch["layout"]["yaxis"]["type"] = "log" if new_value else "linear"
+    elif param_name == "log_z":
+        patch["layout"]["zaxis"]["type"] = "log" if new_value else "linear"
+
+    logger.debug(f"Patched layout parameter: {param_name} = {new_value}")
+    return patch
+
+
+def patch_continuous_parameter(
+    patch: Any, param_name: str, new_value: Any, trace_indices: list[int] | None = None
+) -> Any:
+    """
+    Patch continuous parameter changes (very efficient).
+
+    Args:
+        patch: Dash Patch object
+        param_name: Parameter name to update
+        new_value: New value for the parameter
+        trace_indices: Specific trace indices to update (default: all)
+
+    Returns:
+        Updated Patch object
+    """
+    from dash import Patch
+
+    if not isinstance(patch, Patch):
+        patch = Patch()
+
+    # If no trace indices specified, will apply to all traces via dict update
+    if trace_indices is None:
+        # Apply to all traces using wildcard pattern
+        if param_name == "opacity":
+            patch["data"][0]["marker"]["opacity"] = new_value
+        elif param_name == "marker_size" or param_name == "size":
+            patch["data"][0]["marker"]["size"] = new_value
+        elif param_name == "line_width":
+            patch["data"][0]["line"]["width"] = new_value
+    else:
+        # Apply to specific traces
+        for i in trace_indices:
+            if param_name == "opacity":
+                patch["data"][i]["marker"]["opacity"] = new_value
+            elif param_name == "marker_size" or param_name == "size":
+                patch["data"][i]["marker"]["size"] = new_value
+            elif param_name == "line_width":
+                patch["data"][i]["line"]["width"] = new_value
+
+    logger.debug(
+        f"Patched continuous parameter: {param_name} = {new_value} "
+        f"(traces: {trace_indices or 'all'})"
+    )
+    return patch
+
+
+def patch_axis_parameter(
+    fig_dict: dict,
+    trace_metadata: dict,
+    param_name: str,
+    new_value: str,
+    df: pl.DataFrame,
+) -> dict:
+    """
+    Patch axis parameter changes (moderate - requires data loading).
+
+    Args:
+        fig_dict: Figure dictionary (from current_figure)
+        trace_metadata: Original trace metadata with parameter mappings
+        param_name: Parameter name ('x', 'y', or 'z')
+        new_value: New column name
+        df: DataFrame with new data
+
+    Returns:
+        Updated figure dictionary
+    """
+    import copy
+
+    patched_fig = copy.deepcopy(fig_dict)
+    original_data = trace_metadata.get("original_data", [])
+
+    # Update each trace with new data from the specified column
+    for i, _trace_info in enumerate(original_data):
+        if i < len(patched_fig.get("data", [])):
+            try:
+                if param_name == "x":
+                    patched_fig["data"][i]["x"] = df[new_value].to_list()
+                elif param_name == "y":
+                    patched_fig["data"][i]["y"] = df[new_value].to_list()
+                elif param_name == "z":
+                    patched_fig["data"][i]["z"] = df[new_value].to_list()
+
+                logger.debug(f"Patched trace {i} axis {param_name} with column {new_value}")
+            except Exception as e:
+                logger.error(f"Failed to patch trace {i} axis {param_name}: {e}")
+                continue
+
+    logger.info(f"Patched axis parameter: {param_name} → {new_value}")
+    return patched_fig
 
 
 def _should_defer_umap_computation(df: pl.DataFrame, context: str = "unknown") -> bool:
@@ -967,10 +1894,23 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     # For stepper mode, use the temporary index to avoid conflicts with existing components
     # For normal mode, use the original index (remove -tmp suffix if present)
     if stepper:
-        store_index = index  # Use the temporary index with -tmp suffix
-        data_index = index.replace("-tmp", "") if index else "unknown"  # Clean index for data
+        # Defensive check: only append -tmp if not already present
+        if not str(index).endswith("-tmp"):
+            index = f"{index}-tmp"
+
+    # Metadata management - matches build_card pattern
+    if stepper:
+        # Remove -tmp suffix to match code mode behavior and Done button expectations
+        # Done button expects: metadata.index + "-tmp" == triggered_index
+        # This matches frontend.py:1912-1915 behavior for code mode
+        store_index = index.replace("-tmp", "") if index and "-tmp" in str(index) else index
+        data_index = index.replace("-tmp", "") if index else "unknown"
+        logger.info(
+            f"📝 STEPPER MODE: Storing metadata without -tmp suffix (index={index} -> store_index={store_index})"
+        )
     else:
         store_index = index.replace("-tmp", "") if index else "unknown"
+        data_index = store_index
 
     logger.info(f"Building figure component {index}")
     logger.info(
@@ -984,9 +1924,6 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         target_id_format = f'{{"index":"{index}","type":"graph"}}'
         logger.info(f"🎯 target_components will use: {target_id_format}")
         logger.info(f'📍 Graph component ID will be: {{"type":"graph","index":"{index}"}}')
-
-    # Clean the component index
-    store_index = index.replace("-tmp", "") if index else "unknown"
 
     # Check if this is a code mode component
     is_code_mode = kwargs.get("mode") == "code" or kwargs.get("code_content") is not None
@@ -1016,6 +1953,15 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
             f"📝 STORED code_content for component {str(store_index)} (length: {len(kwargs['code_content'])})"
         )
     logger.info(f"Component metadata: {store_component_data}")
+
+    # Validate component completeness
+    is_valid, error_msg = validate_figure_component_metadata(store_component_data)
+    if not is_valid:
+        logger.warning(f"⚠️ INCOMPLETE COMPONENT CREATED: {error_msg}")
+        logger.warning(
+            f"⚠️ Component index: {store_index}, mode: {store_component_data.get('mode')}"
+        )
+        logger.warning("⚠️ This component may fail to save properly")
 
     # Log code mode component details
     if kwargs.get("mode") == "code":
@@ -1119,87 +2065,16 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         else:
             logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
 
-    # Create the figure
-    logger.info("CALLING render_figure WITH:")
+    # CALLBACK ARCHITECTURE: Create placeholder figure instead of synchronous rendering
+    # Figure will be rendered by pattern-matching callback in frontend.py
+    logger.info("🔄 CALLBACK ARCHITECTURE: Creating placeholder for async rendering")
     logger.info(f"  validated_kwargs: {validated_kwargs}")
     logger.info(f"  visu_type: {visu_type}")
-    logger.info(f"  df shape: {df.shape if df is not None else 'None'}")
     logger.info(f"  theme: {theme}")
     logger.info(f"  is_code_mode: {is_code_mode}")
 
-    try:
-        # Handle code mode with potential preprocessing
-        if is_code_mode:
-            df_for_figure = df  # Default to original dataframe
-            code_content = kwargs.get("code_content", "")
-
-            if code_content:
-                from .code_mode import analyze_constrained_code
-
-                analysis = analyze_constrained_code(code_content)
-
-                if analysis["is_valid"] and analysis["has_preprocessing"]:
-                    logger.info("🔄 CODE MODE: Executing preprocessing step for build_figure")
-
-                    # Execute preprocessing using SimpleCodeExecutor
-                    try:
-                        from .simple_code_executor import SimpleCodeExecutor
-
-                        executor = SimpleCodeExecutor()
-                        success, df_for_figure, message = executor.execute_preprocessing_only(
-                            code_content, df
-                        )
-                        logger.info(f"CODE MODE: Preprocessing message: {message}")
-                        logger.info(f"CODE MODE: Preprocessing success: {success}")
-
-                        # Safety check: if preprocessing failed or returned None, use original df
-                        if not success or df_for_figure is None:
-                            logger.warning(
-                                "CODE MODE: Preprocessing failed or returned None, using original df"
-                            )
-                            df_for_figure = df
-                        else:
-                            # Additional safety check before calling head()
-                            if df_for_figure is not None:
-                                logger.info(
-                                    f"CODE MODE: Preprocessing dataframe: {df_for_figure.head()}"
-                                )
-                            else:
-                                logger.warning(
-                                    "CODE MODE: df_for_figure is None after preprocessing"
-                                )
-                                df_for_figure = df
-
-                    except Exception as e:
-                        logger.error(
-                            f"❌ CODE MODE: Preprocessing execution failed: {e}, using original df"
-                        )
-                        df_for_figure = df  # Fallback to original DataFrame
-            else:
-                # No code content provided for code mode - this indicates a metadata flow issue
-                logger.error(
-                    f"❌ CODE MODE: Component marked as code mode but no code_content provided. "
-                    f"This indicates the component metadata pipeline is not preserving code_content during interactive updates. "
-                    f"Expected columns like '{validated_kwargs.get('y')}' will not exist. "
-                    f"FIX NEEDED: Ensure stored_metadata includes code_content field."
-                )
-                df_for_figure = df
-
-            figure = render_figure(
-                validated_kwargs,
-                visu_type,
-                df_for_figure,
-                theme=theme,
-                skip_validation=True,
-                mode="code",
-            )
-        else:
-            figure = render_figure(validated_kwargs, visu_type, df, theme=theme, mode="ui")
-
-        logger.info(f"render_figure SUCCESS: figure type = {type(figure)}")
-    except Exception as e:
-        logger.error(f"Failed to render figure: {e}")
-        figure = px.scatter(title=f"Error: {str(e)}")
+    # Create placeholder figure with theme-aware template
+    # placeholder_figure = create_figure_placeholder(theme=theme, visu_type=visu_type)
 
     # Create info badges
     badges = _create_info_badges(
@@ -1215,13 +2090,13 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     figure_components = [
         badges,
         dcc.Graph(
-            figure=figure,
+            # figure=placeholder_figure,  # Use placeholder instead of synchronously rendered figure
             id={"type": "graph", "index": index},
             config={
                 "editable": True,
                 "scrollZoom": True,
                 "responsive": True,
-                "displayModeBar": True,
+                "displayModeBar": "hover",
             },
             className="responsive-graph",  # Add responsive graph class for vertical growing
             # style={
@@ -1232,64 +2107,38 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
             #     # "minHeight": "200px",  # Minimum height for usability
             # },
         ),
+        # CALLBACK ARCHITECTURE: Add render trigger store for pattern-matching callback
+        dcc.Store(
+            id={"type": "figure-render-trigger", "index": index},
+            data={
+                "dict_kwargs": validated_kwargs,
+                "visu_type": visu_type,
+                "wf_id": wf_id,
+                "dc_id": dc_id,
+                "theme": theme,
+                "mode": kwargs.get("mode", "ui"),
+                "code_content": kwargs.get("code_content") if is_code_mode else None,
+                "timestamp": datetime.now().isoformat(),
+            },
+        ),
+        # CALLBACK ARCHITECTURE: Add trace metadata store for efficient patching
+        dcc.Store(
+            id={"type": "figure-trace-metadata", "index": index},
+            data={},  # Will be populated by render callback
+        ),
     ]
 
-    # DUPLICATION FIX: Intelligent store creation based on component existence
-    # Check if this is a new component creation or editing existing component
-    def is_new_component(component_index, parent_index):
-        """
-        Check if this is a new component being created or an existing one being edited.
-
-        For new components:
-        - Component index might be temporary (e.g., contains "-tmp")
-        - No existing metadata in dashboard
-
-        For existing components:
-        - Component exists in the current dashboard
-        - Has persistent index and metadata
-        """
-        # If we have a parent_index, this suggests it's an edit operation on existing component
-        if parent_index and parent_index != component_index:
-            logger.info(
-                f"🔍 EDIT DETECTED: parent_index ({parent_index}) != component_index ({component_index})"
-            )
-            return False
-
-        # If index contains "-tmp", this is likely a temporary component during creation
-        if "-tmp" in str(component_index):
-            logger.info(f"🔍 NEW COMPONENT: temporary index detected ({component_index})")
-            return True
-
-        # For other cases, we could check if component exists in dashboard DB
-        # but for now, use the stepper flag as indicator of creation context
-        logger.info(f"🔍 STEPPER CONTEXT: stepper={stepper}, assuming new component")
-        return stepper
-
-    is_new = is_new_component(store_index, parent_index)
-
-    # Decision logic:
-    # 1. New components (stepper creation): ALWAYS create store
-    # 2. Edit modal (existing component): NEVER create store (design_figure already created it)
-    # 3. Dashboard restore: ALWAYS create store (no design_figure involved)
-
-    should_create_store = is_new or not stepper
-
-    logger.info(
-        f"🔍 STORE CREATION: build_frame={build_frame}, stepper={stepper}, is_new={is_new}, should_create={should_create_store}"
-    )
-
-    if should_create_store:
-        # This is new component creation or dashboard restore - store is needed
-        logger.info(f"✅ CREATING STORE: stored-metadata-component for index {store_index}")
+    # Component metadata store (for dashboard save/restore)
+    # IMPORTANT: Only create in NON-stepper mode to avoid duplicates
+    # In stepper mode, design_figure() already created this store (frontend.py:3088-3103)
+    # for pattern-matching callback compatibility
+    # When user clicks "Done", component transitions to non-stepper mode with proper metadata
+    if not stepper:
         figure_components.append(
             dcc.Store(
                 data=store_component_data,
                 id={"type": "stored-metadata-component", "index": store_index},
             )
-        )
-    else:
-        logger.info(
-            "❌ SKIPPING STORE: Not creating stored-metadata-component (editing existing component)"
         )
 
     figure_div = html.Div(
@@ -1349,35 +2198,15 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
 def _create_info_badges(
     index: str, df: pl.DataFrame, visu_type: str, filter_applied: bool, build_frame: bool
 ) -> html.Div:
-    """Create informational badges for the figure."""
+    """Create informational badges for the figure.
+
+    Note: Partial data warning has been moved to an ActionIcon button in edit.py
+    for better integration with component controls.
+    """
     if not build_frame:
         return html.Div()
 
     badges = []
-    cutoff = _config.max_data_points
-
-    # Partial data badge
-    if (
-        visu_type.lower() == "scatter"
-        and df is not None
-        and not df.is_empty()
-        and df.shape[0] > cutoff
-    ):
-        partial_badge = dmc.Tooltip(
-            children=dmc.Badge(
-                "Partial data displayed",
-                id={"type": "graph-partial-data-displayed", "index": index},
-                leftSection=DashIconify(icon="mdi:alert-circle", width=20),
-                size="lg",
-                radius="xl",
-                color="red",
-            ),
-            label=f"Showing {cutoff:,} of {df.shape[0]:,} points for performance.",
-            position="top",
-            openDelay=500,
-            withinPortal=False,
-        )
-        badges.append(partial_badge)
 
     # Filter applied badge
     if filter_applied:

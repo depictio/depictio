@@ -283,7 +283,7 @@ async def get_deltatable(
             status_code=404,
             detail=f"No DeltaTableAggregated found for Data Collection ID {data_collection_id}.",
         )
-    deltatables = list(deltatable_cursor)[0]
+    deltatables = list(deltatable_cursor)[-1]
     # logger.info(f"Deltatables: {deltatables}")
 
     deltatables = sanitize_for_json(deltatables)

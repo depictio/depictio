@@ -110,26 +110,48 @@ def get_data_collection_size_display(data_collection):
         str: Formatted size string for display
     """
     try:
-        # Extract flexible_metadata
+        # Extract flexible_metadata and type
         if isinstance(data_collection, dict):
             flexible_metadata = data_collection.get("flexible_metadata", {})
+            dc_type = data_collection.get("config", {}).get("type", "unknown").lower()
         else:
             flexible_metadata = getattr(data_collection, "flexible_metadata", {})
+            dc_type = getattr(data_collection.config, "type", "unknown").lower()
 
-        # Extract size_bytes
+        # Extract size_bytes based on data collection type
         if isinstance(flexible_metadata, dict):
-            size_bytes = flexible_metadata.get("deltatable_size_bytes", 0)
+            if dc_type == "multiqc":
+                # For MultiQC, try different size fields
+                size_bytes = (
+                    flexible_metadata.get("total_file_size_bytes", 0)
+                    or flexible_metadata.get("file_size_bytes", 0)
+                    or flexible_metadata.get("s3_size_bytes", 0)
+                )
+            else:
+                # For tables/other types, use deltatable size
+                size_bytes = flexible_metadata.get("deltatable_size_bytes", 0)
         else:
-            size_bytes = (
-                getattr(flexible_metadata, "deltatable_size_bytes", 0) if flexible_metadata else 0
-            )
+            if dc_type == "multiqc":
+                size_bytes = (
+                    getattr(flexible_metadata, "total_file_size_bytes", 0)
+                    or getattr(flexible_metadata, "file_size_bytes", 0)
+                    or getattr(flexible_metadata, "s3_size_bytes", 0)
+                    if flexible_metadata
+                    else 0
+                )
+            else:
+                size_bytes = (
+                    getattr(flexible_metadata, "deltatable_size_bytes", 0)
+                    if flexible_metadata
+                    else 0
+                )
 
         # Format and return
         if size_bytes and isinstance(size_bytes, (int, float)):
             formatted_size, unit = format_storage_size(size_bytes)
             return f"{formatted_size} {unit}"
         else:
-            return "N/A"
+            return "Processing..." if dc_type == "multiqc" else "N/A"
     except Exception:
         return "N/A"
 
@@ -584,18 +606,37 @@ def create_unified_data_collections_manager_section(
                                     # Main data collection info
                                     dmc.Group(
                                         [
-                                            DashIconify(
-                                                icon="mdi:table"
+                                            # Set icon based on data collection type
+                                            (
+                                                DashIconify(
+                                                    icon="mdi:table",
+                                                    width=20,
+                                                    color=colors["teal"],
+                                                )
                                                 if dc.config.type.lower() == "table"
-                                                else "mdi:file-document",
-                                                width=20,
-                                                color=colors["teal"],
+                                                else (
+                                                    html.Img(
+                                                        src="/assets/images/logos/multiqc.png",
+                                                        style={"width": "20px", "height": "20px"},
+                                                    )
+                                                    if dc.config.type.lower() == "multiqc"
+                                                    else DashIconify(
+                                                        icon="mdi:file-document",
+                                                        width=20,
+                                                        color=colors["teal"],
+                                                    )
+                                                )
                                             ),
                                             dmc.Badge(dc.config.type, color="blue", size="xs"),
-                                            dmc.Badge(
-                                                dc.config.metatype or "Unknown",
-                                                color="gray",
-                                                size="xs",
+                                            # Only show metatype badge for non-MultiQC types
+                                            (
+                                                dmc.Badge(
+                                                    dc.config.metatype or "Unknown",
+                                                    color="gray",
+                                                    size="xs",
+                                                )
+                                                if dc.config.type.lower() != "multiqc"
+                                                else html.Div()  # Empty placeholder for MultiQC
                                             ),
                                             dmc.Text(dc.data_collection_tag, fw="bold", size="sm"),
                                         ],
@@ -618,7 +659,9 @@ def create_unified_data_collections_manager_section(
                                                     variant="subtle",
                                                     color="orange",
                                                     size="sm",
-                                                    disabled=False,  # Will be controlled by callback
+                                                    disabled=(
+                                                        dc.config.type.lower() == "multiqc"
+                                                    ),  # Disable for MultiQC collections
                                                 ),
                                                 label="Overwrite data",
                                                 position="top",
@@ -929,6 +972,11 @@ def create_data_collection_viewer_content(
         if isinstance(data_collection, dict)
         else getattr(data_collection, "data_collection_tag", "Unknown")
     )
+    dc_id = (
+        data_collection.get("id")
+        if isinstance(data_collection, dict)
+        else getattr(data_collection, "id", "unknown")
+    )
     dc_type = (
         data_collection.get("config", {}).get("type")
         if isinstance(data_collection, dict)
@@ -945,10 +993,20 @@ def create_data_collection_viewer_content(
             # Data collection header info
             dmc.Group(
                 [
-                    DashIconify(
-                        icon="mdi:table" if dc_type.lower() == "table" else "mdi:file-document",
-                        width=32,
-                        color=colors["teal"],
+                    # Set icon based on data collection type
+                    (
+                        DashIconify(icon="mdi:table", width=32, color=colors["teal"])
+                        if dc_type.lower() == "table"
+                        else (
+                            html.Img(
+                                src="/assets/images/logos/multiqc.png",
+                                style={"width": "32px", "height": "32px"},
+                            )
+                            if dc_type.lower() == "multiqc"
+                            else DashIconify(
+                                icon="mdi:file-document", width=32, color=colors["teal"]
+                            )
+                        )
                     ),
                     dmc.Stack(
                         [
@@ -1012,14 +1070,23 @@ def create_data_collection_viewer_content(
                                         ],
                                         justify="space-between",
                                     ),
-                                    dmc.Group(
-                                        [
-                                            dmc.Text("Metatype:", size="sm", fw="bold", c="gray"),
-                                            dmc.Badge(
-                                                dc_metatype or "Unknown", color="gray", size="xs"
-                                            ),
-                                        ],
-                                        justify="space-between",
+                                    # Hide metatype for MultiQC collections
+                                    (
+                                        dmc.Group(
+                                            [
+                                                dmc.Text(
+                                                    "Metatype:", size="sm", fw="bold", c="gray"
+                                                ),
+                                                dmc.Badge(
+                                                    dc_metatype or "Unknown",
+                                                    color="gray",
+                                                    size="xs",
+                                                ),
+                                            ],
+                                            justify="space-between",
+                                        )
+                                        if dc_type.lower() != "multiqc"
+                                        else html.Div()  # Empty placeholder for MultiQC
                                     ),
                                 ],
                                 gap="xs",
@@ -1030,13 +1097,27 @@ def create_data_collection_viewer_content(
                         radius="md",
                         p="md",
                     ),
-                    # Delta Table Information
+                    # Storage Information (Delta Table for tables, S3 for MultiQC)
                     dmc.Card(
                         [
                             dmc.Group(
                                 [
-                                    DashIconify(icon="mdi:delta", width=20, color=colors["green"]),
-                                    dmc.Text("Delta Table Details", fw="bold", size="md"),
+                                    DashIconify(
+                                        icon=(
+                                            "mdi:cloud"
+                                            if dc_type.lower() == "multiqc"
+                                            else "mdi:delta"
+                                        ),
+                                        width=20,
+                                        color=colors["green"],
+                                    ),
+                                    dmc.Text(
+                                        "S3 Storage Details"
+                                        if dc_type.lower() == "multiqc"
+                                        else "Delta Table Details",
+                                        fw="bold",
+                                        size="md",
+                                    ),
                                 ],
                                 gap="xs",
                                 align="center",
@@ -1044,15 +1125,39 @@ def create_data_collection_viewer_content(
                             dmc.Divider(my="sm"),
                             dmc.Stack(
                                 [
+                                    # Show S3 location for MultiQC, Delta location for others
                                     dmc.Group(
                                         [
                                             dmc.Text(
-                                                "Delta Location:", size="sm", fw="bold", c="gray"
+                                                "S3 Location:"
+                                                if dc_type.lower() == "multiqc"
+                                                else "Delta Location:",
+                                                size="sm",
+                                                fw="bold",
+                                                c="gray",
                                             ),
                                             dmc.Text(
-                                                delta_info.get("delta_table_location", "N/A")
-                                                if delta_info
-                                                else "N/A",
+                                                # For MultiQC, show S3 location with better logic
+                                                (
+                                                    # For MultiQC, try multiple S3 location sources
+                                                    (
+                                                        getattr(
+                                                            data_collection, "flexible_metadata", {}
+                                                        ).get("s3_location")
+                                                        or getattr(
+                                                            data_collection, "flexible_metadata", {}
+                                                        ).get("primary_s3_location")
+                                                        or f"s3://depictio-bucket/{dc_id}/"
+                                                    )
+                                                    if dc_type.lower() == "multiqc"
+                                                    else (
+                                                        delta_info.get(
+                                                            "delta_table_location", "N/A"
+                                                        )
+                                                        if delta_info
+                                                        else "N/A"
+                                                    )
+                                                ),
                                                 size="sm",
                                                 ff="monospace",
                                             ),
@@ -1185,54 +1290,58 @@ def create_data_collection_viewer_content(
                 p="md",
                 mt="md",
             ),
-            # Data Visualization Section
-            dmc.Card(
-                [
-                    dmc.Group(
-                        [
-                            DashIconify(icon="mdi:table-eye", width=20, color=colors["teal"]),
-                            dmc.Text("Data Preview", fw="bold", size="md"),
-                        ],
-                        gap="xs",
-                        align="center",
-                    ),
-                    dmc.Divider(my="sm"),
-                    dmc.Stack(
-                        [
-                            dmc.Group(
-                                [
-                                    # dmc.Text("Rows to load:", size="sm", c="gray"),
-                                    dmc.NumberInput(
-                                        id="dc-viewer-row-limit",
-                                        value=1000,
-                                        min=100,
-                                        max=10000,
-                                        step=100,
-                                        w="120px",
-                                        style={"display": "none"},
-                                    ),
-                                    dmc.Button(
-                                        "Load Data",
-                                        id="dc-viewer-load-btn",
-                                        leftSection=DashIconify(icon="mdi:table-refresh"),
-                                        variant="light",
-                                        size="sm",
-                                    ),
-                                ],
-                                gap="md",
-                                align="center",
-                            ),
-                            dmc.Divider(),
-                            html.Div(id="dc-viewer-data-content"),
-                        ],
-                        gap="md",
-                    ),
-                ],
-                withBorder=True,
-                shadow="xs",
-                radius="md",
-                p="md",
-                mt="md",
+            # Data Visualization Section (disabled for MultiQC)
+            (
+                dmc.Card(
+                    [
+                        dmc.Group(
+                            [
+                                DashIconify(icon="mdi:table-eye", width=20, color=colors["teal"]),
+                                dmc.Text("Data Preview", fw="bold", size="md"),
+                            ],
+                            gap="xs",
+                            align="center",
+                        ),
+                        dmc.Divider(my="sm"),
+                        dmc.Stack(
+                            [
+                                dmc.Group(
+                                    [
+                                        # dmc.Text("Rows to load:", size="sm", c="gray"),
+                                        dmc.NumberInput(
+                                            id="dc-viewer-row-limit",
+                                            value=1000,
+                                            min=100,
+                                            max=10000,
+                                            step=100,
+                                            w="120px",
+                                            style={"display": "none"},
+                                        ),
+                                        dmc.Button(
+                                            "Load Data",
+                                            id="dc-viewer-load-btn",
+                                            leftSection=DashIconify(icon="mdi:table-refresh"),
+                                            variant="light",
+                                            size="sm",
+                                        ),
+                                    ],
+                                    gap="md",
+                                    align="center",
+                                ),
+                                dmc.Divider(),
+                                html.Div(id="dc-viewer-data-content"),
+                            ],
+                            gap="md",
+                        ),
+                    ],
+                    withBorder=True,
+                    shadow="xs",
+                    radius="md",
+                    p="md",
+                    mt="md",
+                )
+                if dc_type.lower() != "multiqc"  # Hide data preview for MultiQC
+                else html.Div()  # Empty placeholder for MultiQC
             ),
         ],
         gap="md",

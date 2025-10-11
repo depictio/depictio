@@ -9,10 +9,16 @@
    - Hover state transitions
 
    Grid Configuration (applied in draggable.py):
-   - cols: {"lg": 12, "md": 10, "sm": 6, "xs": 4, "xxs": 2}
-   - rowHeight: 50px
+   - cols: {"lg": 48, "md": 48, "sm": 48, "xs": 48, "xxs": 48}
+   - rowHeight: 20px
    - compactType: undefined (disabled for performance)
    ============================================================================= */
+
+/* Minimize spacing between grid items for compact layout */
+.react-grid-layout {
+    margin: 0 !important;
+    padding: 0 !important;
+}
 
 /* =============================================================================
    1. THEME INTEGRATION & VISUAL CONSISTENCY
@@ -84,7 +90,9 @@
 .react-grid-item:hover .mantine-ActionIcon-root[id*="remove_box_button"],
 .react-grid-item:hover .mantine-ActionIcon-root[id*="edit_box_button"],
 .react-grid-item:hover .mantine-ActionIcon-root[id*="duplicate_box_button"],
-.react-grid-item:hover .mantine-ActionIcon-root[id*="reset_selection_graph_button"] {
+.react-grid-item:hover .mantine-ActionIcon-root[id*="reset_selection_graph_button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="metadata-info-button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="partial-data-warning-button"] {
     opacity: 1 !important;
     pointer-events: auto !important;
 }
@@ -116,7 +124,10 @@
 .drag-handles-hidden .mantine-ActionIcon-root[id*="remove_box_button"],
 .drag-handles-hidden .mantine-ActionIcon-root[id*="edit_box_button"],
 .drag-handles-hidden .mantine-ActionIcon-root[id*="duplicate_box_button"],
-.drag-handles-hidden .mantine-ActionIcon-root[id*="alignment_menu_btn"] {
+.drag-handles-hidden .mantine-ActionIcon-root[id*="alignment_menu_btn"],
+.drag-handles-hidden .mantine-ActionIcon-root[id*="metadata-info-button"],
+.drag-handles-hidden .mantine-ActionIcon-root[id*="partial-data-warning-button"],
+.drag-handles-hidden .metadata-button-wrapper {
     display: none !important;
     visibility: hidden !important;
 }
@@ -199,7 +210,7 @@
 
 /* Normalize wrapper div padding between edit and non-edit modes - minimize white space */
 .react-grid-item > div {
-    padding: 2px !important;
+    padding: 0px !important;
     max-height: 100% !important;
     max-width: 100% !important;
     height: 100% !important;
@@ -289,34 +300,36 @@
 
 /* Base ActionIconGroup styling
    Purpose: Container for edit buttons (remove, edit, duplicate, reset)
-   Behavior: Hidden by default, shown on component hover
+   Behavior: Hidden by default, shown on component hover, positioned absolutely to overlap component
    Z-index: 1001 (above resize handles at 500) */
 .react-grid-item .mantine-ActionIconGroup-root {
     opacity: 0 !important;
     transition: opacity 0.2s ease !important; /* POTENTIAL PERFORMANCE ISSUE */
     pointer-events: none !important;
     z-index: 1001 !important;
+    position: absolute !important;
+    top: 4px !important;
+    right: 4px !important;
 }
 
 /* Individual action button base styling
    Purpose: Hide specific action buttons by default
-   Targets: remove, edit, duplicate, reset buttons, alignment menu button */
+   Targets: remove, edit, duplicate, reset buttons, alignment menu button, metadata info button, partial data warning button */
 .react-grid-item .mantine-ActionIcon-root[id*="remove_box_button"],
 .react-grid-item .mantine-ActionIcon-root[id*="edit_box_button"],
 .react-grid-item .mantine-ActionIcon-root[id*="duplicate_box_button"],
 .react-grid-item .mantine-ActionIcon-root[id*="reset_selection_graph_button"],
-.react-grid-item .mantine-ActionIcon-root[id*="alignment_menu_btn"] {
+.react-grid-item .mantine-ActionIcon-root[id*="alignment_menu_btn"],
+.react-grid-item .mantine-ActionIcon-root[id*="partial-data-warning-button"] {
     opacity: 0 !important;
     transition: opacity 0.2s ease !important; /* POTENTIAL PERFORMANCE ISSUE */
     pointer-events: none !important;
 }
-.react-grid-item .mantine-ActionIcon-root[id*="remove_box_button"],
-.react-grid-item .mantine-ActionIcon-root[id*="edit_box_button"],
-.react-grid-item .mantine-ActionIcon-root[id*="duplicate_box_button"],
-.react-grid-item .mantine-ActionIcon-root[id*="reset_selection_graph_button"],
-.react-grid-item .mantine-ActionIcon-root[id*="alignment_menu_btn"] {
+
+/* Hide metadata button wrapper (contains Popover) by default */
+.react-grid-item .metadata-button-wrapper {
     opacity: 0 !important;
-    transition: opacity 0.2s ease !important; /* POTENTIAL PERFORMANCE ISSUE */
+    transition: opacity 0.2s ease !important;
     pointer-events: none !important;
 }
 
@@ -332,7 +345,14 @@
 .draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="edit_box_button"],
 .draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="duplicate_box_button"],
 .draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="reset_selection_graph_button"],
-.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="alignment_menu_btn"] {
+.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="alignment_menu_btn"],
+.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="partial-data-warning-button"] {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
+
+/* Show metadata button wrapper on component hover (only when edit mode is ON) */
+.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .metadata-button-wrapper {
     opacity: 1 !important;
     pointer-events: auto !important;
 }

@@ -25,6 +25,7 @@
 #component-dock-container button:nth-child(3) { animation-delay: 0.3s; }
 #component-dock-container button:nth-child(4) { animation-delay: 0.4s; }
 #component-dock-container button:nth-child(5) { animation-delay: 0.5s; }
+#component-dock-container button:nth-child(6) { animation-delay: 0.6s; }
 
 @keyframes dockSlideIn {
     from {
