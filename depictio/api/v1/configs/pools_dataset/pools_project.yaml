@@ -1,0 +1,79 @@
+# Palmer Penguins Multi-Species Analysis for Depictio
+name: "HGSVC Pools Strand-seq Analysis"
+project_type: "basic"
+is_public: false
+workflows:
+  - name: "hgsvc_pools_analysis"
+    engine:
+      name: "snakemake"
+      version: "7.19.2"
+    description: "Comparative analysis of HGSVC pools strand-seq data"
+    data_location:
+      structure: "flat"
+      locations:
+        - ../api/v1/configs/pools_dataset
+    data_collections:
+    # Population metadata
+    - data_collection_tag: "population_metadata"
+      description: "Population metadata for HGSVC samples"
+      config:
+        type: "Table"
+        metatype: "Metadata"
+        scan:
+          mode: single
+          scan_parameters:
+            filename: "../api/v1/configs/pools_dataset/population_metadata.xlsx"
+        dc_specific_properties:
+          format: "XLSX"
+          columns_description:
+            sample_id: "Sample identifier matching sequencing data"
+            ANCESTRY: "Ancestry information of the sample"
+            Population: "Population group of the sample"
+            Superpopulation: "Super population group of the sample"
+    # Demultiplexing results
+    - data_collection_tag: "demuxid_result"
+      description: "Demultiplexing results for HGSVC pools strand-seq data"
+      config:
+        type: "Table"
+        metatype: "Metadata"
+        scan:
+          mode: "single"
+          scan_parameters:
+            filename: "../api/v1/configs/pools_dataset/demuxid_results.xlsx"
+        dc_specific_properties:
+          format: "XLSX"
+          columns_description:
+            pool_name: "Name of the pool from which the sample originates"
+            sample_id: "Sample identifier matching population metadata"
+            cell_count: "Number of cells assigned to the sample"
+        join:
+          on_columns:
+            - sample_id
+          how: "inner"
+          with_dc:
+            - "population_metadata"
+    # Strand-seq QC metrics
+    # - data_collection_tag: "strandseq_qc_metrics"
+    #   description: "Strand-seq quality control metrics for HGSVC samples"
+    #   config:
+    #     type: "Table"
+    #     metatype: "Metadata"
+    #     scan:
+    #       mode: "single"
+    #       scan_parameters:
+    #         filename: "../api/v1/configs/pools_dataset/pools_qc_summary.xlsx"
+    #     dc_specific_properties:
+    #       format: "XLSX"
+    #       columns_description:
+    #         pool_name: "Name of the pool"
+    #         cell: "Cell identifier"
+    #         mapped: "Number of mapped reads"
+    #         dupl_rate: "Duplicate read rate"
+    #         good: "Usable reads after filtering"
+    #         usable: "Flag indicating if the cell passed QC"
+    #     join:
+    #       on_columns:
+    #         - pool_name
+    #       how: "inner"
+    #       with_dc:
+    #         - "demuxid_result"

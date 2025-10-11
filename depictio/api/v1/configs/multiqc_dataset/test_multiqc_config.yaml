@@ -1,0 +1,68 @@
+# Test MultiQC Data Collection Configuration
+name: "MultiQC Test Project"
+
+workflows:
+  - name: "test-workflow"
+    engine:
+      name: "python"
+    data_location:
+      structure: "sequencing-runs"
+      runs_regex: "run_*"
+      locations:
+        - ../api/v1/configs/multiqc_dataset
+    data_collections:
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report data"
+        config:
+          type: "MultiQC"
+      - data_collection_tag: "sample_metadata"
+        description: "Sample metadata table for MultiQC integration"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: single
+            scan_parameters:
+              filename: "../api/v1/configs/multiqc_dataset/sample_metadata.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              "sample": "Sample identifier matching MultiQC sample names"
+              "treatment": "Treatment condition applied to the sample"
+              "batch": "Batch identifier for experimental runs"
+          join:
+            on_columns: ["sample"]
+            how: "inner"
+            with_dc: ["multiqc_data"]
+      - data_collection_tag: "sample_qc_metrics"
+        description: "Per-sample quality control metrics and statistics"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "sample_qc_metrics.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              "sample": "Sample identifier"
+              "cell_id": "Individual cell or cellular compartment identifier"
+              "total_reads": "Total number of reads for this cell"
+              "mapped_reads": "Number of successfully mapped reads"
+              "mapping_rate": "Percentage of reads mapped to reference"
+              "duplicate_rate": "Percentage of duplicate reads"
+              "mean_coverage": "Mean genome coverage depth"
+              "median_insert_size": "Median insert size for paired-end reads"
+              "gc_content": "GC content percentage"
+              "q30_rate": "Percentage of bases with quality score >= 30"
+              "mean_quality": "Mean base quality score"
+          join:
+            on_columns: ["sample"]
+            how: "inner"
+            with_dc: ["sample_metadata", "multiqc_data"]

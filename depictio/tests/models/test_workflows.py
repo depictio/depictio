@@ -604,12 +604,12 @@ class TestWorkflowIntegration:
         assert isinstance(dc, DataCollection)
         assert dc.data_collection_tag == "iris_table"
         assert dc.config.type == "table"
-        assert dc.config.scan.mode == "single"
+        assert dc.config.scan.mode == "single"  # type: ignore[attr-defined]
         from depictio.models.models.data_collections import ScanSingle
 
-        assert isinstance(dc.config.scan.scan_parameters, ScanSingle)
+        assert isinstance(dc.config.scan.scan_parameters, ScanSingle)  # type: ignore[attr-defined]
         assert (
-            dc.config.scan.scan_parameters.filename
+            dc.config.scan.scan_parameters.filename  # type: ignore[attr-defined]
             == "/app/depictio/api/v1/configs/iris_dataset/iris.csv"
         )
         from depictio.models.models.data_collections_types.table import DCTableConfig

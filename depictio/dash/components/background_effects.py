@@ -137,11 +137,11 @@ def create_dashboard_background_effects(theme="light", performance_level="medium
             ),
             dcc.Store(id="dashboard-background-theme-store", data={"theme": theme}),
             # Interval for performance monitoring
-            dcc.Interval(
-                id="dashboard-performance-interval",
-                interval=5000,  # Check every 5 seconds
-                n_intervals=0,
-            ),
+            # dcc.Interval(
+            #     id="dashboard-performance-interval",
+            #     interval=5000,  # Check every 5 seconds
+            #     n_intervals=0,
+            # ),
         ],
         id="dashboard-background-effects",
         style={

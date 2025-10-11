@@ -138,11 +138,19 @@ def process_single_data_collection(
             mode="process",
         )
 
-        return {
-            "success": True,
-            "message": f"Data collection {data_collection.data_collection_tag} processed successfully",
-            "data": result,
-        }
+        # Check if the processing actually succeeded
+        if result.get("result") == "success":
+            return {
+                "success": True,
+                "message": f"Data collection {data_collection.data_collection_tag} processed successfully",
+                "data": result,
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"Failed to process data collection {data_collection.data_collection_tag}: {result.get('message', 'Unknown error')}",
+                "data": result,
+            }
 
     except Exception as e:
         logger.error(f"Error processing data collection {data_collection.data_collection_tag}: {e}")

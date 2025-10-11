@@ -7,6 +7,7 @@ from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel
 from depictio.models.models.data_collections_types.jbrowse import DCJBrowse2Config
+from depictio.models.models.data_collections_types.multiqc import DCMultiQC
 from depictio.models.models.data_collections_types.table import DCTableConfig
 
 
@@ -142,13 +143,13 @@ class TableJoinConfig(BaseModel):
 class DataCollectionConfig(MongoModel):
     type: str
     metatype: str | None = None
-    scan: Scan
-    dc_specific_properties: DCTableConfig | DCJBrowse2Config
+    scan: Scan | None = None
+    dc_specific_properties: DCTableConfig | DCJBrowse2Config | DCMultiQC
     join: TableJoinConfig | None = None
 
     @field_validator("type", mode="before")
     def validate_type(cls, v):
-        allowed_values = ["table", "jbrowse2"]
+        allowed_values = ["table", "jbrowse2", "multiqc"]
         lower_v = v.lower()
         if lower_v not in allowed_values:
             raise ValueError(f"type must be one of {allowed_values}")
@@ -176,6 +177,20 @@ class DataCollectionConfig(MongoModel):
             if not isinstance(dc_specific_properties, DCJBrowse2Config):
                 if isinstance(dc_specific_properties, dict):
                     values["dc_specific_properties"] = DCJBrowse2Config(**dc_specific_properties)
+        elif type_value == "multiqc":
+            # For MultiQC, scan field is optional - it will be handled by the processing logic
+            # Check if it's already a DCMultiQC instance
+            if not isinstance(dc_specific_properties, DCMultiQC):
+                if isinstance(dc_specific_properties, dict):
+                    values["dc_specific_properties"] = DCMultiQC(**dc_specific_properties)
+                else:
+                    # Initialize with empty DCMultiQC if not provided
+                    values["dc_specific_properties"] = DCMultiQC()
+
+        # Validate that scan is provided for non-MultiQC types
+        if type_value != "multiqc" and not values.get("scan"):
+            raise ValueError("scan field is required for non-MultiQC data collection types")
+
         return values
 
 

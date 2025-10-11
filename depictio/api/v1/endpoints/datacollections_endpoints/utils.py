@@ -43,11 +43,38 @@ def generate_join_dict(workflow: dict) -> dict[str, dict[str, dict]]:
     logger.info(f"Workflow ID: {wf_id}")
     join_dict[wf_id] = {}
 
+    # Start with all table-type data collections (they can have join configurations)
     dc_ids = {
         str(dc["_id"]): dc
         for dc in workflow["data_collections"]
         if dc["config"]["type"].lower() == "table"
     }
+
+    # Add data collections that are referenced in join configurations
+    # ONLY include table-type data collections (skip multiqc, jbrowse, etc.)
+    all_dc_lookup = {dc["data_collection_tag"]: dc for dc in workflow["data_collections"]}
+
+    for dc in workflow["data_collections"]:
+        if dc["config"]["type"].lower() == "table" and "join" in dc["config"]:
+            join_info = dc["config"]["join"]
+            if join_info and "with_dc" in join_info:
+                for related_dc_tag in join_info["with_dc"]:
+                    if related_dc_tag in all_dc_lookup:
+                        related_dc = all_dc_lookup[related_dc_tag]
+                        related_dc_id = str(related_dc["_id"])
+                        related_dc_type = related_dc["config"]["type"].lower()
+
+                        if related_dc_id not in dc_ids:
+                            # Only add table-type data collections to joins
+                            if related_dc_type == "table":
+                                dc_ids[related_dc_id] = related_dc
+                                logger.debug(
+                                    f"Added related table DC to joins: {related_dc_tag} ({related_dc_id})"
+                                )
+                            else:
+                                logger.debug(
+                                    f"Skipping non-table DC from joins: {related_dc_tag} ({related_dc_id}) - type: {related_dc_type}"
+                                )
     logger.debug(f"Data collections: {dc_ids}")
     visited = set()
 
@@ -59,6 +86,11 @@ def generate_join_dict(workflow: dict) -> dict[str, dict[str, dict]]:
         if dc_id in visited:
             return
         visited.add(dc_id)
+
+        # Skip if this DC is not in dc_ids (filtered out non-table type)
+        if dc_id not in dc_ids:
+            return
+
         if "join" in dc_ids[dc_id]["config"]:
             join_info = dc_ids[dc_id]["config"]["join"]
             # logger.info(f"Join info: {join_info}")
@@ -72,7 +104,8 @@ def generate_join_dict(workflow: dict) -> dict[str, dict[str, dict]]:
                         ),
                         None,
                     )
-                    if related_dc_id:
+                    # Only create join if both DCs are in dc_ids (both are table types)
+                    if related_dc_id and related_dc_id in dc_ids:
                         join_configs[f"{dc_id}--{related_dc_id}"] = {
                             "how": join_info["how"],
                             "on_columns": join_info["on_columns"],

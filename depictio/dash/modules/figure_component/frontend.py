@@ -5,7 +5,8 @@ from typing import Any, Dict, List
 import dash
 import dash_mantine_components as dmc
 import httpx
-from dash import ALL, MATCH, Input, Output, Patch, State, dcc, html
+from dash import ALL, MATCH, Input, Output, Patch, State, ctx, dcc, html
+from dash.exceptions import PreventUpdate
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL, settings
@@ -145,6 +146,145 @@ def _get_default_parameters(visu_type: str, columns_specs: Dict[str, List[str]])
             defaults["ids"] = categorical_cols[0]
 
     return {k: v for k, v in defaults.items() if v is not None}
+
+
+# ========================================================================
+# HELPER FUNCTIONS: Interactive filtering support
+# ========================================================================
+
+
+def _extract_and_group_filters(interactive_values):
+    """
+    Extract filter components and group by data collection ID.
+
+    Args:
+        interactive_values: List of interactive component values from Store
+
+    Returns:
+        tuple: (filters_by_dc, interactive_dict)
+            - filters_by_dc: Dict[str, List[dict]] - Filters grouped by DC ID
+            - interactive_dict: Dict[str, Any] - Column name to value mapping
+    """
+    interactive_dict = {}
+    filters_by_dc = {}
+
+    for component in interactive_values:
+        column_name = component.get("metadata", {}).get("column_name")
+        component_dc_id = component.get("metadata", {}).get("dc_id")
+        if column_name:
+            interactive_dict[column_name] = component.get("value")
+            # Group filters by DC
+            if component_dc_id:
+                dc_key = str(component_dc_id)
+                if dc_key not in filters_by_dc:
+                    filters_by_dc[dc_key] = []
+                filters_by_dc[dc_key].append(component)
+
+    logger.debug(
+        "Extracted %d filter columns across %d DCs",
+        len(interactive_dict),
+        len(filters_by_dc),
+    )
+
+    return filters_by_dc, interactive_dict
+
+
+def _filter_relevant_dcs(filters_by_dc, figure_dc_id, workflow_id, token):
+    """
+    Filter out unrelated DCs that have no join relationship with figure DC.
+
+    Args:
+        filters_by_dc: Dict[str, List[dict]] - Filters grouped by DC ID
+        figure_dc_id: Target figure component's DC ID
+        workflow_id: Workflow ID for join table lookup
+        token: Authentication token
+
+    Returns:
+        dict: Filtered filters_by_dc with only relevant DCs
+    """
+    from depictio.api.v1.deltatables_utils import get_join_tables
+
+    figure_dc_str = str(figure_dc_id)
+
+    # Detect if figure DC is a joined DC and extract constituent DCs
+    is_joined_dc = "--" in figure_dc_str
+    constituent_dcs = figure_dc_str.split("--") if is_joined_dc else [figure_dc_str]
+
+    logger.debug(
+        "Target DC: %s (joined=%s, constituents=%s)",
+        figure_dc_str,
+        is_joined_dc,
+        constituent_dcs,
+    )
+
+    # Fetch join tables to validate DC relationships
+    join_tables_for_wf = get_join_tables(str(workflow_id), token)
+    workflow_joins = join_tables_for_wf.get(str(workflow_id), {})
+
+    # Keep only filter DCs that have a join relationship with figure DC
+    relevant_filters_by_dc = {}
+    filtered_out_dcs = []
+
+    for filter_dc_id, filters in filters_by_dc.items():
+        logger.debug(
+            "Comparing: filter_dc=%s vs figure_dc=%s, equal=%s",
+            filter_dc_id,
+            figure_dc_str,
+            filter_dc_id == figure_dc_str,
+        )
+
+        if filter_dc_id == figure_dc_str:
+            # Same DC - always relevant
+            relevant_filters_by_dc[filter_dc_id] = filters
+            logger.debug("Including filter DC %s (same as figure DC)", filter_dc_id)
+        elif is_joined_dc and filter_dc_id in constituent_dcs:
+            # Filter DC is a constituent of the joined DC - always relevant
+            relevant_filters_by_dc[filter_dc_id] = filters
+            logger.debug(
+                "Including filter DC %s (constituent of joined DC %s)",
+                filter_dc_id,
+                figure_dc_str,
+            )
+        else:
+            # Check if join relationship exists
+            join_key1 = f"{figure_dc_str}--{filter_dc_id}"
+            join_key2 = f"{filter_dc_id}--{figure_dc_str}"
+
+            logger.debug("Checking joins: %s or %s", join_key1, join_key2)
+            logger.debug("Available joins: %s", list(workflow_joins.keys()))
+
+            if join_key1 in workflow_joins or join_key2 in workflow_joins:
+                relevant_filters_by_dc[filter_dc_id] = filters
+                logger.debug("Including filter DC %s (has join with figure DC)", filter_dc_id)
+            else:
+                filtered_out_dcs.append(filter_dc_id)
+                logger.debug("Excluding filter DC %s (no join with figure DC)", filter_dc_id)
+
+    if filtered_out_dcs:
+        logger.debug("Filtered out %d unrelated DCs: %s", len(filtered_out_dcs), filtered_out_dcs)
+
+    logger.debug("Relevant filters: %d DCs", len(relevant_filters_by_dc))
+
+    return relevant_filters_by_dc
+
+
+def _check_active_filters(filters_by_dc):
+    """
+    Check if any filters have active (non-empty) values.
+
+    Args:
+        filters_by_dc: Dict[str, List[dict]] - Filters grouped by DC ID
+
+    Returns:
+        bool: True if at least one filter has a non-empty value
+    """
+    for dc_filters in filters_by_dc.values():
+        for component in dc_filters:
+            value = component.get("value")
+            # Check if value is non-empty (list, string, number, etc.)
+            if value is not None and value != [] and value != "" and value is not False:
+                return True
+    return False
 
 
 def register_callbacks_figure_component(app):
@@ -574,6 +714,32 @@ def register_callbacks_figure_component(app):
 
         if not local_data:
             raise dash.exceptions.PreventUpdate
+
+        # Check if this is a MultiQC data collection - if so, skip this callback
+        if workflow_id and data_collection_id and local_data:
+            try:
+                TOKEN = local_data.get("access_token")
+                logger.info(f"🔍 UPDATE_FIGURE: Checking DC type for {data_collection_id}")
+
+                response = httpx.get(
+                    f"{API_BASE_URL}/depictio/api/v1/datacollections/{data_collection_id}",
+                    headers={"Authorization": f"Bearer {TOKEN}"},
+                )
+
+                if response.status_code == 200:
+                    data_collection_info = response.json()
+                    dc_type = data_collection_info.get("config", {}).get("type", "").lower()
+                    logger.info(f"🔍 UPDATE_FIGURE: DC type = '{dc_type}'")
+
+                    if dc_type == "multiqc":
+                        logger.info(
+                            "🔍 UPDATE_FIGURE: MultiQC collection detected - skipping standard figure update"
+                        )
+                        raise dash.exceptions.PreventUpdate
+
+            except Exception as e:
+                logger.warning(f"Error checking data collection type in update_figure: {e}")
+                # Continue with normal processing if check fails
 
         TOKEN = local_data["access_token"]
         dashboard_id = pathname.split("/")[-1]
@@ -1260,16 +1426,18 @@ def register_callbacks_figure_component(app):
         action_type = "INITIAL SETUP" if is_initial_setup else "USER TOGGLE"
         logger.info(f"{action_type}: Setting {mode} mode for component {component_index}")
 
+        # Initialize styles - only UI and Code modes supported
+        ui_content_style = {"display": "none"}
+        code_content_style = {"display": "none"}
+
         if mode == "code":
             # Switch to code mode interface
-            ui_content_style = {"display": "none"}
             code_content_style = {"display": "block"}
             code_interface_children = create_code_mode_interface(component_index)
             logger.info(f"Switched to CODE MODE for {component_index}")
         else:
-            # Switch to UI mode interface
+            # Switch to UI mode interface (default)
             ui_content_style = {"display": "block"}
-            code_content_style = {"display": "none"}
             # Create hidden code-status component to ensure callbacks work
             code_interface_children = [
                 dmc.Alert(
@@ -2057,7 +2225,7 @@ def register_callbacks_figure_component(app):
         raise dash.exceptions.PreventUpdate
 
     @app.callback(
-        Output({"type": "graph", "index": MATCH}, "figure"),
+        Output({"type": "graph", "index": MATCH}, "figure", allow_duplicate=True),
         Input("theme-store", "data"),
         prevent_initial_call=True,  # Only update on theme changes, not initial load
     )
@@ -2091,8 +2259,825 @@ def register_callbacks_figure_component(app):
         )
         return patch
 
+    # CALLBACK ARCHITECTURE: Pattern-matching render callback for async figure generation (PRIMARY)
+    @app.callback(
+        Output({"type": "graph", "index": MATCH}, "figure"),
+        Output({"type": "figure-trace-metadata", "index": MATCH}, "data"),
+        Output({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        Input({"type": "figure-render-trigger", "index": MATCH}, "data"),
+        State({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        State("local-store", "data"),
+        background=False,  # Synchronous to avoid subprocess issues with cache
+        prevent_initial_call=False,  # Fire immediately when trigger store is populated
+    )
+    def render_figure_callback(trigger_data, metadata, local_data):
+        """
+        Pattern-matching callback for independent figure rendering.
 
-def design_figure(id, component_data=None):
+        Inspired by MultiQC callback architecture - each figure component renders
+        independently without blocking dashboard restore flow.
+
+        This callback fires when the figure-render-trigger store is populated during
+        dashboard restore or component creation, allowing figures to render progressively.
+        """
+        if not trigger_data or not metadata:
+            logger.warning("🚫 RENDER CALLBACK: Missing trigger data or metadata")
+            raise dash.exceptions.PreventUpdate
+
+        logger.info("=" * 80)
+        logger.info("🎨 RENDER CALLBACK: Starting figure generation")
+        logger.info(f"📊 Component ID: {metadata.get('index', 'unknown')}")
+        logger.info(f"📈 Visualization type: {trigger_data.get('visu_type')}")
+        logger.info(f"🎨 Theme: {trigger_data.get('theme')}")
+        logger.info("=" * 80)
+
+        try:
+            # Import here to avoid circular dependencies
+            import polars as pl
+            from bson import ObjectId
+
+            from depictio.api.v1.deltatables_utils import load_deltatable_lite
+            from depictio.dash.modules.figure_component.utils import render_figure
+
+            # Extract parameters from trigger data
+            dict_kwargs = trigger_data.get("dict_kwargs", {})
+            visu_type = trigger_data.get("visu_type", "scatter")
+            wf_id = trigger_data.get("wf_id")
+            dc_id = trigger_data.get("dc_id")
+            theme = trigger_data.get("theme", "light")
+            mode = trigger_data.get("mode", "ui")
+            code_content = trigger_data.get("code_content")
+
+            TOKEN = local_data.get("access_token") if local_data else None
+
+            logger.info(f"🔍 RENDER PARAMS: wf_id={wf_id}, dc_id={dc_id}, mode={mode}")
+            logger.info(f"🔍 RENDER PARAMS: dict_kwargs keys={list(dict_kwargs.keys())}")
+
+            # Load data
+            df = pl.DataFrame()
+            if wf_id and dc_id:
+                try:
+                    logger.info(f"📂 LOADING DATA: {wf_id}:{dc_id}")
+                    if isinstance(dc_id, str) and "--" in dc_id:
+                        # Joined data collection
+                        df = load_deltatable_lite(ObjectId(wf_id), dc_id, TOKEN=TOKEN)
+                    else:
+                        # Regular data collection
+                        df = load_deltatable_lite(ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN)
+                    logger.info(f"✅ DATA LOADED: {df.shape[0]} rows x {df.shape[1]} columns")
+                except Exception as e:
+                    logger.error(f"❌ DATA LOAD FAILED: {e}")
+                    df = pl.DataFrame()
+
+            # Handle code mode preprocessing
+            if mode == "code" and code_content:
+                logger.info("🔄 CODE MODE: Executing preprocessing")
+                try:
+                    from .code_mode import analyze_constrained_code
+                    from .simple_code_executor import SimpleCodeExecutor
+
+                    analysis = analyze_constrained_code(code_content)
+                    if analysis["is_valid"] and analysis["has_preprocessing"]:
+                        executor = SimpleCodeExecutor()
+                        success, df_preprocessed, message = executor.execute_preprocessing_only(
+                            code_content, df
+                        )
+                        if success and df_preprocessed is not None:
+                            df = df_preprocessed
+                            logger.info("✅ CODE MODE: Preprocessing successful")
+                        else:
+                            logger.warning(f"⚠️ CODE MODE: Preprocessing failed: {message}")
+                except Exception as e:
+                    logger.error(f"❌ CODE MODE: Preprocessing error: {e}")
+
+            # Render figure
+            logger.info("🎨 RENDERING FIGURE...")
+            figure, data_info = render_figure(
+                dict_kwargs,
+                visu_type,
+                df,
+                theme=theme,
+                skip_validation=(mode == "code"),
+                mode=mode,
+            )
+
+            # Log data count information
+            logger.info(
+                f"📊 DATA INFO: displayed={data_info.get('displayed_data_count', 0):,}, total={data_info.get('total_data_count', 0):,}, sampled={data_info.get('was_sampled', False)}"
+            )
+
+            # CALLBACK ARCHITECTURE: Generate trace metadata for efficient patching
+            logger.info("🔍 ANALYZING FIGURE STRUCTURE for patching...")
+            from depictio.dash.modules.figure_component.utils import analyze_figure_structure
+
+            trace_metadata = analyze_figure_structure(figure, dict_kwargs, visu_type)
+
+            # Store data counts in trace metadata for partial data warning button
+            trace_metadata["displayed_data_count"] = data_info.get("displayed_data_count", 0)
+            trace_metadata["total_data_count"] = data_info.get("total_data_count", 0)
+            trace_metadata["was_sampled"] = data_info.get("was_sampled", False)
+
+            # Also update stored metadata component so buttons can access the data counts
+            updated_metadata = metadata.copy() if metadata else {}
+            updated_metadata["displayed_data_count"] = data_info.get("displayed_data_count", 0)
+            updated_metadata["total_data_count"] = data_info.get("total_data_count", 0)
+            updated_metadata["was_sampled"] = data_info.get("was_sampled", False)
+
+            # Preserve full_data_loaded flag if it exists (set by patch_figure_interactive)
+            # This ensures the popover continues to show the correct state after re-renders
+            if metadata and "full_data_loaded" in metadata:
+                updated_metadata["full_data_loaded"] = metadata["full_data_loaded"]
+                logger.info(f"🔒 Preserved full_data_loaded flag: {metadata['full_data_loaded']}")
+
+            logger.info(f"   Trace count: {trace_metadata.get('summary', {}).get('traces', 0)}")
+            logger.info(
+                f"   Has color: {trace_metadata.get('summary', {}).get('has_color', False)}"
+            )
+
+            logger.info("✅ RENDER CALLBACK: Figure generated successfully")
+            logger.info("=" * 80)
+            return figure, trace_metadata, updated_metadata
+
+        except Exception as e:
+            logger.error(f"❌ RENDER CALLBACK FAILED: {e}")
+            logger.exception("Full traceback:")
+            # Return error placeholder with empty metadata
+            import plotly.express as px
+
+            from depictio.dash.modules.figure_component.utils import _get_theme_template
+
+            error_fig = px.scatter(
+                template=_get_theme_template(trigger_data.get("theme", "light")),
+                title=f"Error rendering figure: {str(e)}",
+            )
+            # Return original metadata unchanged on error
+            return error_fig, {}, metadata
+
+    def _determine_join_strategy(filters_by_dc, figure_dc_str):
+        """
+        Determine if manual join is required based on filter distribution.
+
+        Args:
+            filters_by_dc: Dict[str, List[dict]] - Filters grouped by DC ID
+            figure_dc_str: Figure component's DC ID as string
+
+        Returns:
+            tuple: (requires_manual_join, is_joined_dc, constituent_dc_ids)
+        """
+        # Detect if figure DC is a joined DC (contains "--")
+        is_joined_dc = isinstance(figure_dc_str, str) and "--" in figure_dc_str
+        constituent_dc_ids = set(figure_dc_str.split("--")) if is_joined_dc else set()
+
+        # For joined DCs, check if filters target constituent DCs
+        if is_joined_dc:
+            logger.debug("Figure DC %s is a joined DC", figure_dc_str)
+            filter_dc_ids = set(filters_by_dc.keys())
+            all_filters_on_constituents = filter_dc_ids.issubset(constituent_dc_ids)
+            has_filters_for_figure_dc = all_filters_on_constituents
+            logger.debug(
+                "Joined DC: constituents=%s, filters=%s", constituent_dc_ids, filter_dc_ids
+            )
+        else:
+            logger.debug("Figure DC %s is a regular DC", figure_dc_str)
+            has_filters_for_figure_dc = figure_dc_str in filters_by_dc
+            all_filters_on_constituents = False
+
+        # Determine if we need to perform a manual join
+        needs_join = False
+        if not has_filters_for_figure_dc and len(filters_by_dc) > 0:
+            # OPTIMIZATION: For joined DCs with filters on constituent DCs,
+            # skip manual join (load_deltatable_lite handles it internally)
+            if is_joined_dc and all_filters_on_constituents:
+                needs_join = False
+                logger.debug("Joined DC with constituent filters - using direct filtering")
+            else:
+                # Filters are on different DC(s) - need manual join
+                needs_join = True
+                logger.debug("Filters on different DCs - manual join required")
+
+        # Determine if manual join is needed
+        # For joined DCs with constituent filters from multiple DCs, use manual join
+        # to apply filters separately to each DC before joining
+        requires_manual_join = (needs_join or len(filters_by_dc) > 1) and not (
+            is_joined_dc and all_filters_on_constituents and len(filters_by_dc) == 1
+        )
+
+        logger.debug(
+            "Join strategy: requires_manual=%s, filters_count=%d",
+            requires_manual_join,
+            len(filters_by_dc),
+        )
+
+        return requires_manual_join, is_joined_dc, constituent_dc_ids
+
+    def _load_and_join_data(
+        filters_by_dc,
+        wf_id,
+        token,
+        has_active_filters,
+        is_joined_dc,
+        constituent_dc_ids,
+        figure_dc_str,
+        metadata,
+        join_config,
+    ):
+        """
+        Load and join multiple data collections.
+
+        Args:
+            filters_by_dc: Dict[str, List[dict]] - Filters grouped by DC ID
+            wf_id: Workflow ID
+            token: Authentication token
+            has_active_filters: Whether any filters are active
+            is_joined_dc: Whether figure DC is a joined DC
+            constituent_dc_ids: Set of constituent DC IDs (for joined DCs)
+            figure_dc_str: Figure DC ID as string
+            metadata: Component metadata (for metatype extraction)
+            join_config: Join configuration from component
+
+        Returns:
+            pl.DataFrame: Joined dataframe
+        """
+        from bson import ObjectId
+
+        from depictio.api.v1.deltatables_utils import (
+            load_deltatable_lite,
+            merge_multiple_dataframes,
+        )
+
+        logger.debug("Multi-DC filtering: joining %d DCs", len(filters_by_dc))
+
+        # Determine join config
+        if is_joined_dc:
+            join_config_to_use = {
+                "on_columns": ["sample_id"],
+                "how": "inner",
+            }
+            logger.debug("Using inferred join config for joined DC")
+
+            # Ensure all constituent DCs are in filters_by_dc (even if no filters)
+            for constituent_dc in constituent_dc_ids:
+                if constituent_dc not in filters_by_dc:
+                    filters_by_dc[constituent_dc] = []
+                    logger.debug("Adding constituent DC %s to join (no filters)", constituent_dc)
+        else:
+            if not join_config or not join_config.get("on_columns"):
+                raise Exception("Join required but no join config found")
+            join_config_to_use = join_config
+
+            # Include figure's DC in the join if it's not already in filters_by_dc
+            if figure_dc_str not in filters_by_dc:
+                logger.debug("Adding figure DC %s to join (no filters)", figure_dc_str)
+                filters_by_dc[figure_dc_str] = []
+
+        # Extract DC metatypes from component metadata
+        dc_metatypes = {}
+        for dc_key, dc_filters in filters_by_dc.items():
+            if dc_filters:
+                component_dc_config = dc_filters[0].get("metadata", {}).get("dc_config", {})
+                metatype = component_dc_config.get("metatype")
+                if metatype:
+                    dc_metatypes[dc_key] = metatype
+                    logger.debug("DC %s metatype: %s", dc_key, metatype)
+
+        # If figure DC not in filters_by_dc, get its metatype from metadata State
+        if figure_dc_str not in dc_metatypes and metadata:
+            figure_dc_config = metadata.get("dc_config", {})
+            figure_metatype = figure_dc_config.get("metatype")
+            if figure_metatype:
+                dc_metatypes[figure_dc_str] = figure_metatype
+                logger.debug("Figure DC %s metatype: %s", figure_dc_str, figure_metatype)
+
+        # Load each DC
+        dataframes = {}
+        for dc_key, dc_filters in filters_by_dc.items():
+            if has_active_filters:
+                active_filters = [
+                    c for c in dc_filters if c.get("value") not in [None, [], "", False]
+                ]
+                logger.debug("Loading DC %s with %d active filters", dc_key, len(active_filters))
+                metadata_to_pass = active_filters
+            else:
+                logger.debug("Loading DC %s with NO filters (clearing)", dc_key)
+                metadata_to_pass = []
+
+            dc_df = load_deltatable_lite(
+                ObjectId(wf_id),
+                ObjectId(dc_key),
+                metadata=metadata_to_pass,
+                TOKEN=token,
+                select_columns=None,
+            )
+            dataframes[dc_key] = dc_df
+            logger.debug("Loaded DC %s: %d rows × %d cols", dc_key, dc_df.height, dc_df.width)
+
+        # Build join instructions
+        dc_ids = sorted(filters_by_dc.keys())
+        join_instructions = [
+            {
+                "left": dc_ids[0],
+                "right": dc_ids[1],
+                "how": join_config_to_use.get("how", "inner"),
+                "on": join_config_to_use.get("on_columns", []),
+            }
+        ]
+
+        logger.debug("Join instructions: %s", join_instructions)
+        logger.debug("DC metatypes: %s", dc_metatypes)
+
+        # Merge DataFrames
+        df = merge_multiple_dataframes(
+            dataframes=dataframes,
+            join_instructions=join_instructions,
+            dc_metatypes=dc_metatypes,
+        )
+
+        logger.debug("Joined result: %d rows × %d cols", df.height, df.width)
+        return df
+
+    def _load_single_dc(
+        filters_by_dc,
+        wf_id,
+        dc_id,
+        token,
+        has_active_filters,
+        is_joined_dc,
+        constituent_dc_ids,
+        figure_dc_str,
+        select_columns,
+    ):
+        """
+        Load single data collection with optional filtering.
+
+        Args:
+            filters_by_dc: Dict[str, List[dict]] - Filters grouped by DC ID
+            wf_id: Workflow ID
+            dc_id: Data collection ID
+            token: Authentication token
+            has_active_filters: Whether any filters are active
+            is_joined_dc: Whether figure DC is a joined DC
+            constituent_dc_ids: Set of constituent DC IDs (for joined DCs)
+            figure_dc_str: Figure DC ID as string
+            select_columns: List of columns to select for projection
+
+        Returns:
+            pl.DataFrame: Loaded dataframe
+        """
+        from bson import ObjectId
+
+        from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+        logger.debug("Same-DC filtering: loading single DC")
+
+        # Collect relevant filters
+        if is_joined_dc and constituent_dc_ids:
+            relevant_filters = []
+            for constituent_dc in constituent_dc_ids:
+                relevant_filters.extend(filters_by_dc.get(constituent_dc, []))
+            logger.debug(
+                "Joined DC: collected %d filters from %d constituents",
+                len(relevant_filters),
+                len(constituent_dc_ids),
+            )
+        else:
+            relevant_filters = filters_by_dc.get(figure_dc_str, [])
+            logger.debug("Regular DC: collected %d filters", len(relevant_filters))
+
+        # Prepare metadata for loading
+        if has_active_filters:
+            active_filters = [
+                c for c in relevant_filters if c.get("value") not in [None, [], "", False]
+            ]
+            logger.debug("Applying %d active filters to figure DC", len(active_filters))
+            metadata_to_pass = active_filters
+        else:
+            logger.debug("Loading ALL unfiltered data (clearing filters)")
+            metadata_to_pass = []
+
+        # Handle joined DC IDs (don't convert to ObjectId if it contains "--")
+        if is_joined_dc:
+            df = load_deltatable_lite(
+                ObjectId(wf_id),
+                dc_id,  # Keep as string for joined DCs
+                metadata=metadata_to_pass,
+                TOKEN=token,
+                select_columns=select_columns,
+            )
+        else:
+            df = load_deltatable_lite(
+                ObjectId(wf_id),
+                ObjectId(dc_id),
+                metadata=metadata_to_pass,
+                TOKEN=token,
+                select_columns=select_columns,
+            )
+
+        logger.debug("Loaded single DC: %d rows × %d cols", df.height, df.width)
+        return df
+
+    def _apply_code_preprocessing(code_content, df):
+        """
+        Apply code preprocessing to filtered data (code mode only).
+
+        Args:
+            code_content: User's code content
+            df: Input dataframe
+
+        Returns:
+            pl.DataFrame: Preprocessed dataframe (or original if preprocessing fails/not needed)
+        """
+        logger.debug("Code mode: executing preprocessing for filtered data")
+        try:
+            from .code_mode import analyze_constrained_code
+            from .simple_code_executor import SimpleCodeExecutor
+
+            analysis = analyze_constrained_code(code_content)
+            if analysis["is_valid"] and analysis["has_preprocessing"]:
+                executor = SimpleCodeExecutor()
+                success, df_preprocessed, message = executor.execute_preprocessing_only(
+                    code_content, df
+                )
+                if success and df_preprocessed is not None:
+                    logger.debug("Code preprocessing successful")
+                    return df_preprocessed
+                else:
+                    logger.warning("Code preprocessing failed: %s", message)
+            else:
+                logger.debug("No preprocessing needed")
+        except Exception as e:
+            logger.error("Code preprocessing error: %s", e)
+
+        return df
+
+    # CALLBACK ARCHITECTURE: Interactive patching callback for parameter updates
+    @app.callback(
+        Output({"type": "graph", "index": MATCH}, "figure", allow_duplicate=True),
+        Output({"type": "stored-metadata-component", "index": MATCH}, "data", allow_duplicate=True),
+        Input("interactive-values-store", "data"),
+        Input({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        State({"type": "graph", "index": MATCH}, "figure"),
+        State({"type": "figure-trace-metadata", "index": MATCH}, "data"),
+        State("local-store", "data"),
+        prevent_initial_call=True,
+    )
+    def patch_figure_interactive(filter_data, metadata, current_figure, trace_metadata, local_data):
+        """
+        Handle interactive component filtering (range sliders, dropdowns, etc.).
+
+        Loads filtered data with column projection for optimal performance:
+        - Row filtering via metadata parameter (Polars predicate pushdown)
+        - Column projection via select_columns (10-50x I/O reduction for wide tables)
+        - Cached DataFrames reused when available
+
+        Also handles full data loading requests (bypassing sampling while preserving filters).
+        """
+        # Determine what triggered this callback
+        trigger = ctx.triggered_id
+
+        # Check if this is a full data load request
+        full_data_requested = metadata.get("full_data_requested", False) if metadata else False
+
+        # Prevent update if triggered by metadata but NOT a full data request
+        if (
+            trigger
+            and isinstance(trigger, dict)
+            and trigger.get("type") == "stored-metadata-component"
+        ):
+            if not full_data_requested:
+                # Metadata changed for other reasons (e.g., theme change) - ignore
+                raise dash.exceptions.PreventUpdate
+            logger.info(
+                "🔓 Full data load requested for component %s - will apply filters and bypass sampling",
+                metadata.get("index", "unknown"),
+            )
+
+        if not filter_data or not current_figure or not metadata:
+            raise dash.exceptions.PreventUpdate
+
+        logger.info("🔍 Interactive filtering: component %s", metadata.get("index", "unknown"))
+
+        try:
+            from depictio.dash.modules.figure_component.utils import (
+                extract_needed_columns,
+                render_figure,
+            )
+
+            # Extract context
+            interactive_values = filter_data.get("interactive_components_values", [])
+            token = local_data.get("access_token") if local_data else None
+            wf_id = metadata.get("wf_id")
+            dc_id = metadata.get("dc_id")
+            theme = metadata.get("theme", "light")
+            mode = metadata.get("mode", "ui")
+            code_content = metadata.get("code_content")
+            visu_type = metadata.get("visu_type", "scatter")
+            current_params = metadata.get("dict_kwargs", {})
+
+            if not wf_id or not dc_id:
+                logger.warning("Missing workflow/DC IDs for interactive filtering")
+                raise dash.exceptions.PreventUpdate
+
+            # 1. Extract and group filters
+            filters_by_dc, interactive_dict = _extract_and_group_filters(interactive_values)
+
+            # 2. Filter relevant DCs
+            filters_by_dc = _filter_relevant_dcs(filters_by_dc, dc_id, wf_id, token)
+
+            # 2b. Rebuild interactive_dict with only columns from relevant DCs
+            # This prevents trying to load columns from filtered-out DCs
+            interactive_dict = {}
+            for dc_filters in filters_by_dc.values():
+                for component in dc_filters:
+                    column_name = component.get("metadata", {}).get("column_name")
+                    if column_name:
+                        interactive_dict[column_name] = component.get("value")
+
+            # 3. Check for active filters
+            has_active = _check_active_filters(filters_by_dc)
+            logger.info("Filtering mode: %s", "filtered" if has_active else "unfiltered")
+
+            # 4. Determine join strategy
+            requires_join, is_joined, constituents = _determine_join_strategy(
+                filters_by_dc, str(dc_id)
+            )
+
+            # 5. Load data
+            if requires_join:
+                # Get join config from first component
+                first_component = interactive_values[0] if interactive_values else {}
+                dc_config = first_component.get("metadata", {}).get("dc_config", {})
+                join_config = dc_config.get("join", {})
+
+                df = _load_and_join_data(
+                    filters_by_dc,
+                    wf_id,
+                    token,
+                    has_active,
+                    is_joined,
+                    constituents,
+                    str(dc_id),
+                    metadata,
+                    join_config,
+                )
+            else:
+                select_cols = extract_needed_columns(
+                    current_params,
+                    trace_metadata,
+                    interactive_dict,
+                    None,
+                )
+                df = _load_single_dc(
+                    filters_by_dc,
+                    wf_id,
+                    dc_id,
+                    token,
+                    has_active,
+                    is_joined,
+                    constituents,
+                    str(dc_id),
+                    select_cols,
+                )
+
+            logger.info("Loaded %d rows × %d cols", df.height, df.width)
+
+            # 6. Code preprocessing if needed
+            if mode == "code" and code_content:
+                df = _apply_code_preprocessing(code_content, df)
+
+            # 7. Render figure (with optional full data loading when requested)
+            new_figure, data_info = render_figure(
+                current_params,
+                visu_type,
+                df,
+                theme=theme,
+                mode=mode,
+                force_full_data=full_data_requested,
+            )
+
+            # Log data count information
+            logger.info(
+                f"📊 FILTER DATA INFO: displayed={data_info.get('displayed_data_count', 0):,}, total={data_info.get('total_data_count', 0):,}, sampled={data_info.get('was_sampled', False)}"
+            )
+
+            # Mark filter state
+            if isinstance(new_figure, dict):
+                new_figure.setdefault("layout", {})["_depictio_filter_applied"] = has_active
+
+            # Update metadata with new data counts after filtering
+            updated_metadata = metadata.copy() if metadata else {}
+            updated_metadata["displayed_data_count"] = data_info.get("displayed_data_count", 0)
+            updated_metadata["total_data_count"] = data_info.get("total_data_count", 0)
+            updated_metadata["was_sampled"] = data_info.get("was_sampled", False)
+
+            # Handle full data loading state based on actual sampling
+            was_sampled = data_info.get("was_sampled", False)
+
+            if full_data_requested:
+                # Just completed a full data load request
+                updated_metadata["full_data_loaded"] = True
+                updated_metadata["full_data_requested"] = False
+                logger.info(
+                    "✅ Full data loaded successfully (with filters applied): "
+                    f"displayed={updated_metadata['displayed_data_count']:,}, "
+                    f"total={updated_metadata['total_data_count']:,}"
+                )
+            else:
+                # Normal filter operation - flag reflects current reality
+                # If data is sampled → full data NOT loaded
+                # If data is not sampled → full data IS loaded (all data fits within limit)
+                updated_metadata["full_data_loaded"] = not was_sampled
+                if was_sampled and metadata.get("full_data_loaded", False):
+                    # Log when transitioning from full data back to sampled
+                    logger.info(
+                        f"🔄 Data sampled again after filter change: "
+                        f"displaying={updated_metadata['displayed_data_count']:,}, "
+                        f"total={updated_metadata['total_data_count']:,} - reset full_data_loaded flag"
+                    )
+
+            logger.info("✅ Filtering complete, returning updated figure and metadata")
+            return new_figure, updated_metadata
+
+        except dash.exceptions.PreventUpdate:
+            raise
+        except Exception as e:
+            logger.error("Filtering failed: %s", e)
+            logger.debug("Full traceback:", exc_info=True)
+            raise dash.exceptions.PreventUpdate
+
+    # Separate callback to recreate the entire popover button when metadata changes
+    # This listens to stored-metadata updates (triggered by patch_figure_interactive or initial render)
+    @app.callback(
+        Output(
+            {"type": "partial-data-button-wrapper", "index": MATCH},
+            "children",
+            allow_duplicate=True,
+        ),
+        Input({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        State({"type": "partial-data-button-wrapper", "index": MATCH}, "id"),
+        prevent_initial_call=True,
+    )
+    def update_partial_data_popover_from_interactive(metadata, wrapper_id):
+        """Recreate the entire partial data popover button when metadata changes.
+
+        This callback fires AFTER patch_figure_interactive updates the metadata,
+        ensuring we always have fresh data counts. By recreating the entire Popover
+        component, we force DMC to refresh its content (DMC Popover caches content).
+        """
+        from dash import callback_context
+
+        from depictio.dash.modules.figure_component.utils import ComponentConfig
+
+        # Get component index
+        component_index = wrapper_id.get("index", "unknown") if wrapper_id else "unknown"
+
+        # Get trigger info for debugging
+        ctx = callback_context
+        trigger = ctx.triggered[0]["prop_id"] if ctx.triggered else "initial"
+
+        # Extract data counts from metadata (freshly updated by patch_figure_interactive)
+        config = ComponentConfig()
+        cutoff = config.max_data_points
+
+        displayed_count = cutoff
+        total_count = cutoff
+        was_sampled = False
+
+        if metadata:
+            displayed_count = metadata.get("displayed_data_count", cutoff)
+            total_count = metadata.get("total_data_count", cutoff)
+            was_sampled = metadata.get("was_sampled", False)
+
+        # Check if full data has been loaded
+        full_data_loaded = metadata.get("full_data_loaded", False) if metadata else False
+
+        logger.info(
+            f"📊 [{component_index}] Recreating popover button from metadata change (trigger: {trigger}): "
+            f"displayed={displayed_count:,}, total={total_count:,}, sampled={was_sampled}, full_loaded={full_data_loaded}"
+        )
+
+        # Create fresh popover content based on full data state
+        if full_data_loaded:
+            # Show success message - full data is loaded
+            fresh_content = dmc.Stack(
+                [
+                    dmc.Text("✅ Full Dataset Loaded", size="sm", fw="bold", mb="xs", c="green"),
+                    html.Div(f"Displaying all {displayed_count:,} points"),
+                ],
+                gap="xs",
+            )
+        else:
+            # Show warning + action button to load full data
+            fresh_content = dmc.Stack(
+                [
+                    dmc.Text("⚠️ Partial Data Displayed", size="sm", fw="bold", mb="xs"),
+                    html.Div(
+                        [
+                            html.Div(
+                                f"Showing: {displayed_count:,} points",
+                                key=f"showing-{component_index}-{displayed_count}",
+                            ),
+                            html.Div(
+                                f"Total: {total_count:,} points",
+                                key=f"total-{component_index}-{total_count}",
+                            ),
+                            html.Div(
+                                "Full dataset available for analysis",
+                                style={
+                                    "marginTop": "8px",
+                                    "fontStyle": "italic",
+                                    "fontSize": "0.9em",
+                                },
+                                key=f"footer-{component_index}",
+                            ),
+                        ],
+                        key=f"content-wrapper-{component_index}-{displayed_count}-{total_count}",
+                    ),
+                    # Action button to trigger full data load
+                    dmc.Button(
+                        f"Load All {total_count:,} Points",
+                        id={"type": "load-full-data-action", "index": component_index},
+                        size="xs",
+                        color="orange",
+                        variant="light",
+                        fullWidth=True,
+                        mt="sm",
+                        leftSection=DashIconify(icon="mdi:database-refresh", width=14),
+                    ),
+                ],
+                gap="xs",
+            )
+
+        # Recreate entire Popover component to force refresh
+        updated_button = dmc.Popover(
+            [
+                dmc.PopoverTarget(
+                    dmc.Tooltip(
+                        label="Partial data displayed",
+                        position="top",
+                        openDelay=300,
+                        children=dmc.ActionIcon(
+                            id={"type": "partial-data-warning-button", "index": component_index},
+                            color="red",
+                            variant="filled",
+                            size="sm",
+                            radius=0,
+                            children=DashIconify(
+                                icon="mdi:alert-circle-outline", width=16, color="white"
+                            ),
+                        ),
+                    )
+                ),
+                dmc.PopoverDropdown(fresh_content),
+            ],
+            width=300,
+            position="bottom",
+            withArrow=True,
+            shadow="md",
+        )
+
+        logger.info(f"📊 [{component_index}] Returning recreated popover with fresh data")
+        return updated_button
+
+    # Phase 2: Callback to set full_data_requested flag when button is clicked
+    @app.callback(
+        Output({"type": "stored-metadata-component", "index": MATCH}, "data", allow_duplicate=True),
+        Input({"type": "load-full-data-action", "index": MATCH}, "n_clicks"),
+        State({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        State({"type": "load-full-data-action", "index": MATCH}, "id"),
+        prevent_initial_call=True,
+    )
+    def trigger_full_data_load(n_clicks, metadata, button_id):
+        """Set flag to request full data loading.
+
+        This callback fires when the user clicks "Load All X Points" button in the popover.
+        It sets full_data_requested=True in metadata, which will trigger patch_figure_interactive
+        to reload the figure with all data points (no sampling).
+        """
+        if not n_clicks:
+            raise PreventUpdate
+
+        component_index = button_id["index"]
+        logger.info(
+            f"🔄 [{component_index}] Full data load requested via button click (n_clicks={n_clicks})"
+        )
+
+        # Update metadata to request full data
+        if metadata is None:
+            metadata = {}
+
+        metadata["full_data_requested"] = True
+
+        logger.info(
+            f"✅ [{component_index}] Set full_data_requested=True in metadata, "
+            f"will trigger patch_figure_interactive"
+        )
+
+        return metadata
+
+
+def design_figure(
+    id, component_data=None, workflow_id=None, data_collection_id=None, local_data=None
+):
     # Get all available visualizations
     all_vizs = get_available_visualizations()
 
@@ -2154,19 +3139,23 @@ def design_figure(id, component_data=None):
         # Use the visualization name (lowercase) as value
         default_value = component_data["visu_type"].lower()
 
-    # Set initial mode based on component_data mode field
+    # Set initial mode based on component_data mode field only
+    # Figure component only supports "ui" and "code" modes
+    # MultiQC data collections should use the standalone MultiQC component
     initial_mode = "ui"  # Default to UI mode
     if component_data and component_data.get("mode") == "code":
         initial_mode = "code"
         logger.info(
-            f"Setting initial mode to code for component {id['index']} based on stored metadata"
+            f"🔧 Setting initial mode to CODE for component {id['index']} based on stored metadata"
         )
     else:
-        logger.info(f"Setting initial mode to UI for component {id['index']}")
+        logger.info(f"🔧 Setting initial mode to UI for component {id['index']}")
+
+    logger.info(f"🔧 FINAL INITIAL MODE: {initial_mode}")
 
     # Create layout optimized for fullscreen modal
     figure_row = [
-        # Mode toggle (central and prominent)
+        # Mode toggle (central and prominent) - UI and Code modes only
         dmc.Center(
             [
                 dmc.SegmentedControl(
@@ -2182,9 +3171,6 @@ def design_figure(id, component_data=None):
                                 style={
                                     "gap": 10,
                                     "width": "250px",
-                                    # "display": "flex",
-                                    # "justifyContent": "center",
-                                    # "alignItems": "center"
                                 },
                             ),
                         },
@@ -2198,17 +3184,13 @@ def design_figure(id, component_data=None):
                                 style={
                                     "gap": 10,
                                     "width": "250px",
-                                    # "display": "flex",
-                                    # "justifyContent": "center",
-                                    # "alignItems": "center"
                                 },
                             ),
                         },
                     ],
-                    value=initial_mode,  # Use initial_mode based on component_data
+                    value=initial_mode,
                     size="lg",
                     style={"marginBottom": "15px"},
-                    # style={"marginBottom": "15px", "width": "520px"},
                 )
             ]
         ),
@@ -2366,7 +3348,12 @@ def design_figure(id, component_data=None):
         dcc.Store(
             id={"type": "stored-metadata-component", "index": id["index"]},
             data={
-                "index": id["index"],
+                # METADATA INDEX FIX: Remove -tmp suffix to match card component pattern
+                # - Store ID has -tmp: "xxx-tmp"
+                # - Store data["index"] no -tmp: "xxx"
+                # - Done button matching: "xxx" + "-tmp" == "xxx-tmp" ✓
+                # This matches card_component/utils.py:676-678 pattern
+                "index": id["index"].replace("-tmp", ""),
                 "component_type": "figure",
                 "dict_kwargs": component_data.get("dict_kwargs", {}) if component_data else {},
                 "visu_type": component_data.get("visu_type", "scatter")
@@ -2382,6 +3369,7 @@ def design_figure(id, component_data=None):
             storage_type="memory",
         ),
         # Mode management stores
+        (lambda: logger.info(f"🔧 STORING MODE: {initial_mode} for component {id['index']}"))(),
         dcc.Store(
             id={"type": "figure-mode-store", "index": id["index"]},
             data=initial_mode,  # Use detected initial mode (ui or code)

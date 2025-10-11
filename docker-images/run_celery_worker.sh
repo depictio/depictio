@@ -7,7 +7,7 @@ CELERY_WORKERS=${DEPICTIO_CELERY_WORKERS:-2}
 echo "🔧 CELERY WORKER: Starting dedicated Celery worker..."
 echo "🔧 CELERY WORKER: Workers = $CELERY_WORKERS"
 
-# Start Celery worker - following same pattern as run_fastapi.sh
-exec celery -A depictio.dash.app:celery_app worker \
+# Start Celery worker - pointing to celery_app module
+exec celery -A depictio.dash.celery_app:celery_app worker \
     --loglevel=info \
     --concurrency="$CELERY_WORKERS"

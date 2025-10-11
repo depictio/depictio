@@ -3,11 +3,32 @@
    Layout and styling fixes for dashboard draggable components
    ============================================================================= */
 
-/* Add constant border to outermost draggable container - DMC will handle theming */
+/* Remove right/bottom padding for edge-to-edge layout */
+/* Left and top padding are handled automatically by AppShell */
+.mantine-AppShell-main {
+    padding-right: 0 !important;
+    padding-bottom: 0 !important;
+    /* padding-left: Auto-adjusted by AppShell based on navbar state */
+    /* padding-top: Auto-adjusted by AppShell based on header height */
+}
+
+/* Constrain width to prevent horizontal overflow while allowing dropdowns */
+#draggable-wrapper,
+#draggable {
+    width: 100% !important;
+}
+
+/* Edit mode - clear borders for component manipulation */
 .react-grid-item {
-    border: 2px solid #ddd !important;
-    border-radius: 8px !important;
+    border: 1px solid var(--app-border-color, #ddd) !important;
+    border-radius: 4px !important;
     transition: border-color 0.2s ease !important;
+}
+
+/* Non-edit mode - clean borderless presentation with subtle shadow */
+.drag-handles-hidden .react-grid-item {
+    border: none !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
 }
 
 
@@ -16,7 +37,7 @@
 .react-grid-item [id*="content-box-"] {
     border: none !important;
     box-shadow: none !important;
-    padding: 5px !important;
+    padding: 1px !important;
 }
 
 /* Remove borders from nested card components */

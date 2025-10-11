@@ -8,8 +8,10 @@ which is battle-tested and maintained by the Zope Foundation.
 import traceback
 from typing import Any, Dict, Tuple
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import polars as pl
 from RestrictedPython import compile_restricted
 from RestrictedPython.Guards import safe_builtins, safe_globals
@@ -64,10 +66,12 @@ class SimpleCodeExecutor:
             **safe_globals,
             # Visualization libraries only - no data import/export
             "px": px,
-            # Note: go (plotly.graph_objects) disabled for code mode simplicity
+            # Note: go (plotly.graph_objects) available for code mode
+            "go": go,
             # Polars & Pandas
             "pl": pl,
             "pd": pd,
+            "np": np,
             # Safe builtins
             "__builtins__": safe_builtins,
             # Guards for dataframe operations

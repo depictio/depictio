@@ -16,6 +16,7 @@ from depictio.api.v1.endpoints.datacollections_endpoints.routes import (
 from depictio.api.v1.endpoints.deltatables_endpoints.routes import deltatables_endpoint_router
 from depictio.api.v1.endpoints.files_endpoints.routes import files_endpoint_router
 from depictio.api.v1.endpoints.jbrowse_endpoints.routes import jbrowse_endpoints_router
+from depictio.api.v1.endpoints.multiqc_endpoints.routes import router as multiqc_router
 from depictio.api.v1.endpoints.projects_endpoints.routes import projects_endpoint_router
 from depictio.api.v1.endpoints.runs_endpoints.routes import runs_endpoint_router
 from depictio.api.v1.endpoints.user_endpoints.routes import auth_endpoint_router
@@ -45,6 +46,11 @@ router.include_router(
     datacollections_endpoint_router,
     prefix="/datacollections",
     tags=["Data Collections"],
+)
+router.include_router(
+    multiqc_router,
+    prefix="/multiqc",
+    tags=["MultiQC"],
 )
 router.include_router(
     files_endpoint_router,

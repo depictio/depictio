@@ -35,11 +35,16 @@ def verbose_callback(
         help="Set verbose logging level",
         is_eager=True,
     ),
+    logo: bool = typer.Option(False, "--logo", help="Display the Depictio CLI logo", is_eager=True),
 ):
     """Set up logging for all commands"""
     # Set up both CLI and models logging with the same verbose settings
     setup_cli_logging(verbose, verbose_level)
     setup_models_logging(verbose, verbose_level)
+
+    # Display logo if flag is provided
+    if logo:
+        display_depictio_cli_logo()
 
 
 app.add_typer(backup, name="backup", help="Backup commands")
@@ -290,7 +295,16 @@ def main():
     # Add rich display support for Polars DataFrames
     add_rich_display_to_polars()
 
-    # Display Depictio CLI logo
-    display_depictio_cli_logo()
+    # Minimal indication that depictio-cli is running (reuse existing title)
+    from rich.console import Console
+    from rich.panel import Panel
+
+    console = Console()
+
+    panel = Panel("🎨 DEPICTIO-CLI", border_style="bright_blue", padding=(0, 1), expand=False)
+
+    console.print()  # Space above
+    console.print(panel)
+    console.print()  # Space below
 
     app()

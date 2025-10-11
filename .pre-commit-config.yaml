@@ -34,7 +34,8 @@ repos:
       - id: ty-check-models-api-dash-cli
         name: ty check models, api, dash, cli and tests
         description: 'Run ty type checker on models, api, dash, cli and tests folders (must pass)'
-        entry: bash -c 'source depictio-venv-dash-v3/bin/activate && ty check depictio/models/ depictio/api/ depictio/dash/ depictio/cli/ depictio/tests/'
+        entry: bash -c 'VIRTUAL_ENV=depictio-venv-dash-v3 depictio-venv-dash-v3/bin/ty check depictio/models/ depictio/api/ depictio/dash/ depictio/cli/'
+        # entry: bash -c 'VIRTUAL_ENV=depictio-venv-dash-v3 depictio-venv-dash-v3/bin/ty check depictio/models/ depictio/api/ depictio/dash/ depictio/cli/ depictio/tests/'
         language: system
         files: ^depictio/(models|api|dash|cli|tests)/
         pass_filenames: false

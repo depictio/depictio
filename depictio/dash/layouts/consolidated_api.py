@@ -112,14 +112,14 @@ def register_consolidated_api_callbacks(app):
         # Check if project data needs updating (dashboard-specific, 10 minute cache)
         update_project = False
         dashboard_id = None
-        # if "/dashboard/" in pathname:
-        #     dashboard_id = pathname.split("/")[-1]
-        #     cache_key = f"project_{dashboard_id}"
+        if "/dashboard/" in pathname:
+            dashboard_id = pathname.split("/")[-1]
+            cache_key = f"project_{dashboard_id}"
 
-        #     if not cached_project or cached_project.get("cache_key") != cache_key:
-        #         update_project = True
-        #     elif (current_time - cached_project.get("timestamp", 0)) > 600:  # 10 min cache
-        #         update_project = True
+            if not cached_project or cached_project.get("cache_key") != cache_key:
+                update_project = True
+            elif (current_time - cached_project.get("timestamp", 0)) > 600:  # 10 min cache
+                update_project = True
 
         # For local-store triggers, check if token actually changed to prevent unnecessary updates
         if ctx.triggered and ctx.triggered[0]["prop_id"] == "local-store.data":
@@ -155,6 +155,10 @@ def register_consolidated_api_callbacks(app):
         logger.info(
             f"🔄 Consolidated API: Updating user={update_user}, server={update_server}, project={update_project}"
         )
+        if update_project:
+            logger.info(
+                f"🔄 Consolidated API: Will fetch project data for dashboard {dashboard_id}"
+            )
         logger.info("🔧 CONSOLIDATED CALLBACK: About to start async tasks")
         logger.info("🚀 ASYNC MODE ENABLED: Using httpx.AsyncClient for non-blocking I/O")
 
