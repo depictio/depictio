@@ -60,7 +60,7 @@ class TestMultiQCProcessor:
         workflow.data_location.locations = ["/test/data/location"]
         return workflow
 
-    @patch("depictio.cli.cli.utils.multiqc_processor.build_sample_mapping", create=True)
+    @patch("depictio.cli.cli.utils.sample_mapping.build_sample_mapping")
     @patch("builtins.__import__")
     def test_extract_multiqc_metadata_success(
         self, mock_import, mock_build_mapping, mock_multiqc_module
@@ -95,7 +95,7 @@ class TestMultiQCProcessor:
         assert result["modules"] == ["fastqc", "cutadapt"]
         assert result["plots"] == {"fastqc": ["quality", "length"], "cutadapt": ["trimmed"]}
 
-    @patch("depictio.cli.cli.utils.multiqc_processor.build_sample_mapping", create=True)
+    @patch("depictio.cli.cli.utils.sample_mapping.build_sample_mapping")
     @patch("builtins.__import__")
     def test_extract_multiqc_metadata_plots_error(
         self, mock_import, mock_build_mapping, mock_multiqc_module
@@ -126,7 +126,7 @@ class TestMultiQCProcessor:
         assert result["modules"] == ["fastqc", "cutadapt"]
         assert result["plots"] == {}
 
-    @patch("depictio.cli.cli.utils.multiqc_processor.build_sample_mapping", create=True)
+    @patch("depictio.cli.cli.utils.sample_mapping.build_sample_mapping")
     @patch("builtins.__import__")
     def test_extract_multiqc_metadata_import_error(self, mock_import, mock_build_mapping):
         """Test handling of missing multiqc module."""
@@ -142,7 +142,7 @@ class TestMultiQCProcessor:
         with pytest.raises(ImportError):
             extract_multiqc_metadata("/path/to/multiqc.parquet")
 
-    @patch("depictio.cli.cli.utils.multiqc_processor.build_sample_mapping", create=True)
+    @patch("depictio.cli.cli.utils.sample_mapping.build_sample_mapping")
     @patch("builtins.__import__")
     def test_extract_multiqc_metadata_parse_error(
         self, mock_import, mock_build_mapping, mock_multiqc_module
@@ -227,7 +227,7 @@ class TestMultiQCProcessor:
             mock_fetch.side_effect = Exception("No files found")
 
             # Mock no files found in filesystem either
-            with patch("depictio.cli.cli.utils.multiqc_processor.glob") as mock_glob:
+            with patch("glob.glob") as mock_glob:
                 mock_glob.return_value = []
 
                 with patch("depictio.cli.cli.utils.multiqc_processor.Path") as mock_path:
@@ -253,7 +253,7 @@ class TestMultiQCProcessor:
             mock_fetch.side_effect = Exception("No files found")
 
             # Mock glob finding files
-            with patch("depictio.cli.cli.utils.multiqc_processor.glob") as mock_glob:
+            with patch("glob.glob") as mock_glob:
                 mock_glob.return_value = ["/test/data/location/run1/multiqc_data/multiqc.parquet"]
 
                 # Mock file operations
@@ -582,7 +582,7 @@ class TestMultiQCProcessor:
         }
 
         with patch(
-            "depictio.cli.cli.utils.multiqc_processor.build_sample_mapping", create=True
+            "depictio.cli.cli.utils.sample_mapping.build_sample_mapping"
         ) as mock_build_mapping:
             mock_build_mapping.return_value = {
                 "NMP_R2_L1_2": ["NMP_R2_L1_2_val_2"],
