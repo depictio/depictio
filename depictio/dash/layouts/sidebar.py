@@ -300,7 +300,8 @@ def register_sidebar_callbacks(app):
                     dmc.Image(
                         id="navbar-logo-content",
                         src=dash.get_asset_url("images/logos/logo_black.svg"),
-                        h=45,
+                        # h=38,
+                        w=185,
                     ),
                     href="/",
                     style={"alignItems": "center", "justifyContent": "center", "display": "flex"},
