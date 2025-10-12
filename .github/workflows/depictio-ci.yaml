@@ -24,32 +24,27 @@ jobs:
           python-version-file: "pyproject.toml"
           cache-dependency-path: "pyproject.toml"
 
-      - name: Install Dependencies with LTS Fallback
+      - name: Install Dependencies
         run: |
           uv venv --python 3.12.9 venv
           source venv/bin/activate
           uv pip install --upgrade pip
 
-          if uv pip install -e ".[dev]" && python -c "import polars" 2>/dev/null; then
-            echo "✅ Default installation with standard polars successful"
-          else
-            echo "⚠️ Standard polars failed, uninstalling and trying LTS version..."
-            uv pip uninstall polars || true
-            uv pip install "polars-lts-cpu==1.22.0"
-            echo "✅ LTS installation successful"
-          fi
-
-          python -c "import polars; print(f'Polars {polars.__version__} installed')"
-
-      - name: Install dependencies for quality check & testing
-        run: |
-          source venv/bin/activate
+          # Install dependencies from pyproject.toml
           uv pip install -e ".[dev]"
 
-      - name: Show installed packages
-        run: |
-          source venv/bin/activate
-          pip list
+          # Clean up any conflicting polars packages that may have been pulled in
+          echo "🧹 Removing conflicting polars packages..."
+          uv pip uninstall -y polars polars-runtime-32 2>/dev/null || true
+
+          # Ensure correct polars-lts-cpu version is installed (required for MultiQC)
+          echo "📦 Installing polars-lts-cpu 1.19.0..."
+          uv pip install --force-reinstall "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.19.0"
+
+          # Verify only polars-lts-cpu is installed
+          echo "✅ Verifying polars installation..."
+          uv pip list | grep -i polars
+          python -c "import polars; assert '1.19' in polars.__version__, f'Wrong version: {polars.__version__}'; print(f'✅ Polars {polars.__version__} verified')"
 
       # - name: Run Ruff for formatting
       #   run: |
@@ -467,6 +462,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+          cache-dependency-path: "pyproject.toml"
+
       - name: Setup environment
         run: |
           # Reuse setup from docker-system-init
@@ -489,8 +495,7 @@ jobs:
       - name: Setup CLI
         run: |
           cd depictio/cli
-          pip install uv
-          uv venv venv
+          uv venv --python 3.12.9 venv
           source venv/bin/activate
           uv pip install -e .
           docker cp depictio-backend:/app/depictio/.depictio/admin_config.yaml .
@@ -559,6 +564,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+          cache-dependency-path: "pyproject.toml"
+
       - name: Setup environment
         run: |
           sudo chmod 666 /var/run/docker.sock
@@ -580,8 +596,7 @@ jobs:
       - name: Setup CLI
         run: |
           cd depictio/cli
-          pip install uv
-          uv venv venv
+          uv venv --python 3.12.9 venv
           source venv/bin/activate
           uv pip install -e .
           docker cp depictio-backend:/app/depictio/.depictio/admin_config.yaml .

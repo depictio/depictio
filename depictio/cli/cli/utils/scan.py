@@ -181,7 +181,11 @@ def process_files(
 
     # For recursive scans, build the regex from configuration.
     full_regex = None
-    if not skip_regex and hasattr(data_collection.config.scan.scan_parameters, "regex_config"):
+    if (
+        not skip_regex
+        and data_collection.config.scan
+        and hasattr(data_collection.config.scan.scan_parameters, "regex_config")
+    ):
         regex_config = data_collection.config.scan.scan_parameters.regex_config
         full_regex = (
             construct_full_regex(regex=regex_config)  # type: ignore[invalid-argument-type]
@@ -300,9 +304,9 @@ def scan_run_for_multiple_data_collections(
         )
 
         # Build regex for this data collection (only for recursive scans)
-        if not hasattr(dc.config.scan.scan_parameters, "regex_config"):
+        if not dc.config.scan or not hasattr(dc.config.scan.scan_parameters, "regex_config"):
             logger.warning(
-                f"Data collection {dc.data_collection_tag} does not have regex_config (likely single-file scan)"
+                f"Data collection {dc.data_collection_tag} does not have scan config or regex_config (likely single-file scan or MultiQC)"
             )
             continue
 
@@ -796,7 +800,7 @@ def scan_files_for_data_collection(
         raise ValueError(error_msg)
 
     # Only handle single file mode here
-    if data_collection.config.scan.mode.lower() != "single":
+    if not data_collection.config.scan or data_collection.config.scan.mode.lower() != "single":
         raise ValueError(
             "This function only handles single file mode. Use scan_files_for_workflow for aggregate mode."
         )
@@ -817,6 +821,12 @@ def scan_files_for_data_collection(
         )
 
     # Single file scan logic (unchanged)
+    if not data_collection.config.scan:
+        logger.error(
+            f"Data collection {data_collection.data_collection_tag} has no scan configuration"
+        )
+        return {"result": "error", "message": "No scan configuration found"}
+
     file_path = data_collection.config.scan.scan_parameters.filename
 
     workflow_config_id = (
@@ -930,22 +940,39 @@ def scan_project_files(
 
         # Group data collections by scan mode
         aggregate_data_collections = [
-            dc for dc in data_collections_to_scan if dc.config.scan.mode.lower() == "recursive"
+            dc
+            for dc in data_collections_to_scan
+            if dc.config.scan and dc.config.scan.mode.lower() == "recursive"
         ]
         single_data_collections = [
-            dc for dc in data_collections_to_scan if dc.config.scan.mode.lower() == "single"
+            dc
+            for dc in data_collections_to_scan
+            if dc.config.scan and dc.config.scan.mode.lower() == "single"
         ]
-        rich_print_checked_statement(
-            f"  ↪ Found {len(aggregate_data_collections)} aggregate and {len(single_data_collections)} single data collections",
-            "info",
-        )
+        multiqc_data_collections = [
+            dc
+            for dc in data_collections_to_scan
+            if dc.config.type.lower() == "multiqc" and not dc.config.scan
+        ]
+
+        if multiqc_data_collections:
+            rich_print_checked_statement(
+                f"  ↪ Found {len(aggregate_data_collections)} aggregate, {len(single_data_collections)} single, and {len(multiqc_data_collections)} MultiQC data collections",
+                "info",
+            )
+        else:
+            rich_print_checked_statement(
+                f"  ↪ Found {len(aggregate_data_collections)} aggregate and {len(single_data_collections)} single data collections",
+                "info",
+            )
 
         # Scan aggregate data collections together (new workflow-centric approach)
         if aggregate_data_collections:
             # Print info for each data collection being scanned
             for dc in aggregate_data_collections:
+                scan_mode = dc.config.scan.mode.title() if dc.config.scan else "No scan config"
                 rich_print_checked_statement(
-                    f"  ↪ Scanning Data Collection: [italic]'{dc.data_collection_tag}'[/italic] - type {dc.config.type} - metatype {dc.config.scan.mode.title()}",
+                    f"  ↪ Scanning Data Collection: [italic]'{dc.data_collection_tag}'[/italic] - type {dc.config.type} - metatype {scan_mode}",
                     "info",
                 )
 
@@ -966,8 +993,9 @@ def scan_project_files(
 
         # Scan single data collections individually (existing approach)
         for dc in single_data_collections:
+            scan_mode = dc.config.scan.mode.title() if dc.config.scan else "No scan config"
             rich_print_checked_statement(
-                f"  ↪ Scanning Data Collection: [italic]'{dc.data_collection_tag}'[/italic] - type {dc.config.type} - metatype {dc.config.scan.mode.title()}",
+                f"  ↪ Scanning Data Collection: [italic]'{dc.data_collection_tag}'[/italic] - type {dc.config.type} - metatype {scan_mode}",
                 "info",
             )
 
@@ -980,6 +1008,15 @@ def scan_project_files(
 
             if scan_result["result"] != "success":
                 raise Exception(f"Failed to scan data collection {dc.data_collection_tag}")
+
+        # Handle MultiQC data collections (no file scanning needed)
+        for dc in multiqc_data_collections:
+            rich_print_checked_statement(
+                f"  ↪ Scanning Data Collection: [italic]'{dc.data_collection_tag}'[/italic] - type {dc.config.type} - metatype MultiQC (no file scanning needed)",
+                "info",
+            )
+            # MultiQC collections don't need file scanning - they work with existing parquet files
+            # The actual processing happens in Step 6 (data processing)
 
         rich_print_checked_statement(
             f"Workflow {workflow.workflow_tag} processed successfully", "success"

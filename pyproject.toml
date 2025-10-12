@@ -30,6 +30,7 @@ dependencies = [
   "flask-caching",
   "httpx==0.28.1",
   "motor",
+  "multiqc==1.31.0",
   "mypy-boto3-s3",
   "numpy==2.2.3",
   "orjson",
@@ -37,7 +38,7 @@ dependencies = [
   # "playwright==1.50.1",
   "plotly_express",
   # "plotly_express==0.4.1",
-  "polars==1.22.0",
+  "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.19.0",
   "pydantic[email]==2.10.6",
   "pydantic-settings==2.7.1",
   "pyjwt==2.10.1",
@@ -62,6 +63,7 @@ dependencies = [
   "playwright>=1.52.0",
   "restrictedpython>=8.0",
   "dash-dock>=0.0.1",
+  "s3fs"
 ]
 authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
 urls = { Homepage = "http://github.com/depictio/depictio" }
@@ -76,7 +78,7 @@ dev = [
   "black==25.1.0",
   "ruff==0.12.1",
   "ty==0.0.1-alpha.12",
-  "pandera[pandas,polars]",
+  # "pandera[pandas,polars]",
   "pre-commit",
   "pytest==8.4.1",
   "pytest-asyncio==1.0.0",
@@ -92,6 +94,7 @@ dev = [
   "types-boto3",
   "textual>=5.2.0",
 ]
+
 
 [project.scripts]
 depictio-api = "depictio.api.run:main"

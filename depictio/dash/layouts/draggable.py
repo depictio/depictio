@@ -12,7 +12,7 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.colors import colors
 
 # Import centralized component dimensions from metadata
-from depictio.dash.component_metadata import get_component_dimensions_dict
+from depictio.dash.component_metadata import get_build_functions, get_component_dimensions_dict
 from depictio.dash.layouts.draggable_scenarios.add_component import add_new_component
 from depictio.dash.layouts.draggable_scenarios.graphs_interactivity import (
     refresh_children_based_on_click_data,
@@ -20,8 +20,6 @@ from depictio.dash.layouts.draggable_scenarios.graphs_interactivity import (
 )
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import (
     render_raw_children,
-    # update_interactive_component_async,
-    update_interactive_component_sync,
 )
 from depictio.dash.layouts.draggable_scenarios.restore_dashboard import render_dashboard
 
@@ -35,9 +33,10 @@ from depictio.dash.utils import (
     return_wf_tag_from_id,
 )
 
-# Get component dimensions from centralized metadata
-# Adjusted for 12-column grid with rowHeight=50 - optimized dimensions per component type
+# Get component dimensions and build functions from centralized metadata
+# Adjusted for 48-column grid with rowHeight=20 - ultra-fine precision for component placement
 component_dimensions = get_component_dimensions_dict()
+build_functions = get_build_functions()
 # No longer using breakpoints - working with direct list format
 
 
@@ -48,12 +47,12 @@ def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
         f"🔄 CALCULATE_NEW_LAYOUT_POSITION CALLED: {child_type} with {n} existing components"
     )
     dimensions = component_dimensions.get(
-        child_type, {"w": 6, "h": 8}
-    )  # Default 6x8 for 12-column grid with rowHeight=50
+        child_type, {"w": 24, "h": 20}
+    )  # Default 24x20 for 48-column grid with rowHeight=20
     logger.info(f"📐 Selected dimensions: {dimensions} for {child_type}")
     logger.info(f"📋 Existing layouts: {existing_layouts}")
 
-    columns_per_row = 12  # Updated for 12-column grid
+    columns_per_row = 48  # Updated for 48-column grid
     components_per_row = columns_per_row // dimensions["w"]
     if components_per_row == 0:
         components_per_row = 1
@@ -90,8 +89,8 @@ def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
                     if isinstance(layout, dict):
                         existing_x = layout.get("x", 0)
                         existing_y = layout.get("y", 0)
-                        existing_w = layout.get("w", 6)  # Use 12-column grid compatible default
-                        existing_h = layout.get("h", 8)  # Use rowHeight=50 compatible default
+                        existing_w = layout.get("w", 24)  # Use 48-column grid compatible default
+                        existing_h = layout.get("h", 20)  # Use rowHeight=20 compatible default
 
                         existing_x_range = set(range(existing_x, existing_x + existing_w))
                         existing_y_range = set(range(existing_y, existing_y + existing_h))
@@ -167,7 +166,7 @@ def fix_responsive_scaling(layout_data, metadata_list):
         if meta.get("index") and meta.get("component_type"):
             comp_id = f"box-{meta['index']}"
             comp_type = meta["component_type"]
-            default_dims = component_dimensions.get(comp_type, {"w": 6, "h": 8})
+            default_dims = component_dimensions.get(comp_type, {"w": 24, "h": 20})
             expected_dimensions[comp_id] = default_dims
 
     fixed_layouts = []
@@ -229,15 +228,15 @@ def clean_layout_data(layouts):
                 logger.warning(f"Filtering out corrupted layout entry (path-like ID): {layout_id}")
                 continue
 
-            # Check for invalid dimensions or positions (outside 12-column grid)
+            # Check for invalid dimensions or positions (outside 48-column grid)
             x = layout.get("x", 0)
             w = layout.get("w", 0)
 
             # Filter out layouts that:
-            # 1. Have x position >= 12 (outside grid)
-            # 2. Have width > 12 (too wide for grid)
-            # 3. Have x + width > 12 (extend beyond grid)
-            if x >= 12 or w > 12 or (x + w > 12 and x > 0):
+            # 1. Have x position >= 48 (outside grid)
+            # 2. Have width > 48 (too wide for grid)
+            # 3. Have x + width > 48 (extend beyond grid)
+            if x >= 48 or w > 48 or (x + w > 48 and x > 0):
                 logger.warning(
                     f"Filtering out layout entry with invalid position/size: ID={layout_id}, x={x}, w={w}"
                 )
@@ -584,28 +583,28 @@ def register_callbacks_draggable(app):
             },
             "id",
         ),
-        Input(
+        State(
             {
                 "type": "interactive-component-value",
                 "index": ALL,
             },
             "value",
         ),
-        Input(
+        State(
             {
                 "type": "graph",
                 "index": ALL,
             },
             "selectedData",
         ),
-        Input(
+        State(
             {
                 "type": "graph",
                 "index": ALL,
             },
             "clickData",
         ),
-        Input(
+        State(
             {
                 "type": "graph",
                 "index": ALL,
@@ -638,7 +637,6 @@ def register_callbacks_draggable(app):
         State("draggable", "currentLayout"),
         Input("draggable", "currentLayout"),
         State("stored-draggable-layouts", "data"),
-        Input("stored-draggable-layouts", "data"),
         Input(
             {"type": "remove-box-button", "index": ALL},
             "n_clicks",
@@ -679,14 +677,27 @@ def register_callbacks_draggable(app):
             "n_clicks",
         ),
         Input("reset-all-filters-button", "n_clicks"),
-        Input("remove-all-components-button", "n_clicks"),
-        Input("interactive-values-store", "data"),
+        State("remove-all-components-button", "n_clicks"),
+        State("interactive-values-store", "data"),
         State("live-interactivity-toggle", "checked"),
         State("unified-edit-mode-button", "checked"),
-        Input("unified-edit-mode-button", "checked"),
+        # Input("unified-edit-mode-button", "checked"),
         State("url", "pathname"),
         State("local-store", "data"),
         State("theme-store", "data"),
+        # METADATA MERGE FIX: Add access to workflow/DC selections and figure parameters
+        State("local-store-components-metadata", "data"),  # Workflow/DC selections from stepper
+        State({"type": "dict_kwargs", "index": ALL}, "data"),  # Figure parameters
+        State({"type": "dict_kwargs", "index": ALL}, "id"),  # For index matching
+        # RACE CONDITION FIX: Read dropdown values directly to avoid race with store_wf_dc_selection
+        State(
+            {"type": "workflow-selection-label", "index": ALL}, "value"
+        ),  # Workflow dropdown values
+        State({"type": "workflow-selection-label", "index": ALL}, "id"),  # For index matching
+        State(
+            {"type": "datacollection-selection-label", "index": ALL}, "value"
+        ),  # DC dropdown values
+        State({"type": "datacollection-selection-label", "index": ALL}, "id"),  # For index matching
         # Input("dashboard-title", "style"),  # REMOVED: This was causing expensive rebuilds on theme change
         # Input("height-store", "data"),
         prevent_initial_call=True,
@@ -749,7 +760,7 @@ def register_callbacks_draggable(app):
         draggable_layouts,
         input_draggable_layouts,
         state_stored_draggable_layouts,
-        input_stored_draggable_layouts,
+        # input_stored_draggable_layouts,
         remove_box_button_values,
         edit_box_button_values,
         tmp_edit_component_metadata_values,
@@ -761,10 +772,19 @@ def register_callbacks_draggable(app):
         interactive_values_store,
         toggle_interactivity_button,
         unified_edit_mode_button,
-        input_unified_edit_mode_button,
+        # input_unified_edit_mode_button,
         pathname,
         local_data,
         theme_store,  # State parameter for theme data
+        # METADATA MERGE FIX: New parameters for metadata merging
+        components_metadata_store,  # Workflow/DC selections from local-store-components-metadata
+        dict_kwargs_values,  # Figure parameters from dict_kwargs stores
+        dict_kwargs_ids,  # IDs for matching dict_kwargs to components
+        # RACE CONDITION FIX: Read dropdown values directly
+        wf_dropdown_values,  # Workflow dropdown values
+        wf_dropdown_ids,  # Workflow dropdown IDs
+        dc_dropdown_values,  # Data collection dropdown values
+        dc_dropdown_ids,  # Data collection dropdown IDs
         # height_store,
     ):
         if not local_data:
@@ -808,6 +828,9 @@ def register_callbacks_draggable(app):
             draggable_layouts = draggable_layouts.get("lg", [])
         elif draggable_layouts is None:
             draggable_layouts = []
+
+        if draggable_children is None:
+            draggable_children = []
 
         # Initialize layouts from stored layouts if available
         if dashboard_id in state_stored_draggable_layouts:
@@ -861,6 +884,42 @@ def register_callbacks_draggable(app):
                     )
                 # logger.info(f"Updated draggable layouts: {draggable_layouts}")
 
+        # CRITICAL FIX: Generate missing layouts for components that don't have them
+        # This happens when dashboards are restored from stored metadata but layouts weren't saved
+        if draggable_children and stored_metadata:
+            existing_layout_ids = {layout.get("i") for layout in draggable_layouts}
+            logger.info(f"🔧 LAYOUT CHECK - Existing layout IDs: {existing_layout_ids}")
+
+            missing_layouts = []
+            for metadata in stored_metadata:
+                component_index = metadata.get("index")
+                if not component_index:
+                    continue
+
+                # Check if this component has a layout
+                box_id = f"box-{component_index}"
+                if box_id not in existing_layout_ids:
+                    logger.info(
+                        f"🔧 MISSING LAYOUT - Generating layout for component: {component_index}"
+                    )
+
+                    # Generate layout for this component
+                    component_type = metadata.get("component_type", "card")
+                    new_layout = calculate_new_layout_position(
+                        component_type,
+                        draggable_layouts + missing_layouts,  # Include previously generated layouts
+                        component_index,
+                        len(draggable_layouts) + len(missing_layouts),
+                    )
+                    missing_layouts.append(new_layout)
+                    logger.info(f"🔧 GENERATED LAYOUT - {box_id}: {new_layout}")
+
+            if missing_layouts:
+                draggable_layouts.extend(missing_layouts)
+                # Update stored layouts to persist the generated layouts
+                state_stored_draggable_layouts[dashboard_id] = draggable_layouts
+                logger.info(f"🔧 LAYOUT FIX - Added {len(missing_layouts)} missing layouts")
+
         if isinstance(ctx.triggered_id, dict):
             triggered_input = ctx.triggered_id["type"]
             triggered_input_dict = ctx.triggered_id
@@ -913,8 +972,10 @@ def register_callbacks_draggable(app):
         logger.info(f"Theme store value: {theme_store}")
 
         # FIXME: Remove duplicates from stored_metadata
+        logger.info(f"Stored metadata entries before cleaning: {len(stored_metadata)}")
         # Remove duplicates from stored_metadata
         stored_metadata = remove_duplicates_by_index(stored_metadata)
+        logger.info(f"Stored metadata entries after cleaning: {len(stored_metadata)}")
 
         dashboard_id = pathname.split("/")[-1]
         stored_metadata_interactive = [
@@ -1099,20 +1160,173 @@ def register_callbacks_draggable(app):
                 tmp_stored_metadata = [
                     e for e in stored_metadata if f"{e['index']}-tmp" == f"{triggered_index}"
                 ]
-
+                logger.info(
+                    f"Tmp stored metadata: {tmp_stored_metadata} for triggered index: {triggered_index}"
+                )
                 if not tmp_stored_metadata:
+                    logger.error(
+                        f"❌ No temporary metadata found for index {triggered_index}, cannot add component"
+                    )
                     return (
                         dash.no_update,
                         dash.no_update,
                         dash.no_update,
                         dash.no_update,
                     )
-                child_metadata = tmp_stored_metadata[0]
+
+                # METADATA MERGE FIX: Merge metadata from all 3 stores
+                child_metadata = tmp_stored_metadata[0].copy()  # Copy to avoid mutation
                 child_index = child_metadata["index"]
                 child_type = child_metadata["component_type"]
 
+                logger.info(f"📊 METADATA MERGE - Component: {triggered_index}")
+                logger.info(
+                    f"   Base metadata: wf_id={child_metadata.get('wf_id')}, dc_id={child_metadata.get('dc_id')}, dict_kwargs_count={len(child_metadata.get('dict_kwargs', {}))}"
+                )
+
+                # DEBUG: Show what's in components_metadata_store
+                if components_metadata_store:
+                    logger.info(
+                        f"   🔍 DEBUG: components_metadata_store keys: {list(components_metadata_store.keys())}"
+                    )
+                    if triggered_index in components_metadata_store:
+                        logger.info(
+                            f"   🔍 DEBUG: Data for {triggered_index}: {components_metadata_store[triggered_index]}"
+                        )
+                    else:
+                        logger.warning(f"   ⚠️ DEBUG: {triggered_index} NOT found in store!")
+                        # Check if there's a key without -tmp
+                        index_without_tmp = triggered_index.replace("-tmp", "")
+                        if index_without_tmp in components_metadata_store:
+                            logger.info(
+                                f"   🔍 DEBUG: Found data under key without -tmp: {index_without_tmp}"
+                            )
+                            logger.info(
+                                f"   🔍 DEBUG: Data: {components_metadata_store[index_without_tmp]}"
+                            )
+                else:
+                    logger.warning("   ⚠️ DEBUG: components_metadata_store is empty or None!")
+
+                # Step 1: Merge workflow/DC from local-store-components-metadata
+                if components_metadata_store and triggered_index in components_metadata_store:
+                    component_selections = components_metadata_store[triggered_index]
+                    # Only update if values are present in selections store
+                    if "wf_id" in component_selections and component_selections["wf_id"]:
+                        child_metadata["wf_id"] = component_selections["wf_id"]
+                    if "dc_id" in component_selections and component_selections["dc_id"]:
+                        child_metadata["dc_id"] = component_selections["dc_id"]
+                    if "wf_tag" in component_selections:
+                        child_metadata["wf_tag"] = component_selections.get("wf_tag")
+                    if "dc_tag" in component_selections:
+                        child_metadata["dc_tag"] = component_selections.get("dc_tag")
+                    logger.info(
+                        f"   ✅ Merged workflow/DC from store: wf_id={child_metadata.get('wf_id')}, dc_id={child_metadata.get('dc_id')}"
+                    )
+                else:
+                    logger.warning(
+                        f"   ⚠️ No component selections found in store for {triggered_index}"
+                    )
+
+                # Step 1.5: RACE CONDITION FIX - If wf_id/dc_id are still None, read dropdown values directly
+                # This handles the case where Done button is clicked before store_wf_dc_selection completes
+                if child_metadata.get("wf_id") is None or child_metadata.get("dc_id") is None:
+                    logger.info(
+                        "   🔧 Attempting to read workflow/DC from dropdowns directly (race condition fallback)"
+                    )
+
+                    # Find matching workflow dropdown
+                    if child_metadata.get("wf_id") is None:
+                        for idx, wf_id in enumerate(wf_dropdown_ids):
+                            if wf_id and wf_id.get("index") == triggered_index:
+                                wf_value = wf_dropdown_values[idx]
+                                if wf_value:
+                                    child_metadata["wf_id"] = wf_value
+                                    logger.info(f"   ✅ Got wf_id from dropdown: {wf_value}")
+                                    # Get wf_tag from the API
+                                    try:
+                                        TOKEN = local_data.get("access_token")
+                                        wf_tag = return_wf_tag_from_id(
+                                            workflow_id=wf_value, TOKEN=TOKEN
+                                        )
+                                        child_metadata["wf_tag"] = wf_tag
+                                        logger.info(f"   ✅ Got wf_tag: {wf_tag}")
+                                    except Exception as e:
+                                        logger.warning(f"   ⚠️ Could not get wf_tag: {e}")
+                                break
+
+                    # Find matching data collection dropdown
+                    if child_metadata.get("dc_id") is None:
+                        for idx, dc_id in enumerate(dc_dropdown_ids):
+                            if dc_id and dc_id.get("index") == triggered_index:
+                                dc_value = dc_dropdown_values[idx]
+                                if dc_value:
+                                    child_metadata["dc_id"] = dc_value
+                                    logger.info(f"   ✅ Got dc_id from dropdown: {dc_value}")
+                                    # Get dc_tag from the API
+                                    try:
+                                        TOKEN = local_data.get("access_token")
+                                        dc_tag = return_dc_tag_from_id(
+                                            data_collection_id=dc_value, TOKEN=TOKEN
+                                        )
+                                        child_metadata["dc_tag"] = dc_tag
+                                        logger.info(f"   ✅ Got dc_tag: {dc_tag}")
+                                    except Exception as e:
+                                        logger.warning(f"   ⚠️ Could not get dc_tag: {e}")
+                                break
+
+                    logger.info(
+                        f"   ✅ Final workflow/DC after dropdown fallback: wf_id={child_metadata.get('wf_id')}, dc_id={child_metadata.get('dc_id')}"
+                    )
+
+                # Step 2: Merge dict_kwargs from dict_kwargs Store (only for figure components)
+                if child_type == "figure":
+                    matching_dict_kwargs = None
+                    for idx, dict_kwargs_id in enumerate(dict_kwargs_ids):
+                        if dict_kwargs_id and dict_kwargs_id.get("index") == triggered_index:
+                            matching_dict_kwargs = dict_kwargs_values[idx]
+                            break
+
+                    if matching_dict_kwargs:
+                        # Merge dict_kwargs, preserving existing if any
+                        current_dict_kwargs = child_metadata.get("dict_kwargs", {})
+                        if isinstance(current_dict_kwargs, dict) and isinstance(
+                            matching_dict_kwargs, dict
+                        ):
+                            # Update with new values from stepper
+                            current_dict_kwargs.update(matching_dict_kwargs)
+                            child_metadata["dict_kwargs"] = current_dict_kwargs
+                            logger.info(
+                                f"   ✅ Merged dict_kwargs: {len(current_dict_kwargs)} parameters"
+                            )
+                        else:
+                            logger.warning(
+                                f"   ⚠️ Invalid dict_kwargs format: current={type(current_dict_kwargs)}, matching={type(matching_dict_kwargs)}"
+                            )
+                    else:
+                        logger.warning(f"   ⚠️ No dict_kwargs found for {triggered_index}")
+
+                # Step 3: Validate merged metadata (only for figures)
+                if child_type == "figure":
+                    from depictio.dash.modules.figure_component.utils import (
+                        validate_figure_component_metadata,
+                    )
+
+                    is_valid, error_msg = validate_figure_component_metadata(child_metadata)
+                    if not is_valid:
+                        logger.error(f"   ❌ INVALID METADATA after merge: {error_msg}")
+                        logger.error(f"      Component index: {child_index}")
+                        logger.error(f"      Mode: {child_metadata.get('mode')}")
+                        logger.error(f"      Metadata: {child_metadata}")
+                    else:
+                        logger.info("   ✅ VALID METADATA after merge")
+
+                logger.info(
+                    f"   Final merged metadata: wf_id={child_metadata.get('wf_id')}, dc_id={child_metadata.get('dc_id')}, dict_kwargs_count={len(child_metadata.get('dict_kwargs', {}))}"
+                )
+
+                # Render component with merged metadata
                 child, index_returned = render_raw_children(
-                    tmp_stored_metadata[0],
+                    child_metadata,  # Use merged metadata instead of tmp_stored_metadata[0]
                     switch_state=unified_edit_mode_button,
                     dashboard_id=dashboard_id,
                     TOKEN=TOKEN,
@@ -1225,8 +1439,15 @@ def register_callbacks_draggable(app):
 
                     # REMOVED: updated_stored_children logic to fix localStorage quota exceeded
 
+                    # FIX: Use dash.no_update for children to prevent component re-mounting during resize/move
+                    # Returning children (even if unchanged) causes React to re-render and reset component stores
+                    # (figure-render-trigger, stored-metadata-component), resulting in blank figures
+                    # See: depictio/dash/modules/figure_component/frontend.py:2123 (prevent_initial_call=False)
+                    logger.info(
+                        "🔄 LAYOUT UPDATE - Preserving component state by using dash.no_update for children"
+                    )
                     return (
-                        draggable_children,
+                        dash.no_update,  # Preserve component state during layout changes
                         fixed_layouts,  # Return the normalized layout array
                         state_stored_draggable_layouts,
                         dash.no_update,
@@ -1239,55 +1460,16 @@ def register_callbacks_draggable(app):
                         dash.no_update,
                     )
 
-            # Handle scenarios where the user resets a component using the reset button
+            # REMOVED: reset-selection-graph-button handler
+            # Individual reset now handled via store pattern:
+            # 1. Reset button click → update_interactive_values_store removes filters
+            # 2. Store change → component-level callbacks (figure/table/multiqc) reload data
+            # This eliminates redundant full re-renders and uses efficient patching
             elif "reset-selection-graph-button" in triggered_input:
-                logger.info("Reset selection button triggered")
-
-                # Find the component being reset
-                reset_component_metadata = None
-                ctx_triggered = ctx.triggered[0]
-                ctx_triggered_prop_id = ctx_triggered["prop_id"]
-                ctx_triggered_prop_id_index = eval(ctx_triggered_prop_id.split(".")[0])["index"]
-
-                for metadata in stored_metadata:
-                    if metadata["index"] == ctx_triggered_prop_id_index:
-                        metadata["filter_applied"] = False
-                        reset_component_metadata = metadata
-                        break
-
-                # Handle specific reset logic based on component type
-                if reset_component_metadata:
-                    component_type = reset_component_metadata.get("component_type")
-                    logger.info(
-                        f"Resetting {component_type} component: {ctx_triggered_prop_id_index}"
-                    )
-
-                    # For interactive components, clear their values in the interactive_components_dict
-                    if component_type == "interactive":
-                        if ctx_triggered_prop_id_index in interactive_components_dict:
-                            # Clear the value for this interactive component
-                            interactive_components_dict[ctx_triggered_prop_id_index]["value"] = None
-                            logger.info(
-                                f"Cleared value for interactive component: {ctx_triggered_prop_id_index}"
-                            )
-
-                    # For scatter plots, the filter_applied = False is sufficient
-                    elif component_type == "figure":
-                        visu_type = reset_component_metadata.get("visu_type", "")
-                        if visu_type.lower() == "scatter":
-                            logger.info(f"Reset scatter plot: {ctx_triggered_prop_id_index}")
-
-                new_children = update_interactive_component_sync(
-                    stored_metadata,
-                    interactive_components_dict,
-                    draggable_children,
-                    switch_state=unified_edit_mode_button,
-                    TOKEN=TOKEN,
-                    dashboard_id=dashboard_id,
-                    theme=theme,
-                )
+                logger.info("Reset selection button triggered - delegating to store-based pattern")
+                # Store update callback handles filter removal, component callbacks handle re-rendering
                 return (
-                    new_children,
+                    dash.no_update,
                     dash.no_update,
                     dash.no_update,
                     dash.no_update,
@@ -1419,67 +1601,35 @@ def register_callbacks_draggable(app):
                 or triggered_input == "theme-store"
                 or triggered_input == "dashboard-title"
             ):
+                # PATTERN-MATCHING ARCHITECTURE: All data components handle their own updates
+                # - Cards: patch_card_with_filters() listens to interactive-values-store
+                # - Figures: patch_figure_interactive() listens to interactive-values-store
+                # - Tables: Infinite scroll callback listens to interactive-values-store
+                # - MultiQC: Pattern-matching callback handles updates
+                # No sync rebuild needed - components are independent and self-updating
+
                 if triggered_input == "interactive-values-store":
                     logger.info(
-                        "🔄 Interactive values store changed - applying filters to all components"
+                        "✅ Interactive values store changed - pattern-matching callbacks handle all updates"
                     )
+                    # No action needed - each component updates itself via pattern-matching callback
+                    raise dash.exceptions.PreventUpdate
+
                 elif triggered_input == "theme-store":
-                    logger.info("Theme store triggered - updating all components with new theme")
+                    logger.info("⚠️ Theme store triggered - TODO: Add theme callbacks to components")
+                    # TODO: Pattern-matching callbacks should listen to theme-store as Input
+                    # For now, prevent update - components use theme from State only
+                    raise dash.exceptions.PreventUpdate
+
                 elif triggered_input == "dashboard-title":
-                    logger.info(
-                        "Dashboard title style changed - updating all components with new theme"
-                    )
+                    logger.info("Dashboard title style changed")
+                    # Dashboard title changes don't affect component data
+                    raise dash.exceptions.PreventUpdate
+
                 else:
-                    logger.info("Interactive component triggered")
-
-                def clean_stored_metadata(stored_metadata):
-                    # Remove duplicates from stored_metadata by checking parent_index and index
-                    stored_metadata = remove_duplicates_by_index(stored_metadata)
-                    parent_indexes = set(
-                        [
-                            e["parent_index"]
-                            for e in stored_metadata
-                            if "parent_index" in e and e["parent_index"] is not None
-                        ]
-                    )
-                    # remove parent indexes that are also child indexes
-                    stored_metadata = [
-                        e for e in stored_metadata if e["index"] not in parent_indexes
-                    ]
-                    return stored_metadata
-
-                stored_metadata = clean_stored_metadata(stored_metadata)
-
-                logger.info(f"Updating components with theme: {theme}")
-
-                new_children = update_interactive_component_sync(
-                    stored_metadata,
-                    interactive_components_dict,
-                    draggable_children,
-                    switch_state=unified_edit_mode_button,
-                    TOKEN=TOKEN,
-                    dashboard_id=dashboard_id,
-                    theme=theme,
-                )
-                # REMOVED: state_stored_draggable_children storage to fix localStorage quota
-
-                if new_children:
-                    return (
-                        new_children,
-                        dash.no_update,
-                        dash.no_update,
-                        dash.no_update,
-                    )
-                else:
-                    return (
-                        draggable_children,
-                        dash.no_update,
-                        dash.no_update,
-                        dash.no_update,
-                    )
-                # return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
-
-                # return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
+                    logger.info("Interactive component value changed (legacy trigger)")
+                    # Legacy trigger - should not happen with new architecture
+                    raise dash.exceptions.PreventUpdate
 
             elif triggered_input == "stored-draggable-layouts":
                 # logger.info("Stored draggable layouts triggered")
@@ -1508,6 +1658,7 @@ def register_callbacks_draggable(app):
                             )
 
                         # Only render dashboard if there are actual components
+                        logger.info(f"Stored metadata: {stored_metadata}")
                         children = render_dashboard(
                             stored_metadata,
                             unified_edit_mode_button,
@@ -1756,14 +1907,76 @@ def register_callbacks_draggable(app):
                         logger.info(f"Found child with index: {child_index}")
                         logger.info(f"Index: {index}")
                         logger.info(f"Metadata: {metadata}")
-                        edited_child = enable_box_edit_mode(
-                            child,
-                            unified_edit_mode_button,
-                            dashboard_id=dashboard_id,
-                            fresh=False,
-                            component_data=parent_metadata,
-                            TOKEN=TOKEN,
-                        )
+
+                        # CRITICAL FIX: Build FRESH component from metadata instead of reusing wrapped child
+                        # Child from test_container is already wrapped, passing it to enable_box_edit_mode causes double wrapping
+                        # Solution: Build fresh component from parent_metadata (like restore_dashboard.py does)
+
+                        # Type-safe check for parent_metadata
+                        if not parent_metadata or not isinstance(parent_metadata, dict):
+                            logger.error(f"❌ Invalid parent_metadata: {type(parent_metadata)}")
+                            continue
+
+                        component_type = parent_metadata.get("component_type")
+
+                        if component_type and component_type in build_functions:
+                            logger.info(
+                                f"🔧 EDIT FIX - Building fresh {component_type} component from metadata at index {child_index}"
+                            )
+
+                            # Prepare metadata for building (type-safe copy)
+                            build_metadata: dict[str, object] = {**parent_metadata}
+                            # DO NOT modify build_metadata["index"] - keep temp UUID for save.py!
+
+                            build_metadata["build_frame"] = True
+                            build_metadata["access_token"] = TOKEN
+                            build_metadata["theme"] = theme_store if theme_store else "light"
+
+                            # Build fresh component using the appropriate build function
+                            build_function = build_functions[component_type]
+                            try:
+                                fresh_component = build_function(**build_metadata)
+                                logger.info(
+                                    f"✅ EDIT FIX - Successfully built fresh {component_type} component"
+                                )
+
+                                # CRITICAL: Create SEPARATE wrapper metadata for enable_box_edit_mode
+                                # Use parent_index for wrapper ID, but keep original metadata for save.py
+                                wrapper_metadata: dict[str, object] = {**parent_metadata}
+                                if parent_index and wrapper_metadata.get("parent_index"):
+                                    logger.info(
+                                        f"🔧 EDIT FIX - Using parent_index {parent_index} for wrapper ID (metadata stays as temp UUID)"
+                                    )
+                                    wrapper_metadata["index"] = (
+                                        parent_index  # Override ONLY for wrapper
+                                    )
+
+                                # Wrap the fresh component
+                                # Pass wrapper_metadata (with parent UUID for wrapper ID)
+                                # parent_metadata stays unchanged (with temp UUID for save.py)
+                                edited_child = enable_box_edit_mode(
+                                    fresh_component,  # FRESH component
+                                    unified_edit_mode_button,
+                                    dashboard_id=dashboard_id,
+                                    fresh=False,
+                                    component_data=wrapper_metadata,  # Use wrapper_metadata for ID
+                                    TOKEN=TOKEN,
+                                )
+                                logger.info(
+                                    "✅ EDIT FIX - Wrapped fresh component (single wrapper, no double wrapping)"
+                                )
+                            except Exception as e:
+                                logger.error(
+                                    f"❌ Failed to build fresh component: {e}", exc_info=True
+                                )
+                                # Fallback: skip component or continue with next
+                                continue
+                        else:
+                            logger.error(
+                                f"❌ Cannot build component: type='{component_type}', available types={list(build_functions.keys())}"
+                            )
+                            # Fallback: skip component
+                            continue
 
                 if parent_index:
                     logger.info(
@@ -2069,7 +2282,7 @@ def register_callbacks_draggable(app):
                 # DEBUG: Check for responsive scaling in existing layouts
                 logger.debug("🔍 RESPONSIVE DEBUG - Checking existing layouts after fixes:")
                 expected_dims = component_dimensions.get(
-                    metadata["component_type"], {"w": 6, "h": 8}
+                    metadata["component_type"], {"w": 24, "h": 20}
                 )
                 logger.debug(
                     f"🔍 RESPONSIVE DEBUG - Expected dimensions for {metadata['component_type']}: {expected_dims}"
@@ -2106,8 +2319,8 @@ def register_callbacks_draggable(app):
                     )
 
                     # Find a collision-free position near the original component
-                    original_w = original_layout.get("w", 6)
-                    original_h = original_layout.get("h", 8)
+                    original_w = original_layout.get("w", 24)
+                    original_h = original_layout.get("h", 20)
 
                     # Simple approach: just place the duplicate below all existing components
                     # Find the bottom-most position of all existing components
@@ -2150,7 +2363,7 @@ def register_callbacks_draggable(app):
                 logger.debug(f"🔍 DUPLICATE DEBUG - Component type: {metadata['component_type']}")
                 logger.debug(f"🔍 DUPLICATE DEBUG - New layout created: {new_layout}")
                 logger.debug(
-                    f"🔍 DUPLICATE DEBUG - Expected dimensions for {metadata['component_type']}: {component_dimensions.get(metadata['component_type'], {'w': 6, 'h': 8})}"
+                    f"🔍 DUPLICATE DEBUG - Expected dimensions for {metadata['component_type']}: {component_dimensions.get(metadata['component_type'], {'w': 24, 'h': 20})}"
                 )
 
                 # Create the new component using render_raw_children to ensure proper setup
@@ -2214,24 +2427,13 @@ def register_callbacks_draggable(app):
                 )
                 # return [], {}, {}, {}
             elif triggered_input == "reset-all-filters-button":
-                logger.info("Reset all filters button clicked")
-                new_children = list()
-                for metadata in stored_metadata:
-                    metadata["filter_applied"] = False
-
-                    new_child, index = render_raw_children(
-                        metadata,
-                        unified_edit_mode_button,
-                        dashboard_id,
-                        TOKEN=TOKEN,
-                        theme=theme,
-                    )
-                    new_children.append(new_child)
-
-                # state_stored_draggable_children[dashboard_id] = new_children
-
+                # SIMPLIFIED: Reset-all now handled via store pattern
+                # 1. Reset button click → update_interactive_values_store clears all filters
+                # 2. Store change → component-level callbacks (figure/table/multiqc) reload data
+                # No need to re-render all components here - let store propagation handle it
+                logger.info("Reset all filters button clicked - delegating to store-based pattern")
                 return (
-                    new_children,
+                    dash.no_update,
                     dash.no_update,
                     dash.no_update,
                     dash.no_update,
@@ -2397,8 +2599,9 @@ def register_callbacks_draggable(app):
         ],
         [
             Input({"type": "interactive-component-value", "index": ALL}, "value"),
-            Input({"type": "graph", "index": ALL}, "clickData"),
-            Input({"type": "graph", "index": ALL}, "selectedData"),
+            # TODO: Re-enable graph interactions later
+            # Input({"type": "graph", "index": ALL}, "clickData"),
+            # Input({"type": "graph", "index": ALL}, "selectedData"),
             Input({"type": "reset-selection-graph-button", "index": ALL}, "n_clicks"),
             Input("reset-all-filters-button", "n_clicks"),
         ],
@@ -2416,8 +2619,9 @@ def register_callbacks_draggable(app):
     )
     def update_interactive_values_store(
         interactive_values,
-        graph_click_data,
-        graph_selected_data,
+        # TODO: Re-enable graph interactions later
+        # graph_click_data,
+        # graph_selected_data,
         reset_button_clicks,
         reset_all_clicks,
         ids,
@@ -2429,10 +2633,8 @@ def register_callbacks_draggable(app):
         live_interactivity_on,
         pending_changes,
     ):
-        from depictio.dash.layouts.draggable_scenarios.graphs_interactivity import (
-            process_click_data,
-            process_selected_data,
-        )
+        # FIXME
+        live_interactivity_on = True
 
         logger.info("Callback 'update_interactive_values_store' triggered.")
 
@@ -2456,11 +2658,13 @@ def register_callbacks_draggable(app):
         stored_metadata_interactive = remove_duplicates_by_index(stored_metadata_interactive)
 
         components = []
-        scatter_plot_components = {}
+        # scatter_plot_components = {}
         reset_action_performed = False  # Track if an individual reset was performed
 
         # Check trigger types
-        graph_triggered = any("graph" in prop_id for prop_id in triggered_prop_ids)
+        # TODO: Re-enable graph interactions later
+        # graph_triggered = any("graph" in prop_id for prop_id in triggered_prop_ids)
+        graph_triggered = False  # Disabled for now
         interactive_triggered = any(
             "interactive-component-value" in prop_id for prop_id in triggered_prop_ids
         )
@@ -2470,7 +2674,7 @@ def register_callbacks_draggable(app):
         )
 
         logger.info(
-            f"🎯 Trigger analysis: graph={graph_triggered}, interactive={interactive_triggered}, reset={reset_triggered}"
+            f"🎯 Trigger analysis: graph={graph_triggered} (disabled), interactive={interactive_triggered}, reset={reset_triggered}"
         )
 
         # Handle reset buttons first (they take priority)
@@ -2584,13 +2788,14 @@ def register_callbacks_draggable(app):
                             else:
                                 filtered_components = current_components
 
-                            # Update components list for individual reset and let normal flow handle it
-                            components = filtered_components
-                            # Mark this as a reset action for special pending logic
-                            reset_action_performed = True
+                            # CRITICAL FIX: Return immediately to bypass filter preservation logic
+                            # Individual reset should work like reset-all with early return
+                            output_data = {"interactive_components_values": filtered_components}
                             logger.info(
-                                f"🔄 Individual reset completed: {len(components)} components - continuing with normal flow"
+                                f"✅ Individual reset completed: {len(filtered_components)} components - returning immediately"
                             )
+                            # Individual reset always applies immediately (like reset-all)
+                            return output_data, {}
 
                     except Exception as e:
                         logger.error(f"Error processing individual reset: {e}")
@@ -2601,24 +2806,39 @@ def register_callbacks_draggable(app):
             f"🎯 Current store has {len(current_store_data.get('interactive_components_values', [])) if current_store_data else 0} existing components"
         )
 
-        # Check if we have any actual graph data to process (needed early for filter preservation logic)
-        has_actual_graph_data = False
-        if graph_triggered:
-            if graph_click_data:
-                has_actual_graph_data = any(
-                    click_data and click_data.get("points") and len(click_data["points"]) > 0
-                    for click_data in graph_click_data
-                )
+        # Guard clause: Prevent spurious updates on initialization
+        # If no actual user interaction occurred (e.g., reset button with value 0, empty component lists)
+        # Return no_update to prevent triggering save callback unnecessarily
+        if not interactive_triggered and not reset_action_performed:
+            # Check if we have any stored interactive metadata (i.e., interactive components exist)
+            has_interactive_components = bool(stored_metadata_interactive)
 
-            if graph_selected_data and not has_actual_graph_data:
-                has_actual_graph_data = any(
-                    selected_data
-                    and selected_data.get("points")
-                    and len(selected_data["points"]) > 0
-                    for selected_data in graph_selected_data
+            if not has_interactive_components:
+                logger.info(
+                    "🔴 GUARD: No interactive components - skipping store update to prevent spurious save"
                 )
+                return dash.no_update, dash.no_update
 
-            logger.info(f"🎯 Has actual graph data to process: {has_actual_graph_data}")
+        # TODO: Re-enable graph interactions later
+        # # Check if we have any actual graph data to process (needed early for filter preservation logic)
+        # has_actual_graph_data = False
+        # if graph_triggered:
+        #     if graph_click_data:
+        #         has_actual_graph_data = any(
+        #             click_data and click_data.get("points") and len(click_data["points"]) > 0
+        #             for click_data in graph_click_data
+        #         )
+        #
+        #     if graph_selected_data and not has_actual_graph_data:
+        #         has_actual_graph_data = any(
+        #             selected_data
+        #             and selected_data.get("points")
+        #             and len(selected_data["points"]) > 0
+        #             for selected_data in graph_selected_data
+        #         )
+        #
+        #     logger.info(f"🎯 Has actual graph data to process: {has_actual_graph_data}")
+        # has_actual_graph_data = False  # Disabled for now
 
         # Handle regular interactive component updates
         if (
@@ -2634,182 +2854,184 @@ def register_callbacks_draggable(app):
                     {"value": value, "metadata": metadata, "index": metadata["index"]}
                 )
 
-        # Get the graph that was triggered (if any) to avoid duplicate filters
-        triggered_graph_index = None
-        if graph_triggered:
-            for prop_id in triggered_prop_ids:
-                if "graph" in prop_id:
-                    try:
-                        graph_id_str = prop_id.split(".")[0]
-                        graph_id_dict = eval(graph_id_str)
-                        triggered_graph_index = graph_id_dict["index"]
-                        break
-                    except Exception:
-                        continue
+        # TODO: Re-enable graph interactions later
+        # # Get the graph that was triggered (if any) to avoid duplicate filters
+        # triggered_graph_index = None
+        # if graph_triggered:
+        #     for prop_id in triggered_prop_ids:
+        #         if "graph" in prop_id:
+        #             try:
+        #                 graph_id_str = prop_id.split(".")[0]
+        #                 graph_id_dict = eval(graph_id_str)
+        #                 triggered_graph_index = graph_id_dict["index"]
+        #                 break
+        #             except Exception:
+        #                 continue
+        #
+        # # Always preserve existing scatter plot filters unless we're specifically updating them
+        # if current_store_data and "interactive_components_values" in current_store_data:
+        #     # Find existing scatter plot filters and preserve them (except for triggered graph)
+        #     for existing_component in current_store_data["interactive_components_values"]:
+        #         if isinstance(existing_component, dict):
+        #             component_index = existing_component.get("index", "")
+        #             # Check if this is a scatter plot generated filter (starts with "filter_")
+        #             if component_index.startswith("filter_"):
+        #                 # Only remove if this is the same graph AND we have actual new data
+        #                 should_replace = (
+        #                     triggered_graph_index
+        #                     and triggered_graph_index in component_index
+        #                     and has_actual_graph_data
+        #                 )
+        #
+        #                 if not should_replace:
+        #                     components.append(existing_component)
+        #                     logger.info(
+        #                         f"🎯 Preserved existing scatter plot filter: {component_index}"
+        #                     )
+        #                 else:
+        #                     logger.info(
+        #                         f"🎯 Removing old filter for triggered graph (will be replaced): {component_index}"
+        #                     )
 
-        # Always preserve existing scatter plot filters unless we're specifically updating them
-        if current_store_data and "interactive_components_values" in current_store_data:
-            # Find existing scatter plot filters and preserve them (except for triggered graph)
-            for existing_component in current_store_data["interactive_components_values"]:
-                if isinstance(existing_component, dict):
-                    component_index = existing_component.get("index", "")
-                    # Check if this is a scatter plot generated filter (starts with "filter_")
-                    if component_index.startswith("filter_"):
-                        # Only remove if this is the same graph AND we have actual new data
-                        should_replace = (
-                            triggered_graph_index
-                            and triggered_graph_index in component_index
-                            and has_actual_graph_data
-                        )
-
-                        if not should_replace:
-                            components.append(existing_component)
-                            logger.info(
-                                f"🎯 Preserved existing scatter plot filter: {component_index}"
-                            )
-                        else:
-                            logger.info(
-                                f"🎯 Removing old filter for triggered graph (will be replaced): {component_index}"
-                            )
-
-        # Handle scatter plot interactions
-        if graph_triggered:
-            logger.info("🎯 Graph interaction detected in store update")
-
-            # Only process graph interactions if we have actual data
-            # This prevents clearing filters when Dash sends empty data on subsequent triggers
-            if has_actual_graph_data:
-                # Find which graph was triggered
-                for prop_id in triggered_prop_ids:
-                    if "graph" in prop_id:
-                        try:
-                            # Parse the triggered graph index
-                            graph_id_str = prop_id.split(".")[0]
-                            graph_id_dict = eval(graph_id_str)
-                            ctx_triggered_prop_id_index = graph_id_dict["index"]
-
-                            # Get the corresponding graph metadata
-                            graph_metadata = None
-                            for meta in stored_metadata:
-                                if meta.get("index") == ctx_triggered_prop_id_index:
-                                    graph_metadata = meta
-                                    break
-
-                            if (
-                                not graph_metadata
-                                or graph_metadata.get("visu_type", "").lower() != "scatter"
-                            ):
-                                continue
-
-                            logger.info(
-                                f"🎯 Processing scatter plot interaction for {ctx_triggered_prop_id_index}"
-                            )
-
-                            # Get token from local store
-                            TOKEN = None
-                            if local_store and "access_token" in local_store:
-                                TOKEN = local_store["access_token"]
-
-                            if not TOKEN:
-                                logger.warning(
-                                    "No access token available for scatter plot processing"
-                                )
-                                continue
-
-                            # Process click data
-                            if "clickData" in prop_id and graph_click_data:
-                                logger.info(f"🎯 Processing clickData: {graph_click_data}")
-                                for i, click_data in enumerate(graph_click_data):
-                                    logger.info(
-                                        f"🎯 Checking click_data[{i}]: {click_data} for graph {graph_ids[i]['index'] if i < len(graph_ids) else 'N/A'}"
-                                    )
-                                    if (
-                                        click_data
-                                        and i < len(graph_ids)
-                                        and graph_ids[i]["index"] == ctx_triggered_prop_id_index
-                                    ):
-                                        # Only process if there are actual clicked points
-                                        if (
-                                            click_data.get("points")
-                                            and len(click_data["points"]) > 0
-                                        ):
-                                            dict_graph_data = {
-                                                "value": click_data["points"][0],
-                                                "metadata": graph_metadata,
-                                            }
-                                            scatter_plot_components = process_click_data(
-                                                dict_graph_data, {}, TOKEN
-                                            )
-                                            logger.info(
-                                                f"🎯 Click data processed: {len(scatter_plot_components)} components"
-                                            )
-                                        else:
-                                            logger.info(
-                                                f"🎯 No click points - click_data: {click_data}"
-                                            )
-                                        break
-
-                            # Process selected data
-                            elif "selectedData" in prop_id and graph_selected_data:
-                                logger.info(f"🎯 Processing selectedData: {graph_selected_data}")
-                                for i, selected_data in enumerate(graph_selected_data):
-                                    logger.info(
-                                        f"🎯 Checking selected_data[{i}]: {selected_data} for graph {graph_ids[i]['index'] if i < len(graph_ids) else 'N/A'}"
-                                    )
-                                    if (
-                                        selected_data
-                                        and i < len(graph_ids)
-                                        and graph_ids[i]["index"] == ctx_triggered_prop_id_index
-                                    ):
-                                        # Only process if there are actual selected points
-                                        if (
-                                            selected_data.get("points")
-                                            and len(selected_data["points"]) > 0
-                                        ):
-                                            dict_graph_data = {
-                                                "value": selected_data["points"],
-                                                "metadata": graph_metadata,
-                                            }
-                                            scatter_plot_components = process_selected_data(
-                                                dict_graph_data, {}, TOKEN
-                                            )
-                                            logger.info(
-                                                f"🎯 Selected data processed: {len(scatter_plot_components)} components"
-                                            )
-                                        else:
-                                            logger.info(
-                                                f"🎯 No selected points - selected_data: {selected_data}"
-                                            )
-                                        break
-
-                        except Exception as e:
-                            logger.error(f"Error processing graph interaction: {e}")
-                            continue
-            else:
-                logger.info(
-                    "🎯 No actual graph data - preserving existing filters and skipping graph processing"
-                )
-
-        # Add scatter plot generated components to the store
-        if scatter_plot_components:
-            for component_key, component_data in scatter_plot_components.items():
-                if isinstance(component_data, dict) and component_data.get("metadata"):
-                    # Enhance metadata to match expected format for table filtering
-                    enhanced_metadata = component_data.get("metadata", {}).copy()
-                    enhanced_metadata["component_type"] = (
-                        "interactive"  # Critical for table filtering
-                    )
-                    enhanced_metadata["index"] = component_key  # Ensure proper index
-
-                    _tmp_metadata = {
-                        "value": component_data.get("value"),
-                        "metadata": enhanced_metadata,
-                        "index": component_key,
-                    }
-                    components.append(_tmp_metadata)
-                    logger.info(
-                        f"🎯 Added scatter plot component: {component_key} with enhanced metadata: {_tmp_metadata}"
-                    )
+        # TODO: Re-enable graph interactions later
+        # # Handle scatter plot interactions
+        # if graph_triggered:
+        #     logger.info("🎯 Graph interaction detected in store update")
+        #
+        #     # Only process graph interactions if we have actual data
+        #     # This prevents clearing filters when Dash sends empty data on subsequent triggers
+        #     if has_actual_graph_data:
+        #         # Find which graph was triggered
+        #         for prop_id in triggered_prop_ids:
+        #             if "graph" in prop_id:
+        #                 try:
+        #                     # Parse the triggered graph index
+        #                     graph_id_str = prop_id.split(".")[0]
+        #                     graph_id_dict = eval(graph_id_str)
+        #                     ctx_triggered_prop_id_index = graph_id_dict["index"]
+        #
+        #                     # Get the corresponding graph metadata
+        #                     graph_metadata = None
+        #                     for meta in stored_metadata:
+        #                         if meta.get("index") == ctx_triggered_prop_id_index:
+        #                             graph_metadata = meta
+        #                             break
+        #
+        #                     if (
+        #                         not graph_metadata
+        #                         or graph_metadata.get("visu_type", "").lower() != "scatter"
+        #                     ):
+        #                         continue
+        #
+        #                     logger.info(
+        #                         f"🎯 Processing scatter plot interaction for {ctx_triggered_prop_id_index}"
+        #                     )
+        #
+        #                     # Get token from local store
+        #                     TOKEN = None
+        #                     if local_store and "access_token" in local_store:
+        #                         TOKEN = local_store["access_token"]
+        #
+        #                     if not TOKEN:
+        #                         logger.warning(
+        #                             "No access token available for scatter plot processing"
+        #                         )
+        #                         continue
+        #
+        #                     # Process click data
+        #                     if "clickData" in prop_id and graph_click_data:
+        #                         logger.info(f"🎯 Processing clickData: {graph_click_data}")
+        #                         for i, click_data in enumerate(graph_click_data):
+        #                             logger.info(
+        #                                 f"🎯 Checking click_data[{i}]: {click_data} for graph {graph_ids[i]['index'] if i < len(graph_ids) else 'N/A'}"
+        #                             )
+        #                             if (
+        #                                 click_data
+        #                                 and i < len(graph_ids)
+        #                                 and graph_ids[i]["index"] == ctx_triggered_prop_id_index
+        #                             ):
+        #                                 # Only process if there are actual clicked points
+        #                                 if (
+        #                                     click_data.get("points")
+        #                                     and len(click_data["points"]) > 0
+        #                                 ):
+        #                                     dict_graph_data = {
+        #                                         "value": click_data["points"][0],
+        #                                         "metadata": graph_metadata,
+        #                                     }
+        #                                     scatter_plot_components = process_click_data(
+        #                                         dict_graph_data, {}, TOKEN
+        #                                     )
+        #                                     logger.info(
+        #                                         f"🎯 Click data processed: {len(scatter_plot_components)} components"
+        #                                     )
+        #                                 else:
+        #                                     logger.info(
+        #                                         f"🎯 No click points - click_data: {click_data}"
+        #                                     )
+        #                                 break
+        #
+        #                     # Process selected data
+        #                     elif "selectedData" in prop_id and graph_selected_data:
+        #                         logger.info(f"🎯 Processing selectedData: {graph_selected_data}")
+        #                         for i, selected_data in enumerate(graph_selected_data):
+        #                             logger.info(
+        #                                 f"🎯 Checking selected_data[{i}]: {selected_data} for graph {graph_ids[i]['index'] if i < len(graph_ids) else 'N/A'}"
+        #                             )
+        #                             if (
+        #                                 selected_data
+        #                                 and i < len(graph_ids)
+        #                                 and graph_ids[i]["index"] == ctx_triggered_prop_id_index
+        #                             ):
+        #                                 # Only process if there are actual selected points
+        #                                 if (
+        #                                     selected_data.get("points")
+        #                                     and len(selected_data["points"]) > 0
+        #                                 ):
+        #                                     dict_graph_data = {
+        #                                         "value": selected_data["points"],
+        #                                         "metadata": graph_metadata,
+        #                                     }
+        #                                     scatter_plot_components = process_selected_data(
+        #                                         dict_graph_data, {}, TOKEN
+        #                                     )
+        #                                     logger.info(
+        #                                         f"🎯 Selected data processed: {len(scatter_plot_components)} components"
+        #                                     )
+        #                                 else:
+        #                                     logger.info(
+        #                                         f"🎯 No selected points - selected_data: {selected_data}"
+        #                                     )
+        #                                 break
+        #
+        #                 except Exception as e:
+        #                     logger.error(f"Error processing graph interaction: {e}")
+        #                     continue
+        #     else:
+        #         logger.info(
+        #             "🎯 No actual graph data - preserving existing filters and skipping graph processing"
+        #         )
+        #
+        # # Add scatter plot generated components to the store
+        # if scatter_plot_components:
+        #     for component_key, component_data in scatter_plot_components.items():
+        #         if isinstance(component_data, dict) and component_data.get("metadata"):
+        #             # Enhance metadata to match expected format for table filtering
+        #             enhanced_metadata = component_data.get("metadata", {}).copy()
+        #             enhanced_metadata["component_type"] = (
+        #                 "interactive"  # Critical for table filtering
+        #             )
+        #             enhanced_metadata["index"] = component_key  # Ensure proper index
+        #
+        #             _tmp_metadata = {
+        #                 "value": component_data.get("value"),
+        #                 "metadata": enhanced_metadata,
+        #                 "index": component_key,
+        #             }
+        #             components.append(_tmp_metadata)
+        #             logger.info(
+        #                 f"🎯 Added scatter plot component: {component_key} with enhanced metadata: {_tmp_metadata}"
+        #             )
 
         # Final check: prevent accidental loss of scatter plot filters
         scatter_filters_before = 0
@@ -2933,170 +3155,167 @@ def register_callbacks_draggable(app):
             # Keep layout consistent - CSS handles button visibility, not DashGridLayout properties
             return False, False, "draggable-grid-container drag-handles-hidden"
 
-    @app.callback(
-        Output("draggable-wrapper", "children"),
-        [
-            Input("unified-edit-mode-button", "checked"),
-            Input("draggable", "items"),
-        ],
-        [
-            State("local-store", "data"),
-        ],
-    )
-    def update_empty_dashboard_wrapper(edit_mode_enabled, current_draggable_items, local_data):
-        """Update draggable wrapper to show empty state messages when dashboard is empty"""
-        logger.info(f"🔄 Updating draggable wrapper - Edit mode: {edit_mode_enabled}")
+    # @app.callback(
+    #     Output("draggable-wrapper", "children"),
+    #     [
+    #         Input("unified-edit-mode-button", "checked"),
+    #     ],
+    #     [
+    #         State("local-store", "data"),
+    #         State("draggable", "children"),
+    #     ],
+    #     prevent_initial_call=False,
+    # )
+    # def update_empty_dashboard_wrapper(edit_mode_enabled, local_data, current_draggable_items):
+    #     """Update draggable wrapper to show empty state messages when dashboard is empty"""
+    #     logger.info(f"🔄 update_empty_dashboard_wrapper triggered - Edit mode: {edit_mode_enabled}")
+    #     logger.info(f"🔄 Trigger: {ctx.triggered_id}, Current items: {len(current_draggable_items) if current_draggable_items else 0}")
+    #     return html.Div(id="draggable")
 
-        # Check if dashboard has stored components in database (more reliable than current_draggable_items)
-        stored_children_data = local_data.get("stored_children_data", []) if local_data else []
-        stored_layout_data = local_data.get("stored_layout_data", []) if local_data else []
+    #     # Guard clause: If dashboard has stored components, always keep the draggable (don't show empty state)
+    #     # This prevents showing empty state during initial load when components are being populated
+    #     stored_children_data = local_data.get("stored_children_data", []) if local_data else []
+    #     stored_layout_data = local_data.get("stored_layout_data", []) if local_data else []
 
-        # If there are stored components or layouts, this is NOT an empty dashboard
-        if (stored_children_data and len(stored_children_data) > 0) or (
-            stored_layout_data and len(stored_layout_data) > 0
-        ):
-            logger.info(
-                f"Dashboard has stored components ({len(stored_children_data)} children, {len(stored_layout_data)} layouts) - keeping original draggable"
-            )
-            return dash.no_update
+    #     if (stored_children_data and len(stored_children_data) > 0) or (
+    #         stored_layout_data and len(stored_layout_data) > 0
+    #     ):
+    #         logger.info(
+    #             f"Dashboard has stored components ({len(stored_children_data)} children, {len(stored_layout_data)} layouts) - keeping original draggable"
+    #         )
+    #         return dash.no_update
 
-        # Also check current draggable items as secondary check
-        if current_draggable_items and len(current_draggable_items) > 0:
-            logger.info("Dashboard has current draggable items, keeping original draggable")
-            return dash.no_update
+    #     # Also check current draggable items as secondary check
+    #     if current_draggable_items and len(current_draggable_items) > 0:
+    #         logger.info("Dashboard has current draggable items, keeping original draggable")
+    #         return dash.no_update
 
-        if not local_data:
-            logger.info("No local data available, keeping original draggable")
-            return dash.no_update
+    #     if not local_data:
+    #         logger.info("No local data available, keeping original draggable")
+    #         return dash.no_update
 
-        logger.info(f"Truly empty dashboard - Edit mode: {edit_mode_enabled}")
+    #     logger.info(f"Truly empty dashboard - Edit mode: {edit_mode_enabled}")
 
-        if not edit_mode_enabled:
-            logger.info("🔵 Empty dashboard + Edit mode OFF - showing welcome message")
-            # Welcome message (blue theme) - now clickable to enable edit mode
-            welcome_message = html.Div(
-                dmc.Center(
-                    dmc.Paper(
-                        [
-                            dmc.Stack(
-                                [
-                                    dmc.Center(
-                                        DashIconify(
-                                            icon="material-symbols:edit-outline",
-                                            width=64,
-                                            height=64,
-                                            color=colors["blue"],
-                                        )
-                                    ),
-                                    dmc.Text(
-                                        "Your dashboard is empty",
-                                        size="xl",
-                                        fw="bold",
-                                        ta="center",
-                                        c=colors["blue"],
-                                        style={"color": f"var(--app-text-color, {colors['blue']})"},
-                                    ),
-                                    dmc.Text(
-                                        "Enable Edit Mode to start building your dashboard",
-                                        size="md",
-                                        ta="center",
-                                        c="gray",
-                                        style={"color": "var(--app-text-color, #666)"},
-                                    ),
-                                ],
-                                gap="md",
-                                align="center",
-                            )
-                        ],
-                        p="xl",
-                        radius="lg",
-                        shadow="sm",
-                        withBorder=True,
-                        style={
-                            "backgroundColor": "var(--app-surface-color, #ffffff)",
-                            "border": f"1px solid var(--app-border-color, {colors['blue']}20)",
-                            "maxWidth": "500px",
-                            "marginTop": "2rem",
-                            "transition": "transform 0.1s ease",
-                        },
-                    ),
-                    style={
-                        "height": "50vh",
-                        "display": "flex",
-                        "alignItems": "center",
-                        "justifyContent": "center",
-                    },
-                ),
-                id="welcome-message-clickable",
-                style={"cursor": "pointer"},
-            )
-            # Create empty draggable component for callbacks
-            empty_draggable = html.Div(id="draggable")
-            return [welcome_message, empty_draggable]
-        else:
-            logger.info("🧡 Empty dashboard + Edit mode ON - showing add component message")
-            # Add component message (orange theme) - now clickable to trigger add button
-            add_component_message = html.Div(
-                dmc.Center(
-                    dmc.Paper(
-                        [
-                            dmc.Stack(
-                                [
-                                    dmc.Center(
-                                        DashIconify(
-                                            icon="material-symbols:add-circle-outline",
-                                            width=64,
-                                            height=64,
-                                            color=colors["orange"],
-                                        )
-                                    ),
-                                    dmc.Text(
-                                        "Add your first component",
-                                        size="xl",
-                                        fw="bold",
-                                        ta="center",
-                                        c=colors["orange"],
-                                        style={
-                                            "color": f"var(--app-text-color, {colors['orange']})"
-                                        },
-                                    ),
-                                    dmc.Text(
-                                        "Click here to choose from charts, tables, and more",
-                                        size="md",
-                                        ta="center",
-                                        c="gray",
-                                        style={"color": "var(--app-text-color, #666)"},
-                                    ),
-                                ],
-                                gap="md",
-                                align="center",
-                            )
-                        ],
-                        p="xl",
-                        radius="lg",
-                        shadow="sm",
-                        withBorder=True,
-                        style={
-                            "backgroundColor": "var(--app-surface-color, #ffffff)",
-                            "border": f"1px solid var(--app-border-color, {colors['orange']}20)",
-                            "maxWidth": "500px",
-                            "marginTop": "2rem",
-                            "transition": "transform 0.1s ease",
-                        },
-                    ),
-                    style={
-                        "height": "50vh",
-                        "display": "flex",
-                        "alignItems": "center",
-                        "justifyContent": "center",
-                    },
-                ),
-                id="add-component-message-clickable",
-                style={"cursor": "pointer"},
-            )
-            # Create empty draggable component for callbacks
-            empty_draggable = html.Div(id="draggable")
-            return [add_component_message, empty_draggable]
+    #     if not edit_mode_enabled:
+    #         logger.info("🔵 Empty dashboard + Edit mode OFF - showing welcome message")
+    #         # Welcome message (blue theme) - now clickable to enable edit mode
+    #         welcome_message = html.Div(
+    #             dmc.Center(
+    #                 dmc.Paper(
+    #                     dmc.Stack(
+    #                         [
+    #                             dmc.Center(
+    #                                 DashIconify(
+    #                                     icon="material-symbols:edit-outline",
+    #                                     width=64,
+    #                                     height=64,
+    #                                     color=colors["blue"],
+    #                                 )
+    #                             ),
+    #                             dmc.Text(
+    #                                 "Your dashboard is empty",
+    #                                 size="xl",
+    #                                 fw="bold",
+    #                                 ta="center",
+    #                                 c=colors["blue"],
+    #                                 style={"color": f"var(--app-text-color, {colors['blue']})"},
+    #                             ),
+    #                             dmc.Text(
+    #                                 "Enable Edit Mode to start building your dashboard",
+    #                                 size="md",
+    #                                 ta="center",
+    #                                 c="gray",
+    #                                 style={"color": "var(--app-text-color, #666)"},
+    #                             ),
+    #                         ],
+    #                         gap="md",
+    #                         align="center",
+    #                     ),
+    #                     p="xl",
+    #                     radius="lg",
+    #                     shadow="sm",
+    #                     withBorder=True,
+    #                     style={
+    #                         "backgroundColor": "var(--app-surface-color, #ffffff)",
+    #                         "border": f"1px solid var(--app-border-color, {colors['blue']}20)",
+    #                         "maxWidth": "500px",
+    #                         "marginTop": "2rem",
+    #                         "transition": "transform 0.1s ease",
+    #                     },
+    #                 ),
+    #                 style={
+    #                     "height": "50vh",
+    #                     "display": "flex",
+    #                     "alignItems": "center",
+    #                     "justifyContent": "center",
+    #                 },
+    #             ),
+    #             id="welcome-message-clickable",
+    #             style={"cursor": "pointer"},
+    #         )
+    #         # Create empty draggable component for callbacks
+    #         empty_draggable = html.Div(id="draggable")
+    #         return [welcome_message, empty_draggable]
+    #     else:
+    #         logger.info("🧡 Empty dashboard + Edit mode ON - showing add component message")
+    #         # Add component message (orange theme) - now clickable to trigger add button
+    #         add_component_message = html.Div(
+    #             dmc.Center(
+    #                 dmc.Paper(
+    #                     dmc.Stack(
+    #                         [
+    #                             dmc.Center(
+    #                                 DashIconify(
+    #                                     icon="tabler:square-plus",
+    #                                     width=64,
+    #                                     height=64,
+    #                                     color=colors["orange"],
+    #                                 )
+    #                             ),
+    #                             dmc.Text(
+    #                                 "Add your first component",
+    #                                 size="xl",
+    #                                 fw="bold",
+    #                                 ta="center",
+    #                                 c=colors["orange"],
+    #                                 style={"color": f"var(--app-text-color, {colors['orange']})"},
+    #                             ),
+    #                             dmc.Text(
+    #                                 "Click here to choose from charts, tables, and more",
+    #                                 size="md",
+    #                                 ta="center",
+    #                                 c="gray",
+    #                                 style={"color": "var(--app-text-color, #666)"},
+    #                             ),
+    #                         ],
+    #                         gap="md",
+    #                         align="center",
+    #                     ),
+    #                     p="xl",
+    #                     radius="lg",
+    #                     shadow="sm",
+    #                     withBorder=True,
+    #                     style={
+    #                         "backgroundColor": "var(--app-surface-color, #ffffff)",
+    #                         "border": f"1px solid var(--app-border-color, {colors['orange']}20)",
+    #                         "maxWidth": "500px",
+    #                         "marginTop": "2rem",
+    #                         "transition": "transform 0.1s ease",
+    #                     },
+    #                 ),
+    #                 style={
+    #                     "height": "50vh",
+    #                     "display": "flex",
+    #                     "alignItems": "center",
+    #                     "justifyContent": "center",
+    #                 },
+    #             ),
+    #             id="add-component-message-clickable",
+    #             style={"cursor": "pointer"},
+    #         )
+    #         # Create empty draggable component for callbacks
+    #         empty_draggable = html.Div(id="draggable")
+    #         return [add_component_message, empty_draggable]
 
     # Make welcome message clickable to enable edit mode
     @app.callback(
@@ -3132,6 +3351,8 @@ def design_draggable(
     local_data: dict,
     cached_project_data: dict | None = None,
 ):
+    import time
+
     # logger.info("design_draggable - Initializing draggable layout")
     # logger.info(f"design_draggable - Dashboard ID: {dashboard_id}")
     # logger.info(f"design_draggable - Local data: {local_data}")
@@ -3144,16 +3365,25 @@ def design_draggable(
 
     # Use cached project data if available, otherwise fallback to HTTP call
     if cached_project_data and cached_project_data.get("cache_key") == f"project_{dashboard_id}":
-        logger.info(f"🚀 DESIGN_DRAGGABLE: Using cached project data for dashboard {dashboard_id}")
+        logger.info(
+            f"✅ DESIGN_DRAGGABLE: Cache HIT - using cached project data for dashboard {dashboard_id}"
+        )
+        logger.info(
+            f"✅ DESIGN_DRAGGABLE: Cache age: {time.time() - cached_project_data.get('timestamp', 0):.2f}s"
+        )
         project_json = cached_project_data["project"]
     else:
+        cache_info = f"cached_project_data={bool(cached_project_data)}, cache_key={cached_project_data.get('cache_key') if cached_project_data else None}, expected_key=project_{dashboard_id}"
         logger.warning(
-            f"⚠️  DESIGN_DRAGGABLE: Cache miss, falling back to HTTP call for dashboard {dashboard_id}"
+            f"❌ DESIGN_DRAGGABLE: Cache MISS ({cache_info}), making blocking HTTP call for dashboard {dashboard_id}"
         )
+        start_time = time.time()
         project_json = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/projects/get/from_dashboard_id/{dashboard_id}",
             headers={"Authorization": f"Bearer {TOKEN}"},
         ).json()
+        http_duration = time.time() - start_time
+        logger.warning(f"❌ DESIGN_DRAGGABLE: HTTP call took {http_duration * 1000:.0f}ms")
 
     # logger.info(f"design_draggable - Project: {project_json}")
     from depictio.models.models.projects import Project
@@ -3161,82 +3391,135 @@ def design_draggable(
     project = Project.from_mongo(project_json)
     # logger.info(f"design_draggable - Project: {project}")
     workflows = project.workflows
-    delta_table_locations = []
+    data_available = False  # Track if any data (DeltaTables or MultiQC) is available
 
-    # Collect all data collection IDs for batch checking
-    all_dc_ids = []
+    # Collect all data collections by type
+    deltatable_dc_ids = []
+    multiqc_dc_ids = []
     for wf in workflows:
         for dc in wf.data_collections:
-            all_dc_ids.append(str(dc.id))
+            dc_type = dc.config.type if dc.config else None
+            if dc_type == "multiqc":
+                multiqc_dc_ids.append(str(dc.id))
+            else:
+                # All non-multiqc types use deltatables
+                deltatable_dc_ids.append(str(dc.id))
 
-    if all_dc_ids:
+    # Check for DeltaTables
+    if deltatable_dc_ids:
         # Single batch API call to check deltatable existence
-        logger.info(f"🚀 DESIGN_DRAGGABLE: Batch checking {len(all_dc_ids)} deltatables")
+        logger.info(f"🚀 DESIGN_DRAGGABLE: Batch checking {len(deltatable_dc_ids)} deltatables")
         try:
             batch_response = httpx.post(
                 f"{API_BASE_URL}/depictio/api/v1/deltatables/batch/exists",
                 headers={"Authorization": f"Bearer {TOKEN}"},
-                json=all_dc_ids,
+                json=deltatable_dc_ids,
             )
             if batch_response.status_code == 200:
                 batch_results = batch_response.json()
                 for dc_id, result in batch_results.items():
                     if result.get("exists") and result.get("delta_table_location"):
-                        delta_table_locations.append(result["delta_table_location"])
+                        data_available = True
                         logger.info(f"✅ Delta table found: {result['delta_table_location']}")
                     else:
                         logger.warning(f"⚠️  No deltatable found for data collection '{dc_id}'")
-                logger.info(
-                    f"✅ Batch check complete: {len(delta_table_locations)} deltatables found"
-                )
+                logger.info(f"✅ Batch deltatable check complete: data_available={data_available}")
             else:
                 logger.error(f"❌ Batch deltatable check failed: {batch_response.text}")
         except Exception as e:
             logger.error(f"❌ Batch deltatable check exception: {e}")
             # Fallback to individual checks if batch fails
             logger.warning("🔄 Falling back to individual deltatable checks")
-            for wf in workflows:
-                for dc in wf.data_collections:
-                    try:
-                        response = httpx.get(
-                            f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{str(dc.id)}",
-                            headers={"Authorization": f"Bearer {TOKEN}"},
-                        )
-                        if response.status_code == 200:
-                            delta_table_location = response.json()["delta_table_location"]
-                            delta_table_locations.append(delta_table_location)
-                    except Exception as fallback_e:
-                        logger.error(f"❌ Fallback check failed for {dc.id}: {fallback_e}")
-    # logger.info(f"Delta table locations: {delta_table_locations}")
+            for dc_id in deltatable_dc_ids:
+                try:
+                    response = httpx.get(
+                        f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{dc_id}",
+                        headers={"Authorization": f"Bearer {TOKEN}"},
+                    )
+                    if response.status_code == 200:
+                        data_available = True
+                        logger.info(f"✅ Delta table found via fallback for {dc_id}")
+                except Exception as fallback_e:
+                    logger.error(f"❌ Fallback deltatable check failed for {dc_id}: {fallback_e}")
 
-    if len(delta_table_locations) == 0:
+    # Check for MultiQC data
+    if multiqc_dc_ids and not data_available:  # Only check if no deltatables found
+        logger.info(f"🧬 DESIGN_DRAGGABLE: Checking {len(multiqc_dc_ids)} MultiQC collections")
+        for dc_id in multiqc_dc_ids:
+            try:
+                response = httpx.get(
+                    f"{API_BASE_URL}/depictio/api/v1/multiqc/reports/data-collection/{dc_id}",
+                    headers={"Authorization": f"Bearer {TOKEN}"},
+                    params={"limit": 1},  # Just check if any reports exist
+                )
+                if response.status_code == 200:
+                    result = response.json()
+                    if result.get("total_count", 0) > 0:
+                        data_available = True
+                        logger.info(f"✅ MultiQC reports found for data collection '{dc_id}'")
+                        break  # At least one MultiQC collection has data
+                    else:
+                        logger.warning(f"⚠️  No MultiQC reports for data collection '{dc_id}'")
+            except Exception as e:
+                logger.error(f"❌ MultiQC check failed for {dc_id}: {e}")
+
+    logger.info(f"📊 DESIGN_DRAGGABLE: Final data availability check: {data_available}")
+
+    if not data_available:
         # When there are no workflows, log information and prepare a message
         # logger.info(f"init_children {init_children}")
         # logger.info(f"init_layout {init_layout}")
         # message = html.Div(["No workflows available."])
         message = html.Div(
-            [
-                html.Hr(),
-                dmc.Center(
-                    dmc.Group(
+            dmc.Center(
+                dmc.Paper(
+                    dmc.Stack(
                         [
-                            DashIconify(icon="feather:info", color="red", width=40),
-                            dmc.Text(
-                                "No data available.",
-                                variant="gradient",
-                                gradient={"from": "red", "to": "orange", "deg": 45},
-                                style={"fontSize": 30, "textAlign": "center"},
+                            dmc.Center(
+                                DashIconify(
+                                    icon="tabler:database-off",
+                                    width=64,
+                                    height=64,
+                                    color=colors["red"],
+                                )
                             ),
-                        ]
-                    )
+                            dmc.Text(
+                                "No data available",
+                                size="xl",
+                                fw="bold",
+                                ta="center",
+                                c=colors["red"],
+                                style={"color": f"var(--app-text-color, {colors['red']})"},
+                            ),
+                            dmc.Text(
+                                "Please first register workflows and data using Depictio CLI",
+                                size="md",
+                                ta="center",
+                                c="gray",
+                                style={"color": "var(--app-text-color, #666)"},
+                            ),
+                        ],
+                        gap="md",
+                        align="center",
+                    ),
+                    p="xl",
+                    radius="lg",
+                    shadow="sm",
+                    withBorder=True,
+                    style={
+                        "backgroundColor": "var(--app-surface-color, #ffffff)",
+                        "border": f"1px solid var(--app-border-color, {colors['red']}20)",
+                        "maxWidth": "500px",
+                        "marginTop": "2rem",
+                    },
                 ),
-                dmc.Text(
-                    "Please first register workflows and data using Depictio CLI.",
-                    variant="gradient",
-                    gradient={"from": "red", "to": "orange", "deg": 45},
-                    style={"fontSize": 25, "textAlign": "center"},
-                ),
-            ]
+                style={
+                    "height": "50vh",
+                    "display": "flex",
+                    "alignItems": "center",
+                    "justifyContent": "center",
+                },
+            )
         )
         display_style = "none"  # Hide the draggable layout
         core_children = [message]
@@ -3274,8 +3557,8 @@ def design_draggable(
 
     # Debug logging for grid configuration
     logger.debug("🔍 GRID DEBUG - Creating DashGridLayout with configuration:")
-    logger.debug("🔍 GRID DEBUG - rowHeight: 50")
-    logger.debug("🔍 GRID DEBUG - cols: {'lg': 12, 'md': 12, 'sm': 12, 'xs': 12, 'xxs': 12}")
+    logger.debug("🔍 GRID DEBUG - rowHeight: 20")
+    logger.debug("🔍 GRID DEBUG - cols: {'lg': 48, 'md': 48, 'sm': 48, 'xs': 48, 'xxs': 48}")
     logger.debug(
         f"🔍 GRID DEBUG - current_layout items: {len(current_layout) if current_layout else 0}"
     )
@@ -3287,14 +3570,21 @@ def design_draggable(
         id="draggable",
         items=draggable_items,
         itemLayout=current_layout,
-        rowHeight=50,  # Larger row height for better component display
-        cols={"lg": 12, "md": 10, "sm": 6, "xs": 4, "xxs": 2},
+        rowHeight=20,  # Ultra-fine row height for maximum vertical precision
+        cols={
+            "lg": 48,
+            "md": 48,
+            "sm": 48,
+            "xs": 48,
+            "xxs": 48,
+        },  # 48-column grid for ultimate layout flexibility and precision
         showRemoveButton=False,  # Keep consistent - CSS handles visibility
         showResizeHandles=True,  # Enable resize functionality for vertical growing behavior
         className="draggable-grid-container",  # CSS class for styling
         allowOverlap=False,
         # Additional parameters to try to disable responsive scaling
         autoSize=True,  # Let grid auto-size instead of using responsive breakpoints
+        margin=[2, 2],  # Minimal margin between grid items [x, y]
         style={
             "display": display_style,
             "flex-grow": 1,

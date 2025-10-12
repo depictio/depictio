@@ -30,6 +30,7 @@ from depictio.dash.modules.card_component.utils import build_card
 from depictio.dash.modules.figure_component.utils import build_figure
 from depictio.dash.modules.interactive_component.utils import build_interactive
 from depictio.dash.modules.jbrowse_component.utils import build_jbrowse
+from depictio.dash.modules.multiqc_component.utils import build_multiqc
 from depictio.dash.modules.table_component.utils import build_table
 from depictio.dash.modules.text_component.utils import build_text
 
@@ -44,7 +45,7 @@ COMPONENT_METADATA = {
         "supports_reset": True,  # For scatter plots
         "enabled": True,  # Enable by default
         "build_function": build_figure,
-        "default_dimensions": {"w": 2, "h": 2},  # Adjusted for 12-column grid with rowHeight=50
+        "default_dimensions": {"w": 8, "h": 6},  # Adjusted for 48-column grid with rowHeight=20
     },
     "card": {
         "icon": "formkit:number",
@@ -55,7 +56,10 @@ COMPONENT_METADATA = {
         "supports_reset": False,
         "enabled": True,  # Enable by default
         "build_function": build_card,
-        "default_dimensions": {"w": 2, "h": 2},  # Adjusted for 12-column grid - cards are smaller
+        "default_dimensions": {
+            "w": 6,
+            "h": 5,
+        },  # Adjusted for 48-column grid with rowHeight=20 - compact cards
     },
     "interactive": {
         "icon": "bx:slider-alt",
@@ -67,9 +71,9 @@ COMPONENT_METADATA = {
         "enabled": True,  # Enable by default
         "build_function": build_interactive,
         "default_dimensions": {
-            "w": 2,
-            "h": 2,
-        },  # Adjusted for 12-column grid - interactive controls are medium
+            "w": 8,
+            "h": 5,
+        },  # Adjusted for 48-column grid with rowHeight=20 - wider interactive controls
     },
     "table": {
         "icon": "octicon:table-24",
@@ -81,9 +85,9 @@ COMPONENT_METADATA = {
         "enabled": True,  # Enable by default
         "build_function": build_table,
         "default_dimensions": {
-            "w": 2,
-            "h": 2,
-        },  # Adjusted for 12-column grid - tables need more space
+            "w": 12,
+            "h": 12,
+        },  # Adjusted for 48-column grid with rowHeight=20 - tables need substantial space
     },
     "jbrowse": {
         "icon": "material-symbols:table-rows-narrow-rounded",
@@ -95,9 +99,9 @@ COMPONENT_METADATA = {
         "enabled": False,  # Disable by default
         "build_function": build_jbrowse,
         "default_dimensions": {
-            "w": 2,
-            "h": 2,
-        },  # Adjusted for 12-column grid - genome browser needs full width
+            "w": 24,
+            "h": 15,
+        },  # Adjusted for 48-column grid with rowHeight=20 - large genome browser
     },
     "text": {
         "icon": "mdi:text-box-edit",
@@ -109,9 +113,23 @@ COMPONENT_METADATA = {
         "enabled": True,  # Enable by default
         "build_function": build_text,
         "default_dimensions": {
-            "w": 2,
-            "h": 2,
-        },  # Adjusted for 12-column grid - text content is medium width
+            "w": 12,
+            "h": 9,
+        },  # Adjusted for 48-column grid with rowHeight=20 - ample text area
+    },
+    "multiqc": {
+        "icon": "mdi:chart-line",
+        "display_name": "MultiQC",
+        "description": "MultiQC quality control reports and visualizations",
+        "color": colors["orange"],
+        "supports_edit": False,  # MultiQC is read-only visualization
+        "supports_reset": False,  # No reset functionality
+        "enabled": True,  # Enable by default
+        "build_function": build_multiqc,
+        "default_dimensions": {
+            "w": 32,
+            "h": 30,
+        },  # Adjusted for 48-column grid with rowHeight=20 - full-featured MultiQC reports
     },
 }
 
@@ -233,7 +251,7 @@ def get_component_dimensions_dict() -> dict:
         dict: Dictionary with component types as keys and dimension dicts as values
     """
     return {
-        component_type: metadata.get("default_dimensions", {"w": 6, "h": 8})
+        component_type: metadata.get("default_dimensions", {"w": 24, "h": 20})
         for component_type, metadata in COMPONENT_METADATA.items()
     }
 
@@ -245,8 +263,9 @@ DISPLAY_NAME_TO_TYPE_MAPPING = {
     "Interactive": "interactive",
     "Table": "table",
     "JBrowse2": "jbrowse",
-    "JBrowse": "jbrowse",  # Alternative nme
+    "JBrowse": "jbrowse",  # Alternative name
     "Text": "text",
+    "MultiQC": "multiqc",
     "None": None,  # Default case
 }
 

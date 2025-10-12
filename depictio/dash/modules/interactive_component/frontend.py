@@ -8,6 +8,7 @@ from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 
 # Depictio imports
+from depictio.dash.colors import colors
 from depictio.dash.component_metadata import get_component_color, get_dmc_button_color, is_enabled
 from depictio.dash.modules.interactive_component.utils import (
     agg_functions,
@@ -189,7 +190,9 @@ def register_callbacks_interactive_component(app):
             Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
             Input({"type": "input-dropdown-method", "index": MATCH}, "value"),
             Input({"type": "input-dropdown-scale", "index": MATCH}, "value"),
-            # Input({"type": "input-color-picker", "index": MATCH}, "value"),  # Disabled color picker
+            Input({"type": "input-color-picker", "index": MATCH}, "value"),
+            Input({"type": "input-icon-selector", "index": MATCH}, "value"),
+            Input({"type": "input-title-size", "index": MATCH}, "value"),
             Input({"type": "input-number-marks", "index": MATCH}, "value"),
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
@@ -206,7 +209,9 @@ def register_callbacks_interactive_component(app):
         column_value,
         aggregation_value,
         scale_value,
-        # color_value,  # Disabled color picker
+        color_value,
+        icon_name,
+        title_size,
         marks_number,
         workflow_id,
         data_collection_id,
@@ -224,8 +229,9 @@ def register_callbacks_interactive_component(app):
         logger.info(f"  column_value: {column_value}")
         logger.info(f"  aggregation_value: {aggregation_value}")
         logger.info(f"  scale_value: {scale_value}")
-        # logger.info(f"  color_value: {color_value}")  # Disabled color picker
-        color_value = None  # Default value since color picker is disabled
+        logger.info(f"  color_value: {color_value}")
+        logger.info(f"  icon_name: {icon_name}")
+        logger.info(f"  title_size: {title_size}")
         logger.info(f"  marks_number: {marks_number}")
         logger.info(f"  workflow_id: {workflow_id}")
         logger.info(f"  data_collection_id: {data_collection_id}")
@@ -309,19 +315,37 @@ def register_callbacks_interactive_component(app):
                 logger.info(f"Using scale_value from form: {scale_value}")
 
             if marks_number is None:
-                marks_number = component_data.get("marks_number", 5)
+                marks_number = component_data.get("marks_number", 2)
                 logger.info(f"Using marks_number from component_data: {marks_number}")
             else:
                 logger.info(f"Using marks_number from form: {marks_number}")
 
-            # Restore color from component_data if it was saved (for components created before color picker was disabled)
-            if color_value is None:
+            # Restore color from component_data if not provided in form
+            if not color_value:
                 saved_color = component_data.get("custom_color", None)
                 if saved_color:
                     color_value = saved_color
                     logger.info(f"Using saved color_value from component_data: {color_value}")
                 else:
-                    logger.info("No saved color found, keeping color_value as None")
+                    logger.info("No saved color found, keeping color_value as empty")
+
+            # Restore title_size from component_data if not provided in form
+            if not title_size:
+                title_size = component_data.get("title_size", "md")
+                logger.info(f"Using title_size from component_data: {title_size}")
+            else:
+                logger.info(f"Using title_size from form: {title_size}")
+
+            # Restore icon_name from component_data if not provided in form
+            if not icon_name:
+                saved_icon = component_data.get("icon_name", None)
+                if saved_icon:
+                    icon_name = saved_icon
+                    logger.info(f"Using saved icon_name from component_data: {icon_name}")
+                else:
+                    logger.info("No saved icon found, keeping icon_name as empty")
+            else:
+                logger.info(f"Using icon_name from form: {icon_name}")
 
         logger.info("Using final values:")
         logger.info(f"  column_value: {column_value}")
@@ -587,7 +611,9 @@ def register_callbacks_interactive_component(app):
             "parent_index": parent_index,
             "build_frame": False,  # Don't build frame - return just the content for the input-body container
             "scale": scale_value,
-            "color": color_value,  # Re-enabled since we set default value
+            "color": color_value,
+            "icon_name": icon_name,
+            "title_size": title_size,
             "marks_number": marks_number,
         }
 
@@ -607,6 +633,82 @@ def register_callbacks_interactive_component(app):
             interactive_description,
             columns_description_df,
         )
+
+    @app.callback(
+        Output({"type": "interactive-component-value", "index": MATCH}, "value"),
+        Input({"type": "reset-selection-graph-button", "index": MATCH}, "n_clicks"),
+        Input("reset-all-filters-button", "n_clicks"),
+        State({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        State("interactive-values-store", "data"),
+        prevent_initial_call=True,
+    )
+    def reset_interactive_component_to_default(
+        individual_reset_clicks, reset_all_clicks, component_metadata, store_data
+    ):
+        """
+        Reset interactive component to its default state ONLY when reset buttons are clicked.
+        On page load/refresh, preserves existing values from store.
+        Generic for all current and future interactive component types.
+        """
+        from dash import ctx, no_update
+
+        # Check if callback was triggered (not just initial call)
+        if not ctx.triggered_id:
+            logger.debug("No trigger detected, skipping reset")
+            return no_update
+
+        if not component_metadata:
+            logger.warning("No component metadata available for reset")
+            return no_update
+
+        component_index = component_metadata.get("index")
+        component_type = component_metadata.get("interactive_component_type")
+        triggered_id = ctx.triggered_id
+
+        # Check if this is actually a reset button click (not just a store update)
+        is_reset_trigger = "reset-selection-graph-button" in str(
+            triggered_id
+        ) or "reset-all-filters-button" in str(triggered_id)
+
+        if not is_reset_trigger:
+            # Not a reset button - preserve existing value from store
+            logger.debug(f"📥 Non-reset trigger for {component_index}, preserving store value")
+            if store_data:
+                components = store_data.get("interactive_components_values", [])
+                for component in components:
+                    if component.get("index") == component_index:
+                        existing_value = component.get("value")
+                        logger.info(
+                            f"✅ Preserving existing value for {component_index}: {existing_value}"
+                        )
+                        return existing_value
+            logger.debug(f"No store value found for {component_index}, no update")
+            return no_update
+
+        # RESET TRIGGERED - return default value
+        logger.info(
+            f"🔄 Reset triggered for component {component_index} ({component_type}) by {triggered_id}"
+        )
+
+        # Get default state from metadata
+        default_state = component_metadata.get("default_state", {})
+
+        # Generic default value logic (extendable for future components)
+        if "default_range" in default_state:
+            default_value = default_state["default_range"]
+            logger.info(f"✅ Resetting {component_index} to default_range: {default_value}")
+            return default_value
+        elif "default_value" in default_state:
+            default_value = default_state["default_value"]
+            logger.info(f"✅ Resetting {component_index} to default_value: {default_value}")
+            return default_value
+        else:
+            # Fallback based on component type
+            fallback_value = [] if component_type == "MultiSelect" else None
+            logger.info(
+                f"✅ Resetting {component_index} ({component_type}) to fallback: {fallback_value}"
+            )
+            return fallback_value
 
 
 def design_interactive(id, df):
@@ -657,49 +759,102 @@ def design_interactive(id, df):
                                     clearable=False,
                                     style={"display": "none"},  # Initially hidden
                                 ),
-                                # dmc.Stack(  # Disabled color picker
-                                #     [
-                                #         dmc.Text("Color customization", size="sm", fw="bold"),
-                                #         dmc.ColorInput(
-                                #             label="Pick any color from the page",
-                                #             w=250,
-                                #             id={
-                                #                 "type": "input-color-picker",
-                                #                 "index": id["index"],
-                                #             },
-                                #             value="var(--app-text-color, #000000)",
-                                #             format="hex",
-                                #             # leftSection=DashIconify(icon="cil:paint"),
-                                #             swatches=[
-                                #                 colors["purple"],  # Depictio brand colors first
-                                #                 colors["blue"],
-                                #                 colors["teal"],
-                                #                 colors["green"],
-                                #                 colors["yellow"],
-                                #                 colors["orange"],
-                                #                 colors["pink"],
-                                #                 colors["red"],
-                                #                 colors["violet"],
-                                #                 colors["black"],
-                                #                 # "#25262b",  # Additional neutral colors
-                                #                 # "#868e96",
-                                #                 # "#fa5252",
-                                #                 # "#e64980",
-                                #                 # "#be4bdb",
-                                #                 # "#7950f2",
-                                #                 # "#4c6ef5",
-                                #                 # "#228be6",
-                                #                 # "#15aabf",
-                                #                 # "#12b886",
-                                #                 # "#40c057",
-                                #                 # "#82c91e",
-                                #                 # "#fab005",
-                                #                 # "#fd7e14",
-                                #             ],
-                                #         ),
-                                #     ],
-                                #     gap="xs",
-                                # ),
+                                dmc.ColorInput(
+                                    label="Color",
+                                    description="Component color (leave empty for auto theme)",
+                                    id={
+                                        "type": "input-color-picker",
+                                        "index": id["index"],
+                                    },
+                                    value="",  # Empty string for DMC compliance
+                                    format="hex",
+                                    placeholder="Auto (follows theme)",
+                                    swatches=[
+                                        colors["purple"],
+                                        colors["blue"],
+                                        colors["teal"],
+                                        colors["green"],
+                                        colors["yellow"],
+                                        colors["orange"],
+                                        colors["pink"],
+                                        colors["red"],
+                                        colors["violet"],
+                                        colors["black"],
+                                    ],
+                                ),
+                                dmc.Select(
+                                    label="Icon",
+                                    description="Select an icon for your component",
+                                    id={
+                                        "type": "input-icon-selector",
+                                        "index": id["index"],
+                                    },
+                                    data=[
+                                        {"label": "🎚️ Slider Alt", "value": "bx:slider-alt"},
+                                        {"label": "📊 Chart Line", "value": "mdi:chart-line"},
+                                        {"label": "🔢 Counter", "value": "mdi:counter"},
+                                        {"label": "🌡️ Thermometer", "value": "mdi:thermometer"},
+                                        {"label": "💧 Water", "value": "mdi:water"},
+                                        {"label": "🧪 Flask", "value": "mdi:flask"},
+                                        {"label": "💨 Air Filter", "value": "mdi:air-filter"},
+                                        {"label": "⚡ Flash", "value": "mdi:flash"},
+                                        {"label": "📊 Gauge", "value": "mdi:gauge"},
+                                        {"label": "💦 Water Percent", "value": "mdi:water-percent"},
+                                        {"label": "📏 Ruler", "value": "mdi:ruler"},
+                                        {"label": "🌫️ Blur", "value": "mdi:blur"},
+                                        {"label": "🌿 Leaf", "value": "mdi:leaf"},
+                                        {"label": "✅ Check Circle", "value": "mdi:check-circle"},
+                                        {"label": "🎯 Target", "value": "mdi:target"},
+                                        {
+                                            "label": "🎪 Bullseye Arrow",
+                                            "value": "mdi:bullseye-arrow",
+                                        },
+                                        {"label": "⚗️ Flask Empty", "value": "mdi:flask-empty"},
+                                        {"label": "🛡️ Shield Check", "value": "mdi:shield-check"},
+                                        {
+                                            "label": "📈 Chart Bell Curve",
+                                            "value": "mdi:chart-bell-curve",
+                                        },
+                                        {"label": "🔗 Scatter Plot", "value": "mdi:scatter-plot"},
+                                        {"label": "⚠️ Alert Circle", "value": "mdi:alert-circle"},
+                                        {"label": "📡 Sine Wave", "value": "mdi:sine-wave"},
+                                        {"label": "🧬 Beaker", "value": "mdi:beaker"},
+                                        {"label": "⚙️ Speedometer", "value": "mdi:speedometer"},
+                                        {"label": "⚡ Flash Outline", "value": "mdi:flash-outline"},
+                                        {"label": "📊 Trending Up", "value": "mdi:trending-up"},
+                                        {"label": "🧬 DNA", "value": "mdi:dna"},
+                                        {
+                                            "label": "🗺️ Map Marker Path",
+                                            "value": "mdi:map-marker-path",
+                                        },
+                                        {"label": "📋 Content Copy", "value": "mdi:content-copy"},
+                                        {"label": "🔽 Select", "value": "mdi:form-select"},
+                                        {"label": "🔘 Radio", "value": "mdi:radiobox-marked"},
+                                        {"label": "☑️ Checkbox", "value": "mdi:checkbox-marked"},
+                                        {"label": "🔀 Switch", "value": "mdi:toggle-switch"},
+                                        {"label": "📅 Calendar", "value": "mdi:calendar-range"},
+                                    ],
+                                    value="bx:slider-alt",
+                                    searchable=True,
+                                    clearable=False,
+                                ),
+                                dmc.Select(
+                                    label="Title Size",
+                                    description="Choose the size of the component title",
+                                    id={
+                                        "type": "input-title-size",
+                                        "index": id["index"],
+                                    },
+                                    data=[
+                                        {"label": "Extra Small", "value": "xs"},
+                                        {"label": "Small", "value": "sm"},
+                                        {"label": "Medium", "value": "md"},
+                                        {"label": "Large", "value": "lg"},
+                                        {"label": "Extra Large", "value": "xl"},
+                                    ],
+                                    value="md",
+                                    clearable=False,
+                                ),
                                 dmc.NumberInput(
                                     label="Number of marks (for sliders)",
                                     description="Choose how many marks to display on the slider",
@@ -707,8 +862,8 @@ def design_interactive(id, df):
                                         "type": "input-number-marks",
                                         "index": id["index"],
                                     },
-                                    value=5,
-                                    min=3,
+                                    value=2,
+                                    min=2,
                                     max=10,
                                     step=1,
                                     style={"display": "none"},  # Initially hidden

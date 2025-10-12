@@ -146,6 +146,8 @@ def register_callbacks_save(app):
         n_clicks_apply,
         live_interactivity_on,
     ):
+        logger.info("=== SAVE CALLBACK TRIGGERED ===")
+        logger.info(f"CTX TRIGGERED: {dash.ctx.triggered_id}")
         logger.info("Saving dashboard data...")
         logger.info(
             f"📊 SAVE DEBUG - Raw stored_metadata count: {len(stored_metadata) if stored_metadata else 0}"
@@ -178,7 +180,7 @@ def register_callbacks_save(app):
             for elem in stored_metadata
         ]
         logger.info(f"Stored metadata for logging: {stored_metadata_for_logging}")
-        logger.info(f"Stored complete metadata: {stored_metadata}")
+        # logger.info(f"Stored complete metadata: {stored_metadata}")
 
         # Early return if user is not logged in
         if not local_store:
@@ -257,11 +259,11 @@ def register_callbacks_save(app):
         # Check if trigger is interactive component value change
         # If so, check if live interactivity is enabled
         triggered_by_interactive = "interactive-component-value" in triggered_id
-        if triggered_by_interactive and not live_interactivity_on:
-            logger.info(
-                "⏸️ NON-LIVE MODE: Interactive component value changed but live interactivity is OFF - ignoring save"
-            )
-            raise dash.exceptions.PreventUpdate
+        # if triggered_by_interactive and not live_interactivity_on:
+        #     logger.info(
+        #         "⏸️ NON-LIVE MODE: Interactive component value changed but live interactivity is OFF - ignoring save"
+        #     )
+        #     raise dash.exceptions.PreventUpdate
 
         # Check if trigger is apply filters button
         if "apply-filters-button" in triggered_id and not live_interactivity_on:
@@ -369,7 +371,7 @@ def register_callbacks_save(app):
             unique_metadata.append(best_metadata)
             seen_indexes.add(index)
 
-        logger.info(f"📊 SAVE DEBUG - Unique metadata: {unique_metadata}")
+        # logger.info(f"📊 SAVE DEBUG - Unique metadata: {unique_metadata}")
 
         # Summary logging of deduplication results
         # logger.info(
@@ -505,6 +507,23 @@ def register_callbacks_save(app):
                 # Clear parent_index since this is now the final component (no longer a child)
                 component["parent_index"] = None
                 logger.info(f"Cleared parent_index for final component {parent_index}")
+
+                # CRITICAL FIX: Update layout IDs to match the updated component index
+                # This prevents layout destruction when dashboard reloads
+                if stored_layout_data:
+                    old_layout_id = f"box-{component_index}"
+                    new_layout_id = f"box-{parent_index}"
+
+                    for layout in stored_layout_data:
+                        layout_id = layout.get("i", "")
+                        # Check if this layout belongs to the edited component
+                        if layout_id == old_layout_id:
+                            # Update layout ID to match the new component index
+                            layout["i"] = new_layout_id
+                            logger.info(
+                                f"🔧 LAYOUT FIX - Updated layout ID: {old_layout_id} → {new_layout_id}"
+                            )
+                            break  # Only one layout per component
 
                 logger.info(
                     f"Updated component data: type={component.get('component_type')}, title={component.get('title')}, aggregation={component.get('aggregation')}"
@@ -644,9 +663,10 @@ def register_callbacks_save(app):
 
         # Apply interactive component values to metadata when Apply button is clicked or live mode is active
         # This uses the interactive_component_values parameter that's automatically collected from all components
-        if ("apply-filters-button" in triggered_id and not live_interactivity_on) or (
-            triggered_by_interactive and live_interactivity_on
-        ):
+        if triggered_by_interactive:
+            # if ("apply-filters-button" in triggered_id and not live_interactivity_on) or (
+            #     triggered_by_interactive and live_interactivity_on
+            # ):
             logger.info("🔄 UPDATING METADATA WITH CURRENT INTERACTIVE COMPONENT VALUES")
 
             # Get interactive components from metadata to match with values
@@ -770,7 +790,7 @@ def register_callbacks_save(app):
         # Pure side-effect callback - no return needed
 
     @app.callback(
-        Output("success-modal-dashboard", "is_open"),
+        Output("success-modal-dashboard", "opened"),
         Input("save-button-dashboard", "n_clicks"),
         prevent_initial_call=True,
     )
@@ -782,8 +802,8 @@ def register_callbacks_save(app):
     # Auto-dismiss modal after 3 seconds
     app.clientside_callback(
         """
-        function(is_open) {
-            if (is_open) {
+        function(opened) {
+            if (opened) {
                 setTimeout(function() {
                     // Find and click outside to close modal
                     const backdrop = document.querySelector('.modal-backdrop');
@@ -796,5 +816,5 @@ def register_callbacks_save(app):
         }
         """,
         Output("success-modal-dashboard", "id"),
-        Input("success-modal-dashboard", "is_open"),
+        Input("success-modal-dashboard", "opened"),
     )

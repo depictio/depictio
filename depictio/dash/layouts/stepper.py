@@ -115,6 +115,7 @@ def register_callbacks_stepper(app):
         mapping_component_data_collection = {
             "table": ["Figure", "Card", "Interactive", "Table", "Text"],
             "jbrowse2": ["JBrowse2"],
+            "multiqc": ["MultiQC"],
         }
 
         logger.info(f"Component selected: {component_selected}")
@@ -192,6 +193,7 @@ def register_callbacks_stepper(app):
         mapping_component_data_collection = {
             "table": ["Figure", "Card", "Interactive", "Table", "Text"],
             "jbrowse2": ["JBrowse2"],
+            "multiqc": ["MultiQC"],
         }
 
         logger.info(f"Component selected: {component_selected}")
@@ -227,12 +229,29 @@ def register_callbacks_stepper(app):
                         for dc in selected_wf_data["data_collections"]
                     }
 
+                    # Create a mapping from DC ID to DC type for filtering
+                    dc_id_to_type = {
+                        dc["id"]: dc["config"]["type"]
+                        for dc in selected_wf_data["data_collections"]
+                    }
+
                     # Add joined DC options
                     for join_key, join_config in workflow_joins.items():
                         # Extract DC IDs from join key (format: "dc_id1--dc_id2")
                         dc_ids = join_key.split("--")
                         if len(dc_ids) == 2:
                             dc1_id, dc2_id = dc_ids
+
+                            # Skip joins involving multiqc data collections
+                            # MultiQC data should only be accessible via MultiQC component
+                            dc1_type = dc_id_to_type.get(dc1_id, "")
+                            dc2_type = dc_id_to_type.get(dc2_id, "")
+                            if dc1_type == "multiqc" or dc2_type == "multiqc":
+                                logger.debug(
+                                    f"Skipping join {join_key} involving multiqc data collection"
+                                )
+                                continue
+
                             dc1_tag = dc_id_to_tag.get(dc1_id, dc1_id)
                             dc2_tag = dc_id_to_tag.get(dc2_id, dc2_id)
 
@@ -309,16 +328,18 @@ def register_callbacks_stepper(app):
         next_step = current_step  # Default to the current step if no actions require a change
 
         # Check if any btn-option was clicked
-        btn_clicks = [btn for btn in btn_option_clicks if btn > 0]
+        btn_clicks = [btn for btn in btn_option_clicks if btn is not None and btn > 0]
         if btn_clicks:
             # Check if Text component was selected
             if isinstance(triggered_id, dict) and triggered_id.get("type") == "btn-option":
                 component_selected = triggered_id.get("value")
                 logger.info(f"Component selected: {component_selected}")
-                if component_selected == "Text":
-                    # Text components don't need data selection, skip to design step
+                if component_selected in ["Text", "MultiQC"]:
+                    # Text and MultiQC components don't need data selection, skip to design step
                     next_step = 2  # Move directly to component design step
-                    logger.info(f"Text component selected, advancing to step {next_step}")
+                    logger.info(
+                        f"{component_selected} component selected, advancing to step {next_step}"
+                    )
                     return next_step, False  # Return immediately to avoid further processing
                 else:
                     # Other components need data selection
@@ -363,6 +384,29 @@ def register_callbacks_stepper(app):
 
         try:
             TOKEN = local_data["access_token"]
+
+            # Check data collection type to determine if preview is needed
+            try:
+                response = httpx.get(
+                    f"{API_BASE_URL}/depictio/api/v1/datacollections/{data_collection_id}",
+                    headers={"Authorization": f"Bearer {TOKEN}"},
+                )
+
+                if response.status_code == 200:
+                    dc_info = response.json()
+                    dc_type = dc_info.get("config", {}).get("type", "").lower()
+
+                    if dc_type == "multiqc":
+                        # MultiQC data collections don't have traditional tabular data for preview
+                        return dmc.Alert(
+                            "MultiQC data collections don't show a data preview. Use the Figure component to visualize MultiQC reports.",
+                            color="blue",
+                            title="MultiQC Data Collection",
+                            icon=DashIconify(icon="mdi:chart-line"),
+                        )
+            except Exception as e:
+                logger.warning(f"Error checking data collection type for preview: {e}")
+                # Continue with normal preview if check fails
 
             # Load data preview (first 100 rows for stepper)
             df = load_deltatable_lite(
@@ -480,11 +524,18 @@ def register_callbacks_stepper(app):
 
         except Exception as e:
             logger.error(f"Error in stepper data preview: {e}")
-            return dmc.Alert(
-                f"Error loading data preview: {str(e)}",
-                color="red",
-                title="Preview Error",
-            )
+            # Check if this might be a MultiQC-related error (deltatable 404)
+            error_str = str(e).lower()
+            if "deltatable" in error_str or "404" in error_str:
+                # Likely a MultiQC collection without delta table - hide error
+                return html.Div()
+            else:
+                # Show error for other types of failures
+                return dmc.Alert(
+                    f"Error loading data preview: {str(e)}",
+                    color="red",
+                    title="Preview Error",
+                )
 
 
 def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):

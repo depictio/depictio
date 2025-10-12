@@ -264,13 +264,13 @@ class ParameterInspector:
                 "hexagon",
                 "star",
             ],
-            "description": "Marker symbol for scatter plots",
+            "description": "Marker symbol (applied uniformly to all points). To vary symbols by category, select a column from your data.",
             # "default": "circle",
         },
         "line_dash": {
             "type": ParameterType.SELECT,
             "options": ["solid", "dot", "dash", "longdash", "dashdot", "longdashdot"],
-            "description": "Line dash pattern for line plots",
+            "description": "Line dash pattern (applied uniformly to all lines). To vary dash patterns by category, select a column from your data.",
             "default": "solid",
         },
     }

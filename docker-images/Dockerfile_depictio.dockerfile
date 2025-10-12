@@ -45,9 +45,14 @@ RUN rm -f /tmp/depictio.yaml
 
 # Install dependencies more efficiently
 RUN apt-get update && apt-get install --no-install-recommends -y \
-    xvfb xauth sudo git git-lfs curl netcat-openbsd \
+    xvfb xauth sudo git git-lfs curl netcat-openbsd s3fs \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# Create S3 mount directory with proper permissions
+RUN mkdir -p /mnt/s3 && \
+    chmod 755 /mnt/s3 && \
+    chown $MAMBA_USER:$MAMBA_USER /mnt/s3
 
 # Create a shared directory for Playwright browsers with appropriate permissions
 RUN mkdir -p /usr/local/share/playwright-browsers && \

@@ -1,12 +1,7 @@
-import collections
-
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, api_call_get_dashboard
-from depictio.dash.component_metadata import get_build_functions
-from depictio.dash.layouts.draggable_scenarios.interactive_component_update import (
-    update_interactive_component_sync,
-)
+from depictio.dash.component_metadata import DISPLAY_NAME_TO_TYPE_MAPPING, get_build_functions
 from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
     create_skeleton_component,
 )
@@ -16,35 +11,6 @@ from depictio.models.utils import convert_model_to_dict
 
 # Get build functions from centralized metadata
 build_functions = get_build_functions()
-
-
-def return_interactive_components_dict(dashboard_data):
-    # logger.info(f"Dashboard data: {dashboard_data}")
-
-    # logger.debug(f"Dashboard data: {dashboard_data}")
-    # logger.debug(f"Dashboard data type: {type(dashboard_data)}")
-
-    interactive_components_dict = collections.defaultdict(dict)
-
-    for e in dashboard_data:
-        # logger.debug(f"e: {e}")
-
-        if "component_type" not in e:
-            logger.debug(f"Component type not found in e: {e}")
-            continue
-
-        if e["component_type"] == "interactive":
-            # logger.debug(f"e: {e}")
-            # logger.debug(f"e['value']: {e['value']}")
-            # logger.debug(f"e['component_type']: {e['component_type']}")
-            interactive_components_dict[e["index"]] = {
-                "value": e["value"],
-                "metadata": e,
-            }
-
-    # interactive_components_dict = {e["index"]: {"value": e["value"], "metadata": e} for e in dashboard_data if e["component_type"] == "interactive"}
-    # logger.debug(f"Interactive components dict: {interactive_components_dict}")
-    return interactive_components_dict
 
 
 def render_dashboard(stored_metadata, edit_components_button, dashboard_id, theme, TOKEN):
@@ -87,6 +53,15 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
 
         # Extract the type of the child (assuming there is a type key in the metadata)
         component_type = child_metadata.get("component_type", None)
+
+        # Handle legacy case conversion for existing components (e.g., "MultiQC" -> "multiqc")
+        if component_type not in build_functions and component_type in DISPLAY_NAME_TO_TYPE_MAPPING:
+            original_type = component_type
+            component_type = DISPLAY_NAME_TO_TYPE_MAPPING[component_type]
+            logger.info(f"Converting legacy component type '{original_type}' to '{component_type}'")
+            # Update the metadata to use the correct type for consistency
+            child_metadata["component_type"] = component_type
+
         # logger.info(f"component_type : {component_type}")
         if component_type not in build_functions:
             logger.warning(f"Unsupported child type: {component_type}")
@@ -103,98 +78,31 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
         # Build the child using the appropriate function and kwargs
         child = build_function(**child_metadata)
         # logger.debug(f"child : ")
-        # Store child with its component type for later processing
-        children.append((child, component_type))
+        # Store child with its component type and metadata for later processing
+        children.append((child, component_type, child_metadata))
     # logger.info(f"Children: {children}")
-
-    interactive_components_dict = return_interactive_components_dict(stored_metadata)
 
     # Process children with special handling for text components to avoid circular JSON
     processed_children = []
-    for child, component_type in children:
-        logger.info(f"Processing child component: {child.id} of type {component_type}")
-        # try:
-        # if component_type == "text":
-        #     # For text components, try to_plotly_json() first, but catch circular reference errors
-        #     logger.info(
-        #         "Attempting to_plotly_json() for text component with circular reference protection"
-        #     )
-        #     try:
-        #         child_json = child.to_plotly_json()
-        #     except (ValueError, TypeError) as e:
-        #         if "circular" in str(e).lower() or "json" in str(e).lower():
-        #             logger.warning(
-        #                 f"Circular reference detected in text component, using fallback approach: {e}"
-        #             )
-        #             # Create a minimal JSON structure for the text component
-        #             # Extract the essential information without the problematic RichTextEditor
-        #             child_json = {
-        #                 "type": "Div",
-        #                 "props": {
-        #                     "id": {
-        #                         "index": child.id.get("index")
-        #                         if hasattr(child, "id") and child.id
-        #                         else "unknown"
-        #                     },
-        #                     "children": "Text Component (Circular Reference Avoided)",
-        #                 },
-        #             }
-        #         else:
-        #             raise  # Re-raise if it's not a circular reference issue
+    for child, component_type, child_metadata in children:
+        logger.info(f"Processing child component of type {component_type}")
 
-        #     processed_child = enable_box_edit_mode(
-        #         child_json,
-        #         switch_state=edit_components_button,
-        #         dashboard_id=dashboard_id,
-        #         TOKEN=TOKEN,
-        #     )
-        # else:
-        # For other components, use the standard to_plotly_json() approach
         processed_child = enable_box_edit_mode(
-            child.to_plotly_json(),
+            child,  # Pass native Dash component directly
             switch_state=edit_components_button,
             dashboard_id=dashboard_id,
+            component_data=child_metadata,  # Pass component metadata to help with ID extraction
             TOKEN=TOKEN,
         )
-        # if component_type == "text":
-        #     logger.info(
-        #         f"Processed text component {processed_child.id} with content: {processed_child}"
-        #     )
-        #     logger.info(f"Processed child: {processed_child}")
         processed_children.append(processed_child)
-        # except Exception as e:
-        #     logger.error(f"Error processing {component_type} component: {e}")
-        #     # Add a fallback component to prevent the entire dashboard from failing
-        #     fallback_child = {
-        #         "type": "Div",
-        #         "props": {
-        #             "id": {"index": f"error-{component_type}"},
-        #             "children": f"Error loading {component_type} component",
-        #         },
-        #     }
-        #     processed_child = enable_box_edit_mode(
-        #         fallback_child,
-        #         switch_state=edit_components_button,
-        #         dashboard_id=dashboard_id,
-        #         TOKEN=TOKEN,
-        #     )
-        #     processed_children.append(processed_child)
 
-    children = processed_children
-    # logger.info(f"Children: {children}")
-
-    children = update_interactive_component_sync(
-        stored_metadata,
-        interactive_components_dict,
-        children,
-        switch_state=edit_components_button,
-        TOKEN=TOKEN,
-        dashboard_id=dashboard_id,
-        theme=theme,  # Pass theme to interactive component updates
+    # Pattern-matching callbacks handle initial value population (prevent_initial_call=False)
+    # No need for sync rebuild - cards, figures, tables all self-initialize
+    logger.info(
+        f"✅ Dashboard restored with {len(processed_children)} components - pattern-matching callbacks will populate values"
     )
-    # logger.info(f"Updated children after interactive component processing: {children}")
 
-    return children
+    return processed_children
 
 
 def render_dashboard_with_skeletons(

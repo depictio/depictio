@@ -1,0 +1,395 @@
+{
+  "fastqc": {
+    "tool_name": "FastQC",
+    "description": "Quality control tool for high throughput sequencing data",
+    "href": "http://www.bioinformatics.babraham.ac.uk/projects/fastqc/",
+    "module_file": "fastqc/fastqc.py",
+    "general_stats_columns": {
+      "percent_duplicates": {
+        "title": "Dups",
+        "description": "% duplicate reads",
+        "data_type": "percentage",
+        "max": 100,
+        "min": 0,
+        "suffix": "%",
+        "scale": "RdYlGn-rev",
+        "format": "float",
+        "category": "quality_metrics"
+      },
+      "percent_gc": {
+        "title": "GC",
+        "description": "Average % GC content",
+        "data_type": "percentage",
+        "max": 100,
+        "min": 0,
+        "suffix": "%",
+        "scale": "PuRd",
+        "format": "{:,.1f}",
+        "category": "sequence_composition"
+      },
+      "avg_sequence_length": {
+        "title": "Avg len",
+        "description": "Average read length",
+        "data_type": "numeric",
+        "min": 0,
+        "suffix": " bp",
+        "scale": "RdYlGn",
+        "format": "{:,.0f}",
+        "hidden": true,
+        "category": "sequence_metrics"
+      },
+      "median_sequence_length": {
+        "title": "Median len",
+        "description": "Median read length",
+        "data_type": "numeric",
+        "min": 0,
+        "suffix": " bp",
+        "scale": "RdYlGn",
+        "format": "{:,.0f}",
+        "hidden": "conditional",
+        "category": "sequence_metrics"
+      },
+      "percent_fails": {
+        "title": "Failed",
+        "description": "Percentage of modules failed in FastQC report (includes those not plotted here)",
+        "data_type": "percentage",
+        "max": 100,
+        "min": 0,
+        "suffix": "%",
+        "scale": "Reds",
+        "format": "{:,.0f}",
+        "hidden": true,
+        "category": "quality_metrics"
+      },
+      "total_sequences": {
+        "title": "Seqs",
+        "description": "Total sequences (read count)",
+        "data_type": "count",
+        "min": 0,
+        "scale": "Blues",
+        "shared_key": "read_count",
+        "category": "basic_stats"
+      }
+    },
+    "extraction_info": {
+      "line_number": 478,
+      "extraction_method": "automatic_ast_parsing",
+      "uses_column_key": true,
+      "namespace": null
+    }
+  },
+  "star": {
+    "tool_name": "STAR",
+    "description": "Universal RNA-seq aligner",
+    "href": "https://github.com/alexdobin/STAR",
+    "doi": "10.1093/bioinformatics/bts635",
+    "module_file": "star/star.py",
+    "general_stats_columns": {
+      "total_reads": {
+        "title": "Total reads",
+        "description": "Number of input reads",
+        "data_type": "count",
+        "scale": "Blues",
+        "shared_key": "read_count",
+        "hidden": true,
+        "category": "basic_stats"
+      },
+      "mapped": {
+        "title": "Aligned",
+        "description": "Mapped reads",
+        "data_type": "count",
+        "scale": "PuRd",
+        "shared_key": "read_count",
+        "hidden": true,
+        "category": "alignment_stats"
+      },
+      "mapped_percent": {
+        "title": "Aligned",
+        "description": "% Mapped reads",
+        "data_type": "percentage",
+        "suffix": "%",
+        "scale": "PuRd",
+        "category": "alignment_stats"
+      },
+      "uniquely_mapped": {
+        "title": "Uniq aligned",
+        "description": "Uniquely mapped reads",
+        "data_type": "count",
+        "scale": "YlGn",
+        "shared_key": "read_count",
+        "hidden": true,
+        "category": "alignment_stats"
+      },
+      "uniquely_mapped_percent": {
+        "title": "Uniq aligned",
+        "description": "% Uniquely mapped reads",
+        "data_type": "percentage",
+        "suffix": "%",
+        "scale": "YlGn",
+        "category": "alignment_stats"
+      },
+      "multimapped": {
+        "title": "Multimapped",
+        "description": "Multiple mapped reads",
+        "data_type": "count",
+        "scale": "PuRd",
+        "shared_key": "read_count",
+        "hidden": true,
+        "category": "alignment_stats"
+      },
+      "avg_input_read_length": {
+        "title": "Avg. read len",
+        "description": "Average input read length",
+        "data_type": "numeric",
+        "suffix": "bp",
+        "scale": "Blues",
+        "hidden": true,
+        "category": "sequence_metrics"
+      },
+      "avg_mapped_read_length": {
+        "title": "Avg. mapped len",
+        "description": "Average mapped length",
+        "data_type": "numeric",
+        "suffix": "bp",
+        "scale": "Blues",
+        "category": "sequence_metrics"
+      },
+      "num_annotated_splices": {
+        "title": "Annotated splices",
+        "description": "Number of splices: Annotated (sjdb)",
+        "data_type": "count",
+        "scale": "Blues",
+        "shared_key": "read_count",
+        "category": "splice_metrics"
+      }
+    },
+    "extraction_info": {
+      "line_number": 153,
+      "extraction_method": "manual_code_analysis",
+      "uses_column_key": false,
+      "namespace": null,
+      "notes": "Uses variable-based headers pattern: self.general_stats_addcols(data_by_sample, headers)"
+    }
+  },
+  "samtools_flagstat": {
+    "tool_name": "Samtools flagstat",
+    "description": "Summary statistics from samtools flagstat",
+    "href": "http://www.htslib.org/doc/samtools.html",
+    "module_file": "samtools/flagstat.py",
+    "parent_tool": "samtools",
+    "general_stats_columns": {
+      "flagstat_total": {
+        "title": "Reads",
+        "description": "Total reads in the bam file (read count)",
+        "data_type": "count",
+        "shared_key": "read_count",
+        "hidden": true,
+        "category": "basic_stats"
+      },
+      "mapped_passed": {
+        "title": "Reads mapped",
+        "description": "Reads mapped in the bam file (read count)",
+        "data_type": "count",
+        "shared_key": "read_count",
+        "category": "alignment_stats"
+      },
+      "mapped_passed_pct": {
+        "title": "% Reads mapped",
+        "description": "% Reads mapped in the bam file",
+        "data_type": "percentage",
+        "min": 0,
+        "max": 100,
+        "suffix": "%",
+        "scale": "RdYlGn",
+        "hidden": true,
+        "category": "alignment_stats"
+      }
+    },
+    "extraction_info": {
+      "line_number": 62,
+      "extraction_method": "manual_code_analysis",
+      "uses_column_key": false,
+      "namespace": "flagstat",
+      "notes": "Uses utility function pattern: module.get_general_stats_headers(all_headers=flagstat_headers)"
+    }
+  },
+  "samtools_stats": {
+    "tool_name": "Samtools stats",
+    "description": "Comprehensive statistics from samtools stats",
+    "href": "http://www.htslib.org/doc/samtools.html",
+    "module_file": "samtools/stats.py",
+    "parent_tool": "samtools",
+    "general_stats_columns": {
+      "raw_total_sequences": {
+        "title": "Total reads",
+        "description": "Total number of reads in the input file",
+        "data_type": "count",
+        "shared_key": "read_count",
+        "scale": "Blues",
+        "category": "basic_stats"
+      },
+      "filtered_sequences": {
+        "title": "Filtered",
+        "description": "Reads filtered by samtools",
+        "data_type": "count",
+        "shared_key": "read_count",
+        "scale": "Reds",
+        "hidden": true,
+        "category": "quality_metrics"
+      },
+      "sequences": {
+        "title": "Sequences",
+        "description": "Total sequences after filtering",
+        "data_type": "count",
+        "shared_key": "read_count",
+        "scale": "Blues",
+        "hidden": true,
+        "category": "basic_stats"
+      },
+      "reads_mapped": {
+        "title": "Mapped",
+        "description": "Reads mapped to reference",
+        "data_type": "count",
+        "shared_key": "read_count",
+        "scale": "PuRd",
+        "category": "alignment_stats"
+      },
+      "reads_mapped_percent": {
+        "title": "Mapped %",
+        "description": "Percentage of reads mapped",
+        "data_type": "percentage",
+        "suffix": "%",
+        "max": 100,
+        "min": 0,
+        "scale": "PuRd",
+        "category": "alignment_stats"
+      },
+      "error_rate": {
+        "title": "Error rate",
+        "description": "Error rate from alignment",
+        "data_type": "rate",
+        "suffix": "%",
+        "max": 100,
+        "min": 0,
+        "scale": "OrRd",
+        "category": "quality_metrics"
+      },
+      "average_length": {
+        "title": "Avg len",
+        "description": "Average read length",
+        "data_type": "numeric",
+        "suffix": "bp",
+        "scale": "Blues",
+        "category": "sequence_metrics"
+      },
+      "maximum_length": {
+        "title": "Max len",
+        "description": "Maximum read length",
+        "data_type": "numeric",
+        "suffix": "bp",
+        "scale": "Blues",
+        "hidden": true,
+        "category": "sequence_metrics"
+      },
+      "average_quality": {
+        "title": "Avg qual",
+        "description": "Average base quality",
+        "data_type": "quality",
+        "min": 0,
+        "max": 45,
+        "scale": "RdYlGn",
+        "category": "quality_metrics"
+      }
+    },
+    "extraction_info": {
+      "extraction_method": "manual_code_analysis",
+      "uses_column_key": false,
+      "namespace": "stats",
+      "notes": "Complex statistics module with many optional metrics"
+    }
+  },
+  "samtools_coverage": {
+    "tool_name": "Samtools coverage",
+    "description": "Coverage statistics from samtools coverage",
+    "href": "http://www.htslib.org/doc/samtools.html",
+    "module_file": "samtools/coverage.py",
+    "parent_tool": "samtools",
+    "general_stats_columns": {
+      "coverage": {
+        "title": "Coverage",
+        "description": "Mean coverage depth",
+        "data_type": "numeric",
+        "min": 0,
+        "suffix": "x",
+        "scale": "Blues",
+        "category": "coverage_metrics"
+      },
+      "meandepth": {
+        "title": "Mean depth",
+        "description": "Mean depth of coverage",
+        "data_type": "numeric",
+        "min": 0,
+        "suffix": "x",
+        "scale": "Blues",
+        "category": "coverage_metrics"
+      },
+      "baseq": {
+        "title": "Base quality",
+        "description": "Mean base quality at covered positions",
+        "data_type": "quality",
+        "min": 0,
+        "max": 45,
+        "scale": "RdYlGn",
+        "category": "quality_metrics"
+      },
+      "mapq": {
+        "title": "Map quality",
+        "description": "Mean mapping quality",
+        "data_type": "quality",
+        "min": 0,
+        "max": 60,
+        "scale": "RdYlGn",
+        "category": "quality_metrics"
+      }
+    },
+    "extraction_info": {
+      "extraction_method": "manual_code_analysis",
+      "uses_column_key": false,
+      "namespace": "coverage",
+      "notes": "Coverage-specific statistics module"
+    }
+  },
+  "metadata_info": {
+    "extraction_date": "2025-09-23",
+    "extractor_version": "1.0",
+    "multiqc_version_analyzed": "1.x",
+    "multiqc_path": "/Users/tweber/Gits/workspaces/MultiQC-MegaQC/multiqc_latest",
+    "extraction_methods": {
+      "automatic_ast_parsing": "Used AST parsing to extract metadata from Python code",
+      "manual_code_analysis": "Manual analysis of code patterns and variable definitions"
+    },
+    "column_categories": {
+      "basic_stats": "Basic sequencing statistics (read counts, sequences)",
+      "alignment_stats": "Alignment and mapping statistics",
+      "quality_metrics": "Quality assessment metrics",
+      "sequence_metrics": "Sequence length and composition metrics",
+      "coverage_metrics": "Coverage depth and distribution metrics",
+      "splice_metrics": "RNA-seq splicing statistics"
+    },
+    "data_types": {
+      "count": "Integer count values (reads, sequences, etc.)",
+      "percentage": "Percentage values (0-100%)",
+      "numeric": "General numeric values",
+      "rate": "Rate or proportion values",
+      "quality": "Quality scores (Phred, mapping quality)"
+    },
+    "scale_types": {
+      "Blues": "Blue color scale for counts/basic metrics",
+      "PuRd": "Purple-Red for alignment metrics",
+      "RdYlGn": "Red-Yellow-Green for quality metrics (reverse available)",
+      "YlGn": "Yellow-Green for positive metrics",
+      "Reds": "Red scale for error/failure metrics",
+      "OrRd": "Orange-Red for warning metrics"
+    }
+  }
+}

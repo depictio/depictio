@@ -139,12 +139,16 @@ def register_all_callbacks(app):
     from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
         register_progressive_loading_callbacks,
     )
-    from depictio.dash.layouts.edit import register_reset_button_callbacks
+    from depictio.dash.layouts.edit import (
+        register_partial_data_button_callbacks,
+        register_reset_button_callbacks,
+    )
     # from depictio.dash.theme_utils import register_theme_bridge_callback
 
     # register_theme_bridge_callback(app)
     register_progressive_loading_callbacks(app)
     register_reset_button_callbacks(app)
+    register_partial_data_button_callbacks(app)
 
     # Register analytics callbacks
     # from depictio.dash.components.analytics_tracker import register_analytics_callbacks
@@ -205,6 +209,9 @@ def register_component_callbacks(app):
     from depictio.dash.modules.jbrowse_component.frontend import (
         register_callbacks_jbrowse_component,
     )
+    from depictio.dash.modules.multiqc_component.frontend import (
+        register_callbacks_multiqc_component,
+    )
     from depictio.dash.modules.table_component.frontend import register_callbacks_table_component
     from depictio.dash.modules.text_component.frontend import register_callbacks_text_component
 
@@ -213,6 +220,7 @@ def register_component_callbacks(app):
     register_callbacks_interactive_component(app)
     register_callbacks_figure_component(app)
     register_callbacks_jbrowse_component(app)
+    register_callbacks_multiqc_component(app)
     register_callbacks_table_component(app)
     register_callbacks_text_component(app)
 

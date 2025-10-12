@@ -125,7 +125,7 @@ class FastAPIConfig(ServiceConfig):
     service_port: int = Field(default=8058)
     external_port: int = Field(default=8058)
     host: str = Field(default="0.0.0.0")
-    workers: int = Field(default=1)
+    workers: int = Field(default=4)
     ssl: bool = Field(default=False)
     logging_level: str = Field(default="INFO")
 
@@ -137,7 +137,7 @@ class DashConfig(ServiceConfig):
     service_port: int = Field(default=5080)
     external_port: int = Field(default=5080)
     host: str = Field(default="0.0.0.0")
-    workers: int = Field(default=1)
+    workers: int = Field(default=4)
     debug: bool = Field(default=True)
     auto_generate_figures: bool = Field(
         default=False, description="Enable automatic figure generation in UI mode"
@@ -169,6 +169,7 @@ class MongoDBConfig(ServiceConfig):
         dashboards_collection: str = Field(default="dashboards")
         initialization_collection: str = Field(default="initialization")
         projects_collection: str = Field(default="projects")
+        multiqc_collection: str = Field(default="multiqc")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)
@@ -300,6 +301,20 @@ class PerformanceConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_PERFORMANCE_")
 
 
+class S3CacheConfig(BaseSettings):
+    """S3 file caching configuration for MultiQC and other S3 operations."""
+
+    # Cache directory for S3 files
+    cache_dir: str = Field(
+        default="/tmp/depictio_s3_cache", description="Local directory for S3 file cache"
+    )
+
+    # FUSE mount points (optional, comma-separated)
+    mount_points: str = Field(default="", description="Comma-separated S3 FUSE mount points")
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_S3_")
+
+
 class CacheConfig(BaseSettings):
     """Redis cache configuration settings."""
 
@@ -386,21 +401,28 @@ class CeleryConfig(BaseSettings):
         # Fallback to REDIS_PASSWORD env var (used by docker-compose)
         import os
 
-        redis_password = os.getenv("REDIS_PASSWORD", "depictio_cache_2024")
+        redis_password = os.getenv("REDIS_PASSWORD", "")
         return redis_password
 
     @computed_field
     @property
     def broker_url(self) -> str:
         """Construct Redis broker URL."""
-        return f"redis://:{self._redis_password}@{self.broker_host}:{self.broker_port}/{self.broker_db}"
+        # Only include auth if password is set and not empty
+        password = self._redis_password
+        if password and password != "":
+            return f"redis://:{password}@{self.broker_host}:{self.broker_port}/{self.broker_db}"
+        return f"redis://{self.broker_host}:{self.broker_port}/{self.broker_db}"
 
     @computed_field
     @property
     def result_backend_url(self) -> str:
         """Construct Redis result backend URL."""
         result_password = self.result_backend_password or self._redis_password
-        return f"redis://:{result_password}@{self.result_backend_host}:{self.result_backend_port}/{self.result_backend_db}"
+        # Only include auth if password is set and not empty
+        if result_password and result_password != "":
+            return f"redis://:{result_password}@{self.result_backend_host}:{self.result_backend_port}/{self.result_backend_db}"
+        return f"redis://{self.result_backend_host}:{self.result_backend_port}/{self.result_backend_db}"
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_CELERY_")
 
@@ -569,6 +591,7 @@ class Settings(BaseSettings):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     jbrowse: JBrowseConfig = Field(default_factory=JBrowseConfig)
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
+    s3_cache: S3CacheConfig = Field(default_factory=S3CacheConfig)
     cache: CacheConfig = Field(default_factory=CacheConfig)
     celery: CeleryConfig = Field(default_factory=CeleryConfig)
     backup: BackupConfig = Field(default_factory=BackupConfig)

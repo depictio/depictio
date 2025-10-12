@@ -1,12 +1,113 @@
 import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
-from dash import Input, html
+from dash import MATCH, Input, Output, State, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.layouts.header import _is_different_from_default
 from depictio.dash.layouts.stepper import create_stepper_output_edit
 from depictio.dash.utils import get_component_data
+
+
+def register_partial_data_button_callbacks(app):
+    """Register callbacks to update partial data warning popover content with real counts."""
+
+    # NOTE: The popover content update callback has been moved to frontend.py
+    # (update_partial_data_popover_from_interactive) to avoid duplicate callbacks
+    # and ensure it's closer to the data source for better synchronization.
+    #
+    # @app.callback(
+    #     Output({"type": "partial-data-popover-content", "index": MATCH}, "children"),
+    #     Input({"type": "stored-metadata-component", "index": MATCH}, "data"),
+    #     State({"type": "partial-data-popover-content", "index": MATCH}, "id"),
+    #     prevent_initial_call=False,
+    # )
+    # def update_partial_data_popover(metadata, component_id):
+    #     """Update the partial data warning popover with actual data counts."""
+    #     from dash import callback_context
+    #
+    #     from depictio.dash.modules.figure_component.utils import ComponentConfig
+    #
+    #     config = ComponentConfig()
+    #     cutoff = config.max_data_points
+    #
+    #     # Extract counts from metadata
+    #     displayed_count = cutoff
+    #     total_count = cutoff
+    #     was_sampled = False
+    #
+    #     if metadata:
+    #         displayed_count = metadata.get("displayed_data_count", cutoff)
+    #         total_count = metadata.get("total_data_count", cutoff)
+    #         was_sampled = metadata.get("was_sampled", False)
+    #
+    #     # Get component index for logging
+    #     ctx = callback_context
+    #     trigger = ctx.triggered[0]["prop_id"] if ctx.triggered else "initial"
+    #     component_index = component_id.get("index", "unknown") if component_id else "unknown"
+    #
+    #     logger.info(
+    #         f"📊 [{component_index}] Popover update triggered by: {trigger}, data: displayed={displayed_count:,}, total={total_count:,}, sampled={was_sampled}"
+    #     )
+    #
+    #     # Create updated children - include values in keys to force React re-render
+    #     updated_children = html.Div(
+    #         [
+    #             html.Div(
+    #                 f"Showing: {displayed_count:,} points",
+    #                 key=f"showing-{component_index}-{displayed_count}",
+    #             ),
+    #             html.Div(
+    #                 f"Total: {total_count:,} points", key=f"total-{component_index}-{total_count}"
+    #             ),
+    #             html.Div(
+    #                 "Full dataset available for analysis",
+    #                 style={"marginTop": "8px", "fontStyle": "italic", "fontSize": "0.9em"},
+    #                 key=f"footer-{component_index}",
+    #             ),
+    #         ],
+    #         key=f"content-wrapper-{component_index}-{displayed_count}-{total_count}",
+    #     )
+    #
+    #     logger.info(
+    #         f"📊 [{component_index}] Returning updated children to partial-data-popover-content"
+    #     )
+    #
+    #     return updated_children
+
+    # Server-side callback to control button wrapper visibility
+    @app.callback(
+        Output({"type": "partial-data-button-wrapper", "index": MATCH}, "style"),
+        Input({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        State({"type": "partial-data-button-wrapper", "index": MATCH}, "id"),
+        prevent_initial_call=False,
+    )
+    def update_partial_data_button_visibility(metadata, wrapper_id):
+        """Show/hide the partial data warning button based on whether data was sampled."""
+        # Default: hidden
+        hidden_style = {"display": "none", "visibility": "hidden"}
+        visible_style = {"display": "inline-flex", "visibility": "visible"}
+
+        if not metadata:
+            logger.info("📊 No metadata yet, keeping button hidden")
+            return hidden_style
+
+        # Extract sampling information
+        was_sampled = metadata.get("was_sampled", False)
+        displayed_count = metadata.get("displayed_data_count", 0)
+        total_count = metadata.get("total_data_count", 0)
+
+        # Show button only if data was actually sampled
+        should_show = was_sampled and (displayed_count < total_count)
+
+        component_index = wrapper_id.get("index", "unknown") if wrapper_id else "unknown"
+
+        logger.info(
+            f"📊 [{component_index}] Button visibility: sampled={was_sampled}, "
+            f"displayed={displayed_count:,}, total={total_count:,}, show={should_show}"
+        )
+
+        return visible_style if should_show else hidden_style
 
 
 def register_reset_button_callbacks(app):
@@ -200,6 +301,8 @@ def _create_component_buttons(
     create_duplicate_button,
     create_reset_button,
     create_alignment_button=None,
+    create_metadata_button=None,
+    create_partial_data_warning_button=None,
 ):
     """Create action buttons based on component type and configuration.
 
@@ -210,13 +313,15 @@ def _create_component_buttons(
     button_configs = {
         "figure": {
             "orientation": "vertical",
-            "buttons": ["drag", "remove", "edit", "duplicate"],
+            "buttons": ["drag", "remove", "edit", "duplicate", "metadata"],
             "scatter_buttons": [
+                "partial_data",  # Show partial data warning first for scatter plots
                 "drag",
                 "remove",
                 "edit",
                 "duplicate",
                 "reset",
+                "metadata",
             ],  # Special case for scatter plots
         },
         "interactive": {
@@ -227,6 +332,7 @@ def _create_component_buttons(
                 "edit",
                 "duplicate",
                 "reset",
+                "metadata",
             ],  # Interactive components get reset button
         },
         "card": {
@@ -236,18 +342,19 @@ def _create_component_buttons(
                 "remove",
                 "edit",
                 "duplicate",
-                # "reset",
-            ],  # Interactive components get reset button
+                "metadata",
+            ],
         },
-        "table": {"orientation": "horizontal", "buttons": ["drag", "remove"]},
-        "jbrowse": {"orientation": "horizontal", "buttons": ["drag", "remove"]},
+        "table": {"orientation": "horizontal", "buttons": ["drag", "remove", "metadata"]},
+        "jbrowse": {"orientation": "horizontal", "buttons": ["drag", "remove", "metadata"]},
+        "multiqc": {"orientation": "vertical", "buttons": ["drag", "remove", "metadata"]},
         "text": {
             "orientation": "horizontal",
-            "buttons": ["drag", "remove", "duplicate", "alignment"],
+            "buttons": ["drag", "remove", "duplicate", "alignment", "metadata"],
         },  # Text components get alignment button (no edit button)
         "default": {
             "orientation": "horizontal",
-            "buttons": ["drag", "remove"],
+            "buttons": ["drag", "remove", "metadata"],
         },
     }
 
@@ -258,7 +365,7 @@ def _create_component_buttons(
     if component_type == "figure":
         visu_type = component_data.get("visu_type", None) if component_data else None
         if visu_type and visu_type.lower() == "scatter":
-            button_list = config["scatter_buttons"]
+            button_list = config["scatter_buttons"].copy()
         else:
             button_list = config["buttons"]
     else:
@@ -277,8 +384,16 @@ def _create_component_buttons(
     if create_alignment_button is not None:
         button_functions["alignment"] = create_alignment_button
 
+    # Add metadata button only if the function is provided
+    if create_metadata_button is not None:
+        button_functions["metadata"] = create_metadata_button
+
+    # Add partial data warning button only if the function is provided
+    if create_partial_data_warning_button is not None:
+        button_functions["partial_data"] = create_partial_data_warning_button
+
     # Create the actual button components
-    button_components = [button_functions[btn]() for btn in button_list]
+    button_components = [button_functions[btn]() for btn in button_list if btn in button_functions]
 
     # Log configuration for debugging
     if component_type:
@@ -338,9 +453,13 @@ def enable_box_edit_mode(
         logger.warning(f"Component missing id, generated fallback: {fallback_id}")
         return fallback_id
 
-    btn_index = extract_component_id(box)
-
-    logger.debug(f"ENABLE BOX EDIT MODE - index: {btn_index}")
+    # Prioritize component_data index if available, otherwise extract from component
+    if component_data and "index" in component_data:
+        btn_index = component_data["index"]
+        logger.debug(f"ENABLE BOX EDIT MODE - Using index from component_data: {btn_index}")
+    else:
+        btn_index = extract_component_id(box)
+        logger.debug(f"ENABLE BOX EDIT MODE - Extracted index from component: {btn_index}")
 
     component_type = None
     if not component_data:
@@ -456,8 +575,247 @@ def enable_box_edit_mode(
             id={"type": "alignment-menu", "index": f"{btn_index}"},
         )
 
+    def create_metadata_button():
+        """Create metadata info button with Popover to display component metadata."""
+        import json
+
+        # Get metadata from component_data if available
+        metadata_dict = {}
+        if component_data:
+            # Base metadata for all components
+            metadata_dict = {
+                "index": component_data.get("index", btn_index),
+                "component_type": component_data.get("component_type", "unknown"),
+            }
+
+            # Add workflow and data collection info
+            if component_data.get("wf_id"):
+                metadata_dict["wf_id"] = str(component_data["wf_id"])
+            if component_data.get("dc_id"):
+                metadata_dict["dc_id"] = str(component_data["dc_id"])
+
+            # Component-specific metadata
+            component_type_value = component_data.get("component_type")
+
+            if component_type_value == "figure":
+                # Figure component metadata
+                metadata_dict["visu_type"] = component_data.get("visu_type", "N/A")
+                metadata_dict["mode"] = component_data.get("mode", "ui")
+
+                # Add dict_kwargs if available (most important for figures)
+                if "dict_kwargs" in component_data and component_data["dict_kwargs"]:
+                    dict_kwargs = component_data["dict_kwargs"]
+                    metadata_dict["plot_parameters"] = {}
+
+                    # Extract common plot parameters
+                    for key in [
+                        "x",
+                        "y",
+                        "z",
+                        "color",
+                        "size",
+                        "facet_col",
+                        "facet_row",
+                        "hover_data",
+                    ]:
+                        if key in dict_kwargs and dict_kwargs[key]:
+                            metadata_dict["plot_parameters"][key] = dict_kwargs[key]
+
+                    # Add aggregation info if present
+                    if "aggregation_col" in dict_kwargs and dict_kwargs["aggregation_col"]:
+                        metadata_dict["plot_parameters"]["aggregation"] = {
+                            "column": dict_kwargs["aggregation_col"],
+                            "method": dict_kwargs.get("aggregation_method", "N/A"),
+                        }
+
+                    # Add other important kwargs
+                    for key in ["title", "labels", "color_discrete_map", "category_orders"]:
+                        if key in dict_kwargs and dict_kwargs[key]:
+                            metadata_dict["plot_parameters"][key] = dict_kwargs[key]
+
+                # Add filter status
+                metadata_dict["filter_applied"] = component_data.get("filter_applied", False)
+
+            elif component_type_value == "interactive":
+                # Interactive component metadata
+                metadata_dict["interactive_type"] = component_data.get(
+                    "interactive_component_type", "N/A"
+                )
+                if "default_state" in component_data:
+                    metadata_dict["default_state"] = component_data["default_state"]
+
+            elif component_type_value == "card":
+                # Card component metadata
+                if "card_value" in component_data:
+                    metadata_dict["card_value"] = component_data["card_value"]
+                if "aggregation_method" in component_data:
+                    metadata_dict["aggregation_method"] = component_data["aggregation_method"]
+
+            elif component_type_value == "table":
+                # Table component metadata
+                if "columns" in component_data:
+                    metadata_dict["columns"] = component_data["columns"]
+
+            # Add last updated timestamp
+            if component_data.get("last_updated"):
+                metadata_dict["last_updated"] = component_data["last_updated"]
+
+        # Format as JSON string
+        metadata_json = json.dumps(metadata_dict, indent=2, default=str)
+
+        return html.Div(
+            dmc.Popover(
+                [
+                    dmc.PopoverTarget(
+                        dmc.Tooltip(
+                            label="Component metadata",
+                            position="top",
+                            openDelay=300,
+                            children=dmc.ActionIcon(
+                                id={"type": "metadata-info-button", "index": f"{btn_index}"},
+                                color="cyan",
+                                variant="filled",
+                                size="sm",
+                                radius=0,
+                                children=DashIconify(
+                                    icon="mdi:information-outline", width=16, color="white"
+                                ),
+                            ),
+                        )
+                    ),
+                    dmc.PopoverDropdown(
+                        dmc.Stack(
+                            [
+                                dmc.Text("Component Configuration", size="sm", fw="bold", mb="xs"),
+                                dmc.CodeHighlight(
+                                    code=metadata_json,
+                                    language="json",
+                                    copyLabel="Copy metadata",
+                                    copiedLabel="Copied!",
+                                    style={
+                                        "maxWidth": "450px",
+                                        "fontSize": "10px",
+                                        "maxHeight": "400px",
+                                        "overflow": "auto",
+                                    },
+                                ),
+                            ],
+                            gap="xs",
+                        )
+                    ),
+                ],
+                width=500,
+                position="bottom",
+                withArrow=True,
+                shadow="md",
+            ),
+            className="metadata-button-wrapper",
+            style={"display": "inline-flex"},  # Ensure it doesn't add extra spacing
+        )
+
+    def create_partial_data_warning_button():
+        """Create partial data warning button with Popover for figure components.
+
+        Uses a Popover instead of Tooltip so the content can be updated dynamically
+        via callback when stored-metadata-component receives actual data counts.
+        """
+        from depictio.dash.modules.figure_component.utils import ComponentConfig
+
+        config = ComponentConfig()
+        cutoff = config.max_data_points
+
+        # Try to get initial counts from component_data if available
+        displayed_count = cutoff
+        total_count = cutoff
+
+        if component_data:
+            displayed_count = component_data.get("displayed_data_count", cutoff)
+            total_count = component_data.get("total_data_count", cutoff)
+
+        logger.info(
+            f"🎨 Creating partial data button with initial values: {displayed_count:,} / {total_count:,}"
+        )
+
+        # Initial content with best available data - will be updated by callback
+        # Structure: Stack > (Title, Content Div with children)
+        # Include values in keys to force React re-render when counts change
+        initial_content = dmc.Stack(
+            [
+                dmc.Text("⚠️ Partial Data Displayed", size="sm", fw="bold", mb="xs"),
+                html.Div(
+                    # Content div that will be replaced by callback
+                    html.Div(
+                        [
+                            html.Div(
+                                f"Showing: {displayed_count:,} points",
+                                key=f"showing-{btn_index}-{displayed_count}",
+                            ),
+                            html.Div(
+                                f"Total: {total_count:,} points",
+                                key=f"total-{btn_index}-{total_count}",
+                            ),
+                            html.Div(
+                                "Full dataset available for analysis",
+                                style={
+                                    "marginTop": "8px",
+                                    "fontStyle": "italic",
+                                    "fontSize": "0.9em",
+                                },
+                                key=f"footer-{btn_index}",
+                            ),
+                        ],
+                        key=f"content-wrapper-{btn_index}-{displayed_count}-{total_count}",
+                    ),
+                    id={"type": "partial-data-popover-content", "index": f"{btn_index}"},
+                ),
+            ],
+            gap="xs",
+        )
+
+        return html.Div(
+            dmc.Popover(
+                [
+                    dmc.PopoverTarget(
+                        dmc.Tooltip(
+                            label="Partial data displayed",
+                            position="top",
+                            openDelay=300,
+                            children=dmc.ActionIcon(
+                                id={"type": "partial-data-warning-button", "index": f"{btn_index}"},
+                                color="red",
+                                variant="filled",
+                                size="sm",
+                                radius=0,
+                                children=DashIconify(
+                                    icon="mdi:alert-circle-outline", width=16, color="white"
+                                ),
+                            ),
+                        )
+                    ),
+                    dmc.PopoverDropdown(initial_content),
+                ],
+                width=300,
+                position="bottom",
+                withArrow=True,
+                shadow="md",
+            ),
+            id={"type": "partial-data-button-wrapper", "index": f"{btn_index}"},
+            className="partial-data-button-wrapper",
+            # Start hidden - will be shown by callback only if data was sampled
+            style={"display": "none", "visibility": "hidden"},
+        )
+
     if switch_state:
         # Create buttons based on component type and configuration
+        # Conditionally create partial data warning button only for scatter plots with large datasets
+        partial_data_button_func = None
+        if component_type == "figure" and component_data:
+            visu_type = component_data.get("visu_type", None)
+            # Check if this is a scatter plot that might have partial data
+            # The actual check for data size will happen at render time
+            if visu_type and visu_type.lower() == "scatter":
+                partial_data_button_func = create_partial_data_warning_button
+
         buttons = _create_component_buttons(
             component_type,
             component_data,
@@ -468,6 +826,8 @@ def enable_box_edit_mode(
             create_duplicate_button,
             create_reset_button,
             create_alignment_button,
+            create_metadata_button,
+            partial_data_button_func,
         )
         # if fresh:
         #     buttons = dmc.Group([remove_button], grow=False, gap="xl", style={"margin-left": "12px"})

@@ -39,7 +39,8 @@ def create_dash_app():
     # Import the Dash-side Celery app
     # from depictio.dash.celery_app import celery_app
 
-    # background_callback_manager = CeleryManager(celery_app, cache_by=[lambda: uuid4()])
+    # background_callback_manager = dash.CeleryManager(celery_app)
+    # logger.info("✅ DASH: Celery background callback manager configured")
 
     # import diskcache
     # cache = diskcache.Cache("/app/cache")
@@ -65,6 +66,7 @@ def create_dash_app():
         assets_folder=assets_folder,
         assets_url_path="/assets",  # Explicitly set the assets URL path
         # background_callback_manager=background_callback_manager,  # Enable background callbacks
+        # show_undo_redo=False,
     )
 
     # Configure Flask's logger to use custom logging settings

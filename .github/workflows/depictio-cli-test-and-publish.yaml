@@ -44,7 +44,7 @@ jobs:
           uv pip install -e .
 
       - name: Install quality check dependencies
-        run: uv pip install ruff pytest pytest-xdist pytest-asyncio mongomock mongomock-motor build twine
+        run: uv pip install ruff pytest pytest-xdist pytest-asyncio mongomock mongomock-motor multiqc build twine
 
       - name: Run Ruff formatting
         run: ruff format depictio/cli depictio/models depictio/api/v1/configs

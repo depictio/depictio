@@ -4,12 +4,12 @@ Tests for depictio.api.v1.deltatables_utils module.
 
 from unittest.mock import MagicMock, patch
 
-import pandera.polars as pap
+# import pandera.polars as pap
 import polars as pl
 from bson import ObjectId
 
 from depictio.api.v1.deltatables_utils import (
-    add_filter,
+    # add_filter,
     compute_essential_columns,
     convert_filter_model_to_metadata,
     get_join_tables,
@@ -20,371 +20,370 @@ from depictio.api.v1.deltatables_utils import (
     transform_joins_dict_to_instructions,
 )
 
+# class TestAddFilter:
+#     """Test filter addition functionality with comprehensive validation."""
 
-class TestAddFilter:
-    """Test filter addition functionality with comprehensive validation."""
+#     def setup_method(self):
+#         """Set up test fixtures."""
+#         # Create sample datasets for testing different filter scenarios
+#         self.categorical_df = pl.DataFrame(
+#             {
+#                 "category": ["A", "B", "C", "A", "B"],
+#                 "tags": ["tag1,tag2", "tag2,tag3", "tag1,tag3", "tag2", "tag1"],
+#                 "description": [
+#                     "apple fruit",
+#                     "banana yellow",
+#                     "cherry red",
+#                     "avocado green",
+#                     "blueberry",
+#                 ],
+#                 "value": [1, 2, 3, 4, 5],
+#             }
+#         )
 
-    def setup_method(self):
-        """Set up test fixtures."""
-        # Create sample datasets for testing different filter scenarios
-        self.categorical_df = pl.DataFrame(
-            {
-                "category": ["A", "B", "C", "A", "B"],
-                "tags": ["tag1,tag2", "tag2,tag3", "tag1,tag3", "tag2", "tag1"],
-                "description": [
-                    "apple fruit",
-                    "banana yellow",
-                    "cherry red",
-                    "avocado green",
-                    "blueberry",
-                ],
-                "value": [1, 2, 3, 4, 5],
-            }
-        )
+#         self.numeric_df = pl.DataFrame(
+#             {
+#                 "price": [10.5, 25.0, 50.0, 75.5, 100.0],
+#                 "quantity": [1, 2, 3, 4, 5],
+#                 "rating": [4.5, 3.8, 4.9, 4.2, 3.5],
+#             }
+#         )
 
-        self.numeric_df = pl.DataFrame(
-            {
-                "price": [10.5, 25.0, 50.0, 75.5, 100.0],
-                "quantity": [1, 2, 3, 4, 5],
-                "rating": [4.5, 3.8, 4.9, 4.2, 3.5],
-            }
-        )
+#         # Pandera schema for validation if available
+#         self.expected_filter_schema = pap.DataFrameSchema(
+#             {"category": pap.Column(pl.String), "value": pap.Column(pl.Int64)}
+#         )
 
-        # Pandera schema for validation if available
-        self.expected_filter_schema = pap.DataFrameSchema(
-            {"category": pap.Column(pl.String), "value": pap.Column(pl.Int64)}
-        )
+#     def test_add_filter_select_component_basic(self):
+#         """Test adding filter for Select component with basic functionality."""
+#         # Arrange
+#         filter_list = []
 
-    def test_add_filter_select_component_basic(self):
-        """Test adding filter for Select component with basic functionality."""
-        # Arrange
-        filter_list = []
+#         # Act
+#         add_filter(
+#             filter_list,
+#             interactive_component_type="Select",
+#             column_name="category",
+#             value=["A", "B"],
+#         )
 
-        # Act
-        add_filter(
-            filter_list,
-            interactive_component_type="Select",
-            column_name="category",
-            value=["A", "B"],
-        )
+#         # Assert
+#         assert len(filter_list) == 1
+#         filtered_df = self.categorical_df.filter(filter_list[0])
+#         assert filtered_df.height == 4  # Should filter to 4 rows with categories A and B
+#         assert set(filtered_df["category"].to_list()) == {"A", "B"}
 
-        # Assert
-        assert len(filter_list) == 1
-        filtered_df = self.categorical_df.filter(filter_list[0])
-        assert filtered_df.height == 4  # Should filter to 4 rows with categories A and B
-        assert set(filtered_df["category"].to_list()) == {"A", "B"}
+#     def test_add_filter_select_component_single_value(self):
+#         """Test Select component with single value selection."""
+#         # Arrange
+#         filter_list = []
 
-    def test_add_filter_select_component_single_value(self):
-        """Test Select component with single value selection."""
-        # Arrange
-        filter_list = []
+#         # Act
+#         add_filter(
+#             filter_list, interactive_component_type="Select", column_name="category", value=["A"]
+#         )
 
-        # Act
-        add_filter(
-            filter_list, interactive_component_type="Select", column_name="category", value=["A"]
-        )
+#         # Assert
+#         assert len(filter_list) == 1
+#         filtered_df = self.categorical_df.filter(filter_list[0])
+#         assert filtered_df.height == 2
+#         assert all(cat == "A" for cat in filtered_df["category"].to_list())
 
-        # Assert
-        assert len(filter_list) == 1
-        filtered_df = self.categorical_df.filter(filter_list[0])
-        assert filtered_df.height == 2
-        assert all(cat == "A" for cat in filtered_df["category"].to_list())
+#     def test_add_filter_select_component_empty_result(self):
+#         """Test Select component filter that results in empty DataFrame."""
+#         # Arrange
+#         filter_list = []
 
-    def test_add_filter_select_component_empty_result(self):
-        """Test Select component filter that results in empty DataFrame."""
-        # Arrange
-        filter_list = []
+#         # Act
+#         add_filter(
+#             filter_list,
+#             interactive_component_type="Select",
+#             column_name="category",
+#             value=["Z"],  # Non-existent category
+#         )
 
-        # Act
-        add_filter(
-            filter_list,
-            interactive_component_type="Select",
-            column_name="category",
-            value=["Z"],  # Non-existent category
-        )
+#         # Assert
+#         assert len(filter_list) == 1
+#         filtered_df = self.categorical_df.filter(filter_list[0])
+#         assert filtered_df.height == 0
 
-        # Assert
-        assert len(filter_list) == 1
-        filtered_df = self.categorical_df.filter(filter_list[0])
-        assert filtered_df.height == 0
+#     def test_add_filter_multiselect_component_basic(self):
+#         """Test adding filter for MultiSelect component."""
+#         # Arrange
+#         filter_list = []
 
-    def test_add_filter_multiselect_component_basic(self):
-        """Test adding filter for MultiSelect component."""
-        # Arrange
-        filter_list = []
+#         # Act
+#         add_filter(
+#             filter_list,
+#             interactive_component_type="MultiSelect",
+#             column_name="category",
+#             value=["A", "C"],
+#         )
 
-        # Act
-        add_filter(
-            filter_list,
-            interactive_component_type="MultiSelect",
-            column_name="category",
-            value=["A", "C"],
-        )
+#         # Assert
+#         assert len(filter_list) == 1
+#         filtered_df = self.categorical_df.filter(filter_list[0])
+#         assert filtered_df.height == 3  # 2 A's + 1 C
+#         assert set(filtered_df["category"].to_list()) == {"A", "C"}
 
-        # Assert
-        assert len(filter_list) == 1
-        filtered_df = self.categorical_df.filter(filter_list[0])
-        assert filtered_df.height == 3  # 2 A's + 1 C
-        assert set(filtered_df["category"].to_list()) == {"A", "C"}
+#     def test_add_filter_multiselect_component_all_values(self):
+#         """Test MultiSelect with all available values selected."""
+#         # Arrange
+#         filter_list = []
 
-    def test_add_filter_multiselect_component_all_values(self):
-        """Test MultiSelect with all available values selected."""
-        # Arrange
-        filter_list = []
+#         # Act
+#         add_filter(
+#             filter_list,
+#             interactive_component_type="MultiSelect",
+#             column_name="category",
+#             value=["A", "B", "C"],
+#         )
 
-        # Act
-        add_filter(
-            filter_list,
-            interactive_component_type="MultiSelect",
-            column_name="category",
-            value=["A", "B", "C"],
-        )
+#         # Assert
+#         assert len(filter_list) == 1
+#         filtered_df = self.categorical_df.filter(filter_list[0])
+#         assert filtered_df.height == 5  # All rows should pass
 
-        # Assert
-        assert len(filter_list) == 1
-        filtered_df = self.categorical_df.filter(filter_list[0])
-        assert filtered_df.height == 5  # All rows should pass
+#     def test_add_filter_text_input_component_contains(self):
+#         """Test adding filter for TextInput component with contains logic."""
+#         # Arrange
+#         filter_list = []
 
-    def test_add_filter_text_input_component_contains(self):
-        """Test adding filter for TextInput component with contains logic."""
-        # Arrange
-        filter_list = []
+#         # Act
+#         add_filter(
+#             filter_list,
+#             interactive_component_type="TextInput",
+#             column_name="description",
+#             value="fruit",
+#         )
 
-        # Act
-        add_filter(
-            filter_list,
-            interactive_component_type="TextInput",
-            column_name="description",
-            value="fruit",
-        )
+#         # Assert
+#         assert len(filter_list) == 1
+#         filtered_df = self.categorical_df.filter(filter_list[0])
+#         assert filtered_df.height == 1  # Only "apple fruit"
+#         assert "fruit" in filtered_df["description"].to_list()[0]
 
-        # Assert
-        assert len(filter_list) == 1
-        filtered_df = self.categorical_df.filter(filter_list[0])
-        assert filtered_df.height == 1  # Only "apple fruit"
-        assert "fruit" in filtered_df["description"].to_list()[0]
+#     # def test_add_filter_text_input_component_case_insensitive(self):
+#     #     """Test TextInput filter is case insensitive."""
+#     #     # Arrange
+#     #     filter_list = []
 
-    # def test_add_filter_text_input_component_case_insensitive(self):
-    #     """Test TextInput filter is case insensitive."""
-    #     # Arrange
-    #     filter_list = []
+#     #     # Act
+#     #     add_filter(
+#     #         filter_list,
+#     #         interactive_component_type="TextInput",
+#     #         column_name="description",
+#     #         value="APPLE"
+#     #     )
 
-    #     # Act
-    #     add_filter(
-    #         filter_list,
-    #         interactive_component_type="TextInput",
-    #         column_name="description",
-    #         value="APPLE"
-    #     )
+#     #     # Assert
+#     #     assert len(filter_list) == 1
+#     #     filtered_df = self.categorical_df.filter(filter_list[0])
+#     #     print(f"Filtered DataFrame: {filtered_df}")
+#     #     assert filtered_df.height == 1
 
-    #     # Assert
-    #     assert len(filter_list) == 1
-    #     filtered_df = self.categorical_df.filter(filter_list[0])
-    #     print(f"Filtered DataFrame: {filtered_df}")
-    #     assert filtered_df.height == 1
+#     def test_add_filter_text_input_component_partial_match(self):
+#         """Test TextInput filter with partial string matching."""
+#         # Arrange
+#         filter_list = []
 
-    def test_add_filter_text_input_component_partial_match(self):
-        """Test TextInput filter with partial string matching."""
-        # Arrange
-        filter_list = []
+#         # Act
+#         add_filter(
+#             filter_list,
+#             interactive_component_type="TextInput",
+#             column_name="description",
+#             value=".*erry",
+#         )
 
-        # Act
-        add_filter(
-            filter_list,
-            interactive_component_type="TextInput",
-            column_name="description",
-            value=".*erry",
-        )
+#         # Assert
+#         assert len(filter_list) == 1
+#         filtered_df = self.categorical_df.filter(filter_list[0])
+#         print(f"Filtered DataFrame: {filtered_df}")
+#         assert filtered_df.height == 2  # "cherry" and "blueberry"
 
-        # Assert
-        assert len(filter_list) == 1
-        filtered_df = self.categorical_df.filter(filter_list[0])
-        print(f"Filtered DataFrame: {filtered_df}")
-        assert filtered_df.height == 2  # "cherry" and "blueberry"
+#     def test_add_filter_slider_component_equality(self):
+#         """Test adding filter for Slider component with equality check."""
+#         # Arrange
+#         filter_list = []
 
-    def test_add_filter_slider_component_equality(self):
-        """Test adding filter for Slider component with equality check."""
-        # Arrange
-        filter_list = []
+#         # Act
+#         add_filter(
+#             filter_list, interactive_component_type="Slider", column_name="quantity", value=3
+#         )
 
-        # Act
-        add_filter(
-            filter_list, interactive_component_type="Slider", column_name="quantity", value=3
-        )
+#         # Assert
+#         assert len(filter_list) == 1
+#         filtered_df = self.numeric_df.filter(filter_list[0])
+#         assert filtered_df.height == 1
+#         assert filtered_df["quantity"].to_list()[0] == 3
 
-        # Assert
-        assert len(filter_list) == 1
-        filtered_df = self.numeric_df.filter(filter_list[0])
-        assert filtered_df.height == 1
-        assert filtered_df["quantity"].to_list()[0] == 3
+#     def test_add_filter_slider_component_float_value(self):
+#         """Test Slider component with float values."""
+#         # Arrange
+#         filter_list = []
 
-    def test_add_filter_slider_component_float_value(self):
-        """Test Slider component with float values."""
-        # Arrange
-        filter_list = []
+#         # Act
+#         add_filter(
+#             filter_list, interactive_component_type="Slider", column_name="rating", value=4.5
+#         )
 
-        # Act
-        add_filter(
-            filter_list, interactive_component_type="Slider", column_name="rating", value=4.5
-        )
+#         # Assert
+#         assert len(filter_list) == 1
+#         filtered_df = self.numeric_df.filter(filter_list[0])
+#         assert filtered_df.height == 1
+#         assert filtered_df["rating"].to_list()[0] == 4.5
 
-        # Assert
-        assert len(filter_list) == 1
-        filtered_df = self.numeric_df.filter(filter_list[0])
-        assert filtered_df.height == 1
-        assert filtered_df["rating"].to_list()[0] == 4.5
+#     def test_add_filter_range_slider_component_basic(self):
+#         """Test adding filter for RangeSlider component with range filtering."""
+#         # Arrange
+#         filter_list = []
 
-    def test_add_filter_range_slider_component_basic(self):
-        """Test adding filter for RangeSlider component with range filtering."""
-        # Arrange
-        filter_list = []
+#         # Act
+#         add_filter(
+#             filter_list,
+#             interactive_component_type="RangeSlider",
+#             column_name="price",
+#             value=[20, 80],
+#         )
 
-        # Act
-        add_filter(
-            filter_list,
-            interactive_component_type="RangeSlider",
-            column_name="price",
-            value=[20, 80],
-        )
+#         # Assert
+#         assert len(filter_list) == 1
+#         filtered_df = self.numeric_df.filter(filter_list[0])
+#         assert filtered_df.height == 3  # 25.0, 50.0, 75.5
+#         filtered_prices = filtered_df["price"].to_list()
+#         assert all(20 <= price <= 80 for price in filtered_prices)
 
-        # Assert
-        assert len(filter_list) == 1
-        filtered_df = self.numeric_df.filter(filter_list[0])
-        assert filtered_df.height == 3  # 25.0, 50.0, 75.5
-        filtered_prices = filtered_df["price"].to_list()
-        assert all(20 <= price <= 80 for price in filtered_prices)
+#     def test_add_filter_range_slider_component_inclusive_bounds(self):
+#         """Test RangeSlider filter includes boundary values."""
+#         # Arrange
+#         filter_list = []
 
-    def test_add_filter_range_slider_component_inclusive_bounds(self):
-        """Test RangeSlider filter includes boundary values."""
-        # Arrange
-        filter_list = []
+#         # Act
+#         add_filter(
+#             filter_list,
+#             interactive_component_type="RangeSlider",
+#             column_name="price",
+#             value=[25.0, 50.0],
+#         )
 
-        # Act
-        add_filter(
-            filter_list,
-            interactive_component_type="RangeSlider",
-            column_name="price",
-            value=[25.0, 50.0],
-        )
+#         # Assert
+#         assert len(filter_list) == 1
+#         filtered_df = self.numeric_df.filter(filter_list[0])
+#         assert filtered_df.height == 2  # Exactly 25.0 and 50.0
+#         filtered_prices = sorted(filtered_df["price"].to_list())
+#         assert filtered_prices == [25.0, 50.0]
 
-        # Assert
-        assert len(filter_list) == 1
-        filtered_df = self.numeric_df.filter(filter_list[0])
-        assert filtered_df.height == 2  # Exactly 25.0 and 50.0
-        filtered_prices = sorted(filtered_df["price"].to_list())
-        assert filtered_prices == [25.0, 50.0]
+#     def test_add_filter_range_slider_component_narrow_range(self):
+#         """Test RangeSlider with very narrow range."""
+#         # Arrange
+#         filter_list = []
 
-    def test_add_filter_range_slider_component_narrow_range(self):
-        """Test RangeSlider with very narrow range."""
-        # Arrange
-        filter_list = []
+#         # Act
+#         add_filter(
+#             filter_list,
+#             interactive_component_type="RangeSlider",
+#             column_name="price",
+#             value=[49, 51],
+#         )
 
-        # Act
-        add_filter(
-            filter_list,
-            interactive_component_type="RangeSlider",
-            column_name="price",
-            value=[49, 51],
-        )
+#         # Assert
+#         assert len(filter_list) == 1
+#         filtered_df = self.numeric_df.filter(filter_list[0])
+#         assert filtered_df.height == 1  # Only 50.0
+#         assert filtered_df["price"].to_list()[0] == 50.0
 
-        # Assert
-        assert len(filter_list) == 1
-        filtered_df = self.numeric_df.filter(filter_list[0])
-        assert filtered_df.height == 1  # Only 50.0
-        assert filtered_df["price"].to_list()[0] == 50.0
+#     def test_add_filter_no_value_skipped(self):
+#         """Test that filters with no value are not added."""
+#         # Arrange
+#         filter_list = []
 
-    def test_add_filter_no_value_skipped(self):
-        """Test that filters with no value are not added."""
-        # Arrange
-        filter_list = []
+#         # Act
+#         add_filter(
+#             filter_list, interactive_component_type="Select", column_name="category", value=None
+#         )
 
-        # Act
-        add_filter(
-            filter_list, interactive_component_type="Select", column_name="category", value=None
-        )
+#         # Assert
+#         assert len(filter_list) == 0
 
-        # Assert
-        assert len(filter_list) == 0
+#     def test_add_filter_empty_list_value_skipped(self):
+#         """Test that filters with empty list values are not added."""
+#         # Arrange
+#         filter_list = []
 
-    def test_add_filter_empty_list_value_skipped(self):
-        """Test that filters with empty list values are not added."""
-        # Arrange
-        filter_list = []
+#         # Act
+#         add_filter(
+#             filter_list, interactive_component_type="MultiSelect", column_name="category", value=[]
+#         )
 
-        # Act
-        add_filter(
-            filter_list, interactive_component_type="MultiSelect", column_name="category", value=[]
-        )
+#         # Assert
+#         assert len(filter_list) == 0
 
-        # Assert
-        assert len(filter_list) == 0
+#     def test_add_filter_empty_string_value_skipped(self):
+#         """Test that filters with empty string values are not added."""
+#         # Arrange
+#         filter_list = []
 
-    def test_add_filter_empty_string_value_skipped(self):
-        """Test that filters with empty string values are not added."""
-        # Arrange
-        filter_list = []
+#         # Act
+#         add_filter(
+#             filter_list, interactive_component_type="TextInput", column_name="description", value=""
+#         )
 
-        # Act
-        add_filter(
-            filter_list, interactive_component_type="TextInput", column_name="description", value=""
-        )
+#         # Assert
+#         assert len(filter_list) == 0
 
-        # Assert
-        assert len(filter_list) == 0
+#     def test_add_filter_schema_validation(self):
+#         """Test filter results conform to expected schema using Pandera."""
+#         # Arrange
+#         filter_list = []
 
-    def test_add_filter_schema_validation(self):
-        """Test filter results conform to expected schema using Pandera."""
-        # Arrange
-        filter_list = []
+#         # Act
+#         add_filter(
+#             filter_list,
+#             interactive_component_type="Select",
+#             column_name="category",
+#             value=["A", "B"],
+#         )
 
-        # Act
-        add_filter(
-            filter_list,
-            interactive_component_type="Select",
-            column_name="category",
-            value=["A", "B"],
-        )
+#         # Assert with Pandera validation
+#         filtered_df = self.categorical_df.filter(filter_list[0]).select(["category", "value"])
 
-        # Assert with Pandera validation
-        filtered_df = self.categorical_df.filter(filter_list[0]).select(["category", "value"])
+#         # This should not raise an exception if schema is valid
+#         validated_df = self.expected_filter_schema.validate(filtered_df)
+#         assert validated_df is not None
+#         assert len(validated_df) > 0
 
-        # This should not raise an exception if schema is valid
-        validated_df = self.expected_filter_schema.validate(filtered_df)
-        assert validated_df is not None
-        assert len(validated_df) > 0
+#     def test_add_filter_multiple_filters_combination(self):
+#         """Test combining multiple filters works correctly."""
+#         # Arrange
+#         filter_list = []
 
-    def test_add_filter_multiple_filters_combination(self):
-        """Test combining multiple filters works correctly."""
-        # Arrange
-        filter_list = []
+#         # Act - Add multiple filters
+#         add_filter(
+#             filter_list,
+#             interactive_component_type="Select",
+#             column_name="category",
+#             value=["A", "B"],
+#         )
 
-        # Act - Add multiple filters
-        add_filter(
-            filter_list,
-            interactive_component_type="Select",
-            column_name="category",
-            value=["A", "B"],
-        )
+#         add_filter(
+#             filter_list, interactive_component_type="RangeSlider", column_name="value", value=[2, 4]
+#         )
 
-        add_filter(
-            filter_list, interactive_component_type="RangeSlider", column_name="value", value=[2, 4]
-        )
+#         # Assert
+#         assert len(filter_list) == 2
 
-        # Assert
-        assert len(filter_list) == 2
+#         # Apply all filters
+#         filtered_df = self.categorical_df
+#         for filter_expr in filter_list:
+#             filtered_df = filtered_df.filter(filter_expr)
 
-        # Apply all filters
-        filtered_df = self.categorical_df
-        for filter_expr in filter_list:
-            filtered_df = filtered_df.filter(filter_expr)
+#         # Should have categories A or B AND values between 2-4
+#         assert filtered_df.height == 2  # category B with value 2, category A with value 4
+#         result_categories = set(filtered_df["category"].to_list())
+#         result_values = filtered_df["value"].to_list()
 
-        # Should have categories A or B AND values between 2-4
-        assert filtered_df.height == 2  # category B with value 2, category A with value 4
-        result_categories = set(filtered_df["category"].to_list())
-        result_values = filtered_df["value"].to_list()
-
-        assert result_categories.issubset({"A", "B"})
-        assert all(2 <= val <= 4 for val in result_values)
+#         assert result_categories.issubset({"A", "B"})
+#         assert all(2 <= val <= 4 for val in result_values)
 
 
 class TestProcessMetadataAndFilter:

@@ -9,6 +9,7 @@ import asyncio
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _cleanup_expired_temporary_users
+from depictio.api.v1.endpoints.utils_endpoints.core_functions import cleanup_orphaned_s3_files
 from depictio.api.v1.services.analytics_service import AnalyticsService
 
 
@@ -124,6 +125,67 @@ async def periodic_cleanup_analytics_data(
         await asyncio.sleep(interval_in_seconds)
 
 
+async def periodic_cleanup_orphaned_s3_files(
+    interval_hours: int | None = None,
+    interval_minutes: int | None = None,
+    interval_seconds: int | None = None,
+):
+    """
+    Periodically clean up orphaned S3 files from non-existent data collections.
+
+    Args:
+        interval_hours: How often to run cleanup (in hours)
+        interval_minutes: How often to run cleanup (in minutes)
+        interval_seconds: How often to run cleanup (in seconds)
+
+    Note: Only one interval should be specified. If multiple are provided, precedence is:
+          seconds > minutes > hours. If none are provided, defaults to 7 days.
+    """
+    # Determine the interval in seconds
+    if interval_seconds is not None:
+        interval_in_seconds = interval_seconds
+    elif interval_minutes is not None:
+        interval_in_seconds = interval_minutes * 60
+    elif interval_hours is not None:
+        interval_in_seconds = interval_hours * 3600
+    else:
+        interval_in_seconds = 7 * 24 * 3600  # Default: 7 days
+
+    logger.info(
+        f"Starting periodic S3 cleanup with interval: {interval_in_seconds} seconds ({interval_in_seconds / 86400:.1f} days)"
+    )
+
+    while True:
+        try:
+            logger.info("Running periodic cleanup of orphaned S3 files")
+
+            # Run the cleanup
+            # Use force=True when mongodb.wipe is enabled (development/testing mode)
+            # This allows cleanup when DB was intentionally wiped but S3 wasn't
+            force_cleanup = settings.mongodb.wipe
+            if force_cleanup:
+                logger.info(
+                    "MongoDB wipe mode enabled - forcing S3 cleanup even if all prefixes appear orphaned"
+                )
+
+            cleanup_results = await cleanup_orphaned_s3_files(dry_run=False, force=force_cleanup)
+
+            if cleanup_results["deleted_count"] > 0:
+                logger.info(
+                    f"S3 cleanup completed: deleted {cleanup_results['deleted_count']} files/folders "
+                    f"({cleanup_results['total_size_bytes'] / (1024**3):.2f} GB) "
+                    f"from {cleanup_results['orphaned_prefixes_count']} orphaned data collections"
+                )
+            else:
+                logger.debug("No orphaned S3 files found to clean up")
+
+        except Exception as e:
+            logger.error(f"Error during periodic S3 cleanup: {e}")
+
+        # Wait for the next cleanup cycle
+        await asyncio.sleep(interval_in_seconds)
+
+
 def start_cleanup_tasks(
     interval_hours: int | None = None,
     interval_minutes: int | None = None,
@@ -160,5 +222,12 @@ def start_cleanup_tasks(
                 interval_hours=24,  # Run analytics cleanup daily
             )
         )
+
+    # Start S3 orphaned files cleanup
+    asyncio.create_task(
+        periodic_cleanup_orphaned_s3_files(
+            interval_hours=1,  # Run S3 cleanup hourly
+        )
+    )
 
     logger.info("Cleanup tasks started")

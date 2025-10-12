@@ -10,6 +10,9 @@ from depictio.dash.api_calls import api_call_fetch_user_from_token, purge_expire
 from depictio.dash.components.analytics_tracker import (
     create_analytics_tracker,
 )
+from depictio.dash.components.workflow_logo_overlay import (
+    create_workflow_logo_overlay,
+)
 from depictio.dash.layouts.dashboards_management import layout as dashboards_management_layout
 
 # from depictio.dash.layouts.draggable_scenarios.add_component import register_callbacks_add_component
@@ -31,6 +34,63 @@ from depictio.dash.layouts.projectwise_user_management import (
 )
 from depictio.dash.layouts.tokens_management import layout as tokens_management_layout
 from depictio.dash.layouts.users_management import layout as users_management_layout
+
+
+def perform_defensive_cache_check(dashboard_id, local_data, cached_project_data):
+    """
+    DEFENSIVE CACHE CHECK - Ensure project data is available before design_draggable needs it.
+    This prevents race condition with async consolidated callback.
+
+    Args:
+        dashboard_id: Dashboard ID to fetch project for
+        local_data: User authentication data
+        cached_project_data: Existing cached project data (if any)
+
+    Returns:
+        Updated cached_project_data dict or original if already valid
+    """
+    import time
+
+    import httpx
+
+    from depictio.api.v1.configs.config import API_BASE_URL
+
+    cache_key = f"project_{dashboard_id}"
+    if not cached_project_data or cached_project_data.get("cache_key") != cache_key:
+        logger.info(
+            f"⚡ PREFETCH: Cache miss for {dashboard_id} - fetching project synchronously to avoid blocking in design_draggable"
+        )
+        start_time = time.time()
+
+        # Synchronous fetch (blocking but guaranteed to work, prevents larger block later)
+        try:
+            project_json = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/projects/get/from_dashboard_id/{dashboard_id}",
+                headers={"Authorization": f"Bearer {local_data['access_token']}"},
+                timeout=10.0,
+            ).json()
+
+            # Update cached_project_data for downstream use in design_draggable
+            cached_project_data = {
+                "project": project_json,
+                "cache_key": cache_key,
+                "timestamp": time.time(),
+            }
+
+            duration_ms = (time.time() - start_time) * 1000
+            logger.info(
+                f"⚡ PREFETCH: Fetched project in {duration_ms:.0f}ms - cache now populated for design_draggable"
+            )
+        except Exception as e:
+            logger.error(f"❌ PREFETCH: Failed to fetch project data: {e}")
+            # Continue without cached data - design_draggable will handle fallback
+    else:
+        cache_age = time.time() - cached_project_data.get("timestamp", 0)
+        logger.info(
+            f"✅ PREFETCH: Using cached project data (age: {cache_age:.2f}s) - no HTTP call needed"
+        )
+
+    return cached_project_data
 
 
 def return_create_dashboard_button(email, is_anonymous=False):
@@ -107,6 +167,11 @@ def handle_authenticated_user(pathname, local_data, theme="light", cached_projec
 
         # Load dashboard data and create layout directly
         logger.info(f"🔄 DASHBOARD NAVIGATION: Loading dashboard {dashboard_id}")
+
+        # Perform defensive cache check to ensure project data is available
+        cached_project_data = perform_defensive_cache_check(
+            dashboard_id, local_data, cached_project_data
+        )
 
         logger.info(f"🔄 DASHBOARD NAVIGATION: theme - {theme}")
         # Load dashboard data synchronously
@@ -504,6 +569,20 @@ def create_dashboard_layout(
             # Create simple loading progress display
             progressive_loading_components.append(create_loading_progress_display(dashboard_id))
 
+    # Create workflow logo overlay if project data available
+    workflow_logo_overlay = html.Div()  # Default empty div
+    logger.debug(f"🎨 APP_LAYOUT: cached_project_data present: {bool(cached_project_data)}")
+    if cached_project_data and isinstance(cached_project_data, dict):
+        project_data = cached_project_data.get("project")
+        logger.debug(f"🎨 APP_LAYOUT: project_data extracted: {bool(project_data)}")
+        if project_data:
+            logger.debug(f"🎨 APP_LAYOUT: Calling create_workflow_logo_overlay with theme={theme}")
+            workflow_logo_overlay = create_workflow_logo_overlay(project_data, theme)
+        else:
+            logger.debug("🎨 APP_LAYOUT: No project data in cached_project_data")
+    else:
+        logger.debug("🎨 APP_LAYOUT: cached_project_data is None or not a dict")
+
     return dmc.Container(
         [
             # Include backend components (Store components)
@@ -518,18 +597,20 @@ def create_dashboard_layout(
             ),
             # Notes footer - positioned as overlay
             create_notes_footer(dashboard_data=depictio_dash_data),
+            # Workflow logo overlay - positioned as overlay in bottom-right
+            workflow_logo_overlay,
             # html.Div(id="test-input"),
             html.Div(id="test-output", style={"display": "none"}),
             # html.Div(id="test-output-visible"),
         ],
         fluid=True,
+        p=0,  # Remove all padding for edge-to-edge layout
         style={
             "display": "flex",
             "maxWidth": "100%",
             "flexGrow": "1",
             "maxHeight": "100%",
             "flexDirection": "column",
-            "width": "100%",
             "height": "100%",
             "position": "relative",  # Allow positioned children
         },
@@ -595,7 +676,7 @@ def create_app_layout():
                 storage_type="local",
             ),
             dcc.Store(id="current-edit-parent-index", storage_type="memory"),
-            dcc.Interval(id="interval-component", interval=60 * 60 * 1000, n_intervals=0),
+            # dcc.Interval(id="interval-component", interval=60 * 60 * 1000, n_intervals=0),
             html.Div(
                 id="dummy-plotly-output", style={"display": "none"}
             ),  # Hidden output for Plotly theme callback
@@ -634,7 +715,7 @@ def create_app_layout():
                         html.Div(
                             id="page-content",
                             style={
-                                "padding": "1rem",
+                                "padding": "0.25rem 0",  # Only top/bottom padding, no left/right
                                 "minHeight": "calc(100vh - 87px)",  # Ensure minimum height for short content
                                 "overflowY": "auto",  # Allow vertical scrolling
                             },
