@@ -3149,11 +3149,11 @@ def register_callbacks_draggable(app):
         logger.info(f"Grid edit mode toggled: {edit_mode_enabled}")
 
         if edit_mode_enabled:
-            # Keep layout consistent - CSS handles button visibility, not DashGridLayout properties
-            return False, False, "draggable-grid-container"
+            # Keep handles in DOM, CSS controls visibility - showResizeHandles must be True for handles to exist
+            return False, True, "draggable-grid-container"
         else:
-            # Keep layout consistent - CSS handles button visibility, not DashGridLayout properties
-            return False, False, "draggable-grid-container drag-handles-hidden"
+            # Keep handles in DOM, CSS hides them via .drag-handles-hidden class
+            return False, True, "draggable-grid-container drag-handles-hidden"
 
     # @app.callback(
     #     Output("draggable-wrapper", "children"),
