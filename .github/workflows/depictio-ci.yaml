@@ -108,6 +108,55 @@ jobs:
           source venv/bin/activate
           python -m pytest -xvs -n auto
 
+  # Quick validation of cypress-parallel setup
+  cypress-parallel-validation:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+
+      - name: Install Chrome
+        run: |
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
+      - name: Install Cypress dependencies
+        run: |
+          cd depictio/tests/e2e-tests
+          if [ ! -f "package.json" ]; then
+            npm init -y
+            npm install cypress --save-dev
+          else
+            npm ci
+          fi
+
+      - name: Test cypress-parallel with simple validation tests
+        run: |
+          cd depictio/tests/e2e-tests
+          # Install cypress-parallel
+          npm install --save-dev cypress-parallel
+          # Add a script to package.json for cypress-parallel to use with validation-specific config
+          npm pkg set scripts.cy:run="cypress run --browser chrome --headless --config-file cypress.validation.config.js"
+          # Run simple validation tests in parallel using directory
+          npx cypress-parallel \
+            -s cy:run \
+            -t 2 \
+            -d "cypress/e2e/validation"
+
+      - name: Upload validation results
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: cypress-parallel-validation-failure
+          path: depictio/tests/e2e-tests/cypress/screenshots
+          retention-days: 7
+
   docker-build:
     needs: quality
     runs-on: ubuntu-22.04
@@ -1292,7 +1341,7 @@ jobs:
           path: backup-${{ matrix.backup_strategy }}-logs.txt
           retention-days: 7
 
-  e2e-tests:
+  e2e-tests-auth:
     needs: [docker-build]
     runs-on: ubuntu-22.04
     permissions:
@@ -1324,7 +1373,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: "16"
+          node-version: "20"
 
       - name: Install Chrome
         run: |
@@ -1343,33 +1392,160 @@ jobs:
             npm ci
           fi
 
-      - name: Run Cypress tests
+      - name: Run Auth tests with standard Cypress
         run: |
           cd depictio/tests/e2e-tests
           export CYPRESS_UNAUTHENTICATED_MODE=false
           # Set Chrome flags for better CI rendering and stability
           export CYPRESS_BROWSER_ARGS="--disable-gpu --no-sandbox --disable-dev-shm-usage --disable-extensions --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
-          # Run Chrome in headless mode for CI with improved stability
-          npx cypress run \
-            --browser chrome \
-            --headless \
-            --config screenshotsFolder=cypress/screenshots,videosFolder=cypress/videos,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false \
-            --spec "cypress/e2e/!(unauthenticated)/**/*.cy.js"
 
-      - name: Upload screenshots
+          # Check if auth directory exists and has tests
+          if [ ! -d "cypress/e2e/auth" ]; then
+            echo "⚠️ Directory cypress/e2e/auth does not exist, skipping"
+            exit 0
+          fi
+
+          # Check if directory has test files
+          if [ ! $(find "cypress/e2e/auth" -name "*.cy.js" | wc -l) -gt 0 ]; then
+            echo "⚠️ No test files found in cypress/e2e/auth, skipping"
+            exit 0
+          fi
+
+          # Run auth tests with standard Cypress (no parallel)
+          echo "🔧 Running auth tests with standard Cypress (sequential execution for debugging)"
+          npx cypress run --browser chrome --headless \
+            --spec "cypress/e2e/auth/**/*.cy.js" \
+            --config screenshotsFolder=cypress/screenshots-auth,videosFolder=cypress/videos-auth,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false
+
+      - name: Upload screenshots - auth
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: cypress-screenshots
-          path: depictio/tests/e2e-tests/cypress/screenshots
+          name: cypress-screenshots-auth
+          path: depictio/tests/e2e-tests/cypress/screenshots-auth
           retention-days: 30
 
-      - name: Upload videos on failure
+      - name: Upload videos on failure - auth
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: cypress-videos
-          path: depictio/tests/e2e-tests/cypress/videos
+          name: cypress-videos-auth
+          path: depictio/tests/e2e-tests/cypress/videos-auth
+          retention-days: 7
+
+  e2e-tests:
+    needs: [docker-build]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        directory: [dashboard_creation, dashboards_management, pages, projects_management, ui]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup environment
+        run: |
+          sudo chmod 666 /var/run/docker.sock
+          echo "UID=$(id -u)" >> $GITHUB_ENV
+          echo "GID=$(id -g)" >> $GITHUB_ENV
+          cp .env.example .env
+          # Enable dev mode
+          sed -i 's/# DEV_MODE=false/DEV_MODE=true/' docker-compose/.env
+          mkdir -p depictioDB minio_data
+          chmod 777 depictioDB minio_data
+
+      - name: Log in and start services
+        run: |
+          echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
+          FULL_IMAGE="${{ needs.docker-build.outputs.full-image }}"
+          docker pull "${FULL_IMAGE}"
+          export DEPICTIO_VERSION="${FULL_IMAGE}"
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
+          sleep 15
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+
+      - name: Install Chrome
+        run: |
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
+      - name: Install Cypress dependencies
+        run: |
+          cd depictio/tests/e2e-tests
+          if [ ! -f "package.json" ]; then
+            npm init -y
+            npm install cypress --save-dev
+          else
+            npm ci
+          fi
+
+      - name: Run Cypress tests with cypress-parallel - ${{ matrix.directory }}
+        run: |
+          cd depictio/tests/e2e-tests
+          export CYPRESS_UNAUTHENTICATED_MODE=false
+          # Set Chrome flags for better CI rendering and stability
+          export CYPRESS_BROWSER_ARGS="--disable-gpu --no-sandbox --disable-dev-shm-usage --disable-extensions --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
+
+          # Check if directory exists and has tests
+          if [ ! -d "cypress/e2e/${{ matrix.directory }}" ]; then
+            echo "⚠️ Directory cypress/e2e/${{ matrix.directory }} does not exist, skipping"
+            exit 0
+          fi
+
+          # Check if directory has test files and count them
+          TEST_FILE_COUNT=$(find "cypress/e2e/${{ matrix.directory }}" -name "*.cy.js" -type f | wc -l)
+          if [ "$TEST_FILE_COUNT" -eq 0 ]; then
+            echo "⚠️ No test files found in cypress/e2e/${{ matrix.directory }}, skipping"
+            exit 0
+          fi
+
+          echo "📋 Found $TEST_FILE_COUNT test files in cypress/e2e/${{ matrix.directory }}"
+
+          # List test files for debugging and create spec list
+          echo "📋 Test files:"
+          find "cypress/e2e/${{ matrix.directory }}" -name "*.cy.js" -type f
+
+          # Create a comma-separated list of test files (cypress-parallel format)
+          SPEC_LIST=$(find "cypress/e2e/${{ matrix.directory }}" -name "*.cy.js" -type f | tr '\n' ',' | sed 's/,$//')
+          echo "📋 Spec list for cypress-parallel: $SPEC_LIST"
+
+          if [ -z "$SPEC_LIST" ]; then
+            echo "⚠️ No valid spec files found after filtering, skipping"
+            exit 0
+          fi
+
+          # Install cypress-parallel and configure npm scripts
+          npm install --save-dev cypress-parallel
+          npm pkg set scripts.cy:run:auth="cypress run --browser chrome --headless --config screenshotsFolder=cypress/screenshots-${{ matrix.directory }},videosFolder=cypress/videos-${{ matrix.directory }},trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false"
+
+          # Run tests in parallel using explicit spec list (not directory)
+          echo "🚀 Running tests in cypress/e2e/${{ matrix.directory }} with cypress-parallel (4 threads)"
+          npx cypress-parallel -s cy:run:auth -t 4 --spec "$SPEC_LIST"
+
+      - name: Upload screenshots - ${{ matrix.directory }}
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cypress-screenshots-${{ matrix.directory }}
+          path: depictio/tests/e2e-tests/cypress/screenshots-${{ matrix.directory }}
+          retention-days: 30
+
+      - name: Upload videos on failure - ${{ matrix.directory }}
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: cypress-videos-${{ matrix.directory }}
+          path: depictio/tests/e2e-tests/cypress/videos-${{ matrix.directory }}
           retention-days: 7
 
   e2e-tests-unauthenticated:
@@ -1378,6 +1554,11 @@ jobs:
     permissions:
       contents: read
       packages: read
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        directory: [unauthenticated]
     steps:
       - uses: actions/checkout@v4
 
@@ -1440,7 +1621,14 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: "16"
+          node-version: "20"
+
+      - name: Install Chrome for unauthenticated tests
+        run: |
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
 
       - name: Install Cypress dependencies
         run: |
@@ -1452,38 +1640,62 @@ jobs:
             npm ci
           fi
 
-      - name: Install Chrome for unauthenticated tests
-        run: |
-          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
-
-      - name: Run Cypress unauthenticated tests
+      - name: Run Cypress tests with cypress-parallel - ${{ matrix.directory }}
         run: |
           cd depictio/tests/e2e-tests
           # Set environment variable for cypress to know it's unauthenticated mode
           export CYPRESS_UNAUTHENTICATED_MODE=true
           # Set Chrome flags for better CI rendering and stability
           export CYPRESS_BROWSER_ARGS="--disable-gpu --no-sandbox --disable-dev-shm-usage --disable-extensions --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
-          npx cypress run \
-            --browser chrome \
-            --headless \
-            --config screenshotsFolder=cypress/screenshots-unauthenticated,videosFolder=cypress/videos-unauthenticated,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false \
-            --spec "cypress/e2e/unauthenticated/**/*.cy.js"
 
-      - name: Upload screenshots
+          # Check if directory exists and has tests
+          if [ ! -d "cypress/e2e/${{ matrix.directory }}" ]; then
+            echo "⚠️ Directory cypress/e2e/${{ matrix.directory }} does not exist, skipping"
+            exit 0
+          fi
+
+          # Check if directory has test files and count them
+          TEST_FILE_COUNT=$(find "cypress/e2e/${{ matrix.directory }}" -name "*.cy.js" -type f | wc -l)
+          if [ "$TEST_FILE_COUNT" -eq 0 ]; then
+            echo "⚠️ No test files found in cypress/e2e/${{ matrix.directory }}, skipping"
+            exit 0
+          fi
+
+          echo "📋 Found $TEST_FILE_COUNT test files in cypress/e2e/${{ matrix.directory }}"
+
+          # List test files for debugging and create spec list
+          echo "📋 Test files:"
+          find "cypress/e2e/${{ matrix.directory }}" -name "*.cy.js" -type f
+
+          # Create a comma-separated list of test files (cypress-parallel format)
+          SPEC_LIST=$(find "cypress/e2e/${{ matrix.directory }}" -name "*.cy.js" -type f | tr '\n' ',' | sed 's/,$//')
+          echo "📋 Spec list for cypress-parallel: $SPEC_LIST"
+
+          if [ -z "$SPEC_LIST" ]; then
+            echo "⚠️ No valid spec files found after filtering, skipping"
+            exit 0
+          fi
+
+          # Install cypress-parallel and configure npm scripts
+          npm install --save-dev cypress-parallel
+          npm pkg set scripts.cy:run:unauth="cypress run --browser chrome --headless --config screenshotsFolder=cypress/screenshots-${{ matrix.directory }},videosFolder=cypress/videos-${{ matrix.directory }},trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false"
+
+          # Run tests in parallel using explicit spec list (not directory)
+          echo "🚀 Running tests in cypress/e2e/${{ matrix.directory }} with cypress-parallel (4 threads)"
+          npx cypress-parallel -s cy:run:unauth -t 4 --spec "$SPEC_LIST"
+
+      - name: Upload screenshots - ${{ matrix.directory }}
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: cypress-screenshots-unauthenticated
-          path: depictio/tests/e2e-tests/cypress/screenshots-unauthenticated
+          name: cypress-screenshots-${{ matrix.directory }}
+          path: depictio/tests/e2e-tests/cypress/screenshots-${{ matrix.directory }}
           retention-days: 30
 
-      - name: Upload videos on failure
+      - name: Upload videos on failure - ${{ matrix.directory }}
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: cypress-videos-unauthenticated
-          path: depictio/tests/e2e-tests/cypress/videos-unauthenticated
+          name: cypress-videos-${{ matrix.directory }}
+          path: depictio/tests/e2e-tests/cypress/videos-${{ matrix.directory }}
           retention-days: 7
