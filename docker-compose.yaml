@@ -9,6 +9,20 @@ services:
     volumes:
       - ./depictioDB:/data/depictioDB
 
+  redis:
+    image: redis:8.2.1
+    container_name: redis
+    ports:
+      - 6379:6379
+    volumes:
+      - redis_data:/data
+    command: redis-server
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 5
+
   depictio-frontend:
     image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-latest}
     container_name: depictio-frontend
@@ -22,6 +36,7 @@ services:
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:
       - mongo
+      - redis
       - depictio-backend
 
   depictio-backend:
@@ -37,3 +52,8 @@ services:
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:
       - mongo
+      - redis
+
+volumes:
+  redis_data:
+    driver: local
