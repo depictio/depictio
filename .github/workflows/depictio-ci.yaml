@@ -30,24 +30,21 @@ jobs:
           source venv/bin/activate
           uv pip install --upgrade pip
 
-          # Install dependencies respecting pyproject.toml pinned versions
+          # Install dependencies from pyproject.toml
           uv pip install -e ".[dev]"
 
-          # Verify polars installation
-          python -c "import polars; print(f'Polars {polars.__version__} installed')"
+          # Clean up any conflicting polars packages that may have been pulled in
+          echo "🧹 Removing conflicting polars packages..."
+          uv pip uninstall -y polars polars-runtime-32 2>/dev/null || true
 
-      - name: Install dependencies for quality check & testing
-        run: |
-          source venv/bin/activate
-          uv pip install -e ".[dev]"
+          # Ensure correct polars-lts-cpu version is installed (required for MultiQC)
+          echo "📦 Installing polars-lts-cpu 1.19.0..."
+          uv pip install --force-reinstall "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.19.0"
 
-          uv pip uninstall polars
-          uv pip install "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.19.0"
-
-      - name: Show installed packages
-        run: |
-          source venv/bin/activate
-          pip list
+          # Verify only polars-lts-cpu is installed
+          echo "✅ Verifying polars installation..."
+          uv pip list | grep -i polars
+          python -c "import polars; assert '1.19' in polars.__version__, f'Wrong version: {polars.__version__}'; print(f'✅ Polars {polars.__version__} verified')"
 
       # - name: Run Ruff for formatting
       #   run: |

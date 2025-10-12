@@ -34,10 +34,12 @@ workflows:
             format: "TSV"
             polars_kwargs:
               separator: "\t"
+              try_parse_dates: true
             columns_description:
               "sample": "Sample identifier matching MultiQC sample names"
               "name": "ID combined with habitat"
               "habitat": "Habitat type of the sample"
+              "collection_date": "Sample collection date"
           join:
             on_columns: ["sample"]
             how: "inner"
