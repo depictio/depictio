@@ -24,21 +24,16 @@ jobs:
           python-version-file: "pyproject.toml"
           cache-dependency-path: "pyproject.toml"
 
-      - name: Install Dependencies with LTS Fallback
+      - name: Install Dependencies
         run: |
           uv venv --python 3.12.9 venv
           source venv/bin/activate
           uv pip install --upgrade pip
 
-          if uv pip install -e ".[dev]" && python -c "import polars" 2>/dev/null; then
-            echo "✅ Default installation with standard polars successful"
-          else
-            echo "⚠️ Standard polars failed, uninstalling and trying LTS version..."
-            uv pip uninstall polars || true
-            uv pip install "polars-lts-cpu==1.22.0"
-            echo "✅ LTS installation successful"
-          fi
+          # Install dependencies respecting pyproject.toml pinned versions
+          uv pip install -e ".[dev]"
 
+          # Verify polars installation
           python -c "import polars; print(f'Polars {polars.__version__} installed')"
 
       - name: Install dependencies for quality check & testing
