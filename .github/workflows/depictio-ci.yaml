@@ -462,6 +462,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+          cache-dependency-path: "pyproject.toml"
+
       - name: Setup environment
         run: |
           # Reuse setup from docker-system-init
@@ -484,8 +495,7 @@ jobs:
       - name: Setup CLI
         run: |
           cd depictio/cli
-          pip install uv
-          uv venv venv
+          uv venv --python 3.12.9 venv
           source venv/bin/activate
           uv pip install -e .
           docker cp depictio-backend:/app/depictio/.depictio/admin_config.yaml .
@@ -554,6 +564,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+          cache-dependency-path: "pyproject.toml"
+
       - name: Setup environment
         run: |
           sudo chmod 666 /var/run/docker.sock
@@ -575,8 +596,7 @@ jobs:
       - name: Setup CLI
         run: |
           cd depictio/cli
-          pip install uv
-          uv venv venv
+          uv venv --python 3.12.9 venv
           source venv/bin/activate
           uv pip install -e .
           docker cp depictio-backend:/app/depictio/.depictio/admin_config.yaml .
