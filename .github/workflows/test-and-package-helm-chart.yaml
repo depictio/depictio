@@ -680,7 +680,7 @@ jobs:
 
               # Test cache DB (DB 0)
               cache_info = r.info("stats")
-              print(f"📊 Redis cache stats: {cache_info.get(\"total_connections_received\", 0)} connections")
+              print(f"📊 Redis cache stats: {cache_info.get('total_connections_received', 0)} connections")
 
           except Exception as e:
               print(f"❌ Redis failed: {e}")
