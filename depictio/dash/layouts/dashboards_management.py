@@ -424,11 +424,29 @@ def register_callbacks_dashboards_management(app):
             #     ]
             # )
 
+            # Get dashboard customization fields with defaults
+            dashboard_icon = dashboard.get("icon", "mdi:view-dashboard")
+            dashboard_icon_color = dashboard.get("icon_color", "orange")
+            dashboard_subtitle = dashboard.get("subtitle", "")
+
+            # Icon button always uses filled variant
+            icon_button_props = {
+                "color": dashboard_icon_color,
+                "radius": "xl",
+                "size": "lg",
+                "variant": "filled",
+            }
+
             group = html.Div(
                 [
                     dmc.Space(h=10),
                     dmc.Group(
                         [
+                            # Custom icon display
+                            dmc.ActionIcon(
+                                DashIconify(icon=dashboard_icon, width=24, height=24),
+                                **icon_button_props,
+                            ),
                             html.Div(
                                 [
                                     dmc.Title(
@@ -440,17 +458,33 @@ def register_callbacks_dashboards_management(app):
                                             "overflow": "visible",
                                             "whiteSpace": "normal",
                                             "wordWrap": "break-word",
+                                            "marginBottom": "4px" if dashboard_subtitle else "0",
                                         },  # Allow title wrapping
                                         # ta="center",  # Center align the title
                                     ),
+                                    # Subtitle
+                                    dmc.Text(
+                                        dashboard_subtitle,
+                                        size="sm",
+                                        c="gray",
+                                        style={
+                                            "maxWidth": "100%",
+                                            "overflow": "visible",
+                                            "whiteSpace": "normal",
+                                            "wordWrap": "break-word",
+                                        },
+                                    )
+                                    if dashboard_subtitle
+                                    else None,
                                     # dmc.Title(dashboard["title"], order=5),
                                     # dmc.Text(f"Last Modified: {dashboard['last_modified']}"),
                                     # dmc.Text(f"Version: {dashboard['version']}"),
                                     # dmc.Text(f"Owner: {dashboard['permissions']['owners'][0]['email']}"),
                                 ],
                                 style={"flex": "1"},
-                            )
-                        ]
+                            ),
+                        ],
+                        align="center",
                     ),
                     dmc.Space(h=10),
                     dmc.Stack(
@@ -870,6 +904,41 @@ def register_callbacks_dashboards_management(app):
             return []
 
     @app.callback(
+        Output("dashboard-icon-preview", "children"),
+        [
+            Input("dashboard-icon-input", "value"),
+            Input("dashboard-icon-color-select", "value"),
+        ],
+        prevent_initial_call=True,
+    )
+    def update_icon_preview(icon_name, icon_color):
+        """
+        Update the dashboard icon preview in real-time as users modify icon settings.
+
+        Args:
+            icon_name: Icon identifier from Iconify (e.g., "mdi:chart-line")
+            icon_color: Color name for the icon (e.g., "orange", "blue")
+
+        Returns:
+            DashIconify component with updated icon/color for preview
+        """
+        # Default values if inputs are empty/None
+        if not icon_name or icon_name.strip() == "":
+            icon_name = "mdi:view-dashboard"
+
+        # Validate color is in allowed list, default to orange if not
+        allowed_colors = ["blue", "teal", "orange", "red", "purple", "pink", "green", "gray"]
+        if icon_color not in allowed_colors:
+            icon_color = "orange"
+
+        return DashIconify(
+            icon=icon_name,
+            width=36,
+            height=36,
+            color=icon_color,
+        )
+
+    @app.callback(
         Output({"type": "dashboard-list", "index": ALL}, "children"),
         # [Output({"type": "dashboard-list", "index": ALL}, "children"), Output({"type": "dashboard-index-store", "index": ALL}, "data")],
         [
@@ -1041,6 +1110,10 @@ def register_callbacks_dashboards_management(app):
             new_dashboard = DashboardData(
                 id=dashboard_id,
                 title=modal_data["title"],
+                subtitle=modal_data.get("subtitle", ""),
+                icon=modal_data.get("icon", "mdi:view-dashboard"),
+                icon_color=modal_data.get("icon_color", "orange"),
+                icon_variant="filled",
                 last_saved_ts=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 permissions=Permission(owners=[current_userbase]),
                 # permissions={"owners": [current_userbase], "viewers": []},
@@ -1234,6 +1307,9 @@ def register_callbacks_dashboards_management(app):
         ],
         [
             State("dashboard-title-input", "value"),
+            State("dashboard-subtitle-input", "value"),
+            State("dashboard-icon-input", "value"),
+            State("dashboard-icon-color-select", "value"),
             State("dashboard-modal", "opened"),
             State("local-store", "data"),
             State("user-cache-store", "data"),
@@ -1247,13 +1323,23 @@ def register_callbacks_dashboards_management(app):
         n_clicks_submit,
         n_clicks_cancel,
         title,
+        subtitle,
+        icon,
+        icon_color,
         opened,
         user_data,
         user_cache,
         init_create_dashboard_button,
         project,
     ):
-        data = {"title": "", "project_id": ""}
+        data = {
+            "title": "",
+            "subtitle": "",
+            "icon": "mdi:view-dashboard",
+            "icon_color": "orange",
+            "icon_variant": "filled",
+            "project_id": "",
+        }
 
         logger.debug(
             f"Create dashboard n_clicks: {n_clicks_create}, {n_clicks_submit}, {n_clicks_cancel}"
@@ -1385,6 +1471,10 @@ def register_callbacks_dashboards_management(app):
 
             # Set the title and keep the modal open (or toggle it based on your preference)
             data["title"] = title
+            data["subtitle"] = subtitle if subtitle else ""
+            data["icon"] = icon if icon else "mdi:view-dashboard"
+            data["icon_color"] = icon_color if icon_color else "orange"
+            data["icon_variant"] = "filled"
             data["project_id"] = project
             return data, False, False, {"display": "none"}, dash.no_update, dash.no_update
 

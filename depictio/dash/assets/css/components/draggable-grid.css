@@ -43,22 +43,130 @@
    2. RESIZE HANDLES STYLING & BEHAVIOR
    ============================================================================= */
 
-/* Base resize handle styling
-   Purpose: Clean, minimal resize handles that appear on hover
-   Behavior: Hidden by default, visible on component hover
+/* =============================================================================
+   REACT GRID LAYOUT BASE CSS (REQUIRED)
+   Source: https://unpkg.com/react-grid-layout@1.4.4/css/styles.css
+   Note: dash-dynamic-grid-layout package doesn't include CSS (_css_dist = [])
+   This base CSS is REQUIRED for resize handles to function
+   ============================================================================= */
+
+.react-grid-item {
+    transition: all 200ms ease;
+    transition-property: left, top;
+}
+
+.react-grid-item.cssTransforms {
+    transition-property: transform;
+}
+
+.react-grid-item.resizing {
+    z-index: 100;
+    will-change: width, height;
+}
+
+.react-grid-item.react-draggable-dragging {
+    transition: none;
+    z-index: 100;
+    will-change: transform;
+}
+
+.react-grid-item.react-grid-placeholder {
+    background: red;
+    opacity: 0.2;
+    transition-duration: 100ms;
+    z-index: 2;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    -o-user-select: none;
+    user-select: none;
+}
+
+.react-grid-item > .react-resizable-handle {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    bottom: 0;
+    right: 0;
+    cursor: se-resize;
+}
+
+.react-grid-item > .react-resizable-handle::after {
+    content: "";
+    position: absolute;
+    right: 3px;
+    bottom: 3px;
+    width: 5px;
+    height: 5px;
+    border-right: 2px solid rgba(0, 0, 0, 0.4);
+    border-bottom: 2px solid rgba(0, 0, 0, 0.4);
+}
+
+/* =============================================================================
+   CUSTOM RESIZE HANDLE OVERRIDES (Depictio-specific)
+   The rules below override the base CSS above with custom behavior
+   ============================================================================= */
+
+/* Base resize handle styling - OVERRIDE with opacity control
+   Purpose: Hide handles by default, show on hover with edit mode logic
+   Behavior: Hidden by default (opacity: 0), visible on component hover
    Z-index: 500 (below ActionIconGroup at 1001) */
 .react-resizable-handle {
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
     opacity: 0 !important;
     transition: opacity 0.2s ease !important; /* POTENTIAL PERFORMANCE ISSUE */
     z-index: 500 !important;
+    pointer-events: auto !important;
 }
 
-/* Show resize handles on component hover
-   Purpose: Provides visual feedback for resizable components */
-.react-grid-item:hover .react-resizable-handle {
+/* Specific resize handle positioning for different corners/edges
+   Purpose: Position resize handles at correct locations on grid items */
+.react-grid-item > .react-resizable-handle.react-resizable-handle-se {
+    bottom: 0 !important;
+    right: 0 !important;
+    cursor: se-resize !important;
+}
+
+.react-grid-item > .react-resizable-handle.react-resizable-handle-sw {
+    bottom: 0 !important;
+    left: 0 !important;
+    cursor: sw-resize !important;
+    transform: rotate(90deg) !important;
+}
+
+.react-grid-item > .react-resizable-handle.react-resizable-handle-ne {
+    top: 0 !important;
+    right: 0 !important;
+    cursor: ne-resize !important;
+    transform: rotate(270deg) !important;
+}
+
+.react-grid-item > .react-resizable-handle.react-resizable-handle-nw {
+    top: 0 !important;
+    left: 0 !important;
+    cursor: nw-resize !important;
+    transform: rotate(180deg) !important;
+}
+
+/* Visual indicator for resize handle
+   Purpose: Creates a visible corner indicator for resizable area
+   Appearance: Colored corner with L-shaped bracket */
+.react-resizable-handle::after {
+    content: "" !important;
+    position: absolute !important;
+    right: 3px !important;
+    bottom: 3px !important;
+    width: 8px !important;
+    height: 8px !important;
+    border-right: 3px solid rgba(0, 0, 0, 0.4) !important;
+    border-bottom: 3px solid rgba(0, 0, 0, 0.4) !important;
+    background: rgba(0, 0, 0, 0.05) !important;
+    z-index: 1000 !important;
+}
+
+/* Show resize handles on component hover (only when edit mode is ON)
+   Purpose: Provides visual feedback for resizable components
+   Pattern: Matches action button visibility logic */
+.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .react-resizable-handle {
     opacity: 0.7 !important;
 }
 
@@ -71,22 +179,13 @@
 }
 
 /* Dark mode resize handle adjustments
-   Purpose: Invert handle colors for dark theme visibility */
-[data-mantine-color-scheme="dark"] .react-grid-item:hover > .react-resizable-handle::before,
-[data-mantine-color-scheme="dark"] .react-grid-item:hover > .react-resizable-handle::after {
-    filter: invert(1) !important;
+   Purpose: Lighter handle colors for better visibility in dark theme */
+[data-mantine-color-scheme="dark"] .react-resizable-handle::after {
+    border-right-color: rgba(255, 255, 255, 0.5) !important;
+    border-bottom-color: rgba(255, 255, 255, 0.5) !important;
+    background: rgba(255, 255, 255, 0.1) !important;
 }
 
-/* Complete handle hiding in dark mode
-   Purpose: Remove all handle backgrounds/borders in dark theme */
-[data-mantine-color-scheme="dark"] .react-grid-item:hover > .react-resizable-handle {
-    background: none !important;
-    background-color: transparent !important;
-    background-image: none !important;
-    border: none !important;
-    box-shadow: none !important;
-    outline: none !important;
-}
 .react-grid-item:hover .mantine-ActionIcon-root[id*="remove_box_button"],
 .react-grid-item:hover .mantine-ActionIcon-root[id*="edit_box_button"],
 .react-grid-item:hover .mantine-ActionIcon-root[id*="duplicate_box_button"],

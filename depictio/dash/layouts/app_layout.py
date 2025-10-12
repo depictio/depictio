@@ -314,13 +314,14 @@ def create_default_header(text):
 
 def create_admin_header(text):
     """
-    Creates an admin header with a title and navigation tabs for Users, Projects, and Dashboards.
+    Creates admin header CONTENT (not wrapped in AppShellHeader) with navigation tabs.
 
     Parameters:
-    - text (str): The title text to display in the header.
+    - text (str): The title text to display in the header (currently unused, kept for API compatibility).
 
     Returns:
-    - dmc.Header: A Dash Mantine Components Header containing the title and navigation tabs.
+    - dmc.Container: Header content to be placed inside AppShellHeader, matching pattern of
+      create_default_header() and create_header_with_button()
     """
 
     add_group_button = dmc.Button(
@@ -350,124 +351,122 @@ def create_admin_header(text):
         opened=False,
     )
 
-    header = dmc.AppShellHeader(  # type: ignore[unresolved-attribute]
-        h=60,  # Height of the header
-        # padding="xs",  # Padding inside the header
+    # Return Container content directly (no AppShellHeader wrapper)
+    # This matches the pattern of create_default_header() and create_header_with_button()
+    return dmc.Container(
+        fluid=True,  # Make the container fluid (full-width)
         children=[
-            dmc.Container(
-                fluid=True,  # Make the container fluid (full-width)
+            dmc.Group(
+                justify="space-between",  # Space between the title and tabs
+                align="center",
+                style={"height": "100%"},
                 children=[
-                    dmc.Group(
-                        justify="space-between",  # Space between the title and tabs
-                        align="center",
-                        style={"height": "100%"},
-                        children=[
-                            # Navigation Tabs
-                            dmc.Tabs(
-                                value="users",  # Default active tab
-                                id="admin-tabs",  # ID for the tabs component
-                                # onTabChange=lambda value: dash.callback_context.triggered,  # Placeholder for callback
-                                children=dmc.TabsList(
-                                    [
-                                        dmc.TabsTab(  # type: ignore[unresolved-attribute]
-                                            "Users",
-                                            leftSection=DashIconify(
-                                                icon="mdi:account",
-                                                width=20,
-                                                height=20,
-                                            ),
-                                            value="users",
-                                            # value="users",
-                                            # component=dcc.Link("Users", href="/admin/users", style={"textDecoration": "none", "color": "inherit"})
-                                        ),
-                                        dmc.TabsTab(  # type: ignore[unresolved-attribute]
-                                            "Groups",
-                                            leftSection=DashIconify(
-                                                icon="mdi:account-group",
-                                                width=20,
-                                                height=20,
-                                            ),
-                                            value="groups",
-                                            # value="users",
-                                            # component=dcc.Link("Users", href="/admin/users", style={"textDecoration": "none", "color": "inherit"})
-                                        ),
-                                        dmc.TabsTab(  # type: ignore[unresolved-attribute]
-                                            "Projects",
-                                            leftSection=DashIconify(
-                                                icon="mdi:jira",
-                                                width=20,
-                                                height=20,
-                                            ),
-                                            value="projects",
-                                            # value="projects",
-                                            # component=dcc.Link("Projects", href="/admin/projects", style={"textDecoration": "none", "color": "inherit"})
-                                        ),
-                                        dmc.TabsTab(  # type: ignore[unresolved-attribute]
-                                            "Dashboards",
-                                            leftSection=DashIconify(
-                                                icon="mdi:view-dashboard",
-                                                width=20,
-                                                height=20,
-                                            ),
-                                            value="dashboards",
-                                            # value="dashboards",
-                                            # component=dcc.Link("Dashboards", href="/admin/dashboards", style={"textDecoration": "none", "color": "inherit"})
-                                        ),
-                                        dmc.TabsTab(  # type: ignore[unresolved-attribute]
-                                            "Analytics",
-                                            leftSection=DashIconify(
-                                                icon="mdi:chart-line",
-                                                width=20,
-                                                height=20,
-                                            ),
-                                            value="analytics",
-                                        ),
-                                        dmc.TabsPanel(
-                                            children=[],
-                                            value="users",
-                                            id="admin-tabs-users",
-                                        ),
-                                        # dmc.TabsPanel(
-                                        # children=[],
-                                        #     value="groups",
-                                        #     id="admin-tabs-groups",
-                                        # ),
-                                        dmc.TabsPanel(
-                                            children=[],
-                                            value="projects",
-                                            id="admin-tabs-projects",
-                                        ),
-                                        dmc.TabsPanel(
-                                            children=[],
-                                            value="dashboards",
-                                            id="admin-tabs-dashboards",
-                                        ),
-                                        dmc.TabsPanel(
-                                            children=[],
-                                            value="analytics",
-                                            id="admin-tabs-analytics",
-                                        ),
-                                    ]
+                    # Navigation Tabs
+                    dmc.Tabs(
+                        value="users",  # Default active tab
+                        id="admin-tabs",  # ID for the tabs component
+                        # onTabChange=lambda value: dash.callback_context.triggered,  # Placeholder for callback
+                        children=dmc.TabsList(
+                            [
+                                dmc.TabsTab(  # type: ignore[unresolved-attribute]
+                                    "Users",
+                                    leftSection=DashIconify(
+                                        icon="mdi:account",
+                                        width=20,
+                                        height=20,
+                                    ),
+                                    value="users",
+                                    # value="users",
+                                    # component=dcc.Link("Users", href="/admin/users", style={"textDecoration": "none", "color": "inherit"})
                                 ),
-                                # orientation="horizontal",
-                                radius="md",
-                                # variant="outline",
-                                # grow=True,
-                                # styles={
-                                #     "tab": {"fontSize": "14px", "padding": "8px 12px"},
-                                #     "tabActive": {"backgroundColor": "var(--mantine-color-blue-light)", "color": "var(--mantine-color-blue-dark)"},
-                                # }
-                            ),
-                            add_group_button,
-                            add_group_modal,
-                        ],
-                    )
+                                dmc.TabsTab(  # type: ignore[unresolved-attribute]
+                                    "Groups",
+                                    leftSection=DashIconify(
+                                        icon="mdi:account-group",
+                                        width=20,
+                                        height=20,
+                                    ),
+                                    value="groups",
+                                    # value="users",
+                                    # component=dcc.Link("Users", href="/admin/users", style={"textDecoration": "none", "color": "inherit"})
+                                ),
+                                dmc.TabsTab(  # type: ignore[unresolved-attribute]
+                                    "Projects",
+                                    leftSection=DashIconify(
+                                        icon="mdi:jira",
+                                        width=20,
+                                        height=20,
+                                    ),
+                                    value="projects",
+                                    # value="projects",
+                                    # component=dcc.Link("Projects", href="/admin/projects", style={"textDecoration": "none", "color": "inherit"})
+                                ),
+                                dmc.TabsTab(  # type: ignore[unresolved-attribute]
+                                    "Dashboards",
+                                    leftSection=DashIconify(
+                                        icon="mdi:view-dashboard",
+                                        width=20,
+                                        height=20,
+                                    ),
+                                    value="dashboards",
+                                    # value="dashboards",
+                                    # component=dcc.Link("Dashboards", href="/admin/dashboards", style={"textDecoration": "none", "color": "inherit"})
+                                ),
+                                dmc.TabsTab(  # type: ignore[unresolved-attribute]
+                                    "Analytics",
+                                    leftSection=DashIconify(
+                                        icon="mdi:chart-line",
+                                        width=20,
+                                        height=20,
+                                    ),
+                                    value="analytics",
+                                ),
+                                dmc.TabsPanel(
+                                    children=[],
+                                    value="users",
+                                    id="admin-tabs-users",
+                                ),
+                                # dmc.TabsPanel(
+                                # children=[],
+                                #     value="groups",
+                                #     id="admin-tabs-groups",
+                                # ),
+                                dmc.TabsPanel(
+                                    children=[],
+                                    value="projects",
+                                    id="admin-tabs-projects",
+                                ),
+                                dmc.TabsPanel(
+                                    children=[],
+                                    value="dashboards",
+                                    id="admin-tabs-dashboards",
+                                ),
+                                dmc.TabsPanel(
+                                    children=[],
+                                    value="analytics",
+                                    id="admin-tabs-analytics",
+                                ),
+                            ]
+                        ),
+                        # orientation="horizontal",
+                        radius="md",
+                        # variant="outline",
+                        # grow=True,
+                        # styles={
+                        #     "tab": {"fontSize": "14px", "padding": "8px 12px"},
+                        #     "tabActive": {"backgroundColor": "var(--mantine-color-blue-light)", "color": "var(--mantine-color-blue-dark)"},
+                        # }
+                    ),
+                    add_group_button,
+                    add_group_modal,
                 ],
             )
         ],
-        # fixed=True,  # Fix the header to the top
+        style={
+            "height": "100%",
+            "padding": "0 20px",  # Match padding from other header functions
+        },
     )
-    return header
 
 
 def create_header_with_button(text, button):
@@ -621,8 +620,6 @@ def create_dashboard_layout(
 
 
 def create_app_layout():
-    from depictio.dash.layouts.sidebar import render_sidebar_content
-
     return dmc.MantineProvider(
         id="mantine-provider",
         forceColorScheme="light",  # Default to light, will be updated by callback
@@ -676,6 +673,17 @@ def create_app_layout():
                 storage_type="local",
             ),
             dcc.Store(id="current-edit-parent-index", storage_type="memory"),
+            # Tab state management (frontend only, no backend persistence)
+            # Global store - always available before dashboard-specific callbacks run
+            dcc.Store(
+                id="dashboard-tabs-store",
+                storage_type="session",
+                data={
+                    "tabs": [{"id": "tableau-0", "label": "Tableau", "icon": "mdi:tab"}],
+                    "activeTab": "tableau-0",  # Use string ID, not integer index
+                    "maxTabs": 5,
+                },
+            ),
             # dcc.Interval(id="interval-component", interval=60 * 60 * 1000, n_intervals=0),
             html.Div(
                 id="dummy-plotly-output", style={"display": "none"}
@@ -683,6 +691,9 @@ def create_app_layout():
             html.Div(
                 id="dummy-resize-output", style={"display": "none"}
             ),  # Hidden output for resize callback
+            html.Div(
+                id="dummy-padding-output", style={"display": "none"}
+            ),  # Hidden output for padding callback
             dmc.Drawer(
                 title="",
                 id="drawer-simple",
@@ -696,16 +707,25 @@ def create_app_layout():
             html.Div(id="admin-password-warning-trigger", style={"display": "none"}),
             dmc.AppShell(
                 id="app-shell",  # Add ID for callback targeting
-                # navbar and header will be set by callbacks
-                layout="alt",  # Use alternative layout where header stops at navbar
+                layout="alt",  # Default to alt layout for non-dashboard pages (navbar extends to top)
+                # Use default layout with navbar always visible
+                navbar={
+                    "width": 220,
+                    "breakpoint": "sm",
+                    "collapsed": {"mobile": True, "desktop": False},
+                },
+                header={
+                    "height": 65,  # Default to 65px for non-dashboard pages, overridden to 45px for dashboards
+                    "padding": "0",  # Override Mantine's default padding to enforce exact height
+                },
                 style={
                     "height": "100vh",
                     "overflow": "auto",  # ✅ Allow scrolling
                 },
                 children=[
                     dmc.AppShellNavbar(  # type: ignore[unresolved-attribute]
-                        children=render_sidebar_content(""),
-                        id="sidebar",
+                        children=[],  # Content populated by render_dynamic_navbar_content() callback
+                        id="app-shell-navbar-content",
                     ),
                     dmc.AppShellHeader(  # type: ignore[unresolved-attribute]
                         children=[],  # Will be populated by callback
@@ -716,7 +736,7 @@ def create_app_layout():
                             id="page-content",
                             style={
                                 "padding": "0.25rem 0",  # Only top/bottom padding, no left/right
-                                "minHeight": "calc(100vh - 87px)",  # Ensure minimum height for short content
+                                "minHeight": "calc(100vh - 65px)",  # Ensure minimum height for short content (default header height)
                                 "overflowY": "auto",  # Allow vertical scrolling
                             },
                         ),

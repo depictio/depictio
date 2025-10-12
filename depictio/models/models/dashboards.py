@@ -18,6 +18,10 @@ class DashboardData(MongoModel):
     }
     stored_add_button: dict = {"count": 0}
     title: str
+    subtitle: str = ""
+    icon: str = "mdi:view-dashboard"
+    icon_color: str = "orange"
+    icon_variant: str = "filled"
     notes_content: str = ""
     permissions: Permission
     is_public: bool = False

@@ -1,10 +1,8 @@
 import dash
 import dash_mantine_components as dmc
 from dash import ALL, Input, Output, State, dcc, html
-from dash.exceptions import PreventUpdate
 from dash_iconify import DashIconify
 
-from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.simple_theme import create_theme_controls
 
 
@@ -52,34 +50,22 @@ def register_sidebar_callbacks(app):
     #     prevent_initial_call=True,
     # )
 
-    # Move sidebar icon to clientside for instant response
+    # NOTE: sidebar-icon callback removed - now using DMC Burger which manages its own icon state
+
+    # Move header favicon to clientside for instant response
+    # Favicon only relevant on dashboard pages (where navbar exists)
     app.clientside_callback(
         """
         function(is_collapsed, pathname) {
-            console.log('🔧 CLIENTSIDE SIDEBAR ICON: collapsed=' + is_collapsed + ', pathname=' + pathname);
+            console.log('🔧 CLIENTSIDE FAVICON: collapsed=' + is_collapsed + ', pathname=' + pathname);
 
-            // Don't update if on auth page (sidebar doesn't exist)
-            if (pathname === '/auth') {
-                return window.dash_clientside.no_update;
+            // Only manage favicon on dashboard pages
+            if (!pathname || !pathname.startsWith('/dashboard/')) {
+                console.log('❌ Not a dashboard page - hiding favicon');
+                return {"display": "none"};
             }
 
-            // Set icon based on current collapsed state
-            // When collapsed -> show right arrow (points to expand)
-            // When expanded -> show left arrow (points to collapse)
-            return is_collapsed ? 'ep:d-arrow-right' : 'ep:d-arrow-left';
-        }
-        """,
-        Output("sidebar-icon", "icon"),
-        [Input("sidebar-collapsed", "data"), Input("url", "pathname")],
-        prevent_initial_call=False,
-    )
-
-    # Move header favicon to clientside for instant response
-    app.clientside_callback(
-        """
-        function(is_collapsed) {
-            console.log('🔧 CLIENTSIDE FAVICON: collapsed=' + is_collapsed);
-
+            // Show favicon when navbar is collapsed on dashboard pages
             var base_style = {
                 "height": "44px",
                 "width": "44px",
@@ -92,28 +78,31 @@ def register_sidebar_callbacks(app):
         }
         """,
         Output("header-favicon", "style"),
-        [Input("sidebar-collapsed", "data")],
+        [Input("sidebar-collapsed", "data"), Input("url", "pathname")],
         prevent_initial_call=False,
     )
 
-    # Move navbar URL changes to clientside for instant response
+    # NOTE: Navbar is now always visible via static config in app_layout.py
+    # Only update collapse state for dashboard pages
     app.clientside_callback(
         """
-        function(pathname, is_collapsed) {
-            console.log('🔧 CLIENTSIDE NAVBAR URL: pathname=' + pathname + ', collapsed=' + is_collapsed);
+        function(is_collapsed, pathname) {
+            console.log('🔧 CLIENTSIDE NAVBAR COLLAPSED: collapsed=' + is_collapsed + ', pathname=' + pathname);
 
-            // Check if we're on the auth page - if so, hide the navbar completely
-            if (pathname === '/auth') {
-                return null;
+            // Only allow collapse on dashboard pages
+            if (!pathname || !pathname.startsWith('/dashboard/')) {
+                console.log('❌ Not a dashboard page - keeping navbar expanded');
+                return window.dash_clientside.no_update;
             }
 
-            // For other pages, show the navbar with current collapsed state
+            // Update navbar collapse state for dashboard pages
+            console.log('✅ Updating navbar collapse state for dashboard');
             var navbar_config = {
                 "width": 220,
                 "breakpoint": "sm",
                 "collapsed": {
                     "mobile": true,
-                    "desktop": is_collapsed !== null ? is_collapsed : false
+                    "desktop": is_collapsed ? true : false
                 }
             };
 
@@ -121,63 +110,13 @@ def register_sidebar_callbacks(app):
         }
         """,
         Output("app-shell", "navbar"),
-        [Input("url", "pathname")],
-        [State("sidebar-collapsed", "data")],
-        prevent_initial_call=False,
-    )
-
-    # Callback to handle sidebar button clicks (conditional to avoid auth page error)
-    @app.callback(
-        Output("sidebar-collapsed", "data", allow_duplicate=True),
-        Input("sidebar-button", "n_clicks"),
-        State("sidebar-collapsed", "data"),
-        State("url", "pathname"),
-        prevent_initial_call=True,
-    )
-    def handle_sidebar_button_click(n_clicks, is_collapsed, pathname):
-        logger.info(
-            f"Button clicked: {n_clicks}, Current state: {is_collapsed}, Pathname: {pathname}"
-        )
-        if n_clicks is None:
-            raise PreventUpdate
-
-        # Don't handle clicks on auth page (button doesn't exist there)
-        if pathname == "/auth":
-            raise PreventUpdate
-
-        # Toggle the collapsed state
-        logger.info(f"Toggling sidebar state from {is_collapsed} to {not is_collapsed}")
-        return not is_collapsed
-
-    # Move navbar collapsed state update to clientside for instant response
-    app.clientside_callback(
-        """
-        function(is_collapsed, pathname) {
-            console.log('🔧 CLIENTSIDE NAVBAR COLLAPSED: collapsed=' + is_collapsed + ', pathname=' + pathname);
-
-            // Don't update on auth page
-            if (pathname === '/auth') {
-                return window.dash_clientside.no_update;
-            }
-
-            // Return new navbar configuration
-            var navbar_config = {
-                "width": 220,
-                "breakpoint": "sm",
-                "collapsed": {
-                    "mobile": true,
-                    "desktop": is_collapsed !== null ? is_collapsed : false
-                }
-            };
-
-            return navbar_config;
-        }
-        """,
-        Output("app-shell", "navbar", allow_duplicate=True),
         [Input("sidebar-collapsed", "data")],
         [State("url", "pathname")],
         prevent_initial_call=True,
     )
+
+    # NOTE: sidebar-button callback removed - now using DMC Burger which handles clicks via
+    # update_collapsed_from_burger() in header.py
 
     # Move sidebar active state to clientside for instant response
     app.clientside_callback(
@@ -203,40 +142,55 @@ def register_sidebar_callbacks(app):
         prevent_initial_call=True,
     )
 
-    @app.callback(
-        Output("avatar-container", "children"),
-        Input("user-cache-store", "data"),
-        prevent_initial_call=True,
-    )
-    def update_avatar(user_cache):
-        # Get user from consolidated cache
-        if user_cache and isinstance(user_cache, dict) and "user" in user_cache:
-            user_data = user_cache["user"]
+    # Hide logo on dashboard pages for cleaner view
+    app.clientside_callback(
+        """
+        function(pathname) {
+            console.log('🔧 CLIENTSIDE NAVBAR LOGO: pathname=' + pathname);
 
-            if user_data and user_data.get("email"):
-                email = user_data["email"]
-                name = user_data.get("name", email.split("@")[0])
-            else:
-                return []
-        else:
-            return []
-        avatar = dcc.Link(
-            dmc.Avatar(
-                id="avatar",
-                src=f"https://ui-avatars.com/api/?format=svg&name={email}&background=AEC8FF&color=white&rounded=true&bold=true&format=svg&size=16",
-                size="md",
-                radius="xl",
-            ),
-            href="/profile",
-        )
-        name_text = dmc.Text(name, size="lg", style={"fontSize": "16px", "marginLeft": "10px"})
-        logger.info(f"✅ AVATAR CALLBACK: Created avatar for {email}")
-        return [avatar, name_text]
+            // Hide logo on individual dashboard pages (/dashboard/{dashboard_id})
+            if (pathname && pathname.startsWith('/dashboard/')) {
+                console.log('✅ Dashboard page - hiding logo');
+                return {"display": "none"};
+            } else {
+                console.log('✅ Non-dashboard page - showing logo');
+                return {"display": "block"};
+            }
+        }
+        """,
+        Output("navbar-logo-container", "style"),
+        Input("url", "pathname"),
+        prevent_initial_call=False,
+    )
+
+    # Reduce top padding when logo is hidden on dashboard pages
+    app.clientside_callback(
+        """
+        function(pathname) {
+            console.log('🔧 CLIENTSIDE NAVBAR LOGO CENTER: pathname=' + pathname);
+
+            // Hide logo center completely on dashboard pages for maximum space efficiency
+            if (pathname && pathname.startsWith('/dashboard/')) {
+                console.log('✅ Dashboard page - hiding logo center entirely');
+                return {"display": "none"};
+            } else {
+                console.log('✅ Non-dashboard page - showing logo center');
+                return {"display": "block"};
+            }
+        }
+        """,
+        Output("navbar-logo-center", "style"),
+        Input("url", "pathname"),
+        prevent_initial_call=False,
+    )
+
+    # NOTE: Avatar callback removed - replaced with "Powered by Depictio" section
+    # NOTE: Theme-aware logo callbacks removed - no logos to invert anymore
 
     @app.callback(
         Output("sidebar-footer-server-status", "children"),
         Input("server-status-cache", "data"),
-        prevent_initial_call=True,
+        prevent_initial_call=False,
     )
     def update_server_status(server_cache):
         from depictio.dash.layouts.consolidated_api import get_cached_server_status
@@ -293,81 +247,184 @@ def register_sidebar_callbacks(app):
         """,
         Output({"type": "sidebar-link", "index": "administration"}, "style"),
         Input("user-cache-store", "data"),
-        prevent_initial_call=True,
+        prevent_initial_call=False,
     )
 
-    # {"padding": "20px", "display": "none"}
-
-
-def render_sidebar(email):
-    # name = email.split("@")[0]
-
-    depictio_logo = dcc.Link(
-        html.Img(
-            id="navbar-logo", src=dash.get_asset_url("images/logos/logo_black.svg"), height=45
-        ),
-        href="/",
-        style={"alignItems": "center", "justifyContent": "center", "display": "flex"},
+    # Avatar callback - populate avatar container with user info
+    @app.callback(
+        Output("avatar-container", "children"),
+        Input("user-cache-store", "data"),
+        prevent_initial_call=False,
     )
+    def update_avatar(user_cache):
+        """Update avatar with user information from consolidated cache."""
+        from depictio.api.v1.configs.logging_init import logger
 
-    sidebar_links = html.Div(
-        id="sidebar-content",
-        children=[
-            dmc.NavLink(
-                id={"type": "sidebar-link", "index": "dashboards"},
-                label=dmc.Text(
-                    "Dashboards", size="lg", style={"fontSize": "16px"}, className="section-accent"
-                ),
-                leftSection=DashIconify(icon="material-symbols:dashboard", height=25),
-                href="/dashboards",
-                style={"padding": "20px"},
-                color="orange",
+        # Get user from consolidated cache
+        if user_cache and isinstance(user_cache, dict) and "user" in user_cache:
+            user_data = user_cache["user"]
+
+            if user_data and user_data.get("email"):
+                email = user_data["email"]
+                name = user_data.get("name", email.split("@")[0])
+            else:
+                return []
+        else:
+            return []
+
+        avatar = dcc.Link(
+            dmc.Avatar(
+                id="avatar",
+                src=f"https://ui-avatars.com/api/?format=svg&name={email}&background=AEC8FF&color=white&rounded=true&bold=true&format=svg&size=16",
+                size="md",
+                radius="xl",
             ),
-            dmc.NavLink(
-                id={"type": "sidebar-link", "index": "projects"},
-                label=dmc.Text(
-                    "Projects", size="lg", style={"fontSize": "16px"}, className="section-accent"
-                ),
-                leftSection=DashIconify(icon="mdi:jira", height=25),
-                href="/projects",
-                style={"padding": "20px"},
-                color="teal",
-            ),
-            dmc.NavLink(
-                id={"type": "sidebar-link", "index": "administration"},
-                label=dmc.Text(
-                    "Administration",
-                    size="lg",
-                    style={"fontSize": "16px"},
-                    className="section-accent",
-                ),
-                leftSection=DashIconify(icon="material-symbols:settings", height=25),
-                href="/admin",
-                style={"padding": "20px", "display": "none"},
-                color="blue",
-            ),
-            dmc.NavLink(
-                id={"type": "sidebar-link", "index": "about"},
-                label=dmc.Text(
-                    "About", size="lg", style={"fontSize": "16px"}, className="section-accent"
-                ),
-                leftSection=DashIconify(icon="mingcute:question-line", height=25),
-                href="/about",
-                style={"padding": "20px"},
-                color="gray",
-            ),
-        ],
-        style={
-            "whiteSpace": "nowrap",
-            "marginTop": "20px",
-            "flexGrow": "1",
-            "overflowY": "auto",
-        },
+            href="/profile",
+        )
+        name_text = dmc.Text(name, size="sm", style={"marginLeft": "5px"})
+        logger.info(f"✅ AVATAR CALLBACK: Created avatar for {email}")
+        return [avatar, name_text]
+
+    # Static Navbar Content - same layout for all pages
+    @app.callback(
+        Output("app-shell-navbar-content", "children"),
+        Input("url", "pathname"),
+        prevent_initial_call=False,
     )
+    def render_dynamic_navbar_content(pathname):
+        """Render navbar content with logo, navlinks, and footer with avatar."""
+        depictio_logo_container = html.Div(
+            id="navbar-logo-container",
+            children=[
+                dcc.Link(
+                    dmc.Image(
+                        id="navbar-logo-content",
+                        src=dash.get_asset_url("images/logos/logo_black.svg"),
+                        # h=38,
+                        w=185,
+                    ),
+                    href="/",
+                    style={"alignItems": "center", "justifyContent": "center", "display": "flex"},
+                )
+            ],
+        )
 
-    sidebar_footer = html.Div(
-        id="sidebar-footer",
-        # className="mt-auto",
+        sidebar_links = dmc.Stack(
+            id="sidebar-content",
+            children=[
+                dmc.NavLink(
+                    id={"type": "sidebar-link", "index": "dashboards"},
+                    label=dmc.Text(
+                        "Dashboards",
+                        size="lg",
+                        style={"fontSize": "16px"},
+                        className="section-accent",
+                    ),
+                    leftSection=DashIconify(icon="material-symbols:dashboard", height=25),
+                    href="/dashboards",
+                    style={"padding": "20px"},
+                    color="orange",
+                ),
+                dmc.NavLink(
+                    id={"type": "sidebar-link", "index": "projects"},
+                    label=dmc.Text(
+                        "Projects",
+                        size="lg",
+                        style={"fontSize": "16px"},
+                        className="section-accent",
+                    ),
+                    leftSection=DashIconify(icon="mdi:jira", height=25),
+                    href="/projects",
+                    style={"padding": "20px"},
+                    color="teal",
+                ),
+                dmc.NavLink(
+                    id={"type": "sidebar-link", "index": "administration"},
+                    label=dmc.Text(
+                        "Administration",
+                        size="lg",
+                        style={"fontSize": "16px"},
+                        className="section-accent",
+                    ),
+                    leftSection=DashIconify(icon="material-symbols:settings", height=25),
+                    href="/admin",
+                    style={"padding": "20px", "display": "none"},
+                    color="blue",
+                ),
+                dmc.NavLink(
+                    id={"type": "sidebar-link", "index": "about"},
+                    label=dmc.Text(
+                        "About",
+                        size="lg",
+                        style={"fontSize": "16px"},
+                        className="section-accent",
+                    ),
+                    leftSection=DashIconify(icon="mingcute:question-line", height=25),
+                    href="/about",
+                    style={"padding": "20px"},
+                    color="gray",
+                ),
+            ],
+            gap="xs",
+            style={
+                "whiteSpace": "nowrap",
+                "flex": "1",
+                "overflowY": "auto",
+            },
+        )
+
+        sidebar_footer = html.Div(
+            id="sidebar-footer",
+            children=[
+                dmc.Center(create_theme_controls()),
+                dmc.Grid(
+                    id="sidebar-footer-server-status",
+                    align="center",
+                    justify="center",
+                ),
+                html.Hr(),
+                html.Div(
+                    id="avatar-container",
+                    style={
+                        "textAlign": "center",
+                        "justifyContent": "center",
+                        "display": "flex",
+                        "alignItems": "center",
+                        "flexDirection": "row",
+                        "paddingBottom": "16px",  # Add padding to bottom of avatar
+                    },
+                ),
+            ],
+            style={
+                "flexShrink": 0,
+            },
+        )
+
+        # Return layout - same for all pages
+        return [
+            dmc.Stack(
+                [
+                    dmc.Center(
+                        [depictio_logo_container],
+                        id="navbar-logo-center",
+                        pt="md",  # Add padding to top of logo
+                    ),
+                    sidebar_links,
+                    sidebar_footer,
+                ],
+                justify="space-between",
+                h="100%",
+                style={
+                    "height": "100%",
+                },
+            )
+        ]
+
+
+def _create_powered_by_footer():
+    """Create footer with theme controls and server status for dashboard pages."""
+    return dmc.Stack(
+        id="powered-by-footer",
         children=[
             dmc.Center(create_theme_controls()),
             dmc.Grid(
@@ -375,150 +432,9 @@ def render_sidebar(email):
                 align="center",
                 justify="center",
             ),
-            html.Hr(),
-            html.Div(
-                id="avatar-container",
-                style={
-                    "textAlign": "center",
-                    "justifyContent": "center",
-                    "display": "flex",
-                    "alignItems": "center",  # Aligns Avatar and Text on the same line
-                    "flexDirection": "row",  # Flex direction set to row (default)
-                },
-            ),
         ],
-        style={
-            "flexShrink": 0,  # Prevent footer from shrinking
-        },
-    )
-
-    # TODO: DMC 2.0+ - Navbar component no longer exists, replaced with Container
-    navbar = dmc.Container(
-        p="md",
-        id="sidebar",
-        style={
-            "width": "220px",
-            "height": "100vh",
-            "overflow": "hidden",
-            "transition": "width 0.3s ease-in-out",
-            "display": "flex",
-            "flexDirection": "column",
-            "backgroundColor": "#ffffff",
-            "borderRight": "1px solid #dee2e6",
-        },
-        children=[dmc.Center([depictio_logo]), sidebar_links, sidebar_footer],
-    )
-
-    return navbar
-
-
-def render_sidebar_content(email):
-    """Render just the navbar content for use in AppShellNavbar"""
-    # name = email.split("@")[0]
-
-    depictio_logo = dcc.Link(
-        html.Img(
-            id="navbar-logo-content",
-            src=dash.get_asset_url("images/logos/logo_black.svg"),
-            height=45,
-        ),
-        href="/",
-        style={"alignItems": "center", "justifyContent": "center", "display": "flex"},
-    )
-
-    sidebar_links = html.Div(
-        id="sidebar-content",
-        children=[
-            dmc.NavLink(
-                id={"type": "sidebar-link", "index": "dashboards"},
-                label=dmc.Text(
-                    "Dashboards", size="lg", style={"fontSize": "16px"}, className="section-accent"
-                ),
-                leftSection=DashIconify(icon="material-symbols:dashboard", height=25),
-                href="/dashboards",
-                style={"padding": "20px"},
-                color="orange",
-            ),
-            dmc.NavLink(
-                id={"type": "sidebar-link", "index": "projects"},
-                label=dmc.Text(
-                    "Projects", size="lg", style={"fontSize": "16px"}, className="section-accent"
-                ),
-                leftSection=DashIconify(icon="mdi:jira", height=25),
-                href="/projects",
-                style={"padding": "20px"},
-                color="teal",
-            ),
-            dmc.NavLink(
-                id={"type": "sidebar-link", "index": "administration"},
-                label=dmc.Text(
-                    "Administration",
-                    size="lg",
-                    style={"fontSize": "16px"},
-                    className="section-accent",
-                ),
-                leftSection=DashIconify(icon="material-symbols:settings", height=25),
-                href="/admin",
-                style={"padding": "20px", "display": "none"},
-                color="blue",
-            ),
-            dmc.NavLink(
-                id={"type": "sidebar-link", "index": "about"},
-                label=dmc.Text(
-                    "About", size="lg", style={"fontSize": "16px"}, className="section-accent"
-                ),
-                leftSection=DashIconify(icon="mingcute:question-line", height=25),
-                href="/about",
-                style={"padding": "20px"},
-                color="gray",
-            ),
-        ],
-        style={
-            "whiteSpace": "nowrap",
-            "flex": "1",  # Take available space in Stack
-            "overflowY": "auto",
-        },
-    )
-
-    sidebar_footer = html.Div(
-        id="sidebar-footer",
-        children=[
-            dmc.Center(create_theme_controls()),
-            dmc.Grid(
-                id="sidebar-footer-server-status",
-                align="center",
-                justify="center",
-            ),
-            html.Hr(),
-            html.Div(
-                id="avatar-container",
-                style={
-                    "textAlign": "center",
-                    "justifyContent": "center",
-                    "display": "flex",
-                    "alignItems": "center",
-                    "flexDirection": "row",
-                },
-            ),
-        ],
+        gap="sm",
         style={
             "flexShrink": 0,
         },
     )
-
-    # Return content for AppShellNavbar - structured for full height
-    return [
-        dmc.Stack(
-            [
-                dmc.Center([depictio_logo]),
-                sidebar_links,
-                sidebar_footer,
-            ],
-            justify="space-between",
-            h="100%",
-            style={
-                "padding": "16px",
-                "height": "100%",
-            },
-        )
-    ]
