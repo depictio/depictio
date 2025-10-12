@@ -1310,7 +1310,6 @@ def register_callbacks_dashboards_management(app):
             State("dashboard-subtitle-input", "value"),
             State("dashboard-icon-input", "value"),
             State("dashboard-icon-color-select", "value"),
-            State("dashboard-icon-variant-select", "value"),
             State("dashboard-modal", "opened"),
             State("local-store", "data"),
             State("user-cache-store", "data"),
@@ -1327,7 +1326,6 @@ def register_callbacks_dashboards_management(app):
         subtitle,
         icon,
         icon_color,
-        icon_variant,
         opened,
         user_data,
         user_cache,
@@ -1476,7 +1474,7 @@ def register_callbacks_dashboards_management(app):
             data["subtitle"] = subtitle if subtitle else ""
             data["icon"] = icon if icon else "mdi:view-dashboard"
             data["icon_color"] = icon_color if icon_color else "orange"
-            data["icon_variant"] = icon_variant if icon_variant else "filled"
+            data["icon_variant"] = "filled"
             data["project_id"] = project
             return data, False, False, {"display": "none"}, dash.no_update, dash.no_update
 
