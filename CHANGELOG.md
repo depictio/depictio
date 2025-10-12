@@ -6,44 +6,51 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.5.0</summary>
+<summary>Click to expand the changelog for 0.5.1</summary>
 
 ### Changes 📜
 
 #### New Features ✨
 
-* feat: Enhance MultiQC processor tests with improved mocking and error handling [c510c7df]
-* feat: Add date range filtering capability to add_filter function with error handling [0102dda3]
-* feat: Implement full data loading capability with user-triggered requests and bypass sampling [5427d234]
-* feat: Enhance figure component with metadata validation and data count tracking for improved UI feedback [1f7aafc3]
-* feat: Update sync callback to allow duplicate outputs and adjust initial call behavior [8592370b]
-* feat: Add metadata and partial data warning buttons with dynamic visibility and content updates [3fdfc6e8]
-* feat: Add icon selection functionality to interactive component and enhance default icon mapping [679e2e30]
-* feat: Add customizable card styling options including background color, title color, icon selection, and title font size [2f7e9e60]
-* feat: Enhance build_interactive function to support custom color and title size configuration [06c07c83]
-* feat: Refactor screenshot functionality to directly capture AppShell content, excluding navbar and header [5ba7ed84]
-* feat: Re-enable color picker and add title size selection in interactive component [ab442c22]
-* feat: Improve dashboard screenshot functionality with enhanced loading and composite rendering [e18672f1]
-* feat: Enhance filtering logic to support joined data collections in _filter_relevant_dcs function [69ee925d]
-* feat: Add configuration for HGSVC Pools Strand-seq analysis and data collections [46074a7e]
-* feat: Enhance logging for filter application in load_deltatable_lite function [a1f14a8b]
-* feat: Add sample mapping utility to build mappings from canonical IDs to MultiQC variants [7cc1208a]
-* feat: Add endpoint to retrieve sample mappings for MultiQC reports [a51fac9b]
-* feat: Add workflow logo overlay component for dashboard branding [f545585a]
-* feat: Implement defensive cache check for project data and add workflow logo overlay [f5a60dda]
-* feat: Add detailed logging for save callback and clean up commented code [727903a3]
-* feat: Enhance data collection type mapping in interactive component sync process [5bff5fb3]
-* feat: Enhance UI/UX of interactive components with improved layout and spacing adjustments [de0778b4]
-* feat: Add sample mappings and canonical samples fields to MultiQCMetadata for enhanced data representation [82efdb00]
-* feat: Implement interactive filtering support with extraction, grouping, and relevance checks for data collections [9919ad96]
-* feat: Refactor interactive filtering logic to enhance data extraction, grouping, and join strategy for improved performance and maintainability [550aaf70]
-* feat: Refactor filter handling in register_callbacks_figure_component to improve data integrity and logging for relevant data collections [45d21fc2]
-* feat: Improve heatmap filtering logic by implementing fuzzy matching for sample names and ensuring data consistency between Y and Z axes [3876ef86]
-* feat: Enhance logging and parameter handling in figure component for improved debugging and flexibility [28ecbbe2]
-* feat: Add expand_canonical_samples_to_variants function to handle MultiQC sample mappings [0bca114e]
-* feat: Enhance generate_join_dict to include non-table data collections in join configurations [9c0a243d]
-* feat: Preserve component state during layout changes by using dash.no_update for children to prevent re-mounting [0bbe30b2]
-* feat: Refine multiqc data collection handling by removing unnecessary options and adding join filtering logic [d8a8891f]
+* feat: Always create component buttons in edit mode, with CSS controlling visibility [669fdc92]
+* feat: Implement initial edit mode state determination for draggable layout [1e56ebe3]
+* feat: Refactor sidebar callbacks for improved favicon and navbar management on dashboard pages [ba99f97b]
+* feat: Refactor dashboard modal layout to improve form structure and add icon customization options [40d10c09]
+* feat: Update dashboard header layout with improved button sizes and new info section [0d4ad756]
+* feat: Refactor admin header to return content directly without AppShellHeader wrapper [62d294af]
+* feat: Enhance clientside layout and padding management for dashboard and other pages [b10bf77b]
+* feat: Enhance draggable grid resize handle functionality and visibility [58b0690b]
+* feat: Enhance theme management with improved clientside callbacks and logo updates [250437a2]
+* feat: Enhance dashboard model and UI with subtitle and icon customization options [5887297b]
+* feat: Add Redis support with configuration, deployment, and connectivity tests [f86b4f10]
+
+#### Bug Fixes 🐛
+
+* fix: Update resize handle colors for better visibility in light and dark themes [08938777]
+* fix: Remove unused state for dashboard icon variant in callbacks [dbd35d89]
+* fix: Adjust navbar logo dimensions for improved layout consistency [435aa448]
+* fix: Normalize layout IDs to prevent mismatches and component position resets [a164f8cb]
+* fix: Adjust app header height in notes footer for fullscreen mode [a41d83a8]
+* fix: Correct string formatting in Redis cache stats logging [ffcfd7a1]
+
+#### Improvements 🚀
+
+* refactor: Remove dark theme specific styles for auth modal and Google button [6ddaf469]
+
+#### Other Changes 📝
+
+* Bump version: 0.5.0 → 0.5.1 [04df3adf]
+* Update CHANGELOG.md for v0.5.0 [f55fe809]
+* Bump version: 0.4.0 → 0.5.0 [6ce0865e]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+ecessary options and adding join filtering logic [d8a8891f]
 * feat: Enhance render_figure function to support additional color parameters and improve handling of hierarchical visualizations [b2034ced]
 * feat: Enhance filtering logic to detect active filters and optimize data loading for single and joined data collections [da5cbeb2]
 * feat: Add theme selection dropdown to card component for enhanced visual customization [455b8f5a]
