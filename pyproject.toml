@@ -78,7 +78,7 @@ dev = [
   "black==25.1.0",
   "ruff==0.12.1",
   "ty==0.0.1-alpha.12",
-  "pandera[pandas,polars]",
+  # "pandera[pandas,polars]",
   "pre-commit",
   "pytest==8.4.1",
   "pytest-asyncio==1.0.0",
@@ -94,6 +94,7 @@ dev = [
   "types-boto3",
   "textual>=5.2.0",
 ]
+
 
 [project.scripts]
 depictio-api = "depictio.api.run:main"
