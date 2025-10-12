@@ -151,9 +151,9 @@ def _get_user_permissions(current_user, data):
 def _create_action_icon(icon, button_id, disabled=False, n_clicks=0, tooltip=None, **kwargs):
     """Create a standardized action icon button with optional tooltip."""
     button = dmc.ActionIcon(
-        DashIconify(icon=icon, width=35, color="gray"),
+        DashIconify(icon=icon, width=28, color="gray"),
         id=button_id,
-        size="xl",
+        size="md",  # Medium button size
         radius="xl",
         variant="subtle",
         color="gray",
@@ -178,9 +178,9 @@ def _create_action_icon(icon, button_id, disabled=False, n_clicks=0, tooltip=Non
 def _create_reset_filters_button():
     """Create the reset all filters button with consistent styling."""
     button = dmc.ActionIcon(
-        DashIconify(icon="bx:reset", width=35, color="gray"),
+        DashIconify(icon="bx:reset", width=28, color="gray"),
         id="reset-all-filters-button",
-        size="xl",
+        size="md",  # Medium button size
         radius="xl",
         variant="subtle",  # Use subtle variant like other buttons when no filters
         color="gray",
@@ -201,9 +201,9 @@ def _create_reset_filters_button():
 def _create_apply_filters_button():
     """Create the apply filters button with checkmark icon."""
     button = dmc.ActionIcon(
-        DashIconify(icon="material-symbols:check", width=35, color="gray"),
+        DashIconify(icon="material-symbols:check", width=28, color="gray"),
         id="apply-filters-button",
-        size="xl",
+        size="md",  # Medium button size
         radius="xl",
         variant="subtle",  # Default subtle variant
         color="gray",
@@ -259,86 +259,6 @@ def _format_last_saved(timestamp):
         return f"Last saved: {formatted_ts}"
 
 
-def _create_title_section(data):
-    """Create the title section with logo and edit status."""
-    return html.Div(
-        [
-            html.Div(
-                [
-                    dmc.Group(
-                        [
-                            # Depictio favicon
-                            html.Img(
-                                id="header-favicon",
-                                src=dash.get_asset_url("images/icons/favicon.ico"),
-                                style={
-                                    "height": "24px",
-                                    "width": "24px",
-                                    "display": "none",
-                                },
-                            ),
-                            html.Div(
-                                [
-                                    dmc.Title(
-                                        f"{data['title']}",
-                                        order=1,
-                                        id="dashboard-title",
-                                        style={
-                                            "fontWeight": "bold",
-                                            "fontSize": "24px",
-                                            "margin": "0",
-                                        },
-                                    ),
-                                    # Edit status badge - now clickable
-                                    dmc.ActionIcon(
-                                        dmc.Badge(
-                                            "Edit OFF",
-                                            id="edit-status-badge",
-                                            size="xs",
-                                            color="gray",
-                                            leftSection=DashIconify(
-                                                icon="mdi:pencil-off", width=8, color="white"
-                                            ),
-                                            style={
-                                                "marginTop": "1px",
-                                                "fontSize": "8px",
-                                                "height": "14px",
-                                                "padding": "2px 6px",
-                                            },
-                                        ),
-                                        id="edit-status-badge-button",
-                                        variant="transparent",
-                                        size="sm",
-                                        style={"padding": "0"},
-                                    ),
-                                ],
-                                style={
-                                    "display": "flex",
-                                    "flexDirection": "row",
-                                    "alignItems": "center",
-                                    "gap": "4px",
-                                },
-                            ),
-                        ],
-                        gap="md",
-                        align="center",
-                        style={"display": "inline-flex", "alignItems": "center", "gap": "4px"},
-                    ),
-                ],
-                style={"textAlign": "center"},
-            )
-        ],
-        style={
-            "flex": "1",
-            "display": "flex",
-            "justifyContent": "center",
-            "alignItems": "center",
-            "gap": "4px",
-            "minWidth": 0,
-        },
-    )
-
-
 def _create_backend_components():
     """Create backend components (stores, modals, etc.)."""
     modal_save_button = dmc.Modal(
@@ -371,7 +291,8 @@ def _create_backend_components():
         ),
     )
 
-    backend_stores = html.Div(
+    # DMC Box instead of html.Div for backend stores
+    backend_stores = dmc.Stack(
         [
             dcc.Store(id="stored-draggable-children", storage_type="session", data={}),
             dcc.Store(id="stored-edit-component", data=None, storage_type="memory"),
@@ -379,14 +300,20 @@ def _create_backend_components():
             dcc.Store(id="interactive-values-store", storage_type="session", data={}),
             dcc.Store(id="pending-changes-store", storage_type="memory", data={}),
             dcc.Store(id="live-interactivity-store", storage_type="session", data=True),
-        ]
+            # NOTE: dashboard-tabs-store moved to global app layout (app_layout.py)
+            # to ensure it's always available before dashboard-specific callbacks run
+        ],
+        gap=0,  # No gap needed for stores
     )
 
-    return html.Div(
+    # DMC Box instead of html.Div for backend components container
+    return dmc.Box(
         [
             backend_stores,
             modal_save_button,
-            html.Div(id="stepper-output", style={"display": "none"}),
+            html.Div(
+                id="stepper-output", style={"display": "none"}
+            ),  # Keep html.Div for hidden output
             # dcc.Store(id="button-style-tracker", data={}),
             # dcc.Store(id="progress-monitor", data={}),
         ]
@@ -513,21 +440,49 @@ def register_callbacks_header(app):
 
         return is_open, current_footer_class, current_page_class
 
+    # Sync drawer edit status badge with edit mode toggle
     @app.callback(
         [
-            Output("edit-status-badge-2", "children"),
-            Output("edit-status-badge-2", "color"),
-            Output("edit-status-badge-2", "leftSection"),
+            Output("edit-status-badge-drawer", "children"),
+            Output("edit-status-badge-drawer", "color"),
+            Output("edit-status-badge-drawer", "leftSection"),
         ],
         Input("unified-edit-mode-button", "checked"),
         prevent_initial_call=False,
     )
-    def update_edit_status_badge(edit_mode_checked):
-        """Update the edit status badge based on edit mode state."""
+    def update_edit_status_badge_drawer(edit_mode_checked):
+        """Update the drawer edit status badge based on edit mode state."""
         if edit_mode_checked:
             return ("Edit ON", "blue", DashIconify(icon="mdi:pencil", width=8, color="white"))
         else:
             return ("Edit OFF", "gray", DashIconify(icon="mdi:pencil-off", width=8, color="white"))
+
+    # Sync header edit button with edit mode toggle
+    @app.callback(
+        [
+            Output("edit-status-badge-clickable-2", "children"),
+            Output("edit-status-badge-clickable-2", "color"),
+            Output("edit-status-badge-clickable-2", "variant"),
+        ],
+        Input("unified-edit-mode-button", "checked"),
+        prevent_initial_call=False,
+    )
+    def update_edit_button_header(edit_mode_checked):
+        """Update the header edit button based on edit mode state."""
+        if edit_mode_checked:
+            # Edit ON: blue filled button with white icon
+            return (
+                DashIconify(icon="mdi:pencil", width=28, color="white"),
+                "blue",
+                "filled",
+            )
+        else:
+            # Edit OFF: gray subtle button with gray icon
+            return (
+                DashIconify(icon="mdi:pencil-off", width=28, color="gray"),
+                "gray",
+                "subtle",
+            )
 
     # Make edit status badge clickable to toggle edit mode
     @app.callback(
@@ -620,12 +575,12 @@ def register_callbacks_header(app):
         if has_active_filters:
             # Orange filled variant with white icon when filters are active
             logger.info("🟠 Setting reset button to orange with white icon (filters active)")
-            icon = DashIconify(icon="bx:reset", width=35, color="white")
+            icon = DashIconify(icon="bx:reset", width=28, color="white")
             return colors["orange"], "filled", icon
         else:
             # Gray subtle variant with gray icon when no filters
             logger.info("⚪ Setting reset button to gray with gray icon (no filters)")
-            icon = DashIconify(icon="bx:reset", width=35, color="gray")
+            icon = DashIconify(icon="bx:reset", width=28, color="gray")
             return "gray", "subtle", icon
 
     # @app.callback(
@@ -788,6 +743,41 @@ def register_callbacks_header(app):
     #     # Return both updated interactive values and empty pending changes
     #     return updated_values, {}
 
+    # =============================================================================
+    # BURGER BUTTON CALLBACKS (DMC Burger for navbar toggle)
+    # =============================================================================
+
+    # Sync burger opened state with sidebar-collapsed store (inverted)
+    # Burger opened=True means navbar visible, sidebar-collapsed=False
+    @app.callback(
+        Output("burger-button", "opened", allow_duplicate=True),
+        Input("sidebar-collapsed", "data"),
+        prevent_initial_call=True,
+    )
+    def sync_burger_from_store(is_collapsed):
+        """Sync burger button state from sidebar-collapsed store (inverted)."""
+        # Burger opened = NOT collapsed
+        return not is_collapsed if is_collapsed is not None else True
+
+    # Update sidebar-collapsed store when burger is clicked
+    @app.callback(
+        Output("sidebar-collapsed", "data", allow_duplicate=True),
+        Input("burger-button", "opened"),
+        State("url", "pathname"),
+        prevent_initial_call=True,
+    )
+    def update_collapsed_from_burger(burger_opened, pathname):
+        """Update sidebar-collapsed store when burger is clicked (only on dashboard pages)."""
+        # Only update on dashboard pages
+        if not pathname or not pathname.startswith("/dashboard/"):
+            logger.info(f"Ignoring burger click on non-dashboard page: {pathname}")
+            raise dash.exceptions.PreventUpdate
+
+        # sidebar-collapsed = NOT burger_opened
+        is_collapsed = not burger_opened
+        logger.info(f"Burger clicked: opened={burger_opened}, setting collapsed={is_collapsed}")
+        return is_collapsed
+
 
 # =============================================================================
 # MAIN LAYOUT FUNCTION
@@ -846,13 +836,6 @@ def design_header(data, local_store):
         data["stored_edit_dashboard_mode_button"] if data else [int(0)]
     )
 
-    # Create header components
-    card_section = dmc.Group(
-        [_create_info_badges(data, project_name)],
-        justify="center",
-        align="center",
-    )
-
     # Create action buttons with tooltips
     add_new_component_button = _create_action_icon(
         "material-symbols:add",
@@ -884,6 +867,15 @@ def design_header(data, local_store):
     reset_filters_button = _create_reset_filters_button()
     apply_filters_button = _create_apply_filters_button()
 
+    # Create clickable edit mode button using the same pattern as other action buttons
+    edit_mode_button_header = _create_action_icon(
+        "mdi:pencil-off",
+        "edit-status-badge-clickable-2",
+        disabled=False,
+        n_clicks=0,
+        tooltip="Toggle edit mode\nfor dashboard editing",
+    )
+
     # Create remove all components button for offcanvas
     remove_all_components_button = dmc.Button(
         "Remove all components",
@@ -897,7 +889,76 @@ def design_header(data, local_store):
         fullWidth=True,
     )
 
-    toggle_switches_group = html.Div(
+    # NEW: Dashboard Info Section for drawer
+    dashboard_info_group = dmc.Stack(
+        [
+            dmc.Title("Dashboard Info", order=4),
+            dmc.Stack(
+                [
+                    dmc.Badge(
+                        f"Project: {project_name}",
+                        size="lg",
+                        color=colors["teal"],
+                        leftSection=DashIconify(icon="mdi:jira", width=16, color="white"),
+                        style={"width": "100%", "justifyContent": "flex-start"},
+                    ),
+                    dmc.Badge(
+                        f"Owner: {data['permissions']['owners'][0]['email']}",
+                        size="lg",
+                        color=colors["blue"],
+                        leftSection=DashIconify(icon="mdi:account", width=16, color="white"),
+                        style={"width": "100%", "justifyContent": "flex-start"},
+                    ),
+                    dmc.Badge(
+                        _format_last_saved(data["last_saved_ts"]),
+                        size="lg",
+                        color=colors["purple"],
+                        leftSection=DashIconify(
+                            icon="mdi:clock-time-four-outline", width=16, color="white"
+                        ),
+                        style={"width": "100%", "justifyContent": "flex-start"},
+                    ),
+                ],
+                gap="sm",
+            ),
+            dmc.Divider(),
+            # Status badges section
+            dmc.Group(
+                [
+                    dmc.Text("Edit Mode:", fw="bold", size="sm"),
+                    dmc.Badge(
+                        "Edit OFF",
+                        id="edit-status-badge-drawer",
+                        size="sm",
+                        color="gray",
+                        leftSection=DashIconify(icon="mdi:pencil-off", width=8, color="white"),
+                    ),
+                ],
+                justify="space-between",
+                style={"width": "100%"},
+            ),
+            dmc.Group(
+                [
+                    dmc.Text("Live Interactivity:", fw="bold", size="sm"),
+                    dmc.Badge(
+                        "Live OFF",
+                        id="live-interactivity-badge-drawer",
+                        size="sm",
+                        color="gray",
+                        leftSection=DashIconify(
+                            icon="mdi:lightning-bolt-outline", width=8, color="white"
+                        ),
+                    ),
+                ],
+                justify="space-between",
+                style={"width": "100%", "display": "none"},  # Hidden for now
+            ),
+        ],
+        gap="md",
+    )
+
+    # DMC Stack instead of html.Div for better theme support
+    toggle_switches_group = dmc.Stack(
         [
             dmc.Title("Switches", order=4),
             dmc.Group(
@@ -927,7 +988,7 @@ def design_header(data, local_store):
                 ],
                 align="center",
                 gap="sm",
-                style={"padding": "10px", "margin": "10px 0"},
+                style={"padding": "5px", "margin": "5px 0"},
             ),
             dmc.Group(
                 [
@@ -940,7 +1001,7 @@ def design_header(data, local_store):
                 ],
                 align="center",
                 gap="sm",
-                style={"padding": "10px", "margin": "10px 0"},
+                style={"padding": "5px", "margin": "5px 0"},
             ),
             dmc.Group(
                 [
@@ -953,25 +1014,27 @@ def design_header(data, local_store):
                 ],
                 align="center",
                 gap="sm",
-                style={"padding": "10px", "margin": "10px 0"},
+                style={"padding": "5px", "margin": "5px 0"},
             ),
-        ]
+        ],
+        gap="md",
     )
 
-    buttons_group = html.Div(
+    # DMC Stack instead of html.Div for better theme support
+    buttons_group = dmc.Stack(
         [
             dmc.Title("Buttons", order=4),
             dmc.Group(
                 [remove_all_components_button],
                 align="center",
                 gap="sm",
-                style={"padding": "10px", "margin": "10px 0"},
+                style={"padding": "5px", "margin": "5px 0"},
             ),
             dmc.Group(
                 [
                     # dmc.Button(
                     dmc.ActionIcon(
-                        DashIconify(icon="mdi:share-variant", width=20, color="white"),
+                        DashIconify(icon="mdi:share-variant", width=24, color="white"),
                         id="share-button",
                         color="gray",
                         variant="filled",
@@ -982,19 +1045,22 @@ def design_header(data, local_store):
                 ],
                 align="center",
                 gap="sm",
-                style={"padding": "10px", "margin": "10px 0", "display": "none"},
+                style={"padding": "5px", "margin": "5px 0", "display": "none"},
             ),
-        ]
+        ],
+        gap="md",
     )
 
     offcanvas_parameters = dmc.Drawer(
         id="offcanvas-parameters",
-        title="Parameters",
+        title="Dashboard Settings",
         position="right",
         opened=False,
         closeOnClickOutside=True,
         closeOnEscape=True,
-        children=dmc.Stack([toggle_switches_group, buttons_group], gap="md"),
+        children=dmc.Stack(
+            [dashboard_info_group, toggle_switches_group, buttons_group], gap="lg"
+        ),  # Added dashboard_info_group first
         size="400px",
     )
 
@@ -1031,155 +1097,104 @@ def design_header(data, local_store):
         ),
     ]
 
-    button_menu = dmc.Group(
-        [
-            dcc.Store(
-                id="initialized-navbar-button",
-                storage_type="memory",
-                data=False,
-            ),
-            dmc.ActionIcon(
-                DashIconify(
-                    id="sidebar-icon",
-                    icon="ep:d-arrow-right",  # Start with right arrow (collapsed state - default)
-                    width=24,
-                    height=24,
-                    color="#c2c7d0",
-                ),
-                variant="subtle",
-                id="sidebar-button",
-                size="lg",
-                style={"marginRight": "5px"},  # Small margin to prevent overlap
-            ),
-        ]
+    # DMC Burger for navbar toggle (replaces custom sidebar button)
+    burger_button = dmc.Burger(
+        id="burger-button",
+        opened=False,  # Consistent initial state, managed by sidebar-collapsed store
+        size="md",
+        color="gray",
+        style={"marginRight": "10px"},
     )
 
     # DMC 2.0+ - Use Group instead of Grid for better flex control
     header_content = dmc.Group(
         [
-            # Left section - sidebar button and badges
+            # Left section - burger button + dashboard icon + title + subtitle
             dmc.Group(
                 [
-                    button_menu,
-                    card_section,
-                ],
-                gap="xs",
-                style={"minWidth": "fit-content", "flexShrink": 0},  # Prevent shrinking
-            ),
-            # Center section - title with logo positioned to stick to its left
-            html.Div(
-                [
-                    html.Div(
+                    burger_button,  # DMC Burger instead of custom button
+                    # Dashboard icon from DashboardData model with filled variant
+                    dmc.ActionIcon(
+                        DashIconify(
+                            icon=data.get("icon", "mdi:view-dashboard"),
+                            width=24,
+                            height=24,
+                        ),
+                        color=data.get("icon_color", "orange"),
+                        radius="xl",
+                        size="lg",
+                        variant="filled",
+                    ),
+                    # Title and optional subtitle
+                    dmc.Stack(
                         [
-                            dmc.Group(
-                                [
-                                    # Depictio favicon - positioned immediately to the left of title
-                                    html.Img(
-                                        id="header-favicon",
-                                        src=dash.get_asset_url("images/icons/favicon.ico"),
-                                        style={
-                                            "height": "24px",
-                                            "width": "24px",
-                                            # Initially hidden, shown when sidebar is collapsed
-                                            "display": "none",
-                                        },
-                                    ),
-                                    dmc.Stack(
-                                        [
-                                            dmc.Title(
-                                                f"{data['title']}",
-                                                order=1,
-                                                id="dashboard-title",
-                                                style={
-                                                    "fontWeight": "bold",
-                                                    "fontSize": "24px",
-                                                    "margin": "0",
-                                                },
-                                            ),
-                                            dmc.Group(
-                                                [
-                                                    # Edit status badge - directly below title - now clickable
-                                                    html.Div(
-                                                        dmc.Badge(
-                                                            id="edit-status-badge-2",
-                                                            children="Edit OFF",
-                                                            size="sm",
-                                                            color="gray",
-                                                            leftSection=DashIconify(
-                                                                icon="mdi:pencil-off",
-                                                                width=8,
-                                                                color="white",
-                                                            ),
-                                                            style={
-                                                                "fontSize": "10px",
-                                                                "height": "18px",
-                                                                "cursor": "pointer",
-                                                            },
-                                                        ),
-                                                        id="edit-status-badge-clickable-2",
-                                                    ),
-                                                    # Live interactivity status badge - next to edit badge - clickable
-                                                    html.Div(
-                                                        dmc.Badge(
-                                                            id="live-interactivity-badge",
-                                                            children="Live OFF",
-                                                            size="sm",
-                                                            color="gray",
-                                                            leftSection=DashIconify(
-                                                                icon="mdi:lightning-bolt-outline",
-                                                                width=8,
-                                                                color="white",
-                                                            ),
-                                                            style={
-                                                                "fontSize": "10px",
-                                                                "height": "18px",
-                                                                "cursor": "pointer",
-                                                            },
-                                                        ),
-                                                        id="live-interactivity-badge-clickable",
-                                                        style={
-                                                            "cursor": "pointer !important",
-                                                            "display": "none",  # Hidden for now
-                                                        },
-                                                    ),
-                                                ],
-                                                justify="center",
-                                            ),
-                                        ],
-                                        align="center",
-                                        gap="2px",
-                                    ),
-                                ],
-                                gap="sm",
-                                align="center",
+                            dmc.Title(
+                                f"{data['title']}",
+                                order=3,
+                                id="dashboard-title",
+                                fw="bold",
+                                fz=20,
+                                m=0,
+                                style={"lineHeight": "1.2"},
+                            ),
+                            # Subtitle (only shown if provided)
+                            dmc.Text(
+                                data.get("subtitle", ""),
+                                size="xs",
+                                c="gray",
                                 style={
-                                    "display": "inline-flex",
-                                    "flexDirection": "row",
-                                    "alignItems": "center",
-                                    "gap": "8px",
+                                    "lineHeight": "1.2",
+                                    "display": "block" if data.get("subtitle") else "none",
+                                    "opacity": "0.7",
                                 },
                             ),
                         ],
-                        style={
-                            "display": "flex",
-                            "flexDirection": "column",
-                            "alignItems": "center",
-                            "textAlign": "center",
-                        },
-                    )
+                        gap=2,
+                        justify="center",
+                    ),
                 ],
+                gap="sm",
+                align="center",
+                style={"minWidth": "fit-content", "flexShrink": 0},  # Prevent shrinking
+            ),
+            # Center section - spacer for layout balance
+            dmc.Box(
                 style={
                     "flex": "1",
-                    "display": "flex",
-                    "justifyContent": "center",
-                    "alignItems": "center",
-                    "gap": "4px",
                     "minWidth": 0,
                 },
             ),
-            # Right section - action buttons
+            # Right section - "Powered by" + action buttons (compact spacing)
             dmc.Group(
                 [
+                    # Powered by Depictio section
+                    dmc.Group(
+                        [
+                            dmc.Text(
+                                "Powered by",
+                                size="xs",
+                                c="gray",
+                                fw="bold",
+                                style={"opacity": "0.7"},
+                            ),
+                            dmc.Image(
+                                id="header-powered-by-logo",
+                                src=dash.get_asset_url("images/logos/logo_black.svg"),
+                                h=20,
+                                w="auto",
+                            ),
+                        ],
+                        gap=5,
+                        align="center",
+                        style={
+                            "marginRight": "15px",
+                            "borderRight": "1px solid var(--app-border-color, #ddd)",
+                            "paddingRight": "15px",
+                        },
+                    ),
+                    # Edit mode button (clickable)
+                    edit_mode_button_header,
+                    # Action buttons
                     apply_filters_button,
                     add_new_component_button,
                     reset_filters_button,
@@ -1187,7 +1202,7 @@ def design_header(data, local_store):
                     notes_button,
                     open_offcanvas_parameters_button,
                 ],
-                gap="xs",
+                gap=3,  # Tighter gap (3px) for compact buttons
                 style={"minWidth": "fit-content", "flexShrink": 0},
             ),
         ],
@@ -1224,13 +1239,15 @@ def design_header(data, local_store):
     # Backend components
     backend_components = _create_backend_components()
 
-    # Extended backend components that need to be in the layout
-    backend_components_extended = html.Div(
+    # Extended backend components that need to be in the layout (DMC Stack)
+    backend_components_extended = dmc.Stack(
         [
             backend_components,
             offcanvas_parameters,
-            html.Div(children=stores_add_edit),
-        ]
+            dmc.Stack(children=stores_add_edit, gap=0),  # DMC Stack for stores list
+        ],
+        gap=0,  # No gap needed for backend components
     )
 
+    # Return header content (tabs are now in sidebar, not header)
     return header_content, backend_components_extended

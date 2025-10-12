@@ -805,48 +805,37 @@ def enable_box_edit_mode(
             style={"display": "none", "visibility": "hidden"},
         )
 
-    if switch_state:
-        # Create buttons based on component type and configuration
-        # Conditionally create partial data warning button only for scatter plots with large datasets
-        partial_data_button_func = None
-        if component_type == "figure" and component_data:
-            visu_type = component_data.get("visu_type", None)
-            # Check if this is a scatter plot that might have partial data
-            # The actual check for data size will happen at render time
-            if visu_type and visu_type.lower() == "scatter":
-                partial_data_button_func = create_partial_data_warning_button
+    # ALWAYS create buttons regardless of edit mode - CSS will control visibility
+    # Conditionally create partial data warning button only for scatter plots with large datasets
+    partial_data_button_func = None
+    if component_type == "figure" and component_data:
+        visu_type = component_data.get("visu_type", None)
+        # Check if this is a scatter plot that might have partial data
+        # The actual check for data size will happen at render time
+        if visu_type and visu_type.lower() == "scatter":
+            partial_data_button_func = create_partial_data_warning_button
 
-        buttons = _create_component_buttons(
-            component_type,
-            component_data,
-            btn_index,
-            create_drag_handle,
-            create_remove_button,
-            create_edit_button,
-            create_duplicate_button,
-            create_reset_button,
-            create_alignment_button,
-            create_metadata_button,
-            partial_data_button_func,
-        )
-        # if fresh:
-        #     buttons = dmc.Group([remove_button], grow=False, gap="xl", style={"margin-left": "12px"})
-        # Handle native Dash component - wrap in list for consistent processing
-        if hasattr(box, "children") or hasattr(box, "figure") or hasattr(box, "id"):
-            # Native Dash component
-            box_components_list = box
-        else:
-            # JSON representation (legacy)
-            box_components_list = box
+    buttons = _create_component_buttons(
+        component_type,
+        component_data,
+        btn_index,
+        create_drag_handle,
+        create_remove_button,
+        create_edit_button,
+        create_duplicate_button,
+        create_reset_button,
+        create_alignment_button,
+        create_metadata_button,
+        partial_data_button_func,
+    )
 
+    # Handle native Dash component - wrap in list for consistent processing
+    if hasattr(box, "children") or hasattr(box, "figure") or hasattr(box, "id"):
+        # Native Dash component
+        box_components_list = box
     else:
-        # Non-edit mode: handle both native components and JSON
-        if hasattr(box, "children") or hasattr(box, "figure") or hasattr(box, "id"):
-            # Native Dash component
-            box_components_list = box
-        else:
-            # JSON representation (legacy)
-            box_components_list = [box]
+        # JSON representation (legacy)
+        box_components_list = box
 
     # Create a DraggableWrapper for dash-dynamic-grid-layout
     # This preserves the UUID and makes the component draggable
@@ -856,134 +845,63 @@ def enable_box_edit_mode(
 
     logger.info(f"Creating DraggableWrapper with UUID: {box_uuid}")
 
-    if switch_state:
-        # Create content div with embedded buttons (matching prototype pattern)
-        # NUCLEAR: Remove intermediate wrapper div that breaks flex chain
-        content_children = []
+    # Create content div with embedded buttons - CSS will handle visibility based on edit mode
+    # Button visibility controlled by .drag-handles-hidden CSS class (see draggable-grid.css)
+    content_children = []
 
-        # Add component content - handle both native components and lists
-        if (
-            hasattr(box_components_list, "children")
-            or hasattr(box_components_list, "figure")
-            or hasattr(box_components_list, "id")
-        ):
-            # Native Dash component
-            content_children.append(box_components_list)
-        elif isinstance(box_components_list, list):
-            # List of components
-            content_children.extend(box_components_list)
-        else:
-            # Single component or JSON
-            content_children.append(box_components_list)
-
-        # Add buttons positioned absolutely
-        content_children.append(
-            html.Div(
-                buttons,
-                style={
-                    "position": "absolute",
-                    "top": "4px",
-                    "right": "8px",
-                    "zIndex": 1000,
-                    "alignItems": "center",
-                    "height": "auto",
-                    "background": "transparent",
-                    "borderRadius": "6px",
-                    "padding": "4px",
-                },
-            )
-        )
-
-        content_div = html.Div(
-            content_children,
-            id=f"content-{box_uuid}",
-            className="dashboard-component-hover responsive-content",
-            style={
-                "overflow": "visible",
-                "width": "100%",
-                "height": "100%",
-                "boxSizing": "border-box",
-                "padding": "5px",
-                "border": "1px solid transparent",
-                "borderRadius": "8px",
-                "position": "relative",
-                "minHeight": "100px",
-                "transition": "all 0.3s ease",
-                # Critical flexbox properties for vertical growing
-                "display": "flex",
-                "flexDirection": "column",
-            },
-        )
+    # Add component content - handle both native components and lists
+    if (
+        hasattr(box_components_list, "children")
+        or hasattr(box_components_list, "figure")
+        or hasattr(box_components_list, "id")
+    ):
+        # Native Dash component
+        content_children.append(box_components_list)
+    elif isinstance(box_components_list, list):
+        # List of components
+        content_children.extend(box_components_list)
     else:
-        # Non-edit mode: simple content div without buttons (except reset for scatter plots)
-        # Handle both native components and JSON
-        content_children = []
-        if (
-            hasattr(box_components_list, "children")
-            or hasattr(box_components_list, "figure")
-            or hasattr(box_components_list, "id")
-        ):
-            # Native Dash component
-            content_children.append(box_components_list)
-        elif isinstance(box_components_list, list):
-            # List of components
-            content_children.extend(box_components_list)
-        else:
-            # Single component or JSON
-            content_children.append(box_components_list)
+        # Single component or JSON
+        content_children.append(box_components_list)
 
-        # Check if this component should have a reset button in non-edit mode
-        show_reset_in_non_edit = False
-        if component_data:
-            # Show reset for scatter plot figures
-            if component_type == "figure":
-                visu_type = component_data.get("visu_type", None)
-                if visu_type and visu_type.lower() == "scatter":
-                    show_reset_in_non_edit = True
-            # Show reset for all interactive components
-            elif component_type == "interactive":
-                show_reset_in_non_edit = True
-
-        # Add reset button for scatter plots and interactive components even in non-edit mode
-        if show_reset_in_non_edit:
-            reset_button = dmc.ActionIconGroup([create_reset_button()], orientation="horizontal")
-            content_children.append(
-                html.Div(
-                    reset_button,
-                    className="reset-button-container-non-edit",  # Add specific class for CSS targeting
-                    style={
-                        "position": "absolute",
-                        "top": "4px",
-                        "right": "8px",
-                        "zIndex": 1000,
-                        "alignItems": "center",
-                        "height": "auto",
-                        "borderRadius": "6px",
-                        "padding": "4px",
-                    },
-                )
-            )
-
-        content_div = html.Div(
-            content_children,
-            id=f"content-{box_uuid}",
-            className="dashboard-component-hover responsive-content",
+    # Add buttons positioned absolutely - always present in DOM, CSS controls visibility
+    content_children.append(
+        html.Div(
+            buttons,
             style={
-                "overflow": "visible",
-                "width": "100%",
-                "height": "100%",
-                "boxSizing": "border-box",
-                "padding": "5px",
-                "border": "1px solid transparent",
-                "borderRadius": "8px",
-                "position": "relative",
-                "minHeight": "100px",
-                "transition": "all 0.3s ease",
-                # Critical flexbox properties for vertical growing
-                "display": "flex",
-                "flexDirection": "column",
+                "position": "absolute",
+                "top": "4px",
+                "right": "8px",
+                "zIndex": 1000,
+                "alignItems": "center",
+                "height": "auto",
+                "background": "transparent",
+                "borderRadius": "6px",
+                "padding": "4px",
             },
         )
+    )
+
+    content_div = html.Div(
+        content_children,
+        id=f"content-{box_uuid}",
+        className="dashboard-component-hover responsive-content",
+        style={
+            "overflow": "visible",
+            "width": "100%",
+            "height": "100%",
+            "boxSizing": "border-box",
+            "padding": "5px",
+            "border": "1px solid transparent",
+            "borderRadius": "8px",
+            "position": "relative",
+            "minHeight": "100px",
+            "transition": "all 0.3s ease",
+            # Critical flexbox properties for vertical growing
+            "display": "flex",
+            "flexDirection": "column",
+        },
+    )
 
     # Create DraggableWrapper with the UUID as ID (like in the prototype)
     draggable_wrapper = dgl.DraggableWrapper(

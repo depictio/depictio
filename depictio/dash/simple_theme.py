@@ -6,7 +6,7 @@ Uses MantineProvider's forceColorScheme for native theme support.
 """
 
 import dash_mantine_components as dmc
-from dash import Input, Output, clientside_callback
+from dash import Input, Output, State, clientside_callback
 from dash_iconify import DashIconify
 
 
@@ -84,23 +84,95 @@ def register_simple_theme_system(app):
         prevent_initial_call=True,
     )
 
-    # Handle manual theme switch with localStorage storage
+    # Handle manual theme switch - dcc.Store handles localStorage automatically
     clientside_callback(
         """
-        function(checked) {
-            const theme = checked ? 'dark' : 'light';
+        function(checked, current_theme) {
+            // CRITICAL: If checked is undefined/null, the switch component doesn't have a valid state yet
+            // This happens when the component is being recreated during navigation
+            if (checked === undefined || checked === null) {
+                console.log('🚫 Switch state is undefined/null - ignoring spurious callback during component recreation');
+                return window.dash_clientside.no_update;
+            }
 
-            console.log('🎨 Manual theme switch:', theme);
+            const newTheme = checked ? 'dark' : 'light';
 
-            // Store preference in localStorage
-            localStorage.setItem('depictio-theme', theme);
-            localStorage.setItem('depictio-theme-manual-override', 'true');
+            console.log('🎨 Theme switch callback fired - checked:', checked, 'newTheme:', newTheme, 'current_theme:', current_theme);
 
-            return theme;
+            // Only update if theme is actually changing
+            // This prevents spurious updates when switch is reset on page navigation
+            if (newTheme === current_theme) {
+                console.log('🚫 Theme unchanged - skipping update to prevent reset loop');
+                return window.dash_clientside.no_update;
+            }
+
+            console.log('✅ Theme changed from', current_theme, 'to', newTheme);
+
+            // No need to manually write to localStorage - dcc.Store with storage_type="local" handles this
+            // Theme will be automatically persisted and reloaded by Dash
+
+            return newTheme;
         }
         """,
         Output("theme-store", "data", allow_duplicate=True),
         Input("theme-switch", "checked"),
+        State("theme-store", "data"),
+        prevent_initial_call=True,
+    )
+
+    # Re-apply theme on URL navigation to ensure MantineProvider stays synchronized
+    clientside_callback(
+        """
+        function(pathname, theme_data) {
+            console.log('🔄 URL Navigation triggered for path:', pathname);
+            console.log('🔄 Theme data from State:', theme_data, 'Type:', typeof theme_data);
+
+            // IMPORTANT: Only update if we have a valid theme value
+            // This prevents accidentally resetting to 'light' on navigation
+
+            let theme = theme_data;
+
+            // If theme_data is undefined/null/empty string, check localStorage directly
+            if (!theme) {
+                console.warn('⚠️ theme_data is falsy, checking localStorage directly');
+                const storageKey = 'theme-store';  // dcc.Store uses component ID as localStorage key
+                const storedData = localStorage.getItem(storageKey);
+                console.log('📦 localStorage raw value:', storedData);
+
+                if (storedData) {
+                    try {
+                        // dcc.Store stores JSON, so parse it
+                        const parsed = JSON.parse(storedData);
+                        theme = parsed;
+                        console.log('✅ Successfully loaded theme from localStorage:', theme);
+                    } catch (e) {
+                        console.error('❌ Failed to parse localStorage data:', e);
+                        // Don't update - let existing theme stay
+                        console.log('🚫 Not updating - keeping existing MantineProvider theme');
+                        return window.dash_clientside.no_update;
+                    }
+                } else {
+                    console.warn('⚠️ No localStorage data found');
+                    // Don't update - let existing theme stay (don't force default to light)
+                    console.log('🚫 Not updating - keeping existing MantineProvider theme');
+                    return window.dash_clientside.no_update;
+                }
+            }
+
+            // Only update if we have a valid theme string
+            if (theme === 'light' || theme === 'dark') {
+                console.log('✅ Applying theme:', theme);
+                return theme;
+            } else {
+                console.error('❌ Invalid theme value:', theme);
+                console.log('🚫 Not updating - keeping existing MantineProvider theme');
+                return window.dash_clientside.no_update;
+            }
+        }
+        """,
+        Output("mantine-provider", "forceColorScheme", allow_duplicate=True),
+        Input("url", "pathname"),
+        State("theme-store", "data"),
         prevent_initial_call=True,
     )
 
@@ -169,6 +241,22 @@ def register_simple_theme_system(app):
     )
     def update_navbar_logo(theme_data):
         """Update navbar logo for theme."""
+        import dash
+
+        theme = theme_data or "light"
+        logo_src = dash.get_asset_url(
+            "images/logos/logo_white.svg" if theme == "dark" else "images/logos/logo_black.svg"
+        )
+        return logo_src
+
+    # Update header "Powered by" logo based on theme
+    @app.callback(
+        Output("header-powered-by-logo", "src"),
+        Input("theme-store", "data"),
+        prevent_initial_call=False,
+    )
+    def update_header_powered_by_logo(theme_data):
+        """Update header powered by logo for theme."""
         import dash
 
         theme = theme_data or "light"

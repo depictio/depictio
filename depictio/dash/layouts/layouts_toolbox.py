@@ -54,11 +54,8 @@ def create_dashboard_modal(
             # "height": "80vh",  # Set a fixed height for the modal
         },
         children=[
-            # dmc.Grid(
-            #     [
-            #         dmc.Col(
             dmc.Stack(
-                gap="xl",
+                gap="lg",
                 children=[
                     # Header with icon and title
                     dmc.Group(
@@ -81,74 +78,205 @@ def create_dashboard_modal(
                     ),
                     # Divider
                     dmc.Divider(style={"marginTop": 5, "marginBottom": 5}),
-                    # Form elements
-                    dmc.Stack(
-                        gap="md",
+                    # Two-column grid layout
+                    dmc.Grid(
+                        gutter="xl",
                         children=[
-                            # Dashboard title input
-                            dmc.TextInput(
-                                label="Dashboard Title",
-                                description="Give your dashboard a descriptive name",
-                                placeholder="Enter dashboard title",
-                                id=f"{id_prefix}-title-input",
-                                value=dashboard_title,
-                                required=True,
-                                leftSection=DashIconify(icon="mdi:text-box-outline"),
-                                style={"width": "100%"},
+                            # Left column - Main form fields
+                            dmc.GridCol(
+                                span=7,
+                                children=[
+                                    dmc.Stack(
+                                        gap="md",
+                                        children=[
+                                            # Dashboard title input
+                                            dmc.TextInput(
+                                                label="Dashboard Title",
+                                                description="Give your dashboard a descriptive name",
+                                                placeholder="Enter dashboard title",
+                                                id=f"{id_prefix}-title-input",
+                                                value=dashboard_title,
+                                                required=True,
+                                                leftSection=DashIconify(
+                                                    icon="mdi:text-box-outline"
+                                                ),
+                                                style={"width": "100%"},
+                                            ),
+                                            # Dashboard subtitle input
+                                            dmc.Textarea(
+                                                label="Dashboard Subtitle (Optional)",
+                                                description="Add a brief description for your dashboard",
+                                                placeholder="Enter subtitle (optional)",
+                                                id=f"{id_prefix}-subtitle-input",
+                                                value="",
+                                                autosize=True,
+                                                minRows=2,
+                                                maxRows=4,
+                                                style={"width": "100%"},
+                                            ),
+                                            # Project dropdown
+                                            dmc.Select(
+                                                label="Project",
+                                                description="Select the project this dashboard belongs to",
+                                                data=[],  # Start empty, will be populated by callback
+                                                id=f"{id_prefix}-projects",
+                                                placeholder="Loading projects...",
+                                                style={"width": "100%"},
+                                                searchable=False,
+                                                clearable=False,
+                                                comboboxProps={"withinPortal": False},
+                                            ),
+                                            # Warning message (hidden by default)
+                                            dmc.Alert(
+                                                "Dashboard title must be unique",
+                                                color="red",
+                                                id="unique-title-warning",
+                                                icon=DashIconify(icon="mdi:alert"),
+                                                style={"display": "none"},
+                                            ),
+                                        ],
+                                    ),
+                                ],
                             ),
-                            # Warning message (hidden by default)
-                            dmc.Alert(
-                                "Dashboard title must be unique",
-                                color="red",
-                                id="unique-title-warning",
-                                icon=DashIconify(icon="mdi:alert"),
-                                style={"display": "none"},
+                            # Right column - Icon customization
+                            dmc.GridCol(
+                                span=5,
+                                children=[
+                                    dmc.Paper(
+                                        shadow="sm",
+                                        radius="md",
+                                        withBorder=True,
+                                        p="md",
+                                        style={
+                                            "height": "100%",
+                                            "backgroundColor": "var(--app-surface-color, #ffffff)",
+                                        },
+                                        children=[
+                                            dmc.Stack(
+                                                gap="md",
+                                                children=[
+                                                    # Section header
+                                                    dmc.Group(
+                                                        justify="space-between",
+                                                        children=[
+                                                            dmc.Text(
+                                                                "Icon Customization",
+                                                                size="sm",
+                                                                fw="bold",
+                                                                c="gray",
+                                                            ),
+                                                        ],
+                                                    ),
+                                                    # Compact preview with form inputs
+                                                    dmc.Group(
+                                                        justify="space-between",
+                                                        align="center",
+                                                        children=[
+                                                            dmc.Stack(
+                                                                gap="2px",
+                                                                children=[
+                                                                    dmc.Text(
+                                                                        "Preview",
+                                                                        size="xs",
+                                                                        c="gray",
+                                                                    ),
+                                                                    html.Div(
+                                                                        id=f"{id_prefix}-icon-preview",
+                                                                        children=[
+                                                                            DashIconify(
+                                                                                icon="mdi:view-dashboard",
+                                                                                width=36,
+                                                                                height=36,
+                                                                                color="orange",
+                                                                            ),
+                                                                        ],
+                                                                    ),
+                                                                ],
+                                                                align="center",
+                                                            ),
+                                                        ],
+                                                    ),
+                                                    dmc.Divider(),
+                                                    # Icon input
+                                                    dmc.TextInput(
+                                                        label="Dashboard Icon",
+                                                        description="Icon from Iconify (e.g., mdi:chart-line)",
+                                                        placeholder="mdi:view-dashboard",
+                                                        id=f"{id_prefix}-icon-input",
+                                                        value="mdi:view-dashboard",
+                                                        leftSection=DashIconify(
+                                                            icon="mdi:emoticon-outline", width=16
+                                                        ),
+                                                        size="sm",
+                                                        style={"width": "100%"},
+                                                    ),
+                                                    # Link to browse icons
+                                                    html.A(
+                                                        dmc.Group(
+                                                            [
+                                                                DashIconify(
+                                                                    icon="mdi:open-in-new",
+                                                                    width=14,
+                                                                    color="#228be6",
+                                                                ),
+                                                                dmc.Text(
+                                                                    "Browse MDI icons",
+                                                                    size="xs",
+                                                                    c="blue",
+                                                                    style={
+                                                                        "textDecoration": "none",
+                                                                    },
+                                                                ),
+                                                            ],
+                                                            gap="4px",
+                                                            style={
+                                                                "marginTop": "-8px",
+                                                                "marginBottom": "4px",
+                                                            },
+                                                        ),
+                                                        href="https://pictogrammers.com/library/mdi/",
+                                                        target="_blank",
+                                                        style={
+                                                            "textDecoration": "none",
+                                                            "display": "inline-block",
+                                                        },
+                                                    ),
+                                                    # Icon color selection
+                                                    dmc.Select(
+                                                        label="Icon Color",
+                                                        description="Color for the dashboard icon",
+                                                        data=[
+                                                            {"value": "blue", "label": "Blue"},
+                                                            {"value": "teal", "label": "Teal"},
+                                                            {"value": "orange", "label": "Orange"},
+                                                            {"value": "red", "label": "Red"},
+                                                            {"value": "purple", "label": "Purple"},
+                                                            {"value": "pink", "label": "Pink"},
+                                                            {"value": "green", "label": "Green"},
+                                                            {"value": "gray", "label": "Gray"},
+                                                        ],
+                                                        id=f"{id_prefix}-icon-color-select",
+                                                        value="orange",
+                                                        leftSection=DashIconify(
+                                                            icon="mdi:palette", width=16
+                                                        ),
+                                                        size="sm",
+                                                        style={"width": "100%"},
+                                                        comboboxProps={"withinPortal": False},
+                                                    ),
+                                                ],
+                                            ),
+                                        ],
+                                    ),
+                                ],
                             ),
-                            # Project dropdown - simplified for debugging
-                            dmc.Select(
-                                label="Project",
-                                description="Select the project this dashboard belongs to",
-                                data=[],  # Start empty, will be populated by callback
-                                id=f"{id_prefix}-projects",
-                                placeholder="Loading projects...",
-                                style={"width": "100%"},
-                                searchable=False,  # Disable search for now
-                                clearable=False,  # Disable clear for now
-                                # comboboxProps={"zIndex": 1000},
-                                comboboxProps={"withinPortal": False},
-                            ),
-                            # Available templates dropdown
-                            # dmc.Select(
-                            #     label="Available templates",
-                            #     description="Select a template for your dashboard",
-                            #     data=[],  # This would be populated with actual templates
-                            #     id=f"{id_prefix}-templates",
-                            #     searchable=True,
-                            #     clearable=True,
-                            #     leftSection=DashIconify(icon="mdi:palette"),
-                            #     style={"width": "100%"},
-                            # ),
-                            # Template selection message
-                            # dmc.Center(
-                            #     dmc.Badge(
-                            #         "You picked a Depictio template for the workflow X",
-                            #         radius="xl",
-                            #         size="xl",
-                            #         # variant="gradient",
-                            #         # gradient={
-                            #         #     "from": "orange",
-                            #         #     "to": "red",
-                            #         # },
-                            #         className="animated-badge",
-                            #     )
-                            # ),
                         ],
                     ),
                     # Buttons
                     dmc.Group(
                         justify="flex-end",
                         gap="md",
-                        mt="lg",
+                        mt="md",
                         children=[
                             dmc.Button(
                                 "Cancel",
@@ -168,21 +296,6 @@ def create_dashboard_modal(
                     ),
                 ],
             ),
-            #     span=6,
-            # ),
-            # dmc.Col(
-            #     # Image
-            #     dmc.Image(
-            #         src="https://placehold.co/600x400",
-            #         alt="Placeholder image",
-            #         width="100%",
-            #         height="auto",
-            #         fit="cover",
-            #     ),
-            #     span=6,
-            # ),
-            # ]
-            # ),
         ],
     )
 

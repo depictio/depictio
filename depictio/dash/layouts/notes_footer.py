@@ -63,7 +63,7 @@ def register_callbacks_notes_footer(app):
                     /* Full screen mode - covers entire page-content area - ONLY when explicitly toggled */
                     body #notes-footer-content.footer-fullscreen, html #notes-footer-content.footer-fullscreen {
                         position: fixed !important;
-                        top: calc(var(--app-shell-header-height, 87px)) !important; /* Account for app header */
+                        top: calc(var(--app-shell-header-height, 45px)) !important; /* Account for app header */
                         left: 0px !important;
                         right: 0px !important;
                         bottom: 0px !important;
@@ -87,7 +87,7 @@ def register_callbacks_notes_footer(app):
 
                     /* Adjust editor height for full screen - ONLY when footer has fullscreen class */
                     #notes-footer-content.footer-fullscreen .mantine-RichTextEditor-root {
-                        height: calc(100vh - var(--app-shell-header-height, 87px) - 48px - 20px) !important;
+                        height: calc(100vh - var(--app-shell-header-height, 45px) - 48px - 20px) !important;
                         max-height: none !important;
                     }
 

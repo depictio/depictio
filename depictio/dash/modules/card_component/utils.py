@@ -708,6 +708,9 @@ def build_card(**kwargs):
 
     # PATTERN-MATCHING: Trigger store - initiates async rendering
     # This store triggers the render_card_value_background callback
+    # Extract pipeline data from kwargs if provided (advanced mode)
+    pipeline_data = kwargs.get("pipeline")
+
     trigger_store = dcc.Store(
         id={
             "type": "card-trigger",
@@ -732,6 +735,8 @@ def build_card(**kwargs):
             "icon_color": icon_color,
             "title_font_size": title_font_size,
             "value_font_size": value_font_size,
+            # Advanced mode pipeline
+            "pipeline": pipeline_data,  # None for simple mode, dict for advanced mode
         },
     )
 

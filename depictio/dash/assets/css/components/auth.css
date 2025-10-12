@@ -31,13 +31,6 @@
     border-top: none !important;
 }
 
-/* Dark theme modal content */
-@media (prefers-color-scheme: dark) {
-    .auth-modal-content {
-        background: rgba(37, 38, 43, 0.95);
-    }
-}
-
 /* Manual theme overrides for modal content */
 body.theme-manual-light .auth-modal-content {
     background: rgba(255, 255, 255, 0.95) !important;
@@ -220,22 +213,6 @@ body.auth-page .mantine-AppShell-header {
 #google-oauth-button:active {
     transform: translateY(0) !important;
     box-shadow: 0 1px 2px 0 rgba(60, 64, 67, 0.08) !important;
-}
-
-/* Dark theme specific styling for Google button */
-@media (prefers-color-scheme: dark) {
-    #google-oauth-button {
-        background-color: var(--app-surface-color, #25262b) !important;
-        border-color: var(--app-border-color, #373A40) !important;
-        color: var(--app-text-color, #C1C2C5) !important;
-        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.3), 0 1px 3px 1px rgba(0, 0, 0, 0.15) !important;
-    }
-
-    #google-oauth-button:hover {
-        background-color: var(--app-surface-color, #2C2E33) !important;
-        border-color: #4285f4 !important;
-        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 4px 8px 3px rgba(0, 0, 0, 0.15) !important;
-    }
 }
 
 /* Manual theme overrides for Google button */

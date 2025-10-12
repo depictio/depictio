@@ -77,13 +77,35 @@ def register_main_callback(app):
             if (pathname === '/auth') {
                 // Hide header on auth page
                 return null;
+            } else if (pathname && pathname.startsWith('/dashboard/')) {
+                // Dashboard pages: 45px header
+                return {"height": 45, "padding": "0"};
             } else {
-                // Show header on all other pages (including dashboard routes)
-                return {"height": 87};
+                // Other pages: 65px header for better vertical space
+                return {"height": 65, "padding": "0"};
             }
         }
         """,
         Output("app-shell", "header"),
+        Input("url", "pathname"),
+        prevent_initial_call=True,
+    )
+
+    # Control AppShell layout based on page type
+    app.clientside_callback(
+        """
+        function(pathname) {
+            console.log('🔥 CLIENTSIDE LAYOUT CONTROL: pathname=' + pathname);
+            if (pathname && pathname.startsWith('/dashboard/')) {
+                // Dashboard pages: default layout (navbar offset by header)
+                return "default";
+            } else {
+                // Other pages: alt layout (navbar extends to top)
+                return "alt";
+            }
+        }
+        """,
+        Output("app-shell", "layout"),
         Input("url", "pathname"),
         prevent_initial_call=True,
     )
@@ -110,6 +132,35 @@ def register_main_callback(app):
         }
         """,
         Output("dummy-resize-output", "children", allow_duplicate=True),
+        Input("url", "pathname"),
+        prevent_initial_call="initial_duplicate",
+    )
+
+    # Add clientside callback to manage page-content padding for dashboard vs other pages
+    app.clientside_callback(
+        """
+        function(pathname) {
+            const currentPath = pathname || window.location.pathname;
+
+            // Add a small delay to ensure DOM is ready
+            setTimeout(() => {
+                const pageContent = document.getElementById('page-content');
+                if (pageContent) {
+                    if (currentPath && currentPath.startsWith('/dashboard/')) {
+                        // Dashboard pages: minimal padding (grid layout handles spacing)
+                        pageContent.style.padding = '0.25rem 0';
+                    } else {
+                        // Other pages: proper horizontal padding for readability
+                        pageContent.style.padding = '1rem 2rem';
+                        pageContent.style.maxWidth = '100%';
+                    }
+                }
+            }, 50);
+
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("dummy-padding-output", "children", allow_duplicate=True),
         Input("url", "pathname"),
         prevent_initial_call="initial_duplicate",
     )

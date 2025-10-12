@@ -403,6 +403,17 @@ def register_callbacks_save(app):
 
         # logger.info(f"Unique metadata: {unique_metadata}")
         # logger.info(f"seen_indexes: {seen_indexes}")
+
+        # CRITICAL FIX: Normalize all layout IDs to ensure box- prefix before processing
+        # This prevents layout/metadata ID mismatches that cause component position resets
+        if stored_layout_data:
+            for layout in stored_layout_data:
+                layout_id = layout.get("i", "")
+                if layout_id and not layout_id.startswith("box-"):
+                    corrected_id = f"box-{layout_id}"
+                    layout["i"] = corrected_id
+                    logger.info(f"🔧 NORMALIZED layout ID: {layout_id} → {corrected_id}")
+
         # Remove child components for edit mode
         if "btn-done-edit" in triggered_id:
             logger.info("=== BTN-DONE-EDIT TRIGGERED - PROCESSING EDIT MODE ===")
@@ -510,20 +521,40 @@ def register_callbacks_save(app):
 
                 # CRITICAL FIX: Update layout IDs to match the updated component index
                 # This prevents layout destruction when dashboard reloads
+                # Handle BOTH correct format (box-{uuid}) and malformed format ({uuid})
                 if stored_layout_data:
-                    old_layout_id = f"box-{component_index}"
-                    new_layout_id = f"box-{parent_index}"
+                    # Try both formats: with and without 'box-' prefix
+                    old_layout_ids = [
+                        f"box-{component_index}",  # Correct format
+                        component_index,  # Malformed format (missing box- prefix)
+                    ]
+                    new_layout_id = f"box-{parent_index}"  # Always use correct format
 
+                    layout_found = False
                     for layout in stored_layout_data:
                         layout_id = layout.get("i", "")
                         # Check if this layout belongs to the edited component
-                        if layout_id == old_layout_id:
-                            # Update layout ID to match the new component index
+                        if layout_id in old_layout_ids:
+                            old_id = layout_id
                             layout["i"] = new_layout_id
+                            layout_found = True
                             logger.info(
-                                f"🔧 LAYOUT FIX - Updated layout ID: {old_layout_id} → {new_layout_id}"
+                                f"🔧 LAYOUT FIX - Updated layout ID: {old_id} → {new_layout_id}"
                             )
+                            # Warn if we found a malformed layout ID
+                            if not old_id.startswith("box-"):
+                                logger.warning(
+                                    f"⚠️ LAYOUT FIX - Corrected malformed layout ID (missing 'box-' prefix): {old_id}"
+                                )
                             break  # Only one layout per component
+
+                    if not layout_found:
+                        logger.warning(
+                            f"⚠️ LAYOUT FIX - Could not find layout for edited component {component_index} (searched for: {old_layout_ids})"
+                        )
+                        logger.warning(
+                            f"⚠️ LAYOUT FIX - Available layout IDs: {[layout_entry.get('i') for layout_entry in stored_layout_data]}"
+                        )
 
                 logger.info(
                     f"Updated component data: type={component.get('component_type')}, title={component.get('title')}, aggregation={component.get('aggregation')}"
