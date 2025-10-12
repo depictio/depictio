@@ -3566,6 +3566,31 @@ def design_draggable(
         for i, layout_item in enumerate(current_layout):
             logger.debug(f"🔍 GRID DEBUG - layout item {i}: {layout_item}")
 
+    # Determine initial edit mode state from dashboard data
+    # This ensures correct className on initial load (before update_grid_edit_mode callback runs)
+    initial_edit_mode = True  # Default to edit mode ON
+    try:
+        from depictio.dash.api_calls import api_call_get_dashboard
+
+        dashboard_data_dict = api_call_get_dashboard(dashboard_id, TOKEN)
+        if dashboard_data_dict and "buttons_data" in dashboard_data_dict:
+            # Try unified edit mode first, fallback to old key for backward compatibility
+            initial_edit_mode = dashboard_data_dict["buttons_data"].get(
+                "unified_edit_mode",
+                dashboard_data_dict["buttons_data"].get("edit_components_button", True),
+            )
+            logger.info(f"Initial edit mode from dashboard data: {initial_edit_mode}")
+    except Exception as e:
+        logger.warning(
+            f"Could not fetch dashboard edit mode state: {e}, defaulting to edit mode ON"
+        )
+
+    # Set className based on initial edit mode state
+    grid_className = "draggable-grid-container"
+    if not initial_edit_mode:
+        grid_className += " drag-handles-hidden"
+        logger.info("Initial load with edit mode OFF - adding .drag-handles-hidden class")
+
     draggable = dgl.DashGridLayout(
         id="draggable",
         items=draggable_items,
@@ -3580,7 +3605,7 @@ def design_draggable(
         },  # 48-column grid for ultimate layout flexibility and precision
         showRemoveButton=False,  # Keep consistent - CSS handles visibility
         showResizeHandles=True,  # Enable resize functionality for vertical growing behavior
-        className="draggable-grid-container",  # CSS class for styling
+        className=grid_className,  # CSS class for styling (with .drag-handles-hidden if edit mode OFF)
         allowOverlap=False,
         # Additional parameters to try to disable responsive scaling
         autoSize=True,  # Let grid auto-size instead of using responsive breakpoints
