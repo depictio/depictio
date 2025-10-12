@@ -6,41 +6,49 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.4.0-b3</summary>
+<summary>Click to expand the changelog for 0.4.0</summary>
 
 ### Changes 📜
 
 #### New Features ✨
 
-* feat: Add MultiQC Controls tab with highlight and show/hide samples functionality [525eda88]
-* feat: Enhance MultiQC automation with show/hide filter functionality and UI updates [39698eed]
-* feat: Implement incremental filter updates for MultiQC patterns [5f216161]
-* feat: Add dash-dock dependency to pyproject.toml for enhanced dashboard functionality [ed414c80]
-
-#### Bug Fixes 🐛
-
-* fix: enhance login feedback and validation in api_login function [267e6633]
+* feat: Add flask-caching and orjson dependencies to project configuration [b3bdd21f]
+* feat: Add Dock-style animation for buttons with hover effects and entrance animation [0b6d073e]
+* feat: Add live interactivity toggle badge and fix Apply button functionality [14fe2314]
+* feat: Add investigation scripts for DataTable structures and plot input rows [b62fe583]
 
 #### Improvements 🚀
 
-* refactor: Enhance value handling in interactive components to ensure proper type conversion and logging [323653f3]
-* refactor: Update dark mode tests to use MantineProvider for theme state verification [cab906c6]
-* refactor: Implement component search utility and enhance error handling for missing wf_id and dc_id in stepper output [f5ba0705]
-* refactor: Update figure component logic to avoid frame building in stepper mode and enhance store creation handling [2545153b]
-* refactor: Add early check for valid plotting parameters in render_figure to return empty figure when none are provided [1134653a]
-* refactor: Update card and interactive component rendering to enhance stepper mode visuals and improve layout consistency [d7231228]
-* refactor: Update build_interactive_frame to remove border in stepper mode for improved UI clarity [458318dc]
-* refactor: Enhance modal closing logic to handle state changes and improve user feedback [595e708f]
-* refactor: Improve responsive scaling handling to preserve user customizations and enhance duplicate component placement logic [3023d42d]
-* refactor: Enhance component data handling in draggable and figure components for improved UI interactions [559c8b53]
-* refactor: Enhance figure mode handling and auto-execute code on mode switch for improved user experience [e531aa3c]
-* refactor: Enhance logging and handle code mode in register_callbacks_figure_component for improved UI management [c777c62a]
-* refactor: Add safety checks for DataFrame in render_figure and build_figure to prevent NoneType errors [f808309d]
-* refactor: Add validation for df_modified type to ensure it is a Polars DataFrame [b2320eb9]
-* refactor: Improve parameter extraction in extract_params_from_code using AST for dynamic parsing [127981f0]
-* refactor: Enhance logging for code mode figures in render_raw_children to improve debugging [b984696b]
-* refactor: Add load_for_preview parameter to register_callbacks_stepper for improved data handling [d89abc52]
-* refactor: Enhance duplicate component handling and remove unnecessary state management to improve performance and maintainability [558a611b]
+* refactor: Enhance reset action handling in draggable component callbacks; improve pending changes logic and logging for better clarity [71c78e83]
+* refactor: Improve component selection UI and enhance button styles; streamline pending changes detection and interactivity logic [1d909a87]
+* refactor: Update draggable grid action button visibility based on edit mode; enhance header apply button and live interactivity badge styles [abf7bbb9]
+* refactor: Enhance dashboard interactivity with new apply filters button and editable status badge; improve save logic for edit mode persistence. Add initial message for empty dashboard. Set edit mode to disabled by default. [a01f3ac9]
+* refactor: Remove logging from theme update and optimize marginal plot handling to prevent infinite loop warnings in browser console [b05a5c9d]
+* refactor: Adjust max data points limit and enhance theme-aware figure creation for improved performance [c821a75e]
+* refactor: Update theme handling to use server-side Patch and improve robustness of theme updates [0149dcca]
+* refactor: Restore AG Grid theme callback for dynamic theme updates [2685da31]
+* refactor: Move sidebar and navbar state management to clientside for improved responsiveness [59c40d06]
+* refactor: Implement project caching to reduce redundant API calls in dashboard management [e739dbdd]
+* refactor: Optimize API callback to use async functions for non-blocking requests and reduce unnecessary triggers [e80e57d2]
+* refactor: Simplify header visibility management by converting to clientside callback and removing performance debug logs [243d10c2]
+* refactor: Move theme callbacks to clientside for improved responsiveness and logging [54409c11]
+* refactor: Enhance token management with caching for purge and validity checks to reduce API calls [696748d1]
+
+#### Other Changes 📝
+
+* Bump version: 0.4.0-b3 → 0.4.0 [cbeb06ac]
+* Update CHANGELOG.md for v0.4.0-b3 [6529adfb]
+* Bump version: 0.4.0-b2 → 0.4.0-b3 [a1539860]
+* Initiial MultiQC data extraction and reporting modules [1365ef48]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+ecessary state management to improve performance and maintainability [558a611b]
 * refactor: Remove unused layout CSS import to streamline styles [db7bf11c]
 * refactor: Enhance logging in load_deltatable_lite for better debugging and monitoring of DataFrame sizes [64313e1e]
 * refactor: Clean up imports and comment out size attribute for badges in dashboard management [c8182960]
