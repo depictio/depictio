@@ -16,6 +16,24 @@ data:
   DEPICTIO_MONGODB_WIPE: {{ .Values.backend.env.DEPICTIO_MONGODB_WIPE | quote }}
   DEPICTIO_MONGODB_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_MONGODB_SERVICE_PORT | quote }}
 
+  # Redis Cache Configuration
+  {{- if .Values.redis.enabled }}
+  DEPICTIO_CACHE_REDIS_HOST: {{ printf "%s-redis" .Release.Name | quote }}
+  DEPICTIO_CACHE_REDIS_PORT: {{ .Values.backend.env.DEPICTIO_CACHE_REDIS_PORT | default "6379" | quote }}
+  DEPICTIO_CACHE_REDIS_DB: {{ .Values.backend.env.DEPICTIO_CACHE_REDIS_DB | default "0" | quote }}
+  DEPICTIO_CACHE_ENABLE_REDIS_CACHE: {{ .Values.backend.env.DEPICTIO_CACHE_ENABLE_REDIS_CACHE | default "true" | quote }}
+
+  # Celery Configuration (uses Redis as broker)
+  DEPICTIO_CELERY_BROKER_HOST: {{ printf "%s-redis" .Release.Name | quote }}
+  DEPICTIO_CELERY_BROKER_PORT: {{ .Values.backend.env.DEPICTIO_CELERY_BROKER_PORT | default "6379" | quote }}
+  DEPICTIO_CELERY_BROKER_DB: {{ .Values.backend.env.DEPICTIO_CELERY_BROKER_DB | default "1" | quote }}
+  DEPICTIO_CELERY_RESULT_BACKEND_HOST: {{ printf "%s-redis" .Release.Name | quote }}
+  DEPICTIO_CELERY_RESULT_BACKEND_PORT: {{ .Values.backend.env.DEPICTIO_CELERY_RESULT_BACKEND_PORT | default "6379" | quote }}
+  DEPICTIO_CELERY_RESULT_BACKEND_DB: {{ .Values.backend.env.DEPICTIO_CELERY_RESULT_BACKEND_DB | default "2" | quote }}
+  {{- else }}
+  DEPICTIO_CACHE_ENABLE_REDIS_CACHE: "false"
+  {{- end }}
+
   # Authentication mode (defaults to authenticated mode)
   DEPICTIO_AUTH_UNAUTHENTICATED_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_UNAUTHENTICATED_MODE | default "false" | quote }}
   DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.backend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | default "anonymous@example.com" | quote }}
@@ -61,6 +79,25 @@ data:
   DEPICTIO_DASH_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_DASH_SERVICE_PORT | quote }}
   DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo" .Release.Name | quote }}
   DEPICTIO_MONGODB_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_MONGODB_SERVICE_PORT | quote }}
+
+  # Redis Cache Configuration
+  {{- if .Values.redis.enabled }}
+  DEPICTIO_CACHE_REDIS_HOST: {{ printf "%s-redis" .Release.Name | quote }}
+  DEPICTIO_CACHE_REDIS_PORT: {{ .Values.frontend.env.DEPICTIO_CACHE_REDIS_PORT | default "6379" | quote }}
+  DEPICTIO_CACHE_REDIS_DB: {{ .Values.frontend.env.DEPICTIO_CACHE_REDIS_DB | default "0" | quote }}
+  DEPICTIO_CACHE_ENABLE_REDIS_CACHE: {{ .Values.frontend.env.DEPICTIO_CACHE_ENABLE_REDIS_CACHE | default "true" | quote }}
+
+  # Celery Configuration (uses Redis as broker)
+  DEPICTIO_CELERY_BROKER_HOST: {{ printf "%s-redis" .Release.Name | quote }}
+  DEPICTIO_CELERY_BROKER_PORT: {{ .Values.frontend.env.DEPICTIO_CELERY_BROKER_PORT | default "6379" | quote }}
+  DEPICTIO_CELERY_BROKER_DB: {{ .Values.frontend.env.DEPICTIO_CELERY_BROKER_DB | default "1" | quote }}
+  DEPICTIO_CELERY_RESULT_BACKEND_HOST: {{ printf "%s-redis" .Release.Name | quote }}
+  DEPICTIO_CELERY_RESULT_BACKEND_PORT: {{ .Values.frontend.env.DEPICTIO_CELERY_RESULT_BACKEND_PORT | default "6379" | quote }}
+  DEPICTIO_CELERY_RESULT_BACKEND_DB: {{ .Values.frontend.env.DEPICTIO_CELERY_RESULT_BACKEND_DB | default "2" | quote }}
+  {{- else }}
+  DEPICTIO_CACHE_ENABLE_REDIS_CACHE: "false"
+  {{- end }}
+
   # Authentication mode (defaults to authenticated mode)
   DEPICTIO_AUTH_UNAUTHENTICATED_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_UNAUTHENTICATED_MODE | default "false" | quote }}
   DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.backend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | default "anonymous@example.com" | quote }}

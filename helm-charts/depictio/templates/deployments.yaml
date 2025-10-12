@@ -105,6 +105,77 @@ spec:
         requests:
           storage: {{ .Values.persistence.mongo.size }}
 ---
+# Redis StatefulSet (for caching and Celery broker)
+{{- if .Values.redis.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-redis
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: redis
+spec:
+  serviceName: {{ .Release.Name }}-redis
+  replicas: {{ .Values.redis.replicas | default 1 }}
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+      app: redis
+      project: {{ .Values.project.slug }}
+      type: app
+  template:
+    metadata:
+      labels:
+        release: {{ .Release.Name }}
+        app: redis
+        project: {{ .Values.project.slug }}
+        type: app
+    spec:
+      containers:
+        - name: redis
+          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.redis.securityContext | nindent 12 }}
+          command:
+            - redis-server
+            - --appendonly
+            - "yes"
+            - --save
+            - "60 1"
+          ports:
+            - containerPort: {{ .Values.redis.service.port }}
+              name: redis
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+          volumeMounts:
+            - name: redis-storage
+              mountPath: /data
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.redis.service.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-storage
+    spec:
+      accessModes: [ "{{ .Values.redis.persistence.accessMode }}" ]
+      storageClassName: {{ .Values.storageClass }}
+      resources:
+        requests:
+          storage: {{ .Values.redis.persistence.size }}
+{{- end }}
+---
 # MinIO Deployment (S3-compatible storage)
 {{- if .Values.minio.enabled }}
 apiVersion: apps/v1
@@ -317,6 +388,15 @@ spec:
         - name: wait-for-minio
           image: busybox:1.35
           command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-minio {{ .Values.minio.service.httpPort }}; do echo "Waiting for minio..."; sleep 2; done']
+          securityContext:
+            {{- toYaml .Values.backend.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
+        {{- end }}
+        {{- if .Values.redis.enabled }}
+        - name: wait-for-redis
+          image: busybox:1.35
+          command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-redis {{ .Values.redis.service.port }}; do echo "Waiting for redis..."; sleep 2; done']
           securityContext:
             {{- toYaml .Values.backend.securityContext | nindent 12 }}
           resources:
@@ -579,6 +659,36 @@ spec:
           volumeMounts:
           - name: depictio-keys
             mountPath: /app/depictio/keys
+
+        # STEP 4: Wait for Redis to be available
+        {{- if .Values.redis.enabled }}
+        - name: wait-for-redis
+          image: busybox:1.35
+          securityContext:
+            {{- toYaml .Values.frontend.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
+          command:
+            - 'sh'
+            - '-c'
+            - |
+              echo "Waiting for Redis to be available..."
+              timeout=120
+              elapsed=0
+
+              while [ $elapsed -lt $timeout ]; do
+                if nc -z {{ .Release.Name }}-redis {{ .Values.redis.service.port }}; then
+                  echo "✅ Redis is available"
+                  exit 0
+                fi
+                echo "⏳ Waiting for Redis... (${elapsed}s/${timeout}s)"
+                sleep 3
+                elapsed=$((elapsed + 3))
+              done
+
+              echo "❌ Timeout waiting for Redis"
+              exit 1
+        {{- end }}
 
       containers:
         - name: depictio-frontend
