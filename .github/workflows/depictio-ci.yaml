@@ -41,6 +41,9 @@ jobs:
           source venv/bin/activate
           uv pip install -e ".[dev]"
 
+          uv pip uninstall polars
+          uv pip install "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.19.0"
+
       - name: Show installed packages
         run: |
           source venv/bin/activate
