@@ -36,6 +36,26 @@ spec:
     project: {{ .Values.project.slug }}
     type: app
 ---
+# Redis Service
+{{- if .Values.redis.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-redis
+  namespace: {{ .Release.Namespace }}
+spec:
+  type: {{ .Values.redis.service.type }}
+  ports:
+    - name: redis
+      port: {{ .Values.redis.service.port }}
+      targetPort: {{ .Values.redis.service.port }}
+  selector:
+    release: {{ .Release.Name }}
+    app: redis
+    project: {{ .Values.project.slug }}
+    type: app
+{{- end }}
+---
 {{- if .Values.minio.enabled }}
 apiVersion: v1
 kind: Service

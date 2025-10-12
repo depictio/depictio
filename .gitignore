@@ -266,3 +266,4 @@ dev/dev_delta/
 dev/dev_minio/
 !dev/multiqc_parser
 dev/dev-multiqc-parquet/detailed_extraction_reports/
+depictio/api/v1/configs/pools_dataset/*.xlsx

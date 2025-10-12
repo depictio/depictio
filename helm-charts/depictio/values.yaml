@@ -70,6 +70,38 @@ mongo:
     seccompProfile:
       type: RuntimeDefault
 
+# Redis settings
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: "8.2.1"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  service:
+    type: ClusterIP
+    port: 6379
+  persistence:
+    size: 1Gi
+    accessMode: ReadWriteOnce
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999  # Redis default user
+    runAsGroup: 999
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
+    seccompProfile:
+      type: RuntimeDefault
+
 # MinIO settings
 minio:
   enabled: true
@@ -134,6 +166,20 @@ backend:
     # DEPICTIO_MINIO_PUBLIC_URL: "https://{{ .Release.Name }}-minio.{{ .Values.global.domain }}"
     # Performance - Reduced workers for better stability with multiple replicas
     DEPICTIO_FASTAPI_WORKERS: "4"
+
+    # Redis Cache Configuration
+    DEPICTIO_CACHE_REDIS_HOST: "redis"
+    DEPICTIO_CACHE_REDIS_PORT: "6379"
+    DEPICTIO_CACHE_REDIS_DB: "0"
+    DEPICTIO_CACHE_ENABLE_REDIS_CACHE: "true"
+
+    # Celery Configuration (uses Redis as broker)
+    DEPICTIO_CELERY_BROKER_HOST: "redis"
+    DEPICTIO_CELERY_BROKER_PORT: "6379"
+    DEPICTIO_CELERY_BROKER_DB: "1"
+    DEPICTIO_CELERY_RESULT_BACKEND_HOST: "redis"
+    DEPICTIO_CELERY_RESULT_BACKEND_PORT: "6379"
+    DEPICTIO_CELERY_RESULT_BACKEND_DB: "2"
 
     # Enable unauthenticated mode (allows anonymous access)
     DEPICTIO_AUTH_UNAUTHENTICATED_MODE: "false"
@@ -201,6 +247,20 @@ frontend:
 
     # Performance - Reduced workers for better stability with multiple replicas
     DEPICTIO_DASH_WORKERS: "4"
+
+    # Redis Cache Configuration
+    DEPICTIO_CACHE_REDIS_HOST: "redis"
+    DEPICTIO_CACHE_REDIS_PORT: "6379"
+    DEPICTIO_CACHE_REDIS_DB: "0"
+    DEPICTIO_CACHE_ENABLE_REDIS_CACHE: "true"
+
+    # Celery Configuration (uses Redis as broker)
+    DEPICTIO_CELERY_BROKER_HOST: "redis"
+    DEPICTIO_CELERY_BROKER_PORT: "6379"
+    DEPICTIO_CELERY_BROKER_DB: "1"
+    DEPICTIO_CELERY_RESULT_BACKEND_HOST: "redis"
+    DEPICTIO_CELERY_RESULT_BACKEND_PORT: "6379"
+    DEPICTIO_CELERY_RESULT_BACKEND_DB: "2"
 
     # Analytics configuration
     DEPICTIO_ANALYTICS_ENABLED: "false"

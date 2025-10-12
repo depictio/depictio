@@ -203,8 +203,8 @@ jobs:
           echo "🔍 Waiting for workloads to be created..."
           timeout=180  # 3 minutes total timeout
           elapsed=0
-          expected_deployments=3  # minio, backend, frontend (mongo is a StatefulSet)
-          expected_statefulsets=1  # mongo
+          expected_deployments=3  # minio, backend, frontend
+          expected_statefulsets=2  # mongo, redis
 
           while [ $elapsed -lt $timeout ]; do
             # Count deployments by their names
@@ -476,19 +476,21 @@ jobs:
 
           # Construct service names (these match your output)
           MONGODB_SERVICE="${RELEASE_NAME}-mongo"  # Note: "mongo" not "mongodb"
+          REDIS_SERVICE="${RELEASE_NAME}-redis"
           MINIO_SERVICE="${RELEASE_NAME}-minio"
           BACKEND_SERVICE="${RELEASE_NAME}-depictio-backend"
           FRONTEND_SERVICE="${RELEASE_NAME}-depictio-frontend"
 
           echo "📋 Service names:"
           echo "  MongoDB: $MONGODB_SERVICE"
+          echo "  Redis: $REDIS_SERVICE"
           echo "  MinIO: $MINIO_SERVICE"
           echo "  Backend: $BACKEND_SERVICE"
           echo "  Frontend: $FRONTEND_SERVICE"
 
           # Verify services exist
           echo "🔍 Verifying services exist..."
-          kubectl get svc $MONGODB_SERVICE $MINIO_SERVICE $BACKEND_SERVICE $FRONTEND_SERVICE
+          kubectl get svc $MONGODB_SERVICE $REDIS_SERVICE $MINIO_SERVICE $BACKEND_SERVICE $FRONTEND_SERVICE
 
           # Test Backend -> MongoDB connectivity (PORT: 27018) - REMOVED || true
           echo "🧪 Testing Backend -> MongoDB connectivity..."
@@ -496,6 +498,15 @@ jobs:
             echo "✅ Backend can reach MongoDB on port 27018"
           else
             echo "❌ Backend cannot reach MongoDB on port 27018"
+            exit 1
+          fi
+
+          # Test Backend -> Redis connectivity (PORT: 6379)
+          echo "🧪 Testing Backend -> Redis connectivity..."
+          if kubectl exec $BACKEND_POD -- sh -c "nc -z $REDIS_SERVICE 6379"; then
+            echo "✅ Backend can reach Redis on port 6379"
+          else
+            echo "❌ Backend cannot reach Redis on port 6379"
             exit 1
           fi
 
@@ -535,6 +546,14 @@ jobs:
             exit 1
           fi
 
+          # Test Frontend -> Redis connectivity (PORT: 6379)
+          echo "🧪 Testing Frontend -> Redis connectivity..."
+          if kubectl exec $FRONTEND_POD -- sh -c "nc -z $REDIS_SERVICE 6379"; then
+            echo "✅ Frontend can reach Redis on port 6379"
+          else
+            echo "❌ Frontend cannot reach Redis on port 6379"
+            exit 1
+          fi
 
           echo "🎉 All inter-service connectivity tests passed!"
 
@@ -633,6 +652,40 @@ jobs:
 
           except Exception as e:
               print(f"❌ MinIO failed: {e}")
+          '
+
+          # Test Redis - Check connectivity and basic operations
+          echo "🧪 Testing Redis connectivity and basic operations..."
+          kubectl exec $BACKEND_POD -- python3 -c '
+          import redis
+          try:
+              # Connect to Redis
+              r = redis.Redis(host="'${RELEASE_NAME}'-redis", port=6379, db=0, socket_connect_timeout=5)
+
+              # Test ping
+              r.ping()
+              print("✅ Redis connected successfully")
+
+              # Test basic set/get operations
+              test_key = "test_helm_ci_key"
+              test_value = "test_value_123"
+              r.set(test_key, test_value)
+              retrieved = r.get(test_key)
+
+              if retrieved and retrieved.decode("utf-8") == test_value:
+                  print(f"✅ Redis read/write test successful")
+                  r.delete(test_key)
+              else:
+                  print(f"❌ Redis read/write test failed")
+
+              # Test cache DB (DB 0)
+              cache_info = r.info("stats")
+              print(f"📊 Redis cache stats: {cache_info.get('total_connections_received', 0)} connections")
+
+          except Exception as e:
+              print(f"❌ Redis failed: {e}")
+              import traceback
+              traceback.print_exc()
           '
 
       - name: Test API Endpoints
