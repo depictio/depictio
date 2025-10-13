@@ -1,5 +1,6 @@
 # Import necessary libraries
 from collections import defaultdict
+from datetime import datetime
 from typing import Any, Dict, List
 
 import dash
@@ -905,6 +906,39 @@ def register_callbacks_figure_component(app):
             # Return error content and hide loading
             hidden_loading_style = {"display": "none"}
             return error_content, html.Div(), hidden_loading_style
+
+    @app.callback(
+        Output({"type": "stored-metadata-component", "index": MATCH}, "data", allow_duplicate=True),
+        Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
+        State({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        prevent_initial_call=True,
+    )
+    def sync_visu_type_to_metadata(visu_type_value, current_metadata):
+        """
+        CRITICAL FIX: Sync visu_type to stored-metadata-component when dropdown changes.
+
+        Without this, the stored-metadata-component retains the default "scatter" value
+        even after user selects a different visualization type in stepper mode, causing
+        parameter mismatch errors when Done is clicked (e.g., scatter() receiving boxmode parameter).
+
+        This ensures the stored metadata stays synchronized with the visualization dropdown,
+        preventing the "scatter() got an unexpected keyword argument" errors.
+        """
+        if not visu_type_value or not current_metadata:
+            raise dash.exceptions.PreventUpdate
+
+        # Create updated metadata with new visu_type
+        updated_metadata = current_metadata.copy()
+        updated_metadata["visu_type"] = visu_type_value.lower()
+        updated_metadata["last_updated"] = datetime.now().isoformat()
+
+        logger.info(
+            f"✅ VISU_TYPE SYNC: Updated stored-metadata visu_type from "
+            f"'{current_metadata.get('visu_type')}' to '{visu_type_value.lower()}' "
+            f"for component {current_metadata.get('index', 'unknown')}"
+        )
+
+        return updated_metadata
 
     # Callback to initialize figure with default visualization when component is first created
     @app.callback(
@@ -2730,6 +2764,10 @@ def register_callbacks_figure_component(app):
         - Cached DataFrames reused when available
 
         Also handles full data loading requests (bypassing sampling while preserving filters).
+
+        NOTE: stored-metadata-component is an Input to support full_data_requested triggers,
+        but we only process it for specific metadata changes (full_data_requested) to avoid
+        race conditions with visu_type sync callbacks.
         """
         # Determine what triggered this callback
         trigger = ctx.triggered_id
@@ -2738,13 +2776,18 @@ def register_callbacks_figure_component(app):
         full_data_requested = metadata.get("full_data_requested", False) if metadata else False
 
         # Prevent update if triggered by metadata but NOT a full data request
+        # This prevents race conditions with sync_visu_type_to_metadata and other metadata updates
         if (
             trigger
             and isinstance(trigger, dict)
             and trigger.get("type") == "stored-metadata-component"
         ):
             if not full_data_requested:
-                # Metadata changed for other reasons (e.g., theme change) - ignore
+                # Metadata changed for other reasons (e.g., visu_type sync, theme change) - ignore
+                logger.debug(
+                    "🚫 Ignoring metadata trigger for component %s (not a full data request)",
+                    metadata.get("index", "unknown"),
+                )
                 raise dash.exceptions.PreventUpdate
             logger.info(
                 "🔓 Full data load requested for component %s - will apply filters and bypass sampling",
@@ -2825,6 +2868,8 @@ def register_callbacks_figure_component(app):
                     trace_metadata,
                     interactive_dict,
                     None,
+                    code_content=code_content,  # Pass code content for code mode column detection
+                    df_columns=None,  # Could pass known columns from metadata if available
                 )
                 df = _load_single_dc(
                     filters_by_dc,
