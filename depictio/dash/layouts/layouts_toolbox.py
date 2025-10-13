@@ -216,11 +216,17 @@ def create_dashboard_modal(
                                                                     html.Div(
                                                                         id=f"{id_prefix}-icon-preview",
                                                                         children=[
-                                                                            DashIconify(
-                                                                                icon="mdi:view-dashboard",
-                                                                                width=36,
-                                                                                height=36,
-                                                                                color="orange",
+                                                                            dmc.ActionIcon(
+                                                                                DashIconify(
+                                                                                    icon="mdi:view-dashboard",
+                                                                                    width=24,
+                                                                                    height=24,
+                                                                                ),
+                                                                                color="orange",  # Default orange, updated by callback
+                                                                                radius="xl",
+                                                                                size="lg",
+                                                                                variant="filled",
+                                                                                disabled=False,
                                                                             ),
                                                                         ],
                                                                     ),
