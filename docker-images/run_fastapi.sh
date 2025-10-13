@@ -7,7 +7,7 @@ FASTAPI_PORT=${DEPICTIO_FASTAPI_PORT:-8058}
 FASTAPI_WORKERS=${DEPICTIO_FASTAPI_WORKERS:-4}
 
 echo "🚀 Starting FastAPI backend..."
-echo "ℹ️  Note: Celery worker now runs in separate container (depictio-celery-worker)"
+# echo "ℹ️  Note: Celery worker now runs in separate container (depictio-celery-worker)"
 
 # Start FastAPI server (this will block and keep the container running)
 if [ "$DEV_MODE" = "true" ]; then
