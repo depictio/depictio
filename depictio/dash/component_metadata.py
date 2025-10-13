@@ -45,7 +45,7 @@ COMPONENT_METADATA = {
         "supports_reset": True,  # For scatter plots
         "enabled": True,  # Enable by default
         "build_function": build_figure,
-        "default_dimensions": {"w": 8, "h": 6},  # Adjusted for 48-column grid with rowHeight=20
+        "default_dimensions": {"w": 20, "h": 16},  # Adjusted for 48-column grid with rowHeight=20
     },
     "card": {
         "icon": "formkit:number",
@@ -57,8 +57,8 @@ COMPONENT_METADATA = {
         "enabled": True,  # Enable by default
         "build_function": build_card,
         "default_dimensions": {
-            "w": 6,
-            "h": 5,
+            "w": 10,
+            "h": 8,
         },  # Adjusted for 48-column grid with rowHeight=20 - compact cards
     },
     "interactive": {
@@ -71,8 +71,8 @@ COMPONENT_METADATA = {
         "enabled": True,  # Enable by default
         "build_function": build_interactive,
         "default_dimensions": {
-            "w": 8,
-            "h": 5,
+            "w": 16,
+            "h": 10,
         },  # Adjusted for 48-column grid with rowHeight=20 - wider interactive controls
     },
     "table": {
@@ -85,8 +85,8 @@ COMPONENT_METADATA = {
         "enabled": True,  # Enable by default
         "build_function": build_table,
         "default_dimensions": {
-            "w": 12,
-            "h": 12,
+            "w": 24,
+            "h": 20,
         },  # Adjusted for 48-column grid with rowHeight=20 - tables need substantial space
     },
     "jbrowse": {
@@ -100,7 +100,7 @@ COMPONENT_METADATA = {
         "build_function": build_jbrowse,
         "default_dimensions": {
             "w": 24,
-            "h": 15,
+            "h": 16,
         },  # Adjusted for 48-column grid with rowHeight=20 - large genome browser
     },
     "text": {
@@ -113,9 +113,9 @@ COMPONENT_METADATA = {
         "enabled": True,  # Enable by default
         "build_function": build_text,
         "default_dimensions": {
-            "w": 12,
-            "h": 9,
-        },  # Adjusted for 48-column grid with rowHeight=20 - ample text area
+            "w": 10,
+            "h": 8,
+        },  # Adjusted for 48-column grid with rowHeight=20 - compact text area
     },
     "multiqc": {
         "icon": "mdi:chart-line",
@@ -127,8 +127,8 @@ COMPONENT_METADATA = {
         "enabled": True,  # Enable by default
         "build_function": build_multiqc,
         "default_dimensions": {
-            "w": 32,
-            "h": 30,
+            "w": 24,
+            "h": 24,
         },  # Adjusted for 48-column grid with rowHeight=20 - full-featured MultiQC reports
     },
 }
@@ -251,7 +251,7 @@ def get_component_dimensions_dict() -> dict:
         dict: Dictionary with component types as keys and dimension dicts as values
     """
     return {
-        component_type: metadata.get("default_dimensions", {"w": 24, "h": 20})
+        component_type: metadata.get("default_dimensions", {"w": 20, "h": 16})
         for component_type, metadata in COMPONENT_METADATA.items()
     }
 
