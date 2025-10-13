@@ -1773,3 +1773,162 @@ def _are_types_compatible(new_type: str, existing_type: str) -> bool:
             return True
 
     return False
+
+
+@validate_call(validate_return=True)
+def api_call_check_project_permission(
+    project_id: str,
+    token: str,
+    required_permission: str = "editor",
+) -> bool:
+    """
+    Check if the current user has required permission on a project.
+
+    This function provides defense-in-depth permission checking for dashboard
+    operations at the Dash callback layer, complementing the API-level checks.
+
+    Args:
+        project_id: The project ID to check permissions for
+        token: Authentication token
+        required_permission: Required permission level ("owner", "editor", or "viewer")
+
+    Returns:
+        bool: True if user has required permission or project is public, False otherwise
+
+    Example:
+        >>> has_permission = api_call_check_project_permission(
+        ...     project_id="507f1f77bcf86cd799439011",
+        ...     token=user_token,
+        ...     required_permission="editor"
+        ... )
+        >>> if not has_permission:
+        ...     logger.warning("User attempted unauthorized edit")
+        ...     raise PreventUpdate  # Block the operation
+    """
+    try:
+        logger.debug(f"Checking {required_permission} permission for project {project_id}")
+
+        # Get current user from token
+        current_user = api_call_fetch_user_from_token(token)
+        if not current_user:
+            logger.warning("Invalid token - permission denied")
+            return False
+
+        # Admin users have all permissions
+        if current_user.is_admin:
+            logger.debug(f"Admin user {current_user.email} - permission granted")
+            return True
+
+        # Fetch project data to check permissions
+        project = api_call_fetch_project_by_id(project_id, token)
+        if not project:
+            logger.warning(f"Project {project_id} not found")
+            return False
+
+        # Check if project is public (viewers only)
+        if required_permission == "viewer" and project.get("is_public", False):
+            logger.debug("Public project - viewer permission granted")
+            return True
+
+        # Get permissions from project
+        permissions = project.get("permissions", {})
+        user_id_str = str(current_user.id)
+
+        # Check based on required permission level
+        if required_permission == "owner":
+            # Only owners can perform owner-level actions
+            owner_ids = [
+                str(owner.get("id", owner.get("_id", "")))
+                for owner in permissions.get("owners", [])
+            ]
+            has_permission = user_id_str in owner_ids
+
+        elif required_permission == "editor":
+            # Editors and owners can perform editor-level actions
+            owner_ids = [
+                str(owner.get("id", owner.get("_id", "")))
+                for owner in permissions.get("owners", [])
+            ]
+            editor_ids = [
+                str(editor.get("id", editor.get("_id", "")))
+                for editor in permissions.get("editors", [])
+            ]
+            has_permission = user_id_str in owner_ids or user_id_str in editor_ids
+
+        else:  # viewer
+            # Viewers, editors, and owners can perform viewer-level actions
+            owner_ids = [
+                str(owner.get("id", owner.get("_id", "")))
+                for owner in permissions.get("owners", [])
+            ]
+            editor_ids = [
+                str(editor.get("id", editor.get("_id", "")))
+                for editor in permissions.get("editors", [])
+            ]
+            viewer_ids = [
+                str(viewer.get("id", viewer.get("_id", "")))
+                for viewer in permissions.get("viewers", [])
+                if isinstance(viewer, dict)
+            ]
+            has_wildcard = "*" in permissions.get("viewers", [])
+            has_permission = (
+                user_id_str in owner_ids
+                or user_id_str in editor_ids
+                or user_id_str in viewer_ids
+                or has_wildcard
+            )
+
+        if has_permission:
+            logger.debug(
+                f"User {current_user.email} has {required_permission} permission on project {project_id}"
+            )
+        else:
+            logger.warning(
+                f"User {current_user.email} lacks {required_permission} permission on project {project_id}"
+            )
+
+        return has_permission
+
+    except Exception as e:
+        logger.error(f"Error checking project permission: {e}")
+        # Fail secure - deny permission on error
+        return False
+
+
+@validate_call(validate_return=True)
+def api_call_fetch_multiqc_report(data_collection_id: str, token: str) -> dict[str, Any] | None:
+    """
+    Fetch MultiQC report metadata for a specific data collection.
+
+    Args:
+        data_collection_id: Data collection ID to fetch MultiQC report for
+        token: Authentication token
+
+    Returns:
+        MultiQC report metadata or None if not found
+    """
+    try:
+        logger.debug(f"Fetching MultiQC report for data collection: {data_collection_id}")
+
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/multiqc/{data_collection_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=settings.performance.api_request_timeout,
+        )
+
+        if response.status_code == 200:
+            multiqc_data = response.json()
+            logger.debug(f"MultiQC report fetched successfully for {data_collection_id}")
+            return multiqc_data
+        elif response.status_code == 404:
+            logger.debug(f"No MultiQC report found for data collection {data_collection_id}")
+            return None
+        else:
+            logger.warning(
+                f"Failed to fetch MultiQC report for {data_collection_id}: {response.status_code}"
+            )
+            return None
+
+    except Exception as e:
+        logger.error(f"Error fetching MultiQC report for {data_collection_id}: {e}")
+        return None
