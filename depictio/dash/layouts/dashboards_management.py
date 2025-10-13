@@ -971,11 +971,18 @@ def register_callbacks_dashboards_management(app):
                     },
                 )
             else:
-                preview = DashIconify(
-                    icon=icon_name,
-                    width=32,
-                    height=32,
+                # Wrap in ActionIcon for consistent UX
+                preview = dmc.ActionIcon(
+                    DashIconify(
+                        icon=icon_name,
+                        width=24,
+                        height=24,
+                    ),
                     color=icon_color,
+                    radius="xl",
+                    size="lg",
+                    variant="filled",
+                    disabled=True,  # Not clickable - just a preview
                 )
             # Disable color selector when workflow is selected
             color_disabled = True
@@ -990,11 +997,18 @@ def register_callbacks_dashboards_management(app):
             if icon_color not in allowed_colors:
                 icon_color = "orange"
 
-            preview = DashIconify(
-                icon=icon_name,
-                width=32,
-                height=32,
+            # Wrap in ActionIcon for consistent UX
+            preview = dmc.ActionIcon(
+                DashIconify(
+                    icon=icon_name,
+                    width=24,
+                    height=24,
+                ),
                 color=icon_color,
+                radius="xl",
+                size="lg",
+                variant="filled",
+                disabled=False,
             )
             # Enable color selector when no workflow is selected
             color_disabled = False
