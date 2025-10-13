@@ -14,6 +14,12 @@ persistence:
   keys:
     size: 1Mi
     accessMode: ReadWriteMany
+  config:
+    size: 10Mi
+    accessMode: ReadWriteMany
+  uploads:
+    size: 5Gi
+    accessMode: ReadWriteMany
 
 ## Init Container Resources
 initContainerResources:
@@ -108,6 +114,28 @@ mongo:
     seccompProfile:
       type: RuntimeDefault
 
+# Redis configuration (required for EMBL Capsule admission controller)
+redis:
+  enabled: true
+  image:
+    pullPolicy: Always  # EMBL infrastructure requires Always policy
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+
 # External S3 service configuration
 minio:
   enabled: false  # Using external EMBL S3 service instead of local MinIO
@@ -144,6 +172,15 @@ ingress:
     cert-manager.io/cluster-issuer: harica-issuer
 
   # Host configuration for split frontend/backend setup
+  # NOTE: Two approaches are available:
+  # 1. Use the global.urlPattern configuration (set above) to auto-generate URLs
+  #    - Remove or comment out the 'hosts' section below
+  #    - The pattern will automatically generate URLs like:
+  #      * dev.demo.depictio.embl.org (frontend)
+  #      * dev.api.demo.depictio.embl.org (backend)
+  # 2. Explicitly define hosts (current approach - takes precedence over urlPattern)
+  #    - Keeps full control over exact hostnames
+  #    - Useful for non-standard patterns or multiple environments
   hosts:
     - host: "dev.demo.depictio.embl.org"
       paths:
@@ -177,6 +214,14 @@ ingress:
 
 global:
   domain: "depictio.embl.org"  # Global domain for all services
+
+  # URL pattern configuration for EMBL deployment
+  # Using "subdomain" pattern: {subdomain}{service}.{release}.{domain}
+  # This generates: dev.api.demo.depictio.embl.org (for release "demo")
+  # Note: Explicit ingress.hosts below will override these patterns
+  urlPattern:
+    type: "subdomain"
+    subdomain: "dev"  # Creates URLs like: dev.api.demo.depictio.embl.org
 
 
 # Example deployment command:

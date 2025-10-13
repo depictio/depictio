@@ -9,7 +9,7 @@ data:
   DEPICTIO_LOGGING_VERBOSITY_LEVEL: {{ .Values.backend.env.DEPICTIO_LOGGING_VERBOSITY_LEVEL | quote }}
   DEPICTIO_FASTAPI_SERVICE_NAME: {{ printf "%s-depictio-backend" .Release.Name | quote }}
   DEPICTIO_FASTAPI_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_FASTAPI_SERVICE_PORT | quote }}
-  DEPICTIO_FASTAPI_PUBLIC_URL: {{ printf "https://%s-api.%s" .Release.Name .Values.global.domain | quote }}
+  DEPICTIO_FASTAPI_PUBLIC_URL: {{ include "depictio.apiUrlWithProtocol" . | quote }}
   DEPICTIO_DASH_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_DASH_SERVICE_PORT | quote }}
   DEPICTIO_DASH_SERVICE_NAME: {{ printf "%s-depictio-frontend" .Release.Name | quote }}
   DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo" .Release.Name | quote }}
@@ -58,7 +58,7 @@ data:
   DEPICTIO_MINIO_EXTERNAL_SERVICE: "true"
   {{- else }}
   # Built-in MinIO service configuration
-  DEPICTIO_MINIO_PUBLIC_URL: {{ printf "https://%s-minio.%s" .Release.Name .Values.global.domain | quote }}
+  DEPICTIO_MINIO_PUBLIC_URL: {{ include "depictio.minioUrlWithProtocol" . | quote }}
   DEPICTIO_MINIO_EXTERNAL_SERVICE: "false"
   DEPICTIO_MINIO_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
   DEPICTIO_MINIO_SERVICE_PORT: {{ .Values.minio.env.DEPICTIO_MINIO_SERVICE_PORT | default "9000" | quote }}
@@ -75,7 +75,7 @@ data:
   DEPICTIO_LOGGING_VERBOSITY_LEVEL: {{ .Values.backend.env.DEPICTIO_LOGGING_VERBOSITY_LEVEL | quote }}
   DEPICTIO_FASTAPI_SERVICE_NAME: {{ printf "%s-depictio-backend" .Release.Name | quote }}
   DEPICTIO_FASTAPI_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_FASTAPI_SERVICE_PORT | quote }}
-  DEPICTIO_FASTAPI_PUBLIC_URL: {{ printf "https://%s-api.%s" .Release.Name .Values.global.domain | quote }}
+  DEPICTIO_FASTAPI_PUBLIC_URL: {{ include "depictio.apiUrlWithProtocol" . | quote }}
   DEPICTIO_DASH_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_DASH_SERVICE_PORT | quote }}
   DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo" .Release.Name | quote }}
   DEPICTIO_MONGODB_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_MONGODB_SERVICE_PORT | quote }}
@@ -122,7 +122,7 @@ data:
   DEPICTIO_MINIO_EXTERNAL_SERVICE: "true"
   {{- else }}
   # Built-in MinIO service configuration
-  DEPICTIO_MINIO_PUBLIC_URL: {{ printf "https://%s-minio.%s" .Release.Name .Values.global.domain | quote }}
+  DEPICTIO_MINIO_PUBLIC_URL: {{ include "depictio.minioUrlWithProtocol" . | quote }}
   DEPICTIO_MINIO_EXTERNAL_SERVICE: "false"
   DEPICTIO_MINIO_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
   DEPICTIO_MINIO_SERVICE_PORT: {{ .Values.minio.env.DEPICTIO_MINIO_SERVICE_PORT | default "9000" | quote }}
