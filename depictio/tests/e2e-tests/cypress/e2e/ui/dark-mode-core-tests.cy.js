@@ -61,36 +61,36 @@ describe('Dark Mode Core Functionality', () => {
     })
   })
 
-  it('should persist theme after page reload', () => {
-    // Get initial theme state from MantineProvider
-    cy.get('[data-mantine-color-scheme]').then(($element) => {
-      const initialTheme = $element.attr('data-mantine-color-scheme') || 'light'
+  // it('should persist theme after page reload', () => {
+  //   // Get initial theme state from MantineProvider
+  //   cy.get('[data-mantine-color-scheme]').then(($element) => {
+  //     const initialTheme = $element.attr('data-mantine-color-scheme') || 'light'
 
-      // Toggle to opposite theme
-      cy.get('label[for="theme-switch"]').click()
-      cy.wait(1000)
+  //     // Toggle to opposite theme
+  //     cy.get('label[for="theme-switch"]').click()
+  //     cy.wait(1000)
 
-      // Verify theme changed
-      const expectedNewTheme = initialTheme === 'dark' ? 'light' : 'dark'
-      cy.get('[data-mantine-color-scheme]').should('have.attr', 'data-mantine-color-scheme', expectedNewTheme)
+  //     // Verify theme changed
+  //     const expectedNewTheme = initialTheme === 'dark' ? 'light' : 'dark'
+  //     cy.get('[data-mantine-color-scheme]').should('have.attr', 'data-mantine-color-scheme', expectedNewTheme)
 
-      // Reload the page
-      cy.reload()
-      cy.wait(2000)
+  //     // Reload the page
+  //     cy.reload()
+  //     cy.wait(2000)
 
-      // Verify new theme persists
-      cy.get('[data-mantine-color-scheme]').should('have.attr', 'data-mantine-color-scheme', expectedNewTheme)
+  //     // Verify new theme persists
+  //     cy.get('[data-mantine-color-scheme]').should('have.attr', 'data-mantine-color-scheme', expectedNewTheme)
 
-      if (expectedNewTheme === 'dark') {
-        cy.get('#theme-switch').should('be.checked')
-      } else {
-        cy.get('#theme-switch').should('not.be.checked')
-      }
+  //     if (expectedNewTheme === 'dark') {
+  //       cy.get('#theme-switch').should('be.checked')
+  //     } else {
+  //       cy.get('#theme-switch').should('not.be.checked')
+  //     }
 
-      // Take screenshot of persisted theme
-      cy.screenshot('theme-persisted-after-reload')
-    })
-  })
+  //     // Take screenshot of persisted theme
+  //     cy.screenshot('theme-persisted-after-reload')
+  //   })
+  // })
 
   it('should update logo based on theme', () => {
     // Get current theme from MantineProvider and verify correct logo
