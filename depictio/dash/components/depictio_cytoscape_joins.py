@@ -298,6 +298,31 @@ def get_depictio_cytoscape_stylesheet(theme="light"):
                 "text-opacity": 1.0,  # Full text opacity regardless of element opacity
             },
         },
+        # MultiQC data collection background styling (orange colored)
+        {
+            "selector": ".data-collection-background-multiqc",
+            "style": {
+                "background-color": group_bg,
+                "border-color": colors["orange"],
+                "border-width": 2,
+                "border-style": "solid",
+                "label": "data(label)",
+                "text-valign": "top",  # Align text to top like regular DCs
+                "text-halign": "center",
+                "color": colors["orange"],  # Orange color for MultiQC
+                "font-size": "16px",
+                "font-weight": "bold",
+                "shape": "round-rectangle",
+                "width": "180px",
+                "height": "data(box_height)",  # Dynamic height
+                "text-margin-y": -15,  # Same top margin as regular DCs
+                "text-wrap": "wrap",
+                "text-max-width": "160px",
+                "z-index": 1,
+                "opacity": 0.8,
+                "text-opacity": 1.0,
+            },
+        },
         # Styling for DCs with many columns (taller boxes)
         {
             "selector": ".dc-columns-7, .dc-columns-8, .dc-columns-9, .dc-columns-10",
