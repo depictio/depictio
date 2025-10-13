@@ -1,6 +1,6 @@
 # Test MultiQC Data Collection Configuration
-name: "Ampliseq megatest project"
-
+name: "TREC x TARA - Pollution impact"
+project_type: "advanced"
 workflows:
   - name: "ampliseq"
     version: "2.14.0"
@@ -21,15 +21,15 @@ workflows:
         description: "MultiQC report data"
         config:
           type: "MultiQC"
-      - data_collection_tag: "sample_metadata"
-        description: "Sample metadata table for MultiQC integration"
+      - data_collection_tag: "metadata"
+        description: "Sample & Sites metadata table for MultiQC integration"
         config:
           type: "Table"
           metatype: "Metadata"
           scan:
             mode: single
             scan_parameters:
-              filename: "../api/v1/configs/ampliseq_dataset/metadata.tsv"
+              filename: "../api/v1/configs/ampliseq_dataset/merged_metadata.tsv"
           dc_specific_properties:
             format: "TSV"
             polars_kwargs:
@@ -38,12 +38,49 @@ workflows:
             columns_description:
               "sample": "Sample identifier matching MultiQC sample names"
               "name": "ID combined with habitat"
-              "habitat": "Habitat type of the sample"
-              "collection_date": "Sample collection date"
+              # "habitat": "Habitat type of the sample"
+              "condition": "Experimental condition (e.g., control, pollution)"
+              "time": "Time point of sampling"
+              "condition_detailed": "Detailed condition information"
+              # "collection_date": "Sample collection date"
+              "site_alias": "Site alias identifier"
+              "site_locality": "Locality description of the sampling site"
+              "site_date_start": "Start date of sampling at the site"
+              "Temperature": "Water temperature (°C)"
+              "Salinity": "Salinity (PSU)"
+              "Turbidity": "Turbidity (NTU)"
           join:
             on_columns: ["sample"]
             how: "inner"
             with_dc: ["multiqc_data"]
+      # - data_collection_tag: "site_metadata"
+      #   description: "Site metadata table"
+      #   config:
+      #     type: "Table"
+      #     metatype: "Metadata"
+      #     scan:
+      #       mode: "single"
+      #       scan_parameters:
+      #         filename: "../api/v1/configs/ampliseq_dataset/site_metadata.tsv"
+      #     dc_specific_properties:
+      #       format: "TSV"
+      #       polars_kwargs:
+      #         separator: "\t"
+      #         try_parse_dates: true
+      #       columns_description:
+      #         "site_alias": "Site alias identifier"
+      #         # "latitude": "Latitude of the sampling site"
+      #         # "longitude": "Longitude of the sampling site"
+      #         # "country": "Country of the sampling site"
+      #         "site_locality": "Locality description of the sampling site"
+      #         "site_date_start": "Start date of sampling at the site"
+      #         "Temperature": "Water temperature (°C)"
+      #         "Salinity": "Salinity (PSU)"
+      #         "Turbidity": "Turbidity (NTU)"
+      #     join:
+      #       on_columns: ["site_alias"]
+      #       how: "inner"
+      #       with_dc: ["sample_metadata"]
       - data_collection_tag: "alpha_rarefaction"
         description: "Alpha rarefaction data"
         config:
@@ -65,7 +102,7 @@ workflows:
           join:
             on_columns: ["sample"]
             how: "inner"
-            with_dc: ["sample_metadata", "multiqc_data"]
+            with_dc: ["metadata", "multiqc_data"]
       - data_collection_tag: "taxonomy_composition"
         description: "Taxonomic composition data"
         config:
@@ -87,27 +124,27 @@ workflows:
           join:
             on_columns: ["sample"]
             how: "inner"
-            with_dc: ["sample_metadata", "multiqc_data"]
-      - data_collection_tag: "ancom_volcano"
-        description: "ANCOM differential abundance results"
-        config:
-          type: "Table"
-          metatype: "Metadata"
-          scan:
-            mode: "single"
-            scan_parameters:
-              filename: "../api/v1/configs/ampliseq_dataset/ancom_volcano.tsv"
-          dc_specific_properties:
-            format: "TSV"
-            polars_kwargs:
-              separator: "\t"
-            columns_description:
-              "id": "ASV identifier"
-              "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
-              "Kingdom": "Kingdom classification"
-              "Phylum": "Phylum classification"
-              "W": "W statistic from ANCOM analysis"
-              "clr": "Centered log-ratio value"
+            with_dc: ["metadata"]
+      # - data_collection_tag: "ancom_volcano"
+      #   description: "ANCOM differential abundance results"
+      #   config:
+      #     type: "Table"
+      #     metatype: "Metadata"
+      #     scan:
+      #       mode: "single"
+      #       scan_parameters:
+      #         filename: "../api/v1/configs/ampliseq_dataset/ancom_volcano.tsv"
+      #     dc_specific_properties:
+      #       format: "TSV"
+      #       polars_kwargs:
+      #         separator: "\t"
+      #       columns_description:
+      #         "id": "ASV identifier"
+      #         "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
+      #         "Kingdom": "Kingdom classification"
+      #         "Phylum": "Phylum classification"
+      #         "W": "W statistic from ANCOM analysis"
+      #         "clr": "Centered log-ratio value"
           # join:
           #   on_columns: ["id"]
           #   how: "inner"
