@@ -3507,7 +3507,6 @@ def design_draggable(
                     shadow="sm",
                     withBorder=True,
                     style={
-                        "backgroundColor": "var(--app-surface-color, #ffffff)",
                         "border": f"1px solid var(--app-border-color, {colors['red']}20)",
                         "maxWidth": "500px",
                         "marginTop": "2rem",
