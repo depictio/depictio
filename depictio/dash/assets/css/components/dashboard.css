@@ -3,6 +3,12 @@
    Layout and styling fixes for dashboard draggable components
    ============================================================================= */
 
+/* Prevent horizontal scrollbar on page-content for dashboard pages */
+#page-content {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+}
+
 /* Remove right/bottom padding for edge-to-edge layout */
 /* Left and top padding are handled automatically by AppShell */
 .mantine-AppShell-main {
