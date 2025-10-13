@@ -1114,16 +1114,30 @@ def design_header(data, local_store):
                 [
                     burger_button,  # DMC Burger instead of custom button
                     # Dashboard icon from DashboardData model with filled variant
-                    dmc.ActionIcon(
-                        DashIconify(
-                            icon=data.get("icon", "mdi:view-dashboard"),
-                            width=24,
-                            height=24,
-                        ),
-                        color=data.get("icon_color", "orange"),
-                        radius="xl",
-                        size="lg",
-                        variant="filled",
+                    # Check if icon is an image path or Iconify icon
+                    (
+                        html.Img(
+                            src=data.get("icon", "mdi:view-dashboard"),
+                            style={
+                                "width": "32px",
+                                "height": "32px",
+                                "objectFit": "contain",
+                                "borderRadius": "50%",
+                                "padding": "4px",
+                            },
+                        )
+                        if data.get("icon", "").startswith("/assets/")
+                        else dmc.ActionIcon(
+                            DashIconify(
+                                icon=data.get("icon", "mdi:view-dashboard"),
+                                width=24,
+                                height=24,
+                            ),
+                            color=data.get("icon_color", "orange"),
+                            radius="xl",
+                            size="lg",
+                            variant="filled",
+                        )
                     ),
                     # Title and optional subtitle
                     dmc.Stack(

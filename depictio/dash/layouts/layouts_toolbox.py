@@ -6,6 +6,40 @@ from dash_iconify import DashIconify
 from depictio.dash.colors import colors
 
 
+def get_workflow_icon_mapping():
+    """
+    Map workflow systems to their logo image paths.
+
+    Returns:
+        dict: Workflow system to image path mapping
+    """
+    return {
+        "nextflow": "/assets/images/workflows/nextflow.png",
+        "snakemake": "/assets/images/workflows/snakemake.png",
+        "nf-core": "/assets/images/workflows/nf-core.png",
+        "galaxy": "/assets/images/workflows/galaxy.png",
+        "iwc": "/assets/images/workflows/iwc.png",
+        "none": None,  # Use custom icon
+    }
+
+
+def get_workflow_icon_color():
+    """
+    Map workflow systems to their brand colors.
+
+    Returns:
+        dict: Workflow system to color mapping
+    """
+    return {
+        "nextflow": "teal",  # Nextflow green
+        "snakemake": "green",  # Snakemake green
+        "nf-core": "blue",  # nf-core blue
+        "galaxy": "blue",  # Galaxy blue
+        "iwc": "purple",  # IWC purple
+        "none": "orange",  # Default
+    }
+
+
 def create_dashboard_modal(
     dashboard_title="",
     projects=[],
@@ -149,7 +183,6 @@ def create_dashboard_modal(
                                         p="md",
                                         style={
                                             "height": "100%",
-                                            "backgroundColor": "var(--app-surface-color, #ffffff)",
                                         },
                                         children=[
                                             dmc.Stack(
@@ -217,7 +250,6 @@ def create_dashboard_modal(
                                                                 DashIconify(
                                                                     icon="mdi:open-in-new",
                                                                     width=14,
-                                                                    color="#228be6",
                                                                 ),
                                                                 dmc.Text(
                                                                     "Browse MDI icons",
@@ -263,6 +295,55 @@ def create_dashboard_modal(
                                                         size="sm",
                                                         style={"width": "100%"},
                                                         comboboxProps={"withinPortal": False},
+                                                    ),
+                                                    # Workflow system selection
+                                                    dmc.Divider(
+                                                        label="Workflow System (Optional)",
+                                                        labelPosition="center",
+                                                        style={"marginTop": "16px"},
+                                                    ),
+                                                    dmc.Select(
+                                                        label="Workflow System",
+                                                        description="Auto-set icon based on workflow",
+                                                        data=[
+                                                            {
+                                                                "value": "none",
+                                                                "label": "None (Use Custom Icon)",
+                                                            },
+                                                            {
+                                                                "value": "nextflow",
+                                                                "label": "Nextflow",
+                                                            },
+                                                            {
+                                                                "value": "snakemake",
+                                                                "label": "Snakemake",
+                                                            },
+                                                            {
+                                                                "value": "nf-core",
+                                                                "label": "nf-core",
+                                                            },
+                                                            {
+                                                                "value": "galaxy",
+                                                                "label": "Galaxy",
+                                                            },
+                                                            {
+                                                                "value": "iwc",
+                                                                "label": "IWC (Intergalactic Workflow Commission)",
+                                                            },
+                                                        ],
+                                                        id=f"{id_prefix}-workflow-system-select",
+                                                        value="none",
+                                                        leftSection=DashIconify(
+                                                            icon="mdi:cog-outline", width=16
+                                                        ),
+                                                        size="sm",
+                                                        comboboxProps={"withinPortal": False},
+                                                    ),
+                                                    dmc.Text(
+                                                        "Selecting a workflow will override the custom icon",
+                                                        size="xs",
+                                                        c="gray",
+                                                        style={"marginTop": "4px"},
                                                     ),
                                                 ],
                                             ),
