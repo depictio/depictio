@@ -47,8 +47,8 @@ def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
         f"🔄 CALCULATE_NEW_LAYOUT_POSITION CALLED: {child_type} with {n} existing components"
     )
     dimensions = component_dimensions.get(
-        child_type, {"w": 24, "h": 20}
-    )  # Default 24x20 for 48-column grid with rowHeight=20
+        child_type, {"w": 20, "h": 16}
+    )  # Default 20x16 for 48-column grid with rowHeight=20
     logger.info(f"📐 Selected dimensions: {dimensions} for {child_type}")
     logger.info(f"📋 Existing layouts: {existing_layouts}")
 
@@ -166,7 +166,7 @@ def fix_responsive_scaling(layout_data, metadata_list):
         if meta.get("index") and meta.get("component_type"):
             comp_id = f"box-{meta['index']}"
             comp_type = meta["component_type"]
-            default_dims = component_dimensions.get(comp_type, {"w": 24, "h": 20})
+            default_dims = component_dimensions.get(comp_type, {"w": 20, "h": 16})
             expected_dimensions[comp_id] = default_dims
 
     fixed_layouts = []
@@ -1305,6 +1305,42 @@ def register_callbacks_draggable(app):
                     else:
                         logger.warning(f"   ⚠️ No dict_kwargs found for {triggered_index}")
 
+                # CRITICAL FIX: Preserve visu_type from stepper store if it's missing or defaulted to scatter
+                if child_type == "figure":
+                    current_visu_type = child_metadata.get("visu_type")
+                    logger.info(f"   🔍 VISU_TYPE CHECK - Current: {current_visu_type}")
+
+                    # If visu_type is missing or defaulted to scatter, try to restore from stepper store
+                    if not current_visu_type or current_visu_type == "scatter":
+                        if (
+                            components_metadata_store
+                            and triggered_index in components_metadata_store
+                        ):
+                            stepper_visu_type = components_metadata_store[triggered_index].get(
+                                "visu_type"
+                            )
+                            logger.info(
+                                f"   🔍 VISU_TYPE CHECK - Stepper store: {stepper_visu_type}"
+                            )
+
+                            if stepper_visu_type and stepper_visu_type != "scatter":
+                                child_metadata["visu_type"] = stepper_visu_type
+                                logger.info(
+                                    f"   ✅ VISU_TYPE FIX: Restored from stepper: {stepper_visu_type}"
+                                )
+                            else:
+                                logger.warning(
+                                    "   ⚠️ VISU_TYPE: Stepper has scatter or None, keeping current"
+                                )
+                        else:
+                            logger.warning(
+                                f"   ⚠️ VISU_TYPE: No stepper metadata for index {triggered_index}"
+                            )
+                    else:
+                        logger.info(
+                            f"   ✅ VISU_TYPE: Already set correctly to {current_visu_type}"
+                        )
+
                 # Step 3: Validate merged metadata (only for figures)
                 if child_type == "figure":
                     from depictio.dash.modules.figure_component.utils import (
@@ -1692,6 +1728,40 @@ def register_callbacks_draggable(app):
 
             elif triggered_input == "remove-box-button":
                 logger.info("Remove box button clicked")
+
+                # SECURITY: Check editor permission before allowing component removal
+                from depictio.dash.api_calls import (
+                    api_call_check_project_permission,
+                    api_call_get_dashboard,
+                )
+
+                dashboard_data = api_call_get_dashboard(dashboard_id, TOKEN)
+                if not dashboard_data:
+                    logger.warning(
+                        f"Dashboard {dashboard_id} not found - blocking remove operation"
+                    )
+                    raise dash.exceptions.PreventUpdate
+
+                project_id = dashboard_data.get("project_id")
+                if not project_id:
+                    logger.warning(
+                        f"Dashboard {dashboard_id} has no project - blocking remove operation"
+                    )
+                    raise dash.exceptions.PreventUpdate
+
+                # Verify user has editor permission
+                has_editor_permission = api_call_check_project_permission(
+                    project_id=str(project_id),
+                    token=TOKEN,
+                    required_permission="editor",
+                )
+
+                if not has_editor_permission:
+                    logger.warning(
+                        f"User attempted to remove component without editor permission on project {project_id}"
+                    )
+                    raise dash.exceptions.PreventUpdate
+
                 input_id = ctx.triggered_id["index"]
                 component_id_to_remove = f"box-{input_id}"
 
@@ -1730,6 +1800,37 @@ def register_callbacks_draggable(app):
 
             elif triggered_input == "edit-box-button":
                 logger.info("Edit box button clicked")
+
+                # SECURITY: Check editor permission before allowing component edit
+                from depictio.dash.api_calls import (
+                    api_call_check_project_permission,
+                    api_call_get_dashboard,
+                )
+
+                dashboard_data = api_call_get_dashboard(dashboard_id, TOKEN)
+                if not dashboard_data:
+                    logger.warning(f"Dashboard {dashboard_id} not found - blocking edit operation")
+                    raise dash.exceptions.PreventUpdate
+
+                project_id = dashboard_data.get("project_id")
+                if not project_id:
+                    logger.warning(
+                        f"Dashboard {dashboard_id} has no project - blocking edit operation"
+                    )
+                    raise dash.exceptions.PreventUpdate
+
+                # Verify user has editor permission
+                has_editor_permission = api_call_check_project_permission(
+                    project_id=str(project_id),
+                    token=TOKEN,
+                    required_permission="editor",
+                )
+
+                if not has_editor_permission:
+                    logger.warning(
+                        f"User attempted to edit component without editor permission on project {project_id}"
+                    )
+                    raise dash.exceptions.PreventUpdate
 
                 input_id = ctx.triggered_id["index"]
                 logger.info(f"Input ID: {input_id}")
@@ -2104,6 +2205,40 @@ def register_callbacks_draggable(app):
                 logger.info("=" * 80)
                 logger.info("🚨 DUPLICATE CALLBACK EXECUTION START")
                 logger.info("=" * 80)
+
+                # SECURITY: Check editor permission before allowing component duplication
+                from depictio.dash.api_calls import (
+                    api_call_check_project_permission,
+                    api_call_get_dashboard,
+                )
+
+                dashboard_data = api_call_get_dashboard(dashboard_id, TOKEN)
+                if not dashboard_data:
+                    logger.warning(
+                        f"Dashboard {dashboard_id} not found - blocking duplicate operation"
+                    )
+                    raise dash.exceptions.PreventUpdate
+
+                project_id = dashboard_data.get("project_id")
+                if not project_id:
+                    logger.warning(
+                        f"Dashboard {dashboard_id} has no project - blocking duplicate operation"
+                    )
+                    raise dash.exceptions.PreventUpdate
+
+                # Verify user has editor permission
+                has_editor_permission = api_call_check_project_permission(
+                    project_id=str(project_id),
+                    token=TOKEN,
+                    required_permission="editor",
+                )
+
+                if not has_editor_permission:
+                    logger.warning(
+                        f"User attempted to duplicate component without editor permission on project {project_id}"
+                    )
+                    raise dash.exceptions.PreventUpdate
+
                 logger.debug(f"🔍 DUPLICATE DEBUG - ctx.triggered: {ctx.triggered}")
                 logger.debug(f"🔍 DUPLICATE DEBUG - ctx.triggered_id: {ctx.triggered_id}")
                 logger.debug(f"🔍 DUPLICATE DEBUG - Total triggered items: {len(ctx.triggered)}")
@@ -2282,7 +2417,7 @@ def register_callbacks_draggable(app):
                 # DEBUG: Check for responsive scaling in existing layouts
                 logger.debug("🔍 RESPONSIVE DEBUG - Checking existing layouts after fixes:")
                 expected_dims = component_dimensions.get(
-                    metadata["component_type"], {"w": 24, "h": 20}
+                    metadata["component_type"], {"w": 20, "h": 16}
                 )
                 logger.debug(
                     f"🔍 RESPONSIVE DEBUG - Expected dimensions for {metadata['component_type']}: {expected_dims}"
@@ -3565,20 +3700,41 @@ def design_draggable(
         for i, layout_item in enumerate(current_layout):
             logger.debug(f"🔍 GRID DEBUG - layout item {i}: {layout_item}")
 
-    # Determine initial edit mode state from dashboard data
-    # This ensures correct className on initial load (before update_grid_edit_mode callback runs)
+    # Determine initial edit mode state from dashboard data AND check user permissions
+    # This ensures correct className and button visibility on initial load
     initial_edit_mode = True  # Default to edit mode ON
+    is_owner = False  # Default to non-owner
     try:
-        from depictio.dash.api_calls import api_call_get_dashboard
+        from depictio.dash.api_calls import api_call_fetch_user_from_token, api_call_get_dashboard
 
+        # Get current user
+        current_user = api_call_fetch_user_from_token(TOKEN)
+
+        # Get dashboard data
         dashboard_data_dict = api_call_get_dashboard(dashboard_id, TOKEN)
-        if dashboard_data_dict and "buttons_data" in dashboard_data_dict:
-            # Try unified edit mode first, fallback to old key for backward compatibility
-            initial_edit_mode = dashboard_data_dict["buttons_data"].get(
-                "unified_edit_mode",
-                dashboard_data_dict["buttons_data"].get("edit_components_button", True),
-            )
-            logger.info(f"Initial edit mode from dashboard data: {initial_edit_mode}")
+        if dashboard_data_dict:
+            # Check if user is owner
+            if current_user:
+                owner_ids = [
+                    str(owner["id"])
+                    for owner in dashboard_data_dict.get("permissions", {}).get("owners", [])
+                ]
+                is_owner = str(current_user.id) in owner_ids or current_user.is_admin
+                logger.info(f"User is owner: {is_owner}")
+
+            # Get edit mode state only for owners (non-owners always have edit mode OFF)
+            if "buttons_data" in dashboard_data_dict:
+                # Try unified edit mode first, fallback to old key for backward compatibility
+                initial_edit_mode = dashboard_data_dict["buttons_data"].get(
+                    "unified_edit_mode",
+                    dashboard_data_dict["buttons_data"].get("edit_components_button", True),
+                )
+                logger.info(f"Initial edit mode from dashboard data: {initial_edit_mode}")
+
+                # Force edit mode OFF for non-owners
+                if not is_owner:
+                    initial_edit_mode = False
+                    logger.info("Non-owner user - forcing edit mode OFF")
     except Exception as e:
         logger.warning(
             f"Could not fetch dashboard edit mode state: {e}, defaulting to edit mode ON"
@@ -3602,8 +3758,10 @@ def design_draggable(
             "xs": 48,
             "xxs": 48,
         },  # 48-column grid for ultimate layout flexibility and precision
-        showRemoveButton=False,  # Keep consistent - CSS handles visibility
-        showResizeHandles=True,  # Enable resize functionality for vertical growing behavior
+        showRemoveButton=False
+        if not is_owner
+        else False,  # Always False initially, callback controls it
+        showResizeHandles=False if not is_owner else True,  # Non-owners: False, Owners: True
         className=grid_className,  # CSS class for styling (with .drag-handles-hidden if edit mode OFF)
         allowOverlap=False,
         # Additional parameters to try to disable responsive scaling
