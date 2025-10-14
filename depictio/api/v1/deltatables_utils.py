@@ -269,23 +269,61 @@ def _load_joined_deltatable(
         logger.error(f"Failed to fetch join configuration: {e}")
         raise Exception("Error fetching join configuration") from e
 
-    # Load individual DataFrames
-    logger.debug(f"Loading DataFrame for DC1: {dc1_id}")
+    # CRITICAL FIX: Group metadata by dc_id to apply filters only to relevant dataframes
+    # This prevents filters on columns that don't exist in both DCs from causing silent failures
+    dc1_metadata = []
+    dc2_metadata = []
+
+    if metadata and not load_for_options:
+        logger.debug(f"🔍 Grouping {len(metadata)} metadata items by dc_id for joined load")
+        for meta_item in metadata:
+            # Handle both nested and flat metadata structures
+            if "metadata" in meta_item:
+                item_dc_id = meta_item["metadata"].get("dc_id")
+            else:
+                item_dc_id = meta_item.get("dc_id")
+
+            # Normalize dc_id to string for comparison
+            item_dc_id_str = str(item_dc_id) if item_dc_id else None
+
+            # Assign metadata to the correct DC
+            if item_dc_id_str == dc1_id:
+                dc1_metadata.append(meta_item)
+                logger.debug(f"📌 Metadata for DC1 ({dc1_id}): {meta_item.get('value', 'N/A')}")
+            elif item_dc_id_str == dc2_id:
+                dc2_metadata.append(meta_item)
+                logger.debug(f"📌 Metadata for DC2 ({dc2_id}): {meta_item.get('value', 'N/A')}")
+            else:
+                # Metadata doesn't match either DC - log warning
+                logger.warning(
+                    f"⚠️ Metadata with dc_id={item_dc_id_str} doesn't match DC1 ({dc1_id}) or DC2 ({dc2_id}) - skipping"
+                )
+
+        logger.info(
+            f"✅ Metadata grouped: DC1={len(dc1_metadata)} filters, DC2={len(dc2_metadata)} filters"
+        )
+    else:
+        logger.debug(
+            f"⏭️  Skipping metadata grouping (load_for_options={load_for_options}, metadata={'present' if metadata else 'None'})"
+        )
+
+    # Load individual DataFrames with dc-specific metadata
+    logger.debug(f"Loading DataFrame for DC1: {dc1_id} with {len(dc1_metadata)} filters")
     df1 = load_deltatable_lite(
         workflow_id=workflow_id,
         data_collection_id=ObjectId(dc1_id),
-        metadata=metadata if not load_for_options else None,
+        metadata=dc1_metadata if dc1_metadata else None,
         TOKEN=TOKEN,
         limit_rows=None,  # Don't limit individual DFs before join
         load_for_options=load_for_options,
         load_for_preview=load_for_preview,
     )
 
-    logger.debug(f"Loading DataFrame for DC2: {dc2_id}")
+    logger.debug(f"Loading DataFrame for DC2: {dc2_id} with {len(dc2_metadata)} filters")
     df2 = load_deltatable_lite(
         workflow_id=workflow_id,
         data_collection_id=ObjectId(dc2_id),
-        metadata=metadata if not load_for_options else None,
+        metadata=dc2_metadata if dc2_metadata else None,
         TOKEN=TOKEN,
         limit_rows=None,  # Don't limit individual DFs before join
         load_for_options=load_for_options,
@@ -1332,28 +1370,49 @@ def apply_runtime_filters(df: pl.DataFrame, metadata: list[dict] | None) -> pl.D
     if not metadata:
         return df
 
+    original_row_count = df.height
     logger.debug(
-        f"Applying runtime filters to cached DataFrame with {len(metadata)} filter criteria"
+        f"🔍 Applying runtime filters to DataFrame ({original_row_count} rows) with {len(metadata)} filter criteria"
     )
 
     # Get DataFrame columns for validation
     df_columns = set(df.columns)
 
     # Validate that all filter columns exist in the DataFrame
+    skipped_filters = []
     for component in metadata:
         if "metadata" in component:
             column_name = component["metadata"].get("column_name")
+            component_type = component["metadata"].get("interactive_component_type", "unknown")
         else:
             column_name = component.get("column_name")
+            component_type = component.get("interactive_component_type", "unknown")
 
         if column_name and column_name not in df_columns:
-            logger.warning(
-                f"⚠️ Skipping filter for column '{column_name}' - not present in DataFrame. "
-                f"Available columns: {sorted(df_columns)}"
+            skipped_filters.append(
+                {
+                    "column": column_name,
+                    "type": component_type,
+                    "value": component.get("value", "N/A"),
+                }
             )
-            # Return unfiltered DataFrame if any column is missing
-            # This prevents ColumnNotFoundError
-            return df
+
+    # If any filters were skipped, log prominently and return unfiltered data
+    if skipped_filters:
+        logger.warning(
+            f"⚠️ FILTER MISMATCH: Skipping {len(skipped_filters)} filter(s) - columns not present in DataFrame"
+        )
+        for skip in skipped_filters:
+            logger.warning(
+                f"  ❌ Column '{skip['column']}' (type={skip['type']}, value={skip['value']}) not in DataFrame"
+            )
+        logger.warning(f"  📋 Available columns in DataFrame: {sorted(df_columns)}")
+        logger.warning(
+            f"  ⏭️  Returning UNFILTERED DataFrame with {original_row_count} rows (filtering skipped)"
+        )
+        # Return unfiltered DataFrame if any column is missing
+        # This prevents ColumnNotFoundError
+        return df
 
     filter_expressions = process_metadata_and_filter(metadata)
     if filter_expressions:
@@ -1363,10 +1422,15 @@ def apply_runtime_filters(df: pl.DataFrame, metadata: list[dict] | None) -> pl.D
             for filt in filter_expressions[1:]:
                 combined_filter &= filt
             df = df.filter(combined_filter)
-            logger.debug(f"Filtered DataFrame shape: {df.shape}")
+            filtered_row_count = df.height
+            logger.info(
+                f"✅ Filtering applied successfully: {original_row_count} → {filtered_row_count} rows "
+                f"({len(metadata)} filter(s), {original_row_count - filtered_row_count} rows removed)"
+            )
         except pl.exceptions.ColumnNotFoundError as e:
             logger.error(f"❌ Column not found when applying filters: {e}")
             logger.error(f"Available columns: {sorted(df_columns)}")
+            logger.error(f"⏭️  Returning UNFILTERED DataFrame with {original_row_count} rows")
             # Return unfiltered DataFrame instead of crashing
             return df
 
