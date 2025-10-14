@@ -768,14 +768,14 @@ def build_card(**kwargs):
         "top": "10px",
     }
 
-    # Build DashIconify kwargs conditionally - color as direct prop (DMC compliance)
+    # Build DashIconify kwargs conditionally - apply color via CSS style to prevent browser freeze
     dashiconify_kwargs = {
         "icon": icon_name,
         "width": 40,
-        "style": icon_style,
+        "style": icon_style.copy(),  # Copy to avoid mutating the original dict
     }
     if icon_color:
-        dashiconify_kwargs["color"] = icon_color
+        dashiconify_kwargs["style"]["color"] = icon_color
 
     icon_overlay_component = [
         dmc.Group(
