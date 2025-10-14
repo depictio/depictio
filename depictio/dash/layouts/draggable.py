@@ -4,7 +4,7 @@ import dash
 import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
 import httpx
-from dash import ALL, Input, Output, State, ctx, dcc, html
+from dash import ALL, Input, Output, Patch, State, ctx, dcc, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
@@ -278,6 +278,22 @@ def get_component_id(component):
         return None
     except (KeyError, AttributeError, TypeError):
         return None
+
+
+def find_component_index_by_id(children, target_id):
+    """Find index of component in children list by ID.
+
+    Args:
+        children: List of dashboard components
+        target_id: Target component ID to find
+
+    Returns:
+        Index of component if found, None otherwise
+    """
+    for idx, child in enumerate(children):
+        if get_component_id(child) == target_id:
+            return idx
+    return None
 
 
 def remove_duplicates_by_index(components):
@@ -1214,7 +1230,61 @@ def register_callbacks_draggable(app):
                     if "wf_id" in component_selections and component_selections["wf_id"]:
                         child_metadata["wf_id"] = component_selections["wf_id"]
                     if "dc_id" in component_selections and component_selections["dc_id"]:
-                        child_metadata["dc_id"] = component_selections["dc_id"]
+                        dc_value = component_selections["dc_id"]
+
+                        # AUTO-PROMOTION FIX: Check if selected DC has join configuration
+                        # If yes, automatically convert to joined DC ID format
+                        if "--" not in str(dc_value):  # Single DC (not already joined)
+                            logger.info(
+                                f"   🔍 JOIN CHECK - Checking if DC {dc_value} has join configuration"
+                            )
+                            try:
+                                TOKEN = local_data.get("access_token")
+                                # Fetch DC specs to check for joins
+                                dc_specs_response = httpx.get(
+                                    f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_value}",
+                                    headers={"Authorization": f"Bearer {TOKEN}"},
+                                    timeout=10.0,
+                                )
+
+                                if dc_specs_response.status_code == 200:
+                                    dc_specs = dc_specs_response.json()
+                                    join_config = dc_specs.get("config", {}).get("join")
+
+                                    if join_config and join_config.get("with_dc_id"):
+                                        # DC has join configuration - auto-promote to joined format
+                                        with_dc_ids = join_config["with_dc_id"]
+                                        if with_dc_ids and len(with_dc_ids) > 0:
+                                            # Construct joined DC ID: "dc_id--join_target_id"
+                                            join_target_id = with_dc_ids[0]  # Use first join target
+                                            joined_dc_id = f"{dc_value}--{join_target_id}"
+                                            logger.info(
+                                                f"   🔗 AUTO-PROMOTION - DC has join config, promoting {dc_value} → {joined_dc_id}"
+                                            )
+                                            dc_value = joined_dc_id
+                                        else:
+                                            logger.info(
+                                                "   ℹ️ JOIN CHECK - DC has join config but no targets"
+                                            )
+                                    else:
+                                        logger.info(
+                                            "   ℹ️ JOIN CHECK - DC has no join configuration"
+                                        )
+                                else:
+                                    logger.warning(
+                                        f"   ⚠️ JOIN CHECK - Failed to fetch DC specs: {dc_specs_response.status_code}"
+                                    )
+                            except Exception as join_check_error:
+                                logger.warning(
+                                    f"   ⚠️ JOIN CHECK - Error checking for joins: {join_check_error}"
+                                )
+                                # Continue with original dc_value if join check fails
+                        else:
+                            logger.info(
+                                f"   ℹ️ JOIN CHECK - DC is already in joined format: {dc_value}"
+                            )
+
+                        child_metadata["dc_id"] = dc_value
                     if "wf_tag" in component_selections:
                         child_metadata["wf_tag"] = component_selections.get("wf_tag")
                     if "dc_tag" in component_selections:
@@ -1260,14 +1330,87 @@ def register_callbacks_draggable(app):
                             if dc_id and dc_id.get("index") == triggered_index:
                                 dc_value = dc_dropdown_values[idx]
                                 if dc_value:
+                                    # AUTO-PROMOTION FIX: Check if selected DC has join configuration
+                                    # If yes, automatically convert to joined DC ID format
+                                    if "--" not in str(dc_value):  # Single DC (not already joined)
+                                        logger.info(
+                                            f"   🔍 JOIN CHECK - Checking if DC {dc_value} has join configuration"
+                                        )
+                                        try:
+                                            TOKEN = local_data.get("access_token")
+                                            # Fetch DC specs to check for joins
+                                            dc_specs_response = httpx.get(
+                                                f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_value}",
+                                                headers={"Authorization": f"Bearer {TOKEN}"},
+                                                timeout=10.0,
+                                            )
+
+                                            if dc_specs_response.status_code == 200:
+                                                dc_specs = dc_specs_response.json()
+                                                join_config = dc_specs.get("config", {}).get("join")
+
+                                                if join_config and join_config.get("with_dc_id"):
+                                                    # DC has join configuration - auto-promote to joined format
+                                                    with_dc_ids = join_config["with_dc_id"]
+                                                    if with_dc_ids and len(with_dc_ids) > 0:
+                                                        # Construct joined DC ID: "dc_id--join_target_id"
+                                                        join_target_id = with_dc_ids[
+                                                            0
+                                                        ]  # Use first join target
+                                                        joined_dc_id = (
+                                                            f"{dc_value}--{join_target_id}"
+                                                        )
+                                                        logger.info(
+                                                            f"   🔗 AUTO-PROMOTION - DC has join config, promoting {dc_value} → {joined_dc_id}"
+                                                        )
+                                                        dc_value = joined_dc_id
+                                                    else:
+                                                        logger.info(
+                                                            "   ℹ️ JOIN CHECK - DC has join config but no targets"
+                                                        )
+                                                else:
+                                                    logger.info(
+                                                        "   ℹ️ JOIN CHECK - DC has no join configuration"
+                                                    )
+                                            else:
+                                                logger.warning(
+                                                    f"   ⚠️ JOIN CHECK - Failed to fetch DC specs: {dc_specs_response.status_code}"
+                                                )
+                                        except Exception as join_check_error:
+                                            logger.warning(
+                                                f"   ⚠️ JOIN CHECK - Error checking for joins: {join_check_error}"
+                                            )
+                                            # Continue with original dc_value if join check fails
+                                    else:
+                                        logger.info(
+                                            f"   ℹ️ JOIN CHECK - DC is already in joined format: {dc_value}"
+                                        )
+
+                                    # Set the (possibly auto-promoted) dc_id
                                     child_metadata["dc_id"] = dc_value
                                     logger.info(f"   ✅ Got dc_id from dropdown: {dc_value}")
+
                                     # Get dc_tag from the API
                                     try:
+                                        from bson import ObjectId
+
                                         TOKEN = local_data.get("access_token")
-                                        dc_tag = return_dc_tag_from_id(
-                                            data_collection_id=dc_value, TOKEN=TOKEN
-                                        )
+                                        # For joined DCs, we don't need to get tag from API (it's synthetic)
+                                        if "--" in str(dc_value):
+                                            # Joined DC - construct tag from component DCs
+                                            dc_ids = dc_value.split("--")
+                                            dc1_tag = return_dc_tag_from_id(
+                                                data_collection_id=ObjectId(dc_ids[0]), TOKEN=TOKEN
+                                            )
+                                            dc2_tag = return_dc_tag_from_id(
+                                                data_collection_id=ObjectId(dc_ids[1]), TOKEN=TOKEN
+                                            )
+                                            dc_tag = f"Joined: {dc1_tag} + {dc2_tag}"
+                                        else:
+                                            # Single DC - get tag normally
+                                            dc_tag = return_dc_tag_from_id(
+                                                data_collection_id=ObjectId(dc_value), TOKEN=TOKEN
+                                            )
                                         child_metadata["dc_tag"] = dc_tag
                                         logger.info(f"   ✅ Got dc_tag: {dc_tag}")
                                     except Exception as e:
@@ -1769,12 +1912,22 @@ def register_callbacks_draggable(app):
                 logger.debug(f"🗑️ REMOVE DEBUG - Current children count: {len(draggable_children)}")
                 logger.debug(f"🗑️ REMOVE DEBUG - Current layouts count: {len(draggable_layouts)}")
 
-                # Remove the component from children
-                updated_children = [
-                    child
-                    for child in draggable_children
-                    if get_component_id(child) != component_id_to_remove
-                ]
+                # Find the index of the component to remove
+                component_index = find_component_index_by_id(
+                    draggable_children, component_id_to_remove
+                )
+
+                if component_index is None:
+                    logger.warning(f"Component {component_id_to_remove} not found")
+                    return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+                # Use Patch to remove only the specific component
+                children_patch = Patch()
+                del children_patch[component_index]
+
+                logger.info(
+                    f"🔧 PATCH REMOVE - Removing component at index {component_index}: {component_id_to_remove}"
+                )
 
                 # Remove the corresponding layout entry
                 updated_layouts = [
@@ -1784,14 +1937,14 @@ def register_callbacks_draggable(app):
                 ]
 
                 logger.debug(
-                    f"🗑️ REMOVE DEBUG - After removal - children: {len(updated_children)}, layouts: {len(updated_layouts)}"
+                    f"🗑️ REMOVE DEBUG - After removal - remaining layouts: {len(updated_layouts)}"
                 )
 
                 # Update the stored layouts
                 state_stored_draggable_layouts[dashboard_id] = updated_layouts
 
                 return (
-                    updated_children,
+                    children_patch,  # ✅ Partial update - only removes one component
                     updated_layouts,
                     state_stored_draggable_layouts,
                     dash.no_update,
@@ -2399,10 +2552,6 @@ def register_callbacks_draggable(app):
 
                 update_nested_ids(duplicated_component, triggered_index, new_index)
 
-                # Append the duplicated component to the updated children
-                updated_children = list(draggable_children)
-                updated_children.append(duplicated_component)
-
                 # Calculate the new layout position
                 # 'child_type' corresponds to the 'type' in the component's ID
                 # Clean existing layouts to remove any corrupted entries
@@ -2487,7 +2636,9 @@ def register_callbacks_draggable(app):
                     logger.warning(
                         f"⚠️ DUPLICATE WARNING - Could not find original layout for {original_component_id}, using fallback"
                     )
-                    n = len(updated_children)  # Position based on the number of components
+                    n = (
+                        len(draggable_children) + 1
+                    )  # Position based on the number of components (including new one)
                     new_layout = calculate_new_layout_position(
                         metadata["component_type"],
                         existing_layouts,
@@ -2511,8 +2662,11 @@ def register_callbacks_draggable(app):
                     theme=theme,
                 )
 
-                # Replace the deep-copied component with the properly rendered one
-                updated_children[-1] = new_child
+                # Use Patch to append only the new component
+                children_patch = Patch()
+                children_patch.append(new_child)
+
+                logger.info(f"🔧 PATCH DUPLICATE - Adding new component: {child_id}")
 
                 # Add new layout item to the cleaned list
                 existing_layouts.append(new_layout)
@@ -2527,7 +2681,6 @@ def register_callbacks_draggable(app):
 
                 logger.info("=" * 80)
                 logger.info("🔚 DUPLICATE CALLBACK EXECUTION END")
-                logger.debug(f"🔍 DUPLICATE DEBUG - Final children count: {len(updated_children)}")
                 logger.debug(f"🔍 DUPLICATE DEBUG - Final layouts count: {len(draggable_layouts)}")
                 logger.debug(f"🔍 DUPLICATE DEBUG - New component created: {child_id}")
                 logger.debug("🔍 DUPLICATE DEBUG - Final layout data being returned:")
@@ -2538,7 +2691,7 @@ def register_callbacks_draggable(app):
                 logger.info("=" * 80)
 
                 return (
-                    updated_children,
+                    children_patch,  # ✅ Partial update - only adds one component
                     draggable_layouts,
                     state_stored_draggable_layouts,
                     dash.no_update,
