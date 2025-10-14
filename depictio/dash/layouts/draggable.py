@@ -1943,10 +1943,14 @@ def register_callbacks_draggable(app):
                 # Update the stored layouts
                 state_stored_draggable_layouts[dashboard_id] = updated_layouts
 
+                # CRITICAL: Use dash.no_update for currentLayout to prevent callback re-trigger
+                # Updating currentLayout would trigger the "draggable" branch (line 1545) which can
+                # cause component state resets (filters, zoom, scroll position)
+                # The grid component handles layout updates internally when items are removed
                 return (
                     children_patch,  # ✅ Partial update - only removes one component
-                    updated_layouts,
-                    state_stored_draggable_layouts,
+                    dash.no_update,  # ✅ Prevent callback re-trigger and state resets
+                    state_stored_draggable_layouts,  # Update storage for persistence
                     dash.no_update,
                 )
                 # return updated_children, draggable_layouts, state_stored_draggable_children, state_stored_draggable_layouts

@@ -1514,10 +1514,11 @@ def register_callbacks_multiqc_component(app):
         Output({"type": "multiqc-graph", "index": MATCH}, "figure"),
         Output({"type": "multiqc-trace-metadata", "index": MATCH}, "data"),
         Input({"type": "multiqc-trigger", "index": MATCH}, "data"),
+        State({"type": "multiqc-trace-metadata", "index": MATCH}, "data"),
         background=False,  # Disabled background mode - using synchronous rendering
         prevent_initial_call=False,
     )
-    def render_multiqc_plot_background(trigger_data):
+    def render_multiqc_plot_background(trigger_data, existing_trace_metadata):
         """Generate MultiQC plot for dashboard restoration."""
         # Move import to top to avoid issues in background context
         from depictio.dash.modules.multiqc_component.utils import analyze_multiqc_plot_structure
@@ -1525,6 +1526,17 @@ def register_callbacks_multiqc_component(app):
         logger.info("=" * 80)
         logger.info("🎬 RENDER CALLBACK STARTED")
         logger.info(f"🔍 Trigger data received: {trigger_data}")
+
+        # DEFENSIVE CHECK: Skip if already rendered (prevents spurious re-renders during Patch operations)
+        # This prevents re-rendering when removing sibling components with Patch
+        if existing_trace_metadata and existing_trace_metadata.get("summary"):
+            from dash import no_update
+
+            logger.info(
+                "✅ RENDER CALLBACK: Already rendered, skipping re-render "
+                "(Patch operation or spurious Store update detected)"
+            )
+            return no_update, no_update
 
         if not trigger_data:
             logger.warning("⚠️ No trigger_data - returning no_update")

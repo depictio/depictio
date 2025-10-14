@@ -2338,12 +2338,15 @@ def register_callbacks_figure_component(app):
         Output({"type": "stored-metadata-component", "index": MATCH}, "data"),
         Input({"type": "figure-render-trigger", "index": MATCH}, "data"),
         State({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        State({"type": "figure-trace-metadata", "index": MATCH}, "data"),
         State({"type": "graph", "index": MATCH}, "id"),
         State("local-store", "data"),
         background=False,  # Synchronous to avoid subprocess issues with cache
         prevent_initial_call=False,  # Fire immediately when trigger store is populated
     )
-    def render_figure_callback(trigger_data, metadata, graph_id, local_data):
+    def render_figure_callback(
+        trigger_data, metadata, existing_trace_metadata, graph_id, local_data
+    ):
         """
         Pattern-matching callback for independent figure rendering.
 
@@ -2353,6 +2356,17 @@ def register_callbacks_figure_component(app):
         This callback fires when the figure-render-trigger store is populated during
         dashboard restore or component creation, allowing figures to render progressively.
         """
+        # DEFENSIVE CHECK: Skip if already rendered (prevents spurious re-renders during Patch operations)
+        # This prevents re-rendering when removing sibling components with Patch
+        if existing_trace_metadata and existing_trace_metadata.get("summary"):
+            from dash import no_update
+
+            logger.info(
+                "✅ RENDER CALLBACK: Already rendered, skipping re-render "
+                "(Patch operation or spurious Store update detected)"
+            )
+            return no_update, no_update, no_update
+
         if not trigger_data or not metadata:
             logger.warning("🚫 RENDER CALLBACK: Missing trigger data or metadata")
             raise dash.exceptions.PreventUpdate
