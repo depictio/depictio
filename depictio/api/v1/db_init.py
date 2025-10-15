@@ -178,6 +178,35 @@ async def create_initial_dashboard(admin_user: UserBeanie) -> dict | None:
             "message": "Dashboard already exists",
         }
 
+    # CRITICAL: Force static data collection ID in dashboard components
+    # This ensures dashboard references the correct static dc_id across K8s instances
+    STATIC_DC_ID = "646b0f3c1e4a2d7f8e5b8c9c"
+
+    logger.info(f"Forcing static data collection ID in dashboard: {STATIC_DC_ID}")
+
+    if "stored_metadata" in dashboard_data:
+        for component in dashboard_data["stored_metadata"]:
+            # Force top-level dc_id
+            if "dc_id" in component and isinstance(component["dc_id"], dict):
+                component["dc_id"]["$oid"] = STATIC_DC_ID
+                logger.debug(
+                    f"Updated component {component.get('index', 'unknown')} dc_id to {STATIC_DC_ID}"
+                )
+
+            # Force nested dc_config._id
+            if "dc_config" in component and isinstance(component["dc_config"], dict):
+                if "_id" in component["dc_config"] and isinstance(
+                    component["dc_config"]["_id"], dict
+                ):
+                    component["dc_config"]["_id"]["$oid"] = STATIC_DC_ID
+                    logger.debug(
+                        f"Updated component {component.get('index', 'unknown')} dc_config._id to {STATIC_DC_ID}"
+                    )
+
+    logger.info(
+        f"Updated {len(dashboard_data.get('stored_metadata', []))} dashboard components with static dc_id"
+    )
+
     # Convert dashboard data to the correct format
     dashboard_data = DashboardData.from_mongo(dashboard_data)
     dashboard_data.permissions = Permission(
