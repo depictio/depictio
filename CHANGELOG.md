@@ -6,53 +6,21 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.5.2</summary>
+<summary>Click to expand the changelog for 0.5.3</summary>
 
 ### Changes 📜
 
 #### New Features ✨
 
-* feat: Add S3 delta table existence check and improve project ID handling during creation [bc31ff79]
-* feat: Add EMBL specific values for unauthenticated access and Google OAuth configuration [316c4f33]
-* feat: Enable auto-refresh for analytics dashboard with a 30-second interval [3e259297]
-* feat: Enhance filtering logic for date and range components in metadata samples retrieval [c913dd2b]
-* feat: Update icon color handling to apply via CSS style to prevent browser freeze in card and interactive components [1c276fb0]
-* feat: Implement defensive checks to prevent spurious re-renders during Patch operations in draggable, card, figure, and multiqc components [61a2621b]
-* feat: Implement auto-promotion for data collection IDs with join configurations and enhance component removal with Patch updates [103baee8]
-* feat: Enhance joined DataFrame loading and filtering by grouping metadata by dc_id to prevent silent failures and improve logging for skipped filters [7dfdcc24]
-* feat: Enhance interactive filtering by checking data collection compatibility and improving join handling [8b4c3072]
-* feat: Add init container to verify config storage is mounted and writable for backend and frontend deployments [96400521]
-* feat: Refactor icon overlay to use DashIconify kwargs for improved styling and compliance [ce4acaca]
-* feat: Replace DashIconify with ActionIcon for improved dashboard icon styling and consistency [1e9e9d8a]
-* feat: Enhance code-mode figure handling by truncating long code content and adding column name and aggregation metadata for card components [4f7442bf]
-* feat: Update dashboard icon preview to use ActionIcon for consistent UX and improved styling [76c55c18]
-* feat: Update component dimensions and enhance user permission checks for editing and duplicating components [aa03799f]
-* feat: Add MultiQC data collection styling and metadata handling in project data collections [b2d995fd]
-* feat: Update default dimensions for various components in metadata configuration [8fa1c62f]
-* feat: Enhance project permission checks and streamline dashboard access logic [d03deeb8]
-* feat: Update ampliseq project configuration with new metadata structure and file references [4d877513]
-* feat: Add synchronization for visualization type in stored metadata and enhance column extraction from preprocessing code [afd5fb93]
-* feat: Implement URL pattern helpers for API, frontend, and MinIO services in Helm templates [5a7850f1]
-* feat: Add workflow system support with icons and colors in dashboard management [d09e6096]
-
-#### Bug Fixes 🐛
-
-* fix: Standardize 'Iris Dashboard Demo' to 'Iris Dashboard demo' for consistency in tests [ca6ee804]
-* fix: Update references to 'Iris Dashboard' to 'Iris Dashboard Demo' for clarity in unauthenticated mode tests [d7d8a3d8]
-* fix: Comment out theme persistence test in dark mode core functionality [8a83fe7b]
-* fix: Prevent horizontal scrollbar on dashboard pages by adjusting overflow properties [310a8d9f]
-* fix: Remove default background color from draggable component styling [6e06fd6c]
-* fix: Comment out note about Celery worker container in FastAPI script [ca58c0ea]
-* fix: Change prevent_initial_call to false for theme switch callback [937e08b1]
-* fix: Fix container build [acf26a86]
+* feat: Implement static IDs in project creation for K8s consistency [2df1d177]
+* feat: Enhance project creation to preserve original IDs from YAML for consistency across K8s instances [bf683733]
+* feat: Preserve original IDs during project creation to ensure consistency across K8s instances [d4a57a5d]
 
 #### Other Changes 📝
 
-* Bump version: 0.5.1 → 0.5.2 [509a3f71]
-* Add favicon and update screenshot assets [eba98991]
-* Refactor Jupyter Notebook: Remove redundant code cells and streamline data processing for Faith PD and taxonomic richness analysis. Consolidate plotting logic and enhance clarity in data manipulation steps. [61399dff]
-* Update CHANGELOG.md for v0.5.1 [913dbc0f]
-* Bump version: 0.5.0 → 0.5.1 [ae41f896]
+* Bump version: 0.5.2 → 0.5.3 [b747188d]
+* Update CHANGELOG.md for v0.5.2 [c727266b]
+* Bump version: 0.5.1 → 0.5.2 [073fb0cd]
 
 
 </details>
@@ -61,110 +29,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ectivity tests [f86b4f10]
-
-#### Bug Fixes 🐛
-
-* fix: Update resize handle colors for better visibility in light and dark themes [08938777]
-* fix: Remove unused state for dashboard icon variant in callbacks [dbd35d89]
-* fix: Adjust navbar logo dimensions for improved layout consistency [435aa448]
-* fix: Normalize layout IDs to prevent mismatches and component position resets [a164f8cb]
-* fix: Adjust app header height in notes footer for fullscreen mode [a41d83a8]
-* fix: Correct string formatting in Redis cache stats logging [ffcfd7a1]
-
-#### Improvements 🚀
-
-* refactor: Remove dark theme specific styles for auth modal and Google button [6ddaf469]
-
-#### Other Changes 📝
-
-* Bump version: 0.5.0 → 0.5.1 [04df3adf]
-* Update CHANGELOG.md for v0.5.0 [f55fe809]
-* Bump version: 0.4.0 → 0.5.0 [6ce0865e]
-
-
-</details>
-
-### Documentation 📖
-
-For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
-
-ecessary options and adding join filtering logic [d8a8891f]
-* feat: Enhance render_figure function to support additional color parameters and improve handling of hierarchical visualizations [b2034ced]
-* feat: Enhance filtering logic to detect active filters and optimize data loading for single and joined data collections [da5cbeb2]
-* feat: Add theme selection dropdown to card component for enhanced visual customization [455b8f5a]
-* feat: Enhance join logic to conditionally include depictio_run_id based on data collection metatypes [12b555f9]
-* feat: Remove limit on unique options in build_interactive and add display limit for multiselect component [912479af]
-* feat: Enhance filtering logic for boolean and unknown column types in build_table function [fc78efeb]
-* feat: Enhance reset functionality to preserve existing values on non-reset triggers [47eaa773]
-* feat: Add reset functionality for interactive components to restore default state [66f8cc03]
-* feat: Refactor interactive component updates to utilize pattern-matching architecture for improved efficiency [3ec194c3]
-* feat: Enhance component selection logic to route MultiQC data collections to the MultiQC component [b8e0fc65]
-* feat: Remove MultiQC mode support from figure component and update mode handling [22b514b2]
-* feat: Implement multi-DC filtering support with iterative joins and enhanced logging [245b0fcc]
-* feat: Add update functionality for MultiQC reports with S3 metadata preservation [4bd86afa]
-* feat: Enhance filter handling with reset support and multi-DC filtering logic [fe70e248]
-* feat: Implement pattern-matching architecture for card component with async value computation and filter updates [8365b791]
-* feat: Enhance multi-DC filtering support by grouping filters and merging dataframes for efficient loading [f06011b8]
-* feat: Enhance figure rendering with trace metadata for efficient patching and interactive filtering [103cb4f8]
-* feat: Add column selection support for efficient data loading in _load_joined_deltatable and load_deltatable_lite functions [05c4e50c]
-* feat: Add figure structure analysis and parameter extraction for efficient rendering and patching [491949ad]
-* feat: Update Celery configuration to conditionally include Redis password and simplify Dash background callback setup [530a7fdf]
-* feat: Implement asynchronous figure rendering with pattern-matching callbacks and optimize caching for performance [5899ac4f]
-* feat: Implement caching for MultiQC report parsing to optimize plot generation and reduce redundant operations [fc676d84]
-* feat: Implement background rendering for MultiQC plots and enhance loading experience with placeholder [1ea3b0c3]
-* feat: Refactor MultiQC plot handling to include logo overlay at component level and improve layout management [27bbfc4e]
-* feat: Enhance MultiQC figure patching with trace metadata and improve plot analysis [31b6740b]
-* feat: Add endpoint for cleaning up orphaned S3 files with admin privileges [f1d02b15]
-* feat: Add periodic cleanup task for orphaned S3 files and integrate with existing cleanup framework [76283b08]
-* feat: Implement duplicate report checking and handling in MultiQC data processing [5757584c]
-* feat: Enhance MultiQC component with interactive metadata support and theme integration [9a362ec4]
-* feat: Add compatibility aliases and access token handling in MultiQCDashboardComponent [696a3d6c]
-* feat: Add sample filtering and theme support to MultiQC figures with interactive callbacks [b2976903]
-* feat: Implement MultiQC FastQC Dashboard with dynamic sample filtering and plot updates [047cb1eb]
-* feat: Add S3 file access configuration options to .env for improved performance [91cc140a]
-* feat: Enhance MultiQC component handling with improved metadata processing and layout adjustments [da9268e5]
-* feat: Enhance MultiQC component with logo overlay and improved metadata handling [ab7f8ffb]
-* feat: Implement S3 mounting functionality with dynamic credentials in run_dash.sh [f1ea31e2]
-* feat: Add MultiQC tools metadata JSON file with detailed statistics and extraction info [df0db113]
-* feat: Add S3 caching configuration and enhance S3 file handling in MultiQC visualization [9a7fcb2e]
-* feat: Enhance MultiQC metadata loader and table processing with YAML support and modify functions [c698a9fd]
-* feat: Refactor MultiQC data processing and enhance dashboard functionality with argument parsing [4d08d288]
-* feat: Implement MultiQC Table with Data Bars using parquet data and metadata [9baf22bb]
-* feat: ongoing multiqc feat [073fcc00]
-* feat: Add fsspec and s3fs to conda environment; include multiqc in project dependencies [bfa1cf31]
-* feat: Enhance MultiQC processor tests with improved mocking and error handling [fdc9d37e]
-* feat: Add date range filtering capability to add_filter function with error handling [6bb2680d]
-* feat: Implement full data loading capability with user-triggered requests and bypass sampling [8736b6c6]
-* feat: Enhance figure component with metadata validation and data count tracking for improved UI feedback [7488390e]
-* feat: Update sync callback to allow duplicate outputs and adjust initial call behavior [878323d3]
-* feat: Add metadata and partial data warning buttons with dynamic visibility and content updates [c9daf145]
-* feat: Add icon selection functionality to interactive component and enhance default icon mapping [8aa57101]
-* feat: Add customizable card styling options including background color, title color, icon selection, and title font size [82625940]
-* feat: Enhance build_interactive function to support custom color and title size configuration [7d443f31]
-* feat: Refactor screenshot functionality to directly capture AppShell content, excluding navbar and header [9f7daf69]
-* feat: Re-enable color picker and add title size selection in interactive component [42d885f8]
-* feat: Improve dashboard screenshot functionality with enhanced loading and composite rendering [2304593c]
-* feat: Enhance filtering logic to support joined data collections in _filter_relevant_dcs function [41f15578]
-* feat: Add configuration for HGSVC Pools Strand-seq analysis and data collections [82eaedf1]
-* feat: Enhance logging for filter application in load_deltatable_lite function [c13ef67f]
-* feat: Add sample mapping utility to build mappings from canonical IDs to MultiQC variants [8aa1c02d]
-* feat: Add endpoint to retrieve sample mappings for MultiQC reports [c2f3c470]
-* feat: Add workflow logo overlay component for dashboard branding [c1519889]
-* feat: Implement defensive cache check for project data and add workflow logo overlay [3a1d0dae]
-* feat: Add detailed logging for save callback and clean up commented code [30cc6230]
-* feat: Enhance data collection type mapping in interactive component sync process [32abac32]
-* feat: Enhance UI/UX of interactive components with improved layout and spacing adjustments [8096bb30]
-* feat: Add sample mappings and canonical samples fields to MultiQCMetadata for enhanced data representation [9d70bfa7]
-* feat: Implement interactive filtering support with extraction, grouping, and relevance checks for data collections [f5e8615e]
-* feat: Refactor interactive filtering logic to enhance data extraction, grouping, and join strategy for improved performance and maintainability [a5958765]
-* feat: Refactor filter handling in register_callbacks_figure_component to improve data integrity and logging for relevant data collections [6b028674]
-* feat: Improve heatmap filtering logic by implementing fuzzy matching for sample names and ensuring data consistency between Y and Z axes [6396f232]
-* feat: Enhance logging and parameter handling in figure component for improved debugging and flexibility [4a6fe1c1]
-* feat: Add expand_canonical_samples_to_variants function to handle MultiQC sample mappings [2fa2e886]
-* feat: Enhance generate_join_dict to include non-table data collections in join configurations [5f84cc56]
-* feat: Preserve component state during layout changes by using dash.no_update for children to prevent re-mounting [01c8b62a]
-* feat: Refine multiqc data collection handling by removing unnecessary options and adding join filtering logic [aaddc693]
+ecessary options and adding join filtering logic [aaddc693]
 * feat: Enhance render_figure function to support additional color parameters and improve handling of hierarchical visualizations [0ba3b7a6]
 * feat: Enhance filtering logic to detect active filters and optimize data loading for single and joined data collections [7be5b435]
 * feat: Add theme selection dropdown to card component for enhanced visual customization [93944b13]
