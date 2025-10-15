@@ -171,18 +171,60 @@ async def create_initial_dashboard(admin_user: UserBeanie) -> dict | None:
     dashboard_data = json.load(open(dashboard_json_path, "r"), object_hook=json_util.object_hook)
     logger.debug(f"Dashboard data: {dashboard_data}")
     _check = dashboards_collection.find_one({"_id": ObjectId(dashboard_data["_id"])})
-    if _check:
-        logger.info(f"Dashboard already exists: {_check}")
-        return {
-            "success": True,
-            "message": "Dashboard already exists",
-        }
 
     # CRITICAL: Force static data collection ID in dashboard components
     # This ensures dashboard references the correct static dc_id across K8s instances
     STATIC_DC_ID = "646b0f3c1e4a2d7f8e5b8c9c"
 
     logger.info(f"Forcing static data collection ID in dashboard: {STATIC_DC_ID}")
+
+    # If dashboard already exists, verify and fix dc_ids in existing dashboard
+    if _check:
+        logger.info("Dashboard already exists, verifying/fixing dc_ids...")
+
+        needs_update = False
+        if "stored_metadata" in _check:
+            for component in _check["stored_metadata"]:
+                # Check and fix top-level dc_id
+                if "dc_id" in component:
+                    current_dc_id = str(component["dc_id"])
+                    if current_dc_id != STATIC_DC_ID:
+                        logger.warning(
+                            f"Component {component.get('index', 'unknown')} has wrong dc_id: "
+                            f"{current_dc_id}, fixing to {STATIC_DC_ID}"
+                        )
+                        component["dc_id"] = ObjectId(STATIC_DC_ID)
+                        needs_update = True
+
+                # Check and fix nested dc_config._id
+                if "dc_config" in component and isinstance(component["dc_config"], dict):
+                    if "_id" in component["dc_config"]:
+                        current_config_id = str(component["dc_config"]["_id"])
+                        if current_config_id != STATIC_DC_ID:
+                            logger.warning(
+                                f"Component {component.get('index', 'unknown')} has wrong dc_config._id: "
+                                f"{current_config_id}, fixing to {STATIC_DC_ID}"
+                            )
+                            component["dc_config"]["_id"] = ObjectId(STATIC_DC_ID)
+                            needs_update = True
+
+        if needs_update:
+            # Update dashboard in database
+            result = dashboards_collection.update_one(
+                {"_id": ObjectId(dashboard_data["_id"])},
+                {"$set": {"stored_metadata": _check["stored_metadata"]}},
+            )
+            logger.info(
+                f"Updated existing dashboard with correct dc_ids "
+                f"(matched: {result.matched_count}, modified: {result.modified_count})"
+            )
+        else:
+            logger.info("Dashboard dc_ids are already correct")
+
+        return {
+            "success": True,
+            "message": "Dashboard verified/updated with correct dc_ids",
+        }
 
     if "stored_metadata" in dashboard_data:
         for component in dashboard_data["stored_metadata"]:
