@@ -118,8 +118,9 @@ async def _helper_create_project_beanie(project: Project) -> dict:
     # Save the project to the database using PyMongo's insert_one
     result = projects_collection.insert_one(mongo_project)
 
-    # Update the project's id with the inserted _id
-    project.id = result.inserted_id
+    # Only update the project's id if it wasn't already set (preserve static IDs from YAML)
+    if project.id is None:
+        project.id = result.inserted_id
 
     return {
         "project": project,

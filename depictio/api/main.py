@@ -22,6 +22,7 @@ from depictio.api.v1.endpoints.routers import router
 from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import process_collections
 from depictio.api.v1.initialization import run_initialization
 from depictio.api.v1.middleware.analytics_middleware import AnalyticsMiddleware
+from depictio.api.v1.s3 import s3_client
 from depictio.api.v1.tasks.cleanup_tasks import start_cleanup_tasks
 from depictio.api.v1.utils import clean_screenshots
 from depictio.models.models.analytics import UserActivity, UserSession
@@ -114,6 +115,44 @@ async def cleanup_failed_initialization():
     print(f"Worker {os.getpid()}: Cleaned up failed initialization lock")
 
 
+def check_s3_delta_table_exists(bucket: str, data_collection_id: str) -> bool:
+    """
+    Check if a delta table exists in S3 by looking for the _delta_log directory.
+
+    Args:
+        bucket: S3 bucket name
+        data_collection_id: Data collection ID (used as S3 prefix)
+
+    Returns:
+        bool: True if delta table exists in S3, False otherwise
+    """
+    try:
+        # Check if the _delta_log directory exists in S3
+        # Delta tables always have a _delta_log/00000000000000000000.json file
+        delta_log_prefix = f"{data_collection_id}/_delta_log/"
+
+        # List objects with the delta_log prefix
+        response = s3_client.list_objects_v2(Bucket=bucket, Prefix=delta_log_prefix, MaxKeys=1)
+
+        # If Contents exists and has at least one object, the delta table exists
+        exists = "Contents" in response and len(response["Contents"]) > 0
+
+        if exists:
+            print(
+                f"Worker {os.getpid()}: Delta table found in S3 at s3://{bucket}/{data_collection_id}"
+            )
+        else:
+            print(
+                f"Worker {os.getpid()}: Delta table NOT found in S3 at s3://{bucket}/{data_collection_id}"
+            )
+
+        return exists
+    except Exception as e:
+        print(f"Worker {os.getpid()}: Error checking S3 for delta table: {e}")
+        # If we can't check S3, assume it doesn't exist and allow processing
+        return False
+
+
 async def wait_for_initialization_complete(timeout=300):
     """Wait for another worker to complete initialization."""
     import time
@@ -194,6 +233,7 @@ async def lifespan(app: FastAPI):
 def delayed_process_data_collections():
     """
     Process initial data collections after a delay to ensure the API is fully started.
+    Skips processing if delta table already exists in S3 (for multi-instance deployments).
     """
     import threading
     import time
@@ -209,11 +249,23 @@ def delayed_process_data_collections():
     if dc_id:
         dc_id = dc_id.get("workflows", [{}])[0].get("data_collections", [{}])[0].get("_id")
         if dc_id:
+            # First check local MongoDB for existing deltatable record
             _check_deltatables = deltatables_collection.find_one(
                 {"data_collection_id": dc_id}, {"_id": 1}
             )
             if _check_deltatables:
-                print(f"Worker {os.getpid()}: Data collections already processed, skipping")
+                print(
+                    f"Worker {os.getpid()}: Data collections already processed in local DB, skipping"
+                )
+                return
+
+            # More importantly, check if delta table exists in S3 (for multi-instance deployments)
+            # Each instance has its own MongoDB but shares the same S3 bucket
+            dc_id_str = str(dc_id)
+            if check_s3_delta_table_exists(settings.minio.bucket, dc_id_str):
+                print(
+                    f"Worker {os.getpid()}: Delta table already exists in S3 at s3://{settings.minio.bucket}/{dc_id_str}, skipping processing"
+                )
                 return
 
     # Wait longer to ensure the API has fully started
