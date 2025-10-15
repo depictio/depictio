@@ -137,7 +137,7 @@ minio:
 backend:
   image:
     repository: ghcr.io/depictio/depictio # Corrected repository path with .io
-    tag: "0.5.2"
+    tag: "0.5.3"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
   resources:
@@ -220,7 +220,7 @@ backend:
 frontend:
   image:
     repository: ghcr.io/depictio/depictio # Corrected repository path with .io
-    tag: "0.5.2"
+    tag: "0.5.3"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
   resources:
