@@ -114,7 +114,13 @@ describe('Project Permissions Management', () => {
         // Click on user dropdown and select user
         cy.get('#permissions-manager-input-email').should('be.visible').click()
         cy.typeRobust('#permissions-manager-input-email', userEmail)
-        cy.contains(userEmail).click()
+
+        // Wait for dropdown to filter and show results, then click the email option
+        cy.get('.mantine-MultiSelect-dropdown', { timeout: 10000 })
+            .should('be.visible')
+            .contains(userEmail)
+            .should('be.visible')
+            .click()
 
         // Wait for dropdown to update
         cy.wait(500)

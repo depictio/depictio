@@ -119,7 +119,7 @@ describe('Unauthenticated Mode - Login as a temporary user Flow', () => {
     cy.screenshot('temporary_user_profile')
   })
 
-  it('should enable Duplicate button for Iris Dashboard after Interactive Mode', () => {
+  it('should enable Duplicate button for Iris Dashboard Demo after Interactive Mode', () => {
     // First enable Interactive Mode
     cy.visit('/profile')
     cy.wait(2000)
@@ -135,8 +135,8 @@ describe('Unauthenticated Mode - Login as a temporary user Flow', () => {
     cy.reload()
     cy.wait(3000)
 
-    // Find the Iris Dashboard card
-    cy.contains('h4.mantine-Title-root', 'Iris Dashboard')
+    // Find the Iris Dashboard Demo card
+    cy.contains('h4.mantine-Title-root', 'Iris Dashboard Demo')
       .parents('.mantine-Card-root')
       .within(() => {
         // Open Actions accordion
@@ -149,7 +149,7 @@ describe('Unauthenticated Mode - Login as a temporary user Flow', () => {
           if ($btn.is(':disabled')) {
             cy.reload()
             cy.wait(2000)
-            cy.contains('h4.mantine-Title-root', 'Iris Dashboard')
+            cy.contains('h4.mantine-Title-root', 'Iris Dashboard Demo')
               .parents('.mantine-Card-root')
               .within(() => {
                 cy.contains('Actions').click({ force: true })
@@ -183,7 +183,7 @@ describe('Unauthenticated Mode - Login as a temporary user Flow', () => {
     cy.reload()
     cy.wait(3000)
 
-    cy.contains('h4.mantine-Title-root', 'Iris Dashboard')
+    cy.contains('h4.mantine-Title-root', 'Iris Dashboard Demo')
       .parents('.mantine-Card-root')
       .within(() => {
         cy.contains('Actions').click({ force: true })
@@ -202,7 +202,7 @@ describe('Unauthenticated Mode - Login as a temporary user Flow', () => {
     cy.wait(3000)
 
     // Should see the duplicated dashboard (with timeout)
-    cy.contains('h4.mantine-Title-root', 'Iris Dashboard (copy)', { timeout: 10000 }).should('be.visible')
+    cy.contains('h4.mantine-Title-root', 'Iris Dashboard Demo (copy)', { timeout: 10000 }).should('be.visible')
 
     cy.screenshot('dashboard_duplicated_successfully')
   })
@@ -237,7 +237,7 @@ describe('Unauthenticated Mode - Login as a temporary user Flow', () => {
     cy.reload()
     cy.wait(3000)
 
-    cy.contains('h4.mantine-Title-root', 'Iris Dashboard')
+    cy.contains('h4.mantine-Title-root', 'Iris Dashboard Demo')
       .parents('.mantine-Card-root')
       .within(() => {
         cy.contains('Actions').click({ force: true })
