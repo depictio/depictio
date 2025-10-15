@@ -3,6 +3,7 @@ from typing import Any, Optional
 
 import dash
 import dash_mantine_components as dmc
+import polars as pl
 from dash import MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
@@ -534,6 +535,8 @@ def get_samples_from_metadata_filter(
     Returns:
         List of canonical sample names that match the filters (not expanded to variants)
     """
+    from datetime import datetime
+
     from bson import ObjectId
 
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
@@ -562,8 +565,110 @@ def get_samples_from_metadata_filter(
 
         if column_name and filter_values and column_name in df.columns:
             logger.info(f"Filtering {column_name} = {filter_values}")
-            df = df.filter(df[column_name].is_in(filter_values))
-            logger.info(f"After filtering: {df.shape[0]} rows remaining")
+
+            # Get column dtype to handle type-specific filtering
+            column_dtype = df[column_name].dtype
+
+            # Strategy 1: Handle Date/Datetime columns by parsing filter values as dates
+            if column_dtype in (pl.Date, pl.Datetime):
+                # Check if this is the default range (no actual filtering needed)
+                default_state = comp_metadata.get("default_state", {})
+                default_range = default_state.get("default_range")
+
+                # If filter_values equals default_range, skip filtering
+                if default_range and filter_values == default_range:
+                    logger.debug(
+                        f"Date filter '{column_name}' at default range {default_range} - "
+                        "skipping (not an active filter)"
+                    )
+                    continue  # Skip to next component - no filtering for this column
+
+                # Otherwise, apply the date filter (user has changed from default)
+                try:
+                    # Parse string filter values as Python date objects (format: YYYY-MM-DD)
+                    # Polars can compare Date columns directly with Python date objects
+                    parsed_dates = [
+                        datetime.strptime(str(v), "%Y-%m-%d").date() for v in filter_values
+                    ]
+                    # Filter using native Date comparison with Python date objects
+                    df = df.filter(pl.col(column_name).is_in(parsed_dates))
+                    logger.info(f"After filtering: {df.shape[0]} rows remaining (Date parsing)")
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to filter Date column '{column_name}' with date parsing: {e}"
+                    )
+                    # Fallback to string casting with explicit date format
+                    try:
+                        # Cast Date to string format YYYY-MM-DD to match filter values
+                        string_values = [str(v) for v in filter_values]
+                        # Use dt.strftime to ensure consistent date string format
+                        df = df.filter(
+                            pl.col(column_name).dt.strftime("%Y-%m-%d").is_in(string_values)
+                        )
+                        logger.info(
+                            f"After filtering: {df.shape[0]} rows remaining (Date as formatted string)"
+                        )
+                    except Exception as e2:
+                        logger.error(
+                            f"All Date filtering methods failed on '{column_name}': {e2}. Skipping filter."
+                        )
+
+            # Strategy 2: For non-Date columns, detect range vs discrete filtering
+            else:
+                # Check if this is a range filter (2-element numeric list from RangeSlider)
+                is_range_filter = (
+                    isinstance(filter_values, list)
+                    and len(filter_values) == 2
+                    and all(isinstance(v, (int, float)) for v in filter_values)
+                )
+
+                if is_range_filter:
+                    # Check if this is the default range (no actual filtering needed)
+                    default_state = comp_metadata.get("default_state", {})
+                    default_range = default_state.get("default_range")
+
+                    # If filter_values equals default_range, skip filtering
+                    if default_range and filter_values == default_range:
+                        logger.debug(
+                            f"Range filter '{column_name}' at default range {default_range} - "
+                            "skipping (not an active filter)"
+                        )
+                        continue  # Skip to next component - no filtering for this column
+
+                    # Range filtering: filter rows WHERE column BETWEEN min AND max
+                    min_val, max_val = filter_values[0], filter_values[1]
+                    logger.info(f"Applying range filter: {min_val} <= {column_name} <= {max_val}")
+                    try:
+                        df = df.filter(
+                            (pl.col(column_name) >= min_val) & (pl.col(column_name) <= max_val)
+                        )
+                        logger.info(f"After filtering: {df.shape[0]} rows remaining (range filter)")
+                    except Exception as e:
+                        logger.error(
+                            f"Range filtering failed on '{column_name}': {e}. Skipping filter."
+                        )
+                else:
+                    # Discrete value filtering: use .is_in() for exact matches
+                    logger.info(f"Applying discrete filter: {column_name} in {filter_values}")
+                    try:
+                        df = df.filter(df[column_name].is_in(filter_values))
+                        logger.info(
+                            f"After filtering: {df.shape[0]} rows remaining (discrete filter)"
+                        )
+                    except Exception as e:
+                        logger.warning(f"Direct filtering failed on '{column_name}': {e}")
+                        # Fallback: try string casting for type safety (e.g., int vs string mismatch)
+                        try:
+                            string_values = [str(v) for v in filter_values]
+                            df = df.filter(df[column_name].cast(pl.String).is_in(string_values))
+                            logger.info(
+                                f"After filtering: {df.shape[0]} rows remaining (string casting fallback)"
+                            )
+                        except Exception as e2:
+                            logger.error(
+                                f"All filtering methods failed on '{column_name}': {e2}. Skipping filter."
+                            )
+                            # Skip this filter and continue with unfiltered data for this column
 
     # Extract sample names from join column
     if join_column not in df.columns:
@@ -1327,8 +1432,37 @@ def register_callbacks_multiqc_component(app):
                 component_value = component_data.get("value", [])
 
                 # Check if this component has any active filter values
+                # For range components (RangeSlider, DateRangePicker), compare against default_range
                 if component_value and len(component_value) > 0:
-                    has_active_filters = True
+                    comp_metadata = component_data.get("metadata", {})
+                    component_type = comp_metadata.get("interactive_component_type", "")
+                    default_state = comp_metadata.get("default_state", {})
+
+                    # For RangeSlider and DateRangePicker, check if current value equals default range
+                    if component_type in ["RangeSlider", "DateRangePicker"]:
+                        default_range = default_state.get("default_range")
+                        # If current value equals default range, it's NOT an active filter
+                        if default_range and component_value == default_range:
+                            logger.debug(
+                                f"Component {component_index} ({component_type}) at default range "
+                                f"{default_range} - NOT counting as active filter"
+                            )
+                        else:
+                            # User has changed the range from default - this IS an active filter
+                            has_active_filters = True
+                            logger.debug(
+                                f"Component {component_index} ({component_type}) changed from default "
+                                f"{default_range} to {component_value} - IS active filter"
+                            )
+                    else:
+                        # For other component types (MultiSelect, SegmentedControl, etc.),
+                        # non-empty value means active filter
+                        has_active_filters = True
+                        logger.debug(
+                            f"Component {component_index} ({component_type}) has value "
+                            f"{component_value} - IS active filter"
+                        )
+
                 if component_index:
                     interactive_components_dict[component_index] = component_data
                     comp_metadata = component_data.get("metadata", {})
@@ -1362,8 +1496,7 @@ def register_callbacks_multiqc_component(app):
         # If user is clearing filters (no active filters but was previously patched),
         # we need to restore the original unfiltered data
         if not has_active_filters and figure_was_patched:
-            logger.info("Clearing filters - restoring original unfiltered data")
-            # We'll let the patching continue with empty selected_samples to restore all data
+            logger.info("🔄 RESET MODE: Clearing filters - restoring original unfiltered data")
 
         try:
             # Extract metadata DC ID and join column from joins_dict
@@ -1417,18 +1550,48 @@ def register_callbacks_multiqc_component(app):
                 )
                 return dash.no_update
 
-            # Get canonical sample IDs from filtered metadata table
-            canonical_samples = get_samples_from_metadata_filter(
-                workflow_id=workflow_id,
-                metadata_dc_id=metadata_dc_id,
-                join_column=join_column,
-                interactive_components_dict=interactive_components_dict,
-                token=token,
-            )
+            # RESET HANDLING: Load ALL samples when filters are cleared
+            if not has_active_filters and figure_was_patched:
+                # Reset mode: Load ALL samples from metadata table without filtering
+                from bson import ObjectId
 
-            if not canonical_samples:
-                logger.warning("No canonical samples found after filtering")
-                return dash.no_update
+                from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+                logger.info("🔄 Loading ALL samples from metadata (no filtering)")
+                df = load_deltatable_lite(
+                    workflow_id=ObjectId(workflow_id),
+                    data_collection_id=ObjectId(metadata_dc_id),
+                    metadata=None,
+                    TOKEN=token,
+                )
+
+                if df is None or df.is_empty():
+                    logger.warning("Metadata table is empty - cannot restore")
+                    return dash.no_update
+
+                if join_column not in df.columns:
+                    logger.error(
+                        f"Join column '{join_column}' not found in metadata. "
+                        f"Available columns: {df.columns}"
+                    )
+                    return dash.no_update
+
+                # Get ALL canonical samples (unfiltered)
+                canonical_samples = df[join_column].unique().to_list()
+                logger.info(f"✅ RESET: Loaded {len(canonical_samples)} total samples (unfiltered)")
+            else:
+                # Normal filtering mode: Get filtered samples
+                canonical_samples = get_samples_from_metadata_filter(
+                    workflow_id=workflow_id,
+                    metadata_dc_id=metadata_dc_id,
+                    join_column=join_column,
+                    interactive_components_dict=interactive_components_dict,
+                    token=token,
+                )
+
+                if not canonical_samples:
+                    logger.warning("No canonical samples found after filtering")
+                    return dash.no_update
 
             # Expand canonical IDs to all MultiQC variants using stored mappings
             sample_mappings = metadata.get("sample_mappings", {})
