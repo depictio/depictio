@@ -4,7 +4,7 @@ import dash
 import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
 import httpx
-from dash import ALL, Input, Output, State, ctx, dcc, html
+from dash import ALL, Input, Output, Patch, State, ctx, dcc, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
@@ -47,8 +47,8 @@ def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
         f"🔄 CALCULATE_NEW_LAYOUT_POSITION CALLED: {child_type} with {n} existing components"
     )
     dimensions = component_dimensions.get(
-        child_type, {"w": 24, "h": 20}
-    )  # Default 24x20 for 48-column grid with rowHeight=20
+        child_type, {"w": 20, "h": 16}
+    )  # Default 20x16 for 48-column grid with rowHeight=20
     logger.info(f"📐 Selected dimensions: {dimensions} for {child_type}")
     logger.info(f"📋 Existing layouts: {existing_layouts}")
 
@@ -166,7 +166,7 @@ def fix_responsive_scaling(layout_data, metadata_list):
         if meta.get("index") and meta.get("component_type"):
             comp_id = f"box-{meta['index']}"
             comp_type = meta["component_type"]
-            default_dims = component_dimensions.get(comp_type, {"w": 24, "h": 20})
+            default_dims = component_dimensions.get(comp_type, {"w": 20, "h": 16})
             expected_dimensions[comp_id] = default_dims
 
     fixed_layouts = []
@@ -278,6 +278,22 @@ def get_component_id(component):
         return None
     except (KeyError, AttributeError, TypeError):
         return None
+
+
+def find_component_index_by_id(children, target_id):
+    """Find index of component in children list by ID.
+
+    Args:
+        children: List of dashboard components
+        target_id: Target component ID to find
+
+    Returns:
+        Index of component if found, None otherwise
+    """
+    for idx, child in enumerate(children):
+        if get_component_id(child) == target_id:
+            return idx
+    return None
 
 
 def remove_duplicates_by_index(components):
@@ -1214,7 +1230,61 @@ def register_callbacks_draggable(app):
                     if "wf_id" in component_selections and component_selections["wf_id"]:
                         child_metadata["wf_id"] = component_selections["wf_id"]
                     if "dc_id" in component_selections and component_selections["dc_id"]:
-                        child_metadata["dc_id"] = component_selections["dc_id"]
+                        dc_value = component_selections["dc_id"]
+
+                        # AUTO-PROMOTION FIX: Check if selected DC has join configuration
+                        # If yes, automatically convert to joined DC ID format
+                        if "--" not in str(dc_value):  # Single DC (not already joined)
+                            logger.info(
+                                f"   🔍 JOIN CHECK - Checking if DC {dc_value} has join configuration"
+                            )
+                            try:
+                                TOKEN = local_data.get("access_token")
+                                # Fetch DC specs to check for joins
+                                dc_specs_response = httpx.get(
+                                    f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_value}",
+                                    headers={"Authorization": f"Bearer {TOKEN}"},
+                                    timeout=10.0,
+                                )
+
+                                if dc_specs_response.status_code == 200:
+                                    dc_specs = dc_specs_response.json()
+                                    join_config = dc_specs.get("config", {}).get("join")
+
+                                    if join_config and join_config.get("with_dc_id"):
+                                        # DC has join configuration - auto-promote to joined format
+                                        with_dc_ids = join_config["with_dc_id"]
+                                        if with_dc_ids and len(with_dc_ids) > 0:
+                                            # Construct joined DC ID: "dc_id--join_target_id"
+                                            join_target_id = with_dc_ids[0]  # Use first join target
+                                            joined_dc_id = f"{dc_value}--{join_target_id}"
+                                            logger.info(
+                                                f"   🔗 AUTO-PROMOTION - DC has join config, promoting {dc_value} → {joined_dc_id}"
+                                            )
+                                            dc_value = joined_dc_id
+                                        else:
+                                            logger.info(
+                                                "   ℹ️ JOIN CHECK - DC has join config but no targets"
+                                            )
+                                    else:
+                                        logger.info(
+                                            "   ℹ️ JOIN CHECK - DC has no join configuration"
+                                        )
+                                else:
+                                    logger.warning(
+                                        f"   ⚠️ JOIN CHECK - Failed to fetch DC specs: {dc_specs_response.status_code}"
+                                    )
+                            except Exception as join_check_error:
+                                logger.warning(
+                                    f"   ⚠️ JOIN CHECK - Error checking for joins: {join_check_error}"
+                                )
+                                # Continue with original dc_value if join check fails
+                        else:
+                            logger.info(
+                                f"   ℹ️ JOIN CHECK - DC is already in joined format: {dc_value}"
+                            )
+
+                        child_metadata["dc_id"] = dc_value
                     if "wf_tag" in component_selections:
                         child_metadata["wf_tag"] = component_selections.get("wf_tag")
                     if "dc_tag" in component_selections:
@@ -1260,14 +1330,87 @@ def register_callbacks_draggable(app):
                             if dc_id and dc_id.get("index") == triggered_index:
                                 dc_value = dc_dropdown_values[idx]
                                 if dc_value:
+                                    # AUTO-PROMOTION FIX: Check if selected DC has join configuration
+                                    # If yes, automatically convert to joined DC ID format
+                                    if "--" not in str(dc_value):  # Single DC (not already joined)
+                                        logger.info(
+                                            f"   🔍 JOIN CHECK - Checking if DC {dc_value} has join configuration"
+                                        )
+                                        try:
+                                            TOKEN = local_data.get("access_token")
+                                            # Fetch DC specs to check for joins
+                                            dc_specs_response = httpx.get(
+                                                f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_value}",
+                                                headers={"Authorization": f"Bearer {TOKEN}"},
+                                                timeout=10.0,
+                                            )
+
+                                            if dc_specs_response.status_code == 200:
+                                                dc_specs = dc_specs_response.json()
+                                                join_config = dc_specs.get("config", {}).get("join")
+
+                                                if join_config and join_config.get("with_dc_id"):
+                                                    # DC has join configuration - auto-promote to joined format
+                                                    with_dc_ids = join_config["with_dc_id"]
+                                                    if with_dc_ids and len(with_dc_ids) > 0:
+                                                        # Construct joined DC ID: "dc_id--join_target_id"
+                                                        join_target_id = with_dc_ids[
+                                                            0
+                                                        ]  # Use first join target
+                                                        joined_dc_id = (
+                                                            f"{dc_value}--{join_target_id}"
+                                                        )
+                                                        logger.info(
+                                                            f"   🔗 AUTO-PROMOTION - DC has join config, promoting {dc_value} → {joined_dc_id}"
+                                                        )
+                                                        dc_value = joined_dc_id
+                                                    else:
+                                                        logger.info(
+                                                            "   ℹ️ JOIN CHECK - DC has join config but no targets"
+                                                        )
+                                                else:
+                                                    logger.info(
+                                                        "   ℹ️ JOIN CHECK - DC has no join configuration"
+                                                    )
+                                            else:
+                                                logger.warning(
+                                                    f"   ⚠️ JOIN CHECK - Failed to fetch DC specs: {dc_specs_response.status_code}"
+                                                )
+                                        except Exception as join_check_error:
+                                            logger.warning(
+                                                f"   ⚠️ JOIN CHECK - Error checking for joins: {join_check_error}"
+                                            )
+                                            # Continue with original dc_value if join check fails
+                                    else:
+                                        logger.info(
+                                            f"   ℹ️ JOIN CHECK - DC is already in joined format: {dc_value}"
+                                        )
+
+                                    # Set the (possibly auto-promoted) dc_id
                                     child_metadata["dc_id"] = dc_value
                                     logger.info(f"   ✅ Got dc_id from dropdown: {dc_value}")
+
                                     # Get dc_tag from the API
                                     try:
+                                        from bson import ObjectId
+
                                         TOKEN = local_data.get("access_token")
-                                        dc_tag = return_dc_tag_from_id(
-                                            data_collection_id=dc_value, TOKEN=TOKEN
-                                        )
+                                        # For joined DCs, we don't need to get tag from API (it's synthetic)
+                                        if "--" in str(dc_value):
+                                            # Joined DC - construct tag from component DCs
+                                            dc_ids = dc_value.split("--")
+                                            dc1_tag = return_dc_tag_from_id(
+                                                data_collection_id=ObjectId(dc_ids[0]), TOKEN=TOKEN
+                                            )
+                                            dc2_tag = return_dc_tag_from_id(
+                                                data_collection_id=ObjectId(dc_ids[1]), TOKEN=TOKEN
+                                            )
+                                            dc_tag = f"Joined: {dc1_tag} + {dc2_tag}"
+                                        else:
+                                            # Single DC - get tag normally
+                                            dc_tag = return_dc_tag_from_id(
+                                                data_collection_id=ObjectId(dc_value), TOKEN=TOKEN
+                                            )
                                         child_metadata["dc_tag"] = dc_tag
                                         logger.info(f"   ✅ Got dc_tag: {dc_tag}")
                                     except Exception as e:
@@ -1304,6 +1447,42 @@ def register_callbacks_draggable(app):
                             )
                     else:
                         logger.warning(f"   ⚠️ No dict_kwargs found for {triggered_index}")
+
+                # CRITICAL FIX: Preserve visu_type from stepper store if it's missing or defaulted to scatter
+                if child_type == "figure":
+                    current_visu_type = child_metadata.get("visu_type")
+                    logger.info(f"   🔍 VISU_TYPE CHECK - Current: {current_visu_type}")
+
+                    # If visu_type is missing or defaulted to scatter, try to restore from stepper store
+                    if not current_visu_type or current_visu_type == "scatter":
+                        if (
+                            components_metadata_store
+                            and triggered_index in components_metadata_store
+                        ):
+                            stepper_visu_type = components_metadata_store[triggered_index].get(
+                                "visu_type"
+                            )
+                            logger.info(
+                                f"   🔍 VISU_TYPE CHECK - Stepper store: {stepper_visu_type}"
+                            )
+
+                            if stepper_visu_type and stepper_visu_type != "scatter":
+                                child_metadata["visu_type"] = stepper_visu_type
+                                logger.info(
+                                    f"   ✅ VISU_TYPE FIX: Restored from stepper: {stepper_visu_type}"
+                                )
+                            else:
+                                logger.warning(
+                                    "   ⚠️ VISU_TYPE: Stepper has scatter or None, keeping current"
+                                )
+                        else:
+                            logger.warning(
+                                f"   ⚠️ VISU_TYPE: No stepper metadata for index {triggered_index}"
+                            )
+                    else:
+                        logger.info(
+                            f"   ✅ VISU_TYPE: Already set correctly to {current_visu_type}"
+                        )
 
                 # Step 3: Validate merged metadata (only for figures)
                 if child_type == "figure":
@@ -1692,6 +1871,40 @@ def register_callbacks_draggable(app):
 
             elif triggered_input == "remove-box-button":
                 logger.info("Remove box button clicked")
+
+                # SECURITY: Check editor permission before allowing component removal
+                from depictio.dash.api_calls import (
+                    api_call_check_project_permission,
+                    api_call_get_dashboard,
+                )
+
+                dashboard_data = api_call_get_dashboard(dashboard_id, TOKEN)
+                if not dashboard_data:
+                    logger.warning(
+                        f"Dashboard {dashboard_id} not found - blocking remove operation"
+                    )
+                    raise dash.exceptions.PreventUpdate
+
+                project_id = dashboard_data.get("project_id")
+                if not project_id:
+                    logger.warning(
+                        f"Dashboard {dashboard_id} has no project - blocking remove operation"
+                    )
+                    raise dash.exceptions.PreventUpdate
+
+                # Verify user has editor permission
+                has_editor_permission = api_call_check_project_permission(
+                    project_id=str(project_id),
+                    token=TOKEN,
+                    required_permission="editor",
+                )
+
+                if not has_editor_permission:
+                    logger.warning(
+                        f"User attempted to remove component without editor permission on project {project_id}"
+                    )
+                    raise dash.exceptions.PreventUpdate
+
                 input_id = ctx.triggered_id["index"]
                 component_id_to_remove = f"box-{input_id}"
 
@@ -1699,12 +1912,22 @@ def register_callbacks_draggable(app):
                 logger.debug(f"🗑️ REMOVE DEBUG - Current children count: {len(draggable_children)}")
                 logger.debug(f"🗑️ REMOVE DEBUG - Current layouts count: {len(draggable_layouts)}")
 
-                # Remove the component from children
-                updated_children = [
-                    child
-                    for child in draggable_children
-                    if get_component_id(child) != component_id_to_remove
-                ]
+                # Find the index of the component to remove
+                component_index = find_component_index_by_id(
+                    draggable_children, component_id_to_remove
+                )
+
+                if component_index is None:
+                    logger.warning(f"Component {component_id_to_remove} not found")
+                    return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+                # Use Patch to remove only the specific component
+                children_patch = Patch()
+                del children_patch[component_index]
+
+                logger.info(
+                    f"🔧 PATCH REMOVE - Removing component at index {component_index}: {component_id_to_remove}"
+                )
 
                 # Remove the corresponding layout entry
                 updated_layouts = [
@@ -1714,22 +1937,57 @@ def register_callbacks_draggable(app):
                 ]
 
                 logger.debug(
-                    f"🗑️ REMOVE DEBUG - After removal - children: {len(updated_children)}, layouts: {len(updated_layouts)}"
+                    f"🗑️ REMOVE DEBUG - After removal - remaining layouts: {len(updated_layouts)}"
                 )
 
                 # Update the stored layouts
                 state_stored_draggable_layouts[dashboard_id] = updated_layouts
 
+                # CRITICAL: Use dash.no_update for currentLayout to prevent callback re-trigger
+                # Updating currentLayout would trigger the "draggable" branch (line 1545) which can
+                # cause component state resets (filters, zoom, scroll position)
+                # The grid component handles layout updates internally when items are removed
                 return (
-                    updated_children,
-                    updated_layouts,
-                    state_stored_draggable_layouts,
+                    children_patch,  # ✅ Partial update - only removes one component
+                    dash.no_update,  # ✅ Prevent callback re-trigger and state resets
+                    state_stored_draggable_layouts,  # Update storage for persistence
                     dash.no_update,
                 )
                 # return updated_children, draggable_layouts, state_stored_draggable_children, state_stored_draggable_layouts
 
             elif triggered_input == "edit-box-button":
                 logger.info("Edit box button clicked")
+
+                # SECURITY: Check editor permission before allowing component edit
+                from depictio.dash.api_calls import (
+                    api_call_check_project_permission,
+                    api_call_get_dashboard,
+                )
+
+                dashboard_data = api_call_get_dashboard(dashboard_id, TOKEN)
+                if not dashboard_data:
+                    logger.warning(f"Dashboard {dashboard_id} not found - blocking edit operation")
+                    raise dash.exceptions.PreventUpdate
+
+                project_id = dashboard_data.get("project_id")
+                if not project_id:
+                    logger.warning(
+                        f"Dashboard {dashboard_id} has no project - blocking edit operation"
+                    )
+                    raise dash.exceptions.PreventUpdate
+
+                # Verify user has editor permission
+                has_editor_permission = api_call_check_project_permission(
+                    project_id=str(project_id),
+                    token=TOKEN,
+                    required_permission="editor",
+                )
+
+                if not has_editor_permission:
+                    logger.warning(
+                        f"User attempted to edit component without editor permission on project {project_id}"
+                    )
+                    raise dash.exceptions.PreventUpdate
 
                 input_id = ctx.triggered_id["index"]
                 logger.info(f"Input ID: {input_id}")
@@ -2104,6 +2362,40 @@ def register_callbacks_draggable(app):
                 logger.info("=" * 80)
                 logger.info("🚨 DUPLICATE CALLBACK EXECUTION START")
                 logger.info("=" * 80)
+
+                # SECURITY: Check editor permission before allowing component duplication
+                from depictio.dash.api_calls import (
+                    api_call_check_project_permission,
+                    api_call_get_dashboard,
+                )
+
+                dashboard_data = api_call_get_dashboard(dashboard_id, TOKEN)
+                if not dashboard_data:
+                    logger.warning(
+                        f"Dashboard {dashboard_id} not found - blocking duplicate operation"
+                    )
+                    raise dash.exceptions.PreventUpdate
+
+                project_id = dashboard_data.get("project_id")
+                if not project_id:
+                    logger.warning(
+                        f"Dashboard {dashboard_id} has no project - blocking duplicate operation"
+                    )
+                    raise dash.exceptions.PreventUpdate
+
+                # Verify user has editor permission
+                has_editor_permission = api_call_check_project_permission(
+                    project_id=str(project_id),
+                    token=TOKEN,
+                    required_permission="editor",
+                )
+
+                if not has_editor_permission:
+                    logger.warning(
+                        f"User attempted to duplicate component without editor permission on project {project_id}"
+                    )
+                    raise dash.exceptions.PreventUpdate
+
                 logger.debug(f"🔍 DUPLICATE DEBUG - ctx.triggered: {ctx.triggered}")
                 logger.debug(f"🔍 DUPLICATE DEBUG - ctx.triggered_id: {ctx.triggered_id}")
                 logger.debug(f"🔍 DUPLICATE DEBUG - Total triggered items: {len(ctx.triggered)}")
@@ -2264,10 +2556,6 @@ def register_callbacks_draggable(app):
 
                 update_nested_ids(duplicated_component, triggered_index, new_index)
 
-                # Append the duplicated component to the updated children
-                updated_children = list(draggable_children)
-                updated_children.append(duplicated_component)
-
                 # Calculate the new layout position
                 # 'child_type' corresponds to the 'type' in the component's ID
                 # Clean existing layouts to remove any corrupted entries
@@ -2282,7 +2570,7 @@ def register_callbacks_draggable(app):
                 # DEBUG: Check for responsive scaling in existing layouts
                 logger.debug("🔍 RESPONSIVE DEBUG - Checking existing layouts after fixes:")
                 expected_dims = component_dimensions.get(
-                    metadata["component_type"], {"w": 24, "h": 20}
+                    metadata["component_type"], {"w": 20, "h": 16}
                 )
                 logger.debug(
                     f"🔍 RESPONSIVE DEBUG - Expected dimensions for {metadata['component_type']}: {expected_dims}"
@@ -2352,7 +2640,9 @@ def register_callbacks_draggable(app):
                     logger.warning(
                         f"⚠️ DUPLICATE WARNING - Could not find original layout for {original_component_id}, using fallback"
                     )
-                    n = len(updated_children)  # Position based on the number of components
+                    n = (
+                        len(draggable_children) + 1
+                    )  # Position based on the number of components (including new one)
                     new_layout = calculate_new_layout_position(
                         metadata["component_type"],
                         existing_layouts,
@@ -2376,8 +2666,11 @@ def register_callbacks_draggable(app):
                     theme=theme,
                 )
 
-                # Replace the deep-copied component with the properly rendered one
-                updated_children[-1] = new_child
+                # Use Patch to append only the new component
+                children_patch = Patch()
+                children_patch.append(new_child)
+
+                logger.info(f"🔧 PATCH DUPLICATE - Adding new component: {child_id}")
 
                 # Add new layout item to the cleaned list
                 existing_layouts.append(new_layout)
@@ -2392,7 +2685,6 @@ def register_callbacks_draggable(app):
 
                 logger.info("=" * 80)
                 logger.info("🔚 DUPLICATE CALLBACK EXECUTION END")
-                logger.debug(f"🔍 DUPLICATE DEBUG - Final children count: {len(updated_children)}")
                 logger.debug(f"🔍 DUPLICATE DEBUG - Final layouts count: {len(draggable_layouts)}")
                 logger.debug(f"🔍 DUPLICATE DEBUG - New component created: {child_id}")
                 logger.debug("🔍 DUPLICATE DEBUG - Final layout data being returned:")
@@ -2403,7 +2695,7 @@ def register_callbacks_draggable(app):
                 logger.info("=" * 80)
 
                 return (
-                    updated_children,
+                    children_patch,  # ✅ Partial update - only adds one component
                     draggable_layouts,
                     state_stored_draggable_layouts,
                     dash.no_update,
@@ -3507,7 +3799,6 @@ def design_draggable(
                     shadow="sm",
                     withBorder=True,
                     style={
-                        "backgroundColor": "var(--app-surface-color, #ffffff)",
                         "border": f"1px solid var(--app-border-color, {colors['red']}20)",
                         "maxWidth": "500px",
                         "marginTop": "2rem",
@@ -3566,20 +3857,41 @@ def design_draggable(
         for i, layout_item in enumerate(current_layout):
             logger.debug(f"🔍 GRID DEBUG - layout item {i}: {layout_item}")
 
-    # Determine initial edit mode state from dashboard data
-    # This ensures correct className on initial load (before update_grid_edit_mode callback runs)
+    # Determine initial edit mode state from dashboard data AND check user permissions
+    # This ensures correct className and button visibility on initial load
     initial_edit_mode = True  # Default to edit mode ON
+    is_owner = False  # Default to non-owner
     try:
-        from depictio.dash.api_calls import api_call_get_dashboard
+        from depictio.dash.api_calls import api_call_fetch_user_from_token, api_call_get_dashboard
 
+        # Get current user
+        current_user = api_call_fetch_user_from_token(TOKEN)
+
+        # Get dashboard data
         dashboard_data_dict = api_call_get_dashboard(dashboard_id, TOKEN)
-        if dashboard_data_dict and "buttons_data" in dashboard_data_dict:
-            # Try unified edit mode first, fallback to old key for backward compatibility
-            initial_edit_mode = dashboard_data_dict["buttons_data"].get(
-                "unified_edit_mode",
-                dashboard_data_dict["buttons_data"].get("edit_components_button", True),
-            )
-            logger.info(f"Initial edit mode from dashboard data: {initial_edit_mode}")
+        if dashboard_data_dict:
+            # Check if user is owner
+            if current_user:
+                owner_ids = [
+                    str(owner["id"])
+                    for owner in dashboard_data_dict.get("permissions", {}).get("owners", [])
+                ]
+                is_owner = str(current_user.id) in owner_ids or current_user.is_admin
+                logger.info(f"User is owner: {is_owner}")
+
+            # Get edit mode state only for owners (non-owners always have edit mode OFF)
+            if "buttons_data" in dashboard_data_dict:
+                # Try unified edit mode first, fallback to old key for backward compatibility
+                initial_edit_mode = dashboard_data_dict["buttons_data"].get(
+                    "unified_edit_mode",
+                    dashboard_data_dict["buttons_data"].get("edit_components_button", True),
+                )
+                logger.info(f"Initial edit mode from dashboard data: {initial_edit_mode}")
+
+                # Force edit mode OFF for non-owners
+                if not is_owner:
+                    initial_edit_mode = False
+                    logger.info("Non-owner user - forcing edit mode OFF")
     except Exception as e:
         logger.warning(
             f"Could not fetch dashboard edit mode state: {e}, defaulting to edit mode ON"
@@ -3603,8 +3915,10 @@ def design_draggable(
             "xs": 48,
             "xxs": 48,
         },  # 48-column grid for ultimate layout flexibility and precision
-        showRemoveButton=False,  # Keep consistent - CSS handles visibility
-        showResizeHandles=True,  # Enable resize functionality for vertical growing behavior
+        showRemoveButton=False
+        if not is_owner
+        else False,  # Always False initially, callback controls it
+        showResizeHandles=False if not is_owner else True,  # Non-owners: False, Owners: True
         className=grid_className,  # CSS class for styling (with .drag-handles-hidden if edit mode OFF)
         allowOverlap=False,
         # Additional parameters to try to disable responsive scaling

@@ -518,11 +518,11 @@ def create_analytics_dashboard_layout() -> html.Div:
             dcc.Store(id="analytics-dashboard-store", storage_type="memory"),
             dcc.Store(id="realtime-metrics-store", storage_type="memory"),
             # Auto-refresh interval
-            # dcc.Interval(
-            #     id="analytics-auto-refresh",
-            #     interval=30 * 1000,  # 30 seconds
-            #     n_intervals=0,
-            # ),
+            dcc.Interval(
+                id="analytics-auto-refresh",
+                interval=30 * 1000,  # 30 seconds
+                n_intervals=0,
+            ),
             # Loading overlay
             dcc.Loading(
                 id="analytics-loading",

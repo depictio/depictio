@@ -22,6 +22,7 @@ class DashboardData(MongoModel):
     icon: str = "mdi:view-dashboard"
     icon_color: str = "orange"
     icon_variant: str = "filled"
+    workflow_system: str = "none"
     notes_content: str = ""
     permissions: Permission
     is_public: bool = False

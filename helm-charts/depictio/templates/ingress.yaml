@@ -41,8 +41,8 @@ spec:
         {{- end }}
   {{- end }}
   {{- else }}
-  {{- /* Generate default host configurations with CORRECT service names */}}
-    - host: {{ printf "%s.%s" .Release.Name .Values.global.domain | quote }}
+  {{- /* Generate default host configurations using URL pattern helpers */}}
+    - host: {{ include "depictio.frontendUrl" . | quote }}
       http:
         paths:
           - path: /
@@ -52,7 +52,7 @@ spec:
                 name: {{ .Release.Name }}-depictio-frontend
                 port:
                   number: {{ .Values.frontend.service.httpPort }}
-    - host: {{ printf "%s-api.%s" .Release.Name .Values.global.domain | quote }}
+    - host: {{ include "depictio.apiUrl" . | quote }}
       http:
         paths:
           - path: /
@@ -63,7 +63,7 @@ spec:
                 port:
                   number: {{ .Values.backend.service.httpPort }}
     {{- if .Values.minio.enabled }}
-    - host: {{ printf "%s-minio.%s" .Release.Name .Values.global.domain | quote }}
+    - host: {{ include "depictio.minioUrl" . | quote }}
       http:
         paths:
           - path: /

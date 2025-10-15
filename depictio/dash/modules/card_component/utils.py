@@ -760,24 +760,27 @@ def build_card(**kwargs):
     display_value = str(v) if v is not None else "..."
 
     # Add icon overlay (always show icon now, not just for themed cards)
-    # Build icon style conditionally - only set color if specified (DMC compliance)
+    # Build icon style (no color - DashIconify uses direct color prop)
     icon_style = {
         "opacity": "0.3",
         "position": "absolute",
         "right": "10px",
         "top": "10px",
     }
+
+    # Build DashIconify kwargs conditionally - apply color via CSS style to prevent browser freeze
+    dashiconify_kwargs = {
+        "icon": icon_name,
+        "width": 40,
+        "style": icon_style.copy(),  # Copy to avoid mutating the original dict
+    }
     if icon_color:
-        icon_style["color"] = icon_color
+        dashiconify_kwargs["style"]["color"] = icon_color
 
     icon_overlay_component = [
         dmc.Group(
             [
-                DashIconify(
-                    icon=icon_name,
-                    width=40,
-                    style=icon_style,
-                ),
+                DashIconify(**dashiconify_kwargs),
             ],
             style={"position": "relative"},
         )

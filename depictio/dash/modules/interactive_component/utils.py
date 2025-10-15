@@ -1517,14 +1517,13 @@ def build_interactive(**kwargs):
     else:
         logger.debug("Using Mantine's native theming for title")
 
-    # Create title with icon - build props conditionally to avoid None color assignment
+    # Create title with icon - apply color via CSS style to prevent browser freeze
     icon_props = {
         "icon": icon_name,
         "width": int(title_size) if title_size.isdigit() else 20,  # Default to 20 for named sizes
     }
     if icon_color:
-        icon_props["color"] = icon_color
-        icon_props["style"] = {}
+        icon_props["style"] = {"color": icon_color}
     else:
         icon_props["style"] = {"opacity": 0.9}
 

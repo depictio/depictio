@@ -75,23 +75,21 @@ async def get_project_from_dashboard_id(
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
 
-    # Complex query to first retrieve the project ID from the dashboard ID inside the dashboards_collection & then retrieve the project from the projects_collection
-    query = {
-        "dashboard_id": dashboard_id,
-        "$or": [
-            {"permissions.owners._id": current_user.id},
-            {"permissions.viewers._id": current_user.id},
-            {"permissions.viewers": "*"},  # This makes projects with "*" publicly accessible
-            {"is_public": True},  # Allow access to public dashboards
-        ],
-    }
-    response = dashboards_collection.find_one(query)
-    if not response:
+    # Fetch dashboard to get project_id
+    dashboard_response = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_response:
         raise HTTPException(status_code=404, detail="Dashboard not found.")
-    if not response.get("project_id"):
-        raise HTTPException(status_code=404, detail="Project not found.")
-    project_id = response.get("project_id")
 
+    if not dashboard_response.get("project_id"):
+        raise HTTPException(status_code=404, detail="Project not found for this dashboard.")
+
+    project_id = dashboard_response.get("project_id")
+
+    # Check project permissions (includes is_public check)
+    # This uses _async_get_project_from_id which already checks:
+    # - User in project owners/editors/viewers
+    # - Project is_public = True
+    # - User is admin
     project = await get_project_from_id(str(project_id), current_user)
     return project
 

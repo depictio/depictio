@@ -427,9 +427,10 @@ def register_callbacks_card_component(app):
         Output({"type": "card-value", "index": MATCH}, "children"),
         Output({"type": "card-metadata", "index": MATCH}, "data"),
         Input({"type": "card-trigger", "index": MATCH}, "data"),
+        State({"type": "card-metadata", "index": MATCH}, "data"),
         prevent_initial_call=False,
     )
-    def render_card_value_background(trigger_data):
+    def render_card_value_background(trigger_data, existing_metadata):
         """
         PATTERN-MATCHING: Render callback for initial card value computation.
 
@@ -438,15 +439,26 @@ def register_callbacks_card_component(app):
 
         Args:
             trigger_data: Data from card-trigger store containing all necessary params
+            existing_metadata: Existing metadata from previous render (for idempotency check)
 
         Returns:
             tuple: (formatted_value, metadata_dict)
         """
         from bson import ObjectId
+        from dash import no_update
 
         from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
         logger.info(f"🔄 CARD RENDER: Starting value computation for trigger: {trigger_data}")
+
+        # DEFENSIVE CHECK: Skip if already initialized (prevents spurious re-renders during Patch operations)
+        # This prevents the 2-stage flash (unfiltered → filtered) when removing sibling components
+        if existing_metadata and existing_metadata.get("reference_value") is not None:
+            logger.info(
+                "✅ CARD RENDER: Already initialized, skipping re-render "
+                "(Patch operation or spurious Store update detected)"
+            )
+            return no_update, no_update
 
         if not trigger_data:
             logger.warning("No trigger data provided")

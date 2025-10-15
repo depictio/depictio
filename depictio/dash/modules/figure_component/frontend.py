@@ -1,5 +1,6 @@
 # Import necessary libraries
 from collections import defaultdict
+from datetime import datetime
 from typing import Any, Dict, List
 
 import dash
@@ -285,6 +286,20 @@ def _check_active_filters(filters_by_dc):
             if value is not None and value != [] and value != "" and value is not False:
                 return True
     return False
+
+
+def _is_stepper_component(component_id: str) -> bool:
+    """Check if a component ID indicates it's in stepper mode.
+
+    Args:
+        component_id: Component ID string to check
+
+    Returns:
+        True if component is in stepper mode (ends with -tmp)
+    """
+    if not component_id or not isinstance(component_id, str):
+        return False
+    return component_id.endswith("-tmp")
 
 
 def register_callbacks_figure_component(app):
@@ -906,6 +921,50 @@ def register_callbacks_figure_component(app):
             hidden_loading_style = {"display": "none"}
             return error_content, html.Div(), hidden_loading_style
 
+    @app.callback(
+        Output({"type": "stored-metadata-component", "index": MATCH}, "data", allow_duplicate=True),
+        Output({"type": "figure-render-trigger", "index": MATCH}, "data", allow_duplicate=True),
+        Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
+        State({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        State({"type": "figure-render-trigger", "index": MATCH}, "data"),
+        prevent_initial_call=True,
+    )
+    def sync_visu_type_to_metadata(visu_type_value, current_metadata, current_trigger):
+        """
+        CRITICAL FIX: Sync visu_type to stored-metadata-component when dropdown changes.
+
+        Without this, the stored-metadata-component retains the default "scatter" value
+        even after user selects a different visualization type in stepper mode, causing
+        parameter mismatch errors when Done is clicked (e.g., scatter() receiving boxmode parameter).
+
+        This ensures the stored metadata stays synchronized with the visualization dropdown,
+        preventing the "scatter() got an unexpected keyword argument" errors.
+
+        STEPPER MODE FIX: Also update render trigger to re-render the figure with new visualization type.
+        This is necessary because we skip layout rebuilds for stepper components to avoid race conditions.
+        """
+        if not visu_type_value or not current_metadata:
+            raise dash.exceptions.PreventUpdate
+
+        # Create updated metadata with new visu_type
+        updated_metadata = current_metadata.copy()
+        updated_metadata["visu_type"] = visu_type_value.lower()
+        updated_metadata["last_updated"] = datetime.now().isoformat()
+
+        # Update render trigger to re-render with new visualization type
+        updated_trigger = current_trigger.copy() if current_trigger else {}
+        updated_trigger["visu_type"] = visu_type_value.lower()
+        updated_trigger["timestamp"] = datetime.now().isoformat()
+
+        logger.info(
+            f"✅ VISU_TYPE SYNC: Updated stored-metadata visu_type from "
+            f"'{current_metadata.get('visu_type')}' to '{visu_type_value.lower()}' "
+            f"for component {current_metadata.get('index', 'unknown')}"
+        )
+        logger.info("✅ RENDER TRIGGER: Updated render trigger to re-render with new visu_type")
+
+        return updated_metadata, updated_trigger
+
     # Callback to initialize figure with default visualization when component is first created
     @app.callback(
         Output({"type": "dict_kwargs", "index": MATCH}, "data", allow_duplicate=True),
@@ -1149,6 +1208,18 @@ def register_callbacks_figure_component(app):
         logger.info(f"Data Collection ID: {data_collection_id}")
         logger.info(f"parent_index: {parent_index}")
         logger.info(f"pathname: {pathname}")
+
+        # STEPPER MODE FIX: Skip layout rebuild for stepper components
+        # Stepper components (ending with -tmp) should not rebuild the figure layout
+        # on visualization type changes, as this causes race conditions with callbacks
+        if component_index and isinstance(component_index, dict):
+            comp_id = component_index.get("index", "")
+            if isinstance(comp_id, str) and comp_id.endswith("-tmp"):
+                logger.info(f"Skipping figure rebuild for stepper component: {comp_id}")
+                logger.info(
+                    "Visualization type changes in stepper mode will be handled by render callback"
+                )
+                raise dash.exceptions.PreventUpdate
 
         # Don't generate default figure if in code mode - let code execution handle it
         if current_mode == "code":
@@ -2227,9 +2298,10 @@ def register_callbacks_figure_component(app):
     @app.callback(
         Output({"type": "graph", "index": MATCH}, "figure", allow_duplicate=True),
         Input("theme-store", "data"),
+        State({"type": "graph", "index": MATCH}, "id"),
         prevent_initial_call=True,  # Only update on theme changes, not initial load
     )
-    def update_theme_figure(theme_data):
+    def update_theme_figure(theme_data, graph_id):
         """Update figure theme based on current theme using Patch."""
 
         # Handle different theme_data formats robustly
@@ -2266,11 +2338,15 @@ def register_callbacks_figure_component(app):
         Output({"type": "stored-metadata-component", "index": MATCH}, "data"),
         Input({"type": "figure-render-trigger", "index": MATCH}, "data"),
         State({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        State({"type": "figure-trace-metadata", "index": MATCH}, "data"),
+        State({"type": "graph", "index": MATCH}, "id"),
         State("local-store", "data"),
         background=False,  # Synchronous to avoid subprocess issues with cache
         prevent_initial_call=False,  # Fire immediately when trigger store is populated
     )
-    def render_figure_callback(trigger_data, metadata, local_data):
+    def render_figure_callback(
+        trigger_data, metadata, existing_trace_metadata, graph_id, local_data
+    ):
         """
         Pattern-matching callback for independent figure rendering.
 
@@ -2280,6 +2356,17 @@ def register_callbacks_figure_component(app):
         This callback fires when the figure-render-trigger store is populated during
         dashboard restore or component creation, allowing figures to render progressively.
         """
+        # DEFENSIVE CHECK: Skip if already rendered (prevents spurious re-renders during Patch operations)
+        # This prevents re-rendering when removing sibling components with Patch
+        if existing_trace_metadata and existing_trace_metadata.get("summary"):
+            from dash import no_update
+
+            logger.info(
+                "✅ RENDER CALLBACK: Already rendered, skipping re-render "
+                "(Patch operation or spurious Store update detected)"
+            )
+            return no_update, no_update, no_update
+
         if not trigger_data or not metadata:
             logger.warning("🚫 RENDER CALLBACK: Missing trigger data or metadata")
             raise dash.exceptions.PreventUpdate
@@ -2716,11 +2803,14 @@ def register_callbacks_figure_component(app):
         Input("interactive-values-store", "data"),
         Input({"type": "stored-metadata-component", "index": MATCH}, "data"),
         State({"type": "graph", "index": MATCH}, "figure"),
+        State({"type": "graph", "index": MATCH}, "id"),
         State({"type": "figure-trace-metadata", "index": MATCH}, "data"),
         State("local-store", "data"),
         prevent_initial_call=True,
     )
-    def patch_figure_interactive(filter_data, metadata, current_figure, trace_metadata, local_data):
+    def patch_figure_interactive(
+        filter_data, metadata, current_figure, graph_id, trace_metadata, local_data
+    ):
         """
         Handle interactive component filtering (range sliders, dropdowns, etc.).
 
@@ -2730,6 +2820,10 @@ def register_callbacks_figure_component(app):
         - Cached DataFrames reused when available
 
         Also handles full data loading requests (bypassing sampling while preserving filters).
+
+        NOTE: stored-metadata-component is an Input to support full_data_requested triggers,
+        but we only process it for specific metadata changes (full_data_requested) to avoid
+        race conditions with visu_type sync callbacks.
         """
         # Determine what triggered this callback
         trigger = ctx.triggered_id
@@ -2738,13 +2832,18 @@ def register_callbacks_figure_component(app):
         full_data_requested = metadata.get("full_data_requested", False) if metadata else False
 
         # Prevent update if triggered by metadata but NOT a full data request
+        # This prevents race conditions with sync_visu_type_to_metadata and other metadata updates
         if (
             trigger
             and isinstance(trigger, dict)
             and trigger.get("type") == "stored-metadata-component"
         ):
             if not full_data_requested:
-                # Metadata changed for other reasons (e.g., theme change) - ignore
+                # Metadata changed for other reasons (e.g., visu_type sync, theme change) - ignore
+                logger.debug(
+                    "🚫 Ignoring metadata trigger for component %s (not a full data request)",
+                    metadata.get("index", "unknown"),
+                )
                 raise dash.exceptions.PreventUpdate
             logger.info(
                 "🔓 Full data load requested for component %s - will apply filters and bypass sampling",
@@ -2825,6 +2924,8 @@ def register_callbacks_figure_component(app):
                     trace_metadata,
                     interactive_dict,
                     None,
+                    code_content=code_content,  # Pass code content for code mode column detection
+                    df_columns=None,  # Could pass known columns from metadata if available
                 )
                 df = _load_single_dc(
                     filters_by_dc,

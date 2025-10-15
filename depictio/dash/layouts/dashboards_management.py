@@ -17,6 +17,8 @@ from depictio.dash.colors import colors  # Import Depictio color palette
 from depictio.dash.layouts.layouts_toolbox import (
     create_dashboard_modal,
     create_delete_confirmation_modal,
+    get_workflow_icon_color,
+    get_workflow_icon_mapping,
 )
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.dashboards import DashboardData
@@ -437,16 +439,33 @@ def register_callbacks_dashboards_management(app):
                 "variant": "filled",
             }
 
+            # Check if icon is an image path or Iconify icon
+            if dashboard_icon and dashboard_icon.startswith("/assets/"):
+                # Use html.Img for workflow logos
+                icon_display = html.Img(
+                    src=dashboard_icon,
+                    style={
+                        "width": "48px",
+                        "height": "48px",
+                        "objectFit": "contain",
+                        "borderRadius": "50%",
+                        "padding": "4px",
+                    },
+                )
+            else:
+                # Use DashIconify for regular icons
+                icon_display = dmc.ActionIcon(
+                    DashIconify(icon=dashboard_icon, width=24, height=24),
+                    **icon_button_props,
+                )
+
             group = html.Div(
                 [
                     dmc.Space(h=10),
                     dmc.Group(
                         [
                             # Custom icon display
-                            dmc.ActionIcon(
-                                DashIconify(icon=dashboard_icon, width=24, height=24),
-                                **icon_button_props,
-                            ),
+                            icon_display,
                             html.Div(
                                 [
                                     dmc.Title(
@@ -496,6 +515,7 @@ def register_callbacks_dashboards_management(app):
                         ],
                         justify="center",
                         align="flex-start",
+                        gap="xs",  # Reduced gap between badges
                     ),
                     dmc.Space(h=10),
                 ]
@@ -904,39 +924,96 @@ def register_callbacks_dashboards_management(app):
             return []
 
     @app.callback(
-        Output("dashboard-icon-preview", "children"),
+        [
+            Output("dashboard-icon-preview", "children"),
+            Output("dashboard-icon-input", "value"),
+            Output("dashboard-icon-color-select", "value"),
+            Output("dashboard-icon-color-select", "disabled"),
+        ],
         [
             Input("dashboard-icon-input", "value"),
             Input("dashboard-icon-color-select", "value"),
+            Input("dashboard-workflow-system-select", "value"),
         ],
         prevent_initial_call=True,
     )
-    def update_icon_preview(icon_name, icon_color):
+    def update_icon_preview(icon_name, icon_color, workflow_system):
         """
         Update the dashboard icon preview in real-time as users modify icon settings.
+        When a workflow system is selected, automatically set the appropriate workflow logo image.
 
         Args:
-            icon_name: Icon identifier from Iconify (e.g., "mdi:chart-line")
+            icon_name: Icon identifier from Iconify (e.g., "mdi:chart-line") or image path
             icon_color: Color name for the icon (e.g., "orange", "blue")
+            workflow_system: Selected workflow system (e.g., "nextflow", "snakemake", "nf-core", "none")
 
         Returns:
-            DashIconify component with updated icon/color for preview
+            Tuple of (preview component, icon value, color value)
         """
-        # Default values if inputs are empty/None
-        if not icon_name or icon_name.strip() == "":
-            icon_name = "mdi:view-dashboard"
+        # Get workflow mappings
+        workflow_icons = get_workflow_icon_mapping()
+        workflow_colors = get_workflow_icon_color()
 
-        # Validate color is in allowed list, default to orange if not
-        allowed_colors = ["blue", "teal", "orange", "red", "purple", "pink", "green", "gray"]
-        if icon_color not in allowed_colors:
-            icon_color = "orange"
+        # Check if a workflow system is selected (not "none")
+        if workflow_system and workflow_system != "none":
+            # Override with workflow-specific logo image path and color
+            icon_name = workflow_icons.get(workflow_system, "mdi:view-dashboard")
+            icon_color = workflow_colors.get(workflow_system, "orange")
 
-        return DashIconify(
-            icon=icon_name,
-            width=36,
-            height=36,
-            color=icon_color,
-        )
+            # For workflows, use html.Img instead of DashIconify
+            if icon_name and icon_name.startswith("/assets/"):
+                preview = html.Img(
+                    src=icon_name,
+                    style={
+                        "width": "32px",
+                        "height": "32px",
+                        "objectFit": "contain",
+                    },
+                )
+            else:
+                # Wrap in ActionIcon for consistent UX
+                preview = dmc.ActionIcon(
+                    DashIconify(
+                        icon=icon_name,
+                        width=24,
+                        height=24,
+                    ),
+                    color=icon_color,
+                    radius="xl",
+                    size="lg",
+                    variant="filled",
+                    disabled=True,  # Not clickable - just a preview
+                )
+            # Disable color selector when workflow is selected
+            color_disabled = True
+        else:
+            # Use custom icon/color settings
+            # Default values if inputs are empty/None
+            if not icon_name or icon_name.strip() == "":
+                icon_name = "mdi:view-dashboard"
+
+            # Validate color is in allowed list, default to orange if not
+            allowed_colors = ["blue", "teal", "orange", "red", "purple", "pink", "green", "gray"]
+            if icon_color not in allowed_colors:
+                icon_color = "orange"
+
+            # Wrap in ActionIcon for consistent UX
+            preview = dmc.ActionIcon(
+                DashIconify(
+                    icon=icon_name,
+                    width=24,
+                    height=24,
+                ),
+                color=icon_color,
+                radius="xl",
+                size="lg",
+                variant="filled",
+                disabled=False,
+            )
+            # Enable color selector when no workflow is selected
+            color_disabled = False
+
+        return preview, icon_name, icon_color, color_disabled
 
     @app.callback(
         Output({"type": "dashboard-list", "index": ALL}, "children"),
@@ -1114,6 +1191,7 @@ def register_callbacks_dashboards_management(app):
                 icon=modal_data.get("icon", "mdi:view-dashboard"),
                 icon_color=modal_data.get("icon_color", "orange"),
                 icon_variant="filled",
+                workflow_system=modal_data.get("workflow_system", "none"),
                 last_saved_ts=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 permissions=Permission(owners=[current_userbase]),
                 # permissions={"owners": [current_userbase], "viewers": []},
@@ -1310,6 +1388,7 @@ def register_callbacks_dashboards_management(app):
             State("dashboard-subtitle-input", "value"),
             State("dashboard-icon-input", "value"),
             State("dashboard-icon-color-select", "value"),
+            State("dashboard-workflow-system-select", "value"),
             State("dashboard-modal", "opened"),
             State("local-store", "data"),
             State("user-cache-store", "data"),
@@ -1326,6 +1405,7 @@ def register_callbacks_dashboards_management(app):
         subtitle,
         icon,
         icon_color,
+        workflow_system,
         opened,
         user_data,
         user_cache,
@@ -1339,6 +1419,7 @@ def register_callbacks_dashboards_management(app):
             "icon_color": "orange",
             "icon_variant": "filled",
             "project_id": "",
+            "workflow_system": "none",
         }
 
         logger.debug(
@@ -1476,6 +1557,7 @@ def register_callbacks_dashboards_management(app):
             data["icon_color"] = icon_color if icon_color else "orange"
             data["icon_variant"] = "filled"
             data["project_id"] = project
+            data["workflow_system"] = workflow_system if workflow_system else "none"
             return data, False, False, {"display": "none"}, dash.no_update, dash.no_update
 
         logger.debug("No relevant clicks")

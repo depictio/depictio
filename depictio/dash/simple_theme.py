@@ -81,7 +81,7 @@ def register_simple_theme_system(app):
         """,
         Output("theme-switch", "checked"),
         Input("theme-store", "data"),
-        prevent_initial_call=True,
+        prevent_initial_call=False,
     )
 
     # Handle manual theme switch - dcc.Store handles localStorage automatically

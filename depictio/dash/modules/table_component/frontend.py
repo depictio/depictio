@@ -367,7 +367,7 @@ def register_callbacks_table_component(app):
         # time.sleep(1.0)  # Increased delay to better demonstrate spinner loading behavior
 
         try:
-            # ENHANCED INTERACTIVE FILTERING: Always check for interactive components first
+            # ENHANCED INTERACTIVE FILTERING: Check DC compatibility before joining
             if interactive_components_dict:
                 logger.info(
                     f"🔗 INFINITE SCROLL + INTERACTIVE: Processing {len(interactive_components_dict)} interactive components"
@@ -376,15 +376,37 @@ def register_callbacks_table_component(app):
                     f"🎯 Interactive components: {[(k, v.get('value')) for k, v in interactive_components_dict.items()]}"
                 )
 
-                # Get joins configuration for this workflow and table
+                # CHECK DC COMPATIBILITY: Determine if interactive components target the same DC as the table
+                table_dc_id = data_collection_id
+
+                # Handle joined data collection IDs (format: "dc1--dc2")
+                if "--" in str(table_dc_id):
+                    # Table is showing joined data - extract individual DC IDs
+                    table_dc_ids = set(table_dc_id.split("--"))
+                    logger.info(f"📊 Table is JOINED data: {table_dc_id} → {table_dc_ids}")
+                else:
+                    # Single DC
+                    table_dc_ids = {table_dc_id}
+                    logger.info(f"📊 Table DC: {table_dc_id}")
+
+                # Collect all interactive component DC IDs
+                interactive_dc_ids = set()
+                for comp_data in interactive_components_dict.values():
+                    comp_dc_id = comp_data.get("metadata", {}).get("dc_id")
+                    if comp_dc_id:
+                        interactive_dc_ids.add(comp_dc_id)
+
+                logger.info(f"🎛️ Interactive DCs: {interactive_dc_ids}")
+
+                # CRITICAL FIX: Get join configuration BEFORE compatibility check
+                # This allows us to detect if joins exist between table and interactive DCs
                 try:
                     logger.debug(
                         f"🔗 Calling return_joins_dict with wf={workflow_id}, metadata={stored_metadata_for_join}"
                     )
-                    # CRITICAL FIX: Pass workflow_id as string, not ObjectId
                     joins_dict = return_joins_dict(workflow_id, stored_metadata_for_join, TOKEN)
-                    logger.info(f"🔗 Joins dict result: {joins_dict}")
-                    logger.debug(f"🔗 Joins dict type: {type(joins_dict)}")
+                    logger.info(f"🔗 Found {len(joins_dict)} join group(s) in workflow")
+                    logger.debug(f"🔗 Join keys: {list(joins_dict.keys())}")
                 except Exception as joins_error:
                     logger.error(f"❌ Error getting joins dict: {str(joins_error)}")
                     logger.error(f"❌ Error traceback: {joins_error.__class__.__name__}")
@@ -394,52 +416,249 @@ def register_callbacks_table_component(app):
                     logger.error("🔧 Falling back to empty joins dict")
                     joins_dict = {}
 
-                # CRITICAL: Always use iterative_join for interactive component filtering
-                try:
-                    # ALWAYS use iterative_join when interactive components exist
-                    # iterative_join handles both join scenarios AND direct filtering
-                    logger.info(
-                        f"🔗 Using iterative_join for interactive component filtering (joins: {bool(joins_dict)})"
+                # CRITICAL FIX: Check if joins exist between table and interactive DCs
+                has_join_between_dcs = False
+                if joins_dict:
+                    logger.debug(
+                        f"🔍 Checking for joins between table_dcs={table_dc_ids} and interactive_dcs={interactive_dc_ids}"
                     )
+                    for join_key_tuple in joins_dict.keys():
+                        # join_key_tuple is like ('dc1', 'dc2')
+                        join_dc_set = set(join_key_tuple)
 
-                    df = iterative_join(workflow_id, joins_dict, interactive_components_dict, TOKEN)
-                    logger.info(
-                        f"✅ Successfully loaded FILTERED data via iterative_join (shape: {df.shape})"
-                    )
+                        # Check if this join connects table DC(s) with interactive DC(s)
+                        # A join is relevant if it links at least one table DC with at least one interactive DC
+                        if table_dc_ids & join_dc_set and interactive_dc_ids & join_dc_set:
+                            has_join_between_dcs = True
+                            logger.info(
+                                f"✅ JOIN DETECTED: Join exists between table and interactive DCs via {join_key_tuple}"
+                            )
+                            break
 
-                    # Verify that filtering actually occurred
-                    if df.shape[0] > 0:
+                    if not has_join_between_dcs:
+                        logger.debug("📭 No joins found that link table DCs with interactive DCs")
+
+                # ENHANCED COMPATIBILITY CHECK: Now considers join configurations
+                # DCs are compatible if:
+                # 1. Interactive DCs are directly part of table DCs (subset), OR
+                # 2. Table DCs are directly part of interactive DCs (single table case), OR
+                # 3. A JOIN CONFIGURATION exists linking them (NEW!), OR
+                # 4. No interactive filters are active
+                dc_compatible = (
+                    interactive_dc_ids.issubset(table_dc_ids)
+                    or table_dc_ids.issubset(interactive_dc_ids)
+                    or has_join_between_dcs  # NEW: Join-based compatibility
+                    or not interactive_dc_ids
+                )
+
+                # Log detailed compatibility analysis
+                if dc_compatible:
+                    if has_join_between_dcs:
                         logger.info(
-                            f"🎯 Filtered dataset contains {df.shape[0]} rows after applying interactive filters"
+                            f"✅ DC COMPATIBLE (via JOIN): Table DCs={table_dc_ids}, Interactive DCs={interactive_dc_ids}"
+                        )
+                        logger.info(
+                            "🔗 Join configuration detected - will use iterative_join for filtering"
                         )
                     else:
-                        logger.warning(
-                            "⚠️ Filtered dataset is empty - interactive filters excluded all data"
+                        logger.info(
+                            "✅ DC COMPATIBLE (direct match): Interactive filters target same DC as table"
+                        )
+                else:
+                    logger.warning(
+                        f"⚠️ DC INCOMPATIBLE: No direct match or join between table_dcs={table_dc_ids} and interactive_dcs={interactive_dc_ids}"
+                    )
+
+                if dc_compatible:
+                    logger.info("✅ DC COMPATIBLE: Applying joins and filters")
+
+                    # CRITICAL DECISION: Choose between semi-join filtering vs full join
+                    # Semi-join: Single table DC filtered by values from interactive DC (no expansion)
+                    # Full join: Table shows genuinely joined data (may expand rows)
+                    is_single_table_dc = len(table_dc_ids) == 1 and "--" not in str(table_dc_id)
+                    is_cross_dc_filter = interactive_dc_ids != table_dc_ids and bool(
+                        interactive_dc_ids
+                    )
+
+                    use_semi_join = (
+                        is_single_table_dc and is_cross_dc_filter and has_join_between_dcs
+                    )
+
+                    if use_semi_join:
+                        # SEMI-JOIN FILTERING: Filter single-DC table by cross-DC interactive values
+                        # This prevents unwanted Cartesian product expansion
+                        logger.info(
+                            f"🎯 SEMI-JOIN MODE: Table shows single DC ({table_dc_id}), filtering by interactive DC ({interactive_dc_ids}) via join"
+                        )
+                        logger.info(
+                            "💡 Using semi-join to avoid Cartesian product - table rows will be filtered, not expanded"
                         )
 
-                except Exception as interactive_error:
-                    # Handle column mismatch or other interactive filter errors gracefully
-                    logger.error(f"❌ Interactive filtering failed: {str(interactive_error)}")
-                    logger.error(f"❌ Error type: {type(interactive_error)}")
-                    logger.error(f"❌ Error details: {interactive_error}")
+                        try:
+                            # Step 1: Find the join configuration between table and interactive DCs
+                            join_config = None
+                            for join_key_tuple, join_details_list in joins_dict.items():
+                                join_dc_set = set(join_key_tuple)
+                                if table_dc_ids & join_dc_set and interactive_dc_ids & join_dc_set:
+                                    # Found the relevant join
+                                    join_config = join_details_list[0]  # Get first join details
+                                    join_columns = list(join_config.values())[0]["on_columns"]
+                                    logger.info(f"🔗 Join columns: {join_columns}")
+                                    break
 
-                    if "unable to find column" in str(interactive_error):
-                        logger.warning(
-                            "💥 Column mismatch: Interactive components use different columns than table"
-                        )
-                        logger.warning(
-                            "🔧 This indicates a configuration issue - interactive components should target same data collection"
+                            if not join_config:
+                                raise ValueError(
+                                    f"No join configuration found between {table_dc_ids} and {interactive_dc_ids}"
+                                )
+
+                            # Step 2: Load interactive DC with filters applied
+                            interactive_dc_id = list(interactive_dc_ids)[
+                                0
+                            ]  # Get the first (and should be only) interactive DC
+                            interactive_metadata = [
+                                comp_data
+                                for comp_data in interactive_components_dict.values()
+                                if comp_data.get("metadata", {}).get("dc_id") == interactive_dc_id
+                            ]
+
+                            logger.info(
+                                f"📥 Loading interactive DC {interactive_dc_id} with {len(interactive_metadata)} filter(s)"
+                            )
+                            interactive_df = load_deltatable_lite(
+                                ObjectId(workflow_id),
+                                ObjectId(interactive_dc_id),
+                                metadata=interactive_metadata,
+                                TOKEN=TOKEN,
+                            )
+                            logger.info(
+                                f"📊 Interactive DC loaded: {interactive_df.shape[0]} filtered rows"
+                            )
+
+                            # Step 3: Extract unique join column values from filtered interactive DC
+                            join_column = join_columns[0]  # Use first join column
+                            if join_column not in interactive_df.columns:
+                                raise ValueError(
+                                    f"Join column '{join_column}' not found in interactive DC columns: {interactive_df.columns}"
+                                )
+
+                            filtered_join_values = interactive_df[join_column].unique().to_list()
+                            logger.info(
+                                f"🔍 Extracted {len(filtered_join_values)} unique values from join column '{join_column}'"
+                            )
+                            logger.debug(f"Sample join values: {filtered_join_values[:10]}")
+
+                            # Step 4: Load table DC (unfiltered)
+                            logger.info(f"📥 Loading table DC {table_dc_id} (unfiltered)")
+                            table_df = load_deltatable_lite(
+                                ObjectId(workflow_id),
+                                ObjectId(table_dc_id),
+                                metadata=None,  # No filters yet
+                                TOKEN=TOKEN,
+                            )
+                            logger.info(f"📊 Table DC loaded: {table_df.shape[0]} rows")
+
+                            # Step 5: Apply semi-join filter (filter table by join column values)
+                            if join_column not in table_df.columns:
+                                raise ValueError(
+                                    f"Join column '{join_column}' not found in table DC columns: {table_df.columns}"
+                                )
+
+                            df = table_df.filter(pl.col(join_column).is_in(filtered_join_values))
+                            logger.info(
+                                f"✅ SEMI-JOIN SUCCESS: Filtered table from {table_df.shape[0]} → {df.shape[0]} rows (NO expansion)"
+                            )
+                            logger.info(
+                                f"📉 Reduction: {table_df.shape[0] - df.shape[0]} rows removed by semi-join filter"
+                            )
+
+                        except Exception as semi_join_error:
+                            logger.error(f"❌ Semi-join filtering failed: {str(semi_join_error)}")
+                            logger.error(f"❌ Error type: {type(semi_join_error)}")
+                            import traceback
+
+                            logger.error(f"❌ Full traceback: {traceback.format_exc()}")
+
+                            # Fallback: Load table without filtering
+                            logger.warning("🔧 Falling back to unfiltered table data")
+                            df = load_deltatable_lite(
+                                ObjectId(workflow_id),
+                                ObjectId(data_collection_id),
+                                metadata=None,
+                                TOKEN=TOKEN,
+                            )
+                            logger.info(
+                                f"✅ Fallback: Loaded unfiltered table data ({df.shape[0]} rows)"
+                            )
+                    else:
+                        # FULL JOIN MODE: Table genuinely shows joined data (may expand rows)
+                        logger.info("🔗 FULL JOIN MODE: Using iterative_join for joined table data")
+                        logger.info(
+                            f"💡 Table DCs: {table_dc_ids}, Interactive DCs: {interactive_dc_ids}"
                         )
 
-                    # Fallback: Load without interactive filters
-                    logger.warning("🔧 Falling back to unfiltered data loading")
+                        try:
+                            df = iterative_join(
+                                workflow_id, joins_dict, interactive_components_dict, TOKEN
+                            )
+                            logger.info(
+                                f"✅ Successfully loaded FILTERED data via iterative_join (shape: {df.shape})"
+                            )
+
+                            # Verify that filtering actually occurred
+                            if df.shape[0] > 0:
+                                logger.info(
+                                    f"🎯 Filtered dataset contains {df.shape[0]} rows after applying interactive filters"
+                                )
+                            else:
+                                logger.warning(
+                                    "⚠️ Filtered dataset is empty - interactive filters excluded all data"
+                                )
+
+                        except Exception as interactive_error:
+                            # Handle column mismatch or other interactive filter errors gracefully
+                            logger.error(
+                                f"❌ Interactive filtering failed: {str(interactive_error)}"
+                            )
+                            logger.error(f"❌ Error type: {type(interactive_error)}")
+                            logger.error(f"❌ Error details: {interactive_error}")
+
+                            if "unable to find column" in str(interactive_error):
+                                logger.warning(
+                                    "💥 Column mismatch: Interactive components use different columns than table"
+                                )
+                                logger.warning(
+                                    "🔧 This indicates a configuration issue - interactive components should target same data collection"
+                                )
+
+                            # Fallback: Load without interactive filters
+                            logger.warning("🔧 Falling back to unfiltered data loading")
+                            df = load_deltatable_lite(
+                                ObjectId(workflow_id),
+                                ObjectId(data_collection_id),
+                                metadata=None,
+                                TOKEN=TOKEN,
+                            )
+                            logger.info("✅ Fallback: Loaded unfiltered data successfully")
+                else:
+                    # DC INCOMPATIBLE: Load table data WITHOUT joins to avoid unwanted Cartesian products
+                    logger.warning(
+                        f"⚠️ DC INCOMPATIBLE: Interactive filters target different DCs ({interactive_dc_ids}) than table ({table_dc_id})"
+                    )
+                    logger.warning(
+                        "🔧 Loading table data UNJOINED to prevent unwanted Cartesian product joins"
+                    )
+                    logger.warning(
+                        "💡 Interactive filtering is DISABLED for this table - filters apply to other dashboard components only"
+                    )
+
+                    # Load table data directly without any joins
                     df = load_deltatable_lite(
                         ObjectId(workflow_id),
                         ObjectId(data_collection_id),
                         metadata=None,
                         TOKEN=TOKEN,
                     )
-                    logger.info("✅ Fallback: Loaded unfiltered data successfully")
+                    logger.info(f"✅ Loaded unjoined table data successfully (shape: {df.shape})")
             else:
                 # No interactive components - check if table needs joins anyway
                 logger.info(
@@ -532,25 +751,26 @@ def register_callbacks_table_component(app):
             partial_df = df[start_row:end_row]
             actual_rows_returned = partial_df.shape[0]
 
-            # Convert to format expected by AG Grid
-            pandas_df = partial_df.to_pandas()
-
             # Transform column names to replace dots with underscores for AgGrid compatibility
-            column_mapping = {}
-            for col in pandas_df.columns:
-                if "." in col:
-                    new_col = col.replace(".", "_")
-                    column_mapping[col] = new_col
-                    logger.debug(f"🔍 DEBUG: Renaming column '{col}' to '{new_col}' for AgGrid")
-
-            if column_mapping:
-                pandas_df = pandas_df.rename(columns=column_mapping)
-                logger.debug(f"🔍 DEBUG: Transformed columns: {list(pandas_df.columns)}")
+            # Do this BEFORE conversion to avoid schema issues
+            if any("." in col for col in partial_df.columns):
+                column_mapping = {
+                    col: col.replace(".", "_") for col in partial_df.columns if "." in col
+                }
+                partial_df = partial_df.rename(column_mapping)
+                logger.debug(
+                    f"🔍 Renamed {len(column_mapping)} columns for AgGrid: {list(column_mapping.keys())}"
+                )
 
             # Add ID field for row indexing
-            pandas_df.reset_index(drop=True, inplace=True)
-            pandas_df["ID"] = range(start_row, start_row + len(pandas_df))
-            row_data = pandas_df.to_dict("records")
+            partial_df = partial_df.with_columns(
+                pl.Series("ID", range(start_row, start_row + len(partial_df)))
+            )
+
+            # Convert directly to dicts (AG Grid supports Polars natively - no Pandas conversion needed)
+            # This avoids the Polars -> Pandas -> dict conversion chain and potential Arrow RecordBatch errors
+            row_data = partial_df.to_dicts()
+            logger.debug(f"✅ Converted {len(row_data)} rows to dicts using Polars native method")
 
             # LOGGING: Track successful data delivery
             logger.info(

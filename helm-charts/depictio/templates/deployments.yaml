@@ -402,6 +402,31 @@ spec:
           resources:
             {{- toYaml .Values.initContainerResources | nindent 12 }}
         {{- end }}
+        - name: verify-config-storage
+          image: busybox:1.35
+          command: ['sh', '-c']
+          args:
+            - |
+              echo "Verifying config storage is mounted and writable..."
+
+              # Test write access to config directory
+              if touch /app/depictio/.depictio/.storage_test 2>/dev/null; then
+                rm /app/depictio/.depictio/.storage_test
+                echo "✅ Config storage is ready and writable"
+                exit 0
+              else
+                echo "❌ Config storage is not writable"
+                echo "Directory listing:"
+                ls -la /app/depictio/.depictio/ || echo "Directory not accessible"
+                exit 1
+              fi
+          securityContext:
+            {{- toYaml .Values.backend.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
+          volumeMounts:
+            - name: depictio-config
+              mountPath: /app/depictio/.depictio
       containers:
         - name: depictio-backend
           image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
@@ -561,6 +586,32 @@ spec:
             {{- toYaml .Values.frontend.securityContext | nindent 12 }}
           resources:
             {{- toYaml .Values.initContainerResources | nindent 12 }}
+        # STEP 0.5: Verify config storage is mounted and writable
+        - name: verify-config-storage
+          image: busybox:1.35
+          command: ['sh', '-c']
+          args:
+            - |
+              echo "Verifying config storage is mounted and writable..."
+
+              # Test write access to config directory
+              if touch /app/depictio/.depictio/.storage_test 2>/dev/null; then
+                rm /app/depictio/.depictio/.storage_test
+                echo "✅ Config storage is ready and writable"
+                exit 0
+              else
+                echo "❌ Config storage is not writable"
+                echo "Directory listing:"
+                ls -la /app/depictio/.depictio/ || echo "Directory not accessible"
+                exit 1
+              fi
+          securityContext:
+            {{- toYaml .Values.frontend.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
+          volumeMounts:
+            - name: depictio-config
+              mountPath: /app/depictio/.depictio
         # STEP 1: Wait for backend service to be available (network check)
         - name: wait-for-backend
           image: busybox:1.35

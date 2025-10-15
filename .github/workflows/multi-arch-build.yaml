@@ -3,7 +3,7 @@ name: Docker Image Multi Arch Build
 on:
   push:
     tags:
-      - "v[0-9]*.[0-9]*.[0-9]*$"       # Stable releases only (v0.0.4)
+      - "v[0-9]*.[0-9]*.[0-9]*"       # Stable releases only (v0.0.4)
       # Beta releases are commented out as requested
       # - "v[0-9]*.[0-9]*.[0-9]*-beta*"
   workflow_dispatch:

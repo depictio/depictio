@@ -52,7 +52,7 @@ backend:
 
   env:
     # Enable unauthenticated mode (allows anonymous access)
-    DEPICTIO_AUTH_UNAUTHENTICATED_MODE: "true"
+    DEPICTIO_AUTH_UNAUTHENTICATED_MODE: "false"
 
     # Anonymous user configuration
     DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
@@ -60,6 +60,16 @@ backend:
 
     # Performance - Balanced workers for multiple replicas
     DEPICTIO_FASTAPI_WORKERS: "4"
+
+    # Analytics Configuration
+    DEPICTIO_ANALYTICS_ENABLED: "true"
+    DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
+
+    # Google OAuth Configuration
+    DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED: "true"
+
+    # Celery Configuration - Disabled for now
+    # DEPICTIO_CELERY_ENABLED: "false"
 
 
 frontend:
@@ -84,7 +94,7 @@ frontend:
 
   env:
     # Enable unauthenticated mode (allows anonymous access)
-    DEPICTIO_AUTH_UNAUTHENTICATED_MODE: "true"
+    DEPICTIO_AUTH_UNAUTHENTICATED_MODE: "false"
 
     # Anonymous user configuration
     DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
@@ -92,6 +102,16 @@ frontend:
 
     # Performance - Balanced workers for multiple replicas
     DEPICTIO_DASH_WORKERS: "4"
+
+    # Analytics Configuration
+    DEPICTIO_ANALYTICS_ENABLED: "true"
+    DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
+
+    # Google OAuth Configuration
+    DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED: "true"
+
+    # Celery Configuration - Disabled for now
+    DEPICTIO_CELERY_ENABLED: "false"
 
 mongo:
   replicas: 1  # Temporarily single replica to get system working
@@ -165,7 +185,7 @@ minio:
 ## Ingress
 ingress:
   enabled: true
-  ingressClassName: "external-users"
+  ingressClassName: "internal-users"
 
   # EMBL specific annotations
   annotations:
@@ -182,14 +202,14 @@ ingress:
   #    - Keeps full control over exact hostnames
   #    - Useful for non-standard patterns or multiple environments
   hosts:
-    - host: "dev.demo.depictio.embl.org"
+    - host: "depictio.embl.org"
       paths:
         - path: /
           pathType: Prefix
           service:
             name: depictio-frontend
             portName: http
-    - host: "dev.api.demo.depictio.embl.org"
+    - host: "api.depictio.embl.org"
       paths:
         - path: /
           pathType: Prefix
@@ -205,23 +225,27 @@ ingress:
     #         portName: http
 
   # TLS configuration
+  # Note: The secret name should be created by cert-manager based on the cluster-issuer
+  # Format: {release-name}-depictio-tls allows deployment with any release name
   tls:
     - hosts:
-        - "dev.demo.depictio.embl.org"
-        - "dev.api.demo.depictio.embl.org"
-        # - "minio.demo.depictio.embl.org"
-      secretName: demo-depictio-tls
+        - "depictio.embl.org"
+        - "api.depictio.embl.org"
+        # - "minio.depictio.embl.org"
+      secretName: depictio-tls  # Will be created by cert-manager with harica-issuer
 
 global:
   domain: "depictio.embl.org"  # Global domain for all services
 
   # URL pattern configuration for EMBL deployment
-  # Using "subdomain" pattern: {subdomain}{service}.{release}.{domain}
-  # This generates: dev.api.demo.depictio.embl.org (for release "demo")
-  # Note: Explicit ingress.hosts below will override these patterns
+  # Using "custom" pattern to match explicit ingress hosts
+  # This ensures ConfigMap public URLs match the ingress routing
   urlPattern:
-    type: "subdomain"
-    subdomain: "dev"  # Creates URLs like: dev.api.demo.depictio.embl.org
+    type: "custom"
+    templates:
+      api: "api.depictio.embl.org"
+      frontend: "depictio.embl.org"
+      # minio: "minio.depictio.embl.org"  # In case MinIO is needed later
 
 
 # Example deployment command:

@@ -19,12 +19,16 @@ import dash_ag_grid as dag
 import dash_mantine_components as dmc
 import polars as pl
 from bson import ObjectId
-from dash import Input, Output, ctx, dcc, html
+from dash import MATCH, Input, Output, State, ctx, dcc, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
-from depictio.dash.api_calls import api_call_fetch_delta_table_info, api_call_fetch_project_by_id
+from depictio.dash.api_calls import (
+    api_call_fetch_delta_table_info,
+    api_call_fetch_multiqc_report,
+    api_call_fetch_project_by_id,
+)
 from depictio.dash.colors import colors
 from depictio.dash.components.depictio_cytoscape_joins import (
     create_joins_visualization_section,
@@ -151,7 +155,7 @@ def get_data_collection_size_display(data_collection):
             formatted_size, unit = format_storage_size(size_bytes)
             return f"{formatted_size} {unit}"
         else:
-            return "Processing..." if dc_type == "multiqc" else "N/A"
+            return "Unknown"
     except Exception:
         return "N/A"
 
@@ -210,18 +214,24 @@ def create_workflow_card(workflow, selected_workflow_id=None):
     """
     is_selected = str(workflow.id) == selected_workflow_id
 
-    # Get engine icon
-    engine_icons = {
-        "snakemake": "vscode-icons:file-type-snakemake",
-        "nextflow": "vscode-icons:file-type-nextflow",
-        "python": "vscode-icons:file-type-python",
-        "r": "vscode-icons:file-type-r",
-        "bash": "vscode-icons:file-type-bash",
-        "galaxy": "vscode-icons:file-type-galaxy",
-        "cwl": "vscode-icons:file-type-cwl",
-        "rust": "vscode-icons:file-type-rust",
-    }
-    engine_icon = engine_icons.get(workflow.engine.name.lower(), "hugeicons:workflow-square-01")
+    # Get engine icon - prioritize nf-core catalog if present
+    use_image_icon = False
+    if workflow.catalog and workflow.catalog.name.lower() == "nf-core":
+        # Use nf-core logo from assets
+        engine_icon = "/assets/images/workflows/nf-core.png"
+        use_image_icon = True
+    else:
+        engine_icons = {
+            "snakemake": "vscode-icons:file-type-snakemake",
+            "nextflow": "vscode-icons:file-type-nextflow",
+            "python": "vscode-icons:file-type-python",
+            "r": "vscode-icons:file-type-r",
+            "bash": "vscode-icons:file-type-bash",
+            "galaxy": "vscode-icons:file-type-galaxy",
+            "cwl": "vscode-icons:file-type-cwl",
+            "rust": "vscode-icons:file-type-rust",
+        }
+        engine_icon = engine_icons.get(workflow.engine.name.lower(), "hugeicons:workflow-square-01")
 
     return html.Div(
         [
@@ -229,7 +239,14 @@ def create_workflow_card(workflow, selected_workflow_id=None):
                 [
                     dmc.Group(
                         [
-                            DashIconify(icon=engine_icon, width=24),
+                            (
+                                html.Img(
+                                    src=engine_icon,
+                                    style={"width": "24px", "height": "24px"},
+                                )
+                                if use_image_icon
+                                else DashIconify(icon=engine_icon, width=24)
+                            ),
                             dmc.Stack(
                                 [
                                     dmc.Text(workflow.name, fw="bold", size="sm"),
@@ -661,7 +678,12 @@ def create_unified_data_collections_manager_section(
                                                     size="sm",
                                                     disabled=(
                                                         dc.config.type.lower() == "multiqc"
-                                                    ),  # Disable for MultiQC collections
+                                                        or (
+                                                            dc.config.metatype
+                                                            and dc.config.metatype.lower()
+                                                            == "aggregate"
+                                                        )
+                                                    ),  # Disable for MultiQC and aggregate collections
                                                 ),
                                                 label="Overwrite data",
                                                 position="top",
@@ -676,7 +698,14 @@ def create_unified_data_collections_manager_section(
                                                     variant="subtle",
                                                     color="blue",
                                                     size="sm",
-                                                    disabled=False,  # Will be controlled by callback
+                                                    disabled=(
+                                                        dc.config.type.lower() == "multiqc"
+                                                        or (
+                                                            dc.config.metatype
+                                                            and dc.config.metatype.lower()
+                                                            == "aggregate"
+                                                        )
+                                                    ),  # Disable for MultiQC and aggregate collections
                                                 ),
                                                 label="Edit name",
                                                 position="top",
@@ -1341,7 +1370,28 @@ def create_data_collection_viewer_content(
                     mt="md",
                 )
                 if dc_type.lower() != "multiqc"  # Hide data preview for MultiQC
-                else html.Div()  # Empty placeholder for MultiQC
+                else dmc.Card(
+                    [
+                        dmc.Group(
+                            [
+                                html.Img(
+                                    src="/assets/images/logos/multiqc.png",
+                                    style={"width": "20px", "height": "20px"},
+                                ),
+                                dmc.Text("MultiQC Report Metadata", fw="bold", size="md"),
+                            ],
+                            gap="xs",
+                            align="center",
+                        ),
+                        dmc.Divider(my="sm"),
+                        html.Div(id={"type": "dc-viewer-multiqc-metadata-content", "index": dc_id}),
+                    ],
+                    withBorder=True,
+                    shadow="xs",
+                    radius="md",
+                    p="md",
+                    mt="md",
+                )
             ),
         ],
         gap="md",
@@ -2021,6 +2071,219 @@ def register_project_data_collections_callbacks(app):
         )
 
         return selected_dc_tag, viewer_content
+
+    @app.callback(
+        Output({"type": "dc-viewer-multiqc-metadata-content", "index": MATCH}, "children"),
+        [
+            Input("selected-data-collection-store", "data"),
+            Input("project-data-store", "data"),
+        ],
+        [
+            State("selected-workflow-store", "data"),
+            State("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def populate_multiqc_metadata_content(
+        selected_dc_tag, project_data, selected_workflow_id, local_data
+    ):
+        """Populate MultiQC metadata content when a MultiQC data collection is selected."""
+        if not selected_dc_tag or not project_data or not local_data:
+            return dmc.Text("No MultiQC metadata available", size="sm", c="gray", ta="center")
+
+        # Find the selected data collection
+        selected_dc = None
+        dc_id = None
+
+        if project_data.get("project_type") == "basic":
+            data_collections = project_data.get("data_collections", [])
+            for dc in data_collections:
+                if dc.get("data_collection_tag") == selected_dc_tag:
+                    selected_dc = dc
+                    dc_id = dc.get("id")
+                    break
+        else:
+            if selected_workflow_id:
+                workflows = project_data.get("workflows", [])
+                for workflow in workflows:
+                    if str(workflow.get("id")) == selected_workflow_id:
+                        for dc in workflow.get("data_collections", []):
+                            if dc.get("data_collection_tag") == selected_dc_tag:
+                                selected_dc = dc
+                                dc_id = dc.get("id")
+                                break
+                        break
+
+        # Check if this is a MultiQC data collection
+        if not selected_dc or selected_dc.get("config", {}).get("type", "").lower() != "multiqc":
+            return dash.no_update
+
+        # Fetch MultiQC metadata
+        if dc_id and local_data.get("access_token"):
+            try:
+                multiqc_metadata = api_call_fetch_multiqc_report(
+                    str(dc_id), local_data["access_token"]
+                )
+
+                if not multiqc_metadata:
+                    return dmc.Alert(
+                        "No MultiQC report metadata found for this data collection",
+                        color="yellow",
+                        icon=DashIconify(icon="mdi:alert"),
+                    )
+
+                # Extract metadata fields
+                metadata = multiqc_metadata.get("metadata", {})
+                samples = metadata.get("samples", [])
+                modules = metadata.get("modules", [])
+                plots = metadata.get("plots", {})
+
+                multiqc_version = multiqc_metadata.get("multiqc_version", "N/A")
+                report_name = multiqc_metadata.get("report_name", "N/A")
+                processed_at = multiqc_metadata.get("processed_at", "N/A")
+                file_size_bytes = multiqc_metadata.get("file_size_bytes")
+
+                # Format file size
+                if file_size_bytes and isinstance(file_size_bytes, (int, float)):
+                    formatted_size, unit = format_storage_size(file_size_bytes)
+                    file_size_display = f"{formatted_size} {unit}"
+                else:
+                    file_size_display = "Unknown"
+
+                # Create metadata display
+                return dmc.Stack(
+                    [
+                        # Report info
+                        dmc.SimpleGrid(
+                            cols=2,
+                            spacing="md",
+                            children=[
+                                dmc.Stack(
+                                    [
+                                        dmc.Text("Report Name", size="sm", fw="bold", c="gray"),
+                                        dmc.Text(report_name, size="sm", ff="monospace"),
+                                    ],
+                                    gap="xs",
+                                ),
+                                dmc.Stack(
+                                    [
+                                        dmc.Text("MultiQC Version", size="sm", fw="bold", c="gray"),
+                                        dmc.Text(multiqc_version, size="sm", ff="monospace"),
+                                    ],
+                                    gap="xs",
+                                ),
+                                dmc.Stack(
+                                    [
+                                        dmc.Text("Processed At", size="sm", fw="bold", c="gray"),
+                                        dmc.Text(processed_at, size="sm"),
+                                    ],
+                                    gap="xs",
+                                ),
+                                dmc.Stack(
+                                    [
+                                        dmc.Text("File Size", size="sm", fw="bold", c="gray"),
+                                        dmc.Text(file_size_display, size="sm", ff="monospace"),
+                                    ],
+                                    gap="xs",
+                                ),
+                            ],
+                        ),
+                        dmc.Divider(my="sm"),
+                        # Samples
+                        dmc.Stack(
+                            [
+                                dmc.Group(
+                                    [
+                                        DashIconify(
+                                            icon="mdi:test-tube", width=16, color=colors["blue"]
+                                        ),
+                                        dmc.Text("Samples", size="sm", fw="bold"),
+                                        dmc.Badge(str(len(samples)), color="blue", size="xs"),
+                                    ],
+                                    gap="xs",
+                                ),
+                                dmc.Group(
+                                    [
+                                        dmc.Badge(sample, color="gray", size="xs", variant="light")
+                                        for sample in samples[:20]  # Limit to first 20 samples
+                                    ]
+                                    + (
+                                        [
+                                            dmc.Badge(
+                                                f"+{len(samples) - 20} more",
+                                                color="gray",
+                                                size="xs",
+                                            )
+                                        ]
+                                        if len(samples) > 20
+                                        else []
+                                    ),
+                                    gap="xs",
+                                    style={"flexWrap": "wrap"},
+                                ),
+                            ],
+                            gap="xs",
+                        ),
+                        dmc.Divider(my="sm"),
+                        # Modules
+                        dmc.Stack(
+                            [
+                                dmc.Group(
+                                    [
+                                        DashIconify(
+                                            icon="mdi:puzzle", width=16, color=colors["green"]
+                                        ),
+                                        dmc.Text("Modules", size="sm", fw="bold"),
+                                        dmc.Badge(str(len(modules)), color="green", size="xs"),
+                                    ],
+                                    gap="xs",
+                                ),
+                                dmc.Group(
+                                    [
+                                        dmc.Badge(module, color="green", size="xs", variant="light")
+                                        for module in modules
+                                    ],
+                                    gap="xs",
+                                    style={"flexWrap": "wrap"},
+                                ),
+                            ],
+                            gap="xs",
+                        ),
+                        dmc.Divider(my="sm"),
+                        # Plots summary
+                        dmc.Stack(
+                            [
+                                dmc.Group(
+                                    [
+                                        DashIconify(
+                                            icon="mdi:chart-box", width=16, color=colors["orange"]
+                                        ),
+                                        dmc.Text("Plots", size="sm", fw="bold"),
+                                        dmc.Badge(str(len(plots)), color="orange", size="xs"),
+                                    ],
+                                    gap="xs",
+                                ),
+                                dmc.Text(
+                                    f"This report contains {len(plots)} plot categories",
+                                    size="sm",
+                                    c="gray",
+                                ),
+                            ],
+                            gap="xs",
+                        ),
+                    ],
+                    gap="md",
+                )
+
+            except Exception as e:
+                logger.error(f"Error fetching MultiQC metadata: {e}")
+                return dmc.Alert(
+                    f"Error loading MultiQC metadata: {str(e)}",
+                    color="red",
+                    icon=DashIconify(icon="mdi:alert-circle"),
+                )
+
+        return dmc.Text("Unable to load MultiQC metadata", size="sm", c="gray", ta="center")
 
     @app.callback(
         Output("data-collections-content", "children"),
@@ -3529,6 +3792,12 @@ def generate_cytoscape_elements_from_project_data(data_collections):
                 continue
 
             for col in on_columns:
+                # Check if source DC is MultiQC - skip column node creation for MultiQC
+                source_dc_type = dc.get("config", {}).get("type", "table")
+                if source_dc_type.lower() == "multiqc":
+                    logger.debug(f"Skipping join edge creation for MultiQC collection '{dc_tag}'")
+                    continue
+
                 # Check if source node was created
                 source_columns = dc_columns.get(dc_tag, [])
                 if col not in source_columns:
@@ -3580,6 +3849,19 @@ def generate_cytoscape_elements_from_project_data(data_collections):
                     logger.warning(
                         f"Join column '{col}' not found in target DC '{target_dc_tag}' columns: {target_columns}"
                     )
+
+                    # Check if target DC is MultiQC - skip column node creation for MultiQC
+                    target_dc_data = dc_tags_to_data.get(target_dc_tag)
+                    target_dc_type = (
+                        target_dc_data.get("config", {}).get("type", "table")
+                        if target_dc_data
+                        else "table"
+                    )
+                    if target_dc_type.lower() == "multiqc":
+                        logger.debug(
+                            f"Skipping target column creation for MultiQC collection '{target_dc_tag}'"
+                        )
+                        continue
 
                     # Still create the target column node for visualization purposes
                     target_col = col

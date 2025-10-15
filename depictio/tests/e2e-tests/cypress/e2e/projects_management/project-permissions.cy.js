@@ -113,8 +113,17 @@ describe('Project Permissions Management', () => {
 
         // Click on user dropdown and select user
         cy.get('#permissions-manager-input-email').should('be.visible').click()
-        cy.typeRobust('#permissions-manager-input-email', userEmail)
-        cy.contains(userEmail).click()
+        cy.get('#permissions-manager-input-email')
+            .clear()
+            .type(userEmail, { delay: 100 })
+        cy.wait(500)  // Wait for dropdown to filter
+
+        // Wait for dropdown to filter and show results, then click the email option
+        cy.get('.mantine-MultiSelect-dropdown', { timeout: 10000 })
+            .should('be.visible')
+            .contains(userEmail)
+            .should('be.visible')
+            .click()
 
         // Wait for dropdown to update
         cy.wait(500)
@@ -398,8 +407,15 @@ describe('Project Permissions Management', () => {
 
             // Test that user must select exactly one permission type
             cy.get('#permissions-manager-input-email').click()
-            cy.typeRobust('#permissions-manager-input-email', testUser.email)
-            cy.contains(testUser.email).click()
+            cy.get('#permissions-manager-input-email')
+                .clear()
+                .type(testUser.email, { delay: 100 })
+            cy.wait(500)  // Wait for dropdown to filter
+            cy.get('.mantine-MultiSelect-dropdown')
+                .should('be.visible')
+                .contains(testUser.email)
+                .should('be.visible')
+                .click()
             cy.wait(500)
 
             // Without selecting any permission, button should be disabled

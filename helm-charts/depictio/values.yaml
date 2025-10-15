@@ -312,3 +312,33 @@ initContainerResources:
 
 global:
   domain: "example.com" # Default domain, can be overridden in environment-specific values
+
+  # URL pattern configuration
+  # Controls how service URLs are constructed for ingress and public access
+  urlPattern:
+    # Pattern type: "prefix" | "subdomain" | "custom"
+    # - "prefix" (default): {release}-{service}.{domain}
+    #     Example: demo-api.example.com
+    # - "subdomain": {subdomain}{service}.{release}.{domain}
+    #     Example: dev.api.demo.example.com
+    # - "custom": Use custom template strings defined below
+    type: "prefix"
+
+    # Optional subdomain prefix (used with "subdomain" pattern type)
+    # Examples: "dev", "staging", "prod"
+    # Will automatically add trailing dot if not present
+    subdomain: ""
+
+    # Custom URL templates (used when type is "custom")
+    # Available template variables: .Release.Name, .Values.global.domain, .Values.global.urlPattern.subdomain
+    # These are Go templates evaluated at deployment time
+    templates:
+      # API service URL pattern
+      # Default: "{{ .Release.Name }}-api.{{ .Values.global.domain }}"
+      api: ""
+      # Frontend service URL pattern
+      # Default: "{{ .Release.Name }}.{{ .Values.global.domain }}"
+      frontend: ""
+      # MinIO service URL pattern
+      # Default: "{{ .Release.Name }}-minio.{{ .Values.global.domain }}"
+      minio: ""

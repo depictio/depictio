@@ -340,7 +340,6 @@ def register_callbacks_header(app):
         State("local-store", "data"),
         State("url", "pathname"),
         State("user-cache-store", "data"),
-        # prevent_initial_call=True,
     )
     def toggle_buttons(switch_state, local_store, pathname, user_cache):
         """Handle button states based on edit mode and user permissions."""
@@ -366,8 +365,8 @@ def register_callbacks_header(app):
 
         logger.debug(f"owner: {owner}, viewer: {viewer}, switch_state: {switch_state}")
 
-        # If not owner (but has viewing access), disable all editing controls
-        if not owner and viewer:
+        # If not owner, disable all editing controls
+        if not owner:
             return [True] * (len_output - 2) + [False] * 2
 
         return [not switch_state] * (len_output - 2) + [switch_state] * 2
@@ -799,17 +798,19 @@ def design_header(data, local_store):
     current_user = api_call_fetch_user_from_token(local_store["access_token"])
     owner, viewer = _get_user_permissions(current_user, data)
 
-    # Determine button states
-    if not owner and viewer:
+    # Determine button states - ALWAYS check permission first
+    if not owner:
+        # Non-owners: ALWAYS force edit mode OFF and disable controls
         disabled = True
         unified_edit_mode_checked = False
     else:
+        # Owners only: enable controls and use stored edit mode
         disabled = False
         # Set default edit mode to OFF (False) and only use stored value if explicitly set
         buttons_data = data.get("buttons_data", {})
         unified_edit_mode_checked = False  # Always default to OFF
 
-        # Only override default if there's an explicit stored value
+        # Only check stored value for owners
         if "unified_edit_mode" in buttons_data:
             unified_edit_mode_checked = buttons_data["unified_edit_mode"]
         elif "edit_dashboard_mode_button" in buttons_data:
@@ -871,7 +872,7 @@ def design_header(data, local_store):
     edit_mode_button_header = _create_action_icon(
         "mdi:pencil-off",
         "edit-status-badge-clickable-2",
-        disabled=False,
+        disabled=disabled,  # Disable for non-owners
         n_clicks=0,
         tooltip="Toggle edit mode\nfor dashboard editing",
     )
@@ -923,20 +924,20 @@ def design_header(data, local_store):
             ),
             dmc.Divider(),
             # Status badges section
-            dmc.Group(
-                [
-                    dmc.Text("Edit Mode:", fw="bold", size="sm"),
-                    dmc.Badge(
-                        "Edit OFF",
-                        id="edit-status-badge-drawer",
-                        size="sm",
-                        color="gray",
-                        leftSection=DashIconify(icon="mdi:pencil-off", width=8, color="white"),
-                    ),
-                ],
-                justify="space-between",
-                style={"width": "100%"},
-            ),
+            # dmc.Group(
+            #     [
+            #         dmc.Text("Edit Mode:", fw="bold", size="sm"),
+            #         dmc.Badge(
+            #             "Edit OFF",
+            #             id="edit-status-badge-drawer",
+            #             size="sm",
+            #             color="gray",
+            #             leftSection=DashIconify(icon="mdi:pencil-off", width=8, color="white"),
+            #         ),
+            #     ],
+            #     justify="space-between",
+            #     style={"width": "100%"},
+            # ),
             dmc.Group(
                 [
                     dmc.Text("Live Interactivity:", fw="bold", size="sm"),
@@ -1017,7 +1018,7 @@ def design_header(data, local_store):
                 style={"padding": "5px", "margin": "5px 0"},
             ),
         ],
-        gap="md",
+        gap="xs",
     )
 
     # DMC Stack instead of html.Div for better theme support
@@ -1114,16 +1115,30 @@ def design_header(data, local_store):
                 [
                     burger_button,  # DMC Burger instead of custom button
                     # Dashboard icon from DashboardData model with filled variant
-                    dmc.ActionIcon(
-                        DashIconify(
-                            icon=data.get("icon", "mdi:view-dashboard"),
-                            width=24,
-                            height=24,
-                        ),
-                        color=data.get("icon_color", "orange"),
-                        radius="xl",
-                        size="lg",
-                        variant="filled",
+                    # Check if icon is an image path or Iconify icon
+                    (
+                        html.Img(
+                            src=data.get("icon", "mdi:view-dashboard"),
+                            style={
+                                "width": "32px",
+                                "height": "32px",
+                                "objectFit": "contain",
+                                "borderRadius": "50%",
+                                "padding": "4px",
+                            },
+                        )
+                        if data.get("icon", "").startswith("/assets/")
+                        else dmc.ActionIcon(
+                            DashIconify(
+                                icon=data.get("icon", "mdi:view-dashboard"),
+                                width=24,
+                                height=24,
+                            ),
+                            color=data.get("icon_color", "orange"),
+                            radius="xl",
+                            size="lg",
+                            variant="filled",
+                        )
                     ),
                     # Title and optional subtitle
                     dmc.Stack(

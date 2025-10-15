@@ -1341,11 +1341,98 @@ def analyze_figure_structure(fig: Any, dict_kwargs: dict, visu_type: str) -> dic
     }
 
 
+def extract_columns_from_preprocessing(
+    preprocessing_code: str, df_columns: list[str] | None = None
+) -> set[str]:
+    """
+    Extract source column references from code mode preprocessing code.
+
+    Parses AST to find all column references (df['col'], df.col, groupby(['col']))
+    and filters to only columns that exist in the source data.
+
+    Args:
+        preprocessing_code: The df_modified preprocessing line
+        df_columns: Available source columns (optional, for validation)
+
+    Returns:
+        Set of source column names needed for preprocessing
+    """
+    columns = set()
+
+    try:
+        # Parse the preprocessing code
+        tree = ast.parse(preprocessing_code)
+
+        for node in ast.walk(tree):
+            # Find subscript operations: df['column'] or chained_call['column']
+            if isinstance(node, ast.Subscript):
+                # Get column name from subscript
+                if isinstance(node.slice, ast.Constant):
+                    col_name = node.slice.value
+                    # Only add if it looks like a column name (string, not numeric index)
+                    if isinstance(col_name, str):
+                        columns.add(col_name)
+                # Handle list subscripts like df[['col1', 'col2']]
+                elif isinstance(node.slice, ast.List):
+                    for elt in node.slice.elts:
+                        if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                            columns.add(elt.value)
+
+            # Find function calls with column references
+            elif isinstance(node, ast.Call):
+                # Check for .groupby() calls with column lists
+                if isinstance(node.func, ast.Attribute) and node.func.attr == "groupby":
+                    for arg in node.args:
+                        if isinstance(arg, ast.List):
+                            for elt in arg.elts:
+                                if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                                    columns.add(elt.value)
+                        elif isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                            columns.add(arg.value)
+
+                # Check for aggregation methods that might reference columns
+                elif isinstance(node.func, ast.Attribute) and node.func.attr in [
+                    "agg",
+                    "sum",
+                    "mean",
+                    "median",
+                    "std",
+                    "var",
+                    "min",
+                    "max",
+                    "count",
+                ]:
+                    for arg in node.args:
+                        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                            columns.add(arg.value)
+
+        # Filter to only columns that exist in source data (if provided)
+        if df_columns:
+            original_count = len(columns)
+            columns = {col for col in columns if col in df_columns}
+            logger.debug(
+                f"Filtered columns from {original_count} to {len(columns)} based on available columns"
+            )
+
+        logger.info(
+            f"✅ Extracted {len(columns)} source columns from preprocessing: {sorted(columns)}"
+        )
+
+    except Exception as e:
+        logger.error(f"❌ Failed to parse preprocessing code: {e}")
+        logger.exception("Full traceback:")
+        # Return empty set on error - will fall back to loading all columns
+
+    return columns
+
+
 def extract_needed_columns(
     new_params: dict,
     trace_metadata: dict | None = None,
     interactive_components: dict | None = None,
     join_columns: list[str] | None = None,
+    code_content: str | None = None,
+    df_columns: list[str] | None = None,
 ) -> list[str]:
     """
     Extract all columns needed for figure rendering and interactive filtering.
@@ -1353,15 +1440,68 @@ def extract_needed_columns(
     This enables column projection in load_deltatable_lite() for efficient data loading.
     Only loads the 3-5 columns actually needed instead of all 50+ columns in wide tables.
 
+    CRITICAL: For code mode with df_modified preprocessing, extracts source columns from
+    preprocessing code instead of figure parameters to avoid requesting computed columns.
+
     Args:
         new_params: Figure parameters (x, y, z, color, etc.)
         trace_metadata: Existing trace metadata with original column mappings
         interactive_components: Interactive component values (range sliders, dropdowns)
         join_columns: Join columns if this is a joined DC (CRITICAL for join integrity)
+        code_content: Full code content for code mode (optional)
+        df_columns: Available source columns for validation (optional)
 
     Returns:
         List of column names needed for the figure
     """
+    columns = set()
+
+    # CODE MODE PREPROCESSING: Extract source columns from preprocessing instead of figure params
+    if code_content:
+        from .code_mode import analyze_constrained_code
+
+        logger.debug("Code mode detected: analyzing preprocessing for source columns")
+        analysis = analyze_constrained_code(code_content)
+
+        if analysis["has_preprocessing"]:
+            # Extract columns from preprocessing code
+            preprocessing_cols = extract_columns_from_preprocessing(
+                analysis["preprocessing_code"], df_columns
+            )
+
+            if preprocessing_cols:
+                logger.info(
+                    f"✅ CODE MODE: Using {len(preprocessing_cols)} source columns from preprocessing: {sorted(preprocessing_cols)}"
+                )
+                columns.update(preprocessing_cols)
+
+                # ESSENTIAL COLUMNS: Always include these for code mode
+                essential_columns = [
+                    "depictio_run_id",  # Required for joins and run isolation
+                ]
+                columns.update(essential_columns)
+
+                # JOIN COLUMNS: CRITICAL - include all join columns for joined DCs
+                if join_columns:
+                    columns.update(join_columns)
+                    logger.debug(
+                        f"Added {len(join_columns)} join columns to projection: {join_columns}"
+                    )
+
+                # Return early - preprocessing columns are sufficient
+                result = sorted([col for col in columns if col is not None and col != ""])
+                logger.info(
+                    f"📊 CODE MODE PROJECTION: {len(result)} columns for data loading: {result}"
+                )
+                return result
+            else:
+                logger.warning(
+                    "⚠️ CODE MODE: Failed to extract columns from preprocessing, falling back to figure params"
+                )
+        else:
+            logger.debug("CODE MODE: No preprocessing, extracting from figure params")
+
+    # STANDARD EXTRACTION: Extract from figure parameters (non-code mode or no preprocessing)
     columns = set()
 
     # 1. PLOT PARAMETERS: Extract columns from visualization parameters

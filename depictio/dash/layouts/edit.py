@@ -602,6 +602,18 @@ def enable_box_edit_mode(
                 metadata_dict["visu_type"] = component_data.get("visu_type", "N/A")
                 metadata_dict["mode"] = component_data.get("mode", "ui")
 
+                # Add code_content for code-mode figures (truncated for display)
+                if component_data.get("mode") == "code" and "code_content" in component_data:
+                    code_content = component_data["code_content"]
+                    # Truncate code if too long for display
+                    max_code_length = 200
+                    if len(code_content) > max_code_length:
+                        metadata_dict["code_content"] = (
+                            code_content[:max_code_length] + "... (truncated)"
+                        )
+                    else:
+                        metadata_dict["code_content"] = code_content
+
                 # Add dict_kwargs if available (most important for figures)
                 if "dict_kwargs" in component_data and component_data["dict_kwargs"]:
                     dict_kwargs = component_data["dict_kwargs"]
@@ -646,10 +658,12 @@ def enable_box_edit_mode(
 
             elif component_type_value == "card":
                 # Card component metadata
+                if "column_name" in component_data:
+                    metadata_dict["column_name"] = component_data["column_name"]
+                if "aggregation" in component_data:
+                    metadata_dict["aggregation"] = component_data["aggregation"]
                 if "card_value" in component_data:
                     metadata_dict["card_value"] = component_data["card_value"]
-                if "aggregation_method" in component_data:
-                    metadata_dict["aggregation_method"] = component_data["aggregation_method"]
 
             elif component_type_value == "table":
                 # Table component metadata
