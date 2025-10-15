@@ -229,21 +229,26 @@ async def create_initial_dashboard(admin_user: UserBeanie) -> dict | None:
     if "stored_metadata" in dashboard_data:
         for component in dashboard_data["stored_metadata"]:
             # Force top-level dc_id
-            if "dc_id" in component and isinstance(component["dc_id"], dict):
-                component["dc_id"]["$oid"] = STATIC_DC_ID
-                logger.debug(
-                    f"Updated component {component.get('index', 'unknown')} dc_id to {STATIC_DC_ID}"
-                )
+            # Note: json_util.object_hook converts {"$oid": "..."} to ObjectId objects
+            if "dc_id" in component:
+                current_dc_id = str(component.get("dc_id", ""))
+                if current_dc_id != STATIC_DC_ID:
+                    logger.debug(
+                        f"Updating component {component.get('index', 'unknown')} dc_id "
+                        f"from {current_dc_id} to {STATIC_DC_ID}"
+                    )
+                    component["dc_id"] = ObjectId(STATIC_DC_ID)
 
             # Force nested dc_config._id
             if "dc_config" in component and isinstance(component["dc_config"], dict):
-                if "_id" in component["dc_config"] and isinstance(
-                    component["dc_config"]["_id"], dict
-                ):
-                    component["dc_config"]["_id"]["$oid"] = STATIC_DC_ID
-                    logger.debug(
-                        f"Updated component {component.get('index', 'unknown')} dc_config._id to {STATIC_DC_ID}"
-                    )
+                if "_id" in component["dc_config"]:
+                    current_config_id = str(component["dc_config"].get("_id", ""))
+                    if current_config_id != STATIC_DC_ID:
+                        logger.debug(
+                            f"Updating component {component.get('index', 'unknown')} dc_config._id "
+                            f"from {current_config_id} to {STATIC_DC_ID}"
+                        )
+                        component["dc_config"]["_id"] = ObjectId(STATIC_DC_ID)
 
     logger.info(
         f"Updated {len(dashboard_data.get('stored_metadata', []))} dashboard components with static dc_id"
