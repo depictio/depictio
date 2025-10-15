@@ -38,6 +38,19 @@ data:
   DEPICTIO_AUTH_UNAUTHENTICATED_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_UNAUTHENTICATED_MODE | default "false" | quote }}
   DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.backend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | default "anonymous@example.com" | quote }}
   DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.backend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | default "24" | quote }}
+
+  # Google OAuth Configuration
+  DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED: {{ .Values.backend.env.DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED | default "false" | quote }}
+  {{- if .Values.auth }}
+  DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_ID: {{ .Values.auth.DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_ID | default "" | quote }}
+  DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_SECRET: {{ .Values.auth.DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_SECRET | default "" | quote }}
+  DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI: {{ .Values.auth.DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI | default "" | quote }}
+  {{- else }}
+  DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_ID: ""
+  DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_SECRET: ""
+  DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI: ""
+  {{- end }}
+
   # Performance
   DEPICTIO_FASTAPI_WORKERS: {{ .Values.backend.env.DEPICTIO_FASTAPI_WORKERS | quote }}
   # Analytics
@@ -47,7 +60,11 @@ data:
   DEPICTIO_ANALYTICS_TRACK_ANONYMOUS_USERS: {{ .Values.backend.env.DEPICTIO_ANALYTICS_TRACK_ANONYMOUS_USERS | default "true" | quote }}
   DEPICTIO_ANALYTICS_CLEANUP_ENABLED: {{ .Values.backend.env.DEPICTIO_ANALYTICS_CLEANUP_ENABLED | default "true" | quote }}
   DEPICTIO_GOOGLE_ANALYTICS_ENABLED: {{ .Values.backend.env.DEPICTIO_GOOGLE_ANALYTICS_ENABLED | default "false" | quote }}
+  {{- if .Values.googleAnalytics }}
+  DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: {{ .Values.googleAnalytics.DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID | default "G-XXXXXXXXXX" | quote }}
+  {{- else }}
   DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: {{ .Values.backend.env.DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID | default "G-XXXXXXXXXX" | quote }}
+  {{- end }}
   # MinIO/S3 configuration
   DEPICTIO_MINIO_ROOT_USER: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_USER | default "minio" | quote }}
   DEPICTIO_MINIO_ROOT_PASSWORD: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_PASSWORD | default "minio123" | quote }}
@@ -102,6 +119,19 @@ data:
   DEPICTIO_AUTH_UNAUTHENTICATED_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_UNAUTHENTICATED_MODE | default "false" | quote }}
   DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.backend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | default "anonymous@example.com" | quote }}
   DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.backend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | default "24" | quote }}
+
+  # Google OAuth Configuration (Frontend only)
+  DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED: {{ .Values.frontend.env.DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED | default "false" | quote }}
+  {{- if .Values.auth }}
+  DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_ID: {{ .Values.auth.DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_ID | default "" | quote }}
+  DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_SECRET: {{ .Values.auth.DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_SECRET | default "" | quote }}
+  DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI: {{ .Values.auth.DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI | default "" | quote }}
+  {{- else }}
+  DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_ID: ""
+  DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_SECRET: ""
+  DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI: ""
+  {{- end }}
+
   # Performance
   DEPICTIO_DASH_WORKERS: {{ .Values.frontend.env.DEPICTIO_DASH_WORKERS | quote }}
   # Analytics
@@ -111,7 +141,11 @@ data:
   DEPICTIO_ANALYTICS_TRACK_ANONYMOUS_USERS: {{ .Values.frontend.env.DEPICTIO_ANALYTICS_TRACK_ANONYMOUS_USERS | default "true" | quote }}
   DEPICTIO_ANALYTICS_CLEANUP_ENABLED: {{ .Values.frontend.env.DEPICTIO_ANALYTICS_CLEANUP_ENABLED | default "true" | quote }}
   DEPICTIO_GOOGLE_ANALYTICS_ENABLED: {{ .Values.frontend.env.DEPICTIO_GOOGLE_ANALYTICS_ENABLED | default "false" | quote }}
+  {{- if .Values.googleAnalytics }}
+  DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: {{ .Values.googleAnalytics.DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID | default "G-XXXXXXXXXX" | quote }}
+  {{- else }}
   DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: {{ .Values.frontend.env.DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID | default "G-XXXXXXXXXX" | quote }}
+  {{- end }}
   # MinIO/S3 configuration
   DEPICTIO_MINIO_ROOT_USER: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_USER | default "minio" | quote }}
   DEPICTIO_MINIO_ROOT_PASSWORD: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_PASSWORD | default "minio123" | quote }}

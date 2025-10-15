@@ -1,0 +1,257 @@
+# EMBL specific values with no authentication (values-embl-unauth.yaml)
+## Storage
+storageClass: basic-csi
+persistence:
+  mongo:
+    size: 1Gi
+    accessMode: ReadWriteOnce
+  minio:
+    size: 1Gi
+    accessMode: ReadWriteOnce
+  screenshots:
+    size: 100Mi
+    accessMode: ReadWriteMany
+  keys:
+    size: 1Mi
+    accessMode: ReadWriteMany
+  config:
+    size: 10Mi
+    accessMode: ReadWriteMany
+  uploads:
+    size: 5Gi
+    accessMode: ReadWriteMany
+
+## Init Container Resources
+initContainerResources:
+  requests:
+    memory: "64Mi"
+    cpu: "10m"
+  limits:
+    memory: "128Mi"
+    cpu: "100m"
+
+## SecurityContext
+backend:
+  replicas: 2  # Multiple replicas for high availability with anti-affinity
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+  resources:
+    requests:
+      memory: "2Gi"     # Balanced for multiple replicas
+      cpu: "500m"       # Balanced CPU allocation
+    limits:
+      memory: "4Gi"     # Reasonable limit for multiple replicas
+      cpu: "2"          # Balanced CPU limit
+
+  env:
+    # Enable unauthenticated mode (allows anonymous access)
+    DEPICTIO_AUTH_UNAUTHENTICATED_MODE: "false"
+
+    # Anonymous user configuration
+    DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
+    DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
+
+    # Performance - Balanced workers for multiple replicas
+    DEPICTIO_FASTAPI_WORKERS: "4"
+
+    # Analytics Configuration
+    DEPICTIO_ANALYTICS_ENABLED: "true"
+    DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
+
+    # Google OAuth Configuration
+    DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED: "true"
+
+    # Celery Configuration - Disabled for now
+    # DEPICTIO_CELERY_ENABLED: "false"
+
+
+frontend:
+  replicas: 2  # Multiple replicas for high availability with anti-affinity
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+
+  resources:
+    requests:
+      memory: "2Gi"     # Balanced for multiple replicas
+      cpu: "500m"       # Balanced CPU allocation
+    limits:
+      memory: "4Gi"     # Reasonable limit for multiple replicas
+      cpu: "2"          # Balanced CPU limit
+
+  env:
+    # Enable unauthenticated mode (allows anonymous access)
+    DEPICTIO_AUTH_UNAUTHENTICATED_MODE: "false"
+
+    # Anonymous user configuration
+    DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
+    DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
+
+    # Performance - Balanced workers for multiple replicas
+    DEPICTIO_DASH_WORKERS: "4"
+
+    # Analytics Configuration
+    DEPICTIO_ANALYTICS_ENABLED: "true"
+    DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
+
+    # Google OAuth Configuration
+    DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED: "true"
+
+    # Celery Configuration - Disabled for now
+    DEPICTIO_CELERY_ENABLED: "false"
+
+mongo:
+  replicas: 1  # Temporarily single replica to get system working
+  image:
+    pullPolicy: Always
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1"
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+
+# Redis configuration (required for EMBL Capsule admission controller)
+redis:
+  enabled: true
+  image:
+    pullPolicy: Always  # EMBL infrastructure requires Always policy
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+
+# External S3 service configuration
+minio:
+  enabled: false  # Using external EMBL S3 service instead of local MinIO
+  # NOTE: S3 credentials are defined in values-embl-secrets.yaml
+  # This file should be loaded separately and not committed to version control
+
+  # Security context override for PodSecurity "restricted" policy compliance
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+
+  # External MinIO/S3 environment configuration (placeholder values)
+  # These will be overridden by values-embl-secrets.yaml
+  env:
+    DEPICTIO_MINIO_PUBLIC_URL: "https://s3.embl.de"
+    DEPICTIO_MINIO_ROOT_USER: "placeholder-user"
+    DEPICTIO_MINIO_ROOT_PASSWORD: "placeholder-password"
+    DEPICTIO_MINIO_BUCKET: "depictio-bucket"
+    DEPICTIO_MINIO_SERVICE_PORT: "9000"
+
+## Ingress
+ingress:
+  enabled: true
+  ingressClassName: "internal-users"
+
+  # EMBL specific annotations
+  annotations:
+    cert-manager.io/cluster-issuer: harica-issuer
+
+  # Host configuration for split frontend/backend setup
+  # NOTE: Two approaches are available:
+  # 1. Use the global.urlPattern configuration (set above) to auto-generate URLs
+  #    - Remove or comment out the 'hosts' section below
+  #    - The pattern will automatically generate URLs like:
+  #      * dev.demo.depictio.embl.org (frontend)
+  #      * dev.api.demo.depictio.embl.org (backend)
+  # 2. Explicitly define hosts (current approach - takes precedence over urlPattern)
+  #    - Keeps full control over exact hostnames
+  #    - Useful for non-standard patterns or multiple environments
+  hosts:
+    - host: "depictio.embl.org"
+      paths:
+        - path: /
+          pathType: Prefix
+          service:
+            name: depictio-frontend
+            portName: http
+    - host: "api.depictio.embl.org"
+      paths:
+        - path: /
+          pathType: Prefix
+          service:
+            name: depictio-backend
+            portName: http
+    # - host: "minio.demo.depictio.embl.org"
+    #   paths:
+    #     - path: /
+    #       pathType: Prefix
+    #       service:
+    #         name: minio
+    #         portName: http
+
+  # TLS configuration
+  # Note: The secret name should be created by cert-manager based on the cluster-issuer
+  # Format: {release-name}-depictio-tls allows deployment with any release name
+  tls:
+    - hosts:
+        - "depictio.embl.org"
+        - "api.depictio.embl.org"
+        # - "minio.depictio.embl.org"
+      secretName: depictio-tls  # Will be created by cert-manager with harica-issuer
+
+global:
+  domain: "depictio.embl.org"  # Global domain for all services
+
+  # URL pattern configuration for EMBL deployment
+  # Using "custom" pattern to match explicit ingress hosts
+  # This ensures ConfigMap public URLs match the ingress routing
+  urlPattern:
+    type: "custom"
+    templates:
+      api: "api.depictio.embl.org"
+      frontend: "depictio.embl.org"
+      # minio: "minio.depictio.embl.org"  # In case MinIO is needed later
+
+
+# Example deployment command:
+# IMPORTANT: You must also load the secrets file (values-embl-secrets.yaml)
+# helm upgrade --install demo ./helm-charts/depictio \
+#   -f ./helm-charts/depictio/values.yaml \
+#   -f ./helm-charts/depictio/values-embl-unauth.yaml \
+#   -f ./helm-charts/depictio/values-embl-secrets.yaml \
+#   -n datasci-depictio-project-demo
