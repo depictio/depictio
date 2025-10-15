@@ -651,6 +651,78 @@ jobs:
                   else:
                       print("⚠️  Iris demo project not found in database")
 
+              # Verify deltatable document exists for multi-instance deployments
+              print("\n🗄️ Verifying deltatable document exists...")
+              if "deltatables" in collections:
+                  deltatables_collection = db["deltatables"]
+                  expected_dc_id = "646b0f3c1e4a2d7f8e5b8c9c"
+
+                  # Find deltatable for iris data collection
+                  from bson import ObjectId
+                  deltatable = deltatables_collection.find_one({"data_collection_id": ObjectId(expected_dc_id)})
+
+                  if deltatable:
+                      print(f"✅ Deltatable document found for dc_id: {expected_dc_id}")
+                      print(f"📍 Delta table location: {deltatable.get('delta_table_location', 'N/A')}")
+                      if "deltatable_size_bytes" in deltatable:
+                          size_mb = deltatable["deltatable_size_bytes"] / (1024 * 1024)
+                          print(f"💾 Deltatable size: {size_mb:.2f} MB")
+                      print(f"📊 Aggregation count: {len(deltatable.get('aggregation', []))}")
+                  else:
+                      print(f"❌ Deltatable document NOT found for dc_id: {expected_dc_id}")
+                      print("⚠️  This will cause issues in multi-instance K8s deployments!")
+                      exit(1)
+              else:
+                  print("⚠️  deltatables collection not found")
+                  exit(1)
+
+              # Verify dashboard document has correct dc_id references
+              print("\n📊 Verifying dashboard dc_id references...")
+              if "dashboards" in collections:
+                  dashboards_collection = db["dashboards"]
+                  expected_dc_id = "646b0f3c1e4a2d7f8e5b8c9c"
+
+                  # Find iris dashboard
+                  iris_dashboard = dashboards_collection.find_one({"title": "Iris Dashboard demo"})
+
+                  if iris_dashboard:
+                      print("✅ Iris dashboard found")
+                      stored_metadata = iris_dashboard.get("stored_metadata", [])
+                      print(f"📋 Dashboard has {len(stored_metadata)} components")
+
+                      all_correct = True
+                      for idx, component in enumerate(stored_metadata):
+                          component_index = component.get("index", f"component-{idx}")
+                          dc_id = component.get("dc_id")
+
+                          if dc_id:
+                              actual_dc_id = str(dc_id)
+                              if actual_dc_id != expected_dc_id:
+                                  print(f"❌ Component {component_index}: dc_id mismatch! Expected {expected_dc_id}, got {actual_dc_id}")
+                                  all_correct = False
+                              else:
+                                  print(f"✅ Component {component_index}: dc_id correct ({expected_dc_id})")
+
+                          # Check nested dc_config._id
+                          dc_config = component.get("dc_config", {})
+                          if dc_config and "_id" in dc_config:
+                              actual_config_id = str(dc_config["_id"])
+                              if actual_config_id != expected_dc_id:
+                                  print(f"❌ Component {component_index}: dc_config._id mismatch! Expected {expected_dc_id}, got {actual_config_id}")
+                                  all_correct = False
+                              else:
+                                  print(f"✅ Component {component_index}: dc_config._id correct ({expected_dc_id})")
+
+                      if not all_correct:
+                          print("\n❌ Some dashboard components have incorrect dc_id references!")
+                          exit(1)
+                      else:
+                          print("\n🎉 All dashboard components have correct dc_id references!")
+                  else:
+                      print("⚠️  Iris dashboard not found")
+              else:
+                  print("⚠️  dashboards collection not found")
+
           except Exception as e:
               print(f"❌ MongoDB failed: {e}")
               import traceback
