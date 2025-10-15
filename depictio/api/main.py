@@ -259,14 +259,17 @@ def delayed_process_data_collections():
                 )
                 return
 
-            # More importantly, check if delta table exists in S3 (for multi-instance deployments)
+            # Check if delta table exists in S3 (for multi-instance deployments)
             # Each instance has its own MongoDB but shares the same S3 bucket
+            # If it exists, we'll still process to create local deltatable document with overwrite=True
             dc_id_str = str(dc_id)
             if check_s3_delta_table_exists(settings.minio.bucket, dc_id_str):
                 print(
-                    f"Worker {os.getpid()}: Delta table already exists in S3 at s3://{settings.minio.bucket}/{dc_id_str}, skipping processing"
+                    f"Worker {os.getpid()}: Delta table already exists in S3 at s3://{settings.minio.bucket}/{dc_id_str}"
                 )
-                return
+                print(
+                    f"Worker {os.getpid()}: Will process with overwrite=True to create local deltatable document"
+                )
 
     # Wait longer to ensure the API has fully started
     print(f"Worker {os.getpid()}: Waiting 5 seconds before processing data collections")
