@@ -88,11 +88,18 @@ def _async_get_project_from_name(
 
 
 # @validate_call(validate_return=True)
-async def _helper_create_project_beanie(project: Project) -> dict:
+async def _helper_create_project_beanie(project: Project, original_ids: dict | None = None) -> dict:
     """Helper function to create a project in the database.
 
     Args:
         project (ProjectBeanie): Project object containing project information
+        original_ids (dict | None): Original IDs from YAML to preserve static IDs
+            Format: {
+                "project": str,
+                "workflows": {
+                    wf_idx: {"id": str, "data_collections": {dc_idx: str}}
+                }
+            }
 
     Raises:
         HTTPException: If the project already exists in the database
@@ -114,6 +121,61 @@ async def _helper_create_project_beanie(project: Project) -> dict:
     logger.debug(f"Project before conversion: {project}")
     mongo_project = project.mongo()
     logger.debug(f"Mongo project: {mongo_project}")
+
+    # CRITICAL: Restore static IDs from YAML in the MongoDB document dict
+    # This ensures IDs are preserved across multiple K8s instances sharing the same S3 bucket
+    if original_ids:
+        from bson import ObjectId
+
+        # Restore project ID if provided
+        if original_ids.get("project"):
+            original_project_id = original_ids["project"]
+            current_project_id = str(mongo_project.get("_id", ""))
+            if current_project_id != original_project_id:
+                logger.warning(
+                    f"Restoring project ID in mongo_project dict: {current_project_id} -> {original_project_id}"
+                )
+                mongo_project["_id"] = ObjectId(original_project_id)
+            else:
+                logger.debug(f"Project ID already correct: {original_project_id}")
+
+        # Restore workflow and data collection IDs
+        if "workflows" in original_ids and "workflows" in mongo_project:
+            for wf_idx, wf_ids in original_ids["workflows"].items():
+                if wf_idx < len(mongo_project["workflows"]):
+                    workflow = mongo_project["workflows"][wf_idx]
+
+                    # Restore workflow ID
+                    if wf_ids.get("id"):
+                        original_wf_id = wf_ids["id"]
+                        current_wf_id = str(workflow.get("_id", ""))
+                        if current_wf_id != original_wf_id:
+                            logger.warning(
+                                f"Restoring workflow[{wf_idx}] ID in mongo_project dict: {current_wf_id} -> {original_wf_id}"
+                            )
+                            workflow["_id"] = ObjectId(original_wf_id)
+                        else:
+                            logger.debug(f"Workflow[{wf_idx}] ID already correct: {original_wf_id}")
+
+                    # Restore data collection IDs
+                    if "data_collections" in wf_ids and "data_collections" in workflow:
+                        for dc_idx, dc_id in wf_ids["data_collections"].items():
+                            if dc_idx < len(workflow["data_collections"]):
+                                dc = workflow["data_collections"][dc_idx]
+                                current_dc_id = str(dc.get("_id", ""))
+                                if current_dc_id != dc_id:
+                                    logger.warning(
+                                        f"Restoring data_collection[{wf_idx},{dc_idx}] ID in mongo_project dict: {current_dc_id} -> {dc_id}"
+                                    )
+                                    dc["_id"] = ObjectId(dc_id)
+                                else:
+                                    logger.debug(
+                                        f"DataCollection[{wf_idx},{dc_idx}] ID already correct: {dc_id}"
+                                    )
+
+        logger.info(
+            "Static IDs successfully restored in mongo_project dict before database insertion"
+        )
 
     # Save the project to the database using PyMongo's insert_one
     result = projects_collection.insert_one(mongo_project)

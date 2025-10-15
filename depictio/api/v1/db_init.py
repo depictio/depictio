@@ -62,6 +62,21 @@ async def create_initial_project(admin_user: UserBeanie, token_payload: dict | N
         f"Original IDs from YAML - Project: {original_project_id}, "
         f"Workflows: {original_workflow_ids}, DataCollections: {original_dc_ids}"
     )
+
+    # Package original IDs in a structured format for passing to helper function
+    original_ids = {
+        "project": original_project_id,
+        "workflows": {},
+    }
+    for wf_idx, wf_id in original_workflow_ids.items():
+        original_ids["workflows"][wf_idx] = {
+            "id": wf_id,
+            "data_collections": {},
+        }
+    for (wf_idx, dc_idx), dc_id in original_dc_ids.items():
+        if wf_idx not in original_ids["workflows"]:
+            original_ids["workflows"][wf_idx] = {"id": None, "data_collections": {}}
+        original_ids["workflows"][wf_idx]["data_collections"][dc_idx] = dc_id
     logger.debug(f"Project config: {project_config}")
     project = ProjectBeanie(**project_config)  # type: ignore[missing-argument]
 
@@ -98,7 +113,7 @@ async def create_initial_project(admin_user: UserBeanie, token_payload: dict | N
     logger.debug(f"Token: {format_pydantic(token)}")
 
     try:
-        payload = await _helper_create_project_beanie(project)
+        payload = await _helper_create_project_beanie(project, original_ids=original_ids)
 
         logger.debug(f"Project creation payload: {payload}")
         if payload["success"]:
