@@ -14,6 +14,7 @@ from depictio.api.v1.endpoints.user_endpoints.utils import (
     _ensure_mongodb_connection,
     create_group_helper_beanie,
 )
+from depictio.models.models.base import PyObjectId
 from depictio.models.models.dashboards import DashboardData
 from depictio.models.models.projects import ProjectBeanie
 from depictio.models.models.users import GroupBeanie, Permission, TokenBeanie, UserBase, UserBeanie
@@ -41,9 +42,58 @@ async def create_initial_project(admin_user: UserBeanie, token_payload: dict | N
         "viewers": [],
     }
 
+    # IMPORTANT: Save the original IDs from YAML before Pydantic processing
+    # This ensures static IDs are preserved across multiple K8s instances
+    original_project_id = project_config.get("id")
+    original_workflow_ids = {}
+    original_dc_ids = {}
+
+    for wf_idx, workflow in enumerate(project_config.get("workflows", [])):
+        wf_id = workflow.get("id")
+        if wf_id:
+            original_workflow_ids[wf_idx] = wf_id
+
+        for dc_idx, dc in enumerate(workflow.get("data_collections", [])):
+            dc_id = dc.get("id")
+            if dc_id:
+                original_dc_ids[(wf_idx, dc_idx)] = dc_id
+
+    logger.debug(
+        f"Original IDs from YAML - Project: {original_project_id}, "
+        f"Workflows: {original_workflow_ids}, DataCollections: {original_dc_ids}"
+    )
     logger.debug(f"Project config: {project_config}")
     project = ProjectBeanie(**project_config)  # type: ignore[missing-argument]
-    logger.debug(f"Project object: {format_pydantic(project)}")
+
+    # DEFENSIVE: Restore original IDs if they were lost during Pydantic instantiation
+    if original_project_id and str(project.id) != original_project_id:
+        logger.warning(
+            f"Project ID changed from {original_project_id} to {project.id}, restoring original"
+        )
+        project.id = PyObjectId(original_project_id)
+
+    for wf_idx, workflow in enumerate(project.workflows):
+        if wf_idx in original_workflow_ids:
+            original_wf_id = original_workflow_ids[wf_idx]
+            if str(workflow.id) != original_wf_id:
+                logger.warning(
+                    f"Workflow[{wf_idx}] ID changed from {original_wf_id} to {workflow.id}, "
+                    f"restoring original"
+                )
+                workflow.id = PyObjectId(original_wf_id)
+
+        for dc_idx, dc in enumerate(workflow.data_collections):
+            key = (wf_idx, dc_idx)
+            if key in original_dc_ids:
+                original_dc_id = original_dc_ids[key]
+                if str(dc.id) != original_dc_id:
+                    logger.warning(
+                        f"DataCollection[{wf_idx},{dc_idx}] ID changed from {original_dc_id} "
+                        f"to {dc.id}, restoring original"
+                    )
+                    dc.id = PyObjectId(original_dc_id)
+
+    logger.debug(f"Project object after ID restoration: {format_pydantic(project)}")
     token = TokenBeanie(**token_payload["token"])  # type: ignore[missing-argument]
     logger.debug(f"Token: {format_pydantic(token)}")
 

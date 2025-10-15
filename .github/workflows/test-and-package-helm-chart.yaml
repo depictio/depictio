@@ -597,10 +597,65 @@ jobs:
               else:
                   print("⚠️  'users' collection not found")
 
+              # Test static ID preservation for iris demo project
+              if "projects" in collections:
+                  print("\n🔍 Verifying static IDs for iris demo project...")
+                  projects_collection = db["projects"]
 
+                  # Expected static IDs from YAML
+                  expected_project_id = "646b0f3c1e4a2d7f8e5b8c9a"
+                  expected_workflow_id = "646b0f3c1e4a2d7f8e5b8c9b"
+                  expected_dc_id = "646b0f3c1e4a2d7f8e5b8c9c"
+
+                  # Find the iris demo project
+                  iris_project = projects_collection.find_one({"name": "Iris Dataset Project Data Analysis"})
+
+                  if iris_project:
+                      actual_project_id = str(iris_project["_id"])
+                      print(f"📋 Project ID - Expected: {expected_project_id}, Actual: {actual_project_id}")
+
+                      if actual_project_id == expected_project_id:
+                          print("✅ Project ID matches static ID from YAML")
+                      else:
+                          print(f"❌ Project ID mismatch! Expected {expected_project_id}, got {actual_project_id}")
+                          exit(1)
+
+                      # Check workflow ID
+                      if "workflows" in iris_project and len(iris_project["workflows"]) > 0:
+                          workflow = iris_project["workflows"][0]
+                          actual_workflow_id = str(workflow["_id"])
+                          print(f"📋 Workflow ID - Expected: {expected_workflow_id}, Actual: {actual_workflow_id}")
+
+                          if actual_workflow_id == expected_workflow_id:
+                              print("✅ Workflow ID matches static ID from YAML")
+                          else:
+                              print(f"❌ Workflow ID mismatch! Expected {expected_workflow_id}, got {actual_workflow_id}")
+                              exit(1)
+
+                          # Check data collection ID
+                          if "data_collections" in workflow and len(workflow["data_collections"]) > 0:
+                              dc = workflow["data_collections"][0]
+                              actual_dc_id = str(dc["_id"])
+                              print(f"📋 Data Collection ID - Expected: {expected_dc_id}, Actual: {actual_dc_id}")
+
+                              if actual_dc_id == expected_dc_id:
+                                  print("✅ Data Collection ID matches static ID from YAML")
+                                  print("🎉 All static IDs are preserved correctly!")
+                              else:
+                                  print(f"❌ Data Collection ID mismatch! Expected {expected_dc_id}, got {actual_dc_id}")
+                                  exit(1)
+                          else:
+                              print("⚠️  No data collections found in workflow")
+                      else:
+                          print("⚠️  No workflows found in project")
+                  else:
+                      print("⚠️  Iris demo project not found in database")
 
           except Exception as e:
               print(f"❌ MongoDB failed: {e}")
+              import traceback
+              traceback.print_exc()
+              exit(1)
           '
 
           # Test MinIO - Check for depictio-bucket
