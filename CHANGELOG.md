@@ -6,23 +6,62 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.5.1</summary>
+<summary>Click to expand the changelog for 0.5.2</summary>
 
 ### Changes 📜
 
 #### New Features ✨
 
-* feat: Always create component buttons in edit mode, with CSS controlling visibility [669fdc92]
-* feat: Implement initial edit mode state determination for draggable layout [1e56ebe3]
-* feat: Refactor sidebar callbacks for improved favicon and navbar management on dashboard pages [ba99f97b]
-* feat: Refactor dashboard modal layout to improve form structure and add icon customization options [40d10c09]
-* feat: Update dashboard header layout with improved button sizes and new info section [0d4ad756]
-* feat: Refactor admin header to return content directly without AppShellHeader wrapper [62d294af]
-* feat: Enhance clientside layout and padding management for dashboard and other pages [b10bf77b]
-* feat: Enhance draggable grid resize handle functionality and visibility [58b0690b]
-* feat: Enhance theme management with improved clientside callbacks and logo updates [250437a2]
-* feat: Enhance dashboard model and UI with subtitle and icon customization options [5887297b]
-* feat: Add Redis support with configuration, deployment, and connectivity tests [f86b4f10]
+* feat: Add S3 delta table existence check and improve project ID handling during creation [bc31ff79]
+* feat: Add EMBL specific values for unauthenticated access and Google OAuth configuration [316c4f33]
+* feat: Enable auto-refresh for analytics dashboard with a 30-second interval [3e259297]
+* feat: Enhance filtering logic for date and range components in metadata samples retrieval [c913dd2b]
+* feat: Update icon color handling to apply via CSS style to prevent browser freeze in card and interactive components [1c276fb0]
+* feat: Implement defensive checks to prevent spurious re-renders during Patch operations in draggable, card, figure, and multiqc components [61a2621b]
+* feat: Implement auto-promotion for data collection IDs with join configurations and enhance component removal with Patch updates [103baee8]
+* feat: Enhance joined DataFrame loading and filtering by grouping metadata by dc_id to prevent silent failures and improve logging for skipped filters [7dfdcc24]
+* feat: Enhance interactive filtering by checking data collection compatibility and improving join handling [8b4c3072]
+* feat: Add init container to verify config storage is mounted and writable for backend and frontend deployments [96400521]
+* feat: Refactor icon overlay to use DashIconify kwargs for improved styling and compliance [ce4acaca]
+* feat: Replace DashIconify with ActionIcon for improved dashboard icon styling and consistency [1e9e9d8a]
+* feat: Enhance code-mode figure handling by truncating long code content and adding column name and aggregation metadata for card components [4f7442bf]
+* feat: Update dashboard icon preview to use ActionIcon for consistent UX and improved styling [76c55c18]
+* feat: Update component dimensions and enhance user permission checks for editing and duplicating components [aa03799f]
+* feat: Add MultiQC data collection styling and metadata handling in project data collections [b2d995fd]
+* feat: Update default dimensions for various components in metadata configuration [8fa1c62f]
+* feat: Enhance project permission checks and streamline dashboard access logic [d03deeb8]
+* feat: Update ampliseq project configuration with new metadata structure and file references [4d877513]
+* feat: Add synchronization for visualization type in stored metadata and enhance column extraction from preprocessing code [afd5fb93]
+* feat: Implement URL pattern helpers for API, frontend, and MinIO services in Helm templates [5a7850f1]
+* feat: Add workflow system support with icons and colors in dashboard management [d09e6096]
+
+#### Bug Fixes 🐛
+
+* fix: Standardize 'Iris Dashboard Demo' to 'Iris Dashboard demo' for consistency in tests [ca6ee804]
+* fix: Update references to 'Iris Dashboard' to 'Iris Dashboard Demo' for clarity in unauthenticated mode tests [d7d8a3d8]
+* fix: Comment out theme persistence test in dark mode core functionality [8a83fe7b]
+* fix: Prevent horizontal scrollbar on dashboard pages by adjusting overflow properties [310a8d9f]
+* fix: Remove default background color from draggable component styling [6e06fd6c]
+* fix: Comment out note about Celery worker container in FastAPI script [ca58c0ea]
+* fix: Change prevent_initial_call to false for theme switch callback [937e08b1]
+* fix: Fix container build [acf26a86]
+
+#### Other Changes 📝
+
+* Bump version: 0.5.1 → 0.5.2 [509a3f71]
+* Add favicon and update screenshot assets [eba98991]
+* Refactor Jupyter Notebook: Remove redundant code cells and streamline data processing for Faith PD and taxonomic richness analysis. Consolidate plotting logic and enhance clarity in data manipulation steps. [61399dff]
+* Update CHANGELOG.md for v0.5.1 [913dbc0f]
+* Bump version: 0.5.0 → 0.5.1 [ae41f896]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+ectivity tests [f86b4f10]
 
 #### Bug Fixes 🐛
 
