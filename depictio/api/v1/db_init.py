@@ -30,6 +30,26 @@ async def create_initial_project(admin_user: UserBeanie, token_payload: dict | N
     project_config = get_config(project_yaml_path)
     project_config["yaml_config_path"] = project_yaml_path
 
+    # CRITICAL: Force static IDs to ensure consistency across K8s instances
+    # The YAML may be modified by init containers, so we hardcode the expected IDs
+    STATIC_PROJECT_ID = "646b0f3c1e4a2d7f8e5b8c9a"
+    STATIC_WORKFLOW_ID = "646b0f3c1e4a2d7f8e5b8c9b"
+    STATIC_DC_ID = "646b0f3c1e4a2d7f8e5b8c9c"
+
+    logger.info(
+        f"Forcing static IDs for iris demo project: Project={STATIC_PROJECT_ID}, "
+        f"Workflow={STATIC_WORKFLOW_ID}, DataCollection={STATIC_DC_ID}"
+    )
+
+    project_config["id"] = STATIC_PROJECT_ID
+    if project_config.get("workflows") and len(project_config["workflows"]) > 0:
+        project_config["workflows"][0]["id"] = STATIC_WORKFLOW_ID
+        if (
+            project_config["workflows"][0].get("data_collections")
+            and len(project_config["workflows"][0]["data_collections"]) > 0
+        ):
+            project_config["workflows"][0]["data_collections"][0]["id"] = STATIC_DC_ID
+
     project_config["permissions"] = {
         "owners": [
             UserBase(
