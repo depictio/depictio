@@ -125,26 +125,26 @@ workflows:
             on_columns: ["sample"]
             how: "inner"
             with_dc: ["metadata"]
-      # - data_collection_tag: "ancom_volcano"
-      #   description: "ANCOM differential abundance results"
-      #   config:
-      #     type: "Table"
-      #     metatype: "Metadata"
-      #     scan:
-      #       mode: "single"
-      #       scan_parameters:
-      #         filename: "../api/v1/configs/ampliseq_dataset/ancom_volcano.tsv"
-      #     dc_specific_properties:
-      #       format: "TSV"
-      #       polars_kwargs:
-      #         separator: "\t"
-      #       columns_description:
-      #         "id": "ASV identifier"
-      #         "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
-      #         "Kingdom": "Kingdom classification"
-      #         "Phylum": "Phylum classification"
-      #         "W": "W statistic from ANCOM analysis"
-      #         "clr": "Centered log-ratio value"
+      - data_collection_tag: "ancom_volcano"
+        description: "ANCOM differential abundance results"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "../api/v1/configs/ampliseq_dataset/ancom_volcano.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "id": "ASV identifier"
+              "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
+              "Kingdom": "Kingdom classification"
+              "Phylum": "Phylum classification"
+              "W": "W statistic from ANCOM analysis"
+              "clr": "Centered log-ratio value"
           # join:
           #   on_columns: ["id"]
           #   how: "inner"
