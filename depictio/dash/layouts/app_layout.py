@@ -32,6 +32,7 @@ from depictio.dash.layouts.projects import layout as projects_layout
 from depictio.dash.layouts.projectwise_user_management import (
     layout as projectwise_user_management_layout,
 )
+from depictio.dash.layouts.sidebar import create_static_navbar_content
 from depictio.dash.layouts.tokens_management import layout as tokens_management_layout
 from depictio.dash.layouts.users_management import layout as users_management_layout
 
@@ -667,10 +668,14 @@ def create_app_layout():
                 storage_type="memory",
                 data=None,  # Will be populated by consolidated callback
             ),
+            # PERFORMANCE OPTIMIZATION: Changed from "local" to "session" storage
+            # This was causing 885ms initialization delay due to reading 92KB from localStorage
+            # Session storage clears on browser close, preventing accumulated stale data
+            # Data can be reconstructed from dashboard metadata on each page load anyway
             dcc.Store(
                 id="local-store-components-metadata",
                 data={},
-                storage_type="local",
+                storage_type="session",  # Changed from "local" - clears on browser close
             ),
             dcc.Store(id="current-edit-parent-index", storage_type="memory"),
             # Tab state management (frontend only, no backend persistence)
@@ -724,7 +729,7 @@ def create_app_layout():
                 },
                 children=[
                     dmc.AppShellNavbar(  # type: ignore[unresolved-attribute]
-                        children=[],  # Content populated by render_dynamic_navbar_content() callback
+                        children=create_static_navbar_content(),  # PERFORMANCE OPTIMIZATION: Static navbar content - no callback needed
                         id="app-shell-navbar-content",
                     ),
                     dmc.AppShellHeader(  # type: ignore[unresolved-attribute]

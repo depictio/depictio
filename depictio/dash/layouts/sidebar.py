@@ -3,7 +3,145 @@ import dash_mantine_components as dmc
 from dash import ALL, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
+from depictio.dash.layouts.consolidated_api import get_cached_server_status
 from depictio.dash.simple_theme import create_theme_controls
+
+
+def create_static_navbar_content():
+    """
+    PERFORMANCE OPTIMIZATION: Generate static navbar HTML once at app startup.
+
+    This function generates the navbar content that was previously built dynamically
+    via a callback on every page load, causing ~2419ms delay.
+
+    Returns:
+        list: Navbar children to be passed to AppShellNavbar
+    """
+    depictio_logo_container = html.Div(
+        id="navbar-logo-container",
+        children=[
+            dcc.Link(
+                dmc.Image(
+                    id="navbar-logo-content",
+                    src=dash.get_asset_url("images/logos/logo_black.svg"),
+                    w=185,
+                ),
+                href="/",
+                style={"alignItems": "center", "justifyContent": "center", "display": "flex"},
+            )
+        ],
+    )
+
+    sidebar_links = dmc.Stack(
+        id="sidebar-content",
+        children=[
+            dmc.NavLink(
+                id={"type": "sidebar-link", "index": "dashboards"},
+                label=dmc.Text(
+                    "Dashboards",
+                    size="lg",
+                    style={"fontSize": "16px"},
+                    className="section-accent",
+                ),
+                leftSection=DashIconify(icon="material-symbols:dashboard", height=25),
+                href="/dashboards",
+                style={"padding": "20px"},
+                color="orange",
+            ),
+            dmc.NavLink(
+                id={"type": "sidebar-link", "index": "projects"},
+                label=dmc.Text(
+                    "Projects",
+                    size="lg",
+                    style={"fontSize": "16px"},
+                    className="section-accent",
+                ),
+                leftSection=DashIconify(icon="mdi:jira", height=25),
+                href="/projects",
+                style={"padding": "20px"},
+                color="teal",
+            ),
+            dmc.NavLink(
+                id={"type": "sidebar-link", "index": "administration"},
+                label=dmc.Text(
+                    "Administration",
+                    size="lg",
+                    style={"fontSize": "16px"},
+                    className="section-accent",
+                ),
+                leftSection=DashIconify(icon="material-symbols:settings", height=25),
+                href="/admin",
+                style={"padding": "20px", "display": "none"},
+                color="blue",
+            ),
+            dmc.NavLink(
+                id={"type": "sidebar-link", "index": "about"},
+                label=dmc.Text(
+                    "About",
+                    size="lg",
+                    style={"fontSize": "16px"},
+                    className="section-accent",
+                ),
+                leftSection=DashIconify(icon="mingcute:question-line", height=25),
+                href="/about",
+                style={"padding": "20px"},
+                color="gray",
+            ),
+        ],
+        gap="xs",
+        style={
+            "whiteSpace": "nowrap",
+            "flex": "1",
+            "overflowY": "auto",
+        },
+    )
+
+    sidebar_footer = html.Div(
+        id="sidebar-footer",
+        children=[
+            dmc.Center(create_theme_controls()),
+            dmc.Grid(
+                id="sidebar-footer-server-status",
+                align="center",
+                justify="center",
+            ),
+            html.Hr(),
+            html.Div(
+                id="avatar-container",
+                style={
+                    "textAlign": "center",
+                    "justifyContent": "center",
+                    "display": "flex",
+                    "alignItems": "center",
+                    "flexDirection": "row",
+                    "paddingBottom": "16px",
+                },
+            ),
+        ],
+        style={
+            "flexShrink": 0,
+        },
+    )
+
+    # Return layout - same for all pages
+    return [
+        dmc.Stack(
+            [
+                dmc.Center(
+                    [depictio_logo_container],
+                    id="navbar-logo-center",
+                    pt="md",
+                ),
+                sidebar_links,
+                sidebar_footer,
+            ],
+            justify="space-between",
+            h="100%",
+            style={
+                "height": "100%",
+            },
+        )
+    ]
 
 
 def register_sidebar_callbacks(app):
@@ -193,8 +331,10 @@ def register_sidebar_callbacks(app):
         prevent_initial_call=False,
     )
     def update_server_status(server_cache):
-        from depictio.dash.layouts.consolidated_api import get_cached_server_status
-
+        """
+        PERFORMANCE OPTIMIZATION: Import moved to module level to avoid repeated import overhead.
+        Update server status badge based on cached server status data.
+        """
         # Get server status from consolidated cache
         server_status = get_cached_server_status(server_cache)
         if not server_status:
@@ -250,175 +390,206 @@ def register_sidebar_callbacks(app):
         prevent_initial_call=False,
     )
 
-    # Avatar callback - populate avatar container with user info
-    @app.callback(
+    # Avatar callback - CONVERTED TO CLIENT-SIDE for instant response (~0.8s savings)
+    # This breaks CASCADE #1 (user-cache-store → avatar-container, 1.9s total)
+    app.clientside_callback(
+        """
+        function(user_cache) {
+            console.log('🔧 CLIENTSIDE AVATAR: user_cache received:', !!user_cache);
+
+            // Check if we have valid user data
+            if (!user_cache || !user_cache.user) {
+                console.log('❌ No user cache - returning empty');
+                return [];
+            }
+
+            var user = user_cache.user;
+            if (!user.email) {
+                console.log('❌ No email in user - returning empty');
+                return [];
+            }
+
+            var email = user.email;
+            var name = user.name || email.split('@')[0];
+
+            console.log('✅ CLIENTSIDE AVATAR: Creating avatar for', email);
+
+            // Create avatar link with image
+            var avatarSrc = 'https://ui-avatars.com/api/?format=svg&name=' + encodeURIComponent(email) +
+                           '&background=AEC8FF&color=white&rounded=true&bold=true&format=svg&size=16';
+
+            return [
+                {
+                    namespace: 'dash_core_components',
+                    type: 'Link',
+                    props: {
+                        href: '/profile',
+                        children: {
+                            namespace: 'dash_mantine_components',
+                            type: 'Avatar',
+                            props: {
+                                id: 'avatar',
+                                src: avatarSrc,
+                                size: 'md',
+                                radius: 'xl'
+                            }
+                        }
+                    }
+                },
+                {
+                    namespace: 'dash_mantine_components',
+                    type: 'Text',
+                    props: {
+                        children: name,
+                        size: 'sm',
+                        style: {marginLeft: '5px'}
+                    }
+                }
+            ];
+        }
+        """,
         Output("avatar-container", "children"),
         Input("user-cache-store", "data"),
         prevent_initial_call=False,
     )
-    def update_avatar(user_cache):
-        """Update avatar with user information from consolidated cache."""
-        from depictio.api.v1.configs.logging_init import logger
 
-        # Get user from consolidated cache
-        if user_cache and isinstance(user_cache, dict) and "user" in user_cache:
-            user_data = user_cache["user"]
-
-            if user_data and user_data.get("email"):
-                email = user_data["email"]
-                name = user_data.get("name", email.split("@")[0])
-            else:
-                return []
-        else:
-            return []
-
-        avatar = dcc.Link(
-            dmc.Avatar(
-                id="avatar",
-                src=f"https://ui-avatars.com/api/?format=svg&name={email}&background=AEC8FF&color=white&rounded=true&bold=true&format=svg&size=16",
-                size="md",
-                radius="xl",
-            ),
-            href="/profile",
-        )
-        name_text = dmc.Text(name, size="sm", style={"marginLeft": "5px"})
-        logger.info(f"✅ AVATAR CALLBACK: Created avatar for {email}")
-        return [avatar, name_text]
-
-    # Static Navbar Content - same layout for all pages
-    @app.callback(
-        Output("app-shell-navbar-content", "children"),
-        Input("url", "pathname"),
-        prevent_initial_call=False,
-    )
-    def render_dynamic_navbar_content(pathname):
-        """Render navbar content with logo, navlinks, and footer with avatar."""
-        depictio_logo_container = html.Div(
-            id="navbar-logo-container",
-            children=[
-                dcc.Link(
-                    dmc.Image(
-                        id="navbar-logo-content",
-                        src=dash.get_asset_url("images/logos/logo_black.svg"),
-                        # h=38,
-                        w=185,
-                    ),
-                    href="/",
-                    style={"alignItems": "center", "justifyContent": "center", "display": "flex"},
-                )
-            ],
-        )
-
-        sidebar_links = dmc.Stack(
-            id="sidebar-content",
-            children=[
-                dmc.NavLink(
-                    id={"type": "sidebar-link", "index": "dashboards"},
-                    label=dmc.Text(
-                        "Dashboards",
-                        size="lg",
-                        style={"fontSize": "16px"},
-                        className="section-accent",
-                    ),
-                    leftSection=DashIconify(icon="material-symbols:dashboard", height=25),
-                    href="/dashboards",
-                    style={"padding": "20px"},
-                    color="orange",
-                ),
-                dmc.NavLink(
-                    id={"type": "sidebar-link", "index": "projects"},
-                    label=dmc.Text(
-                        "Projects",
-                        size="lg",
-                        style={"fontSize": "16px"},
-                        className="section-accent",
-                    ),
-                    leftSection=DashIconify(icon="mdi:jira", height=25),
-                    href="/projects",
-                    style={"padding": "20px"},
-                    color="teal",
-                ),
-                dmc.NavLink(
-                    id={"type": "sidebar-link", "index": "administration"},
-                    label=dmc.Text(
-                        "Administration",
-                        size="lg",
-                        style={"fontSize": "16px"},
-                        className="section-accent",
-                    ),
-                    leftSection=DashIconify(icon="material-symbols:settings", height=25),
-                    href="/admin",
-                    style={"padding": "20px", "display": "none"},
-                    color="blue",
-                ),
-                dmc.NavLink(
-                    id={"type": "sidebar-link", "index": "about"},
-                    label=dmc.Text(
-                        "About",
-                        size="lg",
-                        style={"fontSize": "16px"},
-                        className="section-accent",
-                    ),
-                    leftSection=DashIconify(icon="mingcute:question-line", height=25),
-                    href="/about",
-                    style={"padding": "20px"},
-                    color="gray",
-                ),
-            ],
-            gap="xs",
-            style={
-                "whiteSpace": "nowrap",
-                "flex": "1",
-                "overflowY": "auto",
-            },
-        )
-
-        sidebar_footer = html.Div(
-            id="sidebar-footer",
-            children=[
-                dmc.Center(create_theme_controls()),
-                dmc.Grid(
-                    id="sidebar-footer-server-status",
-                    align="center",
-                    justify="center",
-                ),
-                html.Hr(),
-                html.Div(
-                    id="avatar-container",
-                    style={
-                        "textAlign": "center",
-                        "justifyContent": "center",
-                        "display": "flex",
-                        "alignItems": "center",
-                        "flexDirection": "row",
-                        "paddingBottom": "16px",  # Add padding to bottom of avatar
-                    },
-                ),
-            ],
-            style={
-                "flexShrink": 0,
-            },
-        )
-
-        # Return layout - same for all pages
-        return [
-            dmc.Stack(
-                [
-                    dmc.Center(
-                        [depictio_logo_container],
-                        id="navbar-logo-center",
-                        pt="md",  # Add padding to top of logo
-                    ),
-                    sidebar_links,
-                    sidebar_footer,
-                ],
-                justify="space-between",
-                h="100%",
-                style={
-                    "height": "100%",
-                },
-            )
-        ]
+    # PERFORMANCE OPTIMIZATION: Navbar callback disabled - replaced with static content at app startup
+    # This callback was causing ~2419ms delay on every page load by rebuilding the same HTML structure
+    # The navbar content is now generated once by create_static_navbar_content() in app_layout.py
+    # Commenting out instead of removing to preserve the code structure for reference
+    # @app.callback(
+    #     Output("app-shell-navbar-content", "children"),
+    #     Input("url", "pathname"),
+    #     prevent_initial_call=False,
+    # )
+    # def render_dynamic_navbar_content(pathname):
+    #     """Render navbar content with logo, navlinks, and footer with avatar."""
+    #     depictio_logo_container = html.Div(
+    #         id="navbar-logo-container",
+    #         children=[
+    #             dcc.Link(
+    #                 dmc.Image(
+    #                     id="navbar-logo-content",
+    #                     src=dash.get_asset_url("images/logos/logo_black.svg"),
+    #                     # h=38,
+    #                     w=185,
+    #                 ),
+    #                 href="/",
+    #                 style={"alignItems": "center", "justifyContent": "center", "display": "flex"},
+    #             )
+    #         ],
+    #     )
+    #
+    #     sidebar_links = dmc.Stack(
+    #         id="sidebar-content",
+    #         children=[
+    #             dmc.NavLink(
+    #                 id={"type": "sidebar-link", "index": "dashboards"},
+    #                 label=dmc.Text(
+    #                     "Dashboards",
+    #                     size="lg",
+    #                     style={"fontSize": "16px"},
+    #                     className="section-accent",
+    #                 ),
+    #                 leftSection=DashIconify(icon="material-symbols:dashboard", height=25),
+    #                 href="/dashboards",
+    #                 style={"padding": "20px"},
+    #                 color="orange",
+    #             ),
+    #             dmc.NavLink(
+    #                 id={"type": "sidebar-link", "index": "projects"},
+    #                 label=dmc.Text(
+    #                     "Projects",
+    #                     size="lg",
+    #                     style={"fontSize": "16px"},
+    #                     className="section-accent",
+    #                 ),
+    #                 leftSection=DashIconify(icon="mdi:jira", height=25),
+    #                 href="/projects",
+    #                 style={"padding": "20px"},
+    #                 color="teal",
+    #             ),
+    #             dmc.NavLink(
+    #                 id={"type": "sidebar-link", "index": "administration"},
+    #                 label=dmc.Text(
+    #                     "Administration",
+    #                     size="lg",
+    #                     style={"fontSize": "16px"},
+    #                     className="section-accent",
+    #                 ),
+    #                 leftSection=DashIconify(icon="material-symbols:settings", height=25),
+    #                 href="/admin",
+    #                 style={"padding": "20px", "display": "none"},
+    #                 color="blue",
+    #             ),
+    #             dmc.NavLink(
+    #                 id={"type": "sidebar-link", "index": "about"},
+    #                 label=dmc.Text(
+    #                     "About",
+    #                     size="lg",
+    #                     style={"fontSize": "16px"},
+    #                     className="section-accent",
+    #                 ),
+    #                 leftSection=DashIconify(icon="mingcute:question-line", height=25),
+    #                 href="/about",
+    #                 style={"padding": "20px"},
+    #                 color="gray",
+    #             ),
+    #         ],
+    #         gap="xs",
+    #         style={
+    #             "whiteSpace": "nowrap",
+    #             "flex": "1",
+    #             "overflowY": "auto",
+    #         },
+    #     )
+    #
+    #     sidebar_footer = html.Div(
+    #         id="sidebar-footer",
+    #         children=[
+    #             dmc.Center(create_theme_controls()),
+    #             dmc.Grid(
+    #                 id="sidebar-footer-server-status",
+    #                 align="center",
+    #                 justify="center",
+    #             ),
+    #             html.Hr(),
+    #             html.Div(
+    #                 id="avatar-container",
+    #                 style={
+    #                     "textAlign": "center",
+    #                     "justifyContent": "center",
+    #                     "display": "flex",
+    #                     "alignItems": "center",
+    #                     "flexDirection": "row",
+    #                     "paddingBottom": "16px",  # Add padding to bottom of avatar
+    #                 },
+    #             ),
+    #         ],
+    #         style={
+    #             "flexShrink": 0,
+    #         },
+    #     )
+    #
+    #     # Return layout - same for all pages
+    #     return [
+    #         dmc.Stack(
+    #             [
+    #                 dmc.Center(
+    #                     [depictio_logo_container],
+    #                     id="navbar-logo-center",
+    #                     pt="md",  # Add padding to top of logo
+    #                 ),
+    #                 sidebar_links,
+    #                 sidebar_footer,
+    #             ],
+    #             justify="space-between",
+    #             h="100%",
+    #             style={
+    #                 "height": "100%",
+    #             },
+    #         )
+    #     ]
 
 
 def _create_powered_by_footer():

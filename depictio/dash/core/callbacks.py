@@ -203,10 +203,15 @@ def register_all_callbacks(app):
 
     # Register analytics callbacks
     # from depictio.dash.components.analytics_tracker import register_analytics_callbacks
-    from depictio.dash.layouts.admin_analytics_callbacks import register_admin_analytics_callbacks
+
+    # PERFORMANCE OPTIMIZATION: Admin analytics callbacks commented out to reduce initial load time
+    # These 8 callbacks were adding ~50-100ms to the Dash renderer initialization (callback graph building)
+    # They only need to run on /admin page, not on every page load
+    # TODO: Re-enable with lazy loading when /admin page is accessed
+    # from depictio.dash.layouts.admin_analytics_callbacks import register_admin_analytics_callbacks
 
     # register_analytics_callbacks(app)
-    register_admin_analytics_callbacks(app)
+    # register_admin_analytics_callbacks(app)  # Commented out for performance
 
 
 def register_layout_callbacks(app):

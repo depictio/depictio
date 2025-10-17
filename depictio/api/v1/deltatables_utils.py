@@ -1,5 +1,7 @@
 import concurrent.futures
+import hashlib
 import itertools
+import json
 import sys
 
 import httpx
@@ -9,6 +11,49 @@ from bson import ObjectId
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.s3 import polars_s3_config
+
+
+# PERFORMANCE OPTIMIZATION: Filter hash generation for caching filtered DataFrames
+def _generate_filter_hash(metadata: list[dict] | None) -> str:
+    """
+    Generate a stable hash from metadata filters for cache key generation.
+
+    Args:
+        metadata: List of metadata dicts containing filter information
+
+    Returns:
+        Short hash string (8 chars) representing the filter state
+    """
+    if not metadata:
+        return "nofilters"
+
+    # Create a stable representation of filters
+    # Sort by column name to ensure consistent ordering
+    filter_repr = []
+    for component in metadata:
+        # Extract metadata from nested structure if needed
+        if "metadata" in component:
+            meta = component["metadata"]
+            column_name = meta.get("column_name", "")
+            component_type = meta.get("interactive_component_type", "")
+            value = component.get("value")
+        else:
+            column_name = component.get("column_name", "")
+            component_type = component.get("interactive_component_type", "")
+            value = component.get("value")
+
+        # Create stable representation
+        filter_dict = {"col": column_name, "type": component_type, "val": value}
+        filter_repr.append(filter_dict)
+
+    # Sort for stability
+    filter_repr.sort(key=lambda x: (x["col"], x["type"]))
+
+    # Convert to JSON and hash
+    filter_json = json.dumps(filter_repr, sort_keys=True)
+    filter_hash = hashlib.md5(filter_json.encode()).hexdigest()[:8]
+
+    return filter_hash
 
 
 # Function to add filter criteria to a list
@@ -571,6 +616,7 @@ def load_deltatable_lite(
     # PERFORMANCE OPTIMIZATION: Early cache check to skip expensive operations
     # Separate cache keys for preview vs full data to prevent conflicts
     # Include column selection in cache key to avoid conflicts between different projections
+    # FILTER CACHING: Include filter hash in cache key to cache filtered DataFrames (~5-8s savings)
     cache_suffix = "preview" if load_for_preview else "base"
     if select_columns:
         # Create deterministic string from sorted column list
@@ -580,17 +626,54 @@ def load_deltatable_lite(
         )
     else:
         base_cache_key = f"{workflow_id_str}_{data_collection_id_str}_{cache_suffix}"
-    logger.debug(
-        f"🔑 Generated cache key: {base_cache_key} (load_for_preview={load_for_preview}, columns={len(select_columns) if select_columns else 'all'})"
-    )
+
+    # Generate filter hash for cache key (only if filters exist and not loading for options)
+    filter_hash = None
+    if metadata and not load_for_options:
+        filter_hash = _generate_filter_hash(metadata)
+        filtered_cache_key = f"{base_cache_key}_filters_{filter_hash}"
+        logger.debug(
+            f"🔑 Generated FILTERED cache key: {filtered_cache_key} (filters={len(metadata)})"
+        )
+    else:
+        filtered_cache_key = base_cache_key
+        logger.debug(
+            f"🔑 Generated BASE cache key: {base_cache_key} (load_for_preview={load_for_preview}, columns={len(select_columns) if select_columns else 'all'})"
+        )
 
     # REDIS INTEGRATION: Check Redis cache first, then fallback to memory
+    # PERFORMANCE OPTIMIZATION: Check filtered cache first if filters exist (~5-8s savings)
     try:
-        from depictio.api.cache import get_cached_dataframe
+        from depictio.api.cache import cache_dataframe, get_cached_dataframe
 
+        # STEP 1: If filters exist, check filtered cache first
+        if filter_hash:
+            filtered_cached_df = get_cached_dataframe(filtered_cache_key)
+            if filtered_cached_df is not None:
+                logger.info(
+                    f"🚀🎯 FILTERED CACHE HIT: Returning pre-filtered DataFrame for key: {filtered_cache_key}"
+                )
+                logger.info(
+                    f"📊 FILTERED DATAFRAME SIZE: {filtered_cached_df.height:,} rows × {filtered_cached_df.width} columns"
+                )
+
+                # Apply row limit if needed
+                if limit_rows:
+                    filtered_cached_df = filtered_cached_df.limit(limit_rows)
+                    logger.debug(f"Applied row limit: {limit_rows}")
+
+                # Drop aggregation time column if exists
+                if "depictio_aggregation_time" in filtered_cached_df.columns:
+                    filtered_cached_df = filtered_cached_df.drop("depictio_aggregation_time")
+
+                return filtered_cached_df
+
+        # STEP 2: Check base cache (unfiltered data)
         redis_cached_df = get_cached_dataframe(base_cache_key)
         if redis_cached_df is not None:
-            logger.info(f"🚀 REDIS CACHE HIT: Skipping DB/HTTP calls for key: {base_cache_key}")
+            logger.info(
+                f"🚀 REDIS CACHE HIT (base): Skipping DB/HTTP calls for key: {base_cache_key}"
+            )
             logger.info(
                 f"📊 CACHED DATAFRAME SIZE: {redis_cached_df.height:,} rows × {redis_cached_df.width} columns"
             )
@@ -605,18 +688,18 @@ def load_deltatable_lite(
             else:
                 df = redis_cached_df
 
-            # DEBUG: Check filter application conditions
-            logger.debug(
-                f"🔍 PRE-FILTER CHECK: metadata={metadata is not None}, "
-                f"load_for_options={load_for_options}, "
-                f"metadata_len={len(metadata) if metadata else 0}"
-            )
-
-            # Apply metadata filters in memory (very fast)
+            # STEP 3: Apply filters to base cache and cache the filtered result
             if metadata and not load_for_options:
                 logger.info(f"🎯 APPLYING FILTERS: {len(metadata)} filter(s) to cached DataFrame")
                 df = apply_runtime_filters(df, metadata)
                 logger.info(f"📊 AFTER FILTERS: {df.height:,} rows × {df.width} columns")
+
+                # Cache the filtered result for future requests (~5-8s savings on next request)
+                if filter_hash:
+                    cache_dataframe(filtered_cache_key, df)
+                    logger.info(
+                        f"💾 CACHED FILTERED RESULT: {filtered_cache_key} ({df.height:,} rows)"
+                    )
             else:
                 logger.debug("⏭️  SKIPPING FILTERS: metadata empty or load_for_options=True")
 
@@ -636,8 +719,25 @@ def load_deltatable_lite(
         logger.debug(f"Redis cache check failed, falling back to memory: {e}")
 
     # Fallback to existing memory cache
+    # PERFORMANCE OPTIMIZATION: Check filtered cache first if filters exist
+    if filter_hash and filtered_cache_key in _dataframe_memory_cache:
+        logger.info(
+            f"💾🎯 FILTERED MEMORY CACHE HIT: Returning pre-filtered DataFrame for key: {filtered_cache_key}"
+        )
+        update_cache_timestamp(filtered_cache_key)
+        df = _dataframe_memory_cache[filtered_cache_key]
+        logger.info(f"📊 FILTERED DATAFRAME SIZE: {df.height:,} rows × {df.width} columns")
+
+        # Apply row limit if needed
+        if limit_rows:
+            df = df.limit(limit_rows)
+            logger.debug(f"Applied row limit: {limit_rows}")
+
+        return df
+
+    # Check base memory cache
     if base_cache_key in _dataframe_memory_cache:
-        logger.info(f"💾 MEMORY CACHE HIT: Skipping DB/HTTP calls for key: {base_cache_key}")
+        logger.info(f"💾 MEMORY CACHE HIT (base): Skipping DB/HTTP calls for key: {base_cache_key}")
         update_cache_timestamp(base_cache_key)
 
         # Get cached DataFrame and apply column projection if needed
@@ -657,10 +757,23 @@ def load_deltatable_lite(
         else:
             df = cached_df
 
-        # Apply metadata filters in memory (very fast)
+        # Apply metadata filters in memory and cache the filtered result
         if metadata and not load_for_options:
             df = apply_runtime_filters(df, metadata)
             logger.debug(f"📊 AFTER FILTERS: {df.height:,} rows × {df.width} columns")
+
+            # Cache the filtered result in memory for future requests
+            if filter_hash:
+                import time
+
+                _dataframe_memory_cache[filtered_cache_key] = df
+                _cache_metadata[filtered_cache_key] = {
+                    "size_bytes": sys.getsizeof(df),
+                    "timestamp": time.time(),
+                }
+                logger.info(
+                    f"💾 CACHED FILTERED RESULT (memory): {filtered_cache_key} ({df.height:,} rows)"
+                )
 
         # Apply row limit AFTER filters to avoid limiting joined data prematurely
         if limit_rows:
@@ -815,9 +928,30 @@ def load_deltatable_lite(
         # Load and cache the base DataFrame (no filters)
         df = load_and_cache_dataframe(base_cache_key, size_bytes, delta_scan)
 
-        # Apply metadata filters in memory after caching
+        # Apply metadata filters in memory after caching and cache filtered result
         if metadata and not load_for_options:
             df = apply_runtime_filters(df, metadata)
+
+            # Cache the filtered result for future requests (~5-8s savings)
+            if filter_hash:
+                from depictio.api.cache import cache_dataframe
+
+                if cache_dataframe(filtered_cache_key, df):
+                    logger.info(
+                        f"💾 CACHED FILTERED RESULT (fresh load): {filtered_cache_key} ({df.height:,} rows)"
+                    )
+                else:
+                    # Fallback to memory cache
+                    import time
+
+                    _dataframe_memory_cache[filtered_cache_key] = df
+                    _cache_metadata[filtered_cache_key] = {
+                        "size_bytes": sys.getsizeof(df),
+                        "timestamp": time.time(),
+                    }
+                    logger.info(
+                        f"💾 CACHED FILTERED RESULT (memory, fresh load): {filtered_cache_key} ({df.height:,} rows)"
+                    )
 
     else:
         # LARGE DATAFRAME: Always use lazy loading to prevent memory issues

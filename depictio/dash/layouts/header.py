@@ -439,8 +439,46 @@ def register_callbacks_header(app):
 
         return is_open, current_footer_class, current_page_class
 
-    # Sync drawer edit status badge with edit mode toggle
-    @app.callback(
+    # Sync drawer edit status badge with edit mode toggle - CONVERTED TO CLIENT-SIDE (~1.4s savings)
+    # This eliminates server roundtrip for simple icon/color updates
+    app.clientside_callback(
+        """
+        function(edit_mode_checked) {
+            console.log('🔧 CLIENTSIDE EDIT BADGE DRAWER: edit_mode_checked=', edit_mode_checked);
+
+            if (edit_mode_checked) {
+                // Edit ON
+                return [
+                    "Edit ON",
+                    "blue",
+                    {
+                        namespace: 'dash_iconify',
+                        type: 'DashIconify',
+                        props: {
+                            icon: 'mdi:pencil',
+                            width: 8,
+                            color: 'white'
+                        }
+                    }
+                ];
+            } else {
+                // Edit OFF
+                return [
+                    "Edit OFF",
+                    "gray",
+                    {
+                        namespace: 'dash_iconify',
+                        type: 'DashIconify',
+                        props: {
+                            icon: 'mdi:pencil-off',
+                            width: 8,
+                            color: 'white'
+                        }
+                    }
+                ];
+            }
+        }
+        """,
         [
             Output("edit-status-badge-drawer", "children"),
             Output("edit-status-badge-drawer", "color"),
@@ -449,15 +487,47 @@ def register_callbacks_header(app):
         Input("unified-edit-mode-button", "checked"),
         prevent_initial_call=False,
     )
-    def update_edit_status_badge_drawer(edit_mode_checked):
-        """Update the drawer edit status badge based on edit mode state."""
-        if edit_mode_checked:
-            return ("Edit ON", "blue", DashIconify(icon="mdi:pencil", width=8, color="white"))
-        else:
-            return ("Edit OFF", "gray", DashIconify(icon="mdi:pencil-off", width=8, color="white"))
 
-    # Sync header edit button with edit mode toggle
-    @app.callback(
+    # Sync header edit button with edit mode toggle - CONVERTED TO CLIENT-SIDE (~1.4s savings)
+    # This eliminates server roundtrip for simple icon/color/variant updates
+    app.clientside_callback(
+        """
+        function(edit_mode_checked) {
+            console.log('🔧 CLIENTSIDE EDIT BUTTON HEADER: edit_mode_checked=', edit_mode_checked);
+
+            if (edit_mode_checked) {
+                // Edit ON: blue filled button with white icon
+                return [
+                    {
+                        namespace: 'dash_iconify',
+                        type: 'DashIconify',
+                        props: {
+                            icon: 'mdi:pencil',
+                            width: 28,
+                            color: 'white'
+                        }
+                    },
+                    "blue",
+                    "filled"
+                ];
+            } else {
+                // Edit OFF: gray subtle button with gray icon
+                return [
+                    {
+                        namespace: 'dash_iconify',
+                        type: 'DashIconify',
+                        props: {
+                            icon: 'mdi:pencil-off',
+                            width: 28,
+                            color: 'gray'
+                        }
+                    },
+                    "gray",
+                    "subtle"
+                ];
+            }
+        }
+        """,
         [
             Output("edit-status-badge-clickable-2", "children"),
             Output("edit-status-badge-clickable-2", "color"),
@@ -466,22 +536,6 @@ def register_callbacks_header(app):
         Input("unified-edit-mode-button", "checked"),
         prevent_initial_call=False,
     )
-    def update_edit_button_header(edit_mode_checked):
-        """Update the header edit button based on edit mode state."""
-        if edit_mode_checked:
-            # Edit ON: blue filled button with white icon
-            return (
-                DashIconify(icon="mdi:pencil", width=28, color="white"),
-                "blue",
-                "filled",
-            )
-        else:
-            # Edit OFF: gray subtle button with gray icon
-            return (
-                DashIconify(icon="mdi:pencil-off", width=28, color="gray"),
-                "gray",
-                "subtle",
-            )
 
     # Make edit status badge clickable to toggle edit mode
     @app.callback(
@@ -743,39 +797,45 @@ def register_callbacks_header(app):
     #     return updated_values, {}
 
     # =============================================================================
-    # BURGER BUTTON CALLBACKS (DMC Burger for navbar toggle)
+    # BURGER BUTTON CALLBACKS (DMC Burger for navbar toggle) - CLIENTSIDE
     # =============================================================================
 
-    # Sync burger opened state with sidebar-collapsed store (inverted)
-    # Burger opened=True means navbar visible, sidebar-collapsed=False
-    @app.callback(
+    # Sync burger opened state with sidebar-collapsed store (inverted) - CLIENTSIDE for instant response
+    app.clientside_callback(
+        """
+        function(is_collapsed) {
+            console.log('🍔 CLIENTSIDE BURGER SYNC: collapsed=' + is_collapsed);
+            // Burger opened = NOT collapsed
+            return (is_collapsed !== null && is_collapsed !== undefined) ? !is_collapsed : true;
+        }
+        """,
         Output("burger-button", "opened", allow_duplicate=True),
         Input("sidebar-collapsed", "data"),
         prevent_initial_call=True,
     )
-    def sync_burger_from_store(is_collapsed):
-        """Sync burger button state from sidebar-collapsed store (inverted)."""
-        # Burger opened = NOT collapsed
-        return not is_collapsed if is_collapsed is not None else True
 
-    # Update sidebar-collapsed store when burger is clicked
-    @app.callback(
+    # Update sidebar-collapsed store when burger is clicked - CLIENTSIDE for instant response
+    app.clientside_callback(
+        """
+        function(burger_opened, pathname) {
+            console.log('🍔 CLIENTSIDE BURGER CLICK: opened=' + burger_opened + ', pathname=' + pathname);
+            // Only update on dashboard pages
+            if (!pathname || !pathname.startsWith('/dashboard/')) {
+                console.log('🚫 Ignoring burger click on non-dashboard page');
+                return window.dash_clientside.no_update;
+            }
+
+            // sidebar-collapsed = NOT burger_opened
+            const is_collapsed = !burger_opened;
+            console.log('✅ Setting collapsed=' + is_collapsed);
+            return is_collapsed;
+        }
+        """,
         Output("sidebar-collapsed", "data", allow_duplicate=True),
         Input("burger-button", "opened"),
         State("url", "pathname"),
         prevent_initial_call=True,
     )
-    def update_collapsed_from_burger(burger_opened, pathname):
-        """Update sidebar-collapsed store when burger is clicked (only on dashboard pages)."""
-        # Only update on dashboard pages
-        if not pathname or not pathname.startswith("/dashboard/"):
-            logger.info(f"Ignoring burger click on non-dashboard page: {pathname}")
-            raise dash.exceptions.PreventUpdate
-
-        # sidebar-collapsed = NOT burger_opened
-        is_collapsed = not burger_opened
-        logger.info(f"Burger clicked: opened={burger_opened}, setting collapsed={is_collapsed}")
-        return is_collapsed
 
 
 # =============================================================================

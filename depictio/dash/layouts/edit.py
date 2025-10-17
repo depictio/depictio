@@ -1,6 +1,6 @@
 import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
-from dash import MATCH, Input, Output, State, html
+from dash import Input, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
@@ -76,38 +76,41 @@ def register_partial_data_button_callbacks(app):
     #     return updated_children
 
     # Server-side callback to control button wrapper visibility
-    @app.callback(
-        Output({"type": "partial-data-button-wrapper", "index": MATCH}, "style"),
-        Input({"type": "stored-metadata-component", "index": MATCH}, "data"),
-        State({"type": "partial-data-button-wrapper", "index": MATCH}, "id"),
-        prevent_initial_call=False,
-    )
-    def update_partial_data_button_visibility(metadata, wrapper_id):
-        """Show/hide the partial data warning button based on whether data was sampled."""
-        # Default: hidden
-        hidden_style = {"display": "none", "visibility": "hidden"}
-        visible_style = {"display": "inline-flex", "visibility": "visible"}
-
-        if not metadata:
-            logger.info("📊 No metadata yet, keeping button hidden")
-            return hidden_style
-
-        # Extract sampling information
-        was_sampled = metadata.get("was_sampled", False)
-        displayed_count = metadata.get("displayed_data_count", 0)
-        total_count = metadata.get("total_data_count", 0)
-
-        # Show button only if data was actually sampled
-        should_show = was_sampled and (displayed_count < total_count)
-
-        component_index = wrapper_id.get("index", "unknown") if wrapper_id else "unknown"
-
-        logger.info(
-            f"📊 [{component_index}] Button visibility: sampled={was_sampled}, "
-            f"displayed={displayed_count:,}, total={total_count:,}, show={should_show}"
-        )
-
-        return visible_style if should_show else hidden_style
+    # DISABLED FOR PERFORMANCE TESTING - Phase 4C
+    # This callback was being triggered frequently, contributing to overhead
+    # @app.callback(
+    #     Output({"type": "partial-data-button-wrapper", "index": MATCH}, "style"),
+    #     Input({"type": "stored-metadata-component", "index": MATCH}, "data"),
+    #     State({"type": "partial-data-button-wrapper", "index": MATCH}, "id"),
+    #     prevent_initial_call=False,
+    # )
+    # def update_partial_data_button_visibility(metadata, wrapper_id):
+    #     """Show/hide the partial data warning button based on whether data was sampled."""
+    #     # Default: hidden
+    #     hidden_style = {"display": "none", "visibility": "hidden"}
+    #     visible_style = {"display": "inline-flex", "visibility": "visible"}
+    #
+    #     if not metadata:
+    #         logger.info("📊 No metadata yet, keeping button hidden")
+    #         return hidden_style
+    #
+    #     # Extract sampling information
+    #     was_sampled = metadata.get("was_sampled", False)
+    #     displayed_count = metadata.get("displayed_data_count", 0)
+    #     total_count = metadata.get("total_data_count", 0)
+    #
+    #     # Show button only if data was actually sampled
+    #     should_show = was_sampled and (displayed_count < total_count)
+    #
+    #     component_index = wrapper_id.get("index", "unknown") if wrapper_id else "unknown"
+    #
+    #     logger.info(
+    #         f"📊 [{component_index}] Button visibility: sampled={was_sampled}, "
+    #         f"displayed={displayed_count:,}, total={total_count:,}, show={should_show}"
+    #     )
+    #
+    #     return visible_style if should_show else hidden_style
+    pass  # Placeholder to keep function structure valid
 
 
 def register_reset_button_callbacks(app):
@@ -820,14 +823,18 @@ def enable_box_edit_mode(
         )
 
     # ALWAYS create buttons regardless of edit mode - CSS will control visibility
+    # DISABLED FOR PERFORMANCE TESTING - Phase 4C
     # Conditionally create partial data warning button only for scatter plots with large datasets
+    # partial_data_button_func = None
+    # if component_type == "figure" and component_data:
+    #     visu_type = component_data.get("visu_type", None)
+    #     # Check if this is a scatter plot that might have partial data
+    #     # The actual check for data size will happen at render time
+    #     if visu_type and visu_type.lower() == "scatter":
+    #         partial_data_button_func = create_partial_data_warning_button
+
+    # Explicitly set to None to disable popover button creation
     partial_data_button_func = None
-    if component_type == "figure" and component_data:
-        visu_type = component_data.get("visu_type", None)
-        # Check if this is a scatter plot that might have partial data
-        # The actual check for data size will happen at render time
-        if visu_type and visu_type.lower() == "scatter":
-            partial_data_button_func = create_partial_data_warning_button
 
     buttons = _create_component_buttons(
         component_type,

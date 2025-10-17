@@ -270,8 +270,78 @@ def register_callbacks_notes_footer(app):
         logger.info(f"Storing notes content: {editor_html[:100] if editor_html else ''}...")
         return editor_html
 
-    # Update button icons based on footer state
-    @app.callback(
+    # Update button icons based on footer state - CONVERTED TO CLIENT-SIDE (~1.2s savings)
+    # This breaks CASCADES #2-3 (notes-footer-content.className → button children, 1.7s total)
+    app.clientside_callback(
+        """
+        function(footer_class) {
+            console.log('🔧 CLIENTSIDE NOTES BUTTONS: footer_class=', footer_class);
+
+            footer_class = footer_class || '';
+
+            // Toggle button icon (for the main toggle button in the UI)
+            var toggle_icon;
+            if (footer_class.includes('footer-visible') || footer_class.includes('footer-fullscreen')) {
+                toggle_icon = {
+                    namespace: 'dash_iconify',
+                    type: 'DashIconify',
+                    props: {
+                        icon: 'material-symbols:expand-more',
+                        width: 35,
+                        color: 'gray'
+                    }
+                };
+            } else {
+                toggle_icon = {
+                    namespace: 'dash_iconify',
+                    type: 'DashIconify',
+                    props: {
+                        icon: 'material-symbols:edit-note',
+                        width: 35,
+                        color: 'gray'
+                    }
+                };
+            }
+
+            // Collapse button icon (points down when footer is open, indicating collapse action)
+            var collapse_icon = {
+                namespace: 'dash_iconify',
+                type: 'DashIconify',
+                props: {
+                    icon: 'material-symbols:expand-more',
+                    width: 20,
+                    color: 'gray'
+                }
+            };
+
+            // Fullscreen button icon
+            var fullscreen_icon;
+            if (footer_class.includes('footer-fullscreen')) {
+                fullscreen_icon = {
+                    namespace: 'dash_iconify',
+                    type: 'DashIconify',
+                    props: {
+                        icon: 'material-symbols:close-fullscreen',
+                        width: 20,
+                        color: 'gray'
+                    }
+                };
+            } else {
+                fullscreen_icon = {
+                    namespace: 'dash_iconify',
+                    type: 'DashIconify',
+                    props: {
+                        icon: 'material-symbols:fullscreen',
+                        width: 20,
+                        color: 'gray'
+                    }
+                };
+            }
+
+            console.log('✅ CLIENTSIDE NOTES BUTTONS: Updated icons based on footer state');
+            return [toggle_icon, collapse_icon, fullscreen_icon];
+        }
+        """,
         [
             Output("toggle-notes-button", "children"),
             Output("collapse-notes-button", "children"),
@@ -280,30 +350,6 @@ def register_callbacks_notes_footer(app):
         Input("notes-footer-content", "className"),
         prevent_initial_call=True,
     )
-    def update_button_icons(footer_class):
-        """Update button icons based on footer visibility and fullscreen state."""
-        footer_class = footer_class or ""
-
-        # Toggle button icon (for the main toggle button in the UI)
-        if "footer-visible" in footer_class or "footer-fullscreen" in footer_class:
-            toggle_icon = DashIconify(icon="material-symbols:expand-more", width=35, color="gray")
-        else:
-            toggle_icon = DashIconify(icon="material-symbols:edit-note", width=35, color="gray")
-
-        # Collapse button icon (points down when footer is open, indicating collapse action)
-        collapse_icon = DashIconify(icon="material-symbols:expand-more", width=20, color="gray")
-
-        # Fullscreen button icon
-        if "footer-fullscreen" in footer_class:
-            fullscreen_icon = DashIconify(
-                icon="material-symbols:close-fullscreen", width=20, color="gray"
-            )
-        else:
-            fullscreen_icon = DashIconify(
-                icon="material-symbols:fullscreen", width=20, color="gray"
-            )
-
-        return toggle_icon, collapse_icon, fullscreen_icon
 
 
 def create_notes_footer(dashboard_data=None):

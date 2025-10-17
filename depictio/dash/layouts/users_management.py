@@ -1,13 +1,13 @@
 import re
 
+import dash
 import dash_mantine_components as dmc
 import httpx
+from dash import Input, Output, State, ctx, dcc, html
+from dash.exceptions import PreventUpdate
 from dash_extensions import EventListener
 from dash_iconify import DashIconify
 
-import dash
-from dash import Input, Output, State, ctx, dcc, html
-from dash.exceptions import PreventUpdate
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _verify_password
@@ -712,6 +712,7 @@ def register_callbacks_users_management(app):
             State("modal-open-store", "data"),
             State("local-store", "data"),
         ],
+        prevent_initial_call=True,
     )
     def handle_auth_and_switch_forms(
         n_clicks_register,
