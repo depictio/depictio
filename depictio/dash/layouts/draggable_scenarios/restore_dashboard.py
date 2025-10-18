@@ -3,6 +3,9 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, api_call_get_dashboard
 from depictio.dash.component_metadata import DISPLAY_NAME_TO_TYPE_MAPPING, get_build_functions
 from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
+    create_card_placeholder,
+    create_figure_placeholder,
+    create_interactive_placeholder,
     create_skeleton_component,
 )
 from depictio.dash.layouts.edit import enable_box_edit_mode
@@ -12,14 +15,38 @@ from depictio.models.utils import convert_model_to_dict
 # Get build functions from centralized metadata
 build_functions = get_build_functions()
 
+# PERFORMANCE OPTIMIZATION (Phase 5B): Enable progressive loading for multiple component types
+# Set to True to reduce initial render from 378 DOM mutations to smaller chunks
+PROGRESSIVE_LOADING_ENABLED = True
+
+# Component types that should use progressive loading
+# Priority order: card (fastest) < interactive < figure (slowest)
+PROGRESSIVE_LOADING_TYPES = ["figure", "card", "interactive"]
+
+# Base delays for each component type (in milliseconds)
+COMPONENT_BASE_DELAYS = {
+    "card": 300,  # Lightest - simple metric cards
+    "interactive": 400,  # Medium - filters and controls
+    "figure": 500,  # Heaviest - complex visualizations
+}
+
+# Placeholder creation functions for each type
+PLACEHOLDER_FUNCTIONS = {
+    "figure": create_figure_placeholder,
+    "card": create_card_placeholder,
+    "interactive": create_interactive_placeholder,
+}
+
 
 def render_dashboard(stored_metadata, edit_components_button, dashboard_id, theme, TOKEN):
-    logger.info(f"Rendering dashboard with ID: {dashboard_id}")
+    import time
+
+    start_time_total = time.time()
+    logger.info(f"⏱️ PROFILING: Starting render_dashboard for {dashboard_id}")
     from depictio.dash.layouts.draggable import clean_stored_metadata
 
-    logger.info(
-        f"📊 RESTORE DEBUG - Raw stored_metadata count: {len(stored_metadata) if stored_metadata else 0}"
-    )
+    num_components = len(stored_metadata) if stored_metadata else 0
+    logger.info(f"📊 RESTORE DEBUG - Raw stored_metadata count: {num_components}")
 
     # Log the first few raw metadata entries for debugging
     if stored_metadata:
@@ -38,14 +65,20 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
                     f"📊 RESTORE DEBUG - Raw metadata {i}: dc_id={elem.get('dc_id', 'MISSING')}"
                 )
 
+    start_clean = time.time()
     stored_metadata = clean_stored_metadata(stored_metadata)
+    clean_duration_ms = (time.time() - start_clean) * 1000
+    logger.info(f"⏱️ PROFILING: clean_stored_metadata took {clean_duration_ms:.1f}ms")
     logger.info(
         f"📊 RESTORE DEBUG - After cleaning, metadata count: {len(stored_metadata) if stored_metadata else 0}"
     )
 
     children = list()
+    component_build_times = []
+    components_pending_load = {}  # Track components for progressive loading by type
 
     for child_metadata in stored_metadata:
+        start_component = time.time()
         child_metadata["build_frame"] = True
         child_metadata["access_token"] = TOKEN
         # logger.info(child_metadata)
@@ -67,16 +100,82 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
             logger.warning(f"Unsupported child type: {component_type}")
             raise ValueError(f"Unsupported child type: {component_type}")
 
-        # Get the build function based on the type
-        build_function = build_functions[component_type]
-        # logger.info(f"build_function : {build_function.__name__}")
-
         # Add theme to child metadata for figure generation
         child_metadata["theme"] = theme
         logger.info(f"Using theme: {theme} for component {component_type}")
 
-        # Build the child using the appropriate function and kwargs
-        child = build_function(**child_metadata)
+        # PERFORMANCE OPTIMIZATION (Phase 5B): Return lightweight placeholders for heavy components
+        # This reduces initial React render from 378 DOM mutations to much smaller chunks
+        # Actual components will be loaded via dcc.Interval triggered callbacks
+        if PROGRESSIVE_LOADING_ENABLED and component_type in PROGRESSIVE_LOADING_TYPES:
+            component_uuid = child_metadata.get("index", "unknown")
+            logger.info(
+                f"⚡ PROGRESSIVE LOADING: Creating placeholder for {component_type} {component_uuid}"
+            )
+
+            # Initialize tracking list for this component type if needed
+            if component_type not in components_pending_load:
+                components_pending_load[component_type] = []
+
+            # Get placeholder creation function
+            placeholder_func = PLACEHOLDER_FUNCTIONS.get(component_type)
+            if not placeholder_func:
+                logger.warning(
+                    f"⚠️  No placeholder function for {component_type}, building normally"
+                )
+                # Fall through to normal build
+                build_function = build_functions[component_type]
+                child = build_function(**child_metadata)
+            else:
+                # Create lightweight placeholder with dcc.Interval to trigger loading
+                from dash import dcc, html
+
+                # Calculate stagger delay based on component type and count
+                base_delay = COMPONENT_BASE_DELAYS.get(component_type, 400)
+                stagger_delay = len(components_pending_load[component_type]) * 100
+
+                # CRITICAL FIX: Use "index" instead of "uuid" for ID consistency
+                # Pattern-matching callbacks expect {"type": "...", "index": MATCH}
+                # Using "uuid" creates ID mismatch causing components to disappear
+                child = html.Div(
+                    [
+                        placeholder_func(component_uuid),
+                        # Interval fires once after delay to trigger server callback
+                        dcc.Interval(
+                            id={
+                                "type": f"{component_type}-load-trigger",
+                                "index": component_uuid,  # Changed from "uuid" to "index"
+                            },
+                            interval=base_delay + stagger_delay,
+                            n_intervals=0,
+                            max_intervals=1,  # Fire only once
+                        ),
+                        # Store to hold loaded component
+                        dcc.Store(
+                            id={
+                                "type": f"{component_type}-metadata-store",
+                                "index": component_uuid,  # Changed from "uuid" to "index"
+                            },
+                            data=child_metadata,  # Store metadata for callback
+                        ),
+                    ],
+                    id={
+                        "type": f"{component_type}-container",
+                        "index": component_uuid,
+                    },  # Changed from "uuid" to "index"
+                )
+                components_pending_load[component_type].append(child_metadata)
+        else:
+            # Build other components normally (text, table, jbrowse, multiqc)
+            # Get the build function based on the type
+            build_function = build_functions[component_type]
+            # logger.info(f"build_function : {build_function.__name__}")
+
+            # Build the child using the appropriate function and kwargs
+            child = build_function(**child_metadata)
+
+        component_build_time_ms = (time.time() - start_component) * 1000
+        component_build_times.append(component_build_time_ms)
         # logger.debug(f"child : ")
         # Store child with its component type and metadata for later processing
         children.append((child, component_type, child_metadata))
@@ -98,6 +197,30 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
 
     # Pattern-matching callbacks handle initial value population (prevent_initial_call=False)
     # No need for sync rebuild - cards, figures, tables all self-initialize
+
+    total_duration_ms = (time.time() - start_time_total) * 1000
+    avg_component_time = (
+        sum(component_build_times) / len(component_build_times) if component_build_times else 0
+    )
+    max_component_time = max(component_build_times) if component_build_times else 0
+
+    logger.info(
+        f"⏱️ PROFILING: render_dashboard TOTAL took {total_duration_ms:.1f}ms "
+        f"for {len(processed_children)} components "
+        f"(avg={avg_component_time:.1f}ms/component, max={max_component_time:.1f}ms)"
+    )
+
+    # Log progressive loading summary
+    if PROGRESSIVE_LOADING_ENABLED and components_pending_load:
+        total_pending = sum(len(comps) for comps in components_pending_load.values())
+        logger.info(f"⚡ PROGRESSIVE LOADING: {total_pending} components will load incrementally:")
+        for comp_type, comps in components_pending_load.items():
+            base_delay = COMPONENT_BASE_DELAYS.get(comp_type, 400)
+            logger.info(
+                f"  - {len(comps)} {comp_type} component(s) "
+                f"(base delay: {base_delay}ms, stagger: 100ms)"
+            )
+
     logger.info(
         f"✅ Dashboard restored with {len(processed_children)} components - pattern-matching callbacks will populate values"
     )
@@ -170,18 +293,32 @@ def get_loading_delay_for_component(component_type, index_in_list):
     return base_delay + positional_delay
 
 
-def load_depictio_data_sync(dashboard_id, local_data, theme="light"):
+def load_depictio_data_sync(
+    dashboard_id: str,
+    local_data: dict,
+    theme: str = "light",
+    cached_user_data: dict | None = None,
+) -> dict | None:
     """Load the dashboard data from the API and render it.
+
+    PERFORMANCE OPTIMIZATION (Phase 5A):
+    - Added cached_user_data parameter to avoid redundant API call
+    - User data already fetched by consolidated API callback
+
     Args:
         dashboard_id (str): The ID of the dashboard to load.
         local_data (dict): Local data containing access token and other information.
         theme (str): The theme to use for rendering the dashboard.
+        cached_user_data: Cached user data from consolidated API (avoids redundant fetch)
     Returns:
         dict: The dashboard data with rendered children.
     Raises:
         ValueError: If the dashboard data cannot be fetched or is invalid.
     """
-    logger.info(f"Loading Depictio data for dashboard ID: {dashboard_id}")
+    import time
+
+    start_time_total = time.time()
+    logger.info(f"⏱️ PROFILING: Starting load_depictio_data_sync for dashboard {dashboard_id}")
 
     # Ensure theme is valid
     if not theme or theme == {} or theme == "{}":
@@ -192,12 +329,20 @@ def load_depictio_data_sync(dashboard_id, local_data, theme="light"):
         logger.warning("Access token not found.")
         return None
 
+    # PROFILING: Measure dashboard metadata fetch
+    start_fetch = time.time()
     dashboard_data_dict = api_call_get_dashboard(dashboard_id, local_data["access_token"])
+    fetch_duration_ms = (time.time() - start_fetch) * 1000
+    logger.info(f"⏱️ PROFILING: api_call_get_dashboard took {fetch_duration_ms:.1f}ms")
     if not dashboard_data_dict:
         logger.error(f"Failed to fetch dashboard data for {dashboard_id}")
         raise ValueError(f"Failed to fetch dashboard data: {dashboard_id}")
 
+    # PROFILING: Measure Pydantic parsing
+    start_parsing = time.time()
     dashboard_data = DashboardData.from_mongo(dashboard_data_dict)
+    parsing_duration_ms = (time.time() - start_parsing) * 1000
+    logger.info(f"⏱️ PROFILING: DashboardData.from_mongo took {parsing_duration_ms:.1f}ms")
 
     # logger.info(f"load_depictio_data : {dashboard_data}")
 
@@ -217,7 +362,19 @@ def load_depictio_data_sync(dashboard_id, local_data, theme="light"):
         #             dashboard_data["buttons_data"][button] = True
 
         if hasattr(dashboard_data, "stored_metadata"):
-            current_user = api_call_fetch_user_from_token(local_data["access_token"])
+            # PERFORMANCE OPTIMIZATION (Phase 5A): Use cached user data
+            start_user_fetch = time.time()
+            if cached_user_data:
+                current_user = cached_user_data
+                logger.info("⏱️ PROFILING: Using cached user data (0ms)")
+            else:
+                current_user = api_call_fetch_user_from_token(
+                    local_data["access_token"]
+                )  # Fallback only
+                user_fetch_duration_ms = (time.time() - start_user_fetch) * 1000
+                logger.info(
+                    f"⏱️ PROFILING: api_call_fetch_user_from_token took {user_fetch_duration_ms:.1f}ms"
+                )
 
             # Check if data is available, if not set the buttons to disabled
             owner = (
@@ -271,6 +428,8 @@ def load_depictio_data_sync(dashboard_id, local_data, theme="light"):
 
             # Use regular dashboard rendering - progressive loading will be handled at UI level
             logger.info("Rendering dashboard components")
+            # PROFILING: Measure component rendering
+            start_render = time.time()
             children = render_dashboard(
                 dashboard_data.stored_metadata,
                 edit_components_button_checked,
@@ -278,12 +437,24 @@ def load_depictio_data_sync(dashboard_id, local_data, theme="light"):
                 theme,
                 local_data["access_token"],
             )
-            # logger.info(f"Render Children: {children}")
+            render_duration_ms = (time.time() - start_render) * 1000
+            logger.info(f"⏱️ PROFILING: render_dashboard took {render_duration_ms:.1f}ms")
 
             dashboard_data.stored_children_data = children
-        # logger.info(f"Dashboard data RETURN: {dashboard_data}")
+
+        # PROFILING: Measure model conversion
+        start_convert = time.time()
         dashboard_data = convert_model_to_dict(dashboard_data)
-        # logger.info(f"Dashboard data RETURN to dict: {dashboard_data}")
+        convert_duration_ms = (time.time() - start_convert) * 1000
+        logger.info(f"⏱️ PROFILING: convert_model_to_dict took {convert_duration_ms:.1f}ms")
+
+        total_duration_ms = (time.time() - start_time_total) * 1000
+        logger.info(
+            f"⏱️ PROFILING: load_depictio_data_sync TOTAL took {total_duration_ms:.1f}ms "
+            f"(fetch={fetch_duration_ms:.1f}ms, parse={parsing_duration_ms:.1f}ms, "
+            f"render={render_duration_ms:.1f}ms, convert={convert_duration_ms:.1f}ms)"
+        )
+
         return dashboard_data
     else:
         return None

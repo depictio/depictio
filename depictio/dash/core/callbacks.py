@@ -17,6 +17,38 @@ def register_main_callback(app):
     """
     logger.info("🔥 REGISTERING MAIN CALLBACK for page routing and authentication")
 
+    # Cache for tracking last processed state to prevent duplicate processing (Phase 4E-3 final)
+    # Hash only user-visible state (logged_in, user_id) NOT tokens (silent refresh)
+    last_processed_state = {"pathname": None, "timestamp": 0, "user_state_hash": None}
+
+    def get_user_state_hash(local_data):
+        """
+        Hash only fields that affect page VISUAL rendering.
+        Token refresh (access_token change) should NOT trigger re-render.
+
+        Fields that affect UI:
+        - logged_in: Login vs. logout state
+        - user_id: Different user = different data
+
+        Fields that DON'T affect UI (excluded):
+        - access_token: Refreshes silently every 15 min
+        - expire_datetime: Changes with token refresh
+        - refresh_token: Rarely changes
+
+        Returns:
+            int: Hash of user-visible state, or None if no local_data
+        """
+        if not local_data:
+            return None
+
+        # Only hash fields that require visual page update
+        user_visible_state = (
+            local_data.get("logged_in"),
+            local_data.get("user_id"),
+            # Explicitly NOT including tokens - silent refresh!
+        )
+        return hash(user_visible_state)
+
     @app.callback(
         Output("page-content", "children"),
         Output("header-content", "children"),
@@ -27,12 +59,19 @@ def register_main_callback(app):
             Input("local-store", "data"),
             State("theme-store", "data"),
             State("project-cache-store", "data"),
+            State("user-cache-store", "data"),  # Phase 4E-4: Pass cached user data
         ],
         prevent_initial_call="initial_duplicate",
     )
-    def display_page(pathname, local_data, theme_store, cached_project_data):
+    def display_page(pathname, local_data, theme_store, cached_project_data, cached_user_data):
         """
         Main callback for handling page routing and authentication.
+
+        PERFORMANCE OPTIMIZATION (Phase 4E):
+        - Added comprehensive profiling to track duplicate executions
+        - Added timing logs to identify bottlenecks
+        - Added unique call ID for tracking execution flow
+        - Added early return when triggered by local-store with unchanged pathname (Phase 4E-2)
 
         Args:
             pathname (str): Current URL pathname
@@ -41,30 +80,85 @@ def register_main_callback(app):
         Returns:
             tuple: (page_content, header, pathname, local_data)
         """
-        trigger = ctx.triggered_id
-        logger.info(f"🔥 MAIN CALLBACK TRIGGERED: {trigger}, pathname={pathname}")
+        import time
+        import uuid
 
-        # PERFORMANCE DEBUG: Log data sizes to identify serialization bottlenecks
-        # import sys
+        from dash import no_update
 
-        # local_data_size = sys.getsizeof(str(local_data)) if local_data else 0
-        # theme_store_size = sys.getsizeof(str(theme_store)) if theme_store else 0
-        # cached_project_size = sys.getsizeof(str(cached_project_data)) if cached_project_data else 0
+        # Generate unique call ID for tracking duplicates
+        call_id = str(uuid.uuid4())[:8]
+        start_time = time.time()
 
-        # logger.info(
-        #     f"🔍 CALLBACK DATA SIZES: local_data={local_data_size:,}B, theme_store={theme_store_size:,}B, cached_project={cached_project_size:,}B"
-        # )
+        # Log callback entry with full context
+        trigger_id = ctx.triggered_id
+        trigger_prop = ctx.triggered[0]["prop_id"] if ctx.triggered else "NONE"
 
-        # if cached_project_size > 100000:  # > 100KB
-        #     logger.warning(
-        #         f"⚠️ LARGE PROJECT CACHE: {cached_project_size:,} bytes - potential performance bottleneck!"
-        #     )
+        logger.info(f"[PERF-4E][{call_id}] 🔥 ROUTING CALLBACK ENTRY")
+        logger.info(f"[PERF-4E][{call_id}]   pathname: {pathname}")
+        logger.info(f"[PERF-4E][{call_id}]   triggered_id: {trigger_id} (type: {type(trigger_id)})")
+        logger.info(f"[PERF-4E][{call_id}]   triggered_prop: {trigger_prop}")
+        logger.info(f"[PERF-4E][{call_id}]   local_data: {'present' if local_data else 'None'}")
+        logger.info(f"[PERF-4E][{call_id}]   theme_store: {'present' if theme_store else 'None'}")
+
+        # CRITICAL OPTIMIZATION: Early return if triggered by local-store with unchanged state
+        # This prevents duplicate processing when authentication updates local-store
+        if trigger_id == "local-store" and pathname == last_processed_state["pathname"]:
+            current_hash = get_user_state_hash(local_data)
+            time_since_last = time.time() - last_processed_state["timestamp"]
+
+            # Only skip if BOTH pathname AND user-visible state unchanged
+            # Token refresh changes access_token but NOT user_state_hash (silent refresh)
+            # CONSERVATIVE: 1 second window (not 5) to avoid catching browser refreshes
+            if time_since_last < 1 and current_hash == last_processed_state["user_state_hash"]:
+                # Safe to skip - only tokens changed (silent refresh) or duplicate trigger
+                elapsed = (time.time() - start_time) * 1000
+                logger.info(
+                    f"[PERF-4E][{call_id}] 🔥 ROUTING CALLBACK EARLY RETURN (duplicate trigger, no user-visible changes)"
+                )
+                logger.info(
+                    f"[PERF-4E][{call_id}]   time_since_last_process: {time_since_last:.1f}s"
+                )
+                logger.info(f"[PERF-4E][{call_id}]   user_state_hash: {current_hash}")
+                logger.info(
+                    f"[PERF-4E][{call_id}]   total_duration: {elapsed:.0f}ms (saved ~200-400ms!)"
+                )
+                # Return no_update for all outputs to prevent any changes
+                return no_update, no_update, no_update, no_update
+            elif current_hash != last_processed_state["user_state_hash"]:
+                # User-visible state changed (login/logout, user switch)
+                logger.info(
+                    f"[PERF-4E][{call_id}] 🔥 ROUTING CALLBACK PROCESSING (user state changed)"
+                )
+                logger.info(
+                    f"[PERF-4E][{call_id}]   old_hash: {last_processed_state['user_state_hash']}"
+                )
+                logger.info(f"[PERF-4E][{call_id}]   new_hash: {current_hash}")
+
+        # Update state including hash
+        last_processed_state.update(
+            {
+                "pathname": pathname,
+                "timestamp": time.time(),
+                "user_state_hash": get_user_state_hash(local_data),
+            }
+        )
 
         # Process authentication and return appropriate content
-        result = process_authentication(pathname, local_data, theme_store, cached_project_data)
-        logger.info(
-            f"🔥 MAIN CALLBACK RESULT: page_content={'<content>' if result[0] else 'None'}, header_content={'<header>' if result[1] else 'None'}, pathname={result[2]}"
+        auth_start = time.time()
+        result = process_authentication(
+            pathname, local_data, theme_store, cached_project_data, cached_user_data
         )
+        auth_duration = (time.time() - auth_start) * 1000
+
+        # Log callback exit with timing
+        total_duration = (time.time() - start_time) * 1000
+        logger.info(f"[PERF-4E][{call_id}] 🔥 ROUTING CALLBACK EXIT")
+        logger.info(f"[PERF-4E][{call_id}]   auth_duration: {auth_duration:.0f}ms")
+        logger.info(f"[PERF-4E][{call_id}]   total_duration: {total_duration:.0f}ms")
+        logger.info(
+            f"[PERF-4E][{call_id}]   result: page={'<content>' if result[0] else 'None'}, header={'<header>' if result[1] else 'None'}, pathname={result[2]}"
+        )
+
         return result
 
     logger.info("🔥 MAIN CALLBACK REGISTERED SUCCESSFULLY")

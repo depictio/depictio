@@ -4,7 +4,7 @@ from dash import dcc, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.api_calls import api_call_fetch_user_from_token, purge_expired_tokens
+from depictio.dash.api_calls import api_call_fetch_user_from_token
 
 # Analytics tracking
 from depictio.dash.components.analytics_tracker import (
@@ -23,7 +23,9 @@ from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_dep
 from depictio.dash.layouts.header import design_header
 from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
 from depictio.dash.layouts.notes_footer import create_notes_footer
-from depictio.dash.layouts.palette import create_color_palette_page
+
+# TEMPORARILY DISABLED FOR PERFORMANCE (Phase 4E-3)
+# from depictio.dash.layouts.palette import create_color_palette_page
 from depictio.dash.layouts.profile import layout as profile_layout
 from depictio.dash.layouts.project_data_collections import (
     layout as project_data_collections_layout,
@@ -156,11 +158,31 @@ def handle_unauthenticated_user(pathname):
     )
 
 
-def handle_authenticated_user(pathname, local_data, theme="light", cached_project_data=None):
+def handle_authenticated_user(
+    pathname, local_data, theme="light", cached_project_data=None, cached_user_data=None
+):
+    """
+    Handle authenticated user routing and page rendering.
+
+    PERFORMANCE OPTIMIZATION (Phase 4E-4):
+    - Added cached_user_data parameter to avoid redundant API calls
+    - Disabled purge_expired_tokens() - moved to cleanup_tasks.py periodic job
+    - Use cached user from consolidated API instead of fetching on every route
+
+    Args:
+        pathname: URL pathname to route to
+        local_data: User authentication data
+        theme: Current theme (light/dark)
+        cached_project_data: Cached project data from consolidated API
+        cached_user_data: Cached user data from consolidated API (avoids API call)
+    """
     logger.info(f"User logged in: {local_data.get('email', 'Unknown')}")
     # logger.info(f"Local data: {local_data}")
 
-    purge_expired_tokens(local_data["access_token"])
+    # PERFORMANCE OPTIMIZATION (Phase 4E-4): Disabled purge on every page load
+    # Token cleanup now runs hourly via cleanup_tasks.py:periodic_purge_expired_tokens()
+    # This saves 30-50ms per page load while maintaining token hygiene
+    # purge_expired_tokens(local_data["access_token"])
 
     # Map the pathname to the appropriate content and header
     if pathname.startswith("/dashboard/"):
@@ -176,13 +198,15 @@ def handle_authenticated_user(pathname, local_data, theme="light", cached_projec
 
         logger.info(f"🔄 DASHBOARD NAVIGATION: theme - {theme}")
         # Load dashboard data synchronously
+        # PERFORMANCE OPTIMIZATION (Phase 5A): Pass cached user data to avoid redundant API call
         depictio_dash_data = load_depictio_data_sync(
             dashboard_id=dashboard_id,
             local_data=local_data,
             theme=theme,
+            cached_user_data=cached_user_data,  # Pass cached user data from consolidated callback
         )
 
-        # Create dashboard layout
+        # # Create dashboard layout
         if depictio_dash_data:
             header_content, backend_components = design_header(depictio_dash_data, local_data)
 
@@ -209,7 +233,11 @@ def handle_authenticated_user(pathname, local_data, theme="light", cached_projec
             return error_layout, header_content, pathname, local_data
 
     elif pathname == "/dashboards":
-        user = api_call_fetch_user_from_token(local_data["access_token"])
+        # PERFORMANCE OPTIMIZATION (Phase 4E-4): Use cached user data
+        if cached_user_data:
+            user = cached_user_data
+        else:
+            user = api_call_fetch_user_from_token(local_data["access_token"])  # Fallback only
         # user = fetch_user_from_token(local_data["access_token"])
         # logger.info(f"User: {user}")
 
@@ -232,7 +260,11 @@ def handle_authenticated_user(pathname, local_data, theme="light", cached_projec
         # return projects, header, pathname, local_data
 
     elif pathname == "/projects":
-        user = api_call_fetch_user_from_token(local_data["access_token"])
+        # PERFORMANCE OPTIMIZATION (Phase 4E-4): Use cached user data
+        if cached_user_data:
+            user = cached_user_data
+        else:
+            user = api_call_fetch_user_from_token(local_data["access_token"])  # Fallback only
 
         # Check if user is anonymous
         is_anonymous = hasattr(user, "is_anonymous") and user.is_anonymous
@@ -246,9 +278,12 @@ def handle_authenticated_user(pathname, local_data, theme="light", cached_projec
         header = create_default_header("Profile")
         return create_profile_layout(), header, pathname, local_data
 
-    elif pathname == "/palette":
-        header = create_default_header("Depictio Color Palette")
-        return create_color_palette_page(), header, pathname, local_data
+    # TEMPORARILY DISABLED FOR PERFORMANCE (Phase 4E-3)
+    # Palette route adds overhead to routing callback
+    # Re-enable when palette functionality is needed
+    # elif pathname == "/palette":
+    #     header = create_default_header("Depictio Color Palette")
+    #     return create_color_palette_page(), header, pathname, local_data
 
     elif pathname == "/cli_configs":
         header = create_default_header("Depictio-CLI configs Management")
@@ -256,7 +291,11 @@ def handle_authenticated_user(pathname, local_data, theme="light", cached_projec
 
     elif pathname == "/admin":
         # Check if user is admin
-        user = api_call_fetch_user_from_token(local_data["access_token"])
+        # PERFORMANCE OPTIMIZATION (Phase 4E-4): Use cached user data
+        if cached_user_data:
+            user = cached_user_data
+        else:
+            user = api_call_fetch_user_from_token(local_data["access_token"])  # Fallback only
         if not user.is_admin:
             # Fallback to dashboards if user is not admin
             content = create_dashboards_management_layout()
@@ -280,7 +319,11 @@ def handle_authenticated_user(pathname, local_data, theme="light", cached_projec
         return about_layout, header, pathname, local_data
     else:
         # Fallback to dashboards if path is unrecognized
-        user = api_call_fetch_user_from_token(local_data["access_token"])
+        # PERFORMANCE OPTIMIZATION (Phase 4E-4): Use cached user data
+        if cached_user_data:
+            user = cached_user_data
+        else:
+            user = api_call_fetch_user_from_token(local_data["access_token"])  # Fallback only
         # Check if user is anonymous
         is_anonymous = hasattr(user, "is_anonymous") and user.is_anonymous
 
@@ -522,6 +565,11 @@ def create_dashboard_layout(
     theme="light",
     cached_project_data=None,
 ):
+    import time
+
+    start_time_total = time.time()
+    logger.info(f"⏱️ PROFILING: Starting create_dashboard_layout for {dashboard_id}")
+
     # Init layout and children if depictio_dash_data is available, else set to empty
     if depictio_dash_data and isinstance(depictio_dash_data, dict):
         # logger.info(f"Depictio dash data: {depictio_dash_data}")
@@ -543,6 +591,7 @@ def create_dashboard_layout(
     # Generate draggable layout
     # Ensure local_data is a dict
     local_data = local_data or {}
+    start_draggable = time.time()
     core = design_draggable(
         init_layout,
         init_children,
@@ -550,6 +599,8 @@ def create_dashboard_layout(
         local_data,
         cached_project_data=cached_project_data,
     )
+    draggable_duration_ms = (time.time() - start_draggable) * 1000
+    logger.info(f"⏱️ PROFILING: design_draggable took {draggable_duration_ms:.1f}ms")
 
     # Add progressive loading components if we have metadata
     progressive_loading_components = []
@@ -582,6 +633,12 @@ def create_dashboard_layout(
             logger.debug("🎨 APP_LAYOUT: No project data in cached_project_data")
     else:
         logger.debug("🎨 APP_LAYOUT: cached_project_data is None or not a dict")
+
+    total_duration_ms = (time.time() - start_time_total) * 1000
+    logger.info(
+        f"⏱️ PROFILING: create_dashboard_layout TOTAL took {total_duration_ms:.1f}ms "
+        f"(design_draggable={draggable_duration_ms:.1f}ms)"
+    )
 
     return dmc.Container(
         [

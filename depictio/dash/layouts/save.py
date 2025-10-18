@@ -1,7 +1,7 @@
 from datetime import datetime
 
 import dash
-from dash import ALL, Input, Output, State
+from dash import ALL, Input, State
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import (
@@ -820,32 +820,11 @@ def register_callbacks_save(app):
 
         # Pure side-effect callback - no return needed
 
-    @app.callback(
-        Output("success-modal-dashboard", "opened"),
-        Input("save-button-dashboard", "n_clicks"),
-        prevent_initial_call=True,
-    )
-    def toggle_success_modal_dashboard(n_save):
-        if n_save:
-            return True
-        raise dash.exceptions.PreventUpdate
-
-    # Auto-dismiss modal after 3 seconds
-    app.clientside_callback(
-        """
-        function(opened) {
-            if (opened) {
-                setTimeout(function() {
-                    // Find and click outside to close modal
-                    const backdrop = document.querySelector('.modal-backdrop');
-                    if (backdrop) {
-                        backdrop.click();
-                    }
-                }, 3000);
-            }
-            return window.dash_clientside.no_update;
-        }
-        """,
-        Output("success-modal-dashboard", "id"),
-        Input("success-modal-dashboard", "opened"),
-    )
+    # @app.callback(
+    #     Output("success-modal-dashboard", "opened"),
+    #     Input("save-button-dashboard", "n_clicks"),
+    #     State("success-modal-dashboard", "opened"),
+    #     prevent_initial_call=True,
+    # )
+    # def toggle_success_modal_dashboard(n_save, is_open):
+    #     return not is_open
