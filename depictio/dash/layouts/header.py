@@ -148,19 +148,29 @@ def _get_user_permissions(current_user, data):
 # =============================================================================
 
 
-def _create_action_icon(icon, button_id, disabled=False, n_clicks=0, tooltip=None, **kwargs):
+def _create_action_icon(icon, button_id, disabled=False, n_clicks=None, tooltip=None, **kwargs):
     """Create a standardized action icon button with optional tooltip."""
+    # Add n_clicks to constructor parameters if provided
+    action_icon_params = {
+        "id": button_id,
+        "size": "md",
+        "radius": "xl",
+        "variant": "subtle",
+        "color": "gray",
+        "style": BUTTON_STYLE,
+        "disabled": disabled,
+    }
+
+    # Include n_clicks if provided
+    if n_clicks is not None:
+        action_icon_params["n_clicks"] = n_clicks
+
+    # Merge additional kwargs
+    action_icon_params.update(kwargs)
+
     button = dmc.ActionIcon(
         DashIconify(icon=icon, width=28, color="gray"),
-        id=button_id,
-        size="md",  # Medium button size
-        radius="xl",
-        variant="subtle",
-        color="gray",
-        style=BUTTON_STYLE,
-        disabled=disabled,
-        n_clicks=n_clicks,
-        **kwargs,
+        **action_icon_params,
     )
 
     if tooltip:
