@@ -74,6 +74,36 @@ def create_dash_app():
     server.logger.handlers = logger.handlers  # type: ignore[possibly-unbound-attribute]
     server.logger.setLevel(logger.level)  # type: ignore[possibly-unbound-attribute]
 
+    # PERFORMANCE OPTIMIZATION: Configure Flask to use orjson for JSON serialization
+    # orjson is 10-16x faster than standard json library
+    try:
+        import orjson
+        from flask.json.provider import JSONProvider
+
+        class OrjsonProvider(JSONProvider):
+            """Custom JSON provider using orjson for faster serialization."""
+
+            def dumps(self, obj, **kwargs):
+                """Serialize obj to JSON bytes using orjson."""
+                # orjson.dumps returns bytes, Flask expects str
+                return orjson.dumps(obj).decode("utf-8")
+
+            def loads(self, s, **kwargs):
+                """Deserialize JSON string to Python object using orjson."""
+                # Convert to bytes if needed (orjson.loads accepts bytes or str)
+                if isinstance(s, str):
+                    s = s.encode("utf-8")
+                return orjson.loads(s)
+
+        server.json = OrjsonProvider(server)
+        logger.info(
+            "✅ DASH: Configured Flask to use orjson for JSON serialization (10-16x faster)"
+        )
+    except ImportError:
+        logger.warning(
+            "⚠️  DASH: orjson not available, using standard json (consider installing: pip install orjson)"
+        )
+
     # Configure static folder for Flask server
     # This is separate from Dash's assets folder
     static_folder = os.path.join(dash_root_path, "static")
