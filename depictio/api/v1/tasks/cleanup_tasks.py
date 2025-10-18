@@ -8,9 +8,13 @@ import asyncio
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.endpoints.user_endpoints.core_functions import _cleanup_expired_temporary_users
+from depictio.api.v1.endpoints.user_endpoints.core_functions import (
+    _cleanup_expired_temporary_users,
+    _purge_expired_tokens,
+)
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import cleanup_orphaned_s3_files
 from depictio.api.v1.services.analytics_service import AnalyticsService
+from depictio.models.models.users import UserBeanie
 
 
 async def periodic_cleanup_expired_temporary_users(
@@ -186,6 +190,79 @@ async def periodic_cleanup_orphaned_s3_files(
         await asyncio.sleep(interval_in_seconds)
 
 
+async def periodic_purge_expired_tokens(
+    interval_hours: int | None = None,
+    interval_minutes: int | None = None,
+    interval_seconds: int | None = None,
+):
+    """
+    Periodically purge expired tokens for all users.
+
+    This task was moved from Dash frontend (app_layout.py) to improve performance.
+    Instead of purging on every page load (30-50ms overhead), tokens are now
+    cleaned up hourly in the background.
+
+    Args:
+        interval_hours: How often to run token purge (in hours)
+        interval_minutes: How often to run token purge (in minutes)
+        interval_seconds: How often to run token purge (in seconds)
+
+    Note: Only one interval should be specified. If multiple are provided, precedence is:
+          seconds > minutes > hours. If none are provided, defaults to 1 hour.
+    """
+    # Determine the interval in seconds
+    if interval_seconds is not None:
+        interval_in_seconds = interval_seconds
+        interval_description = f"{interval_seconds} seconds"
+    elif interval_minutes is not None:
+        interval_in_seconds = interval_minutes * 60
+        interval_description = f"{interval_minutes} minutes"
+    elif interval_hours is not None:
+        interval_in_seconds = interval_hours * 3600
+        interval_description = f"{interval_hours} hours"
+    else:
+        # Default to 1 hour (balances cleanup frequency vs system load)
+        interval_in_seconds = 3600
+        interval_description = "1 hour"
+
+    logger.info(f"Starting periodic token purge task (every {interval_description})")
+
+    while True:
+        try:
+            logger.info("Running periodic purge of expired tokens for all users")
+
+            # Get all non-anonymous users (anonymous user has permanent token)
+            users = await UserBeanie.find({"is_anonymous": {"$ne": True}}).to_list()
+
+            total_tokens_deleted = 0
+
+            # Purge expired tokens for each user
+            for user in users:
+                try:
+                    result = await _purge_expired_tokens(user)
+                    if result["deleted_count"] > 0:
+                        total_tokens_deleted += result["deleted_count"]
+                        logger.debug(
+                            f"Purged {result['deleted_count']} expired tokens for user {user.email}"
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to purge tokens for user {user.email}: {e}")
+
+            if total_tokens_deleted > 0:
+                logger.info(
+                    f"Token purge completed: deleted {total_tokens_deleted} expired tokens "
+                    f"across {len(users)} users"
+                )
+            else:
+                logger.debug("No expired tokens found to purge")
+
+        except Exception as e:
+            logger.error(f"Error during periodic token purge: {e}")
+
+        # Wait for the next cleanup cycle
+        await asyncio.sleep(interval_in_seconds)
+
+
 def start_cleanup_tasks(
     interval_hours: int | None = None,
     interval_minutes: int | None = None,
@@ -227,6 +304,13 @@ def start_cleanup_tasks(
     asyncio.create_task(
         periodic_cleanup_orphaned_s3_files(
             interval_hours=1,  # Run S3 cleanup hourly
+        )
+    )
+
+    # Start periodic token purge (moved from Dash frontend for performance)
+    asyncio.create_task(
+        periodic_purge_expired_tokens(
+            interval_hours=1,  # Run token purge hourly
         )
     )
 
