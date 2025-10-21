@@ -144,3 +144,80 @@ def register_component_loading_callback(app, component_type: str):
         return outputs
 
     logger.info(f"⚡ PHASE 5B: Incremental loading callback for {component_type} registered")
+
+
+def register_deferred_initialization_callback(app, component_type: str):
+    """
+    Register callback to initialize component triggers after DOM commitment.
+
+    PERFORMANCE OPTIMIZATION (Phase 5C - Race Condition Fix):
+    This adds a small delay between component creation and trigger population,
+    ensuring React has committed the component tree before render callbacks fire.
+
+    Without this delay, component render callbacks (prevent_initial_call=False)
+    fire before React finishes committing the DOM, causing components to appear
+    then disappear.
+
+    Args:
+        app: Dash application instance
+        component_type: Type of component to initialize ("figure", "card", "interactive")
+    """
+    logger.info(f"⚡ PHASE 5C: Registering deferred initialization callback for {component_type}")
+
+    @app.callback(
+        Output({"type": f"{component_type}-trigger", "index": ALL}, "data"),
+        Input({"type": f"{component_type}-init-interval", "index": ALL}, "n_intervals"),
+        State({"type": f"{component_type}-metadata-store", "index": ALL}, "data"),
+        State({"type": f"{component_type}-trigger", "index": ALL}, "id"),
+        prevent_initial_call=True,
+    )
+    def initialize_component_trigger(n_intervals_list, metadata_list, trigger_ids):
+        """
+        Populate trigger Stores after DOM commitment delay.
+
+        This callback fires 100ms after the component is created, giving React
+        time to commit the component tree to the DOM before component-specific
+        render callbacks fire.
+
+        Args:
+            n_intervals_list: List of n_intervals for each init trigger
+            metadata_list: List of component metadata for initialization
+            trigger_ids: List of trigger Store IDs
+
+        Returns:
+            List of trigger data (or no_update for non-triggered components)
+        """
+        ctx = callback_context
+        if not ctx.triggered:
+            return [no_update] * len(trigger_ids)
+
+        trigger_id = ctx.triggered_id
+        expected_trigger_type = f"{component_type}-init-interval"
+        if not trigger_id or trigger_id.get("type") != expected_trigger_type:
+            return [no_update] * len(trigger_ids)
+
+        triggered_index = trigger_id.get("index")
+
+        logger.info(f"⏰ DEFERRED INIT: Populating trigger for {component_type} {triggered_index}")
+
+        outputs = []
+        for i, (n_intervals, metadata, tid) in enumerate(
+            zip(n_intervals_list, metadata_list, trigger_ids)
+        ):
+            trigger_index = tid.get("index")
+
+            if trigger_index == triggered_index and n_intervals and n_intervals > 0:
+                logger.info(
+                    f"✅ DEFERRED INIT: Trigger populated for {component_type} {trigger_index}, "
+                    f"render callbacks will now fire safely"
+                )
+                # Populate trigger Store with metadata
+                # This will fire the component's render callback (prevent_initial_call=False)
+                # But now React has already committed the component tree
+                outputs.append(metadata)
+            else:
+                outputs.append(no_update)
+
+        return outputs
+
+    logger.info(f"⚡ PHASE 5C: Deferred initialization callback for {component_type} registered")

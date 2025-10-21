@@ -281,6 +281,10 @@ def register_all_callbacks(app):
 
     # Register theme bridge callback
     # Register progressive loading callbacks
+    # Import position_controls to register position change callback
+    from depictio.dash.layouts import (
+        position_controls,  # noqa: F401 - callback registers via decorator
+    )
     from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
         register_progressive_loading_callbacks,
     )
@@ -288,6 +292,7 @@ def register_all_callbacks(app):
         register_partial_data_button_callbacks,
         register_reset_button_callbacks,
     )
+
     # from depictio.dash.theme_utils import register_theme_bridge_callback
 
     # register_theme_bridge_callback(app)
@@ -382,6 +387,7 @@ def register_feature_callbacks(app):
     Args:
         app (dash.Dash): The Dash application instance
     """
+    from depictio.dash.layouts.add_component_simple import register_add_component_simple_callback
     from depictio.dash.layouts.admin_management import register_admin_callbacks
     from depictio.dash.layouts.admin_notifications import register_admin_notifications_callbacks
     from depictio.dash.layouts.dashboards_management import register_callbacks_dashboards_management
@@ -396,10 +402,15 @@ def register_feature_callbacks(app):
     from depictio.dash.layouts.projectwise_user_management import (
         register_projectwise_user_management_callbacks,
     )
+    from depictio.dash.layouts.remove_component_simple import (
+        register_remove_component_simple_callback,
+    )
     from depictio.dash.layouts.tokens_management import register_tokens_management_callbacks
     from depictio.dash.layouts.users_management import register_callbacks_users_management
 
     # Register feature callbacks
+    register_add_component_simple_callback(app)  # Simple add-button callback
+    register_remove_component_simple_callback(app)  # Patch-based remove-button callback
     register_callbacks_dashboards_management(app)
     register_profile_callbacks(app)
     register_callbacks_users_management(app)

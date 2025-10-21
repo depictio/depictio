@@ -294,6 +294,152 @@ def _check_component_filter_activity(interactive_values, component_index):
     return False
 
 
+def _create_position_menu_vertical(btn_index, component_data=None):
+    """Create vertical position menu for interactive and other components (non-cards).
+
+    Provides up/down and top/bottom movement within the panel/section.
+
+    Args:
+        btn_index: Component index for ID generation
+        component_data: Component metadata for position validation
+
+    Returns:
+        dmc.Menu: Position control menu with vertical arrows
+    """
+
+    # Extract position info for button disable logic
+    panel_position = component_data.get("panel_position", 0) if component_data else 0
+    # TODO: Will need to pass section length from parent to properly disable top/bottom buttons
+
+    return dmc.Menu(
+        [
+            dmc.MenuTarget(
+                dmc.ActionIcon(
+                    DashIconify(icon="mdi:arrow-all", width=16, color="black"),
+                    id={"type": "position-menu-btn", "index": f"{btn_index}"},
+                    variant="filled",
+                    size="sm",
+                    style={"backgroundColor": "#f2f2f2"},  # Light grey like old drag handle
+                )
+            ),
+            dmc.MenuDropdown(
+                [
+                    dmc.MenuItem(
+                        "Move to Top",
+                        id={"type": "position-top-btn", "index": f"{btn_index}"},
+                        leftSection=DashIconify(icon="ph:arrow-line-up", width=16),
+                        n_clicks=0,
+                        disabled=panel_position == 0,  # Disable if already at top
+                    ),
+                    dmc.MenuItem(
+                        "Move Up",
+                        id={"type": "position-up-btn", "index": f"{btn_index}"},
+                        leftSection=DashIconify(icon="ph:arrow-up", width=16),
+                        n_clicks=0,
+                        disabled=panel_position == 0,  # Disable if already at top
+                    ),
+                    dmc.MenuItem(
+                        "Move Down",
+                        id={"type": "position-down-btn", "index": f"{btn_index}"},
+                        leftSection=DashIconify(icon="ph:arrow-down", width=16),
+                        n_clicks=0,
+                        # TODO: Disable if already at bottom (need section length)
+                    ),
+                    dmc.MenuItem(
+                        "Move to Bottom",
+                        id={"type": "position-bottom-btn", "index": f"{btn_index}"},
+                        leftSection=DashIconify(icon="ph:arrow-line-down", width=16),
+                        n_clicks=0,
+                        # TODO: Disable if already at bottom (need section length)
+                    ),
+                ]
+            ),
+        ],
+        id={"type": "position-menu-vertical", "index": f"{btn_index}"},
+    )
+
+
+def _create_position_menu_grid(btn_index, component_data=None):
+    """Create grid position menu for card components.
+
+    Provides up/down, top/bottom, and left/right movement within the 4-column grid.
+
+    Args:
+        btn_index: Component index for ID generation
+        component_data: Component metadata for position validation (row, col)
+
+    Returns:
+        dmc.Menu: Position control menu with directional arrows
+    """
+
+    # Extract position info for button disable logic
+    row = component_data.get("row", 0) if component_data else 0
+    col = component_data.get("col", 0) if component_data else 0
+    panel_position = component_data.get("panel_position", 0) if component_data else 0
+
+    return dmc.Menu(
+        [
+            dmc.MenuTarget(
+                dmc.ActionIcon(
+                    DashIconify(icon="mdi:arrow-all", width=16, color="black"),
+                    id={"type": "position-menu-btn", "index": f"{btn_index}"},
+                    variant="filled",
+                    size="sm",
+                    style={"backgroundColor": "#f2f2f2"},  # Light grey like old drag handle
+                )
+            ),
+            dmc.MenuDropdown(
+                [
+                    dmc.MenuItem(
+                        "Move to Top",
+                        id={"type": "position-top-btn", "index": f"{btn_index}"},
+                        leftSection=DashIconify(icon="ph:arrow-line-up", width=16),
+                        n_clicks=0,
+                        disabled=panel_position == 0,  # Disable if already at top
+                    ),
+                    dmc.MenuItem(
+                        "Move Up",
+                        id={"type": "position-up-btn", "index": f"{btn_index}"},
+                        leftSection=DashIconify(icon="ph:arrow-up", width=16),
+                        n_clicks=0,
+                        disabled=row == 0,  # Disable if already in first row
+                    ),
+                    dmc.MenuItem(
+                        "Move Down",
+                        id={"type": "position-down-btn", "index": f"{btn_index}"},
+                        leftSection=DashIconify(icon="ph:arrow-down", width=16),
+                        n_clicks=0,
+                        # TODO: Disable if already in last row (need total rows)
+                    ),
+                    dmc.MenuItem(
+                        "Move to Bottom",
+                        id={"type": "position-bottom-btn", "index": f"{btn_index}"},
+                        leftSection=DashIconify(icon="ph:arrow-line-down", width=16),
+                        n_clicks=0,
+                        # TODO: Disable if already at bottom (need section length)
+                    ),
+                    dmc.MenuDivider(),  # Visual separator between vertical and horizontal
+                    dmc.MenuItem(
+                        "Move Left",
+                        id={"type": "position-left-btn", "index": f"{btn_index}"},
+                        leftSection=DashIconify(icon="ph:arrow-left", width=16),
+                        n_clicks=0,
+                        disabled=col == 0,  # Disable if already in first column
+                    ),
+                    dmc.MenuItem(
+                        "Move Right",
+                        id={"type": "position-right-btn", "index": f"{btn_index}"},
+                        leftSection=DashIconify(icon="ph:arrow-right", width=16),
+                        n_clicks=0,
+                        disabled=col >= 3,  # Disable if in last column (0-indexed, 4 cols)
+                    ),
+                ]
+            ),
+        ],
+        id={"type": "position-menu-grid", "index": f"{btn_index}"},
+    )
+
+
 def _create_component_buttons(
     component_type,
     component_data,
@@ -313,51 +459,52 @@ def _create_component_buttons(
         dmc.ActionIconGroup: Configured button group for the component
     """
     # Define button configurations for different component types
+    # Order: position, metadata, reset, duplicate, edit, remove
     button_configs = {
         "figure": {
             "orientation": "vertical",
-            "buttons": ["drag", "remove", "edit", "duplicate", "metadata"],
+            "buttons": ["position", "metadata", "duplicate", "edit", "remove"],
             "scatter_buttons": [
                 "partial_data",  # Show partial data warning first for scatter plots
-                "drag",
-                "remove",
-                "edit",
-                "duplicate",
-                "reset",
+                "position",
                 "metadata",
+                "reset",
+                "duplicate",
+                "edit",
+                "remove",
             ],  # Special case for scatter plots
         },
         "interactive": {
             "orientation": "horizontal",
             "buttons": [
-                "drag",
-                "remove",
-                "edit",
-                "duplicate",
-                "reset",
+                "position",
                 "metadata",
+                "reset",
+                "duplicate",
+                "edit",
+                "remove",
             ],  # Interactive components get reset button
         },
         "card": {
             "orientation": "horizontal",
             "buttons": [
-                "drag",
-                "remove",
-                "edit",
-                "duplicate",
+                "position",
                 "metadata",
+                "duplicate",
+                "edit",
+                "remove",
             ],
         },
-        "table": {"orientation": "horizontal", "buttons": ["drag", "remove", "metadata"]},
-        "jbrowse": {"orientation": "horizontal", "buttons": ["drag", "remove", "metadata"]},
-        "multiqc": {"orientation": "vertical", "buttons": ["drag", "remove", "metadata"]},
+        "table": {"orientation": "horizontal", "buttons": ["position", "metadata", "remove"]},
+        "jbrowse": {"orientation": "horizontal", "buttons": ["position", "metadata", "remove"]},
+        "multiqc": {"orientation": "vertical", "buttons": ["position", "metadata", "remove"]},
         "text": {
             "orientation": "horizontal",
-            "buttons": ["drag", "remove", "duplicate", "alignment", "metadata"],
+            "buttons": ["position", "metadata", "duplicate", "alignment", "remove"],
         },  # Text components get alignment button (no edit button)
         "default": {
             "orientation": "horizontal",
-            "buttons": ["drag", "remove", "metadata"],
+            "buttons": ["position", "metadata", "remove"],
         },
     }
 
@@ -374,9 +521,19 @@ def _create_component_buttons(
     else:
         button_list = config["buttons"]
 
+    # Create position menu factory function based on component type
+    def create_position_button():
+        """Create appropriate position menu based on component type."""
+        if component_type == "card":
+            # Cards use grid positioning with left/right arrows
+            return _create_position_menu_grid(btn_index, component_data)
+        else:
+            # All other components use vertical positioning only
+            return _create_position_menu_vertical(btn_index, component_data)
+
     # Map button names to functions
     button_functions = {
-        "drag": create_drag_handle,
+        "position": create_position_button,  # New position menu replaces drag
         "remove": create_remove_button,
         "edit": create_edit_button,
         "duplicate": create_duplicate_button,

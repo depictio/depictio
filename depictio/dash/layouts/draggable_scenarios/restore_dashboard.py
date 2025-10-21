@@ -1,3 +1,5 @@
+from dash import dcc, html
+
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, api_call_get_dashboard
@@ -17,11 +19,15 @@ build_functions = get_build_functions()
 
 # PERFORMANCE OPTIMIZATION (Phase 5B): Enable progressive loading for multiple component types
 # Set to True to reduce initial render from 378 DOM mutations to smaller chunks
-PROGRESSIVE_LOADING_ENABLED = True
+PROGRESSIVE_LOADING_ENABLED = False  # DISABLED FOR DEBUGGING
 
 # Component types that should use progressive loading
 # Priority order: card (fastest) < interactive < figure (slowest)
 PROGRESSIVE_LOADING_TYPES = ["figure", "card", "interactive"]
+
+# DEBUGGING: Test flag to use simple DMC layout instead of draggable grid
+# Set to True to test if component disappearance is related to grid layout system
+USE_SIMPLE_LAYOUT_FOR_TESTING = True  # ENABLED FOR DEBUGGING
 
 # Base delays for each component type (in milliseconds)
 COMPONENT_BASE_DELAYS = {
@@ -128,23 +134,24 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
                 child = build_function(**child_metadata)
             else:
                 # Create lightweight placeholder with dcc.Interval to trigger loading
-                from dash import dcc, html
-
                 # Calculate stagger delay based on component type and count
                 base_delay = COMPONENT_BASE_DELAYS.get(component_type, 400)
                 stagger_delay = len(components_pending_load[component_type]) * 100
 
-                # CRITICAL FIX: Use "index" instead of "uuid" for ID consistency
-                # Pattern-matching callbacks expect {"type": "...", "index": MATCH}
-                # Using "uuid" creates ID mismatch causing components to disappear
-                child = html.Div(
+                # CRITICAL FIX: Progressive loading placeholders must NOT be wrapped by enable_box_edit_mode
+                # The progressive loading callback will build the component and wrap it itself
+                # The container needs pattern-matching ID for the callback to target it
+                # But we wrap it in an outer div with simple ID for enable_box_edit_mode to process later
+
+                # Inner container - targeted by progressive loading callback
+                inner_container = html.Div(
                     [
                         placeholder_func(component_uuid),
                         # Interval fires once after delay to trigger server callback
                         dcc.Interval(
                             id={
                                 "type": f"{component_type}-load-trigger",
-                                "index": component_uuid,  # Changed from "uuid" to "index"
+                                "index": component_uuid,
                             },
                             interval=base_delay + stagger_delay,
                             n_intervals=0,
@@ -154,7 +161,7 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
                         dcc.Store(
                             id={
                                 "type": f"{component_type}-metadata-store",
-                                "index": component_uuid,  # Changed from "uuid" to "index"
+                                "index": component_uuid,
                             },
                             data=child_metadata,  # Store metadata for callback
                         ),
@@ -162,7 +169,24 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
                     id={
                         "type": f"{component_type}-container",
                         "index": component_uuid,
-                    },  # Changed from "uuid" to "index"
+                    },
+                )
+
+                # Outer wrapper - has simple ID structure expected by draggable grid
+                # Progressive loading callback will replace inner_container children with wrapped component
+                # This outer wrapper ensures the grid item has the correct ID (box-{index})
+                child = html.Div(
+                    inner_container,
+                    id=f"box-{component_uuid}",  # Grid item ID - must match draggable layout "i" field
+                    className="responsive-wrapper",
+                    style={
+                        "position": "relative",
+                        "width": "100%",
+                        "height": "100%",
+                        "display": "flex",
+                        "flexDirection": "column",
+                        "flex": "1",
+                    },
                 )
                 components_pending_load[component_type].append(child_metadata)
         else:
@@ -181,18 +205,86 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
         children.append((child, component_type, child_metadata))
     # logger.info(f"Children: {children}")
 
+    # PRE-PROCESS: Add panel metadata before wrapping components
+    # This is needed so position menus can access panel/row/col data during creation
+    if USE_SIMPLE_LAYOUT_FOR_TESTING:
+        logger.info("🧪 PRE-PROCESSING: Adding panel metadata before component wrapping")
+        interactive_count = 0
+        card_count = 0
+        other_count = 0
+
+        for child, component_type, child_metadata in children:
+            if component_type == "interactive":
+                child_metadata["panel"] = "left"
+                child_metadata["panel_position"] = interactive_count
+                interactive_count += 1
+            elif component_type == "card":
+                child_metadata["panel"] = "right"
+                child_metadata["component_section"] = "cards"
+                child_metadata["panel_position"] = card_count
+                child_metadata["row"] = card_count // 4
+                child_metadata["col"] = card_count % 4
+                card_count += 1
+            else:
+                child_metadata["panel"] = "right"
+                child_metadata["component_section"] = "other"
+                child_metadata["panel_position"] = other_count
+                other_count += 1
+
     # Process children with special handling for text components to avoid circular JSON
     processed_children = []
     for child, component_type, child_metadata in children:
         logger.info(f"Processing child component of type {component_type}")
 
-        processed_child = enable_box_edit_mode(
-            child,  # Pass native Dash component directly
-            switch_state=edit_components_button,
-            dashboard_id=dashboard_id,
-            component_data=child_metadata,  # Pass component metadata to help with ID extraction
-            TOKEN=TOKEN,
-        )
+        # DEBUGGING: Use enable_box_edit_mode but extract only the content div without DraggableWrapper
+        if USE_SIMPLE_LAYOUT_FOR_TESTING:
+            logger.info(f"🧪 TESTING MODE: Using simplified button wrapper for {component_type}")
+            # Call enable_box_edit_mode to get buttons, but we'll extract the content div
+            wrapped_component = enable_box_edit_mode(
+                child,
+                switch_state=edit_components_button,
+                dashboard_id=dashboard_id,
+                component_data=child_metadata,
+                TOKEN=TOKEN,
+            )
+
+            # The wrapped_component structure is: html.Div(children=[DraggableWrapper(children=[content_div])])
+            # For simple layout, we just want the content_div with buttons, not the DraggableWrapper
+            # Since extracting from DraggableWrapper is complex, let's just use the wrapped_component as-is
+            # The buttons are already in there, we just need to strip the draggable functionality
+
+            # Simply use the wrapped component but give it a simpler styling for stack layout
+            content_div = wrapped_component
+
+            # Wrap the content div in a simple container for the layout
+            processed_child = html.Div(
+                content_div,
+                id=f"box-{child_metadata.get('index')}",
+                className="dashboard-component-hover",
+                style={
+                    "position": "relative",
+                    "width": "100%",
+                    "minHeight": "auto",
+                    "margin": "0",
+                    "padding": "0",
+                },
+            )
+        # CRITICAL FIX: Skip enable_box_edit_mode for progressive loading placeholders
+        # They're already wrapped with the correct box-{index} ID and structure
+        # Progressive loading callback will handle wrapping the actual component
+        elif PROGRESSIVE_LOADING_ENABLED and component_type in PROGRESSIVE_LOADING_TYPES:
+            logger.info(
+                f"⚡ PROGRESSIVE LOADING: Skipping enable_box_edit_mode for {component_type} placeholder"
+            )
+            processed_child = child  # Already wrapped, use as-is
+        else:
+            processed_child = enable_box_edit_mode(
+                child,  # Pass native Dash component directly
+                switch_state=edit_components_button,
+                dashboard_id=dashboard_id,
+                component_data=child_metadata,  # Pass component metadata to help with ID extraction
+                TOKEN=TOKEN,
+            )
         processed_children.append(processed_child)
 
     # Pattern-matching callbacks handle initial value population (prevent_initial_call=False)
@@ -225,6 +317,160 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
         f"✅ Dashboard restored with {len(processed_children)} components - pattern-matching callbacks will populate values"
     )
 
+    # DEBUGGING: Return simple DMC two-panel layout instead of draggable grid items
+    if USE_SIMPLE_LAYOUT_FOR_TESTING:
+        import dash_mantine_components as dmc
+
+        logger.info("🧪 TESTING MODE: Using two-panel DMC layout instead of draggable grid")
+        logger.info(f"🧪 Number of processed children: {len(processed_children)}")
+
+        # Log each child type for debugging
+        for i, child in enumerate(processed_children):
+            child_type = type(child).__name__
+            logger.info(f"🧪 Child {i}: {child_type}")
+            if hasattr(child, "id"):
+                logger.info(f"🧪 Child {i} ID: {child.id}")
+
+        # Add a debug header to confirm the layout is being used
+        debug_header = dmc.Alert(
+            title="🧪 Testing Mode Active",
+            children=f"Two-panel layout: Interactive (25%) | Cards+Other (75%) - {len(processed_children)} components total",
+            color="blue",
+            style={"marginBottom": "20px"},
+        )
+
+        # Separate components into two panels: interactive (left), everything else (right)
+        interactive_components = []  # Left panel - vertical stack
+
+        # Track card and non-card components separately for right panel layout
+        card_components = []  # Cards will be in a 4-column grid
+        other_components = []  # Other components in vertical stack below cards
+
+        # Need to match processed_children with original metadata to get component_type
+        # The children list was built in the same order as stored_metadata
+        # Panel metadata was already set in pre-processing step
+        for i, (child, component_type, child_metadata) in enumerate(children):
+            if component_type == "interactive":
+                interactive_components.append(processed_children[i])
+                logger.info(
+                    f"🎛️ Adding interactive component to left panel: {child_metadata.get('index')} (position={child_metadata.get('panel_position')})"
+                )
+            elif component_type == "card":
+                card_components.append(processed_children[i])
+                logger.info(
+                    f"📊 Adding card to right panel cards section: {child_metadata.get('index')} (row={child_metadata.get('row')}, col={child_metadata.get('col')})"
+                )
+            else:
+                other_components.append(processed_children[i])
+                logger.info(
+                    f"📈 Adding {component_type} to right panel other section: {child_metadata.get('index')} (position={child_metadata.get('panel_position')})"
+                )
+
+        logger.info(f"🧪 Left panel (interactive): {len(interactive_components)} components")
+        logger.info(
+            f"🧪 Right panel: {len(card_components)} cards + {len(other_components)} other = {len(card_components) + len(other_components)} total"
+        )
+
+        # Create left panel (25% width) - Interactive components
+        if interactive_components:
+            left_panel_content = dmc.Stack(
+                interactive_components,
+                gap=0,  # No gap between interactive components
+                style={"width": "100%"},
+            )
+        else:
+            left_panel_content = dmc.Center(
+                dmc.Text(
+                    "No interactive components",
+                    size="sm",
+                    c="gray",
+                    style={"padding": "20px"},
+                ),
+                style={"width": "100%", "height": "200px"},
+            )
+
+        # Create right panel (75% width) - Cards in grid + Other components in stack
+        right_panel_children = []
+
+        # Add cards section with 4-column grid if cards exist
+        if card_components:
+            cards_grid = dmc.SimpleGrid(
+                card_components,
+                cols=4,  # 4 cards per row
+                spacing=2,  # 2px horizontal gap
+                verticalSpacing=2,  # 2px vertical gap
+                style={"width": "100%", "marginBottom": "2px"},
+            )
+            right_panel_children.append(cards_grid)
+
+        # Add other components section as vertical stack
+        if other_components:
+            right_panel_children.extend(other_components)
+
+        # If no components at all, show placeholder
+        if not right_panel_children:
+            right_panel_content = dmc.Center(
+                dmc.Text(
+                    "No components",
+                    size="sm",
+                    c="gray",
+                    style={"padding": "20px"},
+                ),
+                style={"width": "100%", "height": "200px"},
+            )
+        else:
+            # Wrap all right panel components in a Stack
+            right_panel_content = dmc.Stack(
+                right_panel_children,
+                gap=2,  # Minimal 2px gap between sections/components
+                style={"width": "100%"},
+            )
+
+        # Create two-panel layout using dmc.Grid
+        two_panel_layout = html.Div(
+            [
+                debug_header,
+                dmc.Grid(
+                    [
+                        # Left panel - 1/4 width (span=1 out of 4 columns) - Interactive
+                        dmc.GridCol(
+                            left_panel_content,
+                            span=1,
+                            style={
+                                "backgroundColor": "var(--app-surface-color, #f8f9fa)",
+                                "padding": "4px",  # Minimal padding
+                                "borderRadius": "4px",
+                            },
+                        ),
+                        # Right panel - 3/4 width (span=3 out of 4 columns) - Cards + Other
+                        dmc.GridCol(
+                            right_panel_content,
+                            span=3,
+                            style={
+                                "padding": "0px",  # No padding for maximum compression
+                            },
+                        ),
+                    ],
+                    columns=4,  # Total columns for 1/4 - 3/4 split
+                    gutter="sm",  # 8px gap between panels
+                    style={"width": "100%"},
+                ),
+            ],
+            id="simple-test-layout",  # Add ID for debugging
+            style={
+                "padding": "8px",  # Reduced outer padding
+                "width": "100%",
+                "maxWidth": "1920px",  # Wider max width to accommodate two panels
+                "margin": "0 auto",  # Center the content
+                "backgroundColor": "var(--app-bg-color, #ffffff)",
+            },
+        )
+
+        logger.info(f"🧪 Returning two-panel layout with {len(processed_children)} components")
+        # Return wrapped in a container that the draggable callback can handle
+        # This prevents callback errors while we test
+        return [two_panel_layout]
+
     return processed_children
 
 
@@ -248,7 +494,6 @@ def render_dashboard_with_skeletons(
         skeleton_component = create_skeleton_component(component_type)
 
         # Wrap with DraggableWrapper using enable_box_edit_mode structure
-        from dash import html
 
         # Apply enable_box_edit_mode - wrap skeleton with a content div that can be updated
         skeleton_with_content_id = html.Div(
@@ -377,21 +622,31 @@ def load_depictio_data_sync(
                 )
 
             # Check if data is available, if not set the buttons to disabled
-            owner = (
-                True
-                if str(current_user.id) in [str(e.id) for e in dashboard_data.permissions.owners]
-                else False
+            # Note: current_user can be either a dict (from cache) or User object (from API)
+            # Handle both cases defensively
+            current_user_id = str(
+                current_user.get("id") if isinstance(current_user, dict) else current_user.id
             )
 
-            # logger.info(f"Owner: {owner}")
-            # logger.info(f"Current user: {current_user.id}")
-            # logger.info(
-            #     f"Dashboard owners: {[str(e.id) for e in dashboard_data.permissions.owners]}"
-            # )
+            # Note: dashboard_data.permissions.owners can be either dicts or UserBase objects
+            # Handle both cases defensively
+            owner_ids = [
+                str(e.get("id") if isinstance(e, dict) else e.id)
+                for e in dashboard_data.permissions.owners
+            ]
+            owner = current_user_id in owner_ids
 
-            viewer_ids = [str(e.id) for e in dashboard_data.permissions.viewers]
-            is_viewer = str(current_user.id) in viewer_ids
-            has_wildcard = "*" in dashboard_data.permissions.viewers
+            # logger.info(f"Owner: {owner}")
+            # logger.info(f"Current user: {current_user_id}")
+            # logger.info(f"Dashboard owners: {owner_ids}")
+
+            # Note: dashboard_data.permissions.viewers can be either dicts or UserBase objects
+            viewer_ids = [
+                str(e.get("id") if isinstance(e, dict) else e.id)
+                for e in dashboard_data.permissions.viewers
+            ]
+            is_viewer = current_user_id in viewer_ids
+            has_wildcard = "*" in viewer_ids  # Check if wildcard "*" is in the list of IDs
             viewer = is_viewer or has_wildcard
 
             if not owner and viewer:

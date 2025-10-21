@@ -1,5 +1,6 @@
 import dash_mantine_components as dmc
 from dash import ALL, MATCH, Input, Output, State, ctx, dcc, html
+from dash.exceptions import PreventUpdate
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import is_enabled
@@ -23,6 +24,10 @@ def register_callbacks_stepper_part_two(app):
         prevent_initial_call=True,
     )
     def update_button_list(stored_add_button):
+        # Guard: Skip if Store not yet initialized
+        if not stored_add_button or "_id" not in stored_add_button:
+            raise PreventUpdate
+
         n = stored_add_button["_id"]
 
         # Removed graph_stepper_button and map_stepper_button as they are no longer needed

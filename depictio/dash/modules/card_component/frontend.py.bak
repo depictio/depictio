@@ -1,16 +1,13 @@
 # Import necessary libraries
 import dash_mantine_components as dmc
-import httpx
 from dash import MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
-from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.colors import colors
 from depictio.dash.component_metadata import get_component_color, get_dmc_button_color, is_enabled
 from depictio.dash.modules.card_component.utils import (
     agg_functions,
-    build_card,
     build_card_frame,
     get_adaptive_trend_colors,
 )
@@ -20,7 +17,6 @@ from depictio.dash.utils import (
     UNSELECTED_STYLE,
     get_columns_from_data_collection,
     get_component_data,
-    load_depictio_data_mongo,
 )
 
 
@@ -164,277 +160,270 @@ def register_callbacks_card_component(app):
     #         return False
     #     return True
 
-    # Callback to update card body based on the selected column and aggregation
-    @app.callback(
-        Output({"type": "card-body", "index": MATCH}, "children"),
-        Output({"type": "aggregation-description", "index": MATCH}, "children"),
-        Output({"type": "card-columns-description", "index": MATCH}, "children"),
-        [
-            Input({"type": "card-input", "index": MATCH}, "value"),
-            Input({"type": "card-dropdown-column", "index": MATCH}, "value"),
-            Input({"type": "card-dropdown-aggregation", "index": MATCH}, "value"),
-            Input({"type": "card-color-background", "index": MATCH}, "value"),
-            Input({"type": "card-color-title", "index": MATCH}, "value"),
-            Input({"type": "card-icon-selector", "index": MATCH}, "value"),
-            Input({"type": "card-title-font-size", "index": MATCH}, "value"),
-            State({"type": "workflow-selection-label", "index": MATCH}, "value"),
-            State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-            State("current-edit-parent-index", "data"),  # Retrieve parent_index
-            State({"type": "card-dropdown-column", "index": MATCH}, "id"),
-            State("local-store", "data"),
-            State("url", "pathname"),
-        ],
-        prevent_initial_call=True,
-        # background=True
-    )
-    def design_card_body(
-        input_value,
-        column_name,
-        aggregation_value,
-        background_color,
-        title_color,
-        icon_name,
-        title_font_size,
-        wf_id,
-        dc_id,
-        parent_index,
-        id,
-        local_data,
-        pathname,
-    ):
-        """
-        Callback to update card body based on the selected column and aggregation
-        """
+    # # Callback to update card body based on the selected column and aggregation
+    # @app.callback(
+    #     Output({"type": "card-body", "index": MATCH}, "children"),
+    #     Output({"type": "aggregation-description", "index": MATCH}, "children"),
+    #     Output({"type": "card-columns-description", "index": MATCH}, "children"),
+    #     [
+    #         Input({"type": "card-input", "index": MATCH}, "value"),
+    #         Input({"type": "card-dropdown-column", "index": MATCH}, "value"),
+    #         Input({"type": "card-dropdown-aggregation", "index": MATCH}, "value"),
+    #         Input({"type": "card-color-background", "index": MATCH}, "value"),
+    #         Input({"type": "card-color-title", "index": MATCH}, "value"),
+    #         Input({"type": "card-icon-selector", "index": MATCH}, "value"),
+    #         Input({"type": "card-title-font-size", "index": MATCH}, "value"),
+    #         State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+    #         State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+    #         State("current-edit-parent-index", "data"),  # Retrieve parent_index
+    #         State({"type": "card-dropdown-column", "index": MATCH}, "id"),
+    #         State("local-store", "data"),
+    #         State("url", "pathname"),
+    #     ],
+    #     prevent_initial_call=True,
+    # )
+    # def design_card_body(
+    #     input_value,
+    #     column_name,
+    #     aggregation_value,
+    #     background_color,
+    #     title_color,
+    #     icon_name,
+    #     title_font_size,
+    #     wf_id,
+    #     dc_id,
+    #     parent_index,
+    #     id,
+    #     local_data,
+    #     pathname,
+    # ):
+    #     """
+    #     Callback to update card body based on the selected column and aggregation
+    #     """
 
-        input_id = str(id["index"])
+    #     input_id = str(id["index"])
 
-        logger.info(f"input_id: {input_id}")
-        logger.info(f"pathname: {pathname}")
+    #     logger.info(f"input_id: {input_id}")
+    #     logger.info(f"pathname: {pathname}")
 
-        logger.info(f"input_value: {input_value}")
-        logger.info(f"column_name: {column_name}")
-        logger.info(f"aggregation_value: {aggregation_value}")
-        logger.info(f"background_color: {background_color}")
-        logger.info(f"title_color: {title_color}")
-        logger.info(f"icon_name: {icon_name}")
-        logger.info(f"title_font_size: {title_font_size}")
+    #     logger.info(f"input_value: {input_value}")
+    #     logger.info(f"column_name: {column_name}")
+    #     logger.info(f"aggregation_value: {aggregation_value}")
+    #     logger.info(f"background_color: {background_color}")
+    #     logger.info(f"title_color: {title_color}")
+    #     logger.info(f"icon_name: {icon_name}")
+    #     logger.info(f"title_font_size: {title_font_size}")
 
-        if not local_data:
-            return ([], None)
+    #     if not local_data:
+    #         return ([], None)
 
-        TOKEN = local_data["access_token"]
-        logger.info(f"TOKEN: {TOKEN}")
+    #     TOKEN = local_data["access_token"]
+    #     logger.info(f"TOKEN: {TOKEN}")
 
-        # Extract dashboard_id from pathname
-        # URL format: /dashboard/{dashboard_id}/component/add/{component_id}
-        path_parts = pathname.split("/")
-        if "/component/add/" in pathname:
-            dashboard_id = path_parts[2]  # Get dashboard_id, not component_id
-        else:
-            dashboard_id = path_parts[-1]  # Fallback for regular dashboard URLs
-        logger.info(f"dashboard_id: {dashboard_id}")
+    #     dashboard_id = pathname.split("/")[-1]
+    #     logger.info(f"dashboard_id: {dashboard_id}")
 
-        component_data = get_component_data(
-            input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN
-        )
+    #     component_data = get_component_data(
+    #         input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN
+    #     )
 
-        if not component_data:
-            if not wf_id or not dc_id:
-                # if not wf_dc_store:
-                return ([], None)
+    #     if not component_data:
+    #         if not wf_id or not dc_id:
+    #             # if not wf_dc_store:
+    #             return ([], None)
 
-        else:
-            wf_id = component_data["wf_id"]
-            dc_id = component_data["dc_id"]
-            logger.info(f"wf_tag: {wf_id}")
-            logger.info(f"dc_tag: {dc_id}")
+    #     else:
+    #         wf_id = component_data["wf_id"]
+    #         dc_id = component_data["dc_id"]
+    #         logger.info(f"wf_tag: {wf_id}")
+    #         logger.info(f"dc_tag: {dc_id}")
 
-        logger.info(f"component_data: {component_data}")
+    #     logger.info(f"component_data: {component_data}")
 
-        headers = {
-            "Authorization": f"Bearer {TOKEN}",
-        }
+    #     headers = {
+    #         "Authorization": f"Bearer {TOKEN}",
+    #     }
 
-        # Get the columns from the selected data collection
-        cols_json = get_columns_from_data_collection(wf_id, dc_id, TOKEN)
-        logger.info(f"cols_json: {cols_json}")
+    #     # Get the columns from the selected data collection
+    #     cols_json = get_columns_from_data_collection(wf_id, dc_id, TOKEN)
+    #     logger.info(f"cols_json: {cols_json}")
 
-        data_columns_df = [
-            {"column": c, "description": cols_json[c]["description"]}
-            for c in cols_json
-            if cols_json[c]["description"] is not None
-        ]
+    #     data_columns_df = [
+    #         {"column": c, "description": cols_json[c]["description"]}
+    #         for c in cols_json
+    #         if cols_json[c]["description"] is not None
+    #     ]
 
-        # Create DMC Table instead of DataTable for better theming
-        table_rows = []
-        for row in data_columns_df:
-            table_rows.append(
-                dmc.TableTr(
-                    [
-                        dmc.TableTd(
-                            row["column"],
-                            style={"textAlign": "center", "fontSize": "11px", "maxWidth": "150px"},
-                        ),
-                        dmc.TableTd(
-                            row["description"],
-                            style={"textAlign": "center", "fontSize": "11px", "maxWidth": "150px"},
-                        ),
-                    ]
-                )
-            )
+    #     # Create DMC Table instead of DataTable for better theming
+    #     table_rows = []
+    #     for row in data_columns_df:
+    #         table_rows.append(
+    #             dmc.TableTr(
+    #                 [
+    #                     dmc.TableTd(
+    #                         row["column"],
+    #                         style={"textAlign": "center", "fontSize": "11px", "maxWidth": "150px"},
+    #                     ),
+    #                     dmc.TableTd(
+    #                         row["description"],
+    #                         style={"textAlign": "center", "fontSize": "11px", "maxWidth": "150px"},
+    #                     ),
+    #                 ]
+    #             )
+    #         )
 
-        columns_description_df = dmc.Table(
-            [
-                dmc.TableThead(
-                    [
-                        dmc.TableTr(
-                            [
-                                dmc.TableTh(
-                                    "Column",
-                                    style={
-                                        "textAlign": "center",
-                                        "fontSize": "11px",
-                                        "fontWeight": "bold",
-                                    },
-                                ),
-                                dmc.TableTh(
-                                    "Description",
-                                    style={
-                                        "textAlign": "center",
-                                        "fontSize": "11px",
-                                        "fontWeight": "bold",
-                                    },
-                                ),
-                            ]
-                        )
-                    ]
-                ),
-                dmc.TableTbody(table_rows),
-            ],
-            striped="odd",
-            withTableBorder=True,
-        )
+    #     columns_description_df = dmc.Table(
+    #         [
+    #             dmc.TableThead(
+    #                 [
+    #                     dmc.TableTr(
+    #                         [
+    #                             dmc.TableTh(
+    #                                 "Column",
+    #                                 style={
+    #                                     "textAlign": "center",
+    #                                     "fontSize": "11px",
+    #                                     "fontWeight": "bold",
+    #                                 },
+    #                             ),
+    #                             dmc.TableTh(
+    #                                 "Description",
+    #                                 style={
+    #                                     "textAlign": "center",
+    #                                     "fontSize": "11px",
+    #                                     "fontWeight": "bold",
+    #                                 },
+    #                             ),
+    #                         ]
+    #                     )
+    #                 ]
+    #             ),
+    #             dmc.TableTbody(table_rows),
+    #         ],
+    #         striped="odd",
+    #         withTableBorder=True,
+    #     )
 
-        # If any of the input values are None, return an empty list
-        if column_name is None or aggregation_value is None or wf_id is None or dc_id is None:
-            if not component_data:
-                return ([], None, columns_description_df)
-            else:
-                column_name = component_data["column_name"]
-                aggregation_value = component_data["aggregation"]
-                input_value = component_data["title"]
-                logger.info("COMPOENNT DATA")
-                logger.info(f"column_name: {column_name}")
-                logger.info(f"aggregation_value: {aggregation_value}")
-                logger.info(f"input_value: {input_value}")
+    #     # If any of the input values are None, return an empty list
+    #     if column_name is None or aggregation_value is None or wf_id is None or dc_id is None:
+    #         if not component_data:
+    #             return ([], None, columns_description_df)
+    #         else:
+    #             column_name = component_data["column_name"]
+    #             aggregation_value = component_data["aggregation"]
+    #             input_value = component_data["title"]
+    #             logger.info("COMPOENNT DATA")
+    #             logger.info(f"column_name: {column_name}")
+    #             logger.info(f"aggregation_value: {aggregation_value}")
+    #             logger.info(f"input_value: {input_value}")
 
-        # Get the type of the selected column
-        column_type = cols_json[column_name]["type"]
+    #     # Get the type of the selected column
+    #     column_type = cols_json[column_name]["type"]
 
-        aggregation_description = html.Div(
-            children=[
-                html.Hr(),
-                dmc.Tooltip(
-                    children=dmc.Badge(
-                        children="Aggregation description",
-                        leftSection=DashIconify(icon="mdi:information", color="white", width=20),
-                        color="gray",
-                        radius="lg",
-                    ),
-                    label=agg_functions[str(column_type)]["card_methods"][aggregation_value][
-                        "description"
-                    ],
-                    multiline=True,
-                    w=300,
-                    # transition="pop",
-                    # transitionDuration=300,
-                    transitionProps={
-                        "name": "pop",
-                        "duration": 300,
-                    },
-                    withinPortal=False,
-                    # justify="flex-end",
-                    withArrow=True,
-                    openDelay=500,
-                    closeDelay=500,
-                    color="gray",
-                ),
-            ]
-        )
+    #     aggregation_description = html.Div(
+    #         children=[
+    #             html.Hr(),
+    #             dmc.Tooltip(
+    #                 children=dmc.Badge(
+    #                     children="Aggregation description",
+    #                     leftSection=DashIconify(icon="mdi:information", color="white", width=20),
+    #                     color="gray",
+    #                     radius="lg",
+    #                 ),
+    #                 label=agg_functions[str(column_type)]["card_methods"][aggregation_value][
+    #                     "description"
+    #                 ],
+    #                 multiline=True,
+    #                 w=300,
+    #                 # transition="pop",
+    #                 # transitionDuration=300,
+    #                 transitionProps={
+    #                     "name": "pop",
+    #                     "duration": 300,
+    #                 },
+    #                 withinPortal=False,
+    #                 # justify="flex-end",
+    #                 withArrow=True,
+    #                 openDelay=500,
+    #                 closeDelay=500,
+    #                 color="gray",
+    #             ),
+    #         ]
+    #     )
 
-        # Get the workflow and data collection ids from the tags selected
-        # workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag, TOKEN=TOKEN)
+    #     # Get the workflow and data collection ids from the tags selected
+    #     # workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag, TOKEN=TOKEN)
 
-        # stored_metadata_interactive = []
-        # if stored_metadata:
-        #     stored_metadata_interactive = [e for e in stored_metadata if e["component_type"] == "interactive" and e["wf_id"] == workflow_id and e["dc_id"] == data_collection_id]
+    #     # stored_metadata_interactive = []
+    #     # if stored_metadata:
+    #     #     stored_metadata_interactive = [e for e in stored_metadata if e["component_type"] == "interactive" and e["wf_id"] == workflow_id and e["dc_id"] == data_collection_id]
 
-        if dashboard_id:
-            dashboard_data = load_depictio_data_mongo(dashboard_id, TOKEN=TOKEN)
-            logger.info(f"dashboard_data: {dashboard_data}")
-            relevant_metadata = [
-                m
-                for m in dashboard_data["stored_metadata"]
-                if m["wf_id"] == wf_id and m["component_type"] == "interactive"
-            ]
-            logger.info(f"BUILD CARD - relevant_metadata: {relevant_metadata}")
+    #     if dashboard_id:
+    #         dashboard_data = load_depictio_data_mongo(dashboard_id, TOKEN=TOKEN)
+    #         logger.info(f"dashboard_data: {dashboard_data}")
+    #         relevant_metadata = [
+    #             m
+    #             for m in dashboard_data["stored_metadata"]
+    #             if m["wf_id"] == wf_id and m["component_type"] == "interactive"
+    #         ]
+    #         logger.info(f"BUILD CARD - relevant_metadata: {relevant_metadata}")
 
-        # Get the data collection specs
-        # Handle joined data collection IDs
-        if isinstance(dc_id, str) and "--" in dc_id:
-            # For joined data collections, create synthetic specs
-            dc_specs = {
-                "config": {"type": "table", "metatype": "joined"},
-                "data_collection_tag": f"Joined data collection ({dc_id})",
-                "description": "Virtual joined data collection",
-                "_id": dc_id,
-            }
-        else:
-            # Regular data collection - fetch from API
-            dc_specs = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_id}",
-                headers=headers,
-            ).json()
+    #     # Get the data collection specs
+    #     # Handle joined data collection IDs
+    #     if isinstance(dc_id, str) and "--" in dc_id:
+    #         # For joined data collections, create synthetic specs
+    #         dc_specs = {
+    #             "config": {"type": "table", "metatype": "joined"},
+    #             "data_collection_tag": f"Joined data collection ({dc_id})",
+    #             "description": "Virtual joined data collection",
+    #             "_id": dc_id,
+    #         }
+    #     else:
+    #         # Regular data collection - fetch from API
+    #         dc_specs = httpx.get(
+    #             f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_id}",
+    #             headers=headers,
+    #         ).json()
 
-        # Get the type of the selected column and the value for the selected aggregation
-        column_type = cols_json[column_name]["type"]
-        # v = cols_json[column_name]["specs"][aggregation_value]
+    #     # Get the type of the selected column and the value for the selected aggregation
+    #     column_type = cols_json[column_name]["type"]
+    #     # v = cols_json[column_name]["specs"][aggregation_value]
 
-        dashboard_data
+    #     dashboard_data
 
-        card_kwargs = {
-            "index": id["index"],
-            "title": input_value,
-            "wf_id": wf_id,
-            "dc_id": dc_id,
-            "dc_config": dc_specs["config"],
-            "column_name": column_name,
-            "column_type": column_type,
-            "aggregation": aggregation_value,
-            "access_token": TOKEN,
-            "stepper": True,  # Show border during editing
-            "build_frame": False,  # Don't build frame - return just the content for the card-body container
-            "cols_json": cols_json,  # Pass cols_json for reference values
-            # New individual style parameters
-            "background_color": background_color,
-            "title_color": title_color,
-            "icon_name": icon_name,
-            "icon_color": title_color,  # Use same as title for consistency
-            "title_font_size": title_font_size,
-            "metric_theme": None,  # Not using themes anymore for new cards
-        }
+    #     card_kwargs = {
+    #         "index": id["index"],
+    #         "title": input_value,
+    #         "wf_id": wf_id,
+    #         "dc_id": dc_id,
+    #         "dc_config": dc_specs["config"],
+    #         "column_name": column_name,
+    #         "column_type": column_type,
+    #         "aggregation": aggregation_value,
+    #         "access_token": TOKEN,
+    #         "stepper": True,  # Show border during editing
+    #         "build_frame": False,  # Don't build frame - return just the content for the card-body container
+    #         "cols_json": cols_json,  # Pass cols_json for reference values
+    #         # New individual style parameters
+    #         "background_color": background_color,
+    #         "title_color": title_color,
+    #         "icon_name": icon_name,
+    #         "icon_color": title_color,  # Use same as title for consistency
+    #         "title_font_size": title_font_size,
+    #         "metric_theme": None,  # Not using themes anymore for new cards
+    #     }
 
-        if relevant_metadata:
-            card_kwargs["dashboard_metadata"] = relevant_metadata
+    #     if relevant_metadata:
+    #         card_kwargs["dashboard_metadata"] = relevant_metadata
 
-        logger.info(f"card_kwargs: {card_kwargs}")
+    #     logger.info(f"card_kwargs: {card_kwargs}")
 
-        if parent_index:
-            card_kwargs["parent_index"] = parent_index
+    #     if parent_index:
+    #         card_kwargs["parent_index"] = parent_index
 
-        new_card_body = build_card(**card_kwargs)
+    #     new_card_body = build_card(**card_kwargs)
 
-        return new_card_body, aggregation_description, columns_description_df
+    #     return new_card_body, aggregation_description, columns_description_df
 
     # PATTERN-MATCHING: Render callback for initial card value computation
     @app.callback(
@@ -443,7 +432,6 @@ def register_callbacks_card_component(app):
         Input({"type": "card-trigger", "index": MATCH}, "data"),
         State({"type": "card-metadata", "index": MATCH}, "data"),
         prevent_initial_call=False,
-        # background=True
     )
     def render_card_value_background(trigger_data, existing_metadata):
         """
@@ -565,7 +553,6 @@ def register_callbacks_card_component(app):
         State({"type": "card-metadata", "index": MATCH}, "data"),
         State({"type": "card-trigger", "index": MATCH}, "data"),
         prevent_initial_call=True,
-        # background=True
     )
     def patch_card_with_filters(filters_data, metadata, trigger_data):
         """
@@ -575,7 +562,7 @@ def register_callbacks_card_component(app):
         computes new value, and creates comparison with reference value.
 
         Args:
-            filters_data: Interactive filter selectionsâ
+            filters_data: Interactive filter selections
             metadata: Card metadata with reference_value
             trigger_data: Original trigger data with card config
 

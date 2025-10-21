@@ -185,7 +185,32 @@ def handle_authenticated_user(
     # purge_expired_tokens(local_data["access_token"])
 
     # Map the pathname to the appropriate content and header
-    if pathname.startswith("/dashboard/"):
+    # Component creation/editing page - must be checked BEFORE general dashboard route
+    if pathname.startswith("/dashboard/") and "/component/add/" in pathname:
+        from depictio.dash.layouts.stepper_page import create_stepper_page
+
+        parts = pathname.split("/")
+        # URL structure: /dashboard/{dashboard_id}/component/add/{component_id}
+        # parts: ['', 'dashboard', '{dashboard_id}', 'component', 'add', '{component_id}']
+        dashboard_id = parts[2]
+        component_id = parts[5]  # Fixed: was parts[4] which extracted 'add'
+
+        logger.info(f"🎨 COMPONENT STEPPER - Dashboard: {dashboard_id}, Component: {component_id}")
+
+        # Create stepper page layout
+        stepper_page = create_stepper_page(
+            dashboard_id=dashboard_id,
+            component_id=component_id,
+            theme=theme,
+            TOKEN=local_data.get("access_token"),
+        )
+
+        # Minimal header for consistency (though stepper_page has its own header)
+        header_content = create_default_header("Component Designer")
+
+        return stepper_page, header_content, pathname, local_data
+
+    elif pathname.startswith("/dashboard/"):
         dashboard_id = pathname.split("/")[-1]
 
         # Load dashboard data and create layout directly

@@ -33,18 +33,19 @@ def create_dash_app():
     # assets_folder = os.path.join(dash_root_path, "assets/debug")
     assets_folder = os.path.join(dash_root_path, "assets")
 
-    # Setup Celery background callback manager
-    logger.info("🔧 DASH: Setting up Celery background callback manager...")
+    # # Setup Celery background callback manager
+    # logger.info("🔧 DASH: Setting up Celery background callback manager...")
 
-    # Import the Dash-side Celery app
+    # # Import the Dash-side Celery app
     # from depictio.dash.celery_app import celery_app
 
     # background_callback_manager = dash.CeleryManager(celery_app)
     # logger.info("✅ DASH: Celery background callback manager configured")
 
     # import diskcache
+
     # cache = diskcache.Cache("/app/cache")
-    # background_callback_manager = DiskcacheManager(cache)
+    # background_callback_manager = dash.DiskcacheManager(cache)
     # logger.info(
     #     f"Diskcache background callback manager configured with cache path: {cache.directory}"
     # )

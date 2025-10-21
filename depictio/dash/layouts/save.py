@@ -153,6 +153,11 @@ def register_callbacks_save(app):
             f"📊 SAVE DEBUG - Raw stored_metadata count: {len(stored_metadata) if stored_metadata else 0}"
         )
 
+        # GUARD: Skip if we're on the stepper page (no draggable component there)
+        if pathname and "/component/add/" in pathname:
+            logger.info("🚫 SAVE CALLBACK - Skipping on stepper page (no draggable component)")
+            raise dash.exceptions.PreventUpdate
+
         # Log the first few raw metadata entries for debugging
         # if stored_metadata:
         #     for i, elem in enumerate(stored_metadata[:3]):  # Only first 3 to avoid spam

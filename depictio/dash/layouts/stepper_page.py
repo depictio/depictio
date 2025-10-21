@@ -1,0 +1,235 @@
+"""
+Standalone stepper page for component creation and editing.
+
+This module provides a dedicated page layout for the component stepper,
+replacing the modal-based approach. Benefits:
+- No dashboard components loaded during creation/editing (performance)
+- No pattern matching index conflicts
+- Clean URL-based routing
+- Browser history support
+"""
+
+import dash_mantine_components as dmc
+from dash import dcc, html
+from dash_iconify import DashIconify
+
+from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.api_calls import api_call_get_dashboard
+from depictio.dash.layouts.stepper import create_stepper_content
+
+
+def create_minimal_header(
+    dashboard_id: str, dashboard_title: str | None = None
+) -> dmc.AppShellHeader:
+    """
+    Create a minimal header for the stepper page.
+
+    Args:
+        dashboard_id: Dashboard ID for navigation back
+        dashboard_title: Optional dashboard title to display
+
+    Returns:
+        DMC AppShell header with back button and title
+    """
+    # If no title provided, use a placeholder
+    if not dashboard_title:
+        dashboard_title = f"Dashboard {dashboard_id[:8]}..."
+
+    header_content = dmc.Group(
+        [
+            # Back button - navigates to dashboard
+            dmc.ActionIcon(
+                DashIconify(icon="mdi:arrow-left", width=24),
+                id="stepper-back-button",
+                variant="subtle",
+                size="lg",
+                color="gray",
+            ),
+            dcc.Link(
+                dmc.Text(
+                    f"← Back to {dashboard_title}",
+                    size="lg",
+                    fw="normal",
+                    c="gray",
+                ),
+                href=f"/dashboard/{dashboard_id}",
+                style={"textDecoration": "none"},
+            ),
+            # Spacer
+            html.Div(style={"flex": 1}),
+            # Logo/Title
+            dmc.Group(
+                [
+                    html.Img(
+                        src="/assets/images/icons/favicon.ico",
+                        style={"height": "32px", "width": "32px"},
+                    ),
+                    dmc.Text(
+                        "Component Designer",
+                        size="xl",
+                        fw="bold",
+                    ),
+                ],
+                gap="sm",
+            ),
+            # Spacer
+            html.Div(style={"flex": 1}),
+        ],
+        justify="space-between",
+        align="center",
+        style={
+            "height": "100%",
+            "padding": "0 2rem",
+        },
+    )
+
+    return dmc.AppShellHeader(
+        header_content,
+        style={
+            "backgroundColor": "var(--app-surface-color, #ffffff)",
+            "borderBottom": "1px solid var(--app-border-color, #e9ecef)",
+        },
+    )
+
+
+def create_stepper_page(
+    dashboard_id: str, component_id: str, theme: str = "light", TOKEN: str | None = None
+) -> html.Div:
+    """
+    Create standalone stepper page for component creation/editing.
+
+    This function determines if we're in add or edit mode by checking if the
+    component_id exists in the dashboard metadata.
+
+    Args:
+        dashboard_id: Target dashboard ID
+        component_id: Component ID (new UUID for add, existing ID for edit)
+        theme: Current theme ("light" or "dark")
+        TOKEN: Authentication token
+
+    Returns:
+        Complete page layout with stepper
+    """
+    logger.info(f"🎨 STEPPER PAGE - Dashboard: {dashboard_id}, Component: {component_id}")
+
+    # Fetch dashboard data to determine mode and get context
+    dashboard_data = None
+    if TOKEN:
+        try:
+            dashboard_data = api_call_get_dashboard(dashboard_id, TOKEN)
+        except Exception as e:
+            logger.error(f"Failed to fetch dashboard data: {e}")
+
+    # Determine mode: check if component_id exists in stored_metadata
+    mode = "add"
+    dashboard_title = None
+
+    if dashboard_data:
+        dashboard_title = dashboard_data.get("dashboard_name", dashboard_data.get("title"))
+        stored_metadata = dashboard_data.get("stored_metadata", [])
+
+        # Check if component exists
+        for meta in stored_metadata:
+            if str(meta.get("index")) == str(component_id):
+                mode = "edit"
+                logger.info(f"🔧 EDIT MODE - Found existing component: {component_id}")
+                break
+
+    if mode == "add":
+        logger.info(f"✨ ADD MODE - Creating new component: {component_id}")
+
+    # Create header
+    header = create_minimal_header(dashboard_id, dashboard_title)
+
+    # Create stepper content
+    # IMPORTANT: Use fixed index "stepper-component" to avoid conflicts
+    stepper_index = "stepper-component"
+
+    # Use non-modal stepper for both add and edit modes
+    # The edit mode will be handled by callbacks that pre-populate the stepper with existing data
+    stepper_content = create_stepper_content(
+        n=stepper_index,
+        active=0,  # Start at first step
+    )
+
+    # Store component context for callbacks
+    component_context_store = dcc.Store(
+        id="stepper-page-context",
+        data={
+            "dashboard_id": dashboard_id,
+            "component_id": component_id,
+            "mode": mode,
+        },
+    )
+
+    # CRITICAL: Add Store components that stepper callbacks depend on
+    # These normally come from the header, but the stepper page doesn't have a header
+    # The update_button_list callback in stepper_parts/part_two.py depends on these
+    required_stores = [
+        dcc.Store(
+            id="stored-add-button",
+            storage_type="memory",  # Use memory to avoid localStorage caching issues
+            data=None,  # Start with None, will be populated by init callback
+        ),
+        dcc.Store(
+            id="initialized-add-button",
+            storage_type="memory",
+            data=True,
+        ),
+        # Trigger to initialize the stored-add-button Store on page load
+        dcc.Interval(
+            id="stepper-init-trigger",
+            interval=100,  # Fire after 100ms
+            n_intervals=0,
+            max_intervals=1,  # Fire only once
+        ),
+        # Store to track save completion status for btn-done flow
+        dcc.Store(
+            id="stepper-save-status",
+            storage_type="memory",
+            data=None,  # Will be populated by save_stepper_component callback
+        ),
+        # Hidden save button required for global save callback validation
+        # The global save callback in save.py has Input("save-button-dashboard", "n_clicks")
+        # Dash validates all callback components before execution, even if the callback has guards
+        html.Button(id="save-button-dashboard", style={"display": "none"}),
+    ]
+
+    # Create main layout with AppShell
+    page_layout = html.Div(
+        [
+            component_context_store,
+            *required_stores,  # Unpack the required Store components
+            dmc.AppShell(
+                [
+                    header,
+                    dmc.AppShellMain(
+                        dmc.Container(
+                            stepper_content,
+                            size="xl",
+                            px="md",
+                            py="xl",
+                            style={
+                                "minHeight": "calc(100vh - 80px)",  # Full height minus header
+                            },
+                        ),
+                        style={
+                            "backgroundColor": "var(--app-bg-color, #f8f9fa)",
+                        },
+                    ),
+                ],
+                header={"height": 80},
+                padding=0,
+            ),
+        ],
+        style={
+            "minHeight": "100vh",
+            "width": "100%",
+        },
+    )
+
+    logger.info(
+        f"✅ STEPPER PAGE - Created {mode} page for component {component_id} in dashboard {dashboard_id}"
+    )
+
+    return page_layout

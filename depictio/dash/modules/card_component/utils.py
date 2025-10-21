@@ -708,6 +708,10 @@ def build_card(**kwargs):
 
     # PATTERN-MATCHING: Trigger store - initiates async rendering
     # This store triggers the render_card_value_background callback
+    #
+    # NOTE: Progressive loading components create their own empty trigger Store
+    # via progressive_loading_component.py:136-139. This trigger Store is used
+    # for non-progressive components (stepper mode, direct builds).
     trigger_store = dcc.Store(
         id={
             "type": "card-trigger",
@@ -732,6 +736,7 @@ def build_card(**kwargs):
             "icon_color": icon_color,
             "title_font_size": title_font_size,
             "value_font_size": value_font_size,
+            "dc_config": dc_config,
         },
     )
 
