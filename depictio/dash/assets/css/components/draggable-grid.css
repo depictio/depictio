@@ -191,6 +191,7 @@
 .react-grid-item:hover .mantine-ActionIcon-root[id*="duplicate_box_button"],
 .react-grid-item:hover .mantine-ActionIcon-root[id*="reset_selection_graph_button"],
 .react-grid-item:hover .mantine-ActionIcon-root[id*="metadata-info-button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="position_menu_btn"],
 .react-grid-item:hover .mantine-ActionIcon-root[id*="partial-data-warning-button"] {
     opacity: 1 !important;
     pointer-events: auto !important;
@@ -223,6 +224,7 @@
 .drag-handles-hidden .mantine-ActionIcon-root[id*="remove_box_button"],
 .drag-handles-hidden .mantine-ActionIcon-root[id*="edit_box_button"],
 .drag-handles-hidden .mantine-ActionIcon-root[id*="duplicate_box_button"],
+.drag-handles-hidden .mantine-ActionIcon-root[id*="position_menu_btn"],
 .drag-handles-hidden .mantine-ActionIcon-root[id*="alignment_menu_btn"],
 .drag-handles-hidden .mantine-ActionIcon-root[id*="metadata-info-button"],
 .drag-handles-hidden .mantine-ActionIcon-root[id*="partial-data-warning-button"],
@@ -417,6 +419,7 @@
 .react-grid-item .mantine-ActionIcon-root[id*="remove_box_button"],
 .react-grid-item .mantine-ActionIcon-root[id*="edit_box_button"],
 .react-grid-item .mantine-ActionIcon-root[id*="duplicate_box_button"],
+.react-grid-item .mantine-ActionIcon-root[id*="position_menu_btn"],
 .react-grid-item .mantine-ActionIcon-root[id*="reset_selection_graph_button"],
 .react-grid-item .mantine-ActionIcon-root[id*="alignment_menu_btn"],
 .react-grid-item .mantine-ActionIcon-root[id*="partial-data-warning-button"] {
@@ -443,6 +446,7 @@
 .draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="remove_box_button"],
 .draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="edit_box_button"],
 .draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="duplicate_box_button"],
+.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="position_menu_btn"],
 .draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="reset_selection_graph_button"],
 .draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="alignment_menu_btn"],
 .draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="partial-data-warning-button"] {
@@ -520,3 +524,41 @@
    - Use CSS containment for drag performance
    - Consider will-change property for dragged elements
 */
+
+/* =============================================================================
+   8. POSITION OPTIMIZATION - CSS ORDER SUPPORT
+   ============================================================================= */
+
+/* Enable flexbox order property for lightweight position changes
+   Purpose: Allow components to be reordered visually without DOM restructuring
+   Benefit: Preserves component state (filters, zoom, selections) during moves
+   Performance: Much faster than full re-render (no React reconciliation)
+
+   This system works with clientside callback in position_controls.py which
+   applies CSS order changes instead of rebuilding the entire dashboard.
+*/
+
+/* Left panel - vertical stack with flexbox order support */
+.left-panel-stack,
+.right-panel-other-stack {
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+/* Cards grid - CSS Grid with explicit positioning support */
+.cards-grid-container {
+    display: grid !important;
+    /* Grid will use gridRow and gridColumn set by clientside callback */
+}
+
+/* Smooth transitions for position changes (optional, can be disabled for instant updates) */
+.react-grid-item {
+    transition: order 0.3s ease, grid-row 0.3s ease, grid-column 0.3s ease;
+}
+
+/* Accessibility: Ensure visual order matches DOM order for screen readers
+   Note: When using CSS order, visual order differs from DOM order
+   This is acceptable for this use case as components are purely visual */
+.react-grid-item {
+    /* Components will have inline order style set by clientside callback */
+}
