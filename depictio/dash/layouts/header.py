@@ -346,12 +346,14 @@ def register_callbacks_header(app):
         Output("toggle-notes-button", "disabled"),
         Output("draggable", "showRemoveButton"),
         Output("draggable", "showResizeHandles"),
-        Input("unified-edit-mode-button", "checked"),
+        State(
+            "unified-edit-mode-button", "checked"
+        ),  # Changed from Input to State - avoids error when button doesn't exist on stepper page
+        Input("url", "pathname"),  # Use pathname as trigger instead
         State("local-store", "data"),
-        State("url", "pathname"),
         State("user-cache-store", "data"),
     )
-    def toggle_buttons(switch_state, local_store, pathname, user_cache):
+    def toggle_buttons(switch_state, pathname, local_store, user_cache):
         """Handle button states based on edit mode and user permissions."""
         len_output = 9
 

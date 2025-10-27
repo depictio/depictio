@@ -96,47 +96,33 @@ def create_stepper_page(
     dashboard_id: str, component_id: str, theme: str = "light", TOKEN: str | None = None
 ) -> html.Div:
     """
-    Create standalone stepper page for component creation/editing.
+    Create standalone stepper page for component CREATION only.
 
-    This function determines if we're in add or edit mode by checking if the
-    component_id exists in the dashboard metadata.
+    For editing existing components, use create_edit_page() from edit_page.py instead.
+    This function always creates a new component with the provided component_id.
 
     Args:
         dashboard_id: Target dashboard ID
-        component_id: Component ID (new UUID for add, existing ID for edit)
+        component_id: New component UUID
         theme: Current theme ("light" or "dark")
         TOKEN: Authentication token
 
     Returns:
-        Complete page layout with stepper
+        Complete page layout with stepper wizard
     """
-    logger.info(f"🎨 STEPPER PAGE - Dashboard: {dashboard_id}, Component: {component_id}")
+    logger.info(
+        f"🎨 STEPPER PAGE (ADD MODE) - Dashboard: {dashboard_id}, Component: {component_id}"
+    )
 
-    # Fetch dashboard data to determine mode and get context
+    # Fetch dashboard data for context
     dashboard_data = None
+    dashboard_title = None
     if TOKEN:
         try:
             dashboard_data = api_call_get_dashboard(dashboard_id, TOKEN)
+            dashboard_title = dashboard_data.get("dashboard_name", dashboard_data.get("title"))
         except Exception as e:
             logger.error(f"Failed to fetch dashboard data: {e}")
-
-    # Determine mode: check if component_id exists in stored_metadata
-    mode = "add"
-    dashboard_title = None
-
-    if dashboard_data:
-        dashboard_title = dashboard_data.get("dashboard_name", dashboard_data.get("title"))
-        stored_metadata = dashboard_data.get("stored_metadata", [])
-
-        # Check if component exists
-        for meta in stored_metadata:
-            if str(meta.get("index")) == str(component_id):
-                mode = "edit"
-                logger.info(f"🔧 EDIT MODE - Found existing component: {component_id}")
-                break
-
-    if mode == "add":
-        logger.info(f"✨ ADD MODE - Creating new component: {component_id}")
 
     # Create header
     header = create_minimal_header(dashboard_id, dashboard_title)
@@ -145,20 +131,19 @@ def create_stepper_page(
     # IMPORTANT: Use fixed index "stepper-component" to avoid conflicts
     stepper_index = "stepper-component"
 
-    # Use non-modal stepper for both add and edit modes
-    # The edit mode will be handled by callbacks that pre-populate the stepper with existing data
+    # Create stepper wizard for new component creation
     stepper_content = create_stepper_content(
         n=stepper_index,
-        active=0,  # Start at first step
+        active=0,  # Start at first step (component type selection)
     )
 
-    # Store component context for callbacks
+    # Store component context for callbacks (add mode only)
     component_context_store = dcc.Store(
         id="stepper-page-context",
         data={
             "dashboard_id": dashboard_id,
             "component_id": component_id,
-            "mode": mode,
+            "mode": "add",
         },
     )
 
@@ -229,7 +214,7 @@ def create_stepper_page(
     )
 
     logger.info(
-        f"✅ STEPPER PAGE - Created {mode} page for component {component_id} in dashboard {dashboard_id}"
+        f"✅ STEPPER PAGE - Created ADD page for component {component_id} in dashboard {dashboard_id}"
     )
 
     return page_layout

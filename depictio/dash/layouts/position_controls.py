@@ -312,9 +312,14 @@ def move_card_down_in_grid(cards: list, target_index: int) -> list:
 
 
 # Main callback to handle all position button clicks
-# Re-renders layout with new component order
+# OPTIMIZATION: Updates position-metadata-store to trigger clientside visual updates
+# instead of full dashboard re-render, preserving component state
+# CRITICAL: Also updates ALL stored-metadata-component stores to keep them in sync
 @callback(
-    Output("draggable", "children", allow_duplicate=True),
+    [
+        Output("position-metadata-store", "data", allow_duplicate=True),
+        Output({"type": "stored-metadata-component", "index": ALL}, "data", allow_duplicate=True),
+    ],
     Input({"type": "position-top-btn", "index": ALL}, "n_clicks"),
     Input({"type": "position-up-btn", "index": ALL}, "n_clicks"),
     Input({"type": "position-down-btn", "index": ALL}, "n_clicks"),
@@ -344,7 +349,8 @@ def handle_position_change(
     """
     Handle position button clicks and update component positions.
 
-    Re-renders the dashboard layout with reordered components without page reload.
+    OPTIMIZATION: Updates metadata stores and triggers clientside CSS changes
+    instead of full dashboard re-render, preserving component state.
 
     Args:
         top_clicks_all: List of n_clicks for all top buttons (ALL pattern)
@@ -360,7 +366,9 @@ def handle_position_change(
         theme_store: Current theme data
 
     Returns:
-        New dashboard layout children (rendered with reordered components)
+        Tuple of:
+        - Updated metadata for position-metadata-store (triggers clientside CSS updates)
+        - Updated metadata for ALL stored-metadata-component stores (keeps state in sync)
     """
     if not ctx.triggered:
         raise PreventUpdate
@@ -542,19 +550,13 @@ def handle_position_change(
         elif isinstance(theme_store, str):
             theme = theme_store
 
-    logger.info(f"🔄 Re-rendering dashboard with new component order (theme={theme})")
-
-    # Import render function
-    from depictio.dash.layouts.draggable_scenarios.restore_dashboard import render_dashboard
-
-    # Render new layout with reordered components
-    new_layout = render_dashboard(
-        stored_metadata=new_metadata,
-        edit_components_button=edit_mode,
-        dashboard_id=dashboard_id,
-        theme=theme,
-        TOKEN=TOKEN,
+    logger.info(
+        f"🔄 Updating position metadata (optimization: no re-render, state preserved, theme={theme})"
     )
+
+    # OPTIMIZATION: Don't render_dashboard - just update metadata and save
+    # Clientside callback will handle visual updates via CSS order changes
+    # This preserves component state (filters, zoom, etc.)
 
     # Save to backend asynchronously (non-blocking, best-effort)
     try:
@@ -580,5 +582,71 @@ def handle_position_change(
     except Exception as e:
         logger.warning(f"⚠️ Failed to save dashboard: {e} (layout will revert on refresh)")
 
-    # Return new layout children
-    return new_layout
+    # OPTIMIZATION: Return updated metadata to BOTH outputs
+    # 1. position-metadata-store: triggers clientside callback (CSS order changes)
+    # 2. stored-metadata-component stores: keeps metadata in sync for subsequent moves
+    # Components stay mounted → state preserved (filters, zoom, selections, etc.)
+    logger.info(f"✅ Returning updated metadata to both outputs ({len(new_metadata)} components)")
+    return new_metadata, new_metadata
+
+
+def register_position_clientside_callback(app):
+    """
+    Register clientside callback for lightweight position updates.
+
+    This callback applies CSS order/grid changes to components without
+    triggering React re-renders, preserving component state.
+    """
+    app.clientside_callback(
+        """
+        function(newMetadata) {
+            // Position update via CSS without re-rendering
+            if (!newMetadata || !Array.isArray(newMetadata)) {
+                return window.dash_clientside.no_update;
+            }
+
+            console.log('🔄 CLIENTSIDE POSITION UPDATE: Processing', newMetadata.length, 'components');
+
+            // Apply position changes via CSS order property
+            newMetadata.forEach(comp => {
+                const boxId = `box-${comp.index}`;
+                const elem = document.getElementById(boxId);
+
+                if (!elem) {
+                    console.warn('⚠️  Component not found:', boxId);
+                    return;
+                }
+
+                const panel = comp.panel;
+                const componentSection = comp.component_section;
+                const panelPosition = comp.panel_position;
+
+                // Apply flexbox order for vertical stacking (left panel, right panel other)
+                if (panel === 'left' || (panel === 'right' && componentSection === 'other')) {
+                    elem.style.order = panelPosition;
+                    console.log(`  ✓ Set order=${panelPosition} for ${boxId} (${panel}/${componentSection || 'main'})`);
+                }
+
+                // Apply grid positioning for cards (4-column grid)
+                if (panel === 'right' && componentSection === 'cards') {
+                    const row = comp.row;
+                    const col = comp.col;
+                    if (row !== undefined && col !== undefined) {
+                        // CSS Grid uses 1-based indexing
+                        elem.style.gridRow = (row + 1).toString();
+                        elem.style.gridColumn = (col + 1).toString();
+                        console.log(`  ✓ Set grid position (${row},${col}) for card ${boxId}`);
+                    }
+                }
+            });
+
+            console.log('✅ CLIENTSIDE POSITION UPDATE: Complete');
+            return null;  // No DOM update needed
+        }
+        """,
+        Output("position-update-dummy", "children"),
+        Input("position-metadata-store", "data"),
+        prevent_initial_call=True,
+    )
+
+    logger.info("✅ Clientside position update callback registered")

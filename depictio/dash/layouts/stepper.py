@@ -1467,16 +1467,24 @@ def create_stepper_content(n, active):
                         fw="bold",
                         c="green",
                     ),
-                    dmc.Text(
-                        "Your component has been configured and is ready to be added to your dashboard.",
-                        size="md",
-                        ta="center",
-                        c="gray",
-                        mb="xl",
+                    # Dynamic text based on mode (add/edit)
+                    html.Div(
+                        id={"type": "completion-text", "index": n},
+                        children=dmc.Text(
+                            "Your component has been configured and is ready to be added to your dashboard.",
+                            size="md",
+                            ta="center",
+                            c="gray",
+                            mb="xl",
+                        ),
                     ),
                     dmc.Center(
                         dmc.Button(
-                            "Add to Dashboard",
+                            # Dynamic button text based on mode
+                            children=html.Div(
+                                id={"type": "btn-done-text", "index": n},
+                                children="Add to Dashboard",
+                            ),
                             id={
                                 "type": "btn-done",
                                 "index": n,

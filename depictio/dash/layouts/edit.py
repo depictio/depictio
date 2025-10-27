@@ -1063,6 +1063,7 @@ def enable_box_edit_mode(
     content_div = html.Div(
         content_children,
         id=f"content-{box_uuid}",
+        key=f"content-{btn_index}",  # Stable key for React reconciliation
         className="dashboard-component-hover responsive-content",
         style={
             "overflow": "visible",
@@ -1082,6 +1083,7 @@ def enable_box_edit_mode(
     )
 
     # Create DraggableWrapper with the UUID as ID (like in the prototype)
+    # Note: DraggableWrapper doesn't support 'key' prop - we'll add it to the outer wrapper instead
     draggable_wrapper = dgl.DraggableWrapper(
         id=box_uuid,  # Use UUID as ID for layout tracking
         children=[content_div],
@@ -1092,6 +1094,7 @@ def enable_box_edit_mode(
     return html.Div(
         draggable_wrapper,
         id=box_uuid,  # CRITICAL: Add the ID to the outer wrapper so it can be found for duplication
+        key=f"wrapper-{btn_index}",  # Stable key for outer wrapper
         className="responsive-wrapper",  # Critical: This class makes it work!
         style={
             "position": "relative",
