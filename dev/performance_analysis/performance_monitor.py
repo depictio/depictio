@@ -13,7 +13,7 @@ import httpx
 from playwright.async_api import async_playwright
 
 DASHBOARD_URL = "http://localhost:5080/dashboard/68f0f80e913db3d98f48122d"
-DASHBOARD_URL = "http://localhost:5080/dashboard/6824cb3b89d2b72169309737"  # Large dashboard with many callbacks
+DASHBOARD_URL = "http://localhost:5080/dashboard/68f1481b0cb53242fe72ad0c"  # Large dashboard with many callbacks
 
 # API credentials for automatic authentication
 API_BASE_URL = "http://localhost:8058/depictio/api/v1"

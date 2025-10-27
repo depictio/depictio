@@ -14,7 +14,7 @@ from typing import Any
 class CallbackRegistryBuilder:
     """Build a registry of Dash callbacks from Python source files"""
 
-    def __init__(self, dash_dir="../depictio/dash"):
+    def __init__(self, dash_dir="../../depictio/dash"):
         self.dash_dir = Path(__file__).parent / dash_dir
         self.registry = {}
         self.stats = {"files_parsed": 0, "callbacks_found": 0, "errors": 0}
