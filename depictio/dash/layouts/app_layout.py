@@ -210,6 +210,74 @@ def handle_authenticated_user(
 
         return stepper_page, header_content, pathname, local_data
 
+    # Component editing page - must be checked BEFORE general dashboard route
+    elif pathname.startswith("/dashboard/") and "/component/edit/" in pathname:
+        from depictio.dash.api_calls import api_call_get_dashboard
+        from depictio.dash.layouts.edit_page import create_edit_page
+
+        parts = pathname.split("/")
+        # URL structure: /dashboard/{dashboard_id}/component/edit/{component_id}
+        # parts: ['', 'dashboard', '{dashboard_id}', 'component', 'edit', '{component_id}']
+        dashboard_id = parts[2]
+        component_id = parts[5]
+
+        logger.info(f"✏️ EDIT COMPONENT - Dashboard: {dashboard_id}, Component: {component_id}")
+
+        # Fetch dashboard data to get component metadata
+        dashboard_data = None
+        component_data = None
+
+        if local_data:
+            try:
+                dashboard_data = api_call_get_dashboard(dashboard_id, local_data["access_token"])
+
+                # Find component in stored_metadata
+                stored_metadata = dashboard_data.get("stored_metadata", [])
+                for meta in stored_metadata:
+                    if str(meta.get("index")) == str(component_id):
+                        component_data = meta
+                        logger.info(
+                            f"   Found component type: {component_data.get('component_type')}"
+                        )
+                        break
+            except Exception as e:
+                logger.error(f"Failed to fetch component data: {e}")
+
+        if not component_data:
+            # Component not found - redirect to dashboard
+            logger.warning(f"Component {component_id} not found, redirecting to dashboard")
+            error_content = dmc.Center(
+                dmc.Alert(
+                    "Component not found",
+                    title="Error",
+                    color="red",
+                )
+            )
+            return (
+                error_content,
+                create_default_header("Error"),
+                f"/dashboard/{dashboard_id}",
+                local_data,
+            )
+
+        # Create edit page layout (no stepper, direct to design, no -tmp)
+        dashboard_title = (
+            dashboard_data.get("dashboard_name", dashboard_data.get("title"))
+            if dashboard_data
+            else None
+        )
+        edit_page = create_edit_page(
+            dashboard_id=dashboard_id,
+            component_id=component_id,  # Use actual ID
+            component_data=component_data,
+            dashboard_title=dashboard_title,
+            theme=theme,
+            TOKEN=local_data.get("access_token"),
+        )
+
+        header_content = create_default_header("Edit Component")
+        return edit_page, header_content, pathname, local_data
+
     elif pathname.startswith("/dashboard/"):
         dashboard_id = pathname.split("/")[-1]
 
@@ -750,6 +818,17 @@ def create_app_layout():
                 storage_type="memory",
                 data=None,  # Will be populated by consolidated callback
             ),
+            # POSITION OPTIMIZATION: Store for component position metadata
+            # Used by position_controls.py to trigger lightweight position updates
+            # without full dashboard re-render. Clientside callback reads this to
+            # apply CSS order changes while preserving component state.
+            dcc.Store(
+                id="position-metadata-store",
+                storage_type="memory",
+                data=None,  # Updated by position change callback
+            ),
+            # Hidden div for clientside callback output (position updates)
+            html.Div(id="position-update-dummy", style={"display": "none"}),
             # PERFORMANCE OPTIMIZATION: Changed from "local" to "session" storage
             # This was causing 885ms initialization delay due to reading 92KB from localStorage
             # Session storage clears on browser close, preventing accumulated stale data
@@ -759,6 +838,8 @@ def create_app_layout():
                 data={},
                 storage_type="session",  # Changed from "local" - clears on browser close
             ),
+            # DEPRECATED: Used by old stepper-based edit flow (now obsolete with direct edit page)
+            # Kept for backward compatibility - no longer actively populated or used
             dcc.Store(id="current-edit-parent-index", storage_type="memory"),
             # Tab state management (frontend only, no backend persistence)
             # Global store - always available before dashboard-specific callbacks run

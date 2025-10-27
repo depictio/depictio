@@ -292,6 +292,7 @@ def register_all_callbacks(app):
         register_partial_data_button_callbacks,
         register_reset_button_callbacks,
     )
+    from depictio.dash.layouts.position_controls import register_position_clientside_callback
 
     # from depictio.dash.theme_utils import register_theme_bridge_callback
 
@@ -299,6 +300,7 @@ def register_all_callbacks(app):
     register_progressive_loading_callbacks(app)
     register_reset_button_callbacks(app)
     register_partial_data_button_callbacks(app)
+    register_position_clientside_callback(app)  # Register clientside position update callback
 
     # Register analytics callbacks
     # from depictio.dash.components.analytics_tracker import register_analytics_callbacks
@@ -391,6 +393,8 @@ def register_feature_callbacks(app):
     from depictio.dash.layouts.admin_management import register_admin_callbacks
     from depictio.dash.layouts.admin_notifications import register_admin_notifications_callbacks
     from depictio.dash.layouts.dashboards_management import register_callbacks_dashboards_management
+    from depictio.dash.layouts.edit_component_simple import register_edit_component_simple_callback
+    from depictio.dash.layouts.edit_page import register_edit_page_callbacks
     from depictio.dash.layouts.profile import register_profile_callbacks
     from depictio.dash.layouts.project_data_collections import (
         register_project_data_collections_callbacks,
@@ -410,6 +414,8 @@ def register_feature_callbacks(app):
 
     # Register feature callbacks
     register_add_component_simple_callback(app)  # Simple add-button callback
+    register_edit_component_simple_callback(app)  # Simple edit-button callback (navigation)
+    register_edit_page_callbacks(app)  # Edit page save callback
     register_remove_component_simple_callback(app)  # Patch-based remove-button callback
     register_callbacks_dashboards_management(app)
     register_profile_callbacks(app)

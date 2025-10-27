@@ -73,7 +73,9 @@ def register_callbacks_save(app):
     @app.callback(
         inputs=[
             Input("save-button-dashboard", "n_clicks"),
-            Input("draggable", "currentLayout"),
+            State(
+                "draggable", "currentLayout"
+            ),  # Changed from Input to State - avoids error when draggable doesn't exist on stepper page
             Input(
                 {
                     "type": "stored-metadata-component",
@@ -82,7 +84,9 @@ def register_callbacks_save(app):
                 "data",
             ),
             State("stored-edit-dashboard-mode-button", "data"),
-            Input("unified-edit-mode-button", "checked"),
+            State(
+                "unified-edit-mode-button", "checked"
+            ),  # Changed from Input to State - avoids error when button doesn't exist on stepper page
             State("stored-add-button", "data"),
             State({"type": "interactive-component-value", "index": ALL}, "value"),
             Input({"type": "text-store", "index": ALL}, "data"),
