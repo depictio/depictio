@@ -33,16 +33,13 @@ def register_callbacks_card_component(app):
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             # State("local-store-components-metadata", "data"),
             State({"type": "card-dropdown-column", "index": MATCH}, "id"),
-            State("current-edit-parent-index", "data"),  # Add parent index for edit mode
             State("local-store", "data"),
             State("url", "pathname"),
         ],
         prevent_initial_call=True,
     )
     # def update_aggregation_options(column_name, wf_dc_store, component_id, local_data, pathname):
-    def update_aggregation_options(
-        column_name, wf_tag, dc_tag, component_id, parent_index, local_data, pathname
-    ):
+    def update_aggregation_options(column_name, wf_tag, dc_tag, component_id, local_data, pathname):
         """
         Callback to update aggregation dropdown options based on the selected column
         """
@@ -51,7 +48,6 @@ def register_callbacks_card_component(app):
         logger.info(f"wf_tag: {wf_tag}")
         logger.info(f"dc_tag: {dc_tag}")
         logger.info(f"component_id: {component_id}")
-        logger.info(f"parent_index: {parent_index}")
         logger.info(f"local_data available: {local_data is not None}")
         logger.info(f"pathname: {pathname}")
 
@@ -61,21 +57,23 @@ def register_callbacks_card_component(app):
 
         TOKEN = local_data["access_token"]
 
-        # In edit mode, we might need to get workflow/dc IDs from component data
-        if parent_index is not None and (not wf_tag or not dc_tag):
+        # If workflow/dc tags are missing, try to get from component data (edit mode or pre-population)
+        if not wf_tag or not dc_tag:
+            input_id = str(component_id["index"])
             logger.info(
-                f"Edit mode detected - fetching component data for parent_index: {parent_index}"
+                f"Missing wf/dc tags - fetching component data for component_id: {input_id}"
             )
-            # Extract dashboard_id correctly for stepper page
-            # URL format: /dashboard/{dashboard_id}/component/add/{component_id}
+
+            # Extract dashboard_id from pathname
+            # URL formats: /dashboard/{id}/component/add/{uuid} or /dashboard/{id}/component/edit/{uuid}
             path_parts = pathname.split("/")
-            if "/component/add/" in pathname:
-                dashboard_id = path_parts[2]  # Get dashboard_id, not component_id
+            if "/component/add/" in pathname or "/component/edit/" in pathname:
+                dashboard_id = path_parts[2]  # Both add and edit have dashboard_id at index 2
             else:
                 dashboard_id = path_parts[-1]  # Fallback for regular dashboard URLs
 
             component_data = get_component_data(
-                input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN
+                input_id=input_id, dashboard_id=dashboard_id, TOKEN=TOKEN
             )
             if component_data:
                 wf_tag = component_data.get("wf_id")
@@ -150,6 +148,88 @@ def register_callbacks_card_component(app):
     def reset_aggregation_value(column_name):
         return None
 
+    # Pre-populate card settings in edit mode (edit page, not stepper)
+    @app.callback(
+        Output({"type": "card-input", "index": MATCH}, "value"),
+        Output({"type": "card-dropdown-column", "index": MATCH}, "value"),
+        Output(
+            {"type": "card-dropdown-aggregation", "index": MATCH}, "value", allow_duplicate=True
+        ),
+        Output({"type": "card-color-background", "index": MATCH}, "value"),
+        Output({"type": "card-color-title", "index": MATCH}, "value"),
+        Output({"type": "card-icon-selector", "index": MATCH}, "value"),
+        Output({"type": "card-title-font-size", "index": MATCH}, "value"),
+        Input("edit-page-context", "data"),
+        State({"type": "card-input", "index": MATCH}, "id"),
+        prevent_initial_call="initial_duplicate",
+    )
+    def pre_populate_card_settings_for_edit(edit_context, card_id):
+        """
+        Pre-populate card design settings when in edit mode.
+
+        Uses actual component ID (no -tmp suffix). Only populates when
+        the card_id matches the component being edited in the edit page.
+
+        Args:
+            edit_context: Edit page context with component data
+            card_id: Card component ID from the design form
+
+        Returns:
+            Tuple of pre-populated values for all card settings
+        """
+        import dash
+
+        if not edit_context:
+            return (
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+            )
+
+        component_data = edit_context.get("component_data")
+        if not component_data or component_data.get("component_type") != "card":
+            return (
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+            )
+
+        # Match component ID (actual ID, no -tmp)
+        if str(card_id["index"]) != str(edit_context.get("component_id")):
+            return (
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+            )
+
+        logger.info(f"🎨 PRE-POPULATING card settings for component {card_id['index']}")
+        logger.info(f"   Title: {component_data.get('title')}")
+        logger.info(f"   Column: {component_data.get('column_name')}")
+        logger.info(f"   Aggregation: {component_data.get('aggregation')}")
+
+        # Ensure ColorInput components get empty string instead of None to avoid trim() errors
+        return (
+            component_data.get("title") or "",  # TextInput needs string
+            component_data.get("column_name"),  # Select accepts None
+            component_data.get("aggregation"),  # Select accepts None
+            component_data.get("background_color") or "",  # ColorInput needs empty string, not None
+            component_data.get("title_color") or "",  # ColorInput needs empty string, not None
+            component_data.get("icon_name") or "mdi:chart-line",  # Select needs value
+            component_data.get("title_font_size") or "md",  # Select needs value
+        )
+
     # @app.callback(
     #     Output({"type": "btn-done-edit", "index": MATCH}, "disabled", allow_duplicate=True),
     #     [
@@ -179,7 +259,6 @@ def register_callbacks_card_component(app):
             Input({"type": "card-title-font-size", "index": MATCH}, "value"),
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-            State("current-edit-parent-index", "data"),  # Retrieve parent_index
             State({"type": "card-dropdown-column", "index": MATCH}, "id"),
             State("local-store", "data"),
             State("url", "pathname"),
@@ -197,7 +276,6 @@ def register_callbacks_card_component(app):
         title_font_size,
         wf_id,
         dc_id,
-        parent_index,
         id,
         local_data,
         pathname,
@@ -220,34 +298,49 @@ def register_callbacks_card_component(app):
         logger.info(f"title_font_size: {title_font_size}")
 
         if not local_data:
-            return ([], None)
+            return ([], None, None)
 
         TOKEN = local_data["access_token"]
         logger.info(f"TOKEN: {TOKEN}")
 
-        # Extract dashboard_id from pathname
-        # URL format: /dashboard/{dashboard_id}/component/add/{component_id}
+        # Extract dashboard_id and component_id from pathname
+        # URL formats:
+        #   /dashboard/{dashboard_id}/component/add/{component_id}
+        #   /dashboard/{dashboard_id}/component/edit/{component_id}
+        #   /dashboard/{dashboard_id} (regular dashboard)
         path_parts = pathname.split("/")
-        if "/component/add/" in pathname:
-            dashboard_id = path_parts[2]  # Get dashboard_id, not component_id
+        if "/component/add/" in pathname or "/component/edit/" in pathname:
+            dashboard_id = path_parts[2]  # Dashboard ID at index 2
+            # Use component_id from pattern-matched ID
+            input_id = str(id["index"])
         else:
             dashboard_id = path_parts[-1]  # Fallback for regular dashboard URLs
+            input_id = None  # Regular dashboard - no specific component context
+
         logger.info(f"dashboard_id: {dashboard_id}")
+        logger.info(f"input_id (for component data fetch): {input_id}")
 
-        component_data = get_component_data(
-            input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN
-        )
+        # Fetch component data if we have an input_id
+        component_data = None
+        if input_id:
+            component_data = get_component_data(
+                input_id=input_id, dashboard_id=dashboard_id, TOKEN=TOKEN
+            )
 
-        if not component_data:
-            if not wf_id or not dc_id:
-                # if not wf_dc_store:
-                return ([], None)
-
+        # Use wf_id/dc_id from States (hidden selects) if available
+        # Otherwise fall back to component_data (for backward compatibility)
+        if not wf_id or not dc_id:
+            if component_data:
+                wf_id = component_data["wf_id"]
+                dc_id = component_data["dc_id"]
+                logger.info(f"Using wf/dc from component_data - wf_tag: {wf_id}, dc_tag: {dc_id}")
+            else:
+                logger.error("No wf_id/dc_id available from States or component_data")
+                return ([], None, None)
         else:
-            wf_id = component_data["wf_id"]
-            dc_id = component_data["dc_id"]
-            logger.info(f"wf_tag: {wf_id}")
-            logger.info(f"dc_tag: {dc_id}")
+            logger.info(
+                f"Using wf/dc from States (hidden selects) - wf_tag: {wf_id}, dc_tag: {dc_id}"
+            )
 
         logger.info(f"component_data: {component_data}")
 
@@ -369,6 +462,9 @@ def register_callbacks_card_component(app):
         # if stored_metadata:
         #     stored_metadata_interactive = [e for e in stored_metadata if e["component_type"] == "interactive" and e["wf_id"] == workflow_id and e["dc_id"] == data_collection_id]
 
+        # Initialize relevant_metadata to empty list (defensive programming)
+        relevant_metadata = []
+
         if dashboard_id:
             dashboard_data = load_depictio_data_mongo(dashboard_id, TOKEN=TOKEN)
             logger.info(f"dashboard_data: {dashboard_data}")
@@ -400,7 +496,10 @@ def register_callbacks_card_component(app):
         column_type = cols_json[column_name]["type"]
         # v = cols_json[column_name]["specs"][aggregation_value]
 
-        dashboard_data
+        # Determine if we're in stepper mode vs edit mode
+        # Stepper mode: component/add URLs with -tmp suffix
+        # Edit mode: component/edit URLs with actual component ID
+        is_stepper_mode = "/component/add/" in pathname
 
         card_kwargs = {
             "index": id["index"],
@@ -412,7 +511,7 @@ def register_callbacks_card_component(app):
             "column_type": column_type,
             "aggregation": aggregation_value,
             "access_token": TOKEN,
-            "stepper": True,  # Show border during editing
+            "stepper": is_stepper_mode,  # Only True for stepper workflow, not edit page
             "build_frame": False,  # Don't build frame - return just the content for the card-body container
             "cols_json": cols_json,  # Pass cols_json for reference values
             # New individual style parameters
@@ -428,9 +527,6 @@ def register_callbacks_card_component(app):
             card_kwargs["dashboard_metadata"] = relevant_metadata
 
         logger.info(f"card_kwargs: {card_kwargs}")
-
-        if parent_index:
-            card_kwargs["parent_index"] = parent_index
 
         new_card_body = build_card(**card_kwargs)
 

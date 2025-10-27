@@ -2321,7 +2321,7 @@ def register_callbacks_figure_component(app):
         State({"type": "graph", "index": MATCH}, "id"),
         State("local-store", "data"),
         background=False,  # Synchronous to avoid subprocess issues with cache
-        prevent_initial_call=False,  # Fire immediately when trigger store is populated
+        prevent_initial_call=True,  # Canvas-only: skip initial render, let patch callback handle it
     )
     def render_figure_callback(
         trigger_data, metadata, existing_trace_metadata, graph_id, local_data
@@ -2829,10 +2829,23 @@ def register_callbacks_figure_component(app):
                 metadata.get("index", "unknown"),
             )
 
-        if not filter_data or not current_figure or not metadata:
+        # CANVAS-ONLY: Allow rendering from empty canvas (current_figure may be None on initial render)
+        if not metadata:
             raise dash.exceptions.PreventUpdate
 
-        logger.info("🔍 Interactive filtering: component %s", metadata.get("index", "unknown"))
+        # Detect initial render: no current_figure means this is the first render from empty canvas
+        is_initial_render = current_figure is None
+
+        if is_initial_render:
+            logger.info(
+                "🎨 INITIAL RENDER: Rendering from empty canvas for component %s",
+                metadata.get("index", "unknown"),
+            )
+        else:
+            logger.info(
+                "🔍 PATCH RENDER: Updating existing figure for component %s",
+                metadata.get("index", "unknown"),
+            )
 
         try:
             from depictio.dash.modules.figure_component.utils import (
@@ -2840,8 +2853,10 @@ def register_callbacks_figure_component(app):
                 render_figure,
             )
 
-            # Extract context
-            interactive_values = filter_data.get("interactive_components_values", [])
+            # Extract context - on initial render, filter_data may be None or empty
+            interactive_values = (
+                filter_data.get("interactive_components_values", []) if filter_data else []
+            )
             token = local_data.get("access_token") if local_data else None
             wf_id = metadata.get("wf_id")
             dc_id = metadata.get("dc_id")

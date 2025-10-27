@@ -1,7 +1,7 @@
 import dash_mantine_components as dmc
 import numpy as np
 import pandas as pd
-from dash import dcc
+from dash import dcc, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import settings
@@ -864,23 +864,9 @@ def build_card(**kwargs):
         card_section_kwargs["bg"] = background_color
 
     if stepper and not build_frame:
-        # Return card with minimal styling - no extra borders or padding
-        card_style = {
-            "boxSizing": "content-box",
-            "height": "100%",
-            "minHeight": "120px",
-        }
-
-        new_card_body = dmc.Card(
-            children=[dmc.CardSection(**card_section_kwargs)],
-            withBorder=True,
-            shadow="sm",
-            style=card_style,
-            id={
-                "type": "card",
-                "index": str(index),
-            },
-        )
+        # MINIMAL DEBUG: Return simplest possible element to isolate React error
+        # This should work if the issue is with card_content structure
+        new_card_body = [html.Div("Card Preview", style={"padding": "20px", "textAlign": "center"})]
     else:
         # Normal mode with standard card styling
         card_style = {
