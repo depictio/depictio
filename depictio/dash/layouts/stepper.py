@@ -4,7 +4,7 @@ import dash
 import dash_ag_grid as dag
 import dash_mantine_components as dmc
 import httpx
-from dash import ALL, MATCH, Input, Output, State, callback, ctx, html
+from dash import ALL, MATCH, Input, Output, State, callback, clientside_callback, ctx, html
 from dash_iconify import DashIconify
 
 # Depictio imports
@@ -1659,11 +1659,15 @@ def update_modal_size_regular(opened):
     return MODAL_CONFIG["size"]
 
 
-@callback(
+# PHASE 2C: Converted to clientside callback for better performance
+clientside_callback(
+    """
+    function(themeData) {
+        const theme = themeData || 'light';
+        return theme === 'dark' ? 'ag-theme-alpine-dark' : 'ag-theme-alpine';
+    }
+    """,
     Output({"type": "stepper-data-grid", "index": MATCH}, "className"),
     Input("theme-store", "data"),
     prevent_initial_call=False,
 )
-def update_ag_grid_theme(theme_data):
-    """Update AG Grid theme class based on current theme."""
-    return _get_ag_grid_theme_class(theme_data)

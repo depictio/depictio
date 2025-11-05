@@ -1897,18 +1897,18 @@ def register_projects_callbacks(app):
             # TODO: Add user feedback for errors
             raise dash.exceptions.PreventUpdate
 
-    @app.callback(
+    # PHASE 2C: Converted to clientside callback for better performance
+    app.clientside_callback(
+        """
+        function(themeData) {
+            const theme = themeData || 'light';
+            return theme === 'dark' ? 'ag-theme-alpine-dark' : 'ag-theme-alpine';
+        }
+        """,
         Output({"type": "project-dc-table", "index": MATCH}, "className"),
         Input("theme-store", "data"),
         prevent_initial_call=False,
     )
-    def update_project_dc_table_theme(theme_data):
-        """Update AG Grid theme class based on current theme."""
-        theme = theme_data or "light"
-        if theme == "dark":
-            return "ag-theme-alpine-dark"
-        else:
-            return "ag-theme-alpine"
 
     @app.callback(
         Output({"type": "project-dc-table", "index": MATCH}, "getRowsResponse"),

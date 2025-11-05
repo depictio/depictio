@@ -654,6 +654,35 @@ layout = html.Div(
 
 def register_callbacks_users_management(app):
     @app.callback(
+        [
+            Output("auth-modal", "opened", allow_duplicate=True),
+            Output("modal-content", "children", allow_duplicate=True),
+            Output("modal-state-store", "data", allow_duplicate=True),
+        ],
+        [Input("url", "pathname")],
+        [State("local-store", "data")],
+        prevent_initial_call=True,
+    )
+    def auto_open_auth_modal_on_auth_page(pathname, local_data):
+        """Automatically open the auth modal when user navigates to /auth page."""
+        logger.info(
+            f"Auto-open check: pathname={pathname}, logged_in={local_data.get('logged_in', False) if local_data else False}"
+        )
+
+        if pathname != "/auth":
+            return dash.no_update, dash.no_update, dash.no_update
+
+        # Don't show modal for authenticated users
+        if local_data and local_data.get("logged_in", False):
+            logger.info("User is already logged in, not showing auth modal")
+            return False, dash.no_update, dash.no_update
+
+        # Open modal with login form
+        logger.info("Opening auth modal with login form")
+        content = render_login_form()
+        return True, content, "login"
+
+    @app.callback(
         Output("login-button", "n_clicks"),
         Input("auth-modal-listener", "n_events"),
         State("auth-modal-listener", "event"),

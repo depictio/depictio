@@ -1240,11 +1240,15 @@ def register_projectwise_user_management_callbacks(app):
             else:
                 return False, dash.no_update, dash.no_update
 
-    @app.callback(
+    # PHASE 2C: Converted to clientside callback for better performance
+    app.clientside_callback(
+        """
+        function(themeData) {
+            const theme = themeData || 'light';
+            return theme === 'dark' ? 'ag-theme-alpine-dark' : 'ag-theme-alpine';
+        }
+        """,
         Output("permissions-manager-grid", "className"),
         Input("theme-store", "data"),
         prevent_initial_call=False,
     )
-    def update_ag_grid_theme(theme_data):
-        """Update AG Grid theme class based on current theme."""
-        return _get_ag_grid_theme_class(theme_data)
