@@ -2,32 +2,80 @@
 """
 Dashboard Performance Monitor
 Captures network requests, console logs, and performance metrics during dashboard load
+ENHANCED: Now includes backend profiling from Docker logs for comprehensive analysis
+MODULAR: Supports both standalone and full depictio dashboards via CLI arguments
 """
 
+import argparse
 import asyncio
 import json
+import re
+import subprocess
+from collections import defaultdict
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 import httpx
 from playwright.async_api import async_playwright
 
-DASHBOARD_URL = "http://localhost:5080/dashboard/68f0f80e913db3d98f48122d"
-DASHBOARD_URL = "http://localhost:5080/dashboard/68f1481b0cb53242fe72ad0c"  # Large dashboard with many callbacks
+# ============================================================================
+# Configuration
+# ============================================================================
 
-# API credentials for automatic authentication
+
+@dataclass
+class MonitorConfig:
+    """Configuration for performance monitoring targets"""
+
+    target: str  # "standalone" or "depictio"
+    dashboard_url: str
+    enable_auth: bool
+    enable_backend_profiling: bool
+    container_name: str | None
+    description: str
+
+
+# Predefined configurations for different monitoring targets
+CONFIGS = {
+    "standalone": MonitorConfig(
+        target="standalone",
+        dashboard_url="http://localhost:5081",
+        enable_auth=False,
+        enable_backend_profiling=False,
+        container_name=None,
+        description="Standalone Iris Dashboard (minimal overhead)",
+    ),
+    "depictio": MonitorConfig(
+        target="depictio",
+        dashboard_url="http://localhost:5080/dashboard/68ffe9aab7e81518cd000996",
+        enable_auth=True,
+        enable_backend_profiling=True,
+        container_name="depictio-frontend",
+        description="Full Depictio Dashboard",
+    ),
+}
+
+# API credentials for automatic authentication (depictio only)
 API_BASE_URL = "http://localhost:8058/depictio/api/v1"
 API_USERNAME = "admin@example.com"
 API_PASSWORD = "changeme"
 
 
-async def get_auth_token():
+async def get_auth_token(config: MonitorConfig):
     """
     Authenticate via API and return local-store compatible token data.
 
+    Args:
+        config: MonitorConfig instance controlling authentication behavior
+
     Returns:
-        dict: Authentication data ready for localStorage injection
+        dict: Authentication data ready for localStorage injection, or None if auth disabled
     """
+    if not config.enable_auth:
+        print(f"[{datetime.now().isoformat()}] ⏭️  Skipping authentication (standalone mode)")
+        return None
+
     print(f"[{datetime.now().isoformat()}] Authenticating with API...")
 
     async with httpx.AsyncClient() as client:
@@ -52,12 +100,124 @@ async def get_auth_token():
         return token_data
 
 
+class BackendProfiler:
+    """Captures and parses backend performance data from Docker logs"""
+
+    def __init__(self, enabled: bool = True, container_name: str = "depictio-frontend"):
+        self.enabled = enabled
+        self.container_name = container_name
+        self.backend_logs = []
+        self.backend_timings = {}
+
+    def clear_logs(self):
+        """Clear docker logs before starting monitoring"""
+        if not self.enabled:
+            return
+
+        try:
+            subprocess.run(
+                ["docker", "logs", self.container_name],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            print(
+                f"[{datetime.now().isoformat()}] 🧹 Cleared docker logs for {self.container_name}"
+            )
+        except Exception as e:
+            print(f"[{datetime.now().isoformat()}] ⚠️  Failed to clear docker logs: {e}")
+
+    def capture_logs(self, since_timestamp=None):
+        """Capture docker logs after dashboard load"""
+        if not self.enabled:
+            print(f"[{datetime.now().isoformat()}] ⏭️  Skipping backend profiling (disabled)")
+            return
+
+        try:
+            cmd = ["docker", "logs", self.container_name, "--tail", "2000"]
+            if since_timestamp:
+                # Format timestamp for docker --since flag
+                since_str = since_timestamp.strftime("%Y-%m-%dT%H:%M:%S")
+                cmd.extend(["--since", since_str])
+
+            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            self.backend_logs = result.stdout.split("\n") + result.stderr.split("\n")
+            self.backend_logs = [
+                log for log in self.backend_logs if log.strip()
+            ]  # Remove empty lines
+
+            print(
+                f"[{datetime.now().isoformat()}] 📋 Captured {len(self.backend_logs)} backend log lines"
+            )
+        except Exception as e:
+            print(f"[{datetime.now().isoformat()}] ⚠️  Failed to capture docker logs: {e}")
+            self.backend_logs = []
+
+    def parse_timings(self):
+        """Parse timing information from backend logs"""
+        timing_pattern = re.compile(r"⏱️\s*PERF\s*\[(.*?)\]:\s*([\d.]+)ms")
+        cache_hit_pattern = re.compile(r"(CACHE HIT|🚀.*CACHE HIT)")
+        redis_hit_pattern = re.compile(r"(REDIS CACHE HIT|🚀 REDIS)")
+        cache_miss_pattern = re.compile(r"(CACHE MISS|❌.*CACHE MISS)")
+
+        timings = defaultdict(list)
+        cache_stats = {"hits": 0, "misses": 0, "redis_hits": 0}
+
+        for line in self.backend_logs:
+            # Extract timing measurements
+            timing_match = timing_pattern.search(line)
+            if timing_match:
+                operation = timing_match.group(1)
+                duration_ms = float(timing_match.group(2))
+                timings[operation].append(duration_ms)
+
+            # Extract cache statistics
+            if redis_hit_pattern.search(line):
+                cache_stats["redis_hits"] += 1
+                cache_stats["hits"] += 1  # Redis hits are also cache hits
+            elif cache_hit_pattern.search(line):
+                cache_stats["hits"] += 1
+            elif cache_miss_pattern.search(line):
+                cache_stats["misses"] += 1
+
+        self.backend_timings = {
+            "operations": dict(timings),
+            "cache_stats": cache_stats,
+            "summary": self._generate_summary(timings),
+        }
+
+        return self.backend_timings
+
+    def _generate_summary(self, timings):
+        """Generate statistical summary of backend operations"""
+        summary = {}
+        for operation, durations in timings.items():
+            if durations:  # Only process if we have data
+                summary[operation] = {
+                    "count": len(durations),
+                    "total_ms": sum(durations),
+                    "avg_ms": sum(durations) / len(durations),
+                    "min_ms": min(durations),
+                    "max_ms": max(durations),
+                }
+        return summary
+
+
 class PerformanceMonitor:
-    def __init__(self):
+    def __init__(self, config: MonitorConfig):
+        self.config = config
         self.network_requests = []
         self.console_logs = []
         self.performance_metrics = {}
         self.start_time = None
+        # Initialize backend profiler only if enabled
+        self.backend_profiler = (
+            BackendProfiler(
+                enabled=config.enable_backend_profiling, container_name=config.container_name
+            )
+            if config.enable_backend_profiling
+            else None
+        )
 
     async def monitor_dashboard_load(self):
         """Monitor dashboard loading with full performance capture"""
@@ -154,27 +314,33 @@ class PerformanceMonitor:
                 ),
             )
 
-            # Get fresh authentication token
-            auth_token = await get_auth_token()
+            # Conditional authentication (only for depictio)
+            if self.config.enable_auth:
+                # Get fresh authentication token
+                auth_token = await get_auth_token(self.config)
 
-            # Navigate to auth page first
-            print(f"[{datetime.now().isoformat()}] Navigating to auth page...")
-            await page.goto("http://localhost:5080/auth")
+                # Navigate to auth page first
+                print(f"[{datetime.now().isoformat()}] Navigating to auth page...")
+                await page.goto("http://localhost:5080/auth")
 
-            # Inject authentication
-            print(f"[{datetime.now().isoformat()}] Injecting authentication...")
-            await page.evaluate(
-                f"localStorage.setItem('local-store', JSON.stringify({json.dumps(auth_token)}))"
-            )
+                # Inject authentication
+                print(f"[{datetime.now().isoformat()}] Injecting authentication...")
+                await page.evaluate(
+                    f"localStorage.setItem('local-store', JSON.stringify({json.dumps(auth_token)}))"
+                )
 
             # Clear captured data before dashboard load
             self.network_requests = []
             self.console_logs = []
             self.start_time = datetime.now()
 
+            # Clear backend logs before monitoring starts (if enabled)
+            if self.backend_profiler:
+                self.backend_profiler.clear_logs()
+
             # Navigate to dashboard
-            print(f"[{datetime.now().isoformat()}] Loading dashboard...")
-            await page.goto(DASHBOARD_URL, wait_until="networkidle", timeout=60000)
+            print(f"[{datetime.now().isoformat()}] Loading {self.config.description}...")
+            await page.goto(self.config.dashboard_url, wait_until="networkidle", timeout=60000)
 
             # Wait for user to indicate dashboard is fully loaded
             print(f"\n[{datetime.now().isoformat()}] Dashboard loaded!")
@@ -183,8 +349,14 @@ class PerformanceMonitor:
             print("=" * 80)
             await asyncio.get_event_loop().run_in_executor(None, input)
 
+            # Capture and parse backend logs (if enabled)
+            if self.backend_profiler:
+                print(f"\n[{datetime.now().isoformat()}] Capturing backend logs...")
+                self.backend_profiler.capture_logs(since_timestamp=self.start_time)
+                self.backend_profiler.parse_timings()
+
             # Capture performance metrics (including client-side profiling data)
-            print(f"\n[{datetime.now().isoformat()}] Capturing performance metrics...")
+            print(f"[{datetime.now().isoformat()}] Capturing frontend performance metrics...")
             self.performance_metrics = await page.evaluate("""
                 () => {
                     const perfData = performance.getEntriesByType('navigation')[0];
@@ -236,7 +408,14 @@ class PerformanceMonitor:
         """Generate performance analysis report"""
 
         print("\n" + "=" * 80)
-        print("DASHBOARD LOAD PERFORMANCE REPORT")
+        print(f"PERFORMANCE REPORT: {self.config.description.upper()}")
+        print("=" * 80)
+        print(f"Target: {self.config.target}")
+        print(f"URL: {self.config.dashboard_url}")
+        print(f"Auth: {'Enabled' if self.config.enable_auth else 'Disabled'}")
+        print(
+            f"Backend Profiling: {'Enabled' if self.config.enable_backend_profiling else 'Disabled'}"
+        )
         print("=" * 80)
 
         # Network Analysis
@@ -383,9 +562,7 @@ class PerformanceMonitor:
                     print(
                         f"  - Avg Payload Size: {sum(all_payload_sizes) / len(all_payload_sizes) / 1024:.1f}KB"
                     )
-                    print(
-                        f"  - Total Payload: {sum(all_payload_sizes) / 1024 / 1024:.2f}MB"
-                    )
+                    print(f"  - Total Payload: {sum(all_payload_sizes) / 1024 / 1024:.2f}MB")
 
                 # Top 5 slowest callbacks by total time
                 print("\n🐌 Top 5 Slowest Callbacks (Total Time):")
@@ -444,9 +621,7 @@ class PerformanceMonitor:
 
             # Extract callback breakdown logs
             breakdown_logs = [
-                log
-                for log in profiling_logs
-                if "TOTAL BREAKDOWN" in log.get("text", "")
+                log for log in profiling_logs if "TOTAL BREAKDOWN" in log.get("text", "")
             ]
 
             if breakdown_logs:
@@ -457,18 +632,170 @@ class PerformanceMonitor:
             print("\nNo client-side profiling logs found in console")
             print("Make sure performance-monitor.js is loaded and callbacks are executing")
 
+        # Backend Profiling Analysis
+        print("\n\n🔧 BACKEND PROFILING (Docker Logs)")
+        print("-" * 80)
+
+        if self.backend_profiler and self.backend_profiler.enabled:
+            backend_timings = self.backend_profiler.backend_timings
+            if backend_timings and backend_timings.get("summary"):
+                backend_summary = backend_timings["summary"]
+                cache_stats = backend_timings.get("cache_stats", {})
+
+                print(f"\nBackend Operations Profiled: {len(backend_summary)}")
+
+                # Cache Statistics
+                total_cache_ops = cache_stats.get("hits", 0) + cache_stats.get("misses", 0)
+                if total_cache_ops > 0:
+                    hit_rate = (cache_stats.get("hits", 0) / total_cache_ops) * 100
+                    redis_rate = (
+                        (cache_stats.get("redis_hits", 0) / cache_stats.get("hits", 1)) * 100
+                        if cache_stats.get("hits", 0) > 0
+                        else 0
+                    )
+
+                    print("\n📊 Cache Statistics:")
+                    print(f"  - Total Cache Operations: {total_cache_ops}")
+                    print(f"  - Cache Hits: {cache_stats.get('hits', 0)} ({hit_rate:.1f}%)")
+                    print(f"  - Cache Misses: {cache_stats.get('misses', 0)}")
+                    print(
+                        f"  - Redis Hits: {cache_stats.get('redis_hits', 0)} ({redis_rate:.1f}% of hits)"
+                    )
+
+                # Backend operation timings
+                if backend_summary:
+                    print("\n🐌 Slowest Backend Operations:")
+
+                    # Sort by total time (count * avg)
+                    sorted_ops = sorted(
+                        backend_summary.items(),
+                        key=lambda x: x[1]["total_ms"],
+                        reverse=True,
+                    )
+
+                    for i, (operation, stats) in enumerate(sorted_ops[:10], 1):
+                        print(f"\n{i}. {operation}")
+                        print(f"   - Calls: {stats['count']}")
+                        print(f"   - Total Time: {stats['total_ms']:.1f}ms")
+                        print(f"   - Avg Time: {stats['avg_ms']:.1f}ms")
+                        print(f"   - Min/Max: {stats['min_ms']:.1f}ms / {stats['max_ms']:.1f}ms")
+
+                    # Calculate total backend processing time
+                    total_backend_time = sum(op["total_ms"] for op in backend_summary.values())
+                    print(f"\n⏱️  Total Backend Processing Time: {total_backend_time:.1f}ms")
+            else:
+                print("\nNo backend profiling data captured.")
+                print("Make sure timing markers are present in backend logs.")
+                print("Expected format: ⏱️ PERF [operation]: XXXms")
+        else:
+            print("\nBackend profiling disabled (standalone mode)")
+
+        # Frontend/Backend Correlation Analysis
+        print("\n\n🔗 FRONTEND/BACKEND CORRELATION ANALYSIS")
+        print("-" * 80)
+
+        # Check if we have both frontend and backend data
+        client_profiling = self.performance_metrics.get("clientSideProfiling")
+        backend_timings = self.backend_profiler.backend_timings if self.backend_profiler else None
+
+        if (
+            client_profiling
+            and client_profiling.get("callbacks")
+            and backend_timings
+            and backend_timings.get("summary")
+        ):
+            callbacks = client_profiling.get("callbacks", {})
+            renders = client_profiling.get("renders", [])
+            backend_summary = backend_timings["summary"]
+
+            # Calculate total times
+            total_frontend_network = sum(cb.get("networkTime", 0) for cb in callbacks.values())
+            total_frontend_deserialize = sum(
+                cb.get("deserializeTime", 0) for cb in callbacks.values()
+            )
+            total_frontend_render = sum(r.get("renderTime", 0) for r in renders)
+            total_backend_processing = sum(op["total_ms"] for op in backend_summary.values())
+
+            total_frontend = (
+                total_frontend_network + total_frontend_deserialize + total_frontend_render
+            )
+
+            print("\n📊 Time Budget Breakdown:")
+            print(f"  - Total Frontend Time: {total_frontend:.1f}ms")
+            print(f"    • Network (waiting): {total_frontend_network:.1f}ms")
+            print(f"    • Deserialization: {total_frontend_deserialize:.1f}ms")
+            print(f"    • DOM Rendering: {total_frontend_render:.1f}ms")
+            print(f"\n  - Total Backend Processing: {total_backend_processing:.1f}ms")
+
+            # Calculate overhead
+            network_overhead = total_frontend_network - total_backend_processing
+            if network_overhead > 0:
+                overhead_pct = (network_overhead / total_frontend_network) * 100
+                print("\n⚠️  Network/Serialization Overhead:")
+                print(f"  - Overhead Time: {network_overhead:.1f}ms")
+                print(f"  - Overhead Percentage: {overhead_pct:.1f}% of network time")
+                print("\n  Analysis:")
+                print(f"  Frontend waited {total_frontend_network:.1f}ms for network responses,")
+                print(f"  but backend only spent {total_backend_processing:.1f}ms processing.")
+                print(f"  The {network_overhead:.1f}ms difference is overhead from:")
+                print("    • Network latency (HTTP request/response)")
+                print("    • JSON serialization/deserialization on server")
+                print("    • Dash framework overhead (callback routing, validation)")
+            else:
+                print("\n✅ Backend processing time exceeds frontend network time")
+                print("   This suggests backend operations are well-measured in logs")
+
+            # Show backend efficiency
+            backend_efficiency = (
+                (total_backend_processing / total_frontend_network) * 100
+                if total_frontend_network > 0
+                else 0
+            )
+            print("\n⚡ Backend Efficiency:")
+            print(f"  - Backend represents {backend_efficiency:.1f}% of frontend network wait time")
+
+            if backend_efficiency < 50:
+                print("  ⚠️  Most time spent in network/serialization overhead, not backend logic")
+            elif backend_efficiency > 80:
+                print("  ⚠️  Backend processing is the primary bottleneck")
+            else:
+                print("  ✅ Balanced between backend processing and network overhead")
+
+            # Cache effectiveness analysis
+            cache_stats = backend_timings.get("cache_stats", {})
+            total_cache_ops = cache_stats.get("hits", 0) + cache_stats.get("misses", 0)
+            if total_cache_ops > 0:
+                hit_rate = (cache_stats.get("hits", 0) / total_cache_ops) * 100
+                print("\n💾 Cache Effectiveness:")
+                print(f"  - Cache Hit Rate: {hit_rate:.1f}%")
+
+                if hit_rate < 50:
+                    print("  ⚠️  Low cache hit rate - consider increasing cache size or TTL")
+                elif hit_rate > 80:
+                    print("  ✅ Excellent cache hit rate - caching is working well")
+                else:
+                    print("  ℹ️  Moderate cache hit rate - room for improvement")
+
+        else:
+            print("\nInsufficient data for correlation analysis.")
+            print("Need both frontend (client-side profiling) and backend (docker logs) data.")
+
         # Save detailed JSON report
         report_data = {
             "timestamp": datetime.now().isoformat(),
-            "dashboard_url": DASHBOARD_URL,
+            "target": self.config.target,
+            "dashboard_url": self.config.dashboard_url,
             "network_requests": self.network_requests,
             "console_logs": self.console_logs,
             "performance_metrics": self.performance_metrics,
+            "backend_profiling": (
+                self.backend_profiler.backend_timings if self.backend_profiler else None
+            ),
         }
 
         output_file = (
             Path(__file__).parent
-            / f"performance_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            / f"performance_report_{self.config.target}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         )
         with open(output_file, "w") as f:
             json.dump(report_data, f, indent=2)
@@ -478,7 +805,66 @@ class PerformanceMonitor:
 
 
 async def main():
-    monitor = PerformanceMonitor()
+    """Main entry point with CLI argument parsing"""
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(
+        description="Performance monitoring for Depictio dashboards",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Monitor standalone dashboard
+  python performance_monitor.py --target standalone
+
+  # Monitor full depictio dashboard
+  python performance_monitor.py --target depictio
+
+  # Monitor custom URL (depictio mode)
+  python performance_monitor.py --target depictio --url http://localhost:5080/dashboard/OTHER_ID
+        """,
+    )
+
+    parser.add_argument(
+        "--target",
+        choices=["standalone", "depictio"],
+        required=True,
+        help="Target dashboard to monitor",
+    )
+
+    parser.add_argument("--url", help="Override dashboard URL (optional)")
+
+    parser.add_argument(
+        "--no-backend-profiling",
+        action="store_true",
+        help="Disable backend profiling even for depictio",
+    )
+
+    args = parser.parse_args()
+
+    # Get configuration
+    config = CONFIGS[args.target]
+
+    # Apply overrides
+    if args.url:
+        config.dashboard_url = args.url
+
+    if args.no_backend_profiling:
+        config.enable_backend_profiling = False
+
+    # Print configuration
+    print("\n" + "=" * 80)
+    print("PERFORMANCE MONITOR CONFIGURATION")
+    print("=" * 80)
+    print(f"Target: {config.target}")
+    print(f"Description: {config.description}")
+    print(f"URL: {config.dashboard_url}")
+    print(f"Authentication: {'Enabled' if config.enable_auth else 'Disabled'}")
+    print(f"Backend Profiling: {'Enabled' if config.enable_backend_profiling else 'Disabled'}")
+    if config.enable_backend_profiling:
+        print(f"Container: {config.container_name}")
+    print("=" * 80 + "\n")
+
+    # Create and run monitor
+    monitor = PerformanceMonitor(config)
     await monitor.monitor_dashboard_load()
 
 

@@ -10,7 +10,6 @@ import sys
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlparse
 
 
 class CallbackFlowAnalyzer:
@@ -24,6 +23,7 @@ class CallbackFlowAnalyzer:
         self.show_source = show_source
         self.verbose = verbose
         self.callback_registry = self.load_callback_registry() if show_source else {}
+        self.backend_profiling = self.data.get("backend_profiling", {})  # NEW: Backend data
 
     def parse_callback_data(self, post_data):
         """Extract inputs, outputs, and state from Dash callback POST data"""
@@ -41,15 +41,21 @@ class CallbackFlowAnalyzer:
 
             # Extract outputs
             if "outputs" in data:
-                result["outputs"] = data["outputs"] if isinstance(data["outputs"], list) else [data["outputs"]]
+                result["outputs"] = (
+                    data["outputs"] if isinstance(data["outputs"], list) else [data["outputs"]]
+                )
 
             # Extract inputs
             if "inputs" in data:
-                result["inputs"] = data["inputs"] if isinstance(data["inputs"], list) else [data["inputs"]]
+                result["inputs"] = (
+                    data["inputs"] if isinstance(data["inputs"], list) else [data["inputs"]]
+                )
 
             # Extract state
             if "state" in data:
-                result["state"] = data["state"] if isinstance(data["state"], list) else [data["state"]]
+                result["state"] = (
+                    data["state"] if isinstance(data["state"], list) else [data["state"]]
+                )
 
         except (json.JSONDecodeError, TypeError):
             pass
@@ -172,7 +178,10 @@ class CallbackFlowAnalyzer:
                         "status": req.get("status"),
                         "size": req.get("size", 0),
                         "response_body": req.get("response_body"),
-                        "relative_start": (request_data["start_time"] - self.page_load_time).total_seconds() * 1000
+                        "relative_start": (
+                            request_data["start_time"] - self.page_load_time
+                        ).total_seconds()
+                        * 1000
                         if self.page_load_time
                         else 0,
                     }
@@ -189,7 +198,9 @@ class CallbackFlowAnalyzer:
 
                     for output in flat_outputs:
                         if isinstance(output, dict):
-                            key = f"{output.get('id', 'unknown')}.{output.get('property', 'unknown')}"
+                            key = (
+                                f"{output.get('id', 'unknown')}.{output.get('property', 'unknown')}"
+                            )
                             if key not in self.callback_map:
                                 self.callback_map[key] = []
                             self.callback_map[key].append(callback)
@@ -322,7 +333,10 @@ class CallbackFlowAnalyzer:
                             continue
 
                         input_key = f"{inp.get('id', 'unknown')}.{inp.get('property', 'unknown')}"
-                        if input_key == output_key and other_callback["start_time"] > callback["end_time"]:
+                        if (
+                            input_key == output_key
+                            and other_callback["start_time"] > callback["end_time"]
+                        ):
                             triggered_callbacks.append(other_callback)
 
             if not triggered_callbacks:
@@ -397,10 +411,10 @@ class CallbackFlowAnalyzer:
                 if source_info:
                     print(f"     📍 CALLBACK: {source_info['function']}()")
                     print(f"        FILE: {source_info['file']}:{source_info['line']}")
-                    if source_info.get('docstring'):
+                    if source_info.get("docstring"):
                         print(f"        DOC: {source_info['docstring']}")
                 else:
-                    print(f"     📍 [Unknown callback - no source match]")
+                    print("     📍 [Unknown callback - no source match]")
 
             print(f"     IN:  {self.format_io(callback['inputs'])}")
             print(f"     OUT: {self.format_io(callback['outputs'])}")
@@ -408,6 +422,64 @@ class CallbackFlowAnalyzer:
             if callback["status"] != 200:
                 status_explanation = self.explain_status_code(callback["status"])
                 print(f"     ⚠️  Status: {callback['status']} - {status_explanation}")
+
+    def generate_backend_statistics(self):
+        """Generate backend profiling statistics"""
+
+        if not self.backend_profiling or not self.backend_profiling.get("summary"):
+            return
+
+        print("\n\n" + "=" * 100)
+        print("BACKEND PROFILING STATISTICS")
+        print("=" * 100)
+
+        summary = self.backend_profiling["summary"]
+        cache_stats = self.backend_profiling.get("cache_stats", {})
+
+        # Backend operation statistics
+        print(f"\nBackend Operations Profiled: {len(summary)}")
+
+        total_backend_time = sum(op["total_ms"] for op in summary.values())
+        total_calls = sum(op["count"] for op in summary.values())
+
+        print(f"Total Backend Calls: {total_calls}")
+        print(f"Total Backend Time: {total_backend_time:.0f}ms ({total_backend_time / 1000:.2f}s)")
+
+        if total_calls > 0:
+            print(f"Average Backend Time per Call: {total_backend_time / total_calls:.1f}ms")
+
+        # Cache statistics
+        total_cache_ops = cache_stats.get("hits", 0) + cache_stats.get("misses", 0)
+        if total_cache_ops > 0:
+            hit_rate = (cache_stats.get("hits", 0) / total_cache_ops) * 100
+            redis_hits = cache_stats.get("redis_hits", 0)
+            redis_rate = (
+                (redis_hits / cache_stats.get("hits", 1) * 100)
+                if cache_stats.get("hits", 0) > 0
+                else 0
+            )
+
+            print("\nCache Statistics:")
+            print(f"  Total Cache Operations: {total_cache_ops}")
+            print(f"  Cache Hits: {cache_stats.get('hits', 0)} ({hit_rate:.1f}%)")
+            print(f"  Cache Misses: {cache_stats.get('misses', 0)}")
+            print(f"  Redis Hits: {redis_hits} ({redis_rate:.1f}% of hits)")
+
+            if hit_rate < 50:
+                print("  ⚠️  Low cache hit rate - consider optimizing cache strategy")
+            elif hit_rate > 80:
+                print("  ✅ Excellent cache hit rate")
+
+        # Top slowest operations
+        print("\nTop 5 Slowest Backend Operations:")
+        sorted_ops = sorted(summary.items(), key=lambda x: x[1]["total_ms"], reverse=True)
+
+        for i, (op, stats) in enumerate(sorted_ops[:5], 1):
+            print(f"\n  {i}. {op}")
+            print(f"     Calls: {stats['count']}")
+            print(f"     Total Time: {stats['total_ms']:.1f}ms")
+            print(f"     Avg Time: {stats['avg_ms']:.1f}ms")
+            print(f"     Min/Max: {stats['min_ms']:.1f}ms / {stats['max_ms']:.1f}ms")
 
     def generate_statistics(self):
         """Generate callback statistics"""
@@ -422,11 +494,11 @@ class CallbackFlowAnalyzer:
         min_time = min(durations)
 
         print("\n\n" + "=" * 100)
-        print("CALLBACK STATISTICS")
+        print("FRONTEND CALLBACK STATISTICS")
         print("=" * 100)
 
         print(f"\nTotal Callbacks: {len(self.callbacks)}")
-        print(f"Total Sequential Time: {total_time:.0f}ms ({total_time/1000:.2f}s)")
+        print(f"Total Sequential Time: {total_time:.0f}ms ({total_time / 1000:.2f}s)")
         print(f"Average Duration: {avg_time:.0f}ms")
         print(f"Min Duration: {min_time:.0f}ms")
         print(f"Max Duration: {max_time:.0f}ms")
@@ -435,8 +507,12 @@ class CallbackFlowAnalyzer:
         slow_callbacks = [c for c in self.callbacks if c["duration"] > 100]
         very_slow_callbacks = [c for c in self.callbacks if c["duration"] > 200]
 
-        print(f"\nCallbacks > 100ms: {len(slow_callbacks)} ({len(slow_callbacks)/len(self.callbacks)*100:.1f}%)")
-        print(f"Callbacks > 200ms: {len(very_slow_callbacks)} ({len(very_slow_callbacks)/len(self.callbacks)*100:.1f}%)")
+        print(
+            f"\nCallbacks > 100ms: {len(slow_callbacks)} ({len(slow_callbacks) / len(self.callbacks) * 100:.1f}%)"
+        )
+        print(
+            f"Callbacks > 200ms: {len(very_slow_callbacks)} ({len(very_slow_callbacks) / len(self.callbacks) * 100:.1f}%)"
+        )
 
         # Status codes with explanations
         status_counts = defaultdict(int)
@@ -472,13 +548,95 @@ class CallbackFlowAnalyzer:
             total_duration = cascade["total_duration"]
 
             print(f"\n🔗 CASCADE CHAIN #{i}")
-            print(f"   Total Duration: {total_duration:.0f}ms ({total_duration/1000:.2f}s)")
+            print(f"   Total Duration: {total_duration:.0f}ms ({total_duration / 1000:.2f}s)")
             print(f"   Chain Length: {len(chain)} callbacks")
-            print(f"   Flow:")
+            print("   Flow:")
 
             for j, callback in enumerate(chain):
                 arrow = " ↓ " if j < len(chain) - 1 else ""
-                print(f"      [{j+1}] {self.format_io(callback['outputs'])} ({callback['duration']:.0f}ms){arrow}")
+                print(
+                    f"      [{j + 1}] {self.format_io(callback['outputs'])} ({callback['duration']:.0f}ms){arrow}"
+                )
+
+    def generate_correlation_analysis(self):
+        """Analyze correlation between frontend and backend performance"""
+
+        if not self.backend_profiling or not self.backend_profiling.get("summary"):
+            return
+
+        print("\n\n" + "=" * 100)
+        print("🔗 FRONTEND/BACKEND CORRELATION ANALYSIS")
+        print("=" * 100)
+
+        # Get client-side profiling data if available
+        perf = self.data.get("performance_metrics", {})
+        client_profiling = perf.get("clientSideProfiling")
+
+        backend_summary = self.backend_profiling["summary"]
+        backend_total = sum(op["total_ms"] for op in backend_summary.values())
+
+        # Calculate frontend times
+        frontend_network = sum(c["duration"] for c in self.callbacks)
+
+        if client_profiling and client_profiling.get("callbacks"):
+            callbacks = client_profiling["callbacks"]
+            renders = client_profiling.get("renders", [])
+
+            total_network = sum(cb.get("networkTime", 0) for cb in callbacks.values())
+            total_deserialize = sum(cb.get("deserializeTime", 0) for cb in callbacks.values())
+            total_render = sum(r.get("renderTime", 0) for r in renders)
+
+            print("\nTime Budget Breakdown:")
+            print(f"  Frontend Network (waiting): {total_network:.1f}ms")
+            print(f"  Frontend Deserialization: {total_deserialize:.1f}ms")
+            print(f"  Frontend DOM Rendering: {total_render:.1f}ms")
+            print(f"  Backend Processing: {backend_total:.1f}ms")
+
+            # Calculate overhead
+            network_overhead = total_network - backend_total
+            if network_overhead > 0:
+                overhead_pct = (network_overhead / total_network) * 100
+                print("\n⚠️  Network/Serialization Overhead:")
+                print(
+                    f"  Overhead Time: {network_overhead:.1f}ms ({overhead_pct:.1f}% of network time)"
+                )
+                print("  This overhead comes from:")
+                print("    • HTTP request/response latency")
+                print("    • JSON serialization/deserialization")
+                print("    • Dash framework overhead")
+
+            # Backend efficiency
+            backend_efficiency = (backend_total / total_network * 100) if total_network > 0 else 0
+            print(f"\n⚡ Backend Efficiency: {backend_efficiency:.1f}%")
+
+            if backend_efficiency < 50:
+                print("  → Most time spent in network/serialization overhead, not backend logic")
+                print("  → Consider: clientside callbacks, payload optimization")
+            elif backend_efficiency > 80:
+                print("  → Backend processing is the primary bottleneck")
+                print("  → Consider: caching, database optimization, async processing")
+            else:
+                print("  → Balanced between backend and network")
+
+        else:
+            print(f"\nFrontend Callback Time: {frontend_network:.1f}ms")
+            print(f"Backend Processing Time: {backend_total:.1f}ms")
+
+            if backend_total > frontend_network:
+                print("\n⚠️  Backend processing exceeds frontend callback time")
+                print("  This suggests parallel backend operations or measurement issues")
+
+        # Cache effectiveness
+        cache_stats = self.backend_profiling.get("cache_stats", {})
+        total_cache_ops = cache_stats.get("hits", 0) + cache_stats.get("misses", 0)
+        if total_cache_ops > 0:
+            hit_rate = (cache_stats.get("hits", 0) / total_cache_ops) * 100
+            print(f"\n💾 Cache Effectiveness: {hit_rate:.1f}% hit rate")
+
+            if hit_rate < 50:
+                print("  ⚠️  Low cache hit rate - significant optimization opportunity")
+            elif hit_rate > 80:
+                print("  ✅ Excellent cache hit rate - caching is working well")
 
     def generate_recommendations(self):
         """Generate actionable optimization recommendations"""
@@ -490,31 +648,45 @@ class CallbackFlowAnalyzer:
         recommendations = []
 
         # 1. Check for callbacks with no inputs (likely need prevent_initial_call)
-        no_input_callbacks = [c for c in self.callbacks if not c["inputs"] or c["inputs"] == [{"id": "unknown"}]]
+        no_input_callbacks = [
+            c for c in self.callbacks if not c["inputs"] or c["inputs"] == [{"id": "unknown"}]
+        ]
         if no_input_callbacks:
             recommendations.append(
                 f"1. ADD prevent_initial_call=True: {len(no_input_callbacks)} callbacks have no clear inputs"
             )
-            print(f"\n1. ⚠️  ADD prevent_initial_call=True")
-            print(f"   {len(no_input_callbacks)} callbacks appear to have no user-triggered inputs.")
-            print(f"   Consider adding prevent_initial_call=True to:")
+            print("\n1. ⚠️  ADD prevent_initial_call=True")
+            print(
+                f"   {len(no_input_callbacks)} callbacks appear to have no user-triggered inputs."
+            )
+            print("   Consider adding prevent_initial_call=True to:")
             for cb in no_input_callbacks[:5]:
                 print(f"      - Outputs: {self.format_io(cb['outputs'])}")
 
         # 2. Identify slow callbacks (backend optimization needed)
-        slow_callbacks = sorted([c for c in self.callbacks if c["duration"] > 100], key=lambda x: x["duration"], reverse=True)
+        slow_callbacks = sorted(
+            [c for c in self.callbacks if c["duration"] > 100],
+            key=lambda x: x["duration"],
+            reverse=True,
+        )
         if slow_callbacks:
-            recommendations.append(f"2. OPTIMIZE BACKEND: {len(slow_callbacks)} callbacks take >100ms")
-            print(f"\n2. 🐌 OPTIMIZE BACKEND CALLBACKS")
-            print(f"   {len(slow_callbacks)} callbacks are taking >100ms (likely backend processing)")
-            print(f"   Top 5 slowest:")
+            recommendations.append(
+                f"2. OPTIMIZE BACKEND: {len(slow_callbacks)} callbacks take >100ms"
+            )
+            print("\n2. 🐌 OPTIMIZE BACKEND CALLBACKS")
+            print(
+                f"   {len(slow_callbacks)} callbacks are taking >100ms (likely backend processing)"
+            )
+            print("   Top 5 slowest:")
             for i, cb in enumerate(slow_callbacks[:5], 1):
-                print(f"      {i}. {cb['duration']:.0f}ms - Outputs: {self.format_io(cb['outputs'])}")
-            print(f"\n   Actions:")
-            print(f"      - Profile these callback functions with cProfile")
-            print(f"      - Add caching (@lru_cache or Redis)")
-            print(f"      - Optimize database queries")
-            print(f"      - Consider background processing for heavy operations")
+                print(
+                    f"      {i}. {cb['duration']:.0f}ms - Outputs: {self.format_io(cb['outputs'])}"
+                )
+            print("\n   Actions:")
+            print("      - Profile these callback functions with cProfile")
+            print("      - Add caching (@lru_cache or Redis)")
+            print("      - Optimize database queries")
+            print("      - Consider background processing for heavy operations")
 
         # 3. Check for repeated inputs (potential consolidation)
         input_groups = defaultdict(list)
@@ -524,10 +696,12 @@ class CallbackFlowAnalyzer:
 
         frequent_inputs = {k: v for k, v in input_groups.items() if len(v) > 3}
         if frequent_inputs:
-            recommendations.append(f"3. REVIEW ARCHITECTURE: {len(frequent_inputs)} inputs trigger multiple callbacks")
-            print(f"\n3. 🔍 REVIEW CALLBACK ARCHITECTURE")
+            recommendations.append(
+                f"3. REVIEW ARCHITECTURE: {len(frequent_inputs)} inputs trigger multiple callbacks"
+            )
+            print("\n3. 🔍 REVIEW CALLBACK ARCHITECTURE")
             print(f"   {len(frequent_inputs)} inputs each trigger 3+ callbacks")
-            print(f"   Consider if these can be optimized:")
+            print("   Consider if these can be optimized:")
             for inp, callbacks in list(frequent_inputs.items())[:3]:
                 print(f"\n      Input: {inp}")
                 print(f"      Triggers {len(callbacks)} callbacks:")
@@ -539,41 +713,94 @@ class CallbackFlowAnalyzer:
         if cascades:
             long_cascades = [c for c in cascades if len(c["chain"]) > 2]
             if long_cascades:
-                recommendations.append(f"4. BREAK CASCADES: {len(long_cascades)} callback chains detected")
-                print(f"\n4. ⛓️  BREAK CALLBACK CASCADES")
+                recommendations.append(
+                    f"4. BREAK CASCADES: {len(long_cascades)} callback chains detected"
+                )
+                print("\n4. ⛓️  BREAK CALLBACK CASCADES")
                 print(f"   {len(long_cascades)} chains of 3+ callbacks detected")
-                print(f"   Consider fetching data directly instead of chaining:")
+                print("   Consider fetching data directly instead of chaining:")
                 for i, cascade in enumerate(long_cascades[:3], 1):
                     chain = cascade["chain"]
-                    print(f"\n      Chain #{i}: {len(chain)} callbacks, {cascade['total_duration']:.0f}ms total")
-                    print(f"         {self.format_io(chain[0]['outputs'])} → ... → {self.format_io(chain[-1]['outputs'])}")
+                    print(
+                        f"\n      Chain #{i}: {len(chain)} callbacks, {cascade['total_duration']:.0f}ms total"
+                    )
+                    print(
+                        f"         {self.format_io(chain[0]['outputs'])} → ... → {self.format_io(chain[-1]['outputs'])}"
+                    )
 
         # 5. Client-side callback opportunities
         ui_only_callbacks = []
         for cb in self.callbacks:
             # Check if outputs are UI-related properties
             outputs_str = str(cb["outputs"])
-            if any(prop in outputs_str.lower() for prop in ["style", "classname", "hidden", "disabled", "children"]):
+            if any(
+                prop in outputs_str.lower()
+                for prop in ["style", "classname", "hidden", "disabled", "children"]
+            ):
                 if cb["size"] < 1000:  # Small response suggests UI-only
                     ui_only_callbacks.append(cb)
 
         if ui_only_callbacks:
-            recommendations.append(f"5. CLIENT-SIDE CALLBACKS: {len(ui_only_callbacks)} callbacks could be client-side")
-            print(f"\n5. ⚡ USE CLIENT-SIDE CALLBACKS")
+            recommendations.append(
+                f"5. CLIENT-SIDE CALLBACKS: {len(ui_only_callbacks)} callbacks could be client-side"
+            )
+            print("\n5. ⚡ USE CLIENT-SIDE CALLBACKS")
             print(f"   {len(ui_only_callbacks)} callbacks appear to be UI-only updates")
-            print(f"   Consider converting to clientside_callback:")
+            print("   Consider converting to clientside_callback:")
             for cb in ui_only_callbacks[:5]:
                 print(f"      - {self.format_io(cb['outputs'])} ({cb['duration']:.0f}ms saved)")
 
+        # 6. Backend-specific recommendations
+        if self.backend_profiling and self.backend_profiling.get("summary"):
+            backend_summary = self.backend_profiling["summary"]
+            cache_stats = self.backend_profiling.get("cache_stats", {})
+
+            # Cache optimization
+            total_cache_ops = cache_stats.get("hits", 0) + cache_stats.get("misses", 0)
+            if total_cache_ops > 0:
+                hit_rate = (cache_stats.get("hits", 0) / total_cache_ops) * 100
+                if hit_rate < 50:
+                    recommendations.append(
+                        f"6. OPTIMIZE CACHE: {hit_rate:.1f}% hit rate is too low"
+                    )
+                    print("\n6. 💾 OPTIMIZE CACHE STRATEGY")
+                    print(f"   Cache hit rate: {hit_rate:.1f}% (target: >80%)")
+                    print("   Actions:")
+                    print("      - Increase cache TTL if data doesn't change frequently")
+                    print("      - Increase Redis memory limit")
+                    print("      - Review cache key strategy (ensure proper filtering)")
+                    print("      - Consider warming cache on startup")
+
+            # Slow backend operations
+            slow_backend_ops = {k: v for k, v in backend_summary.items() if v["avg_ms"] > 100}
+            if slow_backend_ops:
+                rec_num = len(recommendations) + 1
+                recommendations.append(
+                    f"{rec_num}. OPTIMIZE BACKEND OPS: {len(slow_backend_ops)} operations >100ms avg"
+                )
+                print(f"\n{rec_num}. 🔧 OPTIMIZE SLOW BACKEND OPERATIONS")
+                print(f"   {len(slow_backend_ops)} backend operations averaging >100ms")
+                print("   Top slowest:")
+                sorted_slow = sorted(
+                    slow_backend_ops.items(), key=lambda x: x[1]["avg_ms"], reverse=True
+                )
+                for i, (op, stats) in enumerate(sorted_slow[:3], 1):
+                    print(f"      {i}. {op}: {stats['avg_ms']:.1f}ms avg ({stats['count']} calls)")
+                print("   Actions:")
+                print("      - Add database indexes for frequently filtered columns")
+                print("      - Optimize Polars DataFrame operations")
+                print("      - Consider column projection (select only needed columns)")
+                print("      - Profile with cProfile for hotspots")
+
         # Summary
         if recommendations:
-            print(f"\n\n" + "=" * 100)
-            print(f"PRIORITY ACTIONS:")
+            print("\n\n" + "=" * 100)
+            print("PRIORITY ACTIONS:")
             print("=" * 100)
             for rec in recommendations:
                 print(f"   {rec}")
         else:
-            print(f"\n✅ No major issues detected! Your callback structure looks good.")
+            print("\n✅ No major issues detected! Your callback structure looks good.")
 
         # Estimate performance gains
         potential_savings = 0
@@ -583,7 +810,9 @@ class CallbackFlowAnalyzer:
             potential_savings += sum(c["duration"] * 0.5 for c in ui_only_callbacks)
 
         if potential_savings > 0:
-            print(f"\n📈 ESTIMATED PERFORMANCE GAIN: {potential_savings:.0f}ms ({potential_savings/1000:.2f}s)")
+            print(
+                f"\n📈 ESTIMATED PERFORMANCE GAIN: {potential_savings:.0f}ms ({potential_savings / 1000:.2f}s)"
+            )
 
 
 def main():
@@ -606,16 +835,28 @@ Examples:
 
   # All options combined
   python callback_flow_analyzer.py performance_report.json --show-source --verbose
-        """
+        """,
     )
-    parser.add_argument("report", nargs="?", default="performance_report_20251016_103721.json",
-                       help="Performance report JSON file (default: performance_report_20251016_103721.json)")
-    parser.add_argument("--show-source", action="store_true",
-                       help="Show callback source locations (function names, files, line numbers)")
-    parser.add_argument("--verbose", "-v", action="store_true",
-                       help="Show full input/output details for all callbacks")
-    parser.add_argument("--build-registry", action="store_true",
-                       help="Rebuild callback registry before analysis")
+    parser.add_argument(
+        "report",
+        nargs="?",
+        default="performance_report_20251016_103721.json",
+        help="Performance report JSON file (default: performance_report_20251016_103721.json)",
+    )
+    parser.add_argument(
+        "--show-source",
+        action="store_true",
+        help="Show callback source locations (function names, files, line numbers)",
+    )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Show full input/output details for all callbacks",
+    )
+    parser.add_argument(
+        "--build-registry", action="store_true", help="Rebuild callback registry before analysis"
+    )
 
     args = parser.parse_args()
 
@@ -626,6 +867,7 @@ Examples:
         print("=" * 100 + "\n")
         try:
             from callback_registry_builder import CallbackRegistryBuilder
+
             builder = CallbackRegistryBuilder()
             builder.build_registry()
             print("\n✅ Callback registry rebuilt successfully")
@@ -655,7 +897,9 @@ Examples:
     analyzer.analyze_callbacks()
     analyzer.generate_timeline()
     analyzer.generate_statistics()
+    analyzer.generate_backend_statistics()  # NEW: Backend profiling
     analyzer.generate_cascade_report()
+    analyzer.generate_correlation_analysis()  # NEW: Frontend/backend correlation
     analyzer.generate_recommendations()
 
     print("\n" + "=" * 100)

@@ -1,0 +1,509 @@
+{
+  "type": "standalone",
+  "timestamp": "2025-10-28T23:03:53.651098",
+  "url": "http://localhost:5081",
+  "network_requests": [
+    {
+      "timestamp": "2025-10-28T23:03:49.368171",
+      "method": "GET",
+      "url": "http://localhost:5081/",
+      "resource_type": "document",
+      "headers": {
+        "upgrade-insecure-requests": "1",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"139\", \"Not;A=Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"macOS\""
+      }
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.380351",
+      "type": "response",
+      "url": "http://localhost:5081/",
+      "status": 200,
+      "status_text": "OK",
+      "size": 0,
+      "timing": null
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.384684",
+      "method": "GET",
+      "url": "http://localhost:5081/_dash-component-suites/dash/deps/polyfill@7.v3_2_0m1755725002.12.1.min.js",
+      "resource_type": "script",
+      "headers": {
+        "sec-ch-ua-platform": "\"macOS\"",
+        "referer": "http://localhost:5081/",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"139\", \"Not;A=Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      }
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.385095",
+      "method": "GET",
+      "url": "http://localhost:5081/_dash-component-suites/dash/deps/react@18.v3_2_0m1755725002.3.1.min.js",
+      "resource_type": "script",
+      "headers": {
+        "sec-ch-ua-platform": "\"macOS\"",
+        "referer": "http://localhost:5081/",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"139\", \"Not;A=Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      }
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.385316",
+      "method": "GET",
+      "url": "http://localhost:5081/_dash-component-suites/dash/deps/react-dom@18.v3_2_0m1755725002.3.1.min.js",
+      "resource_type": "script",
+      "headers": {
+        "sec-ch-ua-platform": "\"macOS\"",
+        "referer": "http://localhost:5081/",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"139\", \"Not;A=Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      }
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.385473",
+      "method": "GET",
+      "url": "http://localhost:5081/_dash-component-suites/dash/deps/prop-types@15.v3_2_0m1755725002.8.1.min.js",
+      "resource_type": "script",
+      "headers": {
+        "sec-ch-ua-platform": "\"macOS\"",
+        "referer": "http://localhost:5081/",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"139\", \"Not;A=Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      }
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.385634",
+      "method": "GET",
+      "url": "http://localhost:5081/_dash-component-suites/dash_mantine_components/dash_mantine_components.v2_1_0m1751553239.js",
+      "resource_type": "script",
+      "headers": {
+        "sec-ch-ua-platform": "\"macOS\"",
+        "referer": "http://localhost:5081/",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"139\", \"Not;A=Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      }
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.385851",
+      "method": "GET",
+      "url": "http://localhost:5081/_dash-component-suites/dash_iconify/dash_iconify.v0_1_2m1751319025.min.js",
+      "resource_type": "script",
+      "headers": {
+        "sec-ch-ua-platform": "\"macOS\"",
+        "referer": "http://localhost:5081/",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"139\", \"Not;A=Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      }
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.386422",
+      "method": "GET",
+      "url": "http://localhost:5081/_dash-component-suites/dash_bootstrap_components/_components/dash_bootstrap_components.v1_7_1m1751319024.min.js",
+      "resource_type": "script",
+      "headers": {
+        "sec-ch-ua-platform": "\"macOS\"",
+        "referer": "http://localhost:5081/",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"139\", \"Not;A=Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      }
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.387531",
+      "method": "GET",
+      "url": "http://localhost:5081/_dash-component-suites/dash/dash-renderer/build/dash_renderer.v3_2_0m1755725000.min.js",
+      "resource_type": "script",
+      "headers": {
+        "sec-ch-ua-platform": "\"macOS\"",
+        "referer": "http://localhost:5081/",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"139\", \"Not;A=Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      }
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.387977",
+      "method": "GET",
+      "url": "http://localhost:5081/_dash-component-suites/dash/dcc/dash_core_components.v3_2_0m1755725002.js",
+      "resource_type": "script",
+      "headers": {
+        "sec-ch-ua-platform": "\"macOS\"",
+        "referer": "http://localhost:5081/",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"139\", \"Not;A=Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      }
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.388396",
+      "method": "GET",
+      "url": "http://localhost:5081/_dash-component-suites/dash/dcc/dash_core_components-shared.v3_2_0m1755725002.js",
+      "resource_type": "script",
+      "headers": {
+        "sec-ch-ua-platform": "\"macOS\"",
+        "referer": "http://localhost:5081/",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"139\", \"Not;A=Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      }
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.388914",
+      "method": "GET",
+      "url": "http://localhost:5081/_dash-component-suites/dash/html/dash_html_components.v3_0_4m1755725003.min.js",
+      "resource_type": "script",
+      "headers": {
+        "sec-ch-ua-platform": "\"macOS\"",
+        "referer": "http://localhost:5081/",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"139\", \"Not;A=Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      }
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.389079",
+      "method": "GET",
+      "url": "http://localhost:5081/_dash-component-suites/dash/dash_table/bundle.v6_0_4m1755725001.js",
+      "resource_type": "script",
+      "headers": {
+        "sec-ch-ua-platform": "\"macOS\"",
+        "referer": "http://localhost:5081/",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"139\", \"Not;A=Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      }
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.392339",
+      "type": "response",
+      "url": "http://localhost:5081/_dash-component-suites/dash/deps/prop-types@15.v3_2_0m1755725002.8.1.min.js",
+      "status": 200,
+      "status_text": "OK",
+      "size": 0,
+      "timing": null
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.392786",
+      "type": "response",
+      "url": "http://localhost:5081/_dash-component-suites/dash/deps/polyfill@7.v3_2_0m1755725002.12.1.min.js",
+      "status": 200,
+      "status_text": "OK",
+      "size": 0,
+      "timing": null
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.418666",
+      "type": "response",
+      "url": "http://localhost:5081/_dash-component-suites/dash/deps/react@18.v3_2_0m1755725002.3.1.min.js",
+      "status": 200,
+      "status_text": "OK",
+      "size": 0,
+      "timing": null
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.418835",
+      "type": "response",
+      "url": "http://localhost:5081/_dash-component-suites/dash/deps/react-dom@18.v3_2_0m1755725002.3.1.min.js",
+      "status": 200,
+      "status_text": "OK",
+      "size": 0,
+      "timing": null
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.419060",
+      "type": "response",
+      "url": "http://localhost:5081/_dash-component-suites/dash_iconify/dash_iconify.v0_1_2m1751319025.min.js",
+      "status": 200,
+      "status_text": "OK",
+      "size": 0,
+      "timing": null
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.419204",
+      "type": "response",
+      "url": "http://localhost:5081/_dash-component-suites/dash/dash-renderer/build/dash_renderer.v3_2_0m1755725000.min.js",
+      "status": 200,
+      "status_text": "OK",
+      "size": 0,
+      "timing": null
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.419429",
+      "type": "response",
+      "url": "http://localhost:5081/_dash-component-suites/dash/dcc/dash_core_components-shared.v3_2_0m1755725002.js",
+      "status": 200,
+      "status_text": "OK",
+      "size": 0,
+      "timing": null
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.419560",
+      "type": "response",
+      "url": "http://localhost:5081/_dash-component-suites/dash_bootstrap_components/_components/dash_bootstrap_components.v1_7_1m1751319024.min.js",
+      "status": 200,
+      "status_text": "OK",
+      "size": 0,
+      "timing": null
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.419701",
+      "type": "response",
+      "url": "http://localhost:5081/_dash-component-suites/dash/dash_table/bundle.v6_0_4m1755725001.js",
+      "status": 200,
+      "status_text": "OK",
+      "size": 0,
+      "timing": null
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.419871",
+      "type": "response",
+      "url": "http://localhost:5081/_dash-component-suites/dash/html/dash_html_components.v3_0_4m1755725003.min.js",
+      "status": 200,
+      "status_text": "OK",
+      "size": 0,
+      "timing": null
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.419996",
+      "type": "response",
+      "url": "http://localhost:5081/_dash-component-suites/dash/dcc/dash_core_components.v3_2_0m1755725002.js",
+      "status": 200,
+      "status_text": "OK",
+      "size": 0,
+      "timing": null
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.420113",
+      "type": "response",
+      "url": "http://localhost:5081/_dash-component-suites/dash_mantine_components/dash_mantine_components.v2_1_0m1751553239.js",
+      "status": 200,
+      "status_text": "OK",
+      "size": 0,
+      "timing": null
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.512018",
+      "method": "GET",
+      "url": "http://localhost:5081/_dash-layout",
+      "resource_type": "fetch",
+      "headers": {
+        "sec-ch-ua-platform": "\"macOS\"",
+        "x-csrftoken": "undefined",
+        "referer": "http://localhost:5081/",
+        "sec-ch-ua": "\"Chromium\";v=\"139\", \"Not;A=Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "accept": "application/json",
+        "content-type": "application/json"
+      }
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.512285",
+      "method": "GET",
+      "url": "http://localhost:5081/_dash-dependencies",
+      "resource_type": "fetch",
+      "headers": {
+        "sec-ch-ua-platform": "\"macOS\"",
+        "x-csrftoken": "undefined",
+        "referer": "http://localhost:5081/",
+        "sec-ch-ua": "\"Chromium\";v=\"139\", \"Not;A=Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "accept": "application/json",
+        "content-type": "application/json"
+      }
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.513647",
+      "method": "GET",
+      "url": "http://localhost:5081/_favicon.ico?v=3.2.0",
+      "resource_type": "other",
+      "headers": {
+        "sec-ch-ua-platform": "\"macOS\"",
+        "referer": "http://localhost:5081/",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"139\", \"Not;A=Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      }
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.516722",
+      "type": "response",
+      "url": "http://localhost:5081/_dash-layout",
+      "status": 200,
+      "status_text": "OK",
+      "size": 0,
+      "timing": null
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.517636",
+      "type": "response",
+      "url": "http://localhost:5081/_dash-dependencies",
+      "status": 200,
+      "status_text": "OK",
+      "size": 0,
+      "timing": null
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.519396",
+      "type": "response",
+      "url": "http://localhost:5081/_favicon.ico?v=3.2.0",
+      "status": 200,
+      "status_text": "OK",
+      "size": 0,
+      "timing": null
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.569326",
+      "method": "GET",
+      "url": "http://localhost:5081/_dash-component-suites/dash_iconify/async-DashIconify.v0_1_2m1650551946.js",
+      "resource_type": "script",
+      "headers": {
+        "sec-ch-ua-platform": "\"macOS\"",
+        "referer": "http://localhost:5081/",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"139\", \"Not;A=Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      }
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.569832",
+      "method": "GET",
+      "url": "http://localhost:5081/_dash-component-suites/dash/dcc/async-graph.js",
+      "resource_type": "script",
+      "headers": {
+        "sec-ch-ua-platform": "\"macOS\"",
+        "referer": "http://localhost:5081/",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"139\", \"Not;A=Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      }
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.570035",
+      "method": "GET",
+      "url": "http://localhost:5081/_dash-component-suites/plotly/package_data/plotly.min.js",
+      "resource_type": "script",
+      "headers": {
+        "sec-ch-ua-platform": "\"macOS\"",
+        "referer": "http://localhost:5081/",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"139\", \"Not;A=Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      }
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.574878",
+      "type": "response",
+      "url": "http://localhost:5081/_dash-component-suites/dash_iconify/async-DashIconify.v0_1_2m1650551946.js",
+      "status": 200,
+      "status_text": "OK",
+      "size": 0,
+      "timing": null
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.575131",
+      "type": "response",
+      "url": "http://localhost:5081/_dash-component-suites/dash/dcc/async-graph.js",
+      "status": 200,
+      "status_text": "OK",
+      "size": 0,
+      "timing": null
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.579770",
+      "method": "GET",
+      "url": "https://api.iconify.design/mdi.json?icons=card%2Cchart-bar%2Cchart-line%2Cfilter%2Cflash%2Cflask%2Ciris%2Cleaf",
+      "resource_type": "fetch",
+      "headers": {
+        "sec-ch-ua-platform": "\"macOS\"",
+        "referer": "http://localhost:5081/",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"139\", \"Not;A=Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      }
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.579928",
+      "method": "GET",
+      "url": "https://api.iconify.design/bx.json?icons=slider-alt",
+      "resource_type": "fetch",
+      "headers": {
+        "sec-ch-ua-platform": "\"macOS\"",
+        "referer": "http://localhost:5081/",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"139\", \"Not;A=Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      }
+    },
+    {
+      "timestamp": "2025-10-28T23:03:49.627883",
+      "type": "response",
+      "url": "http://localhost:5081/_dash-component-suites/plotly/package_data/plotly.min.js",
+      "status": 200,
+      "status_text": "OK",
+      "size": 0,
+      "timing": null
+    },
+    {
+      "timestamp": "2025-10-28T23:03:50.080435",
+      "type": "response",
+      "url": "https://api.iconify.design/bx.json?icons=slider-alt",
+      "status": 200,
+      "status_text": "",
+      "size": 0,
+      "timing": null
+    },
+    {
+      "timestamp": "2025-10-28T23:03:50.080569",
+      "type": "response",
+      "url": "https://api.iconify.design/mdi.json?icons=card%2Cchart-bar%2Cchart-line%2Cfilter%2Cflash%2Cflask%2Ciris%2Cleaf",
+      "status": 200,
+      "status_text": "",
+      "size": 0,
+      "timing": null
+    }
+  ],
+  "console_logs": [],
+  "performance_metrics": {
+    "navigation": {
+      "domContentLoaded": 0.09999999403953552,
+      "domComplete": 146.59999999403954,
+      "loadComplete": 146.59999999403954,
+      "totalLoadTime": 144.8999999910593
+    },
+    "paint": {
+      "firstPaint": 44,
+      "firstContentfulPaint": 44
+    },
+    "resources": {
+      "totalResources": 20,
+      "totalTransferSize": 7496029,
+      "totalDuration": 407.4999999701977
+    },
+    "memory": {
+      "usedJSHeapSize": 34845948,
+      "totalJSHeapSize": 41773144,
+      "jsHeapSizeLimit": 4294705152
+    },
+    "clientSideProfiling": null
+  },
+  "summary": {
+    "total_load_time_ms": 144.8999999910593,
+    "first_contentful_paint_ms": 44,
+    "total_transfer_size_bytes": 7496029,
+    "num_resources": 20,
+    "num_errors": 0,
+    "num_warnings": 0,
+    "num_console_logs": 0,
+    "timestamp": "2025-10-28T23:03:49.308557"
+  }
+}
