@@ -46,9 +46,20 @@ def health_check(self):
     }
 
 
+# Import Dash app to register background callbacks
+# This must be AFTER celery_app is created to avoid circular import
+# The import happens at module level so Celery workers can discover background callback tasks
+logger.info("🔧 CELERY: Importing Dash app to register background callbacks...")
+try:
+    from depictio.dash.app import app  # noqa: F401
+
+    logger.info("✅ CELERY: Dash app imported successfully, background callbacks registered")
+except Exception as e:
+    logger.error(f"❌ CELERY: Failed to import Dash app: {e}")
+    logger.warning("⚠️  CELERY: Background callbacks will not be available")
+
+
 # Auto-discovery of tasks on app start
 if __name__ == "__main__":
     logger.info("🚀 CELERY: Starting worker directly...")
     celery_app.start()
-else:
-    logger.info("📦 CELERY: App imported successfully")
