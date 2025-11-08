@@ -7,7 +7,7 @@ CELERY_WORKERS=${DEPICTIO_CELERY_WORKERS:-2}
 echo "🔧 CELERY WORKER: Starting dedicated Celery worker..."
 echo "🔧 CELERY WORKER: Workers = $CELERY_WORKERS"
 
-# Start Celery worker - pointing to celery_app module
-exec celery -A depictio.dash.celery_app:celery_app worker \
+# Start Celery worker - pointing to celery_worker module (imports flask_dispatcher for task discovery)
+exec celery -A depictio.dash.celery_worker:celery_app worker \
     --loglevel=info \
     --concurrency="$CELERY_WORKERS"
