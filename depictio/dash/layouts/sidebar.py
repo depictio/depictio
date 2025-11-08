@@ -3,7 +3,7 @@ import dash_mantine_components as dmc
 from dash import ALL, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
-from depictio.dash.layouts.consolidated_api import get_cached_server_status
+from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.simple_theme import create_theme_controls
 
 
@@ -325,21 +325,69 @@ def register_sidebar_callbacks(app):
     # NOTE: Avatar callback removed - replaced with "Powered by Depictio" section
     # NOTE: Theme-aware logo callbacks removed - no logos to invert anymore
 
+    # PHASE 2A OPTIMIZATION: Track last rendered server status to prevent duplicate renders
+    _last_server_status_state = {"status": None, "version": None}
+
     @app.callback(
         Output("sidebar-footer-server-status", "children"),
         Input("server-status-cache", "data"),
-        prevent_initial_call=False,
+        State("sidebar-footer-server-status", "children"),
+        prevent_initial_call=False,  # Must be False to check ctx.triggered
     )
-    def update_server_status(server_cache):
+    def update_server_status(server_cache, current_children):
         """
-        PERFORMANCE OPTIMIZATION: Import moved to module level to avoid repeated import overhead.
-        Update server status badge based on cached server status data.
-        """
-        # Get server status from consolidated cache
-        server_status = get_cached_server_status(server_cache)
-        if not server_status:
-            return []
+        PERFORMANCE OPTIMIZATION (Phase 2A): Enhanced guards to prevent redundant updates.
 
+        Guards:
+        1. Skip if no trigger or empty value (initial load)
+        2. Skip if server status hasn't actually changed (content comparison)
+
+        This reduces callback fires from 4 → 1 during dashboard load.
+        """
+        from dash import ctx
+
+        # DEBUG LOGGING: Log all inputs for troubleshooting
+        logger.info("🔍 SERVER STATUS CALLBACK TRIGGERED")
+        logger.info(f"  - Trigger: {ctx.triggered}")
+        logger.info(f"  - server_cache: {server_cache}")
+        logger.info(f"  - current_children type: {type(current_children)}")
+        logger.info(f"  - _last_server_status_state: {_last_server_status_state}")
+
+        # Get server status from server-status-cache store
+        # server_cache contains data like: {"status": "online", "version": "0.5.2"}
+        server_status = server_cache
+
+        # GUARD 1: Skip if no valid cache data exists
+        if not server_status or "status" not in server_status:
+            logger.debug("🔴 GUARD 1: No valid cache data - preventing update")
+            raise dash.exceptions.PreventUpdate
+
+        # GUARD 2: Skip if server status hasn't changed AND element already has content
+        # Compare relevant fields only (status + version)
+        # IMPORTANT: Always render if current_children is None (element is empty in DOM)
+        current_status = server_status.get("status")
+        current_version = server_status.get("version")
+
+        if (
+            current_children is not None  # Element already has content
+            and _last_server_status_state["status"] is not None
+            and _last_server_status_state["status"] == current_status
+            and _last_server_status_state["version"] == current_version
+        ):
+            logger.info(
+                f"🔴 GUARD 2: Status unchanged ({current_status}, {current_version}) and element has content - preventing update"
+            )
+            raise dash.exceptions.PreventUpdate
+
+        # Update tracking state
+        _last_server_status_state["status"] = current_status
+        _last_server_status_state["version"] = current_version
+
+        logger.info(
+            f"✅ update_server_status: Rendering new status ({current_status}, {current_version})"
+        )
+
+        # Render server status badge
         if server_status["status"] == "online":
             server_status_badge = dmc.GridCol(
                 dmc.Badge(
@@ -364,57 +412,64 @@ def register_sidebar_callbacks(app):
             )
             return [server_status_badge]
 
-    # Move admin link visibility to clientside for instant response
-    app.clientside_callback(
-        """
-        function(user_cache) {
-            console.log('🔧 CLIENTSIDE ADMIN LINK: user_cache received:', !!user_cache);
-
-            if (!user_cache || !user_cache.user) {
-                console.log('🔧 CLIENTSIDE ADMIN LINK: No user, hiding admin link');
-                return {"padding": "20px", "display": "none"};
-            }
-
-            var user = user_cache.user;
-            if (user.is_admin) {
-                console.log('✅ CLIENTSIDE ADMIN LINK: Showing admin link for', user.email);
-                return {"padding": "20px"};
-            } else {
-                console.log('🔧 CLIENTSIDE ADMIN LINK: Hiding admin link for non-admin', user.email);
-                return {"padding": "20px", "display": "none"};
-            }
-        }
-        """,
+    # Admin link visibility - server-side callback using local-store
+    @app.callback(
         Output({"type": "sidebar-link", "index": "administration"}, "style"),
-        Input("user-cache-store", "data"),
+        Input("local-store", "data"),
         prevent_initial_call=False,
     )
+    def update_admin_link_visibility(local_data):
+        """
+        Show/hide admin link based on user's admin status.
+        """
+        if not local_data or not local_data.get("logged_in"):
+            return {"padding": "20px", "display": "none"}
 
-    # Avatar callback - CONVERTED TO CLIENT-SIDE for instant response (~0.8s savings)
-    # This breaks CASCADE #1 (user-cache-store → avatar-container, 1.9s total)
+        try:
+            # Fetch user details using cached API call
+            from depictio.dash.api_calls import api_call_fetch_user_from_token
+
+            user = api_call_fetch_user_from_token(local_data.get("access_token"))
+            if user and user.is_admin:
+                logger.debug(f"✅ Showing admin link for admin user: {user.email}")
+                return {"padding": "20px"}
+            else:
+                logger.debug(
+                    f"🔧 Hiding admin link for non-admin user: {user.email if user else 'unknown'}"
+                )
+                return {"padding": "20px", "display": "none"}
+        except Exception as e:
+            logger.error(f"❌ Error checking admin status: {e}")
+            return {"padding": "20px", "display": "none"}
+
     app.clientside_callback(
         """
-        function(user_cache) {
-            console.log('🔧 CLIENTSIDE AVATAR: user_cache received:', !!user_cache);
+        function(local_data) {
+            console.log('🔧 CLIENTSIDE AVATAR: local_data received:', !!local_data);
 
-            // Check if we have valid user data
-            if (!user_cache || !user_cache.user) {
-                console.log('❌ No user cache - returning empty');
+            // Check if user is logged in
+            if (!local_data || !local_data.logged_in) {
+                console.log('❌ No local_data or not logged in - returning empty');
                 return [];
             }
 
-            var user = user_cache.user;
-            if (!user.email) {
-                console.log('❌ No email in user - returning empty');
+            // Read token name which contains email with timestamp suffix
+            // Example: "admin@example.com_20251107090126"
+            var tokenName = local_data.name;
+            if (!tokenName) {
+                console.log('❌ No token name in local_data - returning empty');
                 return [];
             }
 
-            var email = user.email;
-            var name = user.name || email.split('@')[0];
+            // Extract email by removing timestamp suffix (everything after first underscore)
+            var email = tokenName.split('_')[0];
 
-            console.log('✅ CLIENTSIDE AVATAR: Creating avatar for', email);
+            // Extract name from email (before @)
+            var name = email.split('@')[0];
 
-            // Create avatar link with image
+            console.log('✅ CLIENTSIDE AVATAR: Creating avatar for', email, 'from token name', tokenName);
+
+            // Create avatar link with image using clean email
             var avatarSrc = 'https://ui-avatars.com/api/?format=svg&name=' + encodeURIComponent(email) +
                            '&background=AEC8FF&color=white&rounded=true&bold=true&format=svg&size=16';
 
@@ -449,7 +504,7 @@ def register_sidebar_callbacks(app):
         }
         """,
         Output("avatar-container", "children"),
-        Input("user-cache-store", "data"),
+        Input("local-store", "data"),
         prevent_initial_call=False,
     )
 
@@ -590,6 +645,119 @@ def register_sidebar_callbacks(app):
     #             },
     #         )
     #     ]
+
+    # Minimal callback to reference sidebar tabs (dashboard viewer only)
+    # NOTE: Only register this if sidebar-tabs component exists (viewer app)
+    try:
+
+        @app.callback(
+            Input("sidebar-tabs", "value"),
+            prevent_initial_call=True,
+        )
+        def sidebar_tabs_callback(tab_value):
+            """
+            Minimal callback to reference sidebar tabs component (dashboard viewer).
+            No output - Dash supports callbacks without return statements.
+            This prevents component ID errors while allowing for future expansion.
+            """
+            logger.debug(f"Sidebar tab changed to: {tab_value}")
+            # No return statement - Dash allows this for callbacks without outputs
+    except Exception as e:
+        # Sidebar tabs may not exist in management app, skip callback
+        logger.debug(f"Sidebar tabs callback not registered: {e}")
+
+
+def create_dashboard_viewer_sidebar():
+    """
+    Create minimal sidebar for dashboard viewer with workflow tabs and footer.
+
+    This sidebar is specific to dashboard viewing and contains only the
+    QC/Analysis/Downstream tabs with server status and profile at the bottom.
+
+    Returns:
+        list: Sidebar children with tabs and footer
+    """
+    sidebar_tabs = dmc.Tabs(
+        id="sidebar-tabs",
+        orientation="vertical",
+        placement="left",
+        value="qc",
+        children=[
+            dmc.TabsList(
+                [
+                    dmc.TabsTab(
+                        "QC",
+                        value="qc",
+                        leftSection=DashIconify(icon="mdi:chart-line", height=20),
+                        style={"height": "60px"},  # Increased tab height
+                    ),
+                    dmc.TabsTab(
+                        "Analysis",
+                        value="analysis",
+                        leftSection=DashIconify(icon="mdi:flask", height=20),
+                        style={"height": "60px"},  # Increased tab height
+                    ),
+                    dmc.TabsTab(
+                        "Downstream",
+                        value="downstream",
+                        leftSection=DashIconify(icon="mdi:arrow-down-bold", height=20),
+                        style={"height": "60px"},  # Increased tab height
+                    ),
+                ],
+                style={"width": "100%"},  # Full width tabs list
+            ),
+            # No TabsPanel - just show tabs without content panels
+        ],
+        style={
+            "flex": "1",
+            "overflowY": "auto",
+            "width": "100%",  # Full width tabs container
+        },
+    )
+
+    # Footer with server status and profile (same as management app)
+    sidebar_footer = html.Div(
+        id="sidebar-footer",
+        children=[
+            dmc.Center(create_theme_controls()),
+            dmc.Grid(
+                id="sidebar-footer-server-status",
+                align="center",
+                justify="center",
+            ),
+            html.Hr(),
+            html.Div(
+                id="avatar-container",
+                style={
+                    "textAlign": "center",
+                    "justifyContent": "center",
+                    "display": "flex",
+                    "alignItems": "center",
+                    "flexDirection": "row",
+                    "paddingBottom": "16px",
+                },
+            ),
+        ],
+        style={
+            "flexShrink": 0,
+        },
+    )
+
+    # Return tabs with footer at bottom
+    return [
+        dmc.Stack(
+            [
+                sidebar_tabs,
+                sidebar_footer,
+            ],
+            justify="space-between",
+            h="100%",
+            style={
+                "height": "100%",
+                "width": "100%",  # Full width stack
+            },
+        )
+    ]
 
 
 def _create_powered_by_footer():

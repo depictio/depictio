@@ -216,3 +216,156 @@ def validate_workflow_uniqueness_in_project(project: Project) -> None:
             detail=f"Duplicate workflow_tag(s) found within project '{project.name}': {duplicate_tags}. "
             f"Each workflow_tag must be unique within a project.",
         )
+
+
+async def get_project_with_delta_locations(project_id: PyObjectId, current_user: User) -> dict:
+    """
+    Fetch project with delta_location joined for all data collections.
+
+    Uses MongoDB aggregation to JOIN Project → Workflow → DataCollection
+    with DeltaTableAggregated collection at query time. This eliminates
+    the need for caching delta_location in dashboard metadata.
+
+    Benefits:
+    - Always returns fresh delta_location data
+    - Single optimized query vs N separate API calls
+    - No stale cache issues when DCs are re-processed
+
+    Args:
+        project_id: Project ObjectId
+        current_user: Current authenticated user (for permission check)
+
+    Returns:
+        dict: Project document with delta_location and last_aggregation
+              added to each DataCollection
+
+    Raises:
+        HTTPException: If project not found or access denied
+    """
+    current_user_id = ObjectId(current_user.id)
+
+    # Permission check query
+    permission_query = {
+        "_id": ObjectId(project_id),
+        "$or": [
+            {"permissions.owners._id": current_user_id},
+            {"permissions.editors._id": current_user_id},
+            {"permissions.viewers._id": current_user_id},
+            {"is_public": True},
+        ],
+    }
+
+    if current_user.is_admin:
+        permission_query = {"_id": ObjectId(project_id)}
+
+    # MongoDB aggregation pipeline to join with DeltaTableAggregated
+    pipeline = [
+        # 1. Match the project (with permission check)
+        {"$match": permission_query},
+        # 2. Unwind workflows array (preserve empty arrays)
+        {"$unwind": {"path": "$workflows", "preserveNullAndEmptyArrays": True}},
+        # 3. Unwind data_collections array (preserve empty arrays)
+        {
+            "$unwind": {
+                "path": "$workflows.data_collections",
+                "preserveNullAndEmptyArrays": True,
+            }
+        },
+        # 4. Lookup DeltaTableAggregated for each DC
+        {
+            "$lookup": {
+                "from": "deltatables",
+                "let": {"dc_id": "$workflows.data_collections._id"},
+                "pipeline": [
+                    {"$match": {"$expr": {"$eq": ["$data_collection_id", "$$dc_id"]}}},
+                    # Sort by aggregation time descending to get latest version
+                    {"$sort": {"_id": -1}},  # Latest insert is latest version
+                    {"$limit": 1},
+                    {
+                        "$project": {
+                            "delta_table_location": 1,
+                            # Get last aggregation (latest version)
+                            "last_aggregation": {"$arrayElemAt": ["$aggregation", -1]},
+                        }
+                    },
+                ],
+                "as": "delta_info",
+            }
+        },
+        # 5. Add delta info to DC object
+        {
+            "$addFields": {
+                "workflows.data_collections.delta_location": {
+                    "$arrayElemAt": ["$delta_info.delta_table_location", 0]
+                },
+                "workflows.data_collections.last_aggregation": {
+                    "$arrayElemAt": ["$delta_info.last_aggregation", 0]
+                },
+            }
+        },
+        # 6. Remove temporary delta_info field
+        {"$project": {"delta_info": 0}},
+        # 7. Group back to reconstruct data_collections array per workflow
+        {
+            "$group": {
+                "_id": {
+                    "project_id": "$_id",
+                    "project_name": "$name",
+                    "workflow_id": "$workflows._id",
+                },
+                "project_doc": {"$first": "$$ROOT"},
+                "data_collections": {"$push": "$workflows.data_collections"},
+            }
+        },
+        # 8. Group back to reconstruct workflows array per project
+        {
+            "$group": {
+                "_id": "$_id.project_id",
+                "project_doc": {"$first": "$project_doc"},
+                "workflows": {
+                    "$push": {
+                        "_id": "$_id.workflow_id",
+                        "workflow_tag": "$project_doc.workflows.workflow_tag",
+                        "data_collections": "$data_collections",
+                    }
+                },
+            }
+        },
+        # 9. Final projection - merge workflows back into project document
+        {
+            "$replaceRoot": {
+                "newRoot": {
+                    "$mergeObjects": [
+                        "$project_doc",
+                        {"workflows": "$workflows"},
+                    ]
+                }
+            }
+        },
+        # 10. Remove the redundant workflows field from nested structure
+        {"$project": {"project_doc": 0}},
+    ]
+
+    logger.info(f"📡 Fetching project {project_id} with delta_locations (optimized query)")
+
+    try:
+        result = list(projects_collection.aggregate(pipeline))
+    except Exception as e:
+        logger.error(f"Aggregation pipeline error: {e}")
+        raise HTTPException(status_code=500, detail=f"Database query error: {str(e)}")
+
+    if not result:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found or access denied.",
+        )
+
+    project = result[0]
+    project = convert_objectid_to_str(project)
+
+    logger.info(
+        f"✅ Project {project_id} fetched with delta_locations for "
+        f"{len(project.get('workflows', []))} workflows"
+    )
+
+    return project

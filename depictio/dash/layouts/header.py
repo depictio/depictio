@@ -15,7 +15,7 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.api_calls import api_call_fetch_user_from_token, api_call_get_dashboard
+from depictio.dash.api_calls import api_call_fetch_user_from_token
 from depictio.dash.colors import colors
 
 # Constants
@@ -302,14 +302,14 @@ def _create_backend_components():
     )
 
     # DMC Box instead of html.Div for backend stores
+    # Import interactive stores from dedicated module
+    from depictio.dash.modules.interactive_component.callbacks.core_interactivity import (
+        get_interactive_stores,
+    )
+
     backend_stores = dmc.Stack(
         [
-            dcc.Store(id="stored-draggable-children", storage_type="session", data={}),
-            dcc.Store(id="stored-edit-component", data=None, storage_type="memory"),
-            dcc.Store(id="stored-draggable-layouts", storage_type="session", data={}),
-            dcc.Store(id="interactive-values-store", storage_type="session", data={}),
-            dcc.Store(id="pending-changes-store", storage_type="memory", data={}),
-            dcc.Store(id="live-interactivity-store", storage_type="session", data=True),
+            *get_interactive_stores(),  # Interactive filtering stores
             # NOTE: dashboard-tabs-store moved to global app layout (app_layout.py)
             # to ensure it's always available before dashboard-specific callbacks run
         ],
@@ -324,8 +324,6 @@ def _create_backend_components():
             html.Div(
                 id="stepper-output", style={"display": "none"}
             ),  # Keep html.Div for hidden output
-            # dcc.Store(id="button-style-tracker", data={}),
-            # dcc.Store(id="progress-monitor", data={}),
         ]
     )
 
@@ -336,231 +334,50 @@ def _create_backend_components():
 
 
 def register_callbacks_header(app):
-    @app.callback(
-        Output("add-button", "disabled"),
-        Output("save-button-dashboard", "disabled"),
-        Output("remove-all-components-button", "disabled"),
-        Output("toggle-interactivity-button", "disabled"),
-        Output("dashboard-version", "disabled"),
-        Output("share-button", "disabled"),
-        Output("toggle-notes-button", "disabled"),
-        Output("draggable", "showRemoveButton"),
-        Output("draggable", "showResizeHandles"),
-        State(
-            "unified-edit-mode-button", "checked"
-        ),  # Changed from Input to State - avoids error when button doesn't exist on stepper page
-        Input("url", "pathname"),  # Use pathname as trigger instead
-        State("local-store", "data"),
-        State("user-cache-store", "data"),
-    )
-    def toggle_buttons(switch_state, pathname, local_store, user_cache):
-        """Handle button states based on edit mode and user permissions."""
-        len_output = 9
+    logger.info("🔧 REGISTERING HEADER CALLBACKS (including interactive filter Store callback)")
 
-        # Use consolidated user cache
-        from depictio.models.models.users import UserContext
+    # REMOVED: toggle_buttons clientside callback (replaced by URL-based edit mode)
+    # Previously controlled button disabled states based on unified-edit-mode-button toggle
+    # Now buttons are conditionally rendered in header based on edit_mode parameter
+    # - View mode (/dashboard/{id}): Only reset filters + edit dashboard button visible
+    # - Edit mode (/dashboard/{id}/edit): All edit controls visible
+    # showRemoveButton/showResizeHandles now controlled in design_draggable(edit_mode=...)
 
-        current_user = UserContext.from_cache(user_cache)
-        if not current_user:
-            current_user = api_call_fetch_user_from_token(local_store["access_token"])
+    # REMOVED: toggle_share_modal_dashboard callback (share functionality not implemented)
+    # Previously controlled share modal visibility for dashboard sharing feature
+    # Feature incomplete - modal UI doesn't exist, button hidden
+    # Removed to reduce callback graph size and improve startup performance
 
-        if not local_store["access_token"]:
-            return [True] * len_output
+    # PHASE 3 SPRINT 1: Converted to clientside for instant response (-1212ms)
+    # Pure boolean toggle, no server logic needed
+    # NOTES FOOTER DISABLED: Removed notes-footer-content references
+    app.clientside_callback(
+        """
+        function(n_clicks, is_open) {
+            console.log('🔧 CLIENTSIDE OFFCANVAS TOGGLE:', n_clicks, 'is_open:', is_open);
 
-        dashboard_id = pathname.split("/")[-1]
-        data = api_call_get_dashboard(dashboard_id, local_store["access_token"])
-        if not data:
-            return [True] * len_output
+            if (!n_clicks) {
+                return is_open;
+            }
 
-        # Get user permissions
-        owner, viewer = _get_user_permissions(current_user, data)
-
-        logger.debug(f"owner: {owner}, viewer: {viewer}, switch_state: {switch_state}")
-
-        # If not owner, disable all editing controls
-        if not owner:
-            return [True] * (len_output - 2) + [False] * 2
-
-        return [not switch_state] * (len_output - 2) + [switch_state] * 2
-
-    @app.callback(
-        Output("share-modal-dashboard", "is_open"),
-        [
-            Input("share-button", "n_clicks"),
-            Input("share-modal-close", "n_clicks"),
-        ],
-        [State("share-modal-dashboard", "is_open")],
-        prevent_initial_call=True,
-    )
-    def toggle_share_modal_dashboard(n_share, n_close, is_open):
-        ctx = dash.callback_context
-
-        if not ctx.triggered:
-            raise dash.exceptions.PreventUpdate
-
-        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
-        # logger.info(trigger_id, n_save, n_close)
-
-        if trigger_id == "share-button":
-            if n_share is None or n_share == 0:
-                raise dash.exceptions.PreventUpdate
-            else:
-                return True
-
-        elif trigger_id == "share-modal-close":
-            if n_close is None or n_close == 0:
-                raise dash.exceptions.PreventUpdate
-            else:
-                return False
-
-        return is_open
-
-    @app.callback(
+            const new_drawer_state = !is_open;
+            console.log('→ Toggling drawer to:', new_drawer_state);
+            return new_drawer_state;
+        }
+        """,
         Output("offcanvas-parameters", "opened"),
-        Output("notes-footer-content", "className", allow_duplicate=True),
-        Output("page-content", "className", allow_duplicate=True),
         Input("open-offcanvas-parameters-button", "n_clicks"),
         State("offcanvas-parameters", "opened"),
-        State("notes-footer-content", "className"),
-        State("page-content", "className"),
         prevent_initial_call=True,
     )
-    def toggle_offcanvas_parameters(n_clicks, is_open, current_footer_class, current_page_class):
-        logger.info(f"toggle_offcanvas_parameters: {n_clicks}, {is_open}")
-        if n_clicks:
-            new_drawer_state = not is_open
 
-            # If we're opening the drawer, close the notes footer
-            current_footer_class = current_footer_class or ""
-            current_page_class = current_page_class or ""
-
-            if new_drawer_state and (
-                "footer-visible" in current_footer_class
-                or "footer-fullscreen" in current_footer_class
-            ):
-                # Opening drawer and footer is visible - close footer
-                new_footer_class = ""
-                new_page_class = current_page_class.replace("notes-fullscreen", "").strip()
-                logger.info(
-                    f"Closing notes footer when opening offcanvas drawer. Footer: '{new_footer_class}', Page: '{new_page_class}'"
-                )
-                return new_drawer_state, new_footer_class, new_page_class
-            else:
-                # Either closing drawer or footer already hidden - no footer change needed
-                return new_drawer_state, current_footer_class, current_page_class
-
-        return is_open, current_footer_class, current_page_class
-
-    # Sync drawer edit status badge with edit mode toggle - CONVERTED TO CLIENT-SIDE (~1.4s savings)
-    # This eliminates server roundtrip for simple icon/color updates
-    app.clientside_callback(
-        """
-        function(edit_mode_checked) {
-            console.log('🔧 CLIENTSIDE EDIT BADGE DRAWER: edit_mode_checked=', edit_mode_checked);
-
-            if (edit_mode_checked) {
-                // Edit ON
-                return [
-                    "Edit ON",
-                    "blue",
-                    {
-                        namespace: 'dash_iconify',
-                        type: 'DashIconify',
-                        props: {
-                            icon: 'mdi:pencil',
-                            width: 8,
-                            color: 'white'
-                        }
-                    }
-                ];
-            } else {
-                // Edit OFF
-                return [
-                    "Edit OFF",
-                    "gray",
-                    {
-                        namespace: 'dash_iconify',
-                        type: 'DashIconify',
-                        props: {
-                            icon: 'mdi:pencil-off',
-                            width: 8,
-                            color: 'white'
-                        }
-                    }
-                ];
-            }
-        }
-        """,
-        [
-            Output("edit-status-badge-drawer", "children"),
-            Output("edit-status-badge-drawer", "color"),
-            Output("edit-status-badge-drawer", "leftSection"),
-        ],
-        Input("unified-edit-mode-button", "checked"),
-        prevent_initial_call=False,
-    )
-
-    # Sync header edit button with edit mode toggle - CONVERTED TO CLIENT-SIDE (~1.4s savings)
-    # This eliminates server roundtrip for simple icon/color/variant updates
-    app.clientside_callback(
-        """
-        function(edit_mode_checked) {
-            console.log('🔧 CLIENTSIDE EDIT BUTTON HEADER: edit_mode_checked=', edit_mode_checked);
-
-            if (edit_mode_checked) {
-                // Edit ON: blue filled button with white icon
-                return [
-                    {
-                        namespace: 'dash_iconify',
-                        type: 'DashIconify',
-                        props: {
-                            icon: 'mdi:pencil',
-                            width: 28,
-                            color: 'white'
-                        }
-                    },
-                    "blue",
-                    "filled"
-                ];
-            } else {
-                // Edit OFF: gray subtle button with gray icon
-                return [
-                    {
-                        namespace: 'dash_iconify',
-                        type: 'DashIconify',
-                        props: {
-                            icon: 'mdi:pencil-off',
-                            width: 28,
-                            color: 'gray'
-                        }
-                    },
-                    "gray",
-                    "subtle"
-                ];
-            }
-        }
-        """,
-        [
-            Output("edit-status-badge-clickable-2", "children"),
-            Output("edit-status-badge-clickable-2", "color"),
-            Output("edit-status-badge-clickable-2", "variant"),
-        ],
-        Input("unified-edit-mode-button", "checked"),
-        prevent_initial_call=False,
-    )
-
-    # Make edit status badge clickable to toggle edit mode
-    @app.callback(
-        Output("unified-edit-mode-button", "checked", allow_duplicate=True),
-        Input("edit-status-badge-clickable-2", "n_clicks"),
-        State("unified-edit-mode-button", "checked"),
-        prevent_initial_call=True,
-    )
-    def toggle_edit_mode_from_badge(n_clicks, current_state):
-        """Toggle edit mode when clicking on edit status badge."""
-        if n_clicks:
-            return not current_state
-        return dash.no_update
+    # REMOVED: Edit badge sync callbacks (replaced by URL-based edit mode)
+    # Previously synced edit status badges with unified-edit-mode-button toggle
+    # Now edit mode is determined by URL and displayed via "Edit Dashboard" / "Exit Edit Mode" buttons
+    # Removed callbacks:
+    # - edit_badge_drawer_sync: Updated edit-status-badge-drawer based on toggle
+    # - edit_button_header_sync: Updated edit-status-badge-clickable-2 based on toggle
+    # - edit_badge_clickable: Made edit badge clickable to toggle edit mode
 
     # Update live interactivity badge based on toggle state
     # @app.callback(
@@ -623,7 +440,7 @@ def register_callbacks_header(app):
         [
             Output("reset-all-filters-button", "color"),
             Output("reset-all-filters-button", "variant"),
-            Output("reset-all-filters-button", "children"),
+            Output("reset-all-filters-button", "leftSection"),
         ],
         Input("interactive-values-store", "data"),
         prevent_initial_call=False,
@@ -640,76 +457,13 @@ def register_callbacks_header(app):
         if has_active_filters:
             # Orange filled variant with white icon when filters are active
             logger.info("🟠 Setting reset button to orange with white icon (filters active)")
-            icon = DashIconify(icon="bx:reset", width=28, color="white")
+            icon = DashIconify(icon="bx:reset", width=16, color="white")
             return colors["orange"], "filled", icon
         else:
             # Gray subtle variant with gray icon when no filters
             logger.info("⚪ Setting reset button to gray with gray icon (no filters)")
-            icon = DashIconify(icon="bx:reset", width=28, color="gray")
+            icon = DashIconify(icon="bx:reset", width=16, color="gray")
             return "gray", "subtle", icon
-
-    # @app.callback(
-    #     [
-    #         Output("apply-filters-button", "color"),
-    #         Output("apply-filters-button", "variant"),
-    #         Output("apply-filters-button", "children"),
-    #         Output("apply-filters-button", "disabled"),
-    #     ],
-    #     [
-    #         Input("pending-changes-store", "data"),
-    #         Input("live-interactivity-toggle", "checked"),
-    #     ],
-    #     prevent_initial_call=False,
-    # )
-    # def update_apply_button_style(pending_changes, live_interactivity_on):
-    #     """Update apply button style and state based on pending changes and live interactivity mode."""
-    #     logger.info(f"🔍 Apply button style check - pending_changes: {pending_changes}")
-    #     logger.info(f"🔍 Live interactivity mode: {live_interactivity_on}")
-    #     # If live interactivity is ON, hide/disable the apply button
-    #     if live_interactivity_on:
-    #         icon = DashIconify(icon="material-symbols:check", width=35, color="gray")
-    #         return "gray", "subtle", icon, True
-
-    #     # If live interactivity is OFF, check for pending changes
-    #     # Compare current values with default states to detect real changes
-    #     def has_meaningful_pending_changes(changes):
-    #         if not changes or not isinstance(changes, dict):
-    #             return False
-
-    #         for key, value in changes.items():
-    #             if key == "interactive_components_values" and value:
-    #                 # Check if there are actual component values that differ from defaults
-    #                 if isinstance(value, list) and len(value) > 0:
-    #                     for component in value:
-    #                         if isinstance(component, dict):
-    #                             current_value = component.get("value")
-    #                             metadata = component.get("metadata", {})
-    #                             default_state = metadata.get("default_state", {})
-
-    #                             # Use the same logic as _is_different_from_default
-    #                             if _is_different_from_default(current_value, default_state):
-    #                                 logger.info(
-    #                                     f"🔍 Found pending change: current={current_value}, default_state={default_state}"
-    #                                 )
-    #                                 return True
-    #             elif value:  # Other non-empty values
-    #                 return True
-    #         return False
-
-    #     has_pending_changes = has_meaningful_pending_changes(pending_changes)
-
-    #     logger.info(f"📝 Pending changes detected: {has_pending_changes}")
-
-    #     if has_pending_changes:
-    #         # Green filled variant with white icon when pending changes exist (matching Live ON badge)
-    #         logger.info("🟢 Setting apply button to green with white icon (pending changes)")
-    #         icon = DashIconify(icon="material-symbols:check", width=35, color="white")
-    #         return "green", "filled", icon, False
-    #     else:
-    #         # Gray subtle variant with gray icon when no pending changes
-    #         logger.info("⚪ Setting apply button to gray with gray icon (no pending changes)")
-    #         icon = DashIconify(icon="material-symbols:check", width=35, color="gray")
-    #         return "gray", "subtle", icon, True
 
     # @app.callback(
     #     Output("stored_metadata", "data"),
@@ -741,72 +495,6 @@ def register_callbacks_header(app):
     #     except Exception as e:
     #         logger.exception("Failed to load stored_metadata from MongoDB.")
     #         return dash.no_update
-
-    # Apply pending filter changes when Apply button is clicked and clear pending changes atomically
-    # @app.callback(
-    #     [
-    #         Output("interactive-values-store", "data", allow_duplicate=True),
-    #         Output("pending-changes-store", "data", allow_duplicate=True),
-    #     ],
-    #     Input("apply-filters-button", "n_clicks"),
-    #     [
-    #         State("pending-changes-store", "data"),
-    #         State("interactive-values-store", "data"),
-    #     ],
-    #     prevent_initial_call=True,
-    # )
-    # def apply_and_clear_pending_changes(n_clicks, pending_changes, current_interactive_values):
-    #     """Apply pending filter changes and clear pending changes atomically in a single callback."""
-    #     if not n_clicks or not pending_changes:
-    #         return dash.no_update, dash.no_update
-
-    #     logger.info("🔄 Applying pending filter changes and clearing pending store")
-    #     logger.info(f"🔄 Pending changes keys: {list(pending_changes.keys())}")
-
-    #     # Start with current interactive values
-    #     updated_values = current_interactive_values.copy() if current_interactive_values else {}
-
-    #     # Merge at component level to preserve all components
-    #     if "interactive_components_values" in pending_changes:
-    #         if "interactive_components_values" not in updated_values:
-    #             updated_values["interactive_components_values"] = []
-
-    #         # Create dict for quick lookup of current components by index
-    #         existing_components = {
-    #             comp.get("index"): comp for comp in updated_values["interactive_components_values"]
-    #         }
-
-    #         # Apply pending changes to components
-    #         pending_components = pending_changes["interactive_components_values"]
-    #         logger.info(f"🔄 Applying {len(pending_components)} pending component changes")
-
-    #         for pending_component in pending_components:
-    #             component_index = pending_component.get("index")
-    #             if component_index:
-    #                 # Debug: Log before and after values
-    #                 old_value = existing_components.get(component_index, {}).get(
-    #                     "value", "NOT_FOUND"
-    #                 )
-    #                 new_value = pending_component.get("value")
-    #                 logger.info(
-    #                     f"🔄 Updating component {component_index}: {old_value} -> {new_value}"
-    #                 )
-
-    #                 existing_components[component_index] = pending_component
-    #                 logger.info(
-    #                     f"🔄 Applied pending change: {component_index} = {pending_component.get('value')}"
-    #                 )
-
-    #         # Convert back to list
-    #         updated_values["interactive_components_values"] = list(existing_components.values())
-
-    #     logger.info(
-    #         f"✅ Applied pending filter changes - {len(updated_values.get('interactive_components_values', []))} components updated"
-    #     )
-    #     logger.info("🧹 Clearing pending changes after successful apply")
-
-    #     # Return both updated interactive values and empty pending changes
-    #     return updated_values, {}
 
     # =============================================================================
     # BURGER BUTTON CALLBACKS (DMC Burger for navbar toggle) - CLIENTSIDE
@@ -849,14 +537,102 @@ def register_callbacks_header(app):
         prevent_initial_call=True,
     )
 
+    # =============================================================================
+    # EDIT MODE NAVIGATION CALLBACKS (CLIENTSIDE WITH HARD RELOAD)
+    # =============================================================================
+
+    # Unified clientside callback for edit mode toggle with hard page reload
+    # Uses window.location.href to force full browser reload when switching modes
+    # NOTE: Using prevent_initial_call="initial_duplicate" to avoid firing on page load
+    app.clientside_callback(
+        """
+        function(enter_clicks, exit_clicks, current_pathname) {
+            console.log('═══════════════════════════════════════════════');
+            console.log('🔧 EDIT MODE TOGGLE CALLBACK FIRED');
+            console.log('   enter_clicks:', enter_clicks);
+            console.log('   exit_clicks:', exit_clicks);
+            console.log('   current_pathname:', current_pathname);
+
+            // Determine which button was clicked
+            const triggered = window.dash_clientside.callback_context.triggered;
+            console.log('   triggered:', triggered);
+
+            if (!triggered || triggered.length === 0) {
+                console.log('   ❌ No trigger, preventing update');
+                throw window.dash_clientside.PreventUpdate;
+            }
+
+            const trigger_id = triggered[0].prop_id.split('.')[0];
+            const trigger_value = triggered[0].value;
+            console.log('   trigger_id:', trigger_id);
+            console.log('   trigger_value:', trigger_value);
+
+            // CRITICAL: Only proceed if the click count is > 0
+            // This prevents firing when buttons are initialized with null/0 on page load
+            if (!trigger_value || trigger_value === 0) {
+                console.log('   ❌ Invalid click count, preventing update');
+                throw window.dash_clientside.PreventUpdate;
+            }
+
+            if (trigger_id === 'enter-edit-mode-button') {
+                console.log('   ✅ ENTER EDIT MODE button clicked');
+                // Enter edit mode: /dashboard/{id} -> /dashboard/{id}/edit
+                if (current_pathname && current_pathname.startsWith('/dashboard/')) {
+                    if (!current_pathname.endsWith('/edit')) {
+                        const target_url = current_pathname + '/edit';
+                        console.log('   🎨 Navigating to edit mode (hard reload): ' + target_url);
+                        console.log('   🚀 Calling window.location.href = ' + target_url);
+                        window.location.href = target_url;
+                        return;
+                    } else {
+                        console.log('   ⚠️ Already in edit mode, no action needed');
+                    }
+                } else {
+                    console.log('   ❌ Invalid pathname for edit mode:', current_pathname);
+                }
+            } else if (trigger_id === 'exit-edit-mode-button') {
+                console.log('   ✅ EXIT EDIT MODE button clicked');
+                // Exit edit mode: /dashboard/{id}/edit -> /dashboard/{id}
+                if (current_pathname && current_pathname.endsWith('/edit')) {
+                    const new_pathname = current_pathname.replace('/edit', '');
+                    console.log('   👁️ Navigating to view mode (hard reload): ' + new_pathname);
+                    console.log('   🚀 Calling window.location.href = ' + new_pathname);
+                    window.location.href = new_pathname;
+                    return;
+                } else {
+                    console.log('   ⚠️ Not in edit mode, no action needed');
+                }
+            } else {
+                console.log('   ❌ Unknown trigger:', trigger_id);
+            }
+
+            console.log('   Preventing update at end of callback');
+            console.log('═══════════════════════════════════════════════');
+            throw window.dash_clientside.PreventUpdate;
+        }
+        """,
+        Output("edit-mode-navigation-dummy", "data"),
+        Input("enter-edit-mode-button", "n_clicks"),
+        Input("exit-edit-mode-button", "n_clicks"),
+        State("url", "pathname"),
+        prevent_initial_call="initial_duplicate",
+    )
+
 
 # =============================================================================
 # MAIN LAYOUT FUNCTION
 # =============================================================================
 
 
-def design_header(data, local_store):
-    """Design the main dashboard header with modular components."""
+def design_header(data, local_store, edit_mode: bool = False):
+    """
+    Design the main dashboard header with modular components.
+
+    Args:
+        data: Dashboard data
+        local_store: Local storage with access token
+        edit_mode: If True, show full edit controls. If False, show simplified view-mode header.
+    """
     # Ensure data structure exists
     if data:
         if "stored_add_button" not in data:
@@ -864,31 +640,21 @@ def design_header(data, local_store):
         if "stored_edit_dashboard_mode_button" not in data:
             data["stored_edit_dashboard_mode_button"] = [int(0)]
         if "buttons_data" not in data:
-            data["buttons_data"] = {"unified_edit_mode": False}  # Default edit mode OFF
+            data["buttons_data"] = {"unified_edit_mode": True}  # Default edit mode ON for owners
 
     # Get user and permissions
     current_user = api_call_fetch_user_from_token(local_store["access_token"])
     owner, viewer = _get_user_permissions(current_user, data)
 
-    # Determine button states - ALWAYS check permission first
+    # Determine button states based on ownership
+    # Edit mode controls (add/edit/save/share) are only available to owners
+    # They are conditionally rendered based on edit_mode parameter (URL-based)
     if not owner:
-        # Non-owners: ALWAYS force edit mode OFF and disable controls
+        # Non-owners: disable all edit controls (but they won't be rendered in view mode anyway)
         disabled = True
-        unified_edit_mode_checked = False
     else:
-        # Owners only: enable controls and use stored edit mode
+        # Owners: enable controls (will be rendered based on edit_mode)
         disabled = False
-        # Set default edit mode to OFF (False) and only use stored value if explicitly set
-        buttons_data = data.get("buttons_data", {})
-        unified_edit_mode_checked = False  # Always default to OFF
-
-        # Only check stored value for owners
-        if "unified_edit_mode" in buttons_data:
-            unified_edit_mode_checked = buttons_data["unified_edit_mode"]
-        elif "edit_dashboard_mode_button" in buttons_data:
-            unified_edit_mode_checked = buttons_data["edit_dashboard_mode_button"]
-        elif "edit_components_button" in buttons_data:
-            unified_edit_mode_checked = buttons_data["edit_components_button"]
 
     # Get project name
     response = httpx.get(
@@ -909,44 +675,58 @@ def design_header(data, local_store):
         data["stored_edit_dashboard_mode_button"] if data else [int(0)]
     )
 
-    # Create action buttons with tooltips
-    add_new_component_button = _create_action_icon(
-        "material-symbols:add",
-        "add-button",
-        disabled=disabled,
-        n_clicks=init_nclicks_add_button["count"],
-        tooltip="Add a new component\nto your dashboard",
+    # SIMPLIFIED HEADER: Consistent button styling
+    # All buttons use dmc.Button for consistent UX
+    # Removed: add_new_component_button, save_button, apply_filters_button
+
+    # Reset filters button - simplified text
+    # IMPORTANT: ID must be "reset-all-filters-button" to match callbacks
+    reset_filters_button = dmc.Button(
+        "Reset",
+        id="reset-all-filters-button",
+        leftSection=DashIconify(icon="bx:reset", width=16, color="white"),
+        size="sm",
+        color="orange",
+        variant="filled",
+        n_clicks=0,  # Required for callback
     )
 
-    save_button = _create_action_icon(
-        "ic:baseline-save",
-        "save-button-dashboard",
-        disabled=disabled,
-        tooltip="Save current dashboard\nconfiguration and layout",
+    # Settings button - always visible to access dashboard info and settings
+    open_offcanvas_parameters_button = dmc.Button(
+        "Settings",
+        id="open-offcanvas-parameters-button",
+        leftSection=DashIconify(icon="ic:baseline-settings", width=16, color="white"),
+        size="sm",
+        color="gray",
+        variant="filled",
     )
 
-    notes_button = _create_action_icon(
-        "material-symbols:edit-note",
-        "toggle-notes-button",
-        tooltip="Toggle notes footer",
-    )
+    # REMOVED: edit_mode_button_header (replaced by dedicated Edit Dashboard / Exit Edit Mode buttons)
+    # The old edit-status-badge-clickable-2 button was used to toggle edit mode via unified-edit-mode-button
+    # Now we use URL-based edit mode with explicit navigation buttons
 
-    open_offcanvas_parameters_button = _create_action_icon(
-        "ic:baseline-settings",
-        "open-offcanvas-parameters-button",
-        tooltip="Open dashboard settings\nand configuration panel",
-    )
-
-    reset_filters_button = _create_reset_filters_button()
-    apply_filters_button = _create_apply_filters_button()
-
-    # Create clickable edit mode button using the same pattern as other action buttons
-    edit_mode_button_header = _create_action_icon(
-        "mdi:pencil-off",
-        "edit-status-badge-clickable-2",
+    # Create "Edit" button for view mode (navigates to /edit URL)
+    # Uses blue color matching edit ActionIcon in components
+    edit_dashboard_button = dmc.Button(
+        "Edit",
+        id="enter-edit-mode-button",
+        leftSection=DashIconify(icon="mdi:pencil", width=16, color="white"),
+        size="sm",
+        color="blue",
+        variant="filled",
         disabled=disabled,  # Disable for non-owners
-        n_clicks=0,
-        tooltip="Toggle edit mode\nfor dashboard editing",
+        style={"display": "none" if edit_mode else "block"},  # Only show in view mode
+    )
+
+    # Create "Exit" button for edit mode (navigates back to view URL)
+    exit_edit_button = dmc.Button(
+        "Exit",
+        id="exit-edit-mode-button",
+        leftSection=DashIconify(icon="mdi:eye", width=16, color="white"),
+        size="sm",
+        color="gray",
+        variant="filled",
+        style={"display": "block" if edit_mode else "none"},  # Only show in edit mode
     )
 
     # Create remove all components button for offcanvas
@@ -1049,20 +829,9 @@ def design_header(data, local_store):
                     # rightSection=DashIconify(icon="radix-icons:chevron-down"),
                 )
             ),
-            dmc.Group(
-                [
-                    dmc.Switch(
-                        id="unified-edit-mode-button",
-                        checked=unified_edit_mode_checked,
-                        disabled=disabled,
-                        color="gray",
-                    ),
-                    dmc.Text("Edit Mode", style={"fontFamily": "default"}),
-                ],
-                align="center",
-                gap="sm",
-                style={"padding": "5px", "margin": "5px 0"},
-            ),
+            # REMOVED: unified-edit-mode-button toggle (replaced by URL-based edit mode)
+            # Edit mode is now controlled by URL: /dashboard/{id} vs /dashboard/{id}/edit
+            # Use "Edit Dashboard" / "Exit Edit Mode" buttons in header instead
             dmc.Group(
                 [
                     dmc.Switch(
@@ -1093,36 +862,28 @@ def design_header(data, local_store):
         gap="xs",
     )
 
-    # DMC Stack instead of html.Div for better theme support
+    # DMC Stack for action buttons (only shown in edit mode)
+    # In view mode, these buttons should not be accessible
     buttons_group = dmc.Stack(
         [
-            dmc.Title("Buttons", order=4),
+            dmc.Title("Actions", order=4),
             dmc.Group(
                 [remove_all_components_button],
                 align="center",
                 gap="sm",
                 style={"padding": "5px", "margin": "5px 0"},
             ),
-            dmc.Group(
-                [
-                    # dmc.Button(
-                    dmc.ActionIcon(
-                        DashIconify(icon="mdi:share-variant", width=24, color="white"),
-                        id="share-button",
-                        color="gray",
-                        variant="filled",
-                        disabled=disabled,
-                        n_clicks=0,
-                    ),
-                    dmc.Text("Share", style={"fontFamily": "default"}),
-                ],
-                align="center",
-                gap="sm",
-                style={"padding": "5px", "margin": "5px 0", "display": "none"},
-            ),
+            # REMOVED: Share button (feature not implemented)
+            # Previously had share-button ActionIcon with modal - removed to reduce callback graph size
         ],
         gap="md",
+        style={"display": "block" if edit_mode else "none"},  # Hide in view mode
     )
+
+    # Drawer content - conditionally include buttons_group only in edit mode
+    drawer_children = [dashboard_info_group, toggle_switches_group]
+    if edit_mode:
+        drawer_children.append(buttons_group)
 
     offcanvas_parameters = dmc.Drawer(
         id="offcanvas-parameters",
@@ -1131,9 +892,7 @@ def design_header(data, local_store):
         opened=False,
         closeOnClickOutside=True,
         closeOnEscape=True,
-        children=dmc.Stack(
-            [dashboard_info_group, toggle_switches_group, buttons_group], gap="lg"
-        ),  # Added dashboard_info_group first
+        children=dmc.Stack(drawer_children, gap="lg"),
         size="400px",
     )
 
@@ -1157,11 +916,6 @@ def design_header(data, local_store):
             storage_type="memory",
             data=False,
         ),
-        # dcc.Store(
-        #     id="initialized-edit-button",
-        #     storage_type="memory",
-        #     data=False,
-        # ),
         dcc.Store(
             id="stored-edit-dashboard-mode-button",
             # storage_type="memory",
@@ -1212,32 +966,15 @@ def design_header(data, local_store):
                             variant="filled",
                         )
                     ),
-                    # Title and optional subtitle
-                    dmc.Stack(
-                        [
-                            dmc.Title(
-                                f"{data['title']}",
-                                order=3,
-                                id="dashboard-title",
-                                fw="bold",
-                                fz=20,
-                                m=0,
-                                style={"lineHeight": "1.2"},
-                            ),
-                            # Subtitle (only shown if provided)
-                            dmc.Text(
-                                data.get("subtitle", ""),
-                                size="xs",
-                                c="gray",
-                                style={
-                                    "lineHeight": "1.2",
-                                    "display": "block" if data.get("subtitle") else "none",
-                                    "opacity": "0.7",
-                                },
-                            ),
-                        ],
-                        gap=2,
-                        justify="center",
+                    # Title only (subtitle removed for simplified header)
+                    dmc.Title(
+                        f"{data['title']}",
+                        order=3,
+                        id="dashboard-title",
+                        fw="bold",
+                        fz=20,
+                        m=0,
+                        style={"lineHeight": "1.2"},
                     ),
                 ],
                 gap="sm",
@@ -1252,9 +989,11 @@ def design_header(data, local_store):
                 },
             ),
             # Right section - "Powered by" + action buttons (compact spacing)
+            # CONDITIONAL RENDERING: In view mode, only show essential buttons
+            # In edit mode, show all buttons including add, save, edit controls
             dmc.Group(
                 [
-                    # Powered by Depictio section
+                    # Powered by Depictio section (always shown)
                     dmc.Group(
                         [
                             dmc.Text(
@@ -1279,17 +1018,18 @@ def design_header(data, local_store):
                             "paddingRight": "15px",
                         },
                     ),
-                    # Edit mode button (clickable)
-                    edit_mode_button_header,
-                    # Action buttons
-                    apply_filters_button,
-                    add_new_component_button,
-                    reset_filters_button,
-                    save_button,
-                    notes_button,
-                    open_offcanvas_parameters_button,
+                ]
+                + [
+                    # EDIT MODE TOGGLE BUTTONS: Both always in layout, visibility controlled by display style
+                    exit_edit_button,  # Only visible when edit_mode=True (controlled by style display)
+                    edit_dashboard_button,  # Only visible when edit_mode=False (controlled by style display)
+                ]
+                + [
+                    # COMMON CONTROLS: Always shown (settings at the end)
+                    reset_filters_button,  # Reset all filters
+                    open_offcanvas_parameters_button,  # Settings/dashboard info drawer (rightmost)
                 ],
-                gap=3,  # Tighter gap (3px) for compact buttons
+                gap=8,  # Comfortable gap between buttons for better UX
                 style={"minWidth": "fit-content", "flexShrink": 0},
             ),
         ],
@@ -1320,6 +1060,19 @@ def design_header(data, local_store):
             id="stored-edit-dashboard-mode-button",
             storage_type="session",
             data=init_nclicks_edit_dashboard_mode_button,
+        ),
+        # PERFORMANCE: Cache dashboard permissions to avoid redundant API calls in toggle_buttons
+        # This cache is populated during layout creation and eliminates a 2147ms dashboard fetch
+        dcc.Store(
+            id="dashboard-permissions-cache",
+            storage_type="session",
+            data={
+                "dashboard_id": str(data.get("dashboard_id"))
+                if data and data.get("dashboard_id")
+                else None,
+                "owner": owner,
+                "viewer": viewer,
+            },
         ),
     ]
 

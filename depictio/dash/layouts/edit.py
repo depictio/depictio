@@ -1,6 +1,6 @@
 import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
-from dash import Input, html
+from dash import html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
@@ -114,125 +114,13 @@ def register_partial_data_button_callbacks(app):
 
 
 def register_reset_button_callbacks(app):
-    """Register callbacks to update reset button colors based on filter activity."""
+    """
+    Register callbacks to update reset button colors based on filter activity.
 
-    # Use clientside callback for better performance and direct DOM manipulation
-    app.clientside_callback(
-        """
-        function(interactive_values, pathname) {
-            console.log('🔄 Clientside callback triggered with:', interactive_values);
-
-            if (!interactive_values) {
-                console.log('No interactive values, skipping update');
-                return '';
-            }
-
-            // Find all reset buttons
-            const resetButtons = document.querySelectorAll('[id*="reset-selection-graph-button"]');
-            console.log('Found reset buttons:', resetButtons.length);
-
-            resetButtons.forEach(button => {
-                try {
-                    // Extract component index from button ID
-                    const buttonId = button.id;
-                    console.log('Processing button:', buttonId);
-
-                    // Parse the component index from the ID
-                    let componentIndex = null;
-                    const match = buttonId.match(/index":"([^"]+)"/);
-                    if (match) {
-                        componentIndex = match[1];
-                        console.log('Found component index:', componentIndex);
-
-                        // Check if this component has active filters
-                        const hasFilter = checkComponentFilter(interactive_values, componentIndex);
-                        console.log('Component', componentIndex, 'has filter:', hasFilter);
-
-                        if (hasFilter) {
-                            // Make button orange and always visible
-                            button.setAttribute('data-color', 'orange');
-                            button.classList.add('reset-button-filtered');
-                            button.style.opacity = '1';
-                            button.style.pointerEvents = 'auto';
-                            button.style.display = 'flex';
-                            button.style.visibility = 'visible';
-                            console.log('Set button to orange/visible for component', componentIndex);
-                        } else {
-                            // Make button gray and follow normal hover behavior
-                            button.setAttribute('data-color', 'gray');
-                            button.classList.remove('reset-button-filtered');
-                            console.log('Set button to gray/normal for component', componentIndex);
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error processing button:', error);
-                }
-            });
-
-            return 'updated';
-
-            function checkComponentFilter(interactive_values, componentIndex) {
-                try {
-                    let interactive_data = [];
-
-                    if (interactive_values.interactive_components_values) {
-                        interactive_data = interactive_values.interactive_components_values;
-                    } else if (typeof interactive_values === 'object') {
-                        for (const [key, value] of Object.entries(interactive_values)) {
-                            if (value && typeof value === 'object' && value.value !== undefined) {
-                                interactive_data.push(value);
-                            }
-                        }
-                    }
-
-                    console.log('Checking', interactive_data.length, 'components for index', componentIndex);
-
-                    for (const component of interactive_data) {
-                        if (component.metadata && component.metadata.index === componentIndex) {
-                            const currentValue = component.value;
-                            const defaultState = component.metadata.default_state;
-
-                            console.log('Found component', componentIndex, 'value:', currentValue, 'default:', defaultState);
-
-                            if (!defaultState || currentValue === null || currentValue === undefined) {
-                                return false;
-                            }
-
-                            // Check if different from default
-                            if (defaultState.default_range) {
-                                return JSON.stringify(currentValue) !== JSON.stringify(defaultState.default_range);
-                            } else if (defaultState.default_value !== undefined) {
-                                // Special handling for MultiSelect: both empty array [] and null should be considered equivalent
-                                const isCurrentEmpty = currentValue === null || currentValue === undefined || (Array.isArray(currentValue) && currentValue.length === 0);
-                                const isDefaultEmpty = defaultState.default_value === null || defaultState.default_value === undefined || (Array.isArray(defaultState.default_value) && defaultState.default_value.length === 0);
-
-                                if (isCurrentEmpty && isDefaultEmpty) {
-                                    return false; // Both are empty, so no difference
-                                }
-
-                                return currentValue !== defaultState.default_value;
-                            }
-
-                            return false;
-                        }
-                    }
-
-                    console.log('Component', componentIndex, 'not found in interactive data');
-                    return false;
-                } catch (error) {
-                    console.error('Error checking component filter:', error);
-                    return false;
-                }
-            }
-        }
-        """,
-        # Output("button-style-tracker", "data"),
-        [
-            Input("interactive-values-store", "data", allow_optional=True),
-            Input("url", "pathname"),  # Also trigger when page changes
-        ],
-        prevent_initial_call=True,
-    )
+    ⚠️ TEMPORARILY DISABLED FOR DEBUGGING
+    """
+    logger.info("⚠️ Reset button callback DISABLED for debugging")
+    pass
 
 
 def _check_component_filter_activity(interactive_values, component_index):
@@ -294,150 +182,9 @@ def _check_component_filter_activity(interactive_values, component_index):
     return False
 
 
-def _create_position_menu_vertical(btn_index, component_data=None):
-    """Create vertical position menu for interactive and other components (non-cards).
-
-    Provides up/down and top/bottom movement within the panel/section.
-
-    Args:
-        btn_index: Component index for ID generation
-        component_data: Component metadata for position validation
-
-    Returns:
-        dmc.Menu: Position control menu with vertical arrows
-    """
-
-    # Extract position info for button disable logic
-    panel_position = component_data.get("panel_position", 0) if component_data else 0
-    # TODO: Will need to pass section length from parent to properly disable top/bottom buttons
-
-    return dmc.Menu(
-        [
-            dmc.MenuTarget(
-                dmc.ActionIcon(
-                    DashIconify(icon="mdi:arrow-all", width=16, color="black"),
-                    id={"type": "position-menu-btn", "index": f"{btn_index}"},
-                    variant="filled",
-                    size="sm",
-                    style={"backgroundColor": "#f2f2f2"},  # Light grey like old drag handle
-                )
-            ),
-            dmc.MenuDropdown(
-                [
-                    dmc.MenuItem(
-                        "Move to Top",
-                        id={"type": "position-top-btn", "index": f"{btn_index}"},
-                        leftSection=DashIconify(icon="ph:arrow-line-up", width=16),
-                        n_clicks=0,
-                        disabled=panel_position == 0,  # Disable if already at top
-                    ),
-                    dmc.MenuItem(
-                        "Move Up",
-                        id={"type": "position-up-btn", "index": f"{btn_index}"},
-                        leftSection=DashIconify(icon="ph:arrow-up", width=16),
-                        n_clicks=0,
-                        disabled=panel_position == 0,  # Disable if already at top
-                    ),
-                    dmc.MenuItem(
-                        "Move Down",
-                        id={"type": "position-down-btn", "index": f"{btn_index}"},
-                        leftSection=DashIconify(icon="ph:arrow-down", width=16),
-                        n_clicks=0,
-                        # TODO: Disable if already at bottom (need section length)
-                    ),
-                    dmc.MenuItem(
-                        "Move to Bottom",
-                        id={"type": "position-bottom-btn", "index": f"{btn_index}"},
-                        leftSection=DashIconify(icon="ph:arrow-line-down", width=16),
-                        n_clicks=0,
-                        # TODO: Disable if already at bottom (need section length)
-                    ),
-                ]
-            ),
-        ],
-        id={"type": "position-menu-vertical", "index": f"{btn_index}"},
-    )
-
-
-def _create_position_menu_grid(btn_index, component_data=None):
-    """Create grid position menu for card components.
-
-    Provides up/down, top/bottom, and left/right movement within the 4-column grid.
-
-    Args:
-        btn_index: Component index for ID generation
-        component_data: Component metadata for position validation (row, col)
-
-    Returns:
-        dmc.Menu: Position control menu with directional arrows
-    """
-
-    # Extract position info for button disable logic
-    row = component_data.get("row", 0) if component_data else 0
-    col = component_data.get("col", 0) if component_data else 0
-    panel_position = component_data.get("panel_position", 0) if component_data else 0
-
-    return dmc.Menu(
-        [
-            dmc.MenuTarget(
-                dmc.ActionIcon(
-                    DashIconify(icon="mdi:arrow-all", width=16, color="black"),
-                    id={"type": "position-menu-btn", "index": f"{btn_index}"},
-                    variant="filled",
-                    size="sm",
-                    style={"backgroundColor": "#f2f2f2"},  # Light grey like old drag handle
-                )
-            ),
-            dmc.MenuDropdown(
-                [
-                    dmc.MenuItem(
-                        "Move to Top",
-                        id={"type": "position-top-btn", "index": f"{btn_index}"},
-                        leftSection=DashIconify(icon="ph:arrow-line-up", width=16),
-                        n_clicks=0,
-                        disabled=panel_position == 0,  # Disable if already at top
-                    ),
-                    dmc.MenuItem(
-                        "Move Up",
-                        id={"type": "position-up-btn", "index": f"{btn_index}"},
-                        leftSection=DashIconify(icon="ph:arrow-up", width=16),
-                        n_clicks=0,
-                        disabled=row == 0,  # Disable if already in first row
-                    ),
-                    dmc.MenuItem(
-                        "Move Down",
-                        id={"type": "position-down-btn", "index": f"{btn_index}"},
-                        leftSection=DashIconify(icon="ph:arrow-down", width=16),
-                        n_clicks=0,
-                        # TODO: Disable if already in last row (need total rows)
-                    ),
-                    dmc.MenuItem(
-                        "Move to Bottom",
-                        id={"type": "position-bottom-btn", "index": f"{btn_index}"},
-                        leftSection=DashIconify(icon="ph:arrow-line-down", width=16),
-                        n_clicks=0,
-                        # TODO: Disable if already at bottom (need section length)
-                    ),
-                    dmc.MenuDivider(),  # Visual separator between vertical and horizontal
-                    dmc.MenuItem(
-                        "Move Left",
-                        id={"type": "position-left-btn", "index": f"{btn_index}"},
-                        leftSection=DashIconify(icon="ph:arrow-left", width=16),
-                        n_clicks=0,
-                        disabled=col == 0,  # Disable if already in first column
-                    ),
-                    dmc.MenuItem(
-                        "Move Right",
-                        id={"type": "position-right-btn", "index": f"{btn_index}"},
-                        leftSection=DashIconify(icon="ph:arrow-right", width=16),
-                        n_clicks=0,
-                        disabled=col >= 3,  # Disable if in last column (0-indexed, 4 cols)
-                    ),
-                ]
-            ),
-        ],
-        id={"type": "position-menu-grid", "index": f"{btn_index}"},
-    )
+# REMOVED: Position menu functions (_create_position_menu_vertical and _create_position_menu_grid)
+# Replaced with drag & drop using DashGridLayout for all component positioning
+# Components now use drag handles instead of button-based position controls
 
 
 def _create_component_buttons(
@@ -456,55 +203,57 @@ def _create_component_buttons(
     """Create action buttons based on component type and configuration.
 
     Returns:
-        dmc.ActionIconGroup: Configured button group for the component
+        tuple: (edit_buttons_group, view_buttons_group)
+            - edit_buttons_group: ActionIconGroup with edit-only buttons (hidden in view mode)
+            - view_buttons_group: ActionIconGroup with view-accessible buttons (always visible)
     """
     # Define button configurations for different component types
-    # Order: position, metadata, reset, duplicate, edit, remove
+    # Buttons are categorized:
+    # - edit_only: drag, duplicate, edit, remove, alignment (hidden in view mode)
+    # - view_accessible: reset, metadata, partial_data (visible in view mode)
+
     button_configs = {
         "figure": {
             "orientation": "vertical",
-            "buttons": ["position", "metadata", "duplicate", "edit", "remove"],
-            "scatter_buttons": [
-                "partial_data",  # Show partial data warning first for scatter plots
-                "position",
-                "metadata",
-                "reset",
-                "duplicate",
-                "edit",
-                "remove",
-            ],  # Special case for scatter plots
+            "edit_only": ["drag", "duplicate", "edit", "remove"],
+            "view_accessible": ["metadata"],
+            "scatter_edit_only": ["partial_data", "drag", "duplicate", "edit", "remove"],
+            "scatter_view_accessible": ["metadata", "reset"],
         },
         "interactive": {
             "orientation": "horizontal",
-            "buttons": [
-                "position",
-                "metadata",
-                "reset",
-                "duplicate",
-                "edit",
-                "remove",
-            ],  # Interactive components get reset button
+            "edit_only": ["drag", "duplicate", "edit", "remove"],
+            "view_accessible": ["metadata", "reset"],
         },
         "card": {
             "orientation": "horizontal",
-            "buttons": [
-                "position",
-                "metadata",
-                "duplicate",
-                "edit",
-                "remove",
-            ],
+            "edit_only": ["drag", "duplicate", "edit", "remove"],
+            "view_accessible": ["metadata"],
         },
-        "table": {"orientation": "horizontal", "buttons": ["position", "metadata", "remove"]},
-        "jbrowse": {"orientation": "horizontal", "buttons": ["position", "metadata", "remove"]},
-        "multiqc": {"orientation": "vertical", "buttons": ["position", "metadata", "remove"]},
+        "table": {
+            "orientation": "horizontal",
+            "edit_only": ["drag", "remove"],
+            "view_accessible": ["metadata"],
+        },
+        "jbrowse": {
+            "orientation": "horizontal",
+            "edit_only": ["drag", "remove"],
+            "view_accessible": ["metadata"],
+        },
+        "multiqc": {
+            "orientation": "vertical",
+            "edit_only": ["drag", "remove"],
+            "view_accessible": ["metadata"],
+        },
         "text": {
             "orientation": "horizontal",
-            "buttons": ["position", "metadata", "duplicate", "alignment", "remove"],
-        },  # Text components get alignment button (no edit button)
+            "edit_only": ["drag", "duplicate", "alignment", "remove"],
+            "view_accessible": ["metadata"],
+        },
         "default": {
             "orientation": "horizontal",
-            "buttons": ["position", "metadata", "remove"],
+            "edit_only": ["drag", "remove"],
+            "view_accessible": ["metadata"],
         },
     }
 
@@ -515,25 +264,18 @@ def _create_component_buttons(
     if component_type == "figure":
         visu_type = component_data.get("visu_type", None) if component_data else None
         if visu_type and visu_type.lower() == "scatter":
-            button_list = config["scatter_buttons"].copy()
+            edit_only_list = config.get("scatter_edit_only", config["edit_only"])
+            view_accessible_list = config.get("scatter_view_accessible", config["view_accessible"])
         else:
-            button_list = config["buttons"]
+            edit_only_list = config["edit_only"]
+            view_accessible_list = config["view_accessible"]
     else:
-        button_list = config["buttons"]
-
-    # Create position menu factory function based on component type
-    def create_position_button():
-        """Create appropriate position menu based on component type."""
-        if component_type == "card":
-            # Cards use grid positioning with left/right arrows
-            return _create_position_menu_grid(btn_index, component_data)
-        else:
-            # All other components use vertical positioning only
-            return _create_position_menu_vertical(btn_index, component_data)
+        edit_only_list = config["edit_only"]
+        view_accessible_list = config["view_accessible"]
 
     # Map button names to functions
     button_functions = {
-        "position": create_position_button,  # New position menu replaces drag
+        "drag": create_drag_handle,
         "remove": create_remove_button,
         "edit": create_edit_button,
         "duplicate": create_duplicate_button,
@@ -552,16 +294,37 @@ def _create_component_buttons(
     if create_partial_data_warning_button is not None:
         button_functions["partial_data"] = create_partial_data_warning_button
 
-    # Create the actual button components
-    button_components = [button_functions[btn]() for btn in button_list if btn in button_functions]
+    # Create edit-only button components
+    edit_only_components = [
+        button_functions[btn]() for btn in edit_only_list if btn in button_functions
+    ]
+
+    # Create view-accessible button components
+    view_accessible_components = [
+        button_functions[btn]() for btn in view_accessible_list if btn in button_functions
+    ]
 
     # Log configuration for debugging
     if component_type:
         logger.debug(
-            f"Creating {config['orientation']} buttons for {component_type}: {button_list}"
+            f"Creating {config['orientation']} buttons for {component_type}:"
+            f"\n  Edit-only: {edit_only_list}"
+            f"\n  View-accessible: {view_accessible_list}"
         )
 
-    return dmc.ActionIconGroup(button_components, orientation=config["orientation"])
+    # Return both button groups
+    edit_buttons_group = (
+        dmc.ActionIconGroup(edit_only_components, orientation=config["orientation"])
+        if edit_only_components
+        else None
+    )
+    view_buttons_group = (
+        dmc.ActionIconGroup(view_accessible_components, orientation=config["orientation"])
+        if view_accessible_components
+        else None
+    )
+
+    return edit_buttons_group, view_buttons_group
 
 
 def edit_component(index, parent_id, active=0, component_data=None, TOKEN=None):
@@ -993,7 +756,8 @@ def enable_box_edit_mode(
     # Explicitly set to None to disable popover button creation
     partial_data_button_func = None
 
-    buttons = _create_component_buttons(
+    # Get both button groups (edit-only and view-accessible)
+    edit_buttons, view_buttons = _create_component_buttons(
         component_type,
         component_data,
         btn_index,
@@ -1043,22 +807,54 @@ def enable_box_edit_mode(
         content_children.append(box_components_list)
 
     # Add buttons positioned absolutely - always present in DOM, CSS controls visibility
-    content_children.append(
-        html.Div(
-            buttons,
-            style={
-                "position": "absolute",
-                "top": "4px",
-                "right": "8px",
-                "zIndex": 1000,
-                "alignItems": "center",
-                "height": "auto",
-                "background": "transparent",
-                "borderRadius": "6px",
-                "padding": "4px",
-            },
+    # Two separate button groups:
+    # 1. Edit-only buttons (hidden in view mode via CSS .component-action-buttons)
+    # 2. View-accessible buttons (always visible - reset, metadata)
+
+    button_containers = []
+
+    # Add edit-only buttons (drag, duplicate, edit, remove) - hidden in view mode
+    if edit_buttons:
+        button_containers.append(
+            html.Div(
+                edit_buttons,
+                className="component-action-buttons",  # Hidden in view mode by CSS
+                style={
+                    "position": "absolute",
+                    "top": "4px",
+                    "right": "8px",
+                    # z-index managed by CSS: .react-grid-item .mantine-ActionIconGroup-root { z-index: 1001 !important; }
+                    "alignItems": "center",
+                    "height": "auto",
+                    "background": "transparent",
+                    "borderRadius": "6px",
+                    "padding": "4px",
+                },
+            )
         )
-    )
+
+    # Add view-accessible buttons (reset, metadata) - always visible
+    if view_buttons:
+        button_containers.append(
+            html.Div(
+                view_buttons,
+                className="component-view-buttons",  # Always visible (not hidden by CSS)
+                style={
+                    "position": "absolute",
+                    "top": "4px",
+                    "right": "8px",  # Position on right side with edit buttons
+                    # z-index managed by CSS
+                    "alignItems": "center",
+                    "height": "auto",
+                    "background": "transparent",
+                    "borderRadius": "6px",
+                    "padding": "4px",
+                },
+            )
+        )
+
+    # Add both button containers to content
+    content_children.extend(button_containers)
 
     content_div = html.Div(
         content_children,

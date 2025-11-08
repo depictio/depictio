@@ -22,7 +22,6 @@ from depictio.dash.layouts.draggable import design_draggable
 from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data_sync
 from depictio.dash.layouts.header import design_header
 from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
-from depictio.dash.layouts.notes_footer import create_notes_footer
 
 # TEMPORARILY DISABLED FOR PERFORMANCE (Phase 4E-3)
 # from depictio.dash.layouts.palette import create_color_palette_page
@@ -37,63 +36,6 @@ from depictio.dash.layouts.projectwise_user_management import (
 from depictio.dash.layouts.sidebar import create_static_navbar_content
 from depictio.dash.layouts.tokens_management import layout as tokens_management_layout
 from depictio.dash.layouts.users_management import layout as users_management_layout
-
-
-def perform_defensive_cache_check(dashboard_id, local_data, cached_project_data):
-    """
-    DEFENSIVE CACHE CHECK - Ensure project data is available before design_draggable needs it.
-    This prevents race condition with async consolidated callback.
-
-    Args:
-        dashboard_id: Dashboard ID to fetch project for
-        local_data: User authentication data
-        cached_project_data: Existing cached project data (if any)
-
-    Returns:
-        Updated cached_project_data dict or original if already valid
-    """
-    import time
-
-    import httpx
-
-    from depictio.api.v1.configs.config import API_BASE_URL
-
-    cache_key = f"project_{dashboard_id}"
-    if not cached_project_data or cached_project_data.get("cache_key") != cache_key:
-        logger.info(
-            f"⚡ PREFETCH: Cache miss for {dashboard_id} - fetching project synchronously to avoid blocking in design_draggable"
-        )
-        start_time = time.time()
-
-        # Synchronous fetch (blocking but guaranteed to work, prevents larger block later)
-        try:
-            project_json = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/projects/get/from_dashboard_id/{dashboard_id}",
-                headers={"Authorization": f"Bearer {local_data['access_token']}"},
-                timeout=10.0,
-            ).json()
-
-            # Update cached_project_data for downstream use in design_draggable
-            cached_project_data = {
-                "project": project_json,
-                "cache_key": cache_key,
-                "timestamp": time.time(),
-            }
-
-            duration_ms = (time.time() - start_time) * 1000
-            logger.info(
-                f"⚡ PREFETCH: Fetched project in {duration_ms:.0f}ms - cache now populated for design_draggable"
-            )
-        except Exception as e:
-            logger.error(f"❌ PREFETCH: Failed to fetch project data: {e}")
-            # Continue without cached data - design_draggable will handle fallback
-    else:
-        cache_age = time.time() - cached_project_data.get("timestamp", 0)
-        logger.info(
-            f"✅ PREFETCH: Using cached project data (age: {cache_age:.2f}s) - no HTTP call needed"
-        )
-
-    return cached_project_data
 
 
 def return_create_dashboard_button(email, is_anonymous=False):
@@ -159,22 +101,24 @@ def handle_unauthenticated_user(pathname):
 
 
 def handle_authenticated_user(
-    pathname, local_data, theme="light", cached_project_data=None, cached_user_data=None
+    pathname,
+    local_data,
+    theme="light",
+    cached_project_data=None,
+    dashboard_init_data=None,
 ):
     """
     Handle authenticated user routing and page rendering.
 
-    PERFORMANCE OPTIMIZATION (Phase 4E-4):
-    - Added cached_user_data parameter to avoid redundant API calls
-    - Disabled purge_expired_tokens() - moved to cleanup_tasks.py periodic job
-    - Use cached user from consolidated API instead of fetching on every route
+    PERFORMANCE OPTIMIZATION (API Consolidation):
+    - Added dashboard_init_data parameter from consolidated /dashboards/init endpoint
+    - Passes enriched metadata to render_dashboard to eliminate component-level API calls
 
     Args:
         pathname: URL pathname to route to
         local_data: User authentication data
         theme: Current theme (light/dark)
         cached_project_data: Cached project data from consolidated API
-        cached_user_data: Cached user data from consolidated API (avoids API call)
     """
     logger.info(f"User logged in: {local_data.get('email', 'Unknown')}")
     # logger.info(f"Local data: {local_data}")
@@ -279,29 +223,38 @@ def handle_authenticated_user(
         return edit_page, header_content, pathname, local_data
 
     elif pathname.startswith("/dashboard/"):
-        dashboard_id = pathname.split("/")[-1]
+        # Determine if this is view mode or edit mode based on URL
+        is_edit_mode = pathname.endswith("/edit")
+
+        # Extract dashboard ID (handle both /dashboard/{id} and /dashboard/{id}/edit)
+        path_parts = pathname.split("/")
+        # path_parts: ['', 'dashboard', '{dashboard_id}', 'edit'(optional)]
+        dashboard_id = path_parts[2]
 
         # Load dashboard data and create layout directly
-        logger.info(f"🔄 DASHBOARD NAVIGATION: Loading dashboard {dashboard_id}")
-
-        # Perform defensive cache check to ensure project data is available
-        cached_project_data = perform_defensive_cache_check(
-            dashboard_id, local_data, cached_project_data
+        mode_label = "EDIT" if is_edit_mode else "VIEW"
+        logger.info(
+            f"🔄 DASHBOARD NAVIGATION ({mode_label} MODE): Loading dashboard {dashboard_id}"
         )
 
+        # ✅ ASYNC OPTIMIZATION: Project data now populated by consolidated_api callback
+        # No blocking HTTP call needed - rely on project-metadata-store from async population
         logger.info(f"🔄 DASHBOARD NAVIGATION: theme - {theme}")
         # Load dashboard data synchronously
         # PERFORMANCE OPTIMIZATION (Phase 5A): Pass cached user data to avoid redundant API call
+        # PERFORMANCE OPTIMIZATION (API Consolidation): Pass dashboard_init_data to eliminate component API calls
         depictio_dash_data = load_depictio_data_sync(
             dashboard_id=dashboard_id,
             local_data=local_data,
             theme=theme,
-            cached_user_data=cached_user_data,  # Pass cached user data from consolidated callback
+            init_data=dashboard_init_data,  # Pass consolidated init data for components
         )
 
         # # Create dashboard layout
         if depictio_dash_data:
-            header_content, backend_components = design_header(depictio_dash_data, local_data)
+            header_content, backend_components = design_header(
+                depictio_dash_data, local_data, edit_mode=is_edit_mode
+            )
 
             # Create dashboard layout
             dashboard_layout = create_dashboard_layout(
@@ -311,6 +264,7 @@ def handle_authenticated_user(
                 backend_components=backend_components,
                 theme=theme,
                 cached_project_data=cached_project_data,
+                edit_mode=is_edit_mode,
             )
 
             return dashboard_layout, header_content, pathname, local_data
@@ -326,11 +280,7 @@ def handle_authenticated_user(
             return error_layout, header_content, pathname, local_data
 
     elif pathname == "/dashboards":
-        # PERFORMANCE OPTIMIZATION (Phase 4E-4): Use cached user data
-        if cached_user_data:
-            user = cached_user_data
-        else:
-            user = api_call_fetch_user_from_token(local_data["access_token"])  # Fallback only
+        user = api_call_fetch_user_from_token(local_data["access_token"])  # Fallback only
         # user = fetch_user_from_token(local_data["access_token"])
         # logger.info(f"User: {user}")
 
@@ -354,10 +304,7 @@ def handle_authenticated_user(
 
     elif pathname == "/projects":
         # PERFORMANCE OPTIMIZATION (Phase 4E-4): Use cached user data
-        if cached_user_data:
-            user = cached_user_data
-        else:
-            user = api_call_fetch_user_from_token(local_data["access_token"])  # Fallback only
+        user = api_call_fetch_user_from_token(local_data["access_token"])  # Fallback only
 
         # Check if user is anonymous
         is_anonymous = hasattr(user, "is_anonymous") and user.is_anonymous
@@ -385,10 +332,7 @@ def handle_authenticated_user(
     elif pathname == "/admin":
         # Check if user is admin
         # PERFORMANCE OPTIMIZATION (Phase 4E-4): Use cached user data
-        if cached_user_data:
-            user = cached_user_data
-        else:
-            user = api_call_fetch_user_from_token(local_data["access_token"])  # Fallback only
+        user = api_call_fetch_user_from_token(local_data["access_token"])  # Fallback only
         if not user.is_admin:
             # Fallback to dashboards if user is not admin
             content = create_dashboards_management_layout()
@@ -413,10 +357,7 @@ def handle_authenticated_user(
     else:
         # Fallback to dashboards if path is unrecognized
         # PERFORMANCE OPTIMIZATION (Phase 4E-4): Use cached user data
-        if cached_user_data:
-            user = cached_user_data
-        else:
-            user = api_call_fetch_user_from_token(local_data["access_token"])  # Fallback only
+        user = api_call_fetch_user_from_token(local_data["access_token"])  # Fallback only
         # Check if user is anonymous
         is_anonymous = hasattr(user, "is_anonymous") and user.is_anonymous
 
@@ -657,11 +598,15 @@ def create_dashboard_layout(
     backend_components=None,
     theme="light",
     cached_project_data=None,
+    edit_mode: bool = False,
 ):
     import time
 
     start_time_total = time.time()
-    logger.info(f"⏱️ PROFILING: Starting create_dashboard_layout for {dashboard_id}")
+    mode_label = "EDIT" if edit_mode else "VIEW"
+    logger.info(
+        f"⏱️ PROFILING: Starting create_dashboard_layout ({mode_label} MODE) for {dashboard_id}"
+    )
 
     # Init layout and children if depictio_dash_data is available, else set to empty
     if depictio_dash_data and isinstance(depictio_dash_data, dict):
@@ -684,6 +629,12 @@ def create_dashboard_layout(
     # Generate draggable layout
     # Ensure local_data is a dict
     local_data = local_data or {}
+
+    # Extract stored_metadata from depictio_dash_data
+    stored_metadata = None
+    if depictio_dash_data and isinstance(depictio_dash_data, dict):
+        stored_metadata = depictio_dash_data.get("stored_metadata", [])
+
     start_draggable = time.time()
     core = design_draggable(
         init_layout,
@@ -691,6 +642,8 @@ def create_dashboard_layout(
         dashboard_id,
         local_data,
         cached_project_data=cached_project_data,
+        stored_metadata=stored_metadata,
+        edit_mode=edit_mode,
     )
     draggable_duration_ms = (time.time() - start_draggable) * 1000
     logger.info(f"⏱️ PROFILING: design_draggable took {draggable_duration_ms:.1f}ms")
@@ -746,7 +699,7 @@ def create_dashboard_layout(
                 ],
             ),
             # Notes footer - positioned as overlay
-            create_notes_footer(dashboard_data=depictio_dash_data),
+            # create_notes_footer(dashboard_data=depictio_dash_data),
             # Workflow logo overlay - positioned as overlay in bottom-right
             workflow_logo_overlay,
             # html.Div(id="test-input"),
@@ -800,24 +753,16 @@ def create_app_layout():
                 storage_type="local",  # Changed to local storage to persist user preference
                 data=False,  # Default to expanded if no preference saved
             ),
-            # Consolidated user cache to reduce API calls
+            # Dummy store for edit mode navigation clientside callback
             dcc.Store(
-                id="user-cache-store",
+                id="edit-mode-navigation-dummy",
                 storage_type="memory",
-                data=None,  # Will be populated by consolidated callback
             ),
-            # Server status cache
-            dcc.Store(
-                id="server-status-cache",
-                storage_type="memory",
-                data=None,  # Will be populated by consolidated callback
-            ),
-            # Project data cache (dashboard-specific)
-            dcc.Store(
-                id="project-cache-store",
-                storage_type="memory",
-                data=None,  # Will be populated by consolidated callback
-            ),
+            # ✅ MIGRATED TO SHARED STORES: All cache stores now in shared_app_shell.py
+            # - server-status-cache (session storage, was memory)
+            # - project-metadata-store (session storage, renamed from project-cache)
+            # - dashboard-init-data (session storage, new for two-cache architecture)
+            # ✅ ELIMINATED: delta-locations-store (components read directly from project-metadata-store)
             # POSITION OPTIMIZATION: Store for component position metadata
             # Used by position_controls.py to trigger lightweight position updates
             # without full dashboard re-render. Clientside callback reads this to
@@ -829,6 +774,9 @@ def create_app_layout():
             ),
             # Hidden div for clientside callback output (position updates)
             html.Div(id="position-update-dummy", style={"display": "none"}),
+            # REMOVED: Debounced save infrastructure (position-pending-save-store,
+            # position-last-change-timestamp, position-save-interval) - no longer needed
+            # since position control buttons have been replaced with drag & drop
             # PERFORMANCE OPTIMIZATION: Changed from "local" to "session" storage
             # This was causing 885ms initialization delay due to reading 92KB from localStorage
             # Session storage clears on browser close, preventing accumulated stale data

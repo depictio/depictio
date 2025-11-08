@@ -652,6 +652,64 @@ layout = html.Div(
 )
 
 
+def register_google_oauth_callbacks(app):
+    """
+    Register Google OAuth authentication callbacks.
+
+    Only called when settings.auth.google_oauth_enabled is True.
+
+    Args:
+        app: Dash app instance
+    """
+    logger.info("🔐 Registering Google OAuth callbacks")
+
+    # Google OAuth callback using server-side callback
+    @app.callback(
+        Output("google-oauth-redirect", "href"),
+        Input("google-oauth-button", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def handle_google_oauth_login(n_clicks):
+        """Handle Google OAuth login button click."""
+        if not n_clicks:
+            raise PreventUpdate
+
+        if not settings.auth.google_oauth_enabled:
+            logger.warning("Google OAuth is not enabled")
+            raise PreventUpdate
+
+        try:
+            # Call the API to get the Google OAuth login URL
+            oauth_data = api_call_get_google_oauth_login_url()
+
+            if oauth_data and "authorization_url" in oauth_data:
+                authorization_url = oauth_data["authorization_url"]
+                logger.info(f"Redirecting to Google OAuth: {authorization_url}")
+                return authorization_url
+            else:
+                logger.error("Failed to get OAuth URL from API")
+                raise PreventUpdate
+
+        except Exception as e:
+            logger.error(f"Error initiating Google OAuth: {e}")
+            raise PreventUpdate
+
+    # Add JavaScript redirect handling for Google OAuth
+    app.clientside_callback(
+        """
+        function(href) {
+            if (href && href !== "") {
+                window.location.href = href;
+            }
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("google-oauth-redirect", "target"),
+        Input("google-oauth-redirect", "href"),
+        prevent_initial_call=True,
+    )
+
+
 def register_callbacks_users_management(app):
     @app.callback(
         [
@@ -903,53 +961,11 @@ def register_callbacks_users_management(app):
             dash.no_update,
         )
 
-
-# Google OAuth callback using server-side callback
-@dash.callback(
-    Output("google-oauth-redirect", "href"),
-    Input("google-oauth-button", "n_clicks"),
-    prevent_initial_call=True,
-)
-def handle_google_oauth_login(n_clicks):
-    """Handle Google OAuth login button click."""
-    if not n_clicks:
-        raise PreventUpdate
-
-    if not settings.auth.google_oauth_enabled:
-        logger.warning("Google OAuth is not enabled")
-        raise PreventUpdate
-
-    try:
-        # Call the API to get the Google OAuth login URL
-        oauth_data = api_call_get_google_oauth_login_url()
-
-        if oauth_data and "authorization_url" in oauth_data:
-            authorization_url = oauth_data["authorization_url"]
-            logger.info(f"Redirecting to Google OAuth: {authorization_url}")
-            return authorization_url
-        else:
-            logger.error("Failed to get OAuth URL from API")
-            raise PreventUpdate
-
-    except Exception as e:
-        logger.error(f"Error initiating Google OAuth: {e}")
-        raise PreventUpdate
-
-
-# Add JavaScript redirect handling for Google OAuth
-dash.clientside_callback(
-    """
-    function(href) {
-        if (href && href !== "") {
-            window.location.href = href;
-        }
-        return window.dash_clientside.no_update;
-    }
-    """,
-    Output("google-oauth-redirect", "target"),
-    Input("google-oauth-redirect", "href"),
-    prevent_initial_call=True,
-)
+    # Google OAuth callbacks - only register if enabled in settings
+    if settings.auth.google_oauth_enabled:
+        register_google_oauth_callbacks(app)
+    else:
+        logger.info("🔐 Google OAuth disabled - skipping OAuth callback registration")
 
 
 # Add Google OAuth callback handler for when user returns from Google

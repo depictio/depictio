@@ -6,7 +6,7 @@ Uses MantineProvider's forceColorScheme for native theme support.
 """
 
 import dash_mantine_components as dmc
-from dash import Input, Output, State, clientside_callback
+from dash import Input, Output, State
 from dash_iconify import DashIconify
 
 
@@ -85,7 +85,7 @@ def register_simple_theme_system(app):
     )
 
     # Handle manual theme switch - dcc.Store handles localStorage automatically
-    clientside_callback(
+    app.clientside_callback(
         """
         function(checked, current_theme) {
             // CRITICAL: If checked is undefined/null, the switch component doesn't have a valid state yet
@@ -121,7 +121,7 @@ def register_simple_theme_system(app):
     )
 
     # Re-apply theme on URL navigation to ensure MantineProvider stays synchronized
-    clientside_callback(
+    app.clientside_callback(
         """
         function(pathname, theme_data) {
             console.log('🔄 URL Navigation triggered for path:', pathname);

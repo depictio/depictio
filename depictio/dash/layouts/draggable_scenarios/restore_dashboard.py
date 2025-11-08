@@ -1,58 +1,145 @@
-from dash import dcc, html
+from dash import html
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, api_call_get_dashboard
 from depictio.dash.component_metadata import DISPLAY_NAME_TO_TYPE_MAPPING, get_build_functions
-from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
-    create_card_placeholder,
-    create_figure_placeholder,
-    create_interactive_placeholder,
-    create_skeleton_component,
-)
-from depictio.dash.layouts.edit import enable_box_edit_mode
 from depictio.models.models.dashboards import DashboardData
 from depictio.models.utils import convert_model_to_dict
 
 # Get build functions from centralized metadata
 build_functions = get_build_functions()
 
-# PERFORMANCE OPTIMIZATION (Phase 5B): Enable progressive loading for multiple component types
-# Set to True to reduce initial render from 378 DOM mutations to smaller chunks
-PROGRESSIVE_LOADING_ENABLED = False  # DISABLED FOR DEBUGGING
-
-# Component types that should use progressive loading
-# Priority order: card (fastest) < interactive < figure (slowest)
-PROGRESSIVE_LOADING_TYPES = ["figure", "card", "interactive"]
-
 # DEBUGGING: Test flag to use simple DMC layout instead of draggable grid
 # Set to True to test if component disappearance is related to grid layout system
 USE_SIMPLE_LAYOUT_FOR_TESTING = True  # ENABLED FOR DEBUGGING
 
-# Base delays for each component type (in milliseconds)
-COMPONENT_BASE_DELAYS = {
-    "card": 300,  # Lightest - simple metric cards
-    "interactive": 400,  # Medium - filters and controls
-    "figure": 500,  # Heaviest - complex visualizations
-}
 
-# Placeholder creation functions for each type
-PLACEHOLDER_FUNCTIONS = {
-    "figure": create_figure_placeholder,
-    "card": create_card_placeholder,
-    "interactive": create_interactive_placeholder,
-}
+def render_dashboard(
+    stored_metadata, edit_components_button, dashboard_id, theme, TOKEN, init_data=None
+):
+    """
+    Render dashboard components using build functions.
+
+    Creates UI components with pattern-matching callback IDs for automatic population.
+    Build functions create placeholders ("...") - callbacks populate actual values.
+
+    Expected timing: ~150ms for structure, callbacks populate content in parallel
+
+    Args:
+        stored_metadata: List of component metadata dicts
+        edit_components_button: Edit mode button state
+        dashboard_id: Dashboard ObjectId
+        theme: Theme name ("light" or "dark")
+        TOKEN: Access token
+        init_data: Optional consolidated init data for API optimization
+
+    Returns:
+        List of rendered components with callback infrastructure
+    """
+    import time
+
+    start = time.time()
+    logger.info("⏱️ PROFILING: Starting render_dashboard")
+
+    from depictio.dash.layouts.draggable import clean_stored_metadata
+    from depictio.dash.layouts.edit import enable_box_edit_mode
+
+    stored_metadata = clean_stored_metadata(stored_metadata)
+
+    children = []
+    for child_metadata in stored_metadata:
+        # Add required fields
+        child_metadata["build_frame"] = True
+        child_metadata["access_token"] = TOKEN
+        child_metadata["theme"] = theme
+
+        # Add init_data if available (API optimization)
+        if init_data:
+            child_metadata["init_data"] = init_data
+
+        # Get component type
+        component_type = child_metadata.get("component_type")
+
+        # Handle legacy type conversion
+        if component_type not in build_functions and component_type in DISPLAY_NAME_TO_TYPE_MAPPING:
+            component_type = DISPLAY_NAME_TO_TYPE_MAPPING[component_type]
+            child_metadata["component_type"] = component_type
+
+        if component_type not in build_functions:
+            logger.warning(f"Unsupported component type: {component_type}")
+            continue
+
+        # Build component (creates placeholder UI with callback IDs)
+        build_function = build_functions[component_type]
+        child = build_function(**child_metadata)
+
+        # Wrap with edit mode support
+        wrapped = enable_box_edit_mode(
+            child,
+            switch_state=edit_components_button,
+            dashboard_id=dashboard_id,
+            component_data=child_metadata,
+            TOKEN=TOKEN,
+        )
+
+        children.append(wrapped)
+
+    duration_ms = (time.time() - start) * 1000
+    logger.info(
+        f"⏱️ PROFILING: render_dashboard took {duration_ms:.1f}ms for {len(children)} components "
+        f"(avg={duration_ms / len(children) if children else 0:.1f}ms/component)"
+    )
+
+    return children
 
 
-def render_dashboard(stored_metadata, edit_components_button, dashboard_id, theme, TOKEN):
+def render_dashboard_original(
+    stored_metadata, edit_components_button, dashboard_id, theme, TOKEN, init_data=None
+):
+    """
+    BACKUP: Original full implementation of render_dashboard.
+
+    Render dashboard components from stored metadata.
+
+    Args:
+        stored_metadata: List of component metadata dicts
+        edit_components_button: Edit mode button state
+        dashboard_id: Dashboard ObjectId
+        theme: Theme name ("light" or "dark")
+        TOKEN: Access token
+        init_data: Optional consolidated dashboard init data from /dashboards/init endpoint
+            Contains: delta_locations, column_specs, column_names, join_configs
+            This enables component building without redundant API calls
+
+    Returns:
+        List of rendered Dash components
+    """
     import time
 
     start_time_total = time.time()
     logger.info(f"⏱️ PROFILING: Starting render_dashboard for {dashboard_id}")
     from depictio.dash.layouts.draggable import clean_stored_metadata
+    from depictio.dash.layouts.edit import enable_box_edit_mode
 
     num_components = len(stored_metadata) if stored_metadata else 0
     logger.info(f"📊 RESTORE DEBUG - Raw stored_metadata count: {num_components}")
+
+    # OPTIMIZATION: Extract init_data for component builders
+    delta_locations = {}
+    column_specs = {}
+    column_names = {}
+    join_configs = {}
+
+    if init_data:
+        delta_locations = init_data.get("delta_locations", {})
+        column_specs = init_data.get("column_specs", {})
+        column_names = init_data.get("column_names", {})
+        join_configs = init_data.get("join_configs", {})
+        logger.info(
+            f"📡 INIT DATA: Using consolidated data with {len(delta_locations)} delta locations, "
+            f"{len(column_specs)} column specs"
+        )
 
     # Log the first few raw metadata entries for debugging
     if stored_metadata:
@@ -81,14 +168,44 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
 
     children = list()
     component_build_times = []
-    components_pending_load = {}  # Track components for progressive loading by type
 
     for child_metadata in stored_metadata:
         start_component = time.time()
         child_metadata["build_frame"] = True
         child_metadata["access_token"] = TOKEN
-        # logger.info(child_metadata)
-        # logger.info(f"type of child_metadata : {type(child_metadata)}")
+
+        # OPTIMIZATION: Add init_data fields to child_metadata for component builders
+        # This enables load_deltatable_lite to use init_data parameter instead of API calls
+        dc_id = child_metadata.get("dc_id")
+        if init_data and dc_id:
+            dc_id_str = str(dc_id)
+
+            # Build init_data dict for load_deltatable_lite
+            component_init_data = {}
+
+            # Add delta location if available (from enriched metadata)
+            # delta_locations already has structure {dc_id: {"delta_location": path}}
+            if dc_id_str in delta_locations:
+                component_init_data[dc_id_str] = delta_locations[dc_id_str]
+
+            # For joined DCs, add individual DC locations
+            if isinstance(dc_id, str) and "--" in dc_id:
+                for individual_dc_id in dc_id.split("--"):
+                    if individual_dc_id in delta_locations:
+                        # delta_locations already has correct structure
+                        component_init_data[individual_dc_id] = delta_locations[individual_dc_id]
+
+            # ALWAYS add init_data to child_metadata (even if empty)
+            # This signals to components that optimization is available
+            child_metadata["init_data"] = component_init_data
+
+            # Add additional enriched fields if available
+            if column_specs.get(dc_id_str):
+                child_metadata["column_specs"] = column_specs[dc_id_str]
+            if column_names.get(dc_id_str):
+                child_metadata["column_names"] = column_names[dc_id_str]
+            if dc_id_str in join_configs:
+                child_metadata["join_config"] = join_configs[dc_id_str]
 
         # Extract the type of the child (assuming there is a type key in the metadata)
         component_type = child_metadata.get("component_type", None)
@@ -110,93 +227,9 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
         child_metadata["theme"] = theme
         logger.info(f"Using theme: {theme} for component {component_type}")
 
-        # PERFORMANCE OPTIMIZATION (Phase 5B): Return lightweight placeholders for heavy components
-        # This reduces initial React render from 378 DOM mutations to much smaller chunks
-        # Actual components will be loaded via dcc.Interval triggered callbacks
-        if PROGRESSIVE_LOADING_ENABLED and component_type in PROGRESSIVE_LOADING_TYPES:
-            component_uuid = child_metadata.get("index", "unknown")
-            logger.info(
-                f"⚡ PROGRESSIVE LOADING: Creating placeholder for {component_type} {component_uuid}"
-            )
-
-            # Initialize tracking list for this component type if needed
-            if component_type not in components_pending_load:
-                components_pending_load[component_type] = []
-
-            # Get placeholder creation function
-            placeholder_func = PLACEHOLDER_FUNCTIONS.get(component_type)
-            if not placeholder_func:
-                logger.warning(
-                    f"⚠️  No placeholder function for {component_type}, building normally"
-                )
-                # Fall through to normal build
-                build_function = build_functions[component_type]
-                child = build_function(**child_metadata)
-            else:
-                # Create lightweight placeholder with dcc.Interval to trigger loading
-                # Calculate stagger delay based on component type and count
-                base_delay = COMPONENT_BASE_DELAYS.get(component_type, 400)
-                stagger_delay = len(components_pending_load[component_type]) * 100
-
-                # CRITICAL FIX: Progressive loading placeholders must NOT be wrapped by enable_box_edit_mode
-                # The progressive loading callback will build the component and wrap it itself
-                # The container needs pattern-matching ID for the callback to target it
-                # But we wrap it in an outer div with simple ID for enable_box_edit_mode to process later
-
-                # Inner container - targeted by progressive loading callback
-                inner_container = html.Div(
-                    [
-                        placeholder_func(component_uuid),
-                        # Interval fires once after delay to trigger server callback
-                        dcc.Interval(
-                            id={
-                                "type": f"{component_type}-load-trigger",
-                                "index": component_uuid,
-                            },
-                            interval=base_delay + stagger_delay,
-                            n_intervals=0,
-                            max_intervals=1,  # Fire only once
-                        ),
-                        # Store to hold loaded component
-                        dcc.Store(
-                            id={
-                                "type": f"{component_type}-metadata-store",
-                                "index": component_uuid,
-                            },
-                            data=child_metadata,  # Store metadata for callback
-                        ),
-                    ],
-                    id={
-                        "type": f"{component_type}-container",
-                        "index": component_uuid,
-                    },
-                )
-
-                # Outer wrapper - has simple ID structure expected by draggable grid
-                # Progressive loading callback will replace inner_container children with wrapped component
-                # This outer wrapper ensures the grid item has the correct ID (box-{index})
-                child = html.Div(
-                    inner_container,
-                    id=f"box-{component_uuid}",  # Grid item ID - must match draggable layout "i" field
-                    className="responsive-wrapper",
-                    style={
-                        "position": "relative",
-                        "width": "100%",
-                        "height": "100%",
-                        "display": "flex",
-                        "flexDirection": "column",
-                        "flex": "1",
-                    },
-                )
-                components_pending_load[component_type].append(child_metadata)
-        else:
-            # Build other components normally (text, table, jbrowse, multiqc)
-            # Get the build function based on the type
-            build_function = build_functions[component_type]
-            # logger.info(f"build_function : {build_function.__name__}")
-
-            # Build the child using the appropriate function and kwargs
-            child = build_function(**child_metadata)
+        # Build component using the appropriate function and kwargs
+        build_function = build_functions[component_type]
+        child = build_function(**child_metadata)
 
         component_build_time_ms = (time.time() - start_component) * 1000
         component_build_times.append(component_build_time_ms)
@@ -269,14 +302,6 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
                     "padding": "0",
                 },
             )
-        # CRITICAL FIX: Skip enable_box_edit_mode for progressive loading placeholders
-        # They're already wrapped with the correct box-{index} ID and structure
-        # Progressive loading callback will handle wrapping the actual component
-        elif PROGRESSIVE_LOADING_ENABLED and component_type in PROGRESSIVE_LOADING_TYPES:
-            logger.info(
-                f"⚡ PROGRESSIVE LOADING: Skipping enable_box_edit_mode for {component_type} placeholder"
-            )
-            processed_child = child  # Already wrapped, use as-is
         else:
             processed_child = enable_box_edit_mode(
                 child,  # Pass native Dash component directly
@@ -302,17 +327,6 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
         f"(avg={avg_component_time:.1f}ms/component, max={max_component_time:.1f}ms)"
     )
 
-    # Log progressive loading summary
-    if PROGRESSIVE_LOADING_ENABLED and components_pending_load:
-        total_pending = sum(len(comps) for comps in components_pending_load.values())
-        logger.info(f"⚡ PROGRESSIVE LOADING: {total_pending} components will load incrementally:")
-        for comp_type, comps in components_pending_load.items():
-            base_delay = COMPONENT_BASE_DELAYS.get(comp_type, 400)
-            logger.info(
-                f"  - {len(comps)} {comp_type} component(s) "
-                f"(base delay: {base_delay}ms, stagger: 100ms)"
-            )
-
     logger.info(
         f"✅ Dashboard restored with {len(processed_children)} components - pattern-matching callbacks will populate values"
     )
@@ -330,14 +344,6 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
             logger.info(f"🧪 Child {i}: {child_type}")
             if hasattr(child, "id"):
                 logger.info(f"🧪 Child {i} ID: {child.id}")
-
-        # Add a debug header to confirm the layout is being used
-        debug_header = dmc.Alert(
-            title="🧪 Testing Mode Active",
-            children=f"Two-panel layout: Interactive (25%) | Cards+Other (75%) - {len(processed_children)} components total",
-            color="blue",
-            style={"marginBottom": "20px"},
-        )
 
         # Separate components into two panels: interactive (left), everything else (right)
         interactive_components = []  # Left panel - vertical stack
@@ -429,7 +435,7 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
         # Create two-panel layout using dmc.Grid
         two_panel_layout = html.Div(
             [
-                debug_header,
+                # debug_header,
                 dmc.Grid(
                     [
                         # Left panel - 1/4 width (span=1 out of 4 columns) - Interactive
@@ -474,75 +480,12 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
     return processed_children
 
 
-def render_dashboard_with_skeletons(
-    stored_metadata, edit_components_button, dashboard_id, theme, TOKEN
-):
-    """Render dashboard with skeleton placeholders for progressive loading."""
-    logger.info(f"Rendering dashboard with skeletons for ID: {dashboard_id}")
-    from depictio.dash.layouts.draggable import clean_stored_metadata
-
-    stored_metadata = clean_stored_metadata(stored_metadata)
-    children = []
-
-    for child_metadata in stored_metadata:
-        component_type = child_metadata.get("component_type", "card")
-        component_uuid = child_metadata.get("index", "unknown")
-
-        logger.info(f"Creating skeleton for {component_type} component {component_uuid}")
-
-        # Create skeleton component
-        skeleton_component = create_skeleton_component(component_type)
-
-        # Wrap with DraggableWrapper using enable_box_edit_mode structure
-
-        # Apply enable_box_edit_mode - wrap skeleton with a content div that can be updated
-        skeleton_with_content_id = html.Div(
-            [skeleton_component], id={"type": "component-content", "uuid": component_uuid}
-        )
-
-        # Create a wrapper div with the expected ID structure for enable_box_edit_mode
-        # The enable_box_edit_mode function expects a component with id={"index": component_uuid}
-        wrapper_div = html.Div([skeleton_with_content_id], id={"index": component_uuid})
-
-        # Create a proper Dash component for enable_box_edit_mode
-        # The enable_box_edit_mode function expects a component's to_plotly_json() output
-        wrapped_component = enable_box_edit_mode(
-            wrapper_div.to_plotly_json(),
-            switch_state=edit_components_button,
-            dashboard_id=dashboard_id,
-            component_data=child_metadata,
-            TOKEN=TOKEN,
-        )
-
-        children.append(wrapped_component)
-
-    logger.info(f"Created {len(children)} skeleton components")
-    return children
-
-
-def get_loading_delay_for_component(component_type, index_in_list):
-    """Get the loading delay for a component based on its type and position."""
-    base_delays = {
-        "card": 0.1,  # Fastest - simple components
-        "interactive": 0.2,  # Medium - interactive components
-        "figure": 0.3,  # Slower - complex visualizations
-        "table": 0.4,  # Slowest - data-heavy components
-        "jbrowse": 0.5,  # Slowest - genome browser
-        "text": 0.1,  # Text components load fast
-    }
-
-    base_delay = base_delays.get(component_type, 0.2)
-    # Add minimal incremental delay based on position to stagger loading
-    positional_delay = index_in_list * 0.05
-
-    return base_delay + positional_delay
-
-
 def load_depictio_data_sync(
     dashboard_id: str,
     local_data: dict,
     theme: str = "light",
     cached_user_data: dict | None = None,
+    init_data: dict | None = None,
 ) -> dict | None:
     """Load the dashboard data from the API and render it.
 
@@ -550,11 +493,17 @@ def load_depictio_data_sync(
     - Added cached_user_data parameter to avoid redundant API call
     - User data already fetched by consolidated API callback
 
+    PERFORMANCE OPTIMIZATION (API Consolidation):
+    - Added init_data parameter from /dashboards/init endpoint
+    - Contains enriched metadata, column specs, delta locations
+    - Passed to render_dashboard to eliminate component-level API calls
+
     Args:
         dashboard_id (str): The ID of the dashboard to load.
         local_data (dict): Local data containing access token and other information.
         theme (str): The theme to use for rendering the dashboard.
         cached_user_data: Cached user data from consolidated API (avoids redundant fetch)
+        init_data: Consolidated dashboard init data (enriched metadata, column specs, etc.)
     Returns:
         dict: The dashboard data with rendered children.
     Raises:
@@ -691,6 +640,7 @@ def load_depictio_data_sync(
                 dashboard_id,
                 theme,
                 local_data["access_token"],
+                init_data=init_data,  # Pass consolidated init data to components
             )
             render_duration_ms = (time.time() - start_render) * 1000
             logger.info(f"⏱️ PROFILING: render_dashboard took {render_duration_ms:.1f}ms")

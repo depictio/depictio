@@ -6,11 +6,10 @@ import numpy as np
 import pandas as pd
 import polars as pl
 from bson import ObjectId
-from dash import dcc
+from dash import dcc, html
 from dash_iconify import DashIconify
 
 # PERFORMANCE OPTIMIZATION: Use centralized config
-from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
@@ -59,20 +58,19 @@ def build_interactive_frame(index, children=None, show_border=False):
     else:
         return dmc.Paper(
             children=[
-                dmc.Center(
+                html.Div(
                     children=children,
                     id={
                         "type": "input-body",
                         "index": index,
                     },
                     style={
-                        "overflow": "visible",
-                        "height": "100%",
                         "width": "100%",
-                        "position": "relative",
+                        "height": "100%",
                         "display": "flex",
-                        "alignItems": "center",  # Center vertically
-                        "justifyContent": "center",  # Center horizontally
+                        "flexDirection": "column",
+                        "justifyContent": "center",  # Center vertically only
+                        "padding": "8px",
                     },
                 )
             ],
@@ -85,8 +83,8 @@ def build_interactive_frame(index, children=None, show_border=False):
             p="0",
             radius="md",
             style={
-                "overflow": "visible",
-                "position": "relative",
+                "width": "100%",
+                "height": "100%",
                 "display": "flex",
                 "flexDirection": "column",
             },
@@ -590,12 +588,9 @@ def build_interactive(**kwargs):
     title = kwargs.get("title")  # Example of default parameter
     wf_id = kwargs.get("wf_id")
     dc_id = kwargs.get("dc_id")
-    dc_config = kwargs.get("dc_config")
     column_name = kwargs.get("column_name")
     column_type = kwargs.get("column_type")
     interactive_component_type = kwargs.get("interactive_component_type")
-    # cols_json = {}
-    cols_json = kwargs.get("cols_json")
     value = kwargs.get("value", None)
     df = kwargs.get("df", None)
     build_frame = kwargs.get("build_frame", False)
@@ -605,6 +600,21 @@ def build_interactive(**kwargs):
     scale = kwargs.get("scale", "linear")  # Default to linear scale
     # Check both "color" (from frontend) and "custom_color" (from saved metadata) for DMC compliance
     color = kwargs.get("color") or kwargs.get("custom_color") or None
+
+    # DASHBOARD OPTIMIZATION: Extract init_data for API call elimination
+    init_data = kwargs.get("init_data", None)
+
+    # REFACTORING: cols_json no longer stored in component metadata
+    # Callbacks access it directly from dashboard-init-data store via State input
+    # For build-time usage (like getting min/max for sliders), extract from init_data
+    cols_json = None
+    if init_data and "column_specs" in init_data and str(dc_id) in init_data["column_specs"]:
+        cols_json = init_data["column_specs"][str(dc_id)]
+        logger.info(
+            f"📡 INTERACTIVE OPTIMIZATION: init_data available with {len(init_data.get('column_specs', {}))} column_specs"
+        )
+    else:
+        logger.debug("⚠️  init_data not available (edit mode or stepper mode)")
 
     # Default icon mapping by component type for better UX
     DEFAULT_ICONS = {
@@ -624,6 +634,100 @@ def build_interactive(**kwargs):
 
     marks_number = kwargs.get("marks_number", 2)  # Default to 2 marks (min/max only)
     title_size = kwargs.get("title_size", "md")  # Default title size
+    cols_json = kwargs.get("cols_json")
+
+    # Determine value div type based on stepper mode
+    if stepper:
+        value_div_type = "interactive-component-value-tmp"
+    else:
+        value_div_type = "interactive-component-value"
+
+    # SKELETON APPROACH: Show skeleton initially when build_frame=True, populate via callback
+    # Similar to card components: skeleton → callback → populated component
+    if build_frame:
+        logger.info(f"📦 BUILD_FRAME MODE: Returning skeleton for interactive component {index}")
+
+        # Create skeleton placeholder
+        # IMPORTANT: Use different ID type for container to avoid duplicate IDs
+        # The async callback will populate this with a component that has "interactive-component-value" ID
+        skeleton = html.Div(
+            id={"type": f"{value_div_type}-container", "index": str(index)},
+            children=[
+                dmc.Text("Loading options...", size="sm", c="gray", style={"marginBottom": "10px"}),
+                dmc.Loader(type="dots", size="lg"),
+            ],
+            style={"textAlign": "center", "padding": "20px", "minHeight": "120px"},
+        )
+
+        # Create trigger store with ALL metadata needed for callback
+        trigger_store = dcc.Store(
+            id={"type": "interactive-trigger", "index": str(index)},
+            data={
+                "index": str(index),
+                "wf_id": str(wf_id) if wf_id else None,
+                "dc_id": str(dc_id) if dc_id else None,
+                "column_name": column_name,
+                "column_type": column_type,
+                "interactive_component_type": interactive_component_type,
+                "scale": scale,
+                # SECURITY: access_token removed - accessed from local-store in callbacks
+                "title": title,
+                "icon_name": icon_name,
+                "marks_number": marks_number,
+                "title_size": title_size,
+                "color": color,
+                "value": value,
+                "parent_index": parent_index,
+                "stepper": stepper,
+                # REFACTORING: cols_json removed from component stores
+                # Callbacks access dashboard-init-data store directly via State input
+            },
+        )
+
+        # Create metadata store for reference values (like cards)
+        metadata_store = dcc.Store(
+            id={"type": "interactive-metadata", "index": str(index)}, data={}
+        )
+
+        # Create options data store for background callback (JSON-serializable data)
+        options_data_store = dcc.Store(
+            id={"type": "interactive-options-data", "index": str(index)},
+            data={},
+            storage_type="memory",
+        )
+
+        # Create interactive-stored-metadata Store (separate from stored-metadata-component to avoid conflicts)
+        # This Store is used by the card filtering system and filter reset callback
+        interactive_stored_metadata = dcc.Store(
+            id={"type": "interactive-stored-metadata", "index": str(index)},
+            data={
+                "index": str(index),
+                "interactive_component_type": interactive_component_type,
+                "column_name": column_name,
+                "default_state": {},  # Will be populated by async callback
+            },
+            storage_type="memory",
+        )
+
+        # Build frame with skeleton and stores
+        frame_with_skeleton = build_interactive_frame(
+            index=index,
+            children=[
+                skeleton,
+                trigger_store,
+                metadata_store,
+                options_data_store,
+                interactive_stored_metadata,
+            ],
+        )
+
+        return frame_with_skeleton
+
+    # Log optimization info
+    if init_data:
+        logger.info(
+            f"📡 INTERACTIVE OPTIMIZATION: Using init_data with {len(init_data)} DC entries"
+        )
 
     # logger.info(f"Interactive - kwargs: {kwargs}")
     logger.info(
@@ -669,10 +773,10 @@ def build_interactive(**kwargs):
         "title": title,
         "wf_id": wf_id,
         "dc_id": dc_id,
-        "dc_config": dc_config,
+        # REFACTORING: dc_config and cols_json removed - available via init_data centrally
+        # Access via: init_data["dc_configs"][dc_id] and init_data["column_specs"][dc_id]
         "column_name": column_name,
         "column_type": column_type,
-        "cols_json": cols_json,
         "value": value,
         "corrected_value": value,
         "parent_index": parent_index,
@@ -707,12 +811,20 @@ def build_interactive(**kwargs):
             if isinstance(dc_id, str) and "--" in dc_id:
                 # For joined data collections, pass the DC ID as string
                 df_for_options = load_deltatable_lite(
-                    ObjectId(wf_id), dc_id, TOKEN=TOKEN, load_for_options=True
+                    ObjectId(wf_id),
+                    dc_id,
+                    TOKEN=TOKEN,
+                    load_for_options=True,
+                    init_data=init_data,  # OPTIMIZATION: Use init_data from dashboard
                 )
             else:
                 # Regular data collection - convert to ObjectId
                 df_for_options = load_deltatable_lite(
-                    ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN, load_for_options=True
+                    ObjectId(wf_id),
+                    ObjectId(dc_id),
+                    TOKEN=TOKEN,
+                    load_for_options=True,
+                    init_data=init_data,  # OPTIMIZATION: Use init_data from dashboard
                 )
 
         # Use the unfiltered data for generating options
@@ -729,10 +841,20 @@ def build_interactive(**kwargs):
             # Handle joined data collection IDs - don't convert to ObjectId
             if isinstance(dc_id, str) and "--" in dc_id:
                 # For joined data collections, pass the DC ID as string
-                df = load_deltatable_lite(ObjectId(wf_id), dc_id, TOKEN=TOKEN)
+                df = load_deltatable_lite(
+                    ObjectId(wf_id),
+                    dc_id,
+                    TOKEN=TOKEN,
+                    init_data=init_data,  # OPTIMIZATION: Use init_data from dashboard
+                )
             else:
                 # Regular data collection - convert to ObjectId
-                df = load_deltatable_lite(ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN)
+                df = load_deltatable_lite(
+                    ObjectId(wf_id),
+                    ObjectId(dc_id),
+                    TOKEN=TOKEN,
+                    init_data=init_data,  # OPTIMIZATION: Use init_data from dashboard
+                )
     else:
         logger.debug(
             f"Interactive component {index}: Using pre-loaded DataFrame (shape: {df.shape})"
@@ -1582,7 +1704,7 @@ def build_interactive(**kwargs):
         )
 
     store_component = dcc.Store(
-        id={"type": "stored-metadata-component", "index": str(store_index)},
+        id={"type": "interactive-stored-metadata", "index": str(store_index)},
         data=store_data,
         storage_type="memory",
     )
@@ -1613,27 +1735,9 @@ def build_interactive(**kwargs):
 
         # For stepper mode with loading
         if not stepper:
-            # Use skeleton system for consistent loading experience
-            from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
-                create_skeleton_component,
-            )
-
-            # PERFORMANCE OPTIMIZATION: Conditional loading spinner
-            if settings.performance.disable_loading_spinners:
-                logger.info("🚀 PERFORMANCE MODE: Interactive loading spinners disabled")
-                return interactive_component  # Return content directly, no loading wrapper
-            else:
-                # Optimized loading with fast delays
-                return dcc.Loading(
-                    children=interactive_component,
-                    custom_spinner=create_skeleton_component("interactive"),
-                    target_components={
-                        f'{{"index":"{index}","type":"interactive-component-value"}}': "value"
-                    },
-                    delay_show=5,  # Fast delay for better UX
-                    delay_hide=25,  # Quick hide for performance
-                    id={"index": index},
-                )
+            # Interactive components load data synchronously, no loading wrapper needed
+            # Component is built with all data and options ready
+            return interactive_component
         else:
             return interactive_component
 

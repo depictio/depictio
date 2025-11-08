@@ -1,14 +1,10 @@
-from datetime import datetime
-
 import dash
 from dash import ALL, Input, State
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import (
-    api_call_fetch_user_from_token,
     api_call_get_dashboard,
     api_call_save_dashboard,
-    api_call_screenshot_dashboard,
 )
 
 
@@ -69,60 +65,175 @@ def validate_and_clean_orphaned_layouts(stored_layout_data, stored_metadata):
     return cleaned_layout_data
 
 
+def register_callbacks_save_lite(app):
+    """
+    Minimal save callback - captures component metadata only.
+
+    Simplified architecture:
+    - Listens to component metadata stores
+    - Fetches current dashboard from DB
+    - Updates metadata field only
+    - Validates with Pydantic DashboardData model
+    - Saves to DB without enrichment
+
+    Skipped features (for simplicity):
+    - Layout positions (no draggable state)
+    - Notes content (no notes-editor-store)
+    - Interactive component values
+    - Complex metadata deduplication
+    - Edit mode state tracking
+    """
+
+    @app.callback(
+        Input("save-button-dashboard", "n_clicks"),
+        State("url", "pathname"),
+        State("local-store", "data"),
+        State({"type": "stored-metadata-component", "index": ALL}, "data"),
+        State({"type": "interactive-stored-metadata", "index": ALL}, "data"),
+        prevent_initial_call=True,
+    )
+    def save_dashboard_minimal(
+        n_clicks, pathname, local_store, stored_metadata, interactive_metadata
+    ):
+        """Minimal save: Capture component metadata → Build DashboardData → Save to DB"""
+        from depictio.models.models.dashboards import DashboardData
+
+        logger.info("=== MINIMAL SAVE CALLBACK TRIGGERED ===")
+
+        # 1. Validate trigger
+        if not n_clicks or not local_store:
+            logger.warning("Save callback: No click or no auth token")
+            raise dash.exceptions.PreventUpdate
+
+        # Skip if on stepper page
+        if pathname and "/component/add/" in pathname:
+            logger.info("Skipping save on stepper page")
+            raise dash.exceptions.PreventUpdate
+
+        # 2. Extract dashboard_id and token
+        # Handle both /dashboard/{id} and /dashboard/{id}/edit paths
+        path_parts = pathname.split("/")
+        if path_parts[-1] == "edit":
+            dashboard_id = path_parts[-2]  # Get ID before /edit
+        else:
+            dashboard_id = path_parts[-1]  # Get last part
+        TOKEN = local_store["access_token"]
+
+        logger.info(f"Saving dashboard: {dashboard_id}")
+        logger.info(f"Captured {len(stored_metadata)} component metadata entries")
+        logger.info(f"Captured {len(interactive_metadata)} interactive metadata entries")
+
+        # 3. Fetch current dashboard from DB (baseline)
+        dashboard_dict = api_call_get_dashboard(dashboard_id, TOKEN)
+        if not dashboard_dict:
+            logger.error(f"Failed to fetch dashboard {dashboard_id}")
+            raise dash.exceptions.PreventUpdate
+
+        # 4. Update with captured state (metadata only - no layout, no notes)
+        # Merge both metadata lists (general components + interactive components)
+        all_metadata = stored_metadata + interactive_metadata
+        logger.info(f"Total metadata entries to save: {len(all_metadata)}")
+        dashboard_dict["stored_metadata"] = all_metadata
+
+        # 5. Validate with Pydantic model
+        try:
+            dashboard_model = DashboardData.from_mongo(dashboard_dict)
+            logger.info("✅ DashboardData Pydantic validation passed")
+        except Exception as e:
+            logger.error(f"❌ Pydantic validation failed: {e}")
+            raise dash.exceptions.PreventUpdate
+
+        # 6. Save to DB (no enrichment - delta_locations fetched via MongoDB join)
+        success = api_call_save_dashboard(
+            dashboard_id,
+            dashboard_model.model_dump(),
+            TOKEN,
+            enrich=False,
+        )
+
+        if success:
+            logger.info(f"✅ Minimal save successful: {len(all_metadata)} components saved")
+        else:
+            logger.error(f"❌ Minimal save failed for {dashboard_id}")
+
+        # Dash v3: No return needed for side-effect callback
+
+
+# ==============================================================================
+# BACKUP: OLD COMPLEX SAVE CALLBACK (884 lines)
+# Replaced with register_callbacks_save_lite() above
+# Preserved for reference - includes complex deduplication, interactive tracking
+# ==============================================================================
+"""
 def register_callbacks_save(app):
+    # AUTO-SAVE DISABLED: All inputs except save-button-dashboard converted to State
+    # to disable automatic saves on component/content changes.
+    # Only manual save button click triggers save operation.
+    # To re-enable auto-save for specific triggers, convert State back to Input.
     @app.callback(
         inputs=[
-            Input("save-button-dashboard", "n_clicks"),
+            Input("save-button-dashboard", "n_clicks"),  # ONLY trigger for save
             State(
                 "draggable", "currentLayout"
             ),  # Changed from Input to State - avoids error when draggable doesn't exist on stepper page
-            Input(
+            State(
                 {
                     "type": "stored-metadata-component",
                     "index": ALL,
                 },
                 "data",
-            ),
+            ),  # Changed from Input to State - disable auto-save on metadata changes
             State("stored-edit-dashboard-mode-button", "data"),
             State(
                 "unified-edit-mode-button", "checked"
             ),  # Changed from Input to State - avoids error when button doesn't exist on stepper page
             State("stored-add-button", "data"),
             State({"type": "interactive-component-value", "index": ALL}, "value"),
-            Input({"type": "text-store", "index": ALL}, "data"),
-            Input("notes-editor-store", "data"),
+            State(
+                {"type": "text-store", "index": ALL}, "data"
+            ),  # Changed from Input - disable auto-save on text changes
+            State(
+                "notes-editor-store", "data"
+            ),  # Changed from Input - disable auto-save on notes changes
             State("url", "pathname"),
             State("local-store", "data"),
-            State("user-cache-store", "data"),
-            Input(
+            State(
                 {
                     "type": "btn-done",
                     "index": ALL,
                 },
                 "n_clicks",
-            ),
-            Input(
+            ),  # Changed from Input - disable auto-save on component edit done
+            State(
                 {
                     "type": "btn-done-edit",
                     "index": ALL,
                 },
                 "n_clicks",
-            ),
-            Input(
+            ),  # Changed from Input - disable auto-save on edit mode done
+            State(
                 {
                     "type": "duplicate-box-button",
                     "index": ALL,
                 },
                 "n_clicks",
-            ),
-            Input(
+            ),  # Changed from Input - disable auto-save on duplicate
+            State(
                 {"type": "remove-box-button", "index": ALL},
                 "n_clicks",
-            ),
-            Input("remove-all-components-button", "n_clicks"),
-            Input({"type": "interactive-component-value", "index": ALL}, "value"),
-            Input("interactive-values-store", "data"),
-            Input("apply-filters-button", "n_clicks"),
+            ),  # Changed from Input - disable auto-save on remove
+            State(
+                "remove-all-components-button", "n_clicks"
+            ),  # Changed from Input - disable auto-save on remove all
+            State(
+                {"type": "interactive-component-value", "index": ALL}, "value"
+            ),  # Duplicate State kept for compatibility
+            State(
+                "interactive-values-store", "data"
+            ),  # Changed from Input - disable auto-save on filter changes
+            State(
+                "apply-filters-button", "n_clicks"
+            ),  # Changed from Input - disable auto-save on apply filters
             State("live-interactivity-store", "data"),
         ],
         prevent_initial_call=True,
@@ -139,7 +250,6 @@ def register_callbacks_save(app):
         notes_data,
         pathname,
         local_store,
-        user_cache,
         n_clicks_done,
         n_clicks_done_edit,
         n_clicks_duplicate,
@@ -196,27 +306,23 @@ def register_callbacks_save(app):
             logger.warning("User not logged in.")
             raise dash.exceptions.PreventUpdate
 
-        # Validate user authentication using consolidated cache
+        # Validate user authentication using local-store
         from depictio.models.models.users import UserContext
 
         TOKEN = local_store["access_token"]
-        current_user = UserContext.from_cache(user_cache)
-        if not current_user:
-            # Fallback to direct API call if cache not available
-            logger.info("🔄 Save: Using fallback API call for user authentication")
-            current_user_api = api_call_fetch_user_from_token(TOKEN)
-            if not current_user_api:
-                logger.warning("User not found.")
-                raise dash.exceptions.PreventUpdate
-            # Create UserContext from API response for consistency
-            current_user = UserContext(
-                id=str(current_user_api.id),
-                email=current_user_api.email,
-                is_admin=current_user_api.is_admin,
-                is_anonymous=getattr(current_user_api, "is_anonymous", False),
-            )
-        else:
-            logger.info("✅ Save: Using consolidated cache for user authentication")
+        # Fetch user data using API call (with caching)
+        logger.info("🔄 Save: Fetching user data from API using local-store token")
+        current_user_api = api_call_fetch_user_from_token(TOKEN)
+        if not current_user_api:
+            logger.warning("User not found.")
+            raise dash.exceptions.PreventUpdate
+        # Create UserContext from API response
+        current_user = UserContext(
+            id=str(current_user_api.id),
+            email=current_user_api.email,
+            is_admin=current_user_api.is_admin,
+            is_anonymous=getattr(current_user_api, "is_anonymous", False),
+        )
 
         # Extract dashboard ID from pathname
         dashboard_id = pathname.split("/")[-1]
@@ -264,6 +370,33 @@ def register_callbacks_save(app):
         # Check if save should be triggered - modified to allow edit mode state persistence
         if not any(trigger in triggered_id for trigger in save_triggers):
             raise dash.exceptions.PreventUpdate
+
+        # PERFORMANCE OPTIMIZATION: Guard against spurious saves during component initialization
+        # Buttons fire with n_clicks=0/None when mounting during progressive loading
+        # This prevents unnecessary save operations that add 2+ second delays on page load
+        button_triggers = [
+            "save-button-dashboard",
+            "btn-done",
+            "btn-done-edit",
+            "duplicate-box-button",
+            "remove-box-button",
+            "remove-all-components-button",
+            "apply-filters-button",
+        ]
+
+        # Check if trigger is a button-based save
+        is_button_trigger = any(trigger in triggered_id for trigger in button_triggers)
+        if is_button_trigger:
+            # Get the actual value from the triggered input
+            triggered_value = ctx.triggered[0]["value"]
+
+            # Skip if button hasn't been actually clicked (n_clicks=0 or None during mounting)
+            if triggered_value is None or triggered_value == 0:
+                logger.info(
+                    f"⏸️ SAVE CALLBACK SKIPPED: {triggered_id} not actually clicked "
+                    f"(n_clicks={triggered_value}, likely component mounting during progressive load)"
+                )
+                raise dash.exceptions.PreventUpdate
 
         # Check if trigger is interactive component value change
         # If so, check if live interactivity is enabled
@@ -769,7 +902,9 @@ def register_callbacks_save(app):
         logger.debug("=" * 80)
 
         # Save dashboard data using API call with proper timeout
-        save_success = api_call_save_dashboard(dashboard_id, dashboard_data, TOKEN)
+        # REFACTORING: No enrichment needed - delta_locations always fetched fresh via MongoDB join
+        # Project endpoint /projects/get/from_id includes delta_locations via $lookup aggregation
+        save_success = api_call_save_dashboard(dashboard_id, dashboard_data, TOKEN, enrich=False)
 
         # Log save result and verify what was actually saved
         logger.debug("=" * 80)
@@ -837,3 +972,5 @@ def register_callbacks_save(app):
     # )
     # def toggle_success_modal_dashboard(n_save, is_open):
     #     return not is_open
+"""
+# END OF OLD COMPLEX CALLBACK - See save.py.bak for full uncommented version

@@ -1583,11 +1583,10 @@ def register_projects_callbacks(app):
         ],
         [
             dash.State("local-store", "data"),
-            dash.State("user-cache-store", "data"),
         ],
         prevent_initial_call=True,
     )
-    def toggle_project_modal(create_clicks, local_data, user_cache):
+    def toggle_project_modal(create_clicks, local_data):
         """Toggle the project creation modal and reset states."""
         if not create_clicks:
             return False, dash.no_update, dash.no_update, dash.no_update, dash.no_update
@@ -1611,30 +1610,25 @@ def register_projects_callbacks(app):
 
         if trigger_id == "create-project-button":
             # Check if user is anonymous and redirect to profile instead of opening modal
-            # Use the same pattern as dashboard creation
-            current_user = UserContext.from_cache(user_cache)
-            if not current_user:
-                # Fallback to direct API call if cache not available
-                logger.info("🔄 Project Create: Using fallback API call for user data")
-                if local_data and local_data.get("access_token"):
-                    current_user_api = api_call_fetch_user_from_token(local_data["access_token"])
-                    if not current_user_api:
-                        logger.warning("User not found in project creation.")
-                        return False, default_memory, default_store, 0, "/profile"
-                    # Create UserContext from API response for consistency
-                    current_user = UserContext(
-                        id=str(current_user_api.id),
-                        email=current_user_api.email,
-                        is_admin=current_user_api.is_admin,
-                        is_anonymous=getattr(current_user_api, "is_anonymous", False),
-                    )
-                    # Also set temporary user status
-                    current_user.is_temporary = getattr(current_user_api, "is_temporary", False)
-                else:
-                    # No valid user data, treat as anonymous
-                    return False, default_memory, default_store, 0, "/profile"
-            else:
-                logger.info("✅ Project Create: Using consolidated cache for user data")
+            if not local_data or not local_data.get("access_token"):
+                logger.warning("No valid user data in project creation.")
+                return False, default_memory, default_store, 0, "/profile"
+
+            # Fetch user data using cached API call
+            current_user_api = api_call_fetch_user_from_token(local_data["access_token"])
+            if not current_user_api:
+                logger.warning("User not found in project creation.")
+                return False, default_memory, default_store, 0, "/profile"
+
+            # Create UserContext from API response
+            current_user = UserContext(
+                id=str(current_user_api.id),
+                email=current_user_api.email,
+                is_admin=current_user_api.is_admin,
+                is_anonymous=getattr(current_user_api, "is_anonymous", False),
+            )
+            # Also set temporary user status
+            current_user.is_temporary = getattr(current_user_api, "is_temporary", False)
 
             if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
                 logger.info(

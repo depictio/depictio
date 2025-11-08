@@ -2,7 +2,7 @@ import dash
 import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
 import httpx
-from dash import ALL, Input, Output, State, ctx, html
+from dash import ALL, Input, Output, ctx, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
@@ -243,29 +243,229 @@ def find_component_by_type(component, target_type, target_index):
     return matches
 
 
+# ============================================================================
+# DUAL-PANEL GRID UTILITIES
+# ============================================================================
+
+
+def extract_component_id(component):
+    """
+    Extract component ID from a rendered Dash component.
+
+    Handles various component structures including wrapped components.
+
+    Args:
+        component: Dash component (may be wrapped)
+
+    Returns:
+        str: Component ID or None if not found
+    """
+    if not component:
+        return None
+
+    # Try direct ID
+    if hasattr(component, "id") and isinstance(component.id, dict):
+        component_id = component.id.get("index")
+        if component_id:
+            return str(component_id)
+
+    # Try children for wrapped components
+    if hasattr(component, "children"):
+        children = (
+            component.children if isinstance(component.children, list) else [component.children]
+        )
+        for child in children:
+            if child and hasattr(child, "id") and isinstance(child.id, dict):
+                component_id = child.id.get("index")
+                if component_id:
+                    return str(component_id)
+
+    return None
+
+
+def separate_components_by_panel(stored_metadata):
+    """
+    Separate components into left panel (interactive) and right panel (all others).
+
+    Args:
+        stored_metadata: List of component metadata dicts
+
+    Returns:
+        tuple: (interactive_components, right_panel_components)
+    """
+    interactive_components = []
+    right_panel_components = []
+
+    for metadata in stored_metadata:
+        component_type = metadata.get("component_type")
+
+        if component_type == "interactive":
+            metadata["panel"] = "left"
+            interactive_components.append(metadata)
+            # Log what's in the metadata for debugging
+            logger.debug(
+                f"  Interactive component {metadata.get('index')}: "
+                f"type={metadata.get('interactive_component_type', 'MISSING')}"
+            )
+        else:
+            metadata["panel"] = "right"
+            right_panel_components.append(metadata)
+
+    logger.info(
+        f"📊 COMPONENT SEPARATION: {len(interactive_components)} interactive, "
+        f"{len(right_panel_components)} right panel"
+    )
+
+    return interactive_components, right_panel_components
+
+
+def calculate_left_panel_positions(components):
+    """
+    Calculate grid positions for interactive components in left panel (1-column grid).
+
+    Interactive components always take full width (w=1), heights vary by type.
+    Stacks vertically with automatic positioning - 1 component per row.
+
+    Args:
+        components: List of interactive component metadata
+
+    Returns:
+        list: Layout positions [{i, x, y, w, h, static}, ...]
+    """
+    layout = []
+    current_y = 0
+
+    # Component height mapping for interactive components
+    # Heights in grid units (with rowHeight=100, 1*100=100px for compact minimal height)
+    component_heights = {
+        "Select": 1,
+        "MultiSelect": 1,
+        "SegmentedControl": 1,
+        "Slider": 1,
+        "RangeSlider": 1,
+        "DateRangePicker": 1,
+    }
+
+    for metadata in components:
+        index = metadata.get("index")
+        interactive_type = metadata.get("interactive_component_type", "Select")
+
+        # Always use auto-position (ignore saved positions for now to ensure consistent layout)
+        # Auto-position: full width (1 column), stack vertically
+        x = 0
+        y = current_y
+
+        # Get height from component type
+        h = component_heights.get(interactive_type, 1.5)
+
+        layout.append(
+            {
+                "i": str(index),
+                "x": int(x),
+                "y": int(y),
+                "w": 1,  # Full width in 1-column grid (100%)
+                "h": h,  # Allow decimal heights
+                "static": False,
+            }
+        )
+
+        # Update current_y for next component
+        current_y = y + h
+
+        logger.info(
+            f"📐 LEFT: Component {index} ({interactive_type}) positioned at "
+            f"x={x}, y={y}, w=1, h={h}"
+        )
+
+    logger.info(f"📐 LEFT PANEL: Generated {len(layout)} positions, max_y={current_y}")
+    return layout
+
+
+def calculate_right_panel_positions(components):
+    """
+    Calculate grid positions for cards and other components in right panel (8-column grid).
+
+    Cards are arranged in 4-column grid (2 columns each), other components handled later.
+
+    Args:
+        components: List of right panel component metadata
+
+    Returns:
+        list: Layout positions [{i, x, y, w, h, static}, ...]
+    """
+    layout = []
+
+    # Separate cards from other components
+    cards = [c for c in components if c.get("component_type") == "card"]
+    other = [c for c in components if c.get("component_type") != "card"]
+
+    # Cards: 4-column grid (2 columns per card in 8-column system)
+    # With rowHeight=100: h=5 gives 500px height, w=2 gives 25% width (4 per row)
+    card_y = 0
+    for idx, card in enumerate(cards):
+        index = card.get("index")
+
+        # Always use auto-position (ignore saved positions for now to ensure consistent layout)
+        # Auto-position: 4 cards per row
+        col = idx % 4
+        row = idx // 4
+        x = col * 2  # 2 columns per card (8/4)
+        y = row * 5  # 5 rows per card (with rowHeight=100 = 500px)
+
+        layout.append(
+            {
+                "i": str(index),
+                "x": int(x),
+                "y": int(y),
+                "w": 2,  # Fixed card width (25% of 8 columns = 4 cards per row)
+                "h": 3,  # Fixed card height (500px with rowHeight=100)
+                "static": False,
+            }
+        )
+
+        logger.debug(
+            f"📐 RIGHT: Card {index} positioned at x={x}, y={y}, w=2, h=5 (col={col}, row={row})"
+        )
+
+        card_y = max(card_y, y + 5)
+
+    # Other components: Deferred for later implementation
+    # Will be added below cards when figure/table positioning is ready
+    if other:
+        logger.info(f"⏳ RIGHT PANEL: Skipping {len(other)} non-card components (deferred)")
+
+    logger.info(
+        f"📐 RIGHT PANEL: Generated {len(layout)} positions ({len(cards)} cards), max_y={card_y}"
+    )
+    return layout
+
+
 def register_callbacks_draggable(app):
     # KEEPME - MODULARISE - TO EVALUATE
-    @app.callback(
-        Output("local-store-components-metadata", "data"),
-        [
-            State({"type": "workflow-selection-label", "index": ALL}, "value"),
-            State({"type": "datacollection-selection-label", "index": ALL}, "value"),
-            Input("url", "pathname"),
-            Input({"type": "btn-done", "index": ALL}, "n_clicks"),
-            Input({"type": "btn-done-edit", "index": ALL}, "n_clicks"),
-            Input({"type": "edit-box-button", "index": ALL}, "n_clicks"),
-            Input({"type": "duplicate-box-button", "index": ALL}, "n_clicks"),
-        ],
-        [
-            State("local-store", "data"),  # Contains 'access_token'
-            State("local-store-components-metadata", "data"),  # Existing components' data
-            State({"type": "workflow-selection-label", "index": ALL}, "id"),
-            State({"type": "datacollection-selection-label", "index": ALL}, "id"),
-            State("current-edit-parent-index", "data"),  # Retrieve parent_index
-        ],
-        prevent_initial_call=True,
-    )
-    def store_wf_dc_selection(
+    logger.info("⚠️ store_wf_dc_selection callback (duplicate/edit buttons) DISABLED for debugging")
+
+    # TEMPORARILY DISABLED FOR DEBUGGING - this callback handles duplicate-box-button
+    # @app.callback(
+    #     Output("local-store-components-metadata", "data"),
+    #     [
+    #         State({"type": "workflow-selection-label", "index": ALL}, "value"),
+    #         State({"type": "datacollection-selection-label", "index": ALL}, "value"),
+    #         Input("url", "pathname"),
+    #         Input({"type": "btn-done", "index": ALL}, "n_clicks"),
+    #         Input({"type": "btn-done-edit", "index": ALL}, "n_clicks"),
+    #         Input({"type": "edit-box-button", "index": ALL}, "n_clicks"),
+    #         Input({"type": "duplicate-box-button", "index": ALL}, "n_clicks"),
+    #     ],
+    #     [
+    #         State("local-store", "data"),  # Contains 'access_token'
+    #         State("local-store-components-metadata", "data"),  # Existing components' data
+    #         State({"type": "workflow-selection-label", "index": ALL}, "id"),
+    #         State({"type": "datacollection-selection-label", "index": ALL}, "id"),
+    #         State("current-edit-parent-index", "data"),  # Retrieve parent_index
+    #     ],
+    #     prevent_initial_call=True,
+    # )
+    def store_wf_dc_selection__disabled(
         wf_values,
         dc_values,
         pathname,
@@ -308,7 +508,35 @@ def register_callbacks_draggable(app):
             logger.info(f"[PERF] Metadata callback SKIPPED for URL change: {pathname}")
             return components_store or dash.no_update
 
+        # PERFORMANCE OPTIMIZATION: Skip if no buttons were actually clicked
+        # During progressive component loading, buttons mount with n_clicks=0/None
+        # This triggers the callback but no user action occurred - skip processing
+        # This eliminates 26 serial API calls (2241ms → 0ms) on page load
+        all_button_clicks = [
+            *btn_done_clicks,
+            *btn_done_edit_clicks,
+            *edit_box_button_clicks,
+            *duplicate_box_button_clicks,
+        ]
+        has_actual_click = any(clicks is not None and clicks > 0 for clicks in all_button_clicks)
+
+        if not has_actual_click:
+            logger.info(
+                "[PERF] Metadata callback SKIPPED: No button clicks detected "
+                "(triggered by component mounting during progressive load)"
+            )
+            return components_store or dash.no_update
+
         logger.info(f"[PERF] Metadata callback PROCESSING (triggered by: {ctx.triggered_id})")
+
+        # PERFORMANCE OPTIMIZATION: Save original state for comparison at end
+        # This enables hash-based change detection to prevent unnecessary downstream updates
+        import json
+
+        original_components_store_json = json.dumps(
+            components_store if components_store else {}, sort_keys=True
+        )
+
         logger.info("Storing workflow and data collection selections in components store.")
         logger.info(f"Workflow values (IDs): {wf_values}")
         logger.info(f"Data collection values (IDs): {dc_values}")
@@ -431,717 +659,58 @@ def register_callbacks_draggable(app):
                 )
                 components_store[trigger_index]["dc_tag"] = ""
 
+        # PERFORMANCE OPTIMIZATION: Compare metadata before returning
+        # Only update if metadata has actually changed to prevent downstream callback cascade
+        # This reduces unnecessary re-renders and saves when metadata is identical
+        try:
+            # Compare serialized versions to detect actual changes
+            # Sort keys for consistent comparison regardless of dict insertion order
+            current_components_store_json = json.dumps(components_store, sort_keys=True)
+
+            if original_components_store_json == current_components_store_json:
+                logger.info(
+                    "[PERF] Metadata unchanged after processing - using dash.no_update to prevent cascade"
+                )
+                return dash.no_update
+
+            logger.info("[PERF] Metadata changed - returning updated components_store")
+        except Exception as e:
+            logger.warning(f"[PERF] Failed to compare metadata: {e}, returning components_store")
+
         # logger.debug(f"Components store data after update: {components_store}")
         return components_store
 
-    # ============================================================================
-    # CLEARME SECTION REMOVED
-    # ============================================================================
-    # The monolithic populate_draggable() callback (2,200+ lines) has been removed.
-    #
-    # ✅ ALREADY REPLACED - No action needed:
-    #   - Add component → add_component_simple.py
-    #   - Edit component → edit_component_simple.py, edit_page.py
-    #   - Remove component → remove_component_simple.py
-    #   - Layout changes → Active callback below (update_interactive_values_store)
-    #   - Interactive filters → Pattern-matching with interactive-values-store
-    #   - Edit mode toggle → Active callback below (update_grid_edit_mode)
-    #   - Reset filters → Store pattern (update_interactive_values_store)
-    #
-    # 🔴 TODO - FUTURE RESTORATION REQUIRED:
-    #   1. Graph Interactions (clickData/selectedData filtering)
-    #      - Functions exist in draggable_scenarios/graphs_interactivity.py
-    #      - Need callback to connect to interactive-values-store pattern
-    #
-    #   2. Duplicate Component (full component duplication)
-    #      - Deep copy with layout collision avoidance
-    #      - Metadata cloning with permission checks
-    #
-    # 📋 Complete implementation details: dev/draggable/CLEARME_DOCUMENTATION.md
-    # ============================================================================
-
-    # @app.callback(
-    #     Output({"type": "last-button", "index": MATCH}, "data", allow_duplicate=True),
-    #     Input({"type": "edit-box-button", "index": MATCH}, "n_clicks"),
-    #     State({"type": "last-button", "index": MATCH}, "data"),
-    #     prevent_initial_call=True,
-    # )
-    # def update_last_button_using_edit_box_button_value(edit_button_nclicks, last_button):
-    #     logger.info(f"Edit button id: {edit_button_nclicks}")
-    #     logger.info(f"Last button: {last_button}")
-    #     return "Figure"
-
-    # Callback to handle Add Button clicks
-    # TEMPORARILY DISABLED: Old modal-based add-button system
-    # Replaced by simple direct add callback in add_component_simple.py
-    # @app.callback(
-    #     Output("test-output", "children"),
-    #     Output("stored-add-button", "data"),
-    #     Output("initialized-add-button", "data"),
-    #     Output("notes-footer-content", "className", allow_duplicate=True),
-    #     Output("page-content", "className", allow_duplicate=True),
-    #     # Output("initialized-edit-button", "data"),
-    #     Input("add-button", "n_clicks"),
-    #     # Input({"type": "edit-box-button", "index": ALL}, "n_clicks"),
-    #     State("stored-add-button", "data"),
-    #     State("initialized-add-button", "data"),
-    #     State("notes-footer-content", "className"),
-    #     State("page-content", "className"),
-    #     # State("initialized-edit-button", "data"),
-    #     prevent_initial_call=True,
-    # )
-    # def trigger_modal(
-    #     add_button_nclicks,
-    #     #   edit_button_nclicks,
-    #     stored_add_button,
-    #     initialized_add_button,
-    #     current_footer_class,
-    #     current_page_class,
-    #     # initialized_edit_button,
-    # ):
-    #     # logger.info("\n\nTrigger modal")
-    #     # logger.info(f"n_clicks: {add_button_nclicks}")
-    #     # logger.info(f"stored_add_button: {stored_add_button}")
-    #     # logger.info(f"initialized_add_button: {initialized_add_button}")
-    #     # logger.info(f"edit_button_nclicks: {edit_button_nclicks}")
-    #     # logger.info(f"initialized_edit_button: {initialized_edit_button}")
-
-    #     if not initialized_add_button:
-    #         logger.info("Initializing add button")
-    #         return dash.no_update, dash.no_update, True, dash.no_update, dash.no_update
-    #         # return dash.no_update, dash.no_update, True, dash.no_update
-
-    #     # if not initialized_edit_button:
-    #     #     logger.info("Initializing edit button")
-    #     #     return dash.no_update, dash.no_update, dash.no_update, True
-
-    #     if add_button_nclicks is None:
-    #         logger.info("No clicks detected")
-    #         # return dash.no_update, dash.no_update, True, dash.no_update
-    #         return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
-
-    #     # if edit_button_nclicks is None:
-    #     #     logger.info("No clicks detected")
-    #     #     return dash.no_update, dash.no_update, dash.no_update, True
-
-    #     triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
-    #     logger.info(f"triggered_input: {triggered_input}")
-
-    #     if triggered_input == "add-button":
-    #         # Update the stored add button count
-    #         logger.info(f"Updated stored_add_button: {stored_add_button}")
-    #         # index = stored_add_button["count"]
-    #         index = generate_unique_index()
-    #         index = f"{index}-tmp"
-    #         stored_add_button["_id"] = index
-    #         # stored_add_button["count"] += 1
-
-    #         current_draggable_children = add_new_component(str(index))
-
-    #         # Close notes footer when add-button is clicked
-    #         # If footer is visible or fullscreen, hide it completely
-    #         current_footer_class = current_footer_class or ""
-    #         current_page_class = current_page_class or ""
-
-    #         if (
-    #             "footer-visible" in current_footer_class
-    #             or "footer-fullscreen" in current_footer_class
-    #         ):
-    #             # Hide footer completely
-    #             new_footer_class = ""
-    #             new_page_class = current_page_class.replace("notes-fullscreen", "").strip()
-    #             logger.info(
-    #                 f"Closing notes footer when add-button clicked. Footer: '{new_footer_class}', Page: '{new_page_class}'"
-    #             )
-    #         else:
-    #             # Footer already hidden, no change needed
-    #             new_footer_class = current_footer_class
-    #             new_page_class = current_page_class
-
-    #         return (
-    #             current_draggable_children,
-    #             stored_add_button,
-    #             True,
-    #             new_footer_class,
-    #             new_page_class,
-    #         )
-    #         # return current_draggable_children, stored_add_button, True, dash.no_update
-
-    #     # elif "edit-box-button" in triggered_input:
-    #     #     # Generate and return the new component
-    #     #     index = str(eval(triggered_input)["index"])
-    #     #     logger.info(f"Edit button clicked for index: {index}")
-    #     #     current_draggable_children = edit_component(str(index), active=0)
-
-    #     #     return current_draggable_children, stored_add_button, dash.no_update, True
-    #     else:
-    #         logger.warning(f"Unexpected triggered_input: {triggered_input}")
-    #         return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
-
-    # KEEPME - TO EVALUATE - REMOVE PENDING CHANGES LOGIC PART
+    # KEEPME
+    # Add callback to control grid edit mode like in the prototype (dual-panel mode)
     @app.callback(
         [
-            Output("interactive-values-store", "data"),
-            Output("pending-changes-store", "data", allow_duplicate=True),
+            Output({"type": "left-panel-grid", "index": ALL}, "className", allow_duplicate=True),
+            Output({"type": "right-panel-grid", "index": ALL}, "className", allow_duplicate=True),
         ],
-        [
-            Input({"type": "interactive-component-value", "index": ALL}, "value"),
-            # TODO: Re-enable graph interactions later
-            # Input({"type": "graph", "index": ALL}, "clickData"),
-            # Input({"type": "graph", "index": ALL}, "selectedData"),
-            Input({"type": "reset-selection-graph-button", "index": ALL}, "n_clicks"),
-            Input("reset-all-filters-button", "n_clicks"),
-        ],
-        [
-            State({"type": "interactive-component-value", "index": ALL}, "id"),
-            State({"type": "stored-metadata-component", "index": ALL}, "data"),
-            State({"type": "graph", "index": ALL}, "id"),
-            State("local-store", "data"),
-            State("url", "pathname"),
-            State("interactive-values-store", "data"),
-            State("live-interactivity-toggle", "checked"),
-            State("pending-changes-store", "data"),
-        ],
-        prevent_initial_call=True,
+        Input("url", "pathname"),
+        prevent_initial_call="initial_duplicate",
     )
-    def update_interactive_values_store(
-        interactive_values,
-        # TODO: Re-enable graph interactions later
-        # graph_click_data,
-        # graph_selected_data,
-        reset_button_clicks,
-        reset_all_clicks,
-        ids,
-        stored_metadata,
-        graph_ids,
-        local_store,
-        pathname,
-        current_store_data,
-        live_interactivity_on,
-        pending_changes,
-    ):
-        # FIXME
-        live_interactivity_on = True
-
-        logger.info("Callback 'update_interactive_values_store' triggered.")
-
-        # Extract dashboard_id from the URL pathname
-        try:
-            dashboard_id = pathname.split("/")[-1]
-            logger.debug(f"Dashboard ID: {dashboard_id}")
-        except Exception as e:
-            logger.error(f"Error extracting dashboard_id from pathname '{pathname}': {e}")
+    def update_grid_edit_mode(pathname):
+        """Update dual-panel grid edit mode based on URL path (edit mode detection)"""
+        # Detect edit mode from URL: /dashboard/{id}/edit or /dashboard/{id}/edit/
+        # Handle trailing slashes and ensure we're on a dashboard page
+        if not pathname or "/dashboard/" not in pathname:
             raise dash.exceptions.PreventUpdate
 
-        # Check what triggered the callback
-        ctx = dash.callback_context
-        triggered_prop_ids = [t["prop_id"] for t in ctx.triggered]
-        logger.info(f"Triggered by: {triggered_prop_ids}")
-
-        # Start with existing interactive components
-        stored_metadata_interactive = [
-            e for e in stored_metadata if e["component_type"] == "interactive"
-        ]
-        stored_metadata_interactive = remove_duplicates_by_index(stored_metadata_interactive)
-
-        components = []
-        # scatter_plot_components = {}
-        reset_action_performed = False  # Track if an individual reset was performed
-
-        # Check trigger types
-        # TODO: Re-enable graph interactions later
-        # graph_triggered = any("graph" in prop_id for prop_id in triggered_prop_ids)
-        graph_triggered = False  # Disabled for now
-        interactive_triggered = any(
-            "interactive-component-value" in prop_id for prop_id in triggered_prop_ids
-        )
-        reset_triggered = any(
-            "reset-selection-graph-button" in prop_id or "reset-all-filters-button" in prop_id
-            for prop_id in triggered_prop_ids
-        )
-
-        logger.info(
-            f"🎯 Trigger analysis: graph={graph_triggered} (disabled), interactive={interactive_triggered}, reset={reset_triggered}"
-        )
-
-        # Handle reset buttons first (they take priority)
-        if reset_triggered:
-            logger.info("🔄 Reset button detected in main store callback")
-
-            # Check if this is actually a button click (not initialization)
-            triggered_value = ctx.triggered[0]["value"]
-            if not triggered_value or triggered_value == 0:
-                logger.info(
-                    f"🔄 Skipping reset - no actual button click (value: {triggered_value})"
-                )
-            else:
-                triggered_prop_id = ctx.triggered[0]["prop_id"]
-                logger.info(f"🔄 Processing reset: {triggered_prop_id}")
-
-                # Start with current store data
-                if not current_store_data:
-                    current_store_data = {"interactive_components_values": []}
-
-                current_components = current_store_data.get("interactive_components_values", [])
-
-                if "reset-all-filters-button" in triggered_prop_id:
-                    logger.info("🔄 Reset all filters in main callback")
-                    # Remove all scatter plot filters and reset interactive components to defaults
-                    filtered_components = []
-                    for component in current_components:
-                        component_id = component.get("index", "")
-                        if component_id.startswith("filter_"):
-                            logger.info(f"🔄 Removed scatter plot filter: {component_id}")
-                        else:
-                            # Reset interactive component to default
-                            component_metadata = component.get("metadata", {})
-                            default_state = component_metadata.get("default_state", {})
-
-                            reset_component = component.copy()
-                            if "default_range" in default_state:
-                                reset_component["value"] = default_state["default_range"]
-                            elif "default_value" in default_state:
-                                reset_component["value"] = default_state["default_value"]
-                            else:
-                                reset_component["value"] = None
-
-                            filtered_components.append(reset_component)
-                            logger.info(f"🔄 Reset interactive component {component_id} to default")
-
-                    output_data = {"interactive_components_values": filtered_components}
-                    logger.info(f"🔄 Reset all completed: {len(filtered_components)} components")
-                    # Reset always applies immediately regardless of live interactivity state
-                    return output_data, {}
-
-                elif "reset-selection-graph-button" in triggered_prop_id:
-                    logger.info("🔄 Individual reset in main callback")
-                    try:
-                        component_index = eval(triggered_prop_id.split(".")[0])["index"]
-                        logger.info(f"🔄 Resetting component: {component_index}")
-
-                        # Find component metadata
-                        component_metadata = None
-                        for meta in stored_metadata:
-                            if meta and meta.get("index") == component_index:
-                                component_metadata = meta
-                                break
-
-                        if component_metadata:
-                            component_type = component_metadata.get("component_type")
-
-                            if (
-                                component_type == "figure"
-                                and component_metadata.get("visu_type", "").lower() == "scatter"
-                            ):
-                                # Remove scatter plot filters
-                                filtered_components = [
-                                    c
-                                    for c in current_components
-                                    if not (
-                                        c.get("index", "").startswith("filter_")
-                                        and component_index in c.get("index", "")
-                                    )
-                                ]
-                                logger.info(
-                                    f"🔄 Removed scatter plot filters for {component_index}"
-                                )
-                            elif component_type == "interactive":
-                                # Reset interactive component
-                                filtered_components = []
-                                for component in current_components:
-                                    if component.get("index") == component_index:
-                                        default_state = component.get("metadata", {}).get(
-                                            "default_state", {}
-                                        )
-                                        reset_component = component.copy()
-
-                                        if "default_range" in default_state:
-                                            reset_component["value"] = default_state[
-                                                "default_range"
-                                            ]
-                                        elif "default_value" in default_state:
-                                            reset_component["value"] = default_state[
-                                                "default_value"
-                                            ]
-                                        else:
-                                            reset_component["value"] = None
-
-                                        filtered_components.append(reset_component)
-                                        logger.info(
-                                            f"🔄 Reset interactive component {component_index}"
-                                        )
-                                    else:
-                                        filtered_components.append(component)
-                            else:
-                                filtered_components = current_components
-
-                            # CRITICAL FIX: Return immediately to bypass filter preservation logic
-                            # Individual reset should work like reset-all with early return
-                            output_data = {"interactive_components_values": filtered_components}
-                            logger.info(
-                                f"✅ Individual reset completed: {len(filtered_components)} components - returning immediately"
-                            )
-                            # Individual reset always applies immediately (like reset-all)
-                            return output_data, {}
-
-                    except Exception as e:
-                        logger.error(f"Error processing individual reset: {e}")
-
-            # If reset didn't process, continue with normal logic
-            logger.info("🔄 Reset trigger detected but not processed, continuing with normal logic")
-        logger.info(
-            f"🎯 Current store has {len(current_store_data.get('interactive_components_values', [])) if current_store_data else 0} existing components"
-        )
-
-        # Guard clause: Prevent spurious updates on initialization
-        # If no actual user interaction occurred (e.g., reset button with value 0, empty component lists)
-        # Return no_update to prevent triggering save callback unnecessarily
-        if not interactive_triggered and not reset_action_performed:
-            # Check if we have any stored interactive metadata (i.e., interactive components exist)
-            has_interactive_components = bool(stored_metadata_interactive)
-
-            if not has_interactive_components:
-                logger.info(
-                    "🔴 GUARD: No interactive components - skipping store update to prevent spurious save"
-                )
-                return dash.no_update, dash.no_update
-
-        # TODO: Re-enable graph interactions later
-        # # Check if we have any actual graph data to process (needed early for filter preservation logic)
-        # has_actual_graph_data = False
-        # if graph_triggered:
-        #     if graph_click_data:
-        #         has_actual_graph_data = any(
-        #             click_data and click_data.get("points") and len(click_data["points"]) > 0
-        #             for click_data in graph_click_data
-        #         )
-        #
-        #     if graph_selected_data and not has_actual_graph_data:
-        #         has_actual_graph_data = any(
-        #             selected_data
-        #             and selected_data.get("points")
-        #             and len(selected_data["points"]) > 0
-        #             for selected_data in graph_selected_data
-        #         )
-        #
-        #     logger.info(f"🎯 Has actual graph data to process: {has_actual_graph_data}")
-        # has_actual_graph_data = False  # Disabled for now
-
-        # Handle regular interactive component updates
-        if (
-            interactive_values
-            and ids
-            and len(interactive_values) == len(ids) == len(stored_metadata_interactive)
-        ):
-            for value, metadata in zip(interactive_values, stored_metadata_interactive):
-                if metadata is None:
-                    logger.warning(f"Metadata is None for a component with value: {value}")
-                    continue
-                components.append(
-                    {"value": value, "metadata": metadata, "index": metadata["index"]}
-                )
-
-        # TODO: Re-enable graph interactions later
-        # # Get the graph that was triggered (if any) to avoid duplicate filters
-        # triggered_graph_index = None
-        # if graph_triggered:
-        #     for prop_id in triggered_prop_ids:
-        #         if "graph" in prop_id:
-        #             try:
-        #                 graph_id_str = prop_id.split(".")[0]
-        #                 graph_id_dict = eval(graph_id_str)
-        #                 triggered_graph_index = graph_id_dict["index"]
-        #                 break
-        #             except Exception:
-        #                 continue
-        #
-        # # Always preserve existing scatter plot filters unless we're specifically updating them
-        # if current_store_data and "interactive_components_values" in current_store_data:
-        #     # Find existing scatter plot filters and preserve them (except for triggered graph)
-        #     for existing_component in current_store_data["interactive_components_values"]:
-        #         if isinstance(existing_component, dict):
-        #             component_index = existing_component.get("index", "")
-        #             # Check if this is a scatter plot generated filter (starts with "filter_")
-        #             if component_index.startswith("filter_"):
-        #                 # Only remove if this is the same graph AND we have actual new data
-        #                 should_replace = (
-        #                     triggered_graph_index
-        #                     and triggered_graph_index in component_index
-        #                     and has_actual_graph_data
-        #                 )
-        #
-        #                 if not should_replace:
-        #                     components.append(existing_component)
-        #                     logger.info(
-        #                         f"🎯 Preserved existing scatter plot filter: {component_index}"
-        #                     )
-        #                 else:
-        #                     logger.info(
-        #                         f"🎯 Removing old filter for triggered graph (will be replaced): {component_index}"
-        #                     )
-
-        # TODO: Re-enable graph interactions later
-        # # Handle scatter plot interactions
-        # if graph_triggered:
-        #     logger.info("🎯 Graph interaction detected in store update")
-        #
-        #     # Only process graph interactions if we have actual data
-        #     # This prevents clearing filters when Dash sends empty data on subsequent triggers
-        #     if has_actual_graph_data:
-        #         # Find which graph was triggered
-        #         for prop_id in triggered_prop_ids:
-        #             if "graph" in prop_id:
-        #                 try:
-        #                     # Parse the triggered graph index
-        #                     graph_id_str = prop_id.split(".")[0]
-        #                     graph_id_dict = eval(graph_id_str)
-        #                     ctx_triggered_prop_id_index = graph_id_dict["index"]
-        #
-        #                     # Get the corresponding graph metadata
-        #                     graph_metadata = None
-        #                     for meta in stored_metadata:
-        #                         if meta.get("index") == ctx_triggered_prop_id_index:
-        #                             graph_metadata = meta
-        #                             break
-        #
-        #                     if (
-        #                         not graph_metadata
-        #                         or graph_metadata.get("visu_type", "").lower() != "scatter"
-        #                     ):
-        #                         continue
-        #
-        #                     logger.info(
-        #                         f"🎯 Processing scatter plot interaction for {ctx_triggered_prop_id_index}"
-        #                     )
-        #
-        #                     # Get token from local store
-        #                     TOKEN = None
-        #                     if local_store and "access_token" in local_store:
-        #                         TOKEN = local_store["access_token"]
-        #
-        #                     if not TOKEN:
-        #                         logger.warning(
-        #                             "No access token available for scatter plot processing"
-        #                         )
-        #                         continue
-        #
-        #                     # Process click data
-        #                     if "clickData" in prop_id and graph_click_data:
-        #                         logger.info(f"🎯 Processing clickData: {graph_click_data}")
-        #                         for i, click_data in enumerate(graph_click_data):
-        #                             logger.info(
-        #                                 f"🎯 Checking click_data[{i}]: {click_data} for graph {graph_ids[i]['index'] if i < len(graph_ids) else 'N/A'}"
-        #                             )
-        #                             if (
-        #                                 click_data
-        #                                 and i < len(graph_ids)
-        #                                 and graph_ids[i]["index"] == ctx_triggered_prop_id_index
-        #                             ):
-        #                                 # Only process if there are actual clicked points
-        #                                 if (
-        #                                     click_data.get("points")
-        #                                     and len(click_data["points"]) > 0
-        #                                 ):
-        #                                     dict_graph_data = {
-        #                                         "value": click_data["points"][0],
-        #                                         "metadata": graph_metadata,
-        #                                     }
-        #                                     scatter_plot_components = process_click_data(
-        #                                         dict_graph_data, {}, TOKEN
-        #                                     )
-        #                                     logger.info(
-        #                                         f"🎯 Click data processed: {len(scatter_plot_components)} components"
-        #                                     )
-        #                                 else:
-        #                                     logger.info(
-        #                                         f"🎯 No click points - click_data: {click_data}"
-        #                                     )
-        #                                 break
-        #
-        #                     # Process selected data
-        #                     elif "selectedData" in prop_id and graph_selected_data:
-        #                         logger.info(f"🎯 Processing selectedData: {graph_selected_data}")
-        #                         for i, selected_data in enumerate(graph_selected_data):
-        #                             logger.info(
-        #                                 f"🎯 Checking selected_data[{i}]: {selected_data} for graph {graph_ids[i]['index'] if i < len(graph_ids) else 'N/A'}"
-        #                             )
-        #                             if (
-        #                                 selected_data
-        #                                 and i < len(graph_ids)
-        #                                 and graph_ids[i]["index"] == ctx_triggered_prop_id_index
-        #                             ):
-        #                                 # Only process if there are actual selected points
-        #                                 if (
-        #                                     selected_data.get("points")
-        #                                     and len(selected_data["points"]) > 0
-        #                                 ):
-        #                                     dict_graph_data = {
-        #                                         "value": selected_data["points"],
-        #                                         "metadata": graph_metadata,
-        #                                     }
-        #                                     scatter_plot_components = process_selected_data(
-        #                                         dict_graph_data, {}, TOKEN
-        #                                     )
-        #                                     logger.info(
-        #                                         f"🎯 Selected data processed: {len(scatter_plot_components)} components"
-        #                                     )
-        #                                 else:
-        #                                     logger.info(
-        #                                         f"🎯 No selected points - selected_data: {selected_data}"
-        #                                     )
-        #                                 break
-        #
-        #                 except Exception as e:
-        #                     logger.error(f"Error processing graph interaction: {e}")
-        #                     continue
-        #     else:
-        #         logger.info(
-        #             "🎯 No actual graph data - preserving existing filters and skipping graph processing"
-        #         )
-        #
-        # # Add scatter plot generated components to the store
-        # if scatter_plot_components:
-        #     for component_key, component_data in scatter_plot_components.items():
-        #         if isinstance(component_data, dict) and component_data.get("metadata"):
-        #             # Enhance metadata to match expected format for table filtering
-        #             enhanced_metadata = component_data.get("metadata", {}).copy()
-        #             enhanced_metadata["component_type"] = (
-        #                 "interactive"  # Critical for table filtering
-        #             )
-        #             enhanced_metadata["index"] = component_key  # Ensure proper index
-        #
-        #             _tmp_metadata = {
-        #                 "value": component_data.get("value"),
-        #                 "metadata": enhanced_metadata,
-        #                 "index": component_key,
-        #             }
-        #             components.append(_tmp_metadata)
-        #             logger.info(
-        #                 f"🎯 Added scatter plot component: {component_key} with enhanced metadata: {_tmp_metadata}"
-        #             )
-
-        # Final check: prevent accidental loss of scatter plot filters
-        scatter_filters_before = 0
-        scatter_filters_after = 0
-
-        if current_store_data and "interactive_components_values" in current_store_data:
-            scatter_filters_before = len(
-                [
-                    c
-                    for c in current_store_data["interactive_components_values"]
-                    if c.get("index", "").startswith("filter_")
-                ]
-            )
-
-        scatter_filters_after = len(
-            [c for c in components if c.get("index", "").startswith("filter_")]
-        )
-
-        logger.info(
-            f"🎯 Scatter filters: before={scatter_filters_before}, after={scatter_filters_after}"
-        )
-
-        # If we're losing scatter plot filters without a graph trigger, prevent the update
-        if (
-            scatter_filters_before > 0
-            and scatter_filters_after == 0
-            and not graph_triggered
-            and current_store_data
-        ):
-            logger.warning(
-                "🚨 Preventing accidental loss of scatter plot filters - keeping current store"
-            )
-            return current_store_data, dash.no_update
-
-        output_data = {"interactive_components_values": components}
-
-        # Check live interactivity state to decide filter application
-        if live_interactivity_on:
-            # Live mode: apply filters immediately
-            logger.info(f"🔴 LIVE MODE: Applying {len(components)} filters immediately")
-            return output_data, {}  # Empty pending changes
-        else:
-            # Non-live mode: store as pending changes, keep current store unchanged
-            logger.info(
-                f"⏸️ NON-LIVE MODE: Checking {len(components)} components for pending changes"
-            )
-
-            # Get current applied values for comparison
-            current_applied_components = {}
-            if current_store_data and "interactive_components_values" in current_store_data:
-                for comp in current_store_data["interactive_components_values"]:
-                    comp_index = comp.get("index")
-                    if comp_index:
-                        current_applied_components[comp_index] = comp.get("value")
-
-            updated_pending = pending_changes.copy() if pending_changes else {}
-
-            # Merge at component level to avoid overwriting existing pending changes
-            if "interactive_components_values" in output_data:
-                if "interactive_components_values" not in updated_pending:
-                    updated_pending["interactive_components_values"] = []
-
-                # Create a dict for quick lookup of existing pending components by index
-                existing_pending = {
-                    comp.get("index"): comp
-                    for comp in updated_pending["interactive_components_values"]
-                }
-
-                # Update/add components from output_data only if they differ from current applied values
-                components_with_changes = 0
-                for component in output_data["interactive_components_values"]:
-                    component_index = component.get("index")
-                    if component_index:
-                        current_value = component.get("value")
-                        applied_value = current_applied_components.get(component_index)
-
-                        # Add to pending if value differs OR if this was a reset action
-                        if current_value != applied_value or reset_action_performed:
-                            components_with_changes += 1
-                            if reset_action_performed:
-                                logger.info(
-                                    f"⏸️ Found reset action pending: {component_index} = {current_value} (reset action forces pending)"
-                                )
-                            else:
-                                logger.info(
-                                    f"⏸️ Found pending change {component_index}: current={current_value}, applied={applied_value}"
-                                )
-                            existing_pending[component_index] = component
-                        else:
-                            logger.info(
-                                f"⏸️ No change for {component_index}: current={current_value}, applied={applied_value}"
-                            )
-                            # Remove from pending if it was there before (values now match applied)
-                            existing_pending.pop(component_index, None)
-
-                # Convert back to list
-                updated_pending["interactive_components_values"] = list(existing_pending.values())
-
-            pending_count = len(updated_pending.get("interactive_components_values", []))
-            logger.info(f"⏸️ Total pending components: {pending_count}")
-            return dash.no_update, updated_pending
-
-    # KEEPME
-    # Add callback to control grid edit mode like in the prototype
-    @app.callback(
-        [
-            Output("draggable", "showRemoveButton", allow_duplicate=True),
-            Output("draggable", "showResizeHandles", allow_duplicate=True),
-            Output("draggable", "className", allow_duplicate=True),
-        ],
-        Input("unified-edit-mode-button", "checked"),
-        prevent_initial_call=True,
-    )
-    def update_grid_edit_mode(edit_mode_enabled):
-        """Update draggable grid edit mode based on edit dashboard button state"""
-        logger.info(f"Grid edit mode toggled: {edit_mode_enabled}")
+        # Remove trailing slash for consistent detection
+        pathname_normalized = pathname.rstrip("/")
+        edit_mode_enabled = pathname_normalized.endswith("/edit")
+        logger.info(f"Dual-panel grid edit mode from URL ({pathname}): {edit_mode_enabled}")
 
         if edit_mode_enabled:
-            # Keep handles in DOM, CSS controls visibility - showResizeHandles must be True for handles to exist
-            return False, True, "draggable-grid-container"
+            # Edit mode: Remove .drag-handles-hidden class → CSS shows action icons on hover
+            class_name = "draggable-grid-container"
         else:
-            # Keep handles in DOM, CSS hides them via .drag-handles-hidden class
-            return False, True, "draggable-grid-container drag-handles-hidden"
+            # View mode: Add .drag-handles-hidden class → CSS hides all action icons
+            class_name = "draggable-grid-container drag-handles-hidden"
+
+        # Return lists for ALL pattern-matched grids (left and right panels)
+        return [[class_name], [class_name]]
 
     # KEEPME - MODULARISE - IS SUPPOSED TO FILL PREDEFINED MESSAGE FOR USER (Activate EDIT ON / CREATE FIRST COMPONENT ...)
     # @app.callback(
@@ -1342,6 +911,8 @@ def design_draggable(
     dashboard_id: str,
     local_data: dict,
     cached_project_data: dict | None = None,
+    stored_metadata: list[dict] | None = None,
+    edit_mode: bool = False,
 ):
     import time
 
@@ -1355,27 +926,236 @@ def design_draggable(
     )
 
     if USE_SIMPLE_LAYOUT_FOR_TESTING:
-        logger.info("🧪 TESTING MODE: Bypassing draggable grid, returning simple container")
-        # Just return the children wrapped in a simple div
-        # The children are already wrapped by render_dashboard in a DMC Stack
-        simple_wrapper = html.Div(
-            init_children,
-            id="draggable",  # Keep the ID for callback compatibility
+        logger.info("🎨 DUAL-PANEL MODE: Creating two-panel layout with grids")
+        logger.info(f"🔍 Received {len(init_children)} children to process")
+
+        # Use cached metadata as source of truth for component types
+        if not stored_metadata:
+            logger.warning("⚠️ No stored_metadata provided - cannot separate components into panels")
+            stored_metadata = []
+
+        logger.info(f"📊 Using {len(stored_metadata)} metadata entries from cache")
+
+        # Separate components into left/right panels using cached metadata
+        interactive_metadata, right_panel_metadata = separate_components_by_panel(stored_metadata)
+
+        # Create mapping of box_id to metadata for quick lookup
+        metadata_by_index = {str(meta.get("index")): meta for meta in stored_metadata}
+
+        # Separate actual component children into panels based on metadata
+        # Also track the component IDs for grid item creation
+        interactive_children = []
+        interactive_ids = []
+        right_panel_children = []
+        right_panel_ids = []
+
+        for child in init_children:
+            if not child:
+                continue
+
+            # Extract box ID (which corresponds to component index)
+            box_id = None
+            if hasattr(child, "id") and isinstance(child.id, str):
+                # Box ID is like "box-{uuid}"
+                if child.id.startswith("box-"):
+                    box_id = child.id.replace("box-", "")
+
+            if not box_id:
+                logger.warning(f"⚠️ Could not extract box_id from child: {child}")
+                continue
+
+            # Look up component metadata
+            metadata = metadata_by_index.get(box_id)
+            if not metadata:
+                logger.warning(f"⚠️ No metadata found for component {box_id}")
+                continue
+
+            component_type = metadata.get("component_type")
+
+            # Add to appropriate panel with ID tracking
+            if component_type == "interactive":
+                interactive_children.append(child)
+                interactive_ids.append(box_id)
+                logger.debug(f"✅ Added interactive component {box_id} to LEFT panel")
+            else:
+                right_panel_children.append(child)
+                right_panel_ids.append(box_id)
+                logger.debug(f"✅ Added {component_type} component {box_id} to RIGHT panel")
+
+        logger.info(
+            f"📊 DUAL-PANEL: Separated {len(interactive_children)} interactive, "
+            f"{len(right_panel_children)} right panel components"
+        )
+
+        # Extract layout data for position calculation
+        # Convert dict layout to list format if needed
+        if isinstance(init_layout, dict):
+            layout_list = [{"i": k, **v} for k, v in init_layout.items() if isinstance(v, dict)]
+        elif isinstance(init_layout, list):
+            layout_list = init_layout
+        else:
+            layout_list = []
+
+        # Enrich metadata with layout data (x, y positions)
+        # interactive_metadata and right_panel_metadata already populated by separate_components_by_panel()
+        logger.info(
+            f"📐 Enriching {len(interactive_metadata)} interactive components with layout data"
+        )
+        for meta in interactive_metadata:
+            layout_data = next(
+                (item for item in layout_list if item.get("i") == f"box-{meta['index']}"), {}
+            )
+            meta["x"] = layout_data.get("x")
+            meta["y"] = layout_data.get("y")
+            logger.debug(
+                f"  - Interactive {meta['index']}: type={meta.get('interactive_component_type', 'UNKNOWN')}, "
+                f"x={meta.get('x')}, y={meta.get('y')}"
+            )
+
+        logger.info(
+            f"📐 Enriching {len(right_panel_metadata)} right panel components with layout data"
+        )
+        for meta in right_panel_metadata:
+            layout_data = next(
+                (item for item in layout_list if item.get("i") == f"box-{meta['index']}"), {}
+            )
+            meta["x"] = layout_data.get("x")
+            meta["y"] = layout_data.get("y")
+
+        # Calculate positions for both panels
+        logger.info(
+            f"📐 Calculating positions for {len(interactive_metadata)} interactive components"
+        )
+        logger.info(
+            f"📐 Interactive metadata sample: {interactive_metadata[:2] if interactive_metadata else []}"
+        )
+        left_layout = calculate_left_panel_positions(interactive_metadata)
+        logger.info(f"📐 Left layout calculated: {len(left_layout)} items")
+        logger.info(f"📐 Left layout sample: {left_layout[:2] if left_layout else []}")
+
+        logger.info(
+            f"📐 Calculating positions for {len(right_panel_metadata)} right panel components"
+        )
+        right_layout = calculate_right_panel_positions(right_panel_metadata)
+        logger.info(f"📐 Right layout calculated: {len(right_layout)} items")
+        logger.info(f"📐 Right layout sample: {right_layout[:2] if right_layout else []}")
+
+        # Create grid items with keys using tracked IDs
+        left_grid_items = [
+            html.Div(
+                child,
+                key=component_id,
+                id={"type": "grid-item", "index": component_id},
+                style={
+                    "width": "100%",
+                    "height": "100%",
+                },
+            )
+            for child, component_id in zip(interactive_children, interactive_ids)
+        ]
+        logger.info(f"🎨 Created {len(left_grid_items)} left grid items")
+        logger.info(f"🎨 Left grid item IDs: {interactive_ids}")
+
+        right_grid_items = [
+            html.Div(
+                child,
+                key=component_id,
+                id={"type": "grid-item", "index": component_id},
+                style={
+                    "width": "100%",
+                    "height": "100%",
+                },
+            )
+            for child, component_id in zip(right_panel_children, right_panel_ids)
+        ]
+        logger.info(f"🎨 Created {len(right_grid_items)} right grid items")
+        logger.info(f"🎨 Right grid item IDs: {right_panel_ids}")
+
+        # Get edit mode state
+        is_owner = local_data.get("user_id") == local_data.get("dashboard_owner_id", None)
+        grid_className = ""
+        if not is_owner:
+            grid_className = "drag-handles-hidden"
+
+        # Create left panel grid (1 column, rowHeight=100) - 1 component per row
+        left_grid = dgl.DashGridLayout(
+            id={"type": "left-panel-grid", "index": dashboard_id},
+            items=left_grid_items,
+            itemLayout=left_layout,
+            rowHeight=50,
+            cols={"lg": 1, "md": 1, "sm": 1, "xs": 1, "xxs": 1},
+            showRemoveButton=False,
+            showResizeHandles=False,  # Never allow resizing
+            className=grid_className,
+            allowOverlap=False,
+            compactType="vertical",
+            margin=[10, 10],
             style={
                 "width": "100%",
-                "padding": "0",  # No padding here, Stack handles it
+                "minWidth": "280px",  # Ensure grid has minimum width
+                "height": "auto",
             },
+        )
+
+        # Create right panel grid (8 columns, rowHeight=100)
+        right_grid = dgl.DashGridLayout(
+            id={"type": "right-panel-grid", "index": dashboard_id},
+            items=right_grid_items,
+            itemLayout=right_layout,
+            rowHeight=100,
+            cols={"lg": 8, "md": 8, "sm": 8, "xs": 8, "xxs": 8},
+            showRemoveButton=False,
+            showResizeHandles=False,  # Never allow resizing
+            className=grid_className,
+            allowOverlap=False,
+            compactType="vertical",
+            margin=[10, 10],
+            style={"width": "100%", "height": "auto"},
+        )
+
+        # Create dual-panel layout
+        dual_panel_layout = dmc.Grid(
+            columns=12,
+            gutter="sm",
+            children=[
+                # Left panel: Interactive components (wider - 3 out of 12 = 25%)
+                dmc.GridCol(
+                    span=3,
+                    children=[left_grid] if left_grid_items else [dmc.Center("No filters")],
+                    style={
+                        # "backgroundColor": "var(--app-surface-color, #f8f9fa)",
+                        "borderRight": "1px solid var(--app-border-color, #ddd)",
+                        "padding": "12px",
+                        "minHeight": "100vh",
+                        "overflowY": "auto",
+                        "minWidth": "300px",  # Ensure minimum width
+                    },
+                ),
+                # Right panel: Cards and other components (9 out of 12 = 75%)
+                dmc.GridCol(
+                    span=9,
+                    children=[right_grid] if right_grid_items else [dmc.Center("No components")],
+                    style={
+                        # "backgroundColor": "var(--app-bg-color, #ffffff)",
+                        "padding": "12px",
+                        "minHeight": "100vh",
+                        "overflowY": "auto",
+                    },
+                ),
+            ],
+            id="draggable",  # Keep ID for callback compatibility
+            style={"width": "100%", "margin": 0},
         )
 
         core = html.Div(
             html.Div(
-                simple_wrapper,
+                dual_panel_layout,
                 id="draggable-wrapper",
                 style={"flex-grow": 1, "width": "100%", "height": "auto"},
             )
         )
 
-        logger.info("🧪 TESTING MODE: Returning simple layout (no grid)")
+        logger.info("🎨 DUAL-PANEL: Returning two-panel layout with grids")
         return core
 
     # Generate core layout based on data availability
@@ -1643,10 +1423,11 @@ def design_draggable(
             "xs": 48,
             "xxs": 48,
         },  # 48-column grid for ultimate layout flexibility and precision
-        showRemoveButton=False
-        if not is_owner
-        else False,  # Always False initially, callback controls it
-        showResizeHandles=False if not is_owner else True,  # Non-owners: False, Owners: True
+        # EDIT MODE CONTROL: Only show remove button and resize handles in edit mode
+        # In view mode: always False (read-only dashboard)
+        # In edit mode: respect permissions (is_owner = True)
+        showRemoveButton=False if not edit_mode else (is_owner and edit_mode),
+        showResizeHandles=False if not edit_mode else (is_owner and edit_mode),
         className=grid_className,  # CSS class for styling (with .drag-handles-hidden if edit mode OFF)
         allowOverlap=False,
         # Additional parameters to try to disable responsive scaling

@@ -494,6 +494,14 @@ def get_columns_from_data_collection(
     """
     PERFORMANCE OPTIMIZED: Get columns from data collection with LRU caching.
 
+    NOTE: This function is being gradually phased out in favor of centralized
+    data fetching via dashboard-init-data store. For runtime dashboard views,
+    column specs are now pre-fetched and available in init_data.column_specs.
+    This function remains for:
+    - Edit mode (adding/editing components)
+    - Stepper mode (component-by-component creation)
+    - Legacy compatibility
+
     This function now uses functools.lru_cache for automatic cache management with:
     - LRU eviction policy (maxsize=128)
     - Efficient token hashing

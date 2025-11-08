@@ -7,6 +7,15 @@ from dash import Input, Output, State, ctx
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.core.auth import process_authentication
 
+# NOTE: This file contains legacy callback registration code from the single-app architecture.
+# The new multi-app architecture (flask_dispatcher.py + pages/*.py) handles all callback registration.
+# This file is kept for reference but should not be used in production.
+#
+# Multi-app callback registration happens in:
+#   - depictio/dash/pages/management_app.py - Management app callbacks
+#   - depictio/dash/pages/dashboard_viewer.py - Viewer app callbacks
+#   - depictio/dash/pages/dashboard_editor.py - Editor app callbacks (future)
+
 
 def register_main_callback(app):
     """
@@ -58,12 +67,18 @@ def register_main_callback(app):
             Input("url", "pathname"),
             Input("local-store", "data"),
             State("theme-store", "data"),
-            State("project-cache-store", "data"),
-            State("user-cache-store", "data"),  # Phase 4E-4: Pass cached user data
+            State("project-cache", "data"),
+            State("dashboard-init-data", "data"),  # API Consolidation: Dashboard init data
         ],
         prevent_initial_call="initial_duplicate",
     )
-    def display_page(pathname, local_data, theme_store, cached_project_data, cached_user_data):
+    def display_page(
+        pathname,
+        local_data,
+        theme_store,
+        cached_project_data,
+        dashboard_init_data,
+    ):
         """
         Main callback for handling page routing and authentication.
 
@@ -146,7 +161,11 @@ def register_main_callback(app):
         # Process authentication and return appropriate content
         auth_start = time.time()
         result = process_authentication(
-            pathname, local_data, theme_store, cached_project_data, cached_user_data
+            pathname,
+            local_data,
+            theme_store,
+            cached_project_data,
+            dashboard_init_data,
         )
         auth_duration = (time.time() - auth_start) * 1000
 
@@ -164,47 +183,48 @@ def register_main_callback(app):
     logger.info("🔥 MAIN CALLBACK REGISTERED SUCCESSFULLY")
 
     # Move header visibility to clientside for instant response
-    app.clientside_callback(
-        """
-        function(pathname) {
-            console.log('🔥 CLIENTSIDE HEADER VISIBILITY: pathname=' + pathname);
-            if (pathname === '/auth') {
-                // Hide header on auth page
-                return null;
-            } else if (pathname && pathname.startsWith('/dashboard/')) {
-                // Dashboard pages: 45px header
-                return {"height": 45, "padding": "0"};
-            } else {
-                // Other pages: 65px header for better vertical space
-                return {"height": 65, "padding": "0"};
-            }
-        }
-        """,
-        Output("app-shell", "header"),
-        Input("url", "pathname"),
-        prevent_initial_call=True,
-    )
+    # app.clientside_callback(
+    #     """
+    #     function(pathname) {
+    #         console.log('🔥 CLIENTSIDE HEADER VISIBILITY: pathname=' + pathname);
+    #         if (pathname === '/auth') {
+    #             // Hide header on auth page
+    #             return null;
+    #         } else if (pathname && pathname.startsWith('/dashboard/')) {
+    #             // Dashboard pages: 45px header
+    #             return {"height": 45, "padding": "0"};
+    #         } else {
+    #             // Other pages: 65px header for better vertical space
+    #             return {"height": 65, "padding": "0"};
+    #         }
+    #     }
+    #     """,
+    #     Output("app-shell", "header"),
+    #     Input("url", "pathname"),
+    #     prevent_initial_call=True,
+    # )
 
-    # Control AppShell layout based on page type
-    app.clientside_callback(
-        """
-        function(pathname) {
-            console.log('🔥 CLIENTSIDE LAYOUT CONTROL: pathname=' + pathname);
-            if (pathname && pathname.startsWith('/dashboard/')) {
-                // Dashboard pages: default layout (navbar offset by header)
-                return "default";
-            } else {
-                // Other pages: alt layout (navbar extends to top)
-                return "alt";
-            }
-        }
-        """,
-        Output("app-shell", "layout"),
-        Input("url", "pathname"),
-        prevent_initial_call=True,
-    )
+    # # Control AppShell layout based on page type
+    # app.clientside_callback(
+    #     """
+    #     function(pathname) {
+    #         console.log('🔥 CLIENTSIDE LAYOUT CONTROL: pathname=' + pathname);
+    #         if (pathname && pathname.startsWith('/dashboard/')) {
+    #             // Dashboard pages: default layout (navbar offset by header)
+    #             return "default";
+    #         } else {
+    #             // Other pages: alt layout (navbar extends to top)
+    #             return "alt";
+    #         }
+    #     }
+    #     """,
+    #     Output("app-shell", "layout"),
+    #     Input("url", "pathname"),
+    #     prevent_initial_call=True,
+    # )
 
     # Add clientside callback to manage body classes for auth page
+    # Dash v3: No Output required for DOM-only manipulation callbacks
     app.clientside_callback(
         """
         function(pathname) {
@@ -221,86 +241,94 @@ def register_main_callback(app):
                     document.body.classList.add('page-loaded');
                 }
             }, 50); // 50ms delay for smooth transition
-
-            return window.dash_clientside.no_update;
         }
         """,
-        Output("dummy-resize-output", "children", allow_duplicate=True),
         Input("url", "pathname"),
         prevent_initial_call="initial_duplicate",
     )
 
     # Add clientside callback to manage page-content padding for dashboard vs other pages
-    app.clientside_callback(
-        """
-        function(pathname) {
-            const currentPath = pathname || window.location.pathname;
+    # app.clientside_callback(
+    #     """
+    #     function(pathname) {
+    #         const currentPath = pathname || window.location.pathname;
 
-            // Add a small delay to ensure DOM is ready
-            setTimeout(() => {
-                const pageContent = document.getElementById('page-content');
-                if (pageContent) {
-                    if (currentPath && currentPath.startsWith('/dashboard/')) {
-                        // Dashboard pages: minimal padding (grid layout handles spacing)
-                        pageContent.style.padding = '0.25rem 0';
-                    } else {
-                        // Other pages: proper horizontal padding for readability
-                        pageContent.style.padding = '1rem 2rem';
-                        pageContent.style.maxWidth = '100%';
-                    }
-                }
-            }, 50);
+    #         // Add a small delay to ensure DOM is ready
+    #         setTimeout(() => {
+    #             const pageContent = document.getElementById('page-content');
+    #             if (pageContent) {
+    #                 if (currentPath && currentPath.startsWith('/dashboard/')) {
+    #                     // Dashboard pages: minimal padding (grid layout handles spacing)
+    #                     pageContent.style.padding = '0.25rem 0';
+    #                 } else {
+    #                     // Other pages: proper horizontal padding for readability
+    #                     pageContent.style.padding = '1rem 2rem';
+    #                     pageContent.style.maxWidth = '100%';
+    #                 }
+    #             }
+    #         }, 50);
 
-            return window.dash_clientside.no_update;
-        }
-        """,
-        Output("dummy-padding-output", "children", allow_duplicate=True),
-        Input("url", "pathname"),
-        prevent_initial_call="initial_duplicate",
-    )
+    #         return window.dash_clientside.no_update;
+    #     }
+    #     """,
+    #     Output("dummy-padding-output", "children", allow_duplicate=True),
+    #     Input("url", "pathname"),
+    #     prevent_initial_call="initial_duplicate",
+    # )
 
 
 def register_all_callbacks(app):
     """
-    Register all callbacks for the application.
+    LEGACY: Register all callbacks for the application (single-app architecture).
+
+    NOTE: This function is NO LONGER USED in the multi-app architecture.
+    Callback registration now happens in:
+      - depictio/dash/pages/management_app.py (Management app)
+      - depictio/dash/pages/dashboard_viewer.py (Viewer app)
+      - depictio/dash/pages/dashboard_editor.py (Editor app - future)
+
+    DEPRECATED ARCHITECTURE: This was for the old single-app with lazy loading.
 
     Args:
         app (dash.Dash): The Dash application instance
     """
-    # Register main callback for page routing
-    register_main_callback(app)
+    # DEPRECATED: This callback registration is no longer used
+    logger.warning(
+        "⚠️  DEPRECATED: register_all_callbacks() called - use page-specific registration instead"
+    )
+    logger.info("🔧 REGISTERING CORE CALLBACKS (routing, auth, layout)")
+    register_main_callback(app)  # Page routing and authentication
+    register_layout_callbacks(app)  # Header, sidebar, navigation
 
-    # Register layout callbacks
-    register_layout_callbacks(app)
-
-    # Register component callbacks
-    register_component_callbacks(app)
-
-    # Register feature-specific callbacks
-    register_feature_callbacks(app)
+    # DEPRECATED: Component and feature callbacks now registered per app
+    logger.info("🔧 REGISTERING VIEW MODE CALLBACKS (components, dashboards)")
+    register_component_callbacks(app)  # Component core rendering
+    # register_feature_callbacks(app)  # REMOVED - now in page modules
 
     # Register theme bridge callback
     # Register progressive loading callbacks
-    # Import position_controls to register position change callback
-    from depictio.dash.layouts import (
-        position_controls,  # noqa: F401 - callback registers via decorator
-    )
-    from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
-        register_progressive_loading_callbacks,
-    )
-    from depictio.dash.layouts.edit import (
-        register_partial_data_button_callbacks,
-        register_reset_button_callbacks,
-    )
-    from depictio.dash.layouts.position_controls import register_position_clientside_callback
+    # REMOVED: Position controls replaced with drag & drop
+    # from depictio.dash.layouts import (
+    #     position_controls,  # noqa: F401 - callback registers via decorator
+    # )
+    # from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
+    #     register_progressive_loading_callbacks,
+    # )
+    # from depictio.dash.layouts.edit import (
+    #     # register_partial_data_button_callbacks,
+    #     # register_reset_button_callbacks,
+    # )
+    # REMOVED: Position controls replaced with drag & drop
+    # from depictio.dash.layouts.position_controls import register_position_clientside_callback
 
     # from depictio.dash.theme_utils import register_theme_bridge_callback
 
     # register_theme_bridge_callback(app)
-    register_progressive_loading_callbacks(app)
-    register_reset_button_callbacks(app)
-    register_partial_data_button_callbacks(app)
-    register_position_clientside_callback(app)  # Register clientside position update callback
+    # register_progressive_loading_callbacks(app)
+    # register_reset_button_callbacks(app)
+    # register_partial_data_button_callbacks(app)
+    # REMOVED: Position controls replaced with drag & drop
+    # register_position_clientside_callback(app)  # Register clientside position update callback
 
     # Register analytics callbacks
     # from depictio.dash.components.analytics_tracker import register_analytics_callbacks
@@ -317,113 +345,103 @@ def register_all_callbacks(app):
 
 def register_layout_callbacks(app):
     """
-    Register callbacks for layout components.
+    LEGACY: Register core layout callbacks (single-app architecture).
+
+    NOTE: This function is NO LONGER USED in the multi-app architecture.
+    Layout callbacks are now registered in page-specific modules.
+
+    DEPRECATED - Used in old single-app architecture.
+    Multi-app architecture registers callbacks per app in:
+      - management_app.py: Header, save, draggable callbacks
+      - dashboard_viewer.py: Minimal header callbacks
+      - dashboard_editor.py: Edit mode callbacks (future)
 
     Args:
         app (dash.Dash): The Dash application instance
     """
-    from depictio.dash.layouts.consolidated_api import register_consolidated_api_callbacks
     from depictio.dash.layouts.draggable import register_callbacks_draggable
     from depictio.dash.layouts.header import register_callbacks_header
-    from depictio.dash.layouts.notes_footer import register_callbacks_notes_footer
-    from depictio.dash.layouts.save import register_callbacks_save
-    from depictio.dash.layouts.sidebar import register_sidebar_callbacks
-    from depictio.dash.layouts.stepper import register_callbacks_stepper
+    from depictio.dash.layouts.save import register_callbacks_save_lite
 
-    # from depictio.dash.layouts.stepper_parts.part_one import register_callbacks_stepper_part_one
-    # from depictio.dash.layouts.stepper_parts.part_three import register_callbacks_stepper_part_three
-    # from depictio.dash.layouts.stepper_parts.part_two import register_callbacks_stepper_part_two
-    from depictio.dash.simple_theme import register_simple_theme_system
+    # CORE: Header callbacks (always needed for navigation and edit mode switching)
+    logger.info("  📋 Registering header callbacks (navigation, edit mode, filters)")
+    register_callbacks_header(app)  # 8 callbacks: edit mode nav, share modal, offcanvas, burger
 
-    # Register consolidated API callbacks first (highest priority)
-    register_consolidated_api_callbacks(app)
+    # CORE: Save callback (always needed - save button is in header)
+    logger.info("  💾 Registering save callback (minimal - metadata only)")
+    register_callbacks_save_lite(app)  # Minimal save callback
 
-    # Register layout callbacks
-    register_callbacks_stepper(app)
-    # register_callbacks_stepper_part_one(app)
-    # register_callbacks_stepper_part_two(app)
-    # register_callbacks_stepper_part_three(app)
-    register_callbacks_header(app)
-    register_callbacks_draggable(app)
-    register_sidebar_callbacks(app)
-    register_callbacks_notes_footer(app)
-    register_callbacks_save(app)
-    register_simple_theme_system(app)
+    # CORE: Draggable grid edit mode callback (always needed - toggles action icon visibility)
+    logger.info("  🎯 Registering draggable grid edit mode callback (URL-based)")
+    register_callbacks_draggable(app)  # Edit mode className toggle based on URL
+
+    # NOTE: Sidebar content is static (no callbacks needed - rendered once in app_layout.py)
+
+    # NOTE: No longer relevant in multi-app architecture
 
 
 def register_component_callbacks(app):
     """
-    Register callbacks for UI components.
+    LEGACY: Register callbacks for UI components (single-app architecture).
+
+    NOTE: This function is NO LONGER USED in the multi-app architecture.
+    Component callbacks are now registered per app in:
+      - dashboard_viewer.py: All component rendering callbacks
+      - dashboard_editor.py: Component design callbacks (future)
+
+    DEPRECATED - Used in old single-app architecture.
 
     Args:
         app (dash.Dash): The Dash application instance
     """
-    from depictio.dash.modules.card_component.frontend import register_callbacks_card_component
-    from depictio.dash.modules.figure_component.frontend import register_callbacks_figure_component
-    from depictio.dash.modules.interactive_component.frontend import (
+    # Import core callback registration functions
+    from depictio.dash.modules.card_component.callbacks import (
+        register_callbacks_card_component,
+    )
+    from depictio.dash.modules.figure_component.callbacks import register_callbacks_figure_component
+    from depictio.dash.modules.interactive_component.callbacks import (
         register_callbacks_interactive_component,
     )
-    from depictio.dash.modules.jbrowse_component.frontend import (
-        register_callbacks_jbrowse_component,
-    )
-    from depictio.dash.modules.multiqc_component.frontend import (
-        register_callbacks_multiqc_component,
-    )
-    from depictio.dash.modules.table_component.frontend import register_callbacks_table_component
-    from depictio.dash.modules.text_component.frontend import register_callbacks_text_component
 
-    # Register component callbacks
+    # Import other component callbacks (no lazy loading yet)
+    # from depictio.dash.modules.jbrowse_component.frontend import (
+    #     register_callbacks_jbrowse_component,
+    # )
+    # from depictio.dash.modules.multiqc_component.frontend import (
+    #     register_callbacks_multiqc_component,
+    # )
+    # from depictio.dash.modules.table_component.frontend import register_callbacks_table_component
+    # from depictio.dash.modules.text_component.frontend import register_callbacks_text_component
+
+    # Register CORE component callbacks (always loaded at startup)
+    # These handle viewing/rendering dashboards, not editing/designing components
     register_callbacks_card_component(app)
     register_callbacks_interactive_component(app)
     register_callbacks_figure_component(app)
-    register_callbacks_jbrowse_component(app)
-    register_callbacks_multiqc_component(app)
-    register_callbacks_table_component(app)
-    register_callbacks_text_component(app)
+    # register_callbacks_jbrowse_component(app)
+    # register_callbacks_multiqc_component(app)
+    # register_callbacks_table_component(app)
+    # register_callbacks_text_component(app)
+
+    # NOTE: Lazy loading is no longer used in the multi-app architecture.
+    # All callbacks are registered upfront for each app in their respective page modules:
+    #   - management_app.py: All management callbacks (~70 callbacks)
+    #   - dashboard_viewer.py: All viewer callbacks (~30 callbacks)
+    #   - dashboard_editor.py: All editor callbacks (~65 callbacks) - future
 
 
-def register_feature_callbacks(app):
-    """
-    Register callbacks for specific features.
+# REMOVED: register_edit_mode_callbacks()
+# Edit mode callbacks are now registered directly in dashboard_editor.py (future implementation)
+# or in management_app.py for the combined management interface
 
-    Args:
-        app (dash.Dash): The Dash application instance
-    """
-    from depictio.dash.layouts.add_component_simple import register_add_component_simple_callback
-    from depictio.dash.layouts.admin_management import register_admin_callbacks
-    from depictio.dash.layouts.admin_notifications import register_admin_notifications_callbacks
-    from depictio.dash.layouts.dashboards_management import register_callbacks_dashboards_management
-    from depictio.dash.layouts.edit_component_simple import register_edit_component_simple_callback
-    from depictio.dash.layouts.edit_page import register_edit_page_callbacks
-    from depictio.dash.layouts.profile import register_profile_callbacks
-    from depictio.dash.layouts.project_data_collections import (
-        register_project_data_collections_callbacks,
-    )
-    from depictio.dash.layouts.projects import (
-        register_projects_callbacks,
-        register_workflows_callbacks,
-    )
-    from depictio.dash.layouts.projectwise_user_management import (
-        register_projectwise_user_management_callbacks,
-    )
-    from depictio.dash.layouts.remove_component_simple import (
-        register_remove_component_simple_callback,
-    )
-    from depictio.dash.layouts.tokens_management import register_tokens_management_callbacks
-    from depictio.dash.layouts.users_management import register_callbacks_users_management
 
-    # Register feature callbacks
-    register_add_component_simple_callback(app)  # Simple add-button callback
-    register_edit_component_simple_callback(app)  # Simple edit-button callback (navigation)
-    register_edit_page_callbacks(app)  # Edit page save callback
-    register_remove_component_simple_callback(app)  # Patch-based remove-button callback
-    register_callbacks_dashboards_management(app)
-    register_profile_callbacks(app)
-    register_callbacks_users_management(app)
-    register_tokens_management_callbacks(app)
-    register_workflows_callbacks(app)
-    register_projects_callbacks(app)
-    register_admin_callbacks(app)
-    register_projectwise_user_management_callbacks(app)
-    register_project_data_collections_callbacks(app)
-    register_admin_notifications_callbacks(app)
+# REMOVED: register_feature_callbacks()
+# Feature callbacks are now registered directly in the page modules:
+#   - management_app.py: Auth, dashboards, profile, admin, tokens
+#   - dashboard_viewer.py: Component rendering, minimal UI
+#   - dashboard_editor.py: Edit mode, component design (future)
+
+
+# REMOVED: register_extended_feature_callbacks()
+# Extended features are now registered in management_app.py as needed
+# Environment variables can control which features are enabled per deployment

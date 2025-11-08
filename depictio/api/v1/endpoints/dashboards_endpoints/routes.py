@@ -221,6 +221,85 @@ async def get_dashboard(
     return dashboard_data
 
 
+@dashboards_endpoint_router.get("/init/{dashboard_id}")
+async def init_dashboard(
+    dashboard_id: PyObjectId,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """
+    Dashboard initialization endpoint - returns ONLY dashboard-specific data.
+
+    Project-wide data (dc_configs, column_specs, delta_locations) should be
+    fetched separately via /projects/get/from_id endpoint for better caching.
+
+    Returns:
+        dict: Dashboard-specific initialization data
+            {
+                "dashboard": DashboardData (layout, metadata, notes, title),
+                "project_id": str,
+                "user_permissions": {level, can_edit, can_delete}
+            }
+    """
+    logger.info(f"🚀 Dashboard init for dashboard {dashboard_id}")
+
+    # 1. Fetch dashboard with permission check
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(
+            status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
+        )
+
+    # Get project_id from dashboard
+    project_id = dashboard_data.get("project_id")
+    if not project_id:
+        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
+
+    # Check project-based permissions
+    if not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to access this dashboard."
+        )
+
+    dashboard = DashboardData.from_mongo(dashboard_data)
+    logger.debug("✅ Dashboard access granted via project permissions")
+
+    # 2. Determine user permission level
+    # Need to fetch project for permissions check (lightweight query)
+    from depictio.api.v1.endpoints.projects_endpoints.utils import (
+        get_project_with_delta_locations,
+    )
+
+    project_data = await get_project_with_delta_locations(project_id, current_user)
+
+    user_permission_level = "viewer"  # Default
+    permissions = project_data.get("permissions", {})
+    if current_user.id in [str(owner.get("_id", "")) for owner in permissions.get("owners", [])]:
+        user_permission_level = "owner"
+    elif current_user.id in [
+        str(editor.get("_id", "")) for editor in permissions.get("editors", [])
+    ]:
+        user_permission_level = "editor"
+
+    # 3. Build dashboard-only response
+    # Frontend will fetch project data separately via /projects/get/from_id/{project_id}
+    response = {
+        "dashboard": dashboard.model_dump(),
+        "project_id": str(project_id),
+        "user_permissions": {
+            "level": user_permission_level,
+            "can_edit": user_permission_level in ["owner", "editor"],
+            "can_delete": user_permission_level == "owner",
+        },
+    }
+
+    # 4. Sanitize response (convert ObjectIds to strings for JSON serialization)
+    sanitized_response = convert_objectid_to_str(response)
+
+    logger.info(f"✅ Dashboard init complete for {dashboard_id}")
+
+    return sanitized_response
+
+
 @dashboards_endpoint_router.get("/list")
 async def list_dashboards(
     current_user: User = Depends(get_user_or_anonymous),
