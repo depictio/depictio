@@ -1,17 +1,42 @@
 """
-Consolidated API callbacks to reduce redundant API calls across components.
+Consolidated API Caching Layer
 
-This module provides centralized user data management and API call optimization
-to eliminate the 20+ redundant api_call_fetch_user_from_token() calls throughout the app.
+This module provides centralized API caching callbacks for the Depictio dashboard application,
+eliminating redundant HTTP requests and improving performance through browser session storage.
+
+Key Features:
+- Async non-blocking HTTP requests using httpx.AsyncClient
+- Browser session storage caching (persists across page navigation)
+- Intelligent cache invalidation based on TTL and data changes
+- Reduces 20+ redundant API calls per dashboard load
+
+Managed dcc.Store Components:
+1. server-status-cache (2 min TTL) - Server health and version info
+2. project-metadata-store (10 min TTL) - Project data with MongoDB $lookup joins
+3. dashboard-init-data (10 min TTL) - Dashboard metadata and component configurations
+
+Cache Strategy:
+- Server/project data fetched on authentication changes (local-store.data triggers)
+- Dashboard metadata fetched on URL navigation (/dashboard/{id})
+- Project metadata triggered by dashboard data changes (cascading cache population)
+- Components read from caches to avoid individual API calls
+
+Registered Apps:
+- Dashboard Viewer App (pages/dashboard_viewer.py)
+- Management App uses its own server-status-cache writer for consistency
+
+Performance Impact:
+- Eliminates redundant user/project fetches across components
+- Non-blocking async HTTP keeps UI responsive
+- Session storage survives page refreshes and app transitions
 """
 
 import time
-from typing import Any, Dict, Optional
 
 import httpx
 from dash import Input, Output, State, callback_context, no_update
 
-from depictio.api.v1.configs.config import API_BASE_URL, settings
+from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 
 
@@ -23,9 +48,8 @@ def register_consolidated_api_callbacks(app):
     # Use async callback for non-blocking API requests (better performance than background)
     @app.callback(
         [
-            Output("user-cache-store", "data"),
             Output("server-status-cache", "data"),
-            Output("project-cache-store", "data"),
+            Output("project-metadata-store", "data"),
         ],
         [
             Input("local-store", "data"),
@@ -33,9 +57,8 @@ def register_consolidated_api_callbacks(app):
             # Cache updates should only happen when token data changes, not on navigation
         ],
         [
-            State("user-cache-store", "data"),
             State("server-status-cache", "data"),
-            State("project-cache-store", "data"),
+            State("project-metadata-store", "data"),
             State(
                 "url", "pathname"
             ),  # Moved pathname to State so we can access it but not trigger on it
@@ -43,14 +66,13 @@ def register_consolidated_api_callbacks(app):
         prevent_initial_call=False,
         # background=True,  # Disabled - using async instead for better performance
     )
-    async def consolidated_user_server_and_project_data(
-        local_store, cached_user, cached_server, cached_project, pathname
+    async def consolidated_server_and_project_data(
+        local_store, cached_server, cached_project, pathname
     ):
         """
-        Async callback that fetches user data, server status, and project data with non-blocking HTTP requests.
+        Async callback that fetches server status and project data with non-blocking HTTP requests.
 
-        This replaces 20+ individual api_call_fetch_user_from_token() calls across the app
-        and eliminates redundant project fetching in design_draggable() with cached requests.
+        Eliminates redundant project fetching across components with cached requests.
         Uses async HTTP clients so UI shows no "Loading..." and stays responsive.
         """
 
@@ -72,42 +94,32 @@ def register_consolidated_api_callbacks(app):
             trigger_id = ctx.triggered[0]["prop_id"]
             if trigger_id != "local-store.data":
                 logger.info(f"🔧 CONSOLIDATED CALLBACK: Unexpected trigger {trigger_id}, skipping")
-                return cached_user, cached_server, cached_project
+                return cached_server, cached_project
 
         # Skip auth page
         if pathname == "/auth":
             logger.info("🔧 CONSOLIDATED CALLBACK: Skipping auth page")
-            return no_update, no_update, no_update
+            return no_update, no_update
 
         # Check if we have a valid token
         if not local_store or not local_store.get("access_token"):
             logger.info("🔧 CONSOLIDATED CALLBACK: No token found, returning None")
-            return None, None, None
+            return None, None
 
         access_token = local_store["access_token"]
         current_time = time.time()
 
         # Determine what needs updating
-        update_user = False
         update_server = False
-
-        # Check if user data needs updating (5 minute cache)
-        if not cached_user or (current_time - cached_user.get("timestamp", 0)) > 300:
-            update_user = True
 
         # Check if server data needs updating (2 minute cache)
         if not cached_server or (current_time - cached_server.get("timestamp", 0)) > 120:
             update_server = True
 
-        user_cache_age = (
-            current_time - cached_user.get("timestamp", 0) if cached_user else float("inf")
-        )
         server_cache_age = (
             current_time - cached_server.get("timestamp", 0) if cached_server else float("inf")
         )
-        logger.info(
-            f"🔧 CONSOLIDATED DEBUG: User cache age: {user_cache_age}s, server cache age: {server_cache_age}s"
-        )
+        logger.info(f"🔧 CONSOLIDATED DEBUG: Server cache age: {server_cache_age}s")
 
         # Check if project data needs updating (dashboard-specific, 10 minute cache)
         update_project = False
@@ -121,39 +133,16 @@ def register_consolidated_api_callbacks(app):
             elif (current_time - cached_project.get("timestamp", 0)) > 600:  # 10 min cache
                 update_project = True
 
-        # For local-store triggers, check if token actually changed to prevent unnecessary updates
-        if ctx.triggered and ctx.triggered[0]["prop_id"] == "local-store.data":
-            # Get current token from local store
-            current_token = local_store.get("access_token") if local_store else None
-
-            # Check if we have a previous token stored in user cache metadata
-            previous_token = cached_user.get("access_token") if cached_user else None
-
-            logger.info(
-                f"🔧 CONSOLIDATED DEBUG: Current token: {current_token[:10] if current_token else None}..."
-            )
-            logger.info(
-                f"🔧 CONSOLIDATED DEBUG: Previous token: {previous_token[:10] if previous_token else None}..."
-            )
-
-            # If tokens are the same and cache is still valid, skip updates
-            if current_token == previous_token:
-                logger.info("🔄 Token unchanged, using cache-based updates only")
-            else:
-                logger.info("🔄 Token changed, forcing data refresh")
-                update_user = True
-                update_server = True
-
         # If nothing needs updating, return cached data
-        if not update_user and not update_server and not update_project:
+        if not update_server and not update_project:
             logger.info("🔧 CONSOLIDATED CALLBACK: Using cached data, no updates needed")
             logger.info(
-                f"🔧 DEBUG: Cache ages - user: {(current_time - cached_user.get('timestamp', 0)) if cached_user else 'None'}, server: {server_cache_age if cached_server else 'None'}"
+                f"🔧 DEBUG: Cache ages - server: {server_cache_age if cached_server else 'None'}"
             )
-            return cached_user, cached_server, cached_project
+            return cached_server, cached_project
 
         logger.info(
-            f"🔄 Consolidated API: Updating user={update_user}, server={update_server}, project={update_project}"
+            f"🔄 Consolidated API: Updating server={update_server}, project={update_project}"
         )
         if update_project:
             logger.info(
@@ -161,51 +150,6 @@ def register_consolidated_api_callbacks(app):
             )
         logger.info("🔧 CONSOLIDATED CALLBACK: About to start async tasks")
         logger.info("🚀 ASYNC MODE ENABLED: Using httpx.AsyncClient for non-blocking I/O")
-
-        async def fetch_user_data(token):
-            """Fetch user data with async HTTP client."""
-            try:
-                logger.info("🔄 Consolidated API: Fetching user data (async)")
-
-                # Use httpx.AsyncClient for async HTTP requests
-                async with httpx.AsyncClient(timeout=5) as client:
-                    response = await client.get(
-                        f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token",
-                        params={"token": token},
-                        headers={"api-key": settings.auth.internal_api_key},
-                    )
-
-                    if response.status_code == 200:
-                        user_data = response.json()
-                        from depictio.models.models.users import UserContext
-
-                        current_user = UserContext(
-                            id=user_data["id"],
-                            email=user_data["email"],
-                            is_admin=user_data.get("is_admin", False),
-                            is_anonymous=user_data.get("is_anonymous", False),
-                        )
-
-                        return {
-                            "user": {
-                                "id": str(current_user.id),
-                                "email": current_user.email,
-                                "name": getattr(
-                                    current_user, "name", current_user.email.split("@")[0]
-                                ),
-                                "is_admin": current_user.is_admin,
-                                "is_anonymous": getattr(current_user, "is_anonymous", False),
-                            },
-                            "access_token": access_token,  # Store token for comparison
-                            "timestamp": current_time,
-                        }
-                    else:
-                        logger.warning(f"User fetch failed: {response.status_code}")
-                        return None
-
-            except Exception as e:
-                logger.error(f"❌ Consolidated API: Failed to fetch user data: {e}")
-                return None
 
         async def fetch_server_status(token):
             """Fetch server status with async HTTP client."""
@@ -267,20 +211,8 @@ def register_consolidated_api_callbacks(app):
                 return None
 
         # Execute async tasks with await
-        new_user_data = cached_user
         new_server_data = cached_server
         new_project_data = cached_project
-
-        if update_user:
-            try:
-                user_result = await fetch_user_data(access_token)
-                if user_result:
-                    new_user_data = user_result
-                    logger.info(
-                        f"✅ Consolidated API: User data cached for {user_result['user']['email']}"
-                    )
-            except Exception as e:
-                logger.error(f"❌ User fetch exception: {e}")
 
         if update_server:
             try:
@@ -302,70 +234,204 @@ def register_consolidated_api_callbacks(app):
             except Exception as e:
                 logger.error(f"❌ Project fetch exception: {e}")
 
-        if update_user or update_server or update_project:
+        if update_server or update_project:
             logger.info(
-                f"🔧 CONSOLIDATED CALLBACK: Returning updated data - user: {bool(new_user_data)}, server: {bool(new_server_data)}, project: {bool(new_project_data)}"
+                f"🔧 CONSOLIDATED CALLBACK: Returning updated data - server: {bool(new_server_data)}, project: {bool(new_project_data)}"
             )
-            return new_user_data, new_server_data, new_project_data
+            return new_server_data, new_project_data
 
         logger.info("🔧 CONSOLIDATED CALLBACK: No tasks executed, returning cached data")
-        return cached_user, cached_server, cached_project
+        return cached_server, cached_project
 
-    logger.info("✅ CONSOLIDATED API: Callback registered successfully!")
+    logger.info("✅ CONSOLIDATED API: Server/Project callback registered successfully!")
 
-
-def get_cached_user_data(user_cache: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """
-    Helper function to extract user data from cache.
-
-    Args:
-        user_cache: The cached user data from user-cache-store
-
-    Returns:
-        User data dict or None if not available/expired
-    """
-    if not user_cache or not user_cache.get("user"):
-        return None
-
-    # Check if cache is still valid (5 minute timeout)
-    current_time = time.time()
-    if (current_time - user_cache.get("timestamp", 0)) > 300:
-        return None
-
-    return user_cache["user"]
-
-
-def get_cached_server_status(server_cache: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """
-    Helper function to extract server status from cache.
-
-    Args:
-        server_cache: The cached server data from server-status-cache
-
-    Returns:
-        Server status dict or None if not available/expired
-    """
-    logger.info(f"🔧 get_cached_server_status: server_cache = {server_cache}")
-
-    if not server_cache:
-        logger.info("🔧 get_cached_server_status: No server_cache provided")
-        return None
-
-    # Check if cache is still valid (2 minute timeout)
-    current_time = time.time()
-    cache_timestamp = server_cache.get("timestamp", 0)
-    cache_age = current_time - cache_timestamp
-    logger.info(
-        f"🔧 get_cached_server_status: cache_age = {cache_age}s, timestamp = {cache_timestamp}"
+    # Dashboard initialization data callback (Cache 1: Dashboard metadata)
+    @app.callback(
+        Output("dashboard-init-data", "data"),
+        [
+            Input("url", "pathname"),
+        ],
+        [
+            State("local-store", "data"),
+            State("dashboard-init-data", "data"),
+        ],
+        prevent_initial_call=False,
     )
+    async def populate_dashboard_init_data(pathname, local_store, cached_dashboard_data):
+        """
+        Populate dashboard-init-data store with dashboard metadata + component configs + permissions.
 
-    if cache_age > 120:
-        logger.info(f"🔧 get_cached_server_status: Cache expired (age: {cache_age}s > 120s)")
-        return None
+        Cache 1: Dashboard Metadata
+        - Source: /dashboards/init/{dashboard_id} endpoint
+        - Contains: Dashboard + stored_metadata (all components) + permissions
+        - Session storage: Persists across page refreshes
+        """
+        # Only process dashboard URLs
+        if not pathname or "/dashboard/" not in pathname:
+            return no_update
 
-    result = {
-        "status": server_cache.get("status", "offline"),
-        "version": server_cache.get("version", "unknown"),
-    }
-    logger.info(f"🔧 get_cached_server_status: returning {result}")
-    return result
+        # Extract dashboard_id from pathname
+        try:
+            dashboard_id = pathname.split("/")[-1]
+            if not dashboard_id or dashboard_id == "dashboard":
+                return no_update
+        except (IndexError, ValueError):
+            logger.warning(f"Failed to extract dashboard_id from pathname: {pathname}")
+            return no_update
+
+        # Check authentication
+        if not local_store or not local_store.get("access_token"):
+            logger.info("🔧 DASHBOARD-INIT: No token found, skipping")
+            return no_update
+
+        access_token = local_store["access_token"]
+        current_time = time.time()
+
+        # Check if cache is still valid (reuse same dashboard data, 10 min cache)
+        if cached_dashboard_data:
+            cached_dashboard_id = cached_dashboard_data.get("dashboard", {}).get("_id")
+            cache_timestamp = cached_dashboard_data.get("timestamp", 0)
+            cache_age = current_time - cache_timestamp
+
+            # If same dashboard and cache < 10 minutes, use cache
+            if str(cached_dashboard_id) == str(dashboard_id) and cache_age < 600:
+                logger.info(
+                    f"🔧 DASHBOARD-INIT: Using cached data for {dashboard_id} (age: {cache_age:.1f}s)"
+                )
+                return no_update
+
+        logger.info(f"📡 DASHBOARD-INIT: Fetching dashboard metadata for {dashboard_id}")
+
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                response = await client.get(
+                    f"{API_BASE_URL}/depictio/api/v1/dashboards/init/{dashboard_id}",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                )
+
+                if response.status_code == 200:
+                    init_data = response.json()
+
+                    # Add cache metadata
+                    cached_data = {
+                        **init_data,
+                        "timestamp": current_time,
+                    }
+
+                    component_count = len(init_data.get("dashboard", {}).get("stored_metadata", []))
+                    logger.info(
+                        f"✅ DASHBOARD-INIT: Cached dashboard metadata with {component_count} components"
+                    )
+
+                    return cached_data
+                else:
+                    logger.warning(
+                        f"❌ DASHBOARD-INIT: Failed to fetch dashboard metadata: {response.status_code}"
+                    )
+                    return no_update
+
+        except Exception as e:
+            logger.error(f"❌ DASHBOARD-INIT: Exception while fetching dashboard metadata: {e}")
+            return no_update
+
+    logger.info("✅ CONSOLIDATED API: Dashboard-init-data callback registered successfully!")
+
+    # Project metadata callback (Cache 2: Project + delta_locations)
+    @app.callback(
+        Output("project-metadata-store", "data", allow_duplicate=True),
+        [
+            Input("dashboard-init-data", "data"),
+        ],
+        [
+            State("local-store", "data"),
+            State("project-metadata-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    async def populate_project_metadata_from_dashboard(
+        dashboard_init_data, local_store, cached_project
+    ):
+        """
+        Populate project-metadata-store with full project + delta_locations (via MongoDB $lookup join).
+
+        Cache 2: Project Metadata + S3 Locations
+        - Source: /projects/get/from_id endpoint (MongoDB aggregation with delta_locations join)
+        - Contains: Full project + workflows + data_collections with delta_location field
+        - Session storage: 10-minute cache, shared across dashboards in same project
+        - Triggered by dashboard-init-data changes (gets project_id from dashboard metadata)
+        """
+        if not dashboard_init_data:
+            return no_update
+
+        # Extract project_id from dashboard init data
+        project_id = dashboard_init_data.get("project_id")
+        if not project_id:
+            logger.warning("❌ PROJECT-METADATA: No project_id in dashboard-init-data")
+            return no_update
+
+        # Check authentication
+        if not local_store or not local_store.get("access_token"):
+            logger.info("🔧 PROJECT-METADATA: No token found, skipping")
+            return no_update
+
+        access_token = local_store["access_token"]
+        current_time = time.time()
+
+        # Check if cache is still valid (same project, 10 min cache)
+        if cached_project:
+            cached_project_id = cached_project.get("project", {}).get("_id")
+            cache_timestamp = cached_project.get("timestamp", 0)
+            cache_age = current_time - cache_timestamp
+
+            # If same project and cache < 10 minutes, use cache
+            if str(cached_project_id) == str(project_id) and cache_age < 600:
+                logger.info(
+                    f"🔧 PROJECT-METADATA: Using cached data for project {project_id} (age: {cache_age:.1f}s)"
+                )
+                return no_update
+
+        logger.info(
+            f"📡 PROJECT-METADATA: Fetching project metadata with delta_locations for {project_id}"
+        )
+
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                response = await client.get(
+                    f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id",
+                    params={"project_id": project_id},
+                    headers={"Authorization": f"Bearer {access_token}"},
+                )
+
+                if response.status_code == 200:
+                    project_data = response.json()
+
+                    # Cache with metadata
+                    cached_data = {
+                        "project": project_data,
+                        "cache_key": f"project_{project_id}",
+                        "timestamp": current_time,
+                    }
+
+                    # Count delta_locations for logging
+                    delta_count = 0
+                    for wf in project_data.get("workflows", []):
+                        for dc in wf.get("data_collections", []):
+                            if dc.get("delta_location"):
+                                delta_count += 1
+
+                    logger.info(
+                        f"✅ PROJECT-METADATA: Cached project with {delta_count} delta_locations (MongoDB $lookup join)"
+                    )
+
+                    return cached_data
+                else:
+                    logger.warning(
+                        f"❌ PROJECT-METADATA: Failed to fetch project: {response.status_code}"
+                    )
+                    return no_update
+
+        except Exception as e:
+            logger.error(f"❌ PROJECT-METADATA: Exception while fetching project: {e}")
+            return no_update
+
+    logger.info("✅ CONSOLIDATED API: Project-metadata-store callback registered successfully!")

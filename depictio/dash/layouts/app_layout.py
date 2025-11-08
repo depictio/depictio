@@ -777,15 +777,6 @@ def create_app_layout():
             # REMOVED: Debounced save infrastructure (position-pending-save-store,
             # position-last-change-timestamp, position-save-interval) - no longer needed
             # since position control buttons have been replaced with drag & drop
-            # PERFORMANCE OPTIMIZATION: Changed from "local" to "session" storage
-            # This was causing 885ms initialization delay due to reading 92KB from localStorage
-            # Session storage clears on browser close, preventing accumulated stale data
-            # Data can be reconstructed from dashboard metadata on each page load anyway
-            dcc.Store(
-                id="local-store-components-metadata",
-                data={},
-                storage_type="session",  # Changed from "local" - clears on browser close
-            ),
             # DEPRECATED: Used by old stepper-based edit flow (now obsolete with direct edit page)
             # Kept for backward compatibility - no longer actively populated or used
             dcc.Store(id="current-edit-parent-index", storage_type="memory"),

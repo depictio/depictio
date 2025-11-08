@@ -62,8 +62,6 @@ def create_viewer_layout():
         create_analytics_tracker(),
         # Dashboard initialization data (for API caching)
         dcc.Store(id="dashboard-init-data", storage_type="session", data=None),
-        # Component metadata store
-        dcc.Store(id="local-store-components-metadata", storage_type="session", data={}),
         # Hidden output divs for clientside callbacks
         html.Div(id="dummy-plotly-output", style={"display": "none"}),
         html.Div(id="test-output", style={"display": "none"}),
