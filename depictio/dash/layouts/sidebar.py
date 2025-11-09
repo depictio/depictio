@@ -145,6 +145,11 @@ def create_static_navbar_content():
 
 
 def register_sidebar_callbacks(app):
+    # Import and register tab callbacks
+    from depictio.dash.layouts import tab_callbacks  # noqa: F401 - Import for callback registration
+
+    logger.info("✅ SIDEBAR: Tab callbacks registered")
+
     # Inject JavaScript to handle the resize when sidebar state changes
     # app.clientside_callback(
     #     """
@@ -669,51 +674,24 @@ def register_sidebar_callbacks(app):
 
 def create_dashboard_viewer_sidebar():
     """
-    Create minimal sidebar for dashboard viewer with workflow tabs and footer.
+    Create sidebar for dashboard viewer with tabs and footer.
 
-    This sidebar is specific to dashboard viewing and contains only the
-    QC/Analysis/Downstream tabs with server status and profile at the bottom.
+    Tabs are populated dynamically via callback based on current dashboard and user permissions.
 
     Returns:
-        list: Sidebar children with tabs and footer
+        list: Sidebar children with empty tabs container and footer
     """
+    logger.info("🏗️ Creating dashboard viewer sidebar with tab container")
+
+    # Create empty tabs component - will be populated by callback
     sidebar_tabs = dmc.Tabs(
         id="sidebar-tabs",
         orientation="vertical",
         placement="left",
-        value="qc",
-        children=[
-            dmc.TabsList(
-                [
-                    dmc.TabsTab(
-                        "QC",
-                        value="qc",
-                        leftSection=DashIconify(icon="mdi:chart-line", height=20),
-                        style={"height": "60px"},  # Increased tab height
-                    ),
-                    dmc.TabsTab(
-                        "Analysis",
-                        value="analysis",
-                        leftSection=DashIconify(icon="mdi:flask", height=20),
-                        style={"height": "60px"},  # Increased tab height
-                    ),
-                    dmc.TabsTab(
-                        "Downstream",
-                        value="downstream",
-                        leftSection=DashIconify(icon="mdi:arrow-down-bold", height=20),
-                        style={"height": "60px"},  # Increased tab height
-                    ),
-                ],
-                style={"width": "100%"},  # Full width tabs list
-            ),
-            # No TabsPanel - just show tabs without content panels
-        ],
-        style={
-            "flex": "1",
-            "overflowY": "auto",
-            "width": "100%",  # Full width tabs container
-        },
+        value=None,
+        children=[dmc.TabsList([], id="sidebar-tabs-list")],
     )
+    logger.info("✅ Created sidebar-tabs with sidebar-tabs-list")
 
     # Footer with server status and profile (same as management app)
     sidebar_footer = html.Div(

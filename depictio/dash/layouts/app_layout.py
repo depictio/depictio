@@ -34,6 +34,8 @@ from depictio.dash.layouts.projectwise_user_management import (
     layout as projectwise_user_management_layout,
 )
 from depictio.dash.layouts.sidebar import create_static_navbar_content
+from depictio.dash.layouts.tab_callbacks import *  # noqa: F401,F403 - Imports callbacks for registration
+from depictio.dash.layouts.tab_modal import create_tab_modal
 from depictio.dash.layouts.tokens_management import layout as tokens_management_layout
 from depictio.dash.layouts.users_management import layout as users_management_layout
 
@@ -812,6 +814,8 @@ def create_app_layout():
             ),
             dmc.NotificationContainer(id="notification-container"),
             html.Div(id="admin-password-warning-trigger", style={"display": "none"}),
+            # Tab creation modal
+            create_tab_modal(),
             dmc.AppShell(
                 id="app-shell",  # Add ID for callback targeting
                 layout="alt",  # Default to alt layout for non-dashboard pages (navbar extends to top)

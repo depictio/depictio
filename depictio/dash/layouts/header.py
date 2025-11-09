@@ -436,34 +436,34 @@ def register_callbacks_header(app):
     #     """Sync the live interactivity store when toggle changes."""
     #     return toggle_checked
 
-    @app.callback(
-        [
-            Output("reset-all-filters-button", "color"),
-            Output("reset-all-filters-button", "variant"),
-            Output("reset-all-filters-button", "leftSection"),
-        ],
-        Input("interactive-values-store", "data"),
-        prevent_initial_call=False,
-    )
-    def update_reset_button_style(interactive_values):
-        """Update reset button style and icon color based on filter activity."""
-        # Use INFO level logging so it's visible by default
-        # logger.debug(f"🔍 Reset button style check - interactive_values: {interactive_values}")
+    # @app.callback(
+    #     [
+    #         Output("reset-all-filters-button", "color"),
+    #         Output("reset-all-filters-button", "variant"),
+    #         Output("reset-all-filters-button", "leftSection"),
+    #     ],
+    #     Input("interactive-values-store", "data"),
+    #     prevent_initial_call=False,
+    # )
+    # def update_reset_button_style(interactive_values):
+    #     """Update reset button style and icon color based on filter activity."""
+    #     # Use INFO level logging so it's visible by default
+    #     # logger.debug(f"🔍 Reset button style check - interactive_values: {interactive_values}")
 
-        has_active_filters = _check_filter_activity(interactive_values)
+    #     has_active_filters = _check_filter_activity(interactive_values)
 
-        logger.info(f"🎯 Filter activity detected: {has_active_filters}")
+    #     logger.info(f"🎯 Filter activity detected: {has_active_filters}")
 
-        if has_active_filters:
-            # Orange filled variant with white icon when filters are active
-            logger.info("🟠 Setting reset button to orange with white icon (filters active)")
-            icon = DashIconify(icon="bx:reset", width=16, color="white")
-            return colors["orange"], "filled", icon
-        else:
-            # Gray subtle variant with gray icon when no filters
-            logger.info("⚪ Setting reset button to gray with gray icon (no filters)")
-            icon = DashIconify(icon="bx:reset", width=16, color="gray")
-            return "gray", "subtle", icon
+    #     if has_active_filters:
+    #         # Orange filled variant with white icon when filters are active
+    #         logger.info("🟠 Setting reset button to orange with white icon (filters active)")
+    #         icon = DashIconify(icon="bx:reset", width=16, color="white")
+    #         return colors["orange"], "filled", icon
+    #     else:
+    #         # Gray subtle variant with gray icon when no filters
+    #         logger.info("⚪ Setting reset button to gray with gray icon (no filters)")
+    #         icon = DashIconify(icon="bx:reset", width=16, color="gray")
+    #         return "gray", "light", icon
 
     # @app.callback(
     #     Output("stored_metadata", "data"),

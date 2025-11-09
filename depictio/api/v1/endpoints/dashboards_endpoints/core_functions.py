@@ -26,8 +26,13 @@ def load_dashboards_from_db(owner, admin_mode=False, user=None):
         projection["stored_metadata"] = 1
 
     if admin_mode:
-        # List all dashboards for all users
-        dashboards = list(dashboards_collection.find({}, projection))
+        # List all dashboards for all users (only main tabs)
+        dashboards = list(
+            dashboards_collection.find(
+                {"is_main_tab": {"$ne": False}},  # Show only main tabs (backward compatible)
+                projection,
+            )
+        )
         # Sort dashboards by title
         dashboards = sorted(dashboards, key=lambda x: x["title"])
     else:
@@ -61,10 +66,13 @@ def load_dashboards_from_db(owner, admin_mode=False, user=None):
 
         accessible_project_ids = [project["_id"] for project in accessible_projects]
 
-        # Get all dashboards belonging to accessible projects
+        # Get all dashboards belonging to accessible projects (only main tabs)
         dashboards = list(
             dashboards_collection.find(
-                {"project_id": {"$in": accessible_project_ids}},
+                {
+                    "project_id": {"$in": accessible_project_ids},
+                    "is_main_tab": {"$ne": False},  # Show only main tabs (backward compatible)
+                },
                 projection,
             )
         )
