@@ -418,7 +418,7 @@ def calculate_right_panel_positions(components):
                 "x": int(x),
                 "y": int(y),
                 "w": 2,  # Fixed card width (25% of 8 columns = 4 cards per row)
-                "h": 3,  # Fixed card height (500px with rowHeight=100)
+                "h": 5,  # Fixed card height (500px with rowHeight=100)
                 "static": False,
             }
         )

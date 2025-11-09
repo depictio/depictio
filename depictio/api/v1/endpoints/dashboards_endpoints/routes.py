@@ -747,20 +747,40 @@ async def delete_dashboard(
 ):
     """
     Delete a dashboard with the given dashboard ID.
+    If the dashboard is a main tab, also delete all child tabs.
     """
 
     user_id = current_user.id
 
-    result = dashboards_collection.delete_one(
+    # First, check if the dashboard exists and user has permission
+    dashboard = dashboards_collection.find_one(
         {"dashboard_id": dashboard_id, "permissions.owners._id": user_id}
     )
 
-    if result.deleted_count > 0:
-        return {"message": f"Dashboard with ID '{str(dashboard_id)}' deleted successfully."}
-    else:
+    if not dashboard:
         raise HTTPException(
-            status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
+            status_code=404,
+            detail=f"Dashboard with ID '{dashboard_id}' not found or access denied.",
         )
+
+    # Check if this is a main tab - if so, delete all child tabs first
+    child_tabs_deleted = 0
+    if dashboard.get("is_main_tab", True):
+        # Delete all child tabs
+        child_result = dashboards_collection.delete_many({"parent_dashboard_id": dashboard_id})
+        child_tabs_deleted = child_result.deleted_count
+        logger.info(f"Deleted {child_tabs_deleted} child tabs for dashboard {dashboard_id}")
+
+    # Delete the dashboard itself
+    result = dashboards_collection.delete_one({"dashboard_id": dashboard_id})
+
+    if result.deleted_count > 0:
+        message = f"Dashboard with ID '{str(dashboard_id)}' deleted successfully."
+        if child_tabs_deleted > 0:
+            message += f" Also deleted {child_tabs_deleted} child tabs."
+        return {"message": message, "child_tabs_deleted": child_tabs_deleted}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to delete dashboard.")
 
 
 @dashboards_endpoint_router.get("/get_component_data/{dashboard_id}/{component_id}")

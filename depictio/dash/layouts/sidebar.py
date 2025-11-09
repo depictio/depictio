@@ -7,6 +7,48 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.simple_theme import create_theme_controls
 
 
+def create_sidebar_footer():
+    """
+    Create standardized sidebar footer with theme controls and server status.
+
+    This footer is used in both the management app sidebar and dashboard viewer sidebar.
+    It includes:
+    - Theme toggle controls (light/dark mode)
+    - Server status indicator
+    - Horizontal divider
+    - User avatar container
+
+    Returns:
+        html.Div: Sidebar footer component with consistent styling
+    """
+    return html.Div(
+        id="sidebar-footer",
+        children=[
+            dmc.Center(create_theme_controls()),
+            dmc.Grid(
+                id="sidebar-footer-server-status",
+                align="center",
+                justify="center",
+            ),
+            html.Hr(),
+            html.Div(
+                id="avatar-container",
+                style={
+                    "textAlign": "center",
+                    "justifyContent": "center",
+                    "display": "flex",
+                    "alignItems": "center",
+                    "flexDirection": "row",
+                    "paddingBottom": "16px",
+                },
+            ),
+        ],
+        style={
+            "flexShrink": 0,
+        },
+    )
+
+
 def create_static_navbar_content():
     """
     PERFORMANCE OPTIMIZATION: Generate static navbar HTML once at app startup.
@@ -96,32 +138,8 @@ def create_static_navbar_content():
         },
     )
 
-    sidebar_footer = html.Div(
-        id="sidebar-footer",
-        children=[
-            dmc.Center(create_theme_controls()),
-            dmc.Grid(
-                id="sidebar-footer-server-status",
-                align="center",
-                justify="center",
-            ),
-            html.Hr(),
-            html.Div(
-                id="avatar-container",
-                style={
-                    "textAlign": "center",
-                    "justifyContent": "center",
-                    "display": "flex",
-                    "alignItems": "center",
-                    "flexDirection": "row",
-                    "paddingBottom": "16px",
-                },
-            ),
-        ],
-        style={
-            "flexShrink": 0,
-        },
-    )
+    # Create standardized sidebar footer
+    sidebar_footer = create_sidebar_footer()
 
     # Return layout - same for all pages
     return [
@@ -146,8 +164,9 @@ def create_static_navbar_content():
 
 def register_sidebar_callbacks(app):
     # Import and register tab callbacks
-    from depictio.dash.layouts import tab_callbacks  # noqa: F401 - Import for callback registration
+    from depictio.dash.layouts.tab_callbacks import register_tab_callbacks
 
+    register_tab_callbacks(app)
     logger.info("✅ SIDEBAR: Tab callbacks registered")
 
     # Inject JavaScript to handle the resize when sidebar state changes
@@ -513,143 +532,9 @@ def register_sidebar_callbacks(app):
         prevent_initial_call=False,
     )
 
-    # PERFORMANCE OPTIMIZATION: Navbar callback disabled - replaced with static content at app startup
-    # This callback was causing ~2419ms delay on every page load by rebuilding the same HTML structure
-    # The navbar content is now generated once by create_static_navbar_content() in app_layout.py
-    # Commenting out instead of removing to preserve the code structure for reference
-    # @app.callback(
-    #     Output("app-shell-navbar-content", "children"),
-    #     Input("url", "pathname"),
-    #     prevent_initial_call=False,
-    # )
-    # def render_dynamic_navbar_content(pathname):
-    #     """Render navbar content with logo, navlinks, and footer with avatar."""
-    #     depictio_logo_container = html.Div(
-    #         id="navbar-logo-container",
-    #         children=[
-    #             dcc.Link(
-    #                 dmc.Image(
-    #                     id="navbar-logo-content",
-    #                     src=dash.get_asset_url("images/logos/logo_black.svg"),
-    #                     # h=38,
-    #                     w=185,
-    #                 ),
-    #                 href="/",
-    #                 style={"alignItems": "center", "justifyContent": "center", "display": "flex"},
-    #             )
-    #         ],
-    #     )
-    #
-    #     sidebar_links = dmc.Stack(
-    #         id="sidebar-content",
-    #         children=[
-    #             dmc.NavLink(
-    #                 id={"type": "sidebar-link", "index": "dashboards"},
-    #                 label=dmc.Text(
-    #                     "Dashboards",
-    #                     size="lg",
-    #                     style={"fontSize": "16px"},
-    #                     className="section-accent",
-    #                 ),
-    #                 leftSection=DashIconify(icon="material-symbols:dashboard", height=25),
-    #                 href="/dashboards",
-    #                 style={"padding": "20px"},
-    #                 color="orange",
-    #             ),
-    #             dmc.NavLink(
-    #                 id={"type": "sidebar-link", "index": "projects"},
-    #                 label=dmc.Text(
-    #                     "Projects",
-    #                     size="lg",
-    #                     style={"fontSize": "16px"},
-    #                     className="section-accent",
-    #                 ),
-    #                 leftSection=DashIconify(icon="mdi:jira", height=25),
-    #                 href="/projects",
-    #                 style={"padding": "20px"},
-    #                 color="teal",
-    #             ),
-    #             dmc.NavLink(
-    #                 id={"type": "sidebar-link", "index": "administration"},
-    #                 label=dmc.Text(
-    #                     "Administration",
-    #                     size="lg",
-    #                     style={"fontSize": "16px"},
-    #                     className="section-accent",
-    #                 ),
-    #                 leftSection=DashIconify(icon="material-symbols:settings", height=25),
-    #                 href="/admin",
-    #                 style={"padding": "20px", "display": "none"},
-    #                 color="blue",
-    #             ),
-    #             dmc.NavLink(
-    #                 id={"type": "sidebar-link", "index": "about"},
-    #                 label=dmc.Text(
-    #                     "About",
-    #                     size="lg",
-    #                     style={"fontSize": "16px"},
-    #                     className="section-accent",
-    #                 ),
-    #                 leftSection=DashIconify(icon="mingcute:question-line", height=25),
-    #                 href="/about",
-    #                 style={"padding": "20px"},
-    #                 color="gray",
-    #             ),
-    #         ],
-    #         gap="xs",
-    #         style={
-    #             "whiteSpace": "nowrap",
-    #             "flex": "1",
-    #             "overflowY": "auto",
-    #         },
-    #     )
-    #
-    #     sidebar_footer = html.Div(
-    #         id="sidebar-footer",
-    #         children=[
-    #             dmc.Center(create_theme_controls()),
-    #             dmc.Grid(
-    #                 id="sidebar-footer-server-status",
-    #                 align="center",
-    #                 justify="center",
-    #             ),
-    #             html.Hr(),
-    #             html.Div(
-    #                 id="avatar-container",
-    #                 style={
-    #                     "textAlign": "center",
-    #                     "justifyContent": "center",
-    #                     "display": "flex",
-    #                     "alignItems": "center",
-    #                     "flexDirection": "row",
-    #                     "paddingBottom": "16px",  # Add padding to bottom of avatar
-    #                 },
-    #             ),
-    #         ],
-    #         style={
-    #             "flexShrink": 0,
-    #         },
-    #     )
-    #
-    #     # Return layout - same for all pages
-    #     return [
-    #         dmc.Stack(
-    #             [
-    #                 dmc.Center(
-    #                     [depictio_logo_container],
-    #                     id="navbar-logo-center",
-    #                     pt="md",  # Add padding to top of logo
-    #                 ),
-    #                 sidebar_links,
-    #                 sidebar_footer,
-    #             ],
-    #             justify="space-between",
-    #             h="100%",
-    #             style={
-    #                 "height": "100%",
-    #             },
-    #         )
-    #     ]
+    # NOTE: Dynamic navbar callback removed (Phase 1B performance optimization)
+    # Navbar content is now generated statically at app startup via create_static_navbar_content()
+    # This eliminated ~2419ms delay on every page load. See git history for original implementation.
 
     # Minimal callback to reference sidebar tabs (dashboard viewer only)
     # NOTE: Only register this if sidebar-tabs component exists (viewer app)
@@ -689,37 +574,19 @@ def create_dashboard_viewer_sidebar():
         orientation="vertical",
         placement="left",
         value=None,
-        children=[dmc.TabsList([], id="sidebar-tabs-list")],
+        w="100%",  # Full width
+        children=[
+            dmc.TabsList(
+                [],
+                id="sidebar-tabs-list",
+                style={"width": "100%"},  # Full width tabs list
+            )
+        ],
     )
     logger.info("✅ Created sidebar-tabs with sidebar-tabs-list")
 
-    # Footer with server status and profile (same as management app)
-    sidebar_footer = html.Div(
-        id="sidebar-footer",
-        children=[
-            dmc.Center(create_theme_controls()),
-            dmc.Grid(
-                id="sidebar-footer-server-status",
-                align="center",
-                justify="center",
-            ),
-            html.Hr(),
-            html.Div(
-                id="avatar-container",
-                style={
-                    "textAlign": "center",
-                    "justifyContent": "center",
-                    "display": "flex",
-                    "alignItems": "center",
-                    "flexDirection": "row",
-                    "paddingBottom": "16px",
-                },
-            ),
-        ],
-        style={
-            "flexShrink": 0,
-        },
-    )
+    # Create standardized sidebar footer
+    sidebar_footer = create_sidebar_footer()
 
     # Return tabs with footer at bottom
     return [
@@ -736,22 +603,3 @@ def create_dashboard_viewer_sidebar():
             },
         )
     ]
-
-
-def _create_powered_by_footer():
-    """Create footer with theme controls and server status for dashboard pages."""
-    return dmc.Stack(
-        id="powered-by-footer",
-        children=[
-            dmc.Center(create_theme_controls()),
-            dmc.Grid(
-                id="sidebar-footer-server-status",
-                align="center",
-                justify="center",
-            ),
-        ],
-        gap="sm",
-        style={
-            "flexShrink": 0,
-        },
-    )

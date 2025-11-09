@@ -9,11 +9,6 @@ from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 
 
-def DashboardIcon(icon: str, color: str = "blue", width: int = 20):
-    """Create a dashboard icon using DashIconify."""
-    return DashIconify(icon=icon, color=color, width=width)
-
-
 def register_tab_callbacks(app):
     """Register all tab-related callbacks with the app instance."""
 
