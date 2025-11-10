@@ -324,6 +324,9 @@ def _create_backend_components():
             html.Div(
                 id="stepper-output", style={"display": "none"}
             ),  # Keep html.Div for hidden output
+            html.Div(
+                id="edit-mode-navigation-dummy", style={"display": "none"}
+            ),  # Dummy output for edit mode navigation callback
         ]
     )
 
@@ -519,8 +522,8 @@ def register_callbacks_header(app):
         """
         function(burger_opened, pathname) {
             console.log('🍔 CLIENTSIDE BURGER CLICK: opened=' + burger_opened + ', pathname=' + pathname);
-            // Only update on dashboard pages
-            if (!pathname || !pathname.startsWith('/dashboard/')) {
+            // Only update on dashboard pages (viewer or editor app)
+            if (!pathname || !(pathname.startsWith('/dashboard/') || pathname.startsWith('/dashboard-edit/'))) {
                 console.log('🚫 Ignoring burger click on non-dashboard page');
                 return window.dash_clientside.no_update;
             }
@@ -576,31 +579,31 @@ def register_callbacks_header(app):
 
             if (trigger_id === 'enter-edit-mode-button') {
                 console.log('   ✅ ENTER EDIT MODE button clicked');
-                // Enter edit mode: /dashboard/{id} -> /dashboard/{id}/edit
+                // Enter edit mode: /dashboard/{id} -> /dashboard-edit/{id}
                 if (current_pathname && current_pathname.startsWith('/dashboard/')) {
-                    if (!current_pathname.endsWith('/edit')) {
-                        const target_url = current_pathname + '/edit';
-                        console.log('   🎨 Navigating to edit mode (hard reload): ' + target_url);
-                        console.log('   🚀 Calling window.location.href = ' + target_url);
-                        window.location.href = target_url;
-                        return;
-                    } else {
-                        console.log('   ⚠️ Already in edit mode, no action needed');
-                    }
+                    // Extract dashboard ID and navigate to editor app
+                    const dashboardId = current_pathname.split('/')[2];
+                    const target_url = '/dashboard-edit/' + dashboardId;
+                    console.log('   🎨 Navigating to editor app (hard reload): ' + target_url);
+                    console.log('   🚀 Calling window.location.href = ' + target_url);
+                    window.location.href = target_url;
+                    return;
                 } else {
                     console.log('   ❌ Invalid pathname for edit mode:', current_pathname);
                 }
             } else if (trigger_id === 'exit-edit-mode-button') {
                 console.log('   ✅ EXIT EDIT MODE button clicked');
-                // Exit edit mode: /dashboard/{id}/edit -> /dashboard/{id}
-                if (current_pathname && current_pathname.endsWith('/edit')) {
-                    const new_pathname = current_pathname.replace('/edit', '');
-                    console.log('   👁️ Navigating to view mode (hard reload): ' + new_pathname);
-                    console.log('   🚀 Calling window.location.href = ' + new_pathname);
-                    window.location.href = new_pathname;
+                // Exit edit mode: /dashboard-edit/{id} -> /dashboard/{id}
+                if (current_pathname && current_pathname.startsWith('/dashboard-edit/')) {
+                    // Extract dashboard ID and navigate to viewer app
+                    const dashboardId = current_pathname.split('/')[2];
+                    const target_url = '/dashboard/' + dashboardId;
+                    console.log('   👁️ Navigating to viewer app (hard reload): ' + target_url);
+                    console.log('   🚀 Calling window.location.href = ' + target_url);
+                    window.location.href = target_url;
                     return;
                 } else {
-                    console.log('   ⚠️ Not in edit mode, no action needed');
+                    console.log('   ⚠️ Not in editor app, no action needed');
                 }
             } else {
                 console.log('   ❌ Unknown trigger:', trigger_id);
@@ -716,6 +719,7 @@ def design_header(data, local_store, edit_mode: bool = False):
         variant="filled",
         disabled=disabled,  # Disable for non-owners
         style={"display": "none" if edit_mode else "block"},  # Only show in view mode
+        n_clicks=0,  # Required for clientside callback
     )
 
     # Create "Exit" button for edit mode (navigates back to view URL)
@@ -727,6 +731,20 @@ def design_header(data, local_store, edit_mode: bool = False):
         color="gray",
         variant="filled",
         style={"display": "block" if edit_mode else "none"},  # Only show in edit mode
+        n_clicks=0,  # Required for clientside callback
+    )
+
+    # Create "Add Component" button for edit mode
+    add_component_button = dmc.Button(
+        "Add Component",
+        id="add-button",  # Must match callback in add_component_simple.py
+        leftSection=DashIconify(icon="mdi:plus-circle", width=16, color="white"),
+        size="sm",
+        color="green",
+        variant="filled",
+        disabled=disabled,  # Disable for non-owners
+        style={"display": "block" if edit_mode else "none"},  # Only show in edit mode
+        n_clicks=0,  # Required for callback to trigger properly
     )
 
     # Create remove all components button for offcanvas
@@ -1023,6 +1041,10 @@ def design_header(data, local_store, edit_mode: bool = False):
                     # EDIT MODE TOGGLE BUTTONS: Both always in layout, visibility controlled by display style
                     exit_edit_button,  # Only visible when edit_mode=True (controlled by style display)
                     edit_dashboard_button,  # Only visible when edit_mode=False (controlled by style display)
+                ]
+                + [
+                    # EDIT MODE ACTIONS: Only visible in edit mode
+                    add_component_button,  # Add new component (only visible in edit mode)
                 ]
                 + [
                     # COMMON CONTROLS: Always shown (settings at the end)

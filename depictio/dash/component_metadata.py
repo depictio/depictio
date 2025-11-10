@@ -35,6 +35,8 @@ from depictio.dash.modules.table_component.utils import build_table
 from depictio.dash.modules.text_component.utils import build_text
 
 # Component metadata dictionary - centralized configuration
+# NOTE: Only Card & Interactive components are currently enabled for editing
+# Other component types (Figure, Table, Text, JBrowse, MultiQC) are disabled
 COMPONENT_METADATA = {
     "figure": {
         "icon": "mdi:graph-box",
@@ -43,7 +45,7 @@ COMPONENT_METADATA = {
         "color": colors["blue"],
         "supports_edit": True,
         "supports_reset": True,  # For scatter plots
-        "enabled": True,  # Enable by default
+        "enabled": False,  # DISABLED: Focus on Card & Interactive only
         "build_function": build_figure,
         "default_dimensions": {"w": 20, "h": 16},  # Adjusted for 48-column grid with rowHeight=20
     },
@@ -54,7 +56,7 @@ COMPONENT_METADATA = {
         "color": colors["violet"],  # Use same color for skeleton loader
         "supports_edit": True,
         "supports_reset": False,
-        "enabled": True,  # Enable by default
+        "enabled": True,  # ENABLED: Card component available
         "build_function": build_card,
         "default_dimensions": {
             "w": 10,
@@ -68,7 +70,7 @@ COMPONENT_METADATA = {
         "color": colors["teal"],  # Use blue for interactive components
         "supports_edit": True,
         "supports_reset": False,
-        "enabled": True,  # Enable by default
+        "enabled": True,  # ENABLED: Interactive component available
         "build_function": build_interactive,
         "default_dimensions": {
             "w": 16,
@@ -82,7 +84,7 @@ COMPONENT_METADATA = {
         "color": colors["yellow"],
         "supports_edit": False,  # Tables don't have edit functionality
         "supports_reset": False,
-        "enabled": True,  # Enable by default
+        "enabled": False,  # DISABLED: Focus on Card & Interactive only
         "build_function": build_table,
         "default_dimensions": {
             "w": 24,
@@ -96,7 +98,7 @@ COMPONENT_METADATA = {
         "color": colors["orange"],
         "supports_edit": False,  # JBrowse doesn't have edit functionality
         "supports_reset": False,
-        "enabled": False,  # Disable by default
+        "enabled": False,  # DISABLED: Focus on Card & Interactive only
         "build_function": build_jbrowse,
         "default_dimensions": {
             "w": 24,
@@ -110,7 +112,7 @@ COMPONENT_METADATA = {
         "color": colors["pink"],
         "supports_edit": True,  # Text supports editing
         "supports_reset": True,  # Can clear/reset text content
-        "enabled": True,  # Enable by default
+        "enabled": False,  # DISABLED: Focus on Card & Interactive only
         "build_function": build_text,
         "default_dimensions": {
             "w": 10,
@@ -123,8 +125,8 @@ COMPONENT_METADATA = {
         "description": "MultiQC quality control reports and visualizations",
         "color": colors["orange"],
         "supports_edit": False,  # MultiQC is read-only visualization
-        "supports_reset": False,  # No reset functionality
-        "enabled": True,  # Enable by default
+        "supports_reset": False,
+        "enabled": False,  # DISABLED: Focus on Card & Interactive only
         "build_function": build_multiqc,
         "default_dimensions": {
             "w": 24,

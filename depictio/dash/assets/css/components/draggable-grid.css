@@ -401,8 +401,8 @@
     opacity: 1 !important;
 }
 
-/* Show drag handle on component hover */
-.react-grid-item:hover .mantine-ActionIcon-root.react-grid-dragHandle {
+/* Show drag handle on component hover (edit mode only) */
+.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root.react-grid-dragHandle {
     opacity: 1 !important;
 }
 
@@ -440,6 +440,23 @@
     right: 4px !important;
 }
 
+/* Hide all button wrappers by default (both edit-only and view-accessible) */
+.react-grid-item .component-action-buttons-item,
+.react-grid-item .component-view-buttons-item {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* VIEW MODE: Hide edit-only buttons completely (not even on hover) */
+.drag-handles-hidden .component-action-buttons-item {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
 /* Individual action button base styling
    Purpose: Hide specific action buttons by default
    Targets: remove, edit, duplicate, reset buttons, alignment menu button, metadata info button, partial data warning button */
@@ -469,13 +486,31 @@
     z-index: 1001 !important;
 }
 
+/* EDIT MODE: Show all button items on hover (both edit-only and view-accessible) */
+.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .component-action-buttons-item,
+.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .component-view-buttons-item {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
+
+/* VIEW MODE: Show only view-accessible button items on hover */
+.drag-handles-hidden .react-grid-item:hover .component-view-buttons-item {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
+
 /* Show individual action buttons on component hover (only when edit mode is ON) */
+.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="drag-handle"],
 .draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="remove_box_button"],
 .draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="edit_box_button"],
 .draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="duplicate_box_button"],
 .draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="position_menu_btn"],
-.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="reset_selection_graph_button"],
 .draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="alignment_menu_btn"],
+.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="reset_selection_graph_button"],
 .draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="partial-data-warning-button"] {
     opacity: 1 !important;
     pointer-events: auto !important;

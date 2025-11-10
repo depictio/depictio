@@ -45,15 +45,26 @@ def register_tab_callbacks(app):
             f"🔄 populate_sidebar_tabs called - pathname: {pathname}, has_cache: {bool(dashboard_cache)}, has_local: {bool(local_data)}"
         )
 
-        # Check if we're on a dashboard page
-        if not pathname or "/dashboard/" not in pathname:
+        # EARLY EXIT: Don't populate tabs on component add/edit pages
+        # This prevents the callback from running at all when editing/adding components
+        if pathname and ("/component/edit/" in pathname or "/component/add/" in pathname):
+            logger.info("🔒 Component page detected - skipping tab population entirely")
+            raise PreventUpdate
+
+        # Check if we're on a dashboard page (viewer or editor app)
+        if not pathname or ("/dashboard/" not in pathname and "/dashboard-edit/" not in pathname):
             logger.info("⏭️ Not on dashboard page, skipping tab population")
             raise PreventUpdate
 
         # Extract dashboard ID from pathname
         try:
-            dashboard_id = pathname.split("/dashboard/")[1].split("/")[0]
-            is_edit_mode = "/edit" in pathname
+            # Handle both viewer (/dashboard/{id}) and editor (/dashboard-edit/{id}) URLs
+            if "/dashboard-edit/" in pathname:
+                dashboard_id = pathname.split("/dashboard-edit/")[1].split("/")[0]
+                is_edit_mode = True
+            else:
+                dashboard_id = pathname.split("/dashboard/")[1].split("/")[0]
+                is_edit_mode = "/edit" in pathname  # Legacy edit mode check
             logger.info(f"📍 Dashboard ID: {dashboard_id}, Edit mode: {is_edit_mode}")
         except (IndexError, AttributeError) as e:
             logger.warning(f"⚠️ Failed to parse dashboard ID from pathname: {e}")
@@ -131,6 +142,7 @@ def register_tab_callbacks(app):
                 tab_label = "Main" if tab.get("is_main_tab", True) else tab.get("title", "Untitled")
                 icon_name = tab.get("icon", "mdi:view-dashboard")
                 icon_color = tab.get("icon_color", "orange")
+                tab_dashboard_id = str(tab["dashboard_id"])
 
                 # Only use DashIconify - if icon is a file path, use default icon
                 if icon_name and (
@@ -143,7 +155,7 @@ def register_tab_callbacks(app):
                 tab_items.append(
                     dmc.TabsTab(
                         tab_label,
-                        value=str(tab["dashboard_id"]),
+                        value=tab_dashboard_id,
                         leftSection=DashIconify(
                             icon=icon_name,
                             color=icon_color,
@@ -199,7 +211,7 @@ def register_tab_callbacks(app):
         Navigate to selected tab via URL change.
 
         When a tab is clicked, navigate to that dashboard's URL.
-        This triggers a full page reload for clean DOM rendering.
+        Preserves viewer/editor app context.
 
         Args:
             tab_dashboard_id: The dashboard_id of the clicked tab
@@ -211,13 +223,25 @@ def register_tab_callbacks(app):
         if not tab_dashboard_id or tab_dashboard_id == "__add_tab__":
             raise PreventUpdate
 
-        # Check if in edit mode
-        is_edit_mode = "/edit" in current_pathname
+        # CRITICAL FIX: Don't navigate if we're on a component edit/add page
+        # This prevents breaking the component editing workflow
+        if current_pathname and (
+            "/component/edit/" in current_pathname or "/component/add/" in current_pathname
+        ):
+            logger.info(f"🔒 Skipping tab navigation - on component page: {current_pathname}")
+            raise PreventUpdate
 
-        # Build new pathname
-        new_pathname = f"/dashboard/{tab_dashboard_id}"
-        if is_edit_mode:
-            new_pathname += "/edit"
+        # Check if in editor app or legacy edit mode
+        if "/dashboard-edit/" in current_pathname:
+            # Editor app: use /dashboard-edit/ prefix
+            new_pathname = f"/dashboard-edit/{tab_dashboard_id}"
+        else:
+            # Viewer app or legacy mode
+            is_edit_mode = "/edit" in current_pathname
+            new_pathname = f"/dashboard/{tab_dashboard_id}"
+            if is_edit_mode:
+                # Legacy edit mode: append /edit suffix
+                new_pathname += "/edit"
 
         logger.info(f"Navigating to tab: {new_pathname}")
         return new_pathname
@@ -299,8 +323,12 @@ def register_tab_callbacks(app):
         token = local_data["access_token"]
 
         # Extract current dashboard ID from URL
-        current_dashboard_id = pathname.split("/dashboard/")[1].split("/")[0]
-        is_edit_mode = "/edit" in pathname
+        if "/dashboard-edit/" in pathname:
+            current_dashboard_id = pathname.split("/dashboard-edit/")[1].split("/")[0]
+            is_edit_mode = True
+        else:
+            current_dashboard_id = pathname.split("/dashboard/")[1].split("/")[0]
+            is_edit_mode = "/edit" in pathname
 
         # Determine parent dashboard ID
         if dashboard_cache.get("is_main_tab", True):
@@ -358,9 +386,15 @@ def register_tab_callbacks(app):
 
         logger.info(f"Created new tab: {tab_name} (ID: {new_dashboard_id})")
 
-        # Navigate to new tab
-        new_pathname = f"/dashboard/{new_dashboard_id}"
-        if is_edit_mode:
-            new_pathname += "/edit"
+        # Navigate to new tab (preserves viewer/editor app context)
+        if "/dashboard-edit/" in pathname:
+            # Editor app: use /dashboard-edit/ prefix
+            new_pathname = f"/dashboard-edit/{new_dashboard_id}"
+        else:
+            # Viewer app
+            new_pathname = f"/dashboard/{new_dashboard_id}"
+            if is_edit_mode:
+                # Legacy edit mode: append /edit suffix
+                new_pathname += "/edit"
 
         return new_pathname

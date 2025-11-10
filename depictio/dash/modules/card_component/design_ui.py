@@ -299,7 +299,6 @@ def design_card(id, df):
                         icon="mdi:arrow-right-bold",
                         width=40,
                         height=40,
-                        color="#666",
                     ),
                 ),
             ],

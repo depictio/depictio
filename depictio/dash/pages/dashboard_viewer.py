@@ -21,7 +21,7 @@ Key Features:
 from typing import Optional
 
 import dash_mantine_components as dmc
-from dash import Input, Output, State, dcc, html
+from dash import Input, Output, State, ctx, dcc, html, no_update
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.components.analytics_tracker import create_analytics_tracker
@@ -174,6 +174,14 @@ def register_routing_callback(app):
             tuple: (page_content, header_content, pathname, local_data)
         """
         logger.info(f"🔄 VIEWER ROUTING: pathname={pathname}")
+        logger.info(f"   Triggered by: {ctx.triggered_id}")
+
+        # CRITICAL FIX: When triggered by local-store update (not URL change),
+        # don't update the pathname to prevent circular URL changes
+        triggered_by_local_store = ctx.triggered_id == "local-store"
+
+        if triggered_by_local_store:
+            logger.info("   ⚠️ Triggered by local-store - will preserve current URL")
 
         # Extract theme
         theme = extract_theme_from_store(theme_store)
@@ -223,6 +231,14 @@ def register_routing_callback(app):
             dashboard_init_data=dashboard_init_data,
         )
 
+        # If triggered by local-store, preserve current URL
+        if triggered_by_local_store:
+            logger.info(
+                "📤 VIEWER ROUTING RETURNING - pathname: no_update (preserving current URL)"
+            )
+            return content, header_content, no_update, updated_local_data
+
+        logger.info(f"📤 VIEWER ROUTING RETURNING - pathname: {pathname}")
         return content, header_content, pathname, updated_local_data
 
 

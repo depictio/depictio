@@ -294,15 +294,22 @@ def _create_component_buttons(
     if create_partial_data_warning_button is not None:
         button_functions["partial_data"] = create_partial_data_warning_button
 
-    # Create edit-only button components
+    # Create edit-only button components (wrapped with CSS class for conditional visibility)
     edit_only_components = [
-        button_functions[btn]() for btn in edit_only_list if btn in button_functions
+        html.Div(button_functions[btn](), className="component-action-buttons-item")
+        for btn in edit_only_list
+        if btn in button_functions
     ]
 
-    # Create view-accessible button components
+    # Create view-accessible button components (wrapped with CSS class - always visible)
     view_accessible_components = [
-        button_functions[btn]() for btn in view_accessible_list if btn in button_functions
+        html.Div(button_functions[btn](), className="component-view-buttons-item")
+        for btn in view_accessible_list
+        if btn in button_functions
     ]
+
+    # Combine all buttons into a single list (edit buttons first, then view buttons)
+    all_button_components = edit_only_components + view_accessible_components
 
     # Log configuration for debugging
     if component_type:
@@ -310,21 +317,18 @@ def _create_component_buttons(
             f"Creating {config['orientation']} buttons for {component_type}:"
             f"\n  Edit-only: {edit_only_list}"
             f"\n  View-accessible: {view_accessible_list}"
+            f"\n  Total buttons: {len(all_button_components)}"
         )
 
-    # Return both button groups
-    edit_buttons_group = (
-        dmc.ActionIconGroup(edit_only_components, orientation=config["orientation"])
-        if edit_only_components
-        else None
-    )
-    view_buttons_group = (
-        dmc.ActionIconGroup(view_accessible_components, orientation=config["orientation"])
-        if view_accessible_components
+    # Return single ActionIconGroup with all buttons
+    # Each button is wrapped with appropriate CSS class for conditional visibility
+    unified_button_group = (
+        dmc.ActionIconGroup(all_button_components, orientation=config["orientation"])
+        if all_button_components
         else None
     )
 
-    return edit_buttons_group, view_buttons_group
+    return unified_button_group, None  # Return None for second value to maintain API compatibility
 
 
 def edit_component(index, parent_id, active=0, component_data=None, TOKEN=None):
@@ -401,6 +405,7 @@ def enable_box_edit_mode(
             # Use style override instead of color parameter to avoid type errors
             variant="filled",
             size="sm",
+            radius=0,  # Remove border radius
             children=DashIconify(
                 icon="mdi:dots-grid", width=14, color="black"
             ),  # More subtle grid icon
@@ -414,16 +419,19 @@ def enable_box_edit_mode(
             color="red",
             variant="filled",
             size="sm",
+            radius=0,  # Remove border radius
             children=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
         )
 
     def create_edit_button():
         return dmc.ActionIcon(
-            id={"type": "edit-box-button", "index": f"{btn_index}"},
+            id={"type": "edit_box_button", "index": f"{btn_index}"},
             color="blue",
             variant="filled",
             size="sm",
+            radius=0,  # Remove border radius
             children=DashIconify(icon="mdi:pen", width=16, color="white"),
+            n_clicks=0,  # Required for callback to trigger properly
         )
 
     def create_duplicate_button():
@@ -432,6 +440,7 @@ def enable_box_edit_mode(
             color="gray",
             variant="filled",
             size="sm",
+            radius=0,  # Remove border radius
             children=DashIconify(icon="mdi:content-copy", width=16, color="white"),
         )
 
@@ -455,6 +464,7 @@ def enable_box_edit_mode(
             color="orange",
             variant="filled",
             size="sm",
+            radius=0,  # Remove border radius
             children=DashIconify(icon="bx:reset", width=16, color="white"),
         )
 
@@ -470,6 +480,7 @@ def enable_box_edit_mode(
                         color=get_dmc_button_color("text"),
                         variant="filled",
                         size="sm",
+                        radius=0,  # Remove border radius
                     )
                 ),
                 dmc.MenuDropdown(
@@ -807,54 +818,31 @@ def enable_box_edit_mode(
         content_children.append(box_components_list)
 
     # Add buttons positioned absolutely - always present in DOM, CSS controls visibility
-    # Two separate button groups:
-    # 1. Edit-only buttons (hidden in view mode via CSS .component-action-buttons)
-    # 2. View-accessible buttons (always visible - reset, metadata)
+    # Single unified ActionIconGroup with all buttons (edit-only + view-accessible)
+    # CSS classes on individual button wrappers control which buttons are visible:
+    # - .component-action-buttons-item: Edit-only buttons (hidden in view mode)
+    # - .component-view-buttons-item: Always visible buttons (reset, metadata)
 
-    button_containers = []
-
-    # Add edit-only buttons (drag, duplicate, edit, remove) - hidden in view mode
+    # edit_buttons is now a single ActionIconGroup containing all buttons
+    # view_buttons is None (maintained for API compatibility)
     if edit_buttons:
-        button_containers.append(
-            html.Div(
-                edit_buttons,
-                className="component-action-buttons",  # Hidden in view mode by CSS
-                style={
-                    "position": "absolute",
-                    "top": "4px",
-                    "right": "8px",
-                    # z-index managed by CSS: .react-grid-item .mantine-ActionIconGroup-root { z-index: 1001 !important; }
-                    "alignItems": "center",
-                    "height": "auto",
-                    "background": "transparent",
-                    "borderRadius": "6px",
-                    "padding": "4px",
-                },
-            )
+        button_container = html.Div(
+            edit_buttons,
+            style={
+                "position": "absolute",
+                "top": "4px",
+                "right": "8px",
+                "display": "flex",
+                "flexDirection": "row",
+                "gap": "4px",
+                "alignItems": "center",
+                "height": "auto",
+                "background": "transparent",
+                "borderRadius": "6px",
+                "padding": "4px",
+            },
         )
-
-    # Add view-accessible buttons (reset, metadata) - always visible
-    if view_buttons:
-        button_containers.append(
-            html.Div(
-                view_buttons,
-                className="component-view-buttons",  # Always visible (not hidden by CSS)
-                style={
-                    "position": "absolute",
-                    "top": "4px",
-                    "right": "8px",  # Position on right side with edit buttons
-                    # z-index managed by CSS
-                    "alignItems": "center",
-                    "height": "auto",
-                    "background": "transparent",
-                    "borderRadius": "6px",
-                    "padding": "4px",
-                },
-            )
-        )
-
-    # Add both button containers to content
-    content_children.extend(button_containers)
+        content_children.append(button_container)
 
     content_div = html.Div(
         content_children,

@@ -25,7 +25,7 @@ from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
 
 def create_minimal_edit_header(
-    dashboard_id: str, dashboard_title: str | None = None
+    dashboard_id: str, dashboard_title: str | None = None, is_edit_mode: bool = True
 ) -> dmc.AppShellHeader:
     """
     Create minimal header for edit page with back button.
@@ -33,12 +33,16 @@ def create_minimal_edit_header(
     Args:
         dashboard_id: Dashboard ID for navigation back
         dashboard_title: Dashboard title to display
+        is_edit_mode: Whether in edit mode (affects back URL)
 
     Returns:
         DMC AppShell header with back button
     """
     if not dashboard_title:
         dashboard_title = f"Dashboard {dashboard_id[:8]}..."
+
+    # Determine back URL based on edit mode
+    back_url = f"/dashboard-edit/{dashboard_id}" if is_edit_mode else f"/dashboard/{dashboard_id}"
 
     header_content = dmc.Group(
         [
@@ -48,7 +52,7 @@ def create_minimal_edit_header(
                     variant="subtle",
                     leftSection=DashIconify(icon="mdi:arrow-left", width=20),
                 ),
-                href=f"/dashboard/{dashboard_id}",
+                href=back_url,
                 style={"textDecoration": "none"},
             ),
             html.Div(style={"flex": 1}),
@@ -62,10 +66,6 @@ def create_minimal_edit_header(
 
     return dmc.AppShellHeader(
         header_content,
-        style={
-            "backgroundColor": "var(--app-surface-color, #ffffff)",
-            "borderBottom": "1px solid var(--app-border-color, #e9ecef)",
-        },
     )
 
 
@@ -76,6 +76,7 @@ def create_edit_page(
     dashboard_title: str | None = None,
     theme: str = "light",
     TOKEN: str | None = None,
+    is_edit_mode: bool = True,
 ) -> html.Div:
     """
     Create standalone edit page for component modification.
@@ -90,6 +91,7 @@ def create_edit_page(
         dashboard_title: Dashboard title for header
         theme: Current theme ("light" or "dark")
         TOKEN: Authentication token
+        is_edit_mode: Whether in edit mode (affects back button URL)
 
     Returns:
         Complete page layout with design interface
@@ -98,8 +100,8 @@ def create_edit_page(
         f"🎨 CREATE EDIT PAGE - Component: {component_id}, Type: {component_data.get('component_type')}"
     )
 
-    # Create header
-    header = create_minimal_edit_header(dashboard_id, dashboard_title)
+    # Create header with proper back URL based on edit mode
+    header = create_minimal_edit_header(dashboard_id, dashboard_title, is_edit_mode)
 
     # Load data for the component (use actual wf_id/dc_id)
     wf_id = component_data.get("wf_id")
@@ -117,7 +119,8 @@ def create_edit_page(
     component_type = component_data.get("component_type")
 
     if component_type == "card":
-        from depictio.dash.modules.card_component.frontend import design_card
+        # Import directly from design_ui to avoid loading callbacks at import time
+        from depictio.dash.modules.card_component.design_ui import design_card
 
         # CRITICAL: Use actual component_id, NOT tmp suffix
         # design_card() returns a list for backward compatibility with stepper code
@@ -129,9 +132,30 @@ def create_edit_page(
             if isinstance(design_interface_raw, list)
             else design_interface_raw
         )
+    elif component_type == "interactive":
+        # Import directly from design_ui to avoid loading callbacks at import time
+        from depictio.dash.modules.interactive_component.design_ui import design_interactive
+
+        # CRITICAL: Use actual component_id, NOT tmp suffix
+        # design_interactive() returns a list for backward compatibility with stepper code
+        design_interface_raw = design_interactive(
+            id={"type": "interactive-component", "index": component_id}, df=df
+        )
+        design_interface = (
+            design_interface_raw[0]
+            if isinstance(design_interface_raw, list)
+            else design_interface_raw
+        )
     else:
-        # Future: add elif for figure, interactive, etc.
-        design_interface = html.Div(f"Edit interface for {component_type} not yet implemented")
+        # Other component types not yet implemented for editing
+        design_interface = html.Div(
+            dmc.Alert(
+                f"Edit interface for {component_type} components is not yet implemented. Only Card and Interactive components are currently editable.",
+                title="Not Implemented",
+                color="yellow",
+                icon=DashIconify(icon="mdi:alert", width=24),
+            )
+        )
 
     # Hidden workflow/DC dropdowns (for callbacks that need them)
     # Use actual component_id, NOT tmp
@@ -211,7 +235,6 @@ def create_edit_page(
                             py="xl",
                             style={"minHeight": "calc(100vh - 80px)"},
                         ),
-                        style={"backgroundColor": "var(--app-bg-color, #f8f9fa)"},
                     ),
                 ],
                 header={"height": 80},
@@ -234,6 +257,7 @@ def register_edit_page_callbacks(app):
         Input({"type": "btn-save-edit", "index": ALL}, "n_clicks"),
         State("edit-page-context", "data"),
         State("local-store", "data"),
+        State("url", "pathname"),
         State({"type": "card-input", "index": ALL}, "value"),
         State({"type": "card-dropdown-column", "index": ALL}, "value"),
         State({"type": "card-dropdown-aggregation", "index": ALL}, "value"),
@@ -247,6 +271,7 @@ def register_edit_page_callbacks(app):
         btn_clicks,
         edit_context,
         local_store,
+        current_pathname,
         card_titles,
         card_columns,
         card_aggregations,
@@ -384,8 +409,12 @@ def register_edit_page_callbacks(app):
 
             logger.error(f"   Traceback: {traceback.format_exc()}")
 
-        # Redirect back to dashboard
-        logger.info(f"🔄 Redirecting to /dashboard/{dashboard_id}")
-        return f"/dashboard/{dashboard_id}"
+        # Redirect back to dashboard - detect app context from current URL
+        app_prefix = "dashboard"  # default to viewer
+        if current_pathname and "/dashboard-edit/" in current_pathname:
+            app_prefix = "dashboard-edit"
+
+        logger.info(f"🔄 Redirecting to /{app_prefix}/{dashboard_id}")
+        return f"/{app_prefix}/{dashboard_id}"
 
     logger.info("✅ Edit page callbacks registered")

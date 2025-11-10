@@ -19,7 +19,7 @@ from depictio.dash.layouts.stepper import create_stepper_content
 
 
 def create_minimal_header(
-    dashboard_id: str, dashboard_title: str | None = None
+    dashboard_id: str, dashboard_title: str | None = None, is_edit_mode: bool = True
 ) -> dmc.AppShellHeader:
     """
     Create a minimal header for the stepper page.
@@ -27,6 +27,7 @@ def create_minimal_header(
     Args:
         dashboard_id: Dashboard ID for navigation back
         dashboard_title: Optional dashboard title to display
+        is_edit_mode: Whether in edit mode (affects back URL)
 
     Returns:
         DMC AppShell header with back button and title
@@ -34,6 +35,9 @@ def create_minimal_header(
     # If no title provided, use a placeholder
     if not dashboard_title:
         dashboard_title = f"Dashboard {dashboard_id[:8]}..."
+
+    # Determine back URL based on edit mode
+    back_url = f"/dashboard-edit/{dashboard_id}" if is_edit_mode else f"/dashboard/{dashboard_id}"
 
     header_content = dmc.Group(
         [
@@ -52,7 +56,7 @@ def create_minimal_header(
                     fw="normal",
                     c="gray",
                 ),
-                href=f"/dashboard/{dashboard_id}",
+                href=back_url,
                 style={"textDecoration": "none"},
             ),
             # Spacer
@@ -85,15 +89,15 @@ def create_minimal_header(
 
     return dmc.AppShellHeader(
         header_content,
-        style={
-            "backgroundColor": "var(--app-surface-color, #ffffff)",
-            "borderBottom": "1px solid var(--app-border-color, #e9ecef)",
-        },
     )
 
 
 def create_stepper_page(
-    dashboard_id: str, component_id: str, theme: str = "light", TOKEN: str | None = None
+    dashboard_id: str,
+    component_id: str,
+    theme: str = "light",
+    TOKEN: str | None = None,
+    is_edit_mode: bool = True,
 ) -> html.Div:
     """
     Create standalone stepper page for component CREATION only.
@@ -106,6 +110,7 @@ def create_stepper_page(
         component_id: New component UUID
         theme: Current theme ("light" or "dark")
         TOKEN: Authentication token
+        is_edit_mode: Whether in edit mode (affects back button URL)
 
     Returns:
         Complete page layout with stepper wizard
@@ -124,8 +129,8 @@ def create_stepper_page(
         except Exception as e:
             logger.error(f"Failed to fetch dashboard data: {e}")
 
-    # Create header
-    header = create_minimal_header(dashboard_id, dashboard_title)
+    # Create header with proper back URL based on edit mode
+    header = create_minimal_header(dashboard_id, dashboard_title, is_edit_mode)
 
     # Create stepper content
     # IMPORTANT: Use fixed index "stepper-component" to avoid conflicts
@@ -144,6 +149,7 @@ def create_stepper_page(
             "dashboard_id": dashboard_id,
             "component_id": component_id,
             "mode": "add",
+            "is_edit_mode": is_edit_mode,
         },
     )
 
@@ -198,9 +204,6 @@ def create_stepper_page(
                                 "minHeight": "calc(100vh - 80px)",  # Full height minus header
                             },
                         ),
-                        style={
-                            "backgroundColor": "var(--app-bg-color, #f8f9fa)",
-                        },
                     ),
                 ],
                 header={"height": 80},

@@ -297,12 +297,17 @@ def register_callbacks_stepper(app):
             raise dash.exceptions.PreventUpdate
 
         component_id = save_status.get("component_id", "unknown")
+
+        # Detect app context from stepper context
+        is_edit_mode = stepper_context.get("is_edit_mode", False) if stepper_context else False
+        app_prefix = "dashboard-edit" if is_edit_mode else "dashboard"
+
         logger.info(
-            f"✅ STEPPER COMPLETE - Returning to dashboard {dashboard_id} "
+            f"✅ STEPPER COMPLETE - Returning to {app_prefix} {dashboard_id} "
             f"(component: {component_id})"
         )
 
-        return f"/dashboard/{dashboard_id}"
+        return f"/{app_prefix}/{dashboard_id}"
 
     # Legacy modal close callback - kept for backward compatibility
     @app.callback(
@@ -790,7 +795,7 @@ def register_callbacks_stepper(app):
                 [
                     dmc.Group(
                         [
-                            DashIconify(icon="mdi:table-eye", width=20, color="#228be6"),
+                            DashIconify(icon="mdi:table-eye", width=20),
                             dmc.Text("Data Preview", fw="bold", size="md"),
                         ],
                         gap="xs",

@@ -13,11 +13,16 @@ from depictio.api.v1.configs.logging_init import logger
 
 
 def register_edit_component_simple_callback(app):
-    """Register the component editing navigation callback."""
+    """
+    Register the component editing navigation callback.
+
+    Navigates to the component editing stepper page when the edit button is clicked.
+    Preserves the app prefix (dashboard vs dashboard-edit) for proper routing.
+    """
 
     @app.callback(
         Output("url", "pathname", allow_duplicate=True),
-        Input({"type": "edit-box-button", "index": ALL}, "n_clicks"),
+        Input({"type": "edit_box_button", "index": ALL}, "n_clicks"),
         State("url", "pathname"),
         prevent_initial_call=True,
     )
@@ -25,58 +30,71 @@ def register_edit_component_simple_callback(app):
         """
         Navigate to the component editing stepper page.
 
-        Extracts the component UUID from the edit button that was clicked
-        and navigates to the stepper page where the user can modify their
-        component through the multi-step wizard with pre-populated settings.
-
         Args:
-            n_clicks_list: List of n_clicks from all edit buttons (pattern-matched)
-            current_pathname: Current URL pathname (e.g., "/dashboard/{id}")
+            n_clicks_list: List of n_clicks for all edit buttons (pattern-matching callback)
+            current_pathname: Current URL pathname (e.g., "/dashboard/{id}" or "/dashboard-edit/{id}")
 
         Returns:
-            str: New pathname to navigate to (e.g., "/dashboard/{id}/component/edit/{uuid}")
+            str: New pathname to navigate to (e.g., "/dashboard-edit/{id}/component/edit/{uuid}")
         """
         from dash import ctx
 
+        # EARLY EXIT: Don't process on component add pages
+        if current_pathname and "/component/add/" in current_pathname:
+            logger.info("🔒 On component add page - skipping edit button callback")
+            raise PreventUpdate
+
         # Log for debugging URL redirection issues
         logger.info(
-            f"🔍 EDIT BUTTON CALLBACK - triggered_id: {ctx.triggered_id}, pathname: {current_pathname}"
+            f"🔍 EDIT BUTTON CALLBACK - n_clicks: {n_clicks_list}, pathname: {current_pathname}"
+        )
+        logger.info(
+            f"🔍 EDIT BUTTON CALLBACK - triggered_id: {ctx.triggered_id}, triggered: {ctx.triggered}"
         )
 
-        if not ctx.triggered_id or not isinstance(ctx.triggered_id, dict):
-            logger.warning("⚠️ No valid trigger ID found")
+        # GUARD: Check if any button was actually clicked (not just rendered with n_clicks=0)
+        if not n_clicks_list or not any(n_clicks_list):
+            logger.info("🚫 EDIT BUTTON - No actual clicks detected, preventing update")
             raise PreventUpdate
 
-        # Check if any button was actually clicked
-        if not any(n_clicks_list):
-            logger.warning("⚠️ No button clicks detected")
+        # Check if callback was triggered by an edit button
+        if not ctx.triggered_id:
             raise PreventUpdate
 
-        # Extract component_id from the button that was clicked
-        component_id = ctx.triggered_id["index"]
+        # Extract component_id from triggered button
+        if isinstance(ctx.triggered_id, dict) and ctx.triggered_id.get("type") == "edit_box_button":
+            component_id = ctx.triggered_id.get("index")
+            logger.info(f"📝 EDIT BUTTON - Component ID: {component_id}")
+        else:
+            logger.warning("⚠️ Edit button callback triggered by non-edit_box_button element")
+            raise PreventUpdate
 
-        logger.info(f"✏️ EDIT BUTTON - Component ID: {component_id}")
+        if not component_id:
+            logger.warning("⚠️ Could not extract component_id from triggered button")
+            raise PreventUpdate
 
         # Extract dashboard_id from current pathname using robust parsing
         # Expected URL patterns:
-        # - Normal dashboard: /dashboard/{dashboard_id}
-        # - Stepper page: /dashboard/{dashboard_id}/component/add/{component_id}
+        # - Viewer app: /dashboard/{dashboard_id}
+        # - Editor app: /dashboard-edit/{dashboard_id}
         dashboard_id = None
+        app_prefix = None  # Will be "dashboard" or "dashboard-edit"
         if current_pathname:
             parts = current_pathname.split("/")
-            # parts = ['', 'dashboard', '{dashboard_id}', ...]
-            if len(parts) >= 3 and parts[1] == "dashboard":
+            # parts = ['', 'dashboard' or 'dashboard-edit', '{dashboard_id}', ...]
+            if len(parts) >= 3 and parts[1] in ["dashboard", "dashboard-edit"]:
+                app_prefix = parts[1]
                 dashboard_id = parts[2]  # Always extract from position 2
 
-        if not dashboard_id:
+        if not dashboard_id or not app_prefix:
             logger.warning(f"⚠️ Could not extract dashboard_id from pathname: {current_pathname}")
             raise PreventUpdate
 
-        # Build edit stepper page URL
-        edit_url = f"/dashboard/{dashboard_id}/component/edit/{component_id}"
+        # Build edit stepper page URL (preserves viewer/editor app prefix)
+        edit_url = f"/{app_prefix}/{dashboard_id}/component/edit/{component_id}"
 
         logger.info(
-            f"✨ NAVIGATE TO EDIT STEPPER - Dashboard: {dashboard_id}, Component: {component_id}"
+            f"✏️ NAVIGATE TO EDIT STEPPER - Dashboard: {dashboard_id}, Component: {component_id}"
         )
         logger.info(f"  🔗 URL: {edit_url}")
 

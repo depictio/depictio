@@ -692,14 +692,22 @@ def register_callbacks_draggable(app):
     )
     def update_grid_edit_mode(pathname):
         """Update dual-panel grid edit mode based on URL path (edit mode detection)"""
-        # Detect edit mode from URL: /dashboard/{id}/edit or /dashboard/{id}/edit/
+        # Detect edit mode from URL:
+        # - Editor app: /dashboard-edit/{id}
+        # - Legacy edit mode: /dashboard/{id}/edit
         # Handle trailing slashes and ensure we're on a dashboard page
-        if not pathname or "/dashboard/" not in pathname:
+        if not pathname or ("/dashboard/" not in pathname and "/dashboard-edit/" not in pathname):
             raise dash.exceptions.PreventUpdate
 
         # Remove trailing slash for consistent detection
         pathname_normalized = pathname.rstrip("/")
-        edit_mode_enabled = pathname_normalized.endswith("/edit")
+
+        # Edit mode if:
+        # 1. URL starts with /dashboard-edit/ (Editor App)
+        # 2. URL ends with /edit (Legacy edit mode)
+        edit_mode_enabled = pathname_normalized.startswith(
+            "/dashboard-edit/"
+        ) or pathname_normalized.endswith("/edit")
         logger.info(f"Dual-panel grid edit mode from URL ({pathname}): {edit_mode_enabled}")
 
         if edit_mode_enabled:

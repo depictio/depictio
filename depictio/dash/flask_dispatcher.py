@@ -12,13 +12,12 @@ Each app has its own callback registry for true isolation.
 import os
 
 import dash
-from dash import html
 from flask import Flask, send_from_directory
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.components.google_analytics import integrate_google_analytics
-from depictio.dash.pages import dashboard_viewer, management_app
+from depictio.dash.pages import dashboard_editor, dashboard_viewer, management_app
 
 # Set environment context
 os.environ["DEPICTIO_CONTEXT"] = "server"
@@ -410,15 +409,11 @@ dashboard_viewer.register_callbacks(app_viewer)
 logger.info("✅ Viewer App wired up")
 
 
-# Wire up Editor App with placeholder (Phase 4 - TODO: implement full editor)
-logger.info("✏️  Wiring Editor App (placeholder)...")
-app_editor.layout = html.Div(
-    [
-        html.H1("Dashboard Editor - Coming Soon"),
-        html.P("The dashboard editor functionality will be implemented in Phase 4."),
-    ]
-)
-logger.info("✅ Editor App wired up (placeholder)")
+# Wire up Editor App
+logger.info("✏️  Wiring Editor App...")
+app_editor.layout = dashboard_editor.layout
+dashboard_editor.register_callbacks(app_editor)
+logger.info("✅ Editor App wired up")
 
 logger.info("==" * 40)
 logger.info("✅ FLASK DISPATCHER: All apps wired up")

@@ -900,30 +900,27 @@ def build_card(**kwargs):
     if background_color:
         card_section_kwargs["bg"] = background_color
 
-    if stepper and not build_frame:
-        # MINIMAL DEBUG: Return simplest possible element to isolate React error
-        # This should work if the issue is with card_content structure
-        new_card_body = [html.Div("Card Preview", style={"padding": "20px", "textAlign": "center"})]
-    else:
-        # Normal mode with standard card styling
-        card_style = {
-            "boxSizing": "content-box",
-            "height": "100%",
-            "minHeight": "120px",
-        }
+    # Build the card component with standard styling
+    card_style = {
+        "boxSizing": "content-box",
+        "height": "100%",
+        "minHeight": "120px",
+    }
 
-        new_card_body = dmc.Card(
-            children=[dmc.CardSection(**card_section_kwargs)],
-            withBorder=True,
-            shadow="sm",
-            style=card_style,
-            id={
-                "type": "card",
-                "index": str(index),
-            },
-        )
+    new_card_body = dmc.Card(
+        children=[dmc.CardSection(**card_section_kwargs)],
+        withBorder=True,
+        shadow="sm",
+        style=card_style,
+        id={
+            "type": "card",
+            "index": str(index),
+        },
+    )
 
     if not build_frame:
+        # Return single component (not wrapped in list) for consistency
+        # The callback output 'children' can accept single component or list
         return new_card_body
     else:
         # Build the card frame with LoadingOverlay for both dashboard and stepper modes
