@@ -77,14 +77,20 @@ def register_async_rendering_callback(app):
                 for dc in wf.get("data_collections", []):
                     dc_id = str(dc.get("_id"))
                     if dc.get("delta_location"):
-                        delta_locations[dc_id] = dc["delta_location"]
+                        delta_locations[dc_id] = {
+                            "delta_location": dc["delta_location"],
+                            "size_bytes": -1,
+                        }
 
         # DEFENSIVE CHECK 2: Skip if already initialized (prevents spurious re-renders)
+        # EXCEPTION: Allow Stage 2 re-render when delta_locations becomes available
         if existing_metadata and existing_metadata.get("options") is not None:
             had_delta_locations = existing_metadata.get("delta_locations_available", False)
             has_delta_locations_now = delta_locations is not None and len(delta_locations) > 0
 
-            if not (has_delta_locations_now and not had_delta_locations):
+            # Skip re-render only if delta_locations availability hasn't changed
+            # This allows Stage 1→2 transition when project metadata arrives
+            if had_delta_locations == has_delta_locations_now:
                 return no_update, no_update, no_update
 
         # Extract parameters from trigger store
