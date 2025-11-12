@@ -269,7 +269,10 @@ def register_core_callbacks(app):
                 for dc in wf.get("data_collections", []):
                     dc_id = str(dc.get("_id"))
                     if dc.get("delta_location"):
-                        delta_locations[dc_id] = dc["delta_location"]
+                        delta_locations[dc_id] = {
+                            "delta_location": dc["delta_location"],
+                            "size_bytes": -1,
+                        }
 
         # DEFENSIVE CHECK 2: Skip if already initialized (prevents spurious re-renders during Patch operations)
         # EXCEPTION: Allow Stage 2 re-render when delta_locations becomes available

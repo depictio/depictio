@@ -36,12 +36,16 @@ def register_async_rendering_callback(app):
         Input({"type": "interactive-trigger", "index": MATCH}, "data"),
         Input(
             "project-metadata-store", "data"
-        ),  # ✅ MIGRATED: Read directly from project metadata cache
+        ),  # Keep as Input - needed for Stage 2 when metadata arrives
         State({"type": "interactive-metadata", "index": MATCH}, "data"),
         State("local-store", "data"),  # SECURITY: Access token from centralized store
-        prevent_initial_call=False,
-        background=True,
+        prevent_initial_call=False,  # Must be False - trigger store has data at creation time
+        background=False,
+        # background=True,
     )
+    # NOTE: @callback_lock removed - not needed with background=False
+    # The lock was designed for Celery workers (background=True) to prevent duplicate execution
+    # With background=False, callbacks run synchronously so no lock needed
     def render_interactive_options_background(
         trigger_data, project_metadata, existing_metadata, local_data
     ):
@@ -50,9 +54,10 @@ def register_async_rendering_callback(app):
 
         Similar to render_card_value_background but builds entire interactive component.
 
-        TWO-STAGE RENDERING OPTIMIZATION:
-        - Stage 1: Renders immediately with trigger_data (before project_metadata available)
-        - Stage 2: Re-renders when project-metadata-store arrives (contains delta_locations)
+        SINGLE-RENDER PATTERN WITH OPTIMIZED DATA:
+        - Waits for BOTH trigger_data AND project_metadata to be ready
+        - Renders once with cached delta_locations (eliminates API calls)
+        - Loader remains visible until both inputs available
 
         Args:
             trigger_data: Data from interactive-trigger store containing all necessary params
@@ -64,34 +69,51 @@ def register_async_rendering_callback(app):
             tuple: (built_component, metadata_dict, stored_metadata_dict)
         """
 
-        # DEFENSIVE CHECK 1: Skip if trigger_data not ready
+        from dash import callback_context as ctx
+
+        # CRITICAL: With 2 Inputs, callback fires multiple times
+        # Only process when BOTH are ready AND we haven't rendered yet
+
         if not trigger_data or not isinstance(trigger_data, dict):
+            logger.debug("⏭️  Waiting for trigger_data")
+            return no_update, no_update, no_update
+
+        # Extract component info early for logging
+        index = trigger_data.get("index", "unknown")
+        component_type = trigger_data.get("interactive_component_type", "unknown")
+
+        # Debug: Log what triggered this callback
+        triggered_by = ctx.triggered_id if ctx.triggered else "unknown"
+        logger.info(f"🔔 [{component_type}/{index}] Callback triggered by: {triggered_by}")
+
+        # IDEMPOTENCY CHECK FIRST: If already rendered, skip ALL triggers
+        if existing_metadata and existing_metadata.get("options") is not None:
+            logger.info(f"✅ [{component_type}/{index}] Already rendered, skipping")
+            return no_update, no_update, no_update
+
+        # If not rendered yet, check if project_metadata is ready
+        if not project_metadata or not isinstance(project_metadata, dict):
+            logger.info(
+                f"⏭️  [{component_type}/{index}] Waiting for project_metadata (keeping loader visible)"
+            )
             return no_update, no_update, no_update
 
         # ✅ CACHE OPTIMIZATION: Extract delta_locations from project-metadata-store
-        delta_locations = None
-        if project_metadata:
-            delta_locations = {}
-            project_data = project_metadata.get("project", {})
-            for wf in project_data.get("workflows", []):
-                for dc in wf.get("data_collections", []):
-                    dc_id = str(dc.get("_id"))
-                    if dc.get("delta_location"):
-                        delta_locations[dc_id] = {
-                            "delta_location": dc["delta_location"],
-                            "size_bytes": -1,
-                        }
+        delta_locations = {}
+        project_data = project_metadata.get("project", {})
+        for wf in project_data.get("workflows", []):
+            for dc in wf.get("data_collections", []):
+                dc_id = str(dc.get("_id"))
+                if dc.get("delta_location"):
+                    delta_locations[dc_id] = {
+                        "delta_location": dc["delta_location"],
+                        "size_bytes": -1,
+                    }
 
-        # DEFENSIVE CHECK 2: Skip if already initialized (prevents spurious re-renders)
-        # EXCEPTION: Allow Stage 2 re-render when delta_locations becomes available
-        if existing_metadata and existing_metadata.get("options") is not None:
-            had_delta_locations = existing_metadata.get("delta_locations_available", False)
-            has_delta_locations_now = delta_locations is not None and len(delta_locations) > 0
-
-            # Skip re-render only if delta_locations availability hasn't changed
-            # This allows Stage 1→2 transition when project metadata arrives
-            if had_delta_locations == has_delta_locations_now:
-                return no_update, no_update, no_update
+        logger.info(
+            f"🔄 INTERACTIVE RENDER: {component_type} component {index} "
+            f"(delta_locations: {len(delta_locations)})"
+        )
 
         # Extract parameters from trigger store
         wf_id = trigger_data.get("wf_id")
@@ -162,7 +184,7 @@ def build_select_component(df, column_name, component_type, trigger_data, delta_
         column_name: Column to extract options from
         component_type: Type of select component
         trigger_data: Metadata from trigger store
-        delta_locations: Delta locations dict (for Stage 2 optimization)
+        delta_locations: Delta locations dict (for cache optimization)
 
     Returns:
         tuple: (component, metadata, stored_metadata)
@@ -289,7 +311,6 @@ def build_select_component(df, column_name, component_type, trigger_data, delta_
     metadata = {
         "options": options,
         "reference_value": preserved_value,
-        "delta_locations_available": delta_locations is not None,
     }
 
     # Build stored_metadata with ALL fields required for filtering
@@ -319,7 +340,7 @@ def build_slider_component(df, column_name, component_type, trigger_data, delta_
         column_name: Column to extract min/max from
         component_type: "Slider" or "RangeSlider"
         trigger_data: Metadata from trigger store
-        delta_locations: Delta locations dict (for Stage 2 optimization)
+        delta_locations: Delta locations dict (for cache optimization)
 
     Returns:
         tuple: (component, metadata, stored_metadata)
@@ -506,7 +527,6 @@ def build_slider_component(df, column_name, component_type, trigger_data, delta_
         "min": min_value,
         "max": max_value,
         "reference_value": preserved_value,
-        "delta_locations_available": delta_locations is not None,
     }
 
     # Build stored_metadata with ALL fields required for filtering
@@ -536,7 +556,7 @@ def build_datepicker_component(df, column_name, trigger_data, delta_locations):
         df: Polars DataFrame with data
         column_name: Column to extract date range from
         trigger_data: Metadata from trigger store
-        delta_locations: Delta locations dict (for Stage 2 optimization)
+        delta_locations: Delta locations dict (for cache optimization)
 
     Returns:
         tuple: (component, metadata, stored_metadata)
@@ -705,7 +725,6 @@ def build_datepicker_component(df, column_name, trigger_data, delta_locations):
         "min_date": str(min_date_py),
         "max_date": str(max_date_py),
         "reference_value": preserved_value,
-        "delta_locations_available": delta_locations is not None,
     }
 
     # Build stored_metadata with ALL fields required for filtering
