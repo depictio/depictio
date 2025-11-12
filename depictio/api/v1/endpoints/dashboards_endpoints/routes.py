@@ -273,12 +273,24 @@ async def init_dashboard(
 
     user_permission_level = "viewer"  # Default
     permissions = project_data.get("permissions", {})
-    if current_user.id in [str(owner.get("_id", "")) for owner in permissions.get("owners", [])]:
+    owner_ids = [str(owner.get("_id", "")) for owner in permissions.get("owners", [])]
+    editor_ids = [str(editor.get("_id", "")) for editor in permissions.get("editors", [])]
+
+    # Convert current_user.id to string for comparison (it's an ObjectId)
+    current_user_id_str = str(current_user.id)
+
+    logger.info(
+        f"🔐 Permission check for user {current_user_id_str}:\n"
+        f"   - Project owner IDs: {owner_ids}\n"
+        f"   - Project editor IDs: {editor_ids}"
+    )
+
+    if current_user_id_str in owner_ids:
         user_permission_level = "owner"
-    elif current_user.id in [
-        str(editor.get("_id", "")) for editor in permissions.get("editors", [])
-    ]:
+    elif current_user_id_str in editor_ids:
         user_permission_level = "editor"
+
+    logger.info(f"   - Determined permission level: {user_permission_level}")
 
     # 3. Build dashboard-only response
     # Frontend will fetch project data separately via /projects/get/from_id/{project_id}
@@ -302,16 +314,23 @@ async def init_dashboard(
 
 @dashboards_endpoint_router.get("/list")
 async def list_dashboards(
+    include_child_tabs: bool = False,
     current_user: User = Depends(get_user_or_anonymous),
 ):
     """
     Fetch a list of dashboards for the current user.
+
+    Args:
+        include_child_tabs: If True, includes child tabs in addition to main dashboards.
+                           If False (default), returns only main dashboards.
     """
 
     user_id = current_user.id
     logger.debug(f"Current user ID: {user_id}")
 
-    result = load_dashboards_from_db(owner=user_id, admin_mode=False, user=current_user)
+    result = load_dashboards_from_db(
+        owner=user_id, admin_mode=False, user=current_user, include_child_tabs=include_child_tabs
+    )
 
     if not result["success"]:
         raise HTTPException(status_code=404, detail=result["message"])

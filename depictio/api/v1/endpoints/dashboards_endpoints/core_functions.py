@@ -5,7 +5,7 @@ from depictio.api.v1.db import dashboards_collection, projects_collection
 from depictio.models.models.base import convert_objectid_to_str
 
 
-def load_dashboards_from_db(owner, admin_mode=False, user=None):
+def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_tabs=False):
     logger.info("Loading dashboards from MongoDB with project-based permissions")
 
     projection = {
@@ -21,18 +21,22 @@ def load_dashboards_from_db(owner, admin_mode=False, user=None):
         "last_saved_ts": 1,
         "project_id": 1,
         "is_public": 1,
+        # Tab-specific fields (needed for sidebar tab navigation)
+        "is_main_tab": 1,
+        "parent_dashboard_id": 1,
+        "tab_order": 1,
     }
     if admin_mode:
         projection["stored_metadata"] = 1
 
     if admin_mode:
-        # List all dashboards for all users (only main tabs)
-        dashboards = list(
-            dashboards_collection.find(
-                {"is_main_tab": {"$ne": False}},  # Show only main tabs (backward compatible)
-                projection,
-            )
-        )
+        # List all dashboards for all users
+        query = {}
+        if not include_child_tabs:
+            # Show only main tabs (backward compatible - default behavior)
+            query["is_main_tab"] = {"$ne": False}
+
+        dashboards = list(dashboards_collection.find(query, projection))
         # Sort dashboards by title
         dashboards = sorted(dashboards, key=lambda x: x["title"])
     else:
@@ -66,16 +70,13 @@ def load_dashboards_from_db(owner, admin_mode=False, user=None):
 
         accessible_project_ids = [project["_id"] for project in accessible_projects]
 
-        # Get all dashboards belonging to accessible projects (only main tabs)
-        dashboards = list(
-            dashboards_collection.find(
-                {
-                    "project_id": {"$in": accessible_project_ids},
-                    "is_main_tab": {"$ne": False},  # Show only main tabs (backward compatible)
-                },
-                projection,
-            )
-        )
+        # Get all dashboards belonging to accessible projects
+        query = {"project_id": {"$in": accessible_project_ids}}
+        if not include_child_tabs:
+            # Show only main tabs (backward compatible - default behavior)
+            query["is_main_tab"] = {"$ne": False}
+
+        dashboards = list(dashboards_collection.find(query, projection))
 
     if not dashboards:
         logger.warning("No dashboards found.")
