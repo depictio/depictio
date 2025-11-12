@@ -47,6 +47,10 @@ def render_dashboard(
 
     stored_metadata = clean_stored_metadata(stored_metadata)
 
+    # Reset build counts at start of dashboard render
+    if "_reset_counts" in build_functions:
+        build_functions["_reset_counts"]()
+
     children = []
     for child_metadata in stored_metadata:
         # Add required fields

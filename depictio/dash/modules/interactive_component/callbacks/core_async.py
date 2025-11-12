@@ -40,12 +40,11 @@ def register_async_rendering_callback(app):
         State({"type": "interactive-metadata", "index": MATCH}, "data"),
         State("local-store", "data"),  # SECURITY: Access token from centralized store
         prevent_initial_call=False,  # Must be False - trigger store has data at creation time
-        background=False,
-        # background=True,
+        background=True,  # ✅ RE-ENABLED for Celery worker background processing
     )
-    # NOTE: @callback_lock removed - not needed with background=False
-    # The lock was designed for Celery workers (background=True) to prevent duplicate execution
-    # With background=False, callbacks run synchronously so no lock needed
+    # NOTE: @callback_lock intentionally not re-added
+    # The idempotency check at line 92 (existing_metadata.get("options")) prevents duplicate renders
+    # This check is more robust than a lock because it survives worker restarts
     def render_interactive_options_background(
         trigger_data, project_metadata, existing_metadata, local_data
     ):
@@ -84,17 +83,23 @@ def register_async_rendering_callback(app):
 
         # Debug: Log what triggered this callback
         triggered_by = ctx.triggered_id if ctx.triggered else "unknown"
-        logger.info(f"🔔 [{component_type}/{index}] Callback triggered by: {triggered_by}")
+        logger.error(
+            f"🔥 INTERACTIVE CALLBACK FIRED - Type: {component_type}, Index: {index}, Triggered by: {triggered_by}"
+        )
 
         # IDEMPOTENCY CHECK FIRST: If already rendered, skip ALL triggers
         if existing_metadata and existing_metadata.get("options") is not None:
             logger.info(f"✅ [{component_type}/{index}] Already rendered, skipping")
+            logger.error(f"✅ INTERACTIVE CALLBACK COMPLETE - Index: {index} (idempotency block)")
             return no_update, no_update, no_update
 
         # If not rendered yet, check if project_metadata is ready
         if not project_metadata or not isinstance(project_metadata, dict):
             logger.info(
                 f"⏭️  [{component_type}/{index}] Waiting for project_metadata (keeping loader visible)"
+            )
+            logger.error(
+                f"✅ INTERACTIVE CALLBACK COMPLETE - Index: {index} (waiting for metadata)"
             )
             return no_update, no_update, no_update
 
@@ -157,21 +162,34 @@ def register_async_rendering_callback(app):
 
             # Build component based on type
             if component_type in ["Select", "MultiSelect", "SegmentedControl"]:
+                logger.error(
+                    f"✅ INTERACTIVE CALLBACK COMPLETE - Index: {index} (success - select component)"
+                )
                 return build_select_component(
                     df, column_name, component_type, trigger_data, delta_locations
                 )
             elif component_type in ["Slider", "RangeSlider"]:
+                logger.error(
+                    f"✅ INTERACTIVE CALLBACK COMPLETE - Index: {index} (success - slider component)"
+                )
                 return build_slider_component(
                     df, column_name, component_type, trigger_data, delta_locations
                 )
             elif component_type == "DateRangePicker":
+                logger.error(
+                    f"✅ INTERACTIVE CALLBACK COMPLETE - Index: {index} (success - datepicker component)"
+                )
                 return build_datepicker_component(df, column_name, trigger_data, delta_locations)
             else:
                 logger.error(f"Unsupported component type: {component_type}")
+                logger.error(
+                    f"✅ INTERACTIVE CALLBACK COMPLETE - Index: {index} (error - unsupported type)"
+                )
                 return f"Error: Unsupported component type: {component_type}", {}, {}
 
         except Exception as e:
             logger.error(f"Interactive render error: {e}", exc_info=True)
+            logger.error(f"✅ INTERACTIVE CALLBACK COMPLETE - Index: {index} (error - exception)")
             return f"Error loading component: {str(e)}", {}, {}
 
 
@@ -316,6 +334,7 @@ def build_select_component(df, column_name, component_type, trigger_data, delta_
     # Build stored_metadata with ALL fields required for filtering
     stored_metadata = {
         "index": str(index),
+        "component_type": "interactive",  # Required for panel separation in draggable.py
         "interactive_component_type": component_type,
         "column_name": column_name,
         "column_type": trigger_data.get("column_type", "object"),  # Get from trigger
@@ -532,6 +551,7 @@ def build_slider_component(df, column_name, component_type, trigger_data, delta_
     # Build stored_metadata with ALL fields required for filtering
     stored_metadata = {
         "index": str(index),
+        "component_type": "interactive",  # Required for panel separation in draggable.py
         "interactive_component_type": component_type,
         "column_name": column_name,
         "column_type": trigger_data.get("column_type", "float64"),  # Get from trigger
@@ -730,6 +750,7 @@ def build_datepicker_component(df, column_name, trigger_data, delta_locations):
     # Build stored_metadata with ALL fields required for filtering
     stored_metadata = {
         "index": str(index),
+        "component_type": "interactive",  # Required for panel separation in draggable.py
         "interactive_component_type": "DateRangePicker",
         "column_name": column_name,
         "column_type": trigger_data.get("column_type", "datetime"),  # Get from trigger

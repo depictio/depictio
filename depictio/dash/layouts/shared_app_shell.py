@@ -54,8 +54,16 @@ def create_shared_stores():
         ),  # Dashboard + component metadata + permissions
         # Theme relay for clientside callbacks
         dcc.Store(id="theme-relay-store", storage_type="memory"),
+        # API base URL for clientside callbacks (populated on load)
+        dcc.Store(id="api-base-url-store", storage_type="memory"),
         # URL location
         dcc.Location(id="url", refresh=False),
+        # Server status check interval (30 seconds) - pure clientside implementation
+        dcc.Interval(
+            id="server-status-interval",
+            interval=30 * 1000,  # 30 seconds in milliseconds
+            n_intervals=0,
+        ),
     ]
 
 
@@ -232,6 +240,7 @@ def create_minimal_app_shell(
 
     # Import dashboard viewer sidebar (tabs only, no navigation links)
     from depictio.dash.layouts.sidebar import create_dashboard_viewer_sidebar
+    from depictio.dash.layouts.tab_modal import create_tab_modal
 
     # Create shared stores
     stores = create_shared_stores()
@@ -283,6 +292,7 @@ def create_minimal_app_shell(
     return dmc.MantineProvider(
         [
             *stores,
+            create_tab_modal(),  # Add tab creation modal for editor functionality
             app_shell,
         ],
         id="mantine-provider",

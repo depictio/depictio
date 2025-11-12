@@ -180,10 +180,6 @@ def create_stepper_page(
             storage_type="memory",
             data=None,  # Will be populated by save_stepper_component callback
         ),
-        # Hidden save button required for global save callback validation
-        # The global save callback in save.py has Input("save-button-dashboard", "n_clicks")
-        # Dash validates all callback components before execution, even if the callback has guards
-        html.Button(id="save-button-dashboard", style={"display": "none"}),
     ]
 
     # Create main layout with AppShell

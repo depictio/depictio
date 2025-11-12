@@ -245,9 +245,21 @@ def register_core_callbacks(app):
             tuple: (formatted_value, metadata_dict)
         """
         from bson import ObjectId
+        from dash import callback_context as ctx
         from dash import no_update
 
         from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+        # Get component identifier for logging
+        index = (
+            trigger_data.get("index", "unknown")
+            if trigger_data and isinstance(trigger_data, dict)
+            else "unknown"
+        )
+
+        # Log callback execution with trigger information
+        triggered_by = ctx.triggered_id if ctx.triggered else "initial"
+        logger.error(f"🔥 CARD CALLBACK FIRED - Index: {index}, Triggered by: {triggered_by}")
 
         logger.info(f"🔄 CARD RENDER: Starting value computation for trigger: {trigger_data}")
         # DEFENSIVE CHECK 1: Skip if trigger_data not ready (progressive loading race condition)
@@ -258,6 +270,7 @@ def register_core_callbacks(app):
                 "⚠️ CARD RENDER: Trigger data not ready, deferring render "
                 "(Progressive loading race condition detected)"
             )
+            logger.error(f"✅ CARD CALLBACK COMPLETE - Index: {index} (trigger not ready)")
             return no_update, no_update
 
         # ✅ CACHE OPTIMIZATION: Extract delta_locations from project-metadata-store
@@ -274,27 +287,15 @@ def register_core_callbacks(app):
                             "size_bytes": -1,
                         }
 
-        # DEFENSIVE CHECK 2: Skip if already initialized (prevents spurious re-renders during Patch operations)
-        # EXCEPTION: Allow Stage 2 re-render when delta_locations becomes available
-        # This enables two-stage optimization: Stage 1 (API calls) → Stage 2 (cached data)
+        # IDEMPOTENCY CHECK: Skip if already initialized (prevents spurious re-renders)
+        # This ensures single-pass rendering by blocking all re-renders after initial render
         if existing_metadata and existing_metadata.get("reference_value") is not None:
-            # Check if this is a Stage 2 opportunity (delta_locations just arrived)
-            had_delta_locations = existing_metadata.get("delta_locations_available", False)
-            has_delta_locations_now = delta_locations is not None and len(delta_locations) > 0
-
-            if has_delta_locations_now and not had_delta_locations:
-                # Stage 2: delta_locations just became available, allow re-render for optimization
-                logger.info(
-                    "🚀 CARD RENDER STAGE 2: delta_locations now available, re-rendering with optimization"
-                )
-                # Continue to re-render with delta_locations
-            else:
-                # Already fully initialized or spurious update, skip
-                logger.debug(
-                    "✅ CARD RENDER: Already initialized, skipping re-render "
-                    "(Patch operation or spurious Store update detected)"
-                )
-                return no_update, no_update
+            logger.debug(
+                "✅ CARD RENDER: Already initialized, skipping re-render "
+                "(Patch operation or spurious Store update detected)"
+            )
+            logger.error(f"✅ CARD CALLBACK COMPLETE - Index: {index} (idempotency block)")
+            return no_update, no_update
 
         if not trigger_data:
             logger.warning("No trigger data provided")
@@ -391,10 +392,12 @@ def register_core_callbacks(app):
             }
 
             logger.info(f"✅ CARD RENDER: Value computed successfully: {formatted_value}")
+            logger.error(f"✅ CARD CALLBACK COMPLETE - Index: {index} (success)")
             return formatted_value, metadata
 
         except Exception as e:
             logger.error(f"❌ CARD RENDER: Error computing value: {e}", exc_info=True)
+            logger.error(f"✅ CARD CALLBACK COMPLETE - Index: {index} (error)")
             return "Error", {"error": str(e)}
 
     # PATTERN-MATCHING: Patching callback for filter-based updates
@@ -454,6 +457,14 @@ def register_core_callbacks(app):
             raise dash.exceptions.PreventUpdate
 
         # RECONSTRUCT FULL METADATA: Combine lightweight store (index + value) with full metadata
+        logger.error("=" * 80)
+        logger.error("🔍 METADATA ENRICHMENT START")
+        logger.error(
+            f"   Input - Interactive metadata list count: {len(interactive_metadata_list)}"
+        )
+        logger.error(f"   Input - Interactive metadata IDs count: {len(interactive_metadata_ids)}")
+        logger.error(f"   Input - Filters data: {filters_data is not None}")
+
         # Create index → metadata mapping
         metadata_by_index = {}
         if interactive_metadata_list and interactive_metadata_ids:
@@ -461,19 +472,34 @@ def register_core_callbacks(app):
                 if i < len(interactive_metadata_list):
                     index = meta_id["index"]
                     metadata_by_index[index] = interactive_metadata_list[i]
+                    logger.error(f"   📋 Mapped metadata for index: {index[:8]}... (item {i + 1})")
+
+        logger.error(f"   Metadata lookup created with {len(metadata_by_index)} entries")
+        logger.error(
+            f"   Metadata lookup keys: {[k[:8] + '...' for k in metadata_by_index.keys()]}"
+        )
 
         # Enrich lightweight store data with full metadata
         lightweight_components = (
             filters_data.get("interactive_components_values", []) if filters_data else []
         )
+        logger.error(f"   Lightweight components from store: {len(lightweight_components)}")
 
         enriched_components = []
-        for component in lightweight_components:
+        for idx, component in enumerate(lightweight_components):
             index = component.get("index")
             value = component.get("value")
             full_metadata = metadata_by_index.get(index, {})
 
+            logger.error(f"   🔄 Processing component {idx + 1}:")
+            logger.error(f"      - Index: {index[:8] if index else 'None'}...")
+            logger.error(f"      - Value: {value}")
+            logger.error(f"      - Metadata found: {bool(full_metadata)}")
+
             if full_metadata:
+                logger.error(
+                    f"      - Column: {full_metadata.get('column_name')}, DC: {str(full_metadata.get('dc_id'))[:8]}..."
+                )
                 enriched_components.append(
                     {
                         "index": index,
@@ -481,6 +507,15 @@ def register_core_callbacks(app):
                         "metadata": full_metadata,  # Full metadata from interactive-stored-metadata
                     }
                 )
+            else:
+                logger.error(f"      ⚠️ NO METADATA FOUND for index {index[:8]}... - skipping!")
+
+        logger.error(f"   ✅ Enrichment complete: {len(enriched_components)} components enriched")
+        logger.error(
+            f"   ⚠️ Components skipped (no metadata): {len(lightweight_components) - len(enriched_components)}"
+        )
+        logger.error("🔍 METADATA ENRICHMENT END")
+        logger.error("=" * 80)
 
         # Replace filters_data with enriched version for backward compatibility
         filters_data = {"interactive_components_values": enriched_components}

@@ -14,6 +14,9 @@ class DashboardData(MongoModel):
     stored_children_data: list = []
     stored_metadata: list = []
     stored_edit_dashboard_mode_button: list = []
+    # Dual-panel layout storage (for left/right grid layouts)
+    left_panel_layout_data: list = []
+    right_panel_layout_data: list = []
     buttons_data: dict = {
         "unified_edit_mode": True,  # Default edit mode ON for dashboard owners
         "add_components_button": {"count": 0},

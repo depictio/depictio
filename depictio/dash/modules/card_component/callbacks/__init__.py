@@ -29,10 +29,11 @@ def register_callbacks_card_component(app):
 
 def load_design_callbacks(app):
     """
-    Lazy-load design callbacks for card component.
+    Lazy-load design and edit callbacks for card component.
 
     This function is called when a user enters edit mode (edit page or stepper).
-    It loads the design UI creation functions and registers design-related callbacks.
+    It loads the design UI creation functions and registers design-related callbacks
+    as well as the edit save callback.
 
     Args:
         app: Dash application instance
@@ -46,8 +47,10 @@ def load_design_callbacks(app):
         return False
 
     from .design import register_design_callbacks
+    from .edit import register_card_edit_callback
 
     register_design_callbacks(app)
+    register_card_edit_callback(app)
     _design_callbacks_loaded = True
 
     return True

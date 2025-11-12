@@ -319,15 +319,16 @@ def separate_components_by_panel(stored_metadata):
     return interactive_components, right_panel_components
 
 
-def calculate_left_panel_positions(components):
+def calculate_left_panel_positions(components, saved_layout_data=None):
     """
     Calculate grid positions for interactive components in left panel (1-column grid).
 
     Interactive components always take full width (w=1), heights vary by type.
-    Stacks vertically with automatic positioning - 1 component per row.
+    Uses saved positions if available, otherwise stacks vertically with automatic positioning.
 
     Args:
         components: List of interactive component metadata
+        saved_layout_data: Optional list of saved layout positions from database
 
     Returns:
         list: Layout positions [{i, x, y, w, h, static}, ...]
@@ -336,7 +337,7 @@ def calculate_left_panel_positions(components):
     current_y = 0
 
     # Component height mapping for interactive components
-    # Heights in grid units (with rowHeight=100, 1*100=100px for compact minimal height)
+    # Heights in grid units (with rowHeight=50, 1*50=50px for compact minimal height)
     component_heights = {
         "Select": 1,
         "MultiSelect": 1,
@@ -346,49 +347,84 @@ def calculate_left_panel_positions(components):
         "DateRangePicker": 1,
     }
 
+    # Create lookup dict for saved positions (keyed by component index)
+    # Handle both plain UUIDs and JSON-stringified dict IDs from DashGridLayout
+    saved_positions = {}
+    if saved_layout_data:
+        import json
+
+        for saved_item in saved_layout_data:
+            item_id = saved_item.get("i")
+            if item_id:
+                # Try to parse as JSON (DashGridLayout serializes dict IDs as JSON strings)
+                try:
+                    parsed_id = json.loads(item_id)
+                    # Extract the index from the dict
+                    if isinstance(parsed_id, dict) and "index" in parsed_id:
+                        component_id = str(parsed_id["index"])
+                    else:
+                        component_id = str(item_id)
+                except (json.JSONDecodeError, TypeError):
+                    # Not JSON, use as-is
+                    component_id = str(item_id)
+
+                saved_positions[component_id] = saved_item
+
     for metadata in components:
         index = metadata.get("index")
         interactive_type = metadata.get("interactive_component_type", "Select")
+        component_id = str(index)
 
-        # Always use auto-position (ignore saved positions for now to ensure consistent layout)
-        # Auto-position: full width (1 column), stack vertically
-        x = 0
-        y = current_y
-
-        # Get height from component type
-        h = component_heights.get(interactive_type, 1.5)
+        # Check if we have saved position for this component
+        if component_id in saved_positions:
+            # Use saved position
+            saved_pos = saved_positions[component_id]
+            x = saved_pos.get("x", 0)
+            y = saved_pos.get("y", current_y)
+            w = saved_pos.get("w", 1)
+            h = saved_pos.get("h", component_heights.get(interactive_type, 1.5))
+            logger.info(
+                f"📐 LEFT: Using saved position for component {index} ({interactive_type}): "
+                f"x={x}, y={y}, w={w}, h={h}"
+            )
+        else:
+            # Auto-position: full width (1 column), stack vertically
+            x = 0
+            y = current_y
+            w = 1
+            h = component_heights.get(interactive_type, 1.5)
+            logger.info(
+                f"📐 LEFT: Auto-positioning new component {index} ({interactive_type}): "
+                f"x={x}, y={y}, w={w}, h={h}"
+            )
 
         layout.append(
             {
-                "i": str(index),
+                "i": component_id,  # Plain UUID string for clean data storage
                 "x": int(x),
                 "y": int(y),
-                "w": 1,  # Full width in 1-column grid (100%)
-                "h": h,  # Allow decimal heights
+                "w": w,
+                "h": h,
                 "static": False,
             }
         )
 
-        # Update current_y for next component
+        # Update current_y for next component (use y + h to stack properly)
         current_y = y + h
-
-        logger.info(
-            f"📐 LEFT: Component {index} ({interactive_type}) positioned at "
-            f"x={x}, y={y}, w=1, h={h}"
-        )
 
     logger.info(f"📐 LEFT PANEL: Generated {len(layout)} positions, max_y={current_y}")
     return layout
 
 
-def calculate_right_panel_positions(components):
+def calculate_right_panel_positions(components, saved_layout_data=None):
     """
     Calculate grid positions for cards and other components in right panel (8-column grid).
 
-    Cards are arranged in 4-column grid (2 columns each), other components handled later.
+    Uses saved positions if available, otherwise arranges cards in 4-column grid (2 columns each).
 
     Args:
         components: List of right panel component metadata
+        saved_layout_data: Optional list of saved layout positions from database
 
     Returns:
         list: Layout positions [{i, x, y, w, h, static}, ...]
@@ -399,35 +435,74 @@ def calculate_right_panel_positions(components):
     cards = [c for c in components if c.get("component_type") == "card"]
     other = [c for c in components if c.get("component_type") != "card"]
 
+    # Create lookup dict for saved positions (keyed by component index)
+    # Handle both plain UUIDs and JSON-stringified dict IDs from DashGridLayout
+    saved_positions = {}
+    if saved_layout_data:
+        import json
+
+        for saved_item in saved_layout_data:
+            item_id = saved_item.get("i")
+            if item_id:
+                # Try to parse as JSON (DashGridLayout serializes dict IDs as JSON strings)
+                try:
+                    parsed_id = json.loads(item_id)
+                    # Extract the index from the dict
+                    if isinstance(parsed_id, dict) and "index" in parsed_id:
+                        component_id = str(parsed_id["index"])
+                    else:
+                        component_id = str(item_id)
+                except (json.JSONDecodeError, TypeError):
+                    # Not JSON, use as-is
+                    component_id = str(item_id)
+
+                saved_positions[component_id] = saved_item
+
     # Cards: 4-column grid (2 columns per card in 8-column system)
     # With rowHeight=100: h=5 gives 500px height, w=2 gives 25% width (4 per row)
     card_y = 0
     for idx, card in enumerate(cards):
         index = card.get("index")
+        component_id = str(index)
 
-        # Always use auto-position (ignore saved positions for now to ensure consistent layout)
-        # Auto-position: 4 cards per row
-        col = idx % 4
-        row = idx // 4
-        x = col * 2  # 2 columns per card (8/4)
-        y = row * 5  # 5 rows per card (with rowHeight=100 = 500px)
+        # Check if we have saved position for this component
+        if component_id in saved_positions:
+            # Use saved x/y position, but ALWAYS use standard card dimensions (w=2, h=5)
+            # This ensures cards maintain consistent size regardless of saved data
+            saved_pos = saved_positions[component_id]
+            x = saved_pos.get("x", 0)
+            y = saved_pos.get("y", 0)
+            w = 2  # Always use standard card width (25% of 8-column grid)
+            h = 5  # Always use standard card height (500px with rowHeight=100)
+            logger.info(
+                f"📐 RIGHT: Using saved position for card {index}: x={x}, y={y}, "
+                f"w={w} (standard), h={h} (standard)"
+            )
+        else:
+            # Auto-position: 4 cards per row
+            col = idx % 4
+            row = idx // 4
+            x = col * 2  # 2 columns per card (8/4)
+            y = row * 5  # 5 rows per card (with rowHeight=100 = 500px)
+            w = 2  # Fixed card width (25% of 8 columns = 4 cards per row)
+            h = 5  # Fixed card height (500px with rowHeight=100)
+            logger.info(
+                f"📐 RIGHT: Auto-positioning new card {index}: "
+                f"x={x}, y={y}, w={w}, h={h} (col={col}, row={row})"
+            )
 
         layout.append(
             {
-                "i": str(index),
+                "i": component_id,  # Plain UUID string for clean data storage
                 "x": int(x),
                 "y": int(y),
-                "w": 2,  # Fixed card width (25% of 8 columns = 4 cards per row)
-                "h": 5,  # Fixed card height (500px with rowHeight=100)
+                "w": w,
+                "h": h,
                 "static": False,
             }
         )
 
-        logger.debug(
-            f"📐 RIGHT: Card {index} positioned at x={x}, y={y}, w=2, h=5 (col={col}, row={row})"
-        )
-
-        card_y = max(card_y, y + 5)
+        card_y = max(card_y, y + h)
 
     # Other components: Deferred for later implementation
     # Will be added below cards when figure/table positioning is ready
@@ -921,6 +996,8 @@ def design_draggable(
     cached_project_data: dict | None = None,
     stored_metadata: list[dict] | None = None,
     edit_mode: bool = False,
+    left_panel_layout_data: list | None = None,
+    right_panel_layout_data: list | None = None,
 ):
     import time
 
@@ -1030,29 +1107,43 @@ def design_draggable(
             meta["x"] = layout_data.get("x")
             meta["y"] = layout_data.get("y")
 
-        # Calculate positions for both panels
+        # Use provided dual-panel layout data (from dashboard data)
+        left_panel_saved_layout = (
+            left_panel_layout_data if left_panel_layout_data is not None else []
+        )
+        right_panel_saved_layout = (
+            right_panel_layout_data if right_panel_layout_data is not None else []
+        )
+
+        logger.info(
+            f"📐 Saved layout data - LEFT: {len(left_panel_saved_layout)} items, "
+            f"RIGHT: {len(right_panel_saved_layout)} items"
+        )
+
+        # Calculate positions for both panels (with saved layout data)
         logger.info(
             f"📐 Calculating positions for {len(interactive_metadata)} interactive components"
         )
         logger.info(
             f"📐 Interactive metadata sample: {interactive_metadata[:2] if interactive_metadata else []}"
         )
-        left_layout = calculate_left_panel_positions(interactive_metadata)
+        left_layout = calculate_left_panel_positions(interactive_metadata, left_panel_saved_layout)
         logger.info(f"📐 Left layout calculated: {len(left_layout)} items")
         logger.info(f"📐 Left layout sample: {left_layout[:2] if left_layout else []}")
 
         logger.info(
             f"📐 Calculating positions for {len(right_panel_metadata)} right panel components"
         )
-        right_layout = calculate_right_panel_positions(right_panel_metadata)
+        right_layout = calculate_right_panel_positions(
+            right_panel_metadata, right_panel_saved_layout
+        )
         logger.info(f"📐 Right layout calculated: {len(right_layout)} items")
         logger.info(f"📐 Right layout sample: {right_layout[:2] if right_layout else []}")
 
-        # Create grid items with keys using tracked IDs
+        # Create grid items using tracked IDs
         left_grid_items = [
             html.Div(
                 child,
-                key=component_id,
                 id={"type": "grid-item", "index": component_id},
                 style={
                     "width": "100%",
@@ -1067,7 +1158,6 @@ def design_draggable(
         right_grid_items = [
             html.Div(
                 child,
-                key=component_id,
                 id={"type": "grid-item", "index": component_id},
                 style={
                     "width": "100%",
@@ -1159,7 +1249,7 @@ def design_draggable(
             html.Div(
                 dual_panel_layout,
                 id="draggable-wrapper",
-                style={"flex-grow": 1, "width": "100%", "height": "auto"},
+                style={"flexGrow": 1, "width": "100%", "height": "auto"},
             )
         )
 
@@ -1443,7 +1533,7 @@ def design_draggable(
         margin=[2, 2],  # Minimal margin between grid items [x, y]
         style={
             "display": display_style,
-            "flex-grow": 1,
+            "flexGrow": 1,
             "width": "100%",
             "height": "auto",
         },
@@ -1453,7 +1543,7 @@ def design_draggable(
     draggable_wrapper = html.Div(
         [draggable],  # Initially just contains the draggable
         id="draggable-wrapper",
-        style={"flex-grow": 1, "width": "100%", "height": "auto"},
+        style={"flexGrow": 1, "width": "100%", "height": "auto"},
     )
 
     # Simple centered loading spinner

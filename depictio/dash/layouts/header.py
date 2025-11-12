@@ -724,7 +724,7 @@ def design_header(data, local_store, edit_mode: bool = False):
 
     # Create "Exit" button for edit mode (navigates back to view URL)
     exit_edit_button = dmc.Button(
-        "Exit",
+        "Exit Edit mode",
         id="exit-edit-mode-button",
         leftSection=DashIconify(icon="mdi:eye", width=16, color="white"),
         size="sm",
@@ -741,6 +741,19 @@ def design_header(data, local_store, edit_mode: bool = False):
         leftSection=DashIconify(icon="mdi:plus-circle", width=16, color="white"),
         size="sm",
         color="green",
+        variant="filled",
+        disabled=disabled,  # Disable for non-owners
+        style={"display": "block" if edit_mode else "none"},  # Only show in edit mode
+        n_clicks=0,  # Required for callback to trigger properly
+    )
+
+    # Create "Save Dashboard" button for edit mode
+    save_dashboard_button = dmc.Button(
+        "Save",
+        id="save-button-dashboard",  # Must match callback in save.py
+        leftSection=DashIconify(icon="mdi:content-save", width=16, color="white"),
+        size="sm",
+        color="teal",
         variant="filled",
         disabled=disabled,  # Disable for non-owners
         style={"display": "block" if edit_mode else "none"},  # Only show in edit mode
@@ -1011,30 +1024,41 @@ def design_header(data, local_store, edit_mode: bool = False):
             # In edit mode, show all buttons including add, save, edit controls
             dmc.Group(
                 [
-                    # Powered by Depictio section (always shown)
-                    dmc.Group(
-                        [
-                            dmc.Text(
-                                "Powered by",
-                                size="xs",
-                                c="gray",
-                                fw="bold",
-                                style={"opacity": "0.7"},
-                            ),
-                            dmc.Image(
-                                id="header-powered-by-logo",
-                                src=dash.get_asset_url("images/logos/logo_black.svg"),
-                                h=20,
-                                w="auto",
-                            ),
-                        ],
-                        gap=5,
-                        align="center",
+                    # Powered by Depictio section (always shown) - clickable link to docs
+                    html.A(
+                        dmc.Group(
+                            [
+                                dmc.Text(
+                                    "Powered by",
+                                    size="xs",
+                                    c="gray",
+                                    fw="bold",
+                                    style={"opacity": "0.7"},
+                                ),
+                                dmc.Image(
+                                    id="header-powered-by-logo",
+                                    src=dash.get_asset_url("images/logos/logo_black.svg"),
+                                    h=20,
+                                    w="auto",
+                                ),
+                            ],
+                            gap=5,
+                            align="center",
+                            style={
+                                "marginRight": "15px",
+                                "borderRight": "1px solid var(--app-border-color, #ddd)",
+                                "paddingRight": "15px",
+                            },
+                        ),
+                        href="https://depictio.github.io/depictio-docs/",
+                        target="_blank",
+                        rel="noopener noreferrer",
                         style={
-                            "marginRight": "15px",
-                            "borderRight": "1px solid var(--app-border-color, #ddd)",
-                            "paddingRight": "15px",
+                            "textDecoration": "none",
+                            "cursor": "pointer",
+                            "transition": "opacity 0.2s",
                         },
+                        className="hover-link",
                     ),
                 ]
                 + [
@@ -1045,6 +1069,7 @@ def design_header(data, local_store, edit_mode: bool = False):
                 + [
                     # EDIT MODE ACTIONS: Only visible in edit mode
                     add_component_button,  # Add new component (only visible in edit mode)
+                    save_dashboard_button,  # Save dashboard (only visible in edit mode)
                 ]
                 + [
                     # COMMON CONTROLS: Always shown (settings at the end)

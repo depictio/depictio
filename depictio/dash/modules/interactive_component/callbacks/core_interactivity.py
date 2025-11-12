@@ -70,10 +70,24 @@ def register_store_update_callback(app):
         Returns:
             dict: Aggregated values with indexes
         """
+        from depictio.api.v1.configs.logging_init import logger
+
+        logger.error("=" * 80)
+        logger.error("🔄 INTERACTIVE VALUES STORE UPDATE CALLBACK")
+        logger.error(f"   Input - Total interactive components detected: {len(values)}")
+        logger.error(f"   Input - Component IDs: {len(ids)}")
+
         components_values = []
 
         for i in range(len(values)):
             value = values[i]
+            component_index = ids[i]["index"] if i < len(ids) else "unknown"
+
+            logger.error(f"   📊 Component {i + 1}:")
+            logger.error(f"      - Index: {component_index[:8] if component_index else 'None'}...")
+            logger.error(f"      - Value: {value}")
+            logger.error(f"      - Value is None: {value is None}")
+
             if value is not None:
                 components_values.append(
                     {
@@ -81,5 +95,16 @@ def register_store_update_callback(app):
                         "value": value,
                     }
                 )
+                logger.error("      ✅ Added to store")
+            else:
+                logger.error("      ⚠️ Skipped (value is None)")
+
+        logger.error(
+            f"   ✅ Store update complete: {len(components_values)} components with values"
+        )
+        logger.error(
+            f"   ⚠️ Components with None values (skipped): {len(values) - len(components_values)}"
+        )
+        logger.error("=" * 80)
 
         return {"interactive_components_values": components_values}

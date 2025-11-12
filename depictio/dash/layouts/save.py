@@ -1,10 +1,11 @@
+import json
+
 import dash
 from dash import ALL, Input, State
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import (
     api_call_get_dashboard,
-    api_call_save_dashboard,
 )
 
 
@@ -90,10 +91,18 @@ def register_callbacks_save_lite(app):
         State("local-store", "data"),
         State({"type": "stored-metadata-component", "index": ALL}, "data"),
         State({"type": "interactive-stored-metadata", "index": ALL}, "data"),
+        State({"type": "left-panel-grid", "index": ALL}, "itemLayout"),
+        State({"type": "right-panel-grid", "index": ALL}, "itemLayout"),
         prevent_initial_call=True,
     )
     def save_dashboard_minimal(
-        n_clicks, pathname, local_store, stored_metadata, interactive_metadata
+        n_clicks,
+        pathname,
+        local_store,
+        stored_metadata,
+        interactive_metadata,
+        left_panel_layouts,
+        right_panel_layouts,
     ):
         """Minimal save: Capture component metadata → Build DashboardData → Save to DB"""
         from depictio.models.models.dashboards import DashboardData
@@ -123,36 +132,111 @@ def register_callbacks_save_lite(app):
         logger.info(f"Captured {len(stored_metadata)} component metadata entries")
         logger.info(f"Captured {len(interactive_metadata)} interactive metadata entries")
 
+        # DEBUG: Log what's in each metadata source
+        logger.info("📊 STORED METADATA (from stored-metadata-component):")
+        for idx, meta in enumerate(stored_metadata):
+            logger.info(f"  [{idx}] index={meta.get('index')}, type={meta.get('component_type')}")
+
+        logger.info("📊 INTERACTIVE METADATA (from interactive-stored-metadata):")
+        for idx, meta in enumerate(interactive_metadata):
+            logger.info(f"  [{idx}] index={meta.get('index')}, type={meta.get('component_type')}")
+
         # 3. Fetch current dashboard from DB (baseline)
         dashboard_dict = api_call_get_dashboard(dashboard_id, TOKEN)
         if not dashboard_dict:
             logger.error(f"Failed to fetch dashboard {dashboard_id}")
             raise dash.exceptions.PreventUpdate
 
-        # 4. Update with captured state (metadata only - no layout, no notes)
+        # 4. Update with captured state (metadata + dual-panel layouts)
         # Merge both metadata lists (general components + interactive components)
         all_metadata = stored_metadata + interactive_metadata
         logger.info(f"Total metadata entries to save: {len(all_metadata)}")
+
+        # DEBUG: Log interactive metadata to understand why left panel is empty
+        logger.info(f"📊 Interactive metadata count: {len(interactive_metadata)}")
+        for idx, meta in enumerate(interactive_metadata):
+            logger.info(
+                f"  Interactive [{idx}]: index={meta.get('index')}, "
+                f"type={meta.get('component_type')}, "
+                f"interactive_type={meta.get('interactive_component_type')}"
+            )
+
         dashboard_dict["stored_metadata"] = all_metadata
+
+        # RECALCULATE positions in Python to ensure correct IDs and dimensions
+        # This avoids relying on DashGridLayout's internal state which may be stale/incorrect
+        from depictio.dash.layouts.draggable import (
+            calculate_left_panel_positions,
+            calculate_right_panel_positions,
+            separate_components_by_panel,
+        )
+
+        # Separate components by panel
+        interactive_components, right_panel_components = separate_components_by_panel(all_metadata)
+
+        # Recalculate fresh layout positions using current metadata
+        # Pass existing saved data so we preserve user's drag positions (x/y)
+        # but enforce correct IDs (JSON-stringified) and dimensions (h=5 for cards)
+        left_panel_layout = calculate_left_panel_positions(
+            interactive_components,
+            saved_layout_data=left_panel_layouts[0] if left_panel_layouts else None,
+        )
+        right_panel_layout = calculate_right_panel_positions(
+            right_panel_components,
+            saved_layout_data=right_panel_layouts[0] if right_panel_layouts else None,
+        )
+
+        logger.info(f"Recalculated left panel layout: {len(left_panel_layout)} items")
+        logger.info(f"Recalculated right panel layout: {len(right_panel_layout)} items")
+
+        dashboard_dict["left_panel_layout_data"] = left_panel_layout
+        dashboard_dict["right_panel_layout_data"] = right_panel_layout
 
         # 5. Validate with Pydantic model
         try:
-            dashboard_model = DashboardData.from_mongo(dashboard_dict)
+            DashboardData.from_mongo(dashboard_dict)
             logger.info("✅ DashboardData Pydantic validation passed")
         except Exception as e:
             logger.error(f"❌ Pydantic validation failed: {e}")
             raise dash.exceptions.PreventUpdate
 
-        # 6. Save to DB (no enrichment - delta_locations fetched via MongoDB join)
-        success = api_call_save_dashboard(
-            dashboard_id,
-            dashboard_model.model_dump(),
-            TOKEN,
-            enrich=False,
-        )
+        # 6. LOG what would be saved (API call disabled for debugging)
+        logger.info("=" * 80)
+        logger.info("📝 SAVE DATA PREVIEW (API CALL DISABLED)")
+        logger.info("=" * 80)
+        logger.info(f"Dashboard ID: {dashboard_id}")
+        logger.info(f"Total metadata entries: {len(all_metadata)}")
+        logger.info(f"Left panel layout items: {len(left_panel_layout)}")
+        logger.info(f"Right panel layout items: {len(right_panel_layout)}")
+        logger.info("")
+        logger.info("📊 LEFT PANEL LAYOUT DATA:")
+        logger.info(json.dumps(left_panel_layout, indent=2))
+        logger.info("")
+        logger.info("📊 RIGHT PANEL LAYOUT DATA:")
+        logger.info(json.dumps(right_panel_layout, indent=2))
+        logger.info("")
+        logger.info("📊 METADATA SUMMARY:")
+        for idx, meta in enumerate(all_metadata):
+            logger.info(
+                f"  [{idx}] Component: {meta.get('index')}, "
+                f"Type: {meta.get('component_type')}, "
+                f"Title: {meta.get('title', 'N/A')}"
+            )
+        logger.info("=" * 80)
+
+        # API CALL COMMENTED OUT FOR DEBUGGING - WILL NOT SAVE TO DATABASE
+        # success = api_call_save_dashboard(
+        #     dashboard_id,
+        #     dashboard_model.model_dump(),
+        #     TOKEN,
+        #     enrich=False,
+        # )
+
+        # Simulate success for callback flow
+        success = True
 
         if success:
-            logger.info(f"✅ Minimal save successful: {len(all_metadata)} components saved")
+            logger.info(f"✅ Save preview logged: {len(all_metadata)} components")
         else:
             logger.error(f"❌ Minimal save failed for {dashboard_id}")
 

@@ -27,7 +27,7 @@ Key Features:
 from typing import Optional
 
 import dash_mantine_components as dmc
-from dash import Input, Output, State, ctx, dcc, html, no_update
+from dash import Input, Output, State, ctx, html, no_update
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.components.analytics_tracker import create_analytics_tracker
@@ -62,12 +62,10 @@ def create_editor_layout():
     )
 
     # Create additional stores specific to Editor App
-    # Note: project-cache and theme-relay-store are already in create_shared_stores()
+    # Note: project-cache, theme-relay-store, and dashboard-init-data are already in create_shared_stores()
     additional_stores = [
         # Analytics tracking
         create_analytics_tracker(),
-        # Dashboard initialization data (for API caching)
-        dcc.Store(id="dashboard-init-data", storage_type="session", data=None),
         # Hidden output divs for clientside callbacks
         html.Div(id="dummy-plotly-output", style={"display": "none"}),
         html.Div(id="test-output", style={"display": "none"}),
@@ -161,7 +159,9 @@ def register_routing_callback(app):
         Output("local-store", "data", allow_duplicate=True),
         [
             Input("url", "pathname"),
-            Input("local-store", "data"),
+        ],
+        [
+            State("local-store", "data"),
             State("theme-store", "data"),
             State("project-metadata-store", "data"),
             State("dashboard-init-data", "data"),
@@ -481,6 +481,9 @@ def load_and_render_dashboard(
     init_layout = depictio_dash_data.get("stored_layout_data", {})
     init_children = depictio_dash_data.get("stored_children_data", [])
     stored_metadata = depictio_dash_data.get("stored_metadata", [])
+    # Extract dual-panel layout data
+    left_panel_layout_data = depictio_dash_data.get("left_panel_layout_data", [])
+    right_panel_layout_data = depictio_dash_data.get("right_panel_layout_data", [])
 
     # Render draggable layout (EDIT MODE)
     core = design_draggable(
@@ -491,6 +494,8 @@ def load_and_render_dashboard(
         cached_project_data=cached_project_data,
         stored_metadata=stored_metadata,
         edit_mode=True,  # EDIT MODE - enables drag & drop, resize, etc.
+        left_panel_layout_data=left_panel_layout_data,
+        right_panel_layout_data=right_panel_layout_data,
     )
 
     # Create workflow logo overlay if project data available
@@ -695,12 +700,12 @@ def register_component_editing_callbacks(app):
 
     register_callbacks_stepper(app)
 
-    # Register edit page callbacks (for component editing flow)
-    from depictio.dash.layouts.edit_page import register_edit_page_callbacks
+    # NOTE: Component edit/save callbacks are registered via lazy loading
+    # when entering edit mode. See:
+    # - depictio/dash/modules/card_component/callbacks/edit.py
+    # - depictio/dash/modules/interactive_component/callbacks/edit.py
 
-    register_edit_page_callbacks(app)
-
-    logger.info("  ✅ Component editing callbacks registered")
+    logger.info("  ✅ Component editing callbacks registered (lazy loading)")
 
 
 def register_save_callbacks(app):
@@ -717,6 +722,11 @@ def register_save_callbacks(app):
         app: Dash app instance
     """
     logger.info("  📋 Registering save callbacks")
+
+    # Register save callback for dashboard persistence
+    from depictio.dash.layouts.save import register_callbacks_save_lite
+
+    register_callbacks_save_lite(app)
 
     # Register draggable grid callbacks (drag & drop, resize, save)
     from depictio.dash.layouts.draggable import register_callbacks_draggable

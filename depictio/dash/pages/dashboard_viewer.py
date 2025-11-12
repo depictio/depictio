@@ -21,7 +21,7 @@ Key Features:
 from typing import Optional
 
 import dash_mantine_components as dmc
-from dash import Input, Output, State, ctx, dcc, html, no_update
+from dash import Input, Output, State, ctx, html, no_update
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.components.analytics_tracker import create_analytics_tracker
@@ -56,12 +56,10 @@ def create_viewer_layout():
     )
 
     # Create additional stores specific to Viewer App
-    # Note: project-cache and theme-relay-store are already in create_shared_stores()
+    # Note: project-cache, theme-relay-store, and dashboard-init-data are already in create_shared_stores()
     additional_stores = [
         # Analytics tracking
         create_analytics_tracker(),
-        # Dashboard initialization data (for API caching)
-        dcc.Store(id="dashboard-init-data", storage_type="session", data=None),
         # Hidden output divs for clientside callbacks
         html.Div(id="dummy-plotly-output", style={"display": "none"}),
         html.Div(id="test-output", style={"display": "none"}),
@@ -146,7 +144,9 @@ def register_routing_callback(app):
         # ✅ REMOVED: server-status-cache output (now handled by consolidated_api callback)
         [
             Input("url", "pathname"),
-            Input("local-store", "data"),
+        ],
+        [
+            State("local-store", "data"),
             State("theme-store", "data"),
             State("project-metadata-store", "data"),  # ✅ Fixed: renamed from project-cache
             State("dashboard-init-data", "data"),
@@ -304,6 +304,9 @@ def load_and_render_dashboard(
     init_layout = depictio_dash_data.get("stored_layout_data", {})
     init_children = depictio_dash_data.get("stored_children_data", [])
     stored_metadata = depictio_dash_data.get("stored_metadata", [])
+    # Extract dual-panel layout data
+    left_panel_layout_data = depictio_dash_data.get("left_panel_layout_data", [])
+    right_panel_layout_data = depictio_dash_data.get("right_panel_layout_data", [])
 
     # Render draggable layout (view-only)
     core = design_draggable(
@@ -314,6 +317,8 @@ def load_and_render_dashboard(
         cached_project_data=cached_project_data,
         stored_metadata=stored_metadata,
         edit_mode=False,  # Read-only mode
+        left_panel_layout_data=left_panel_layout_data,
+        right_panel_layout_data=right_panel_layout_data,
     )
 
     # Create workflow logo overlay if project data available

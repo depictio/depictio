@@ -7,6 +7,9 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
+from depictio.models.models.base import PyObjectId, convert_objectid_to_str
+from depictio.models.models.dashboards import DashboardData
+from depictio.models.models.users import Permission
 
 
 def register_tab_callbacks(app):
@@ -44,6 +47,8 @@ def register_tab_callbacks(app):
         logger.info(
             f"🔄 populate_sidebar_tabs called - pathname: {pathname}, has_cache: {bool(dashboard_cache)}, has_local: {bool(local_data)}"
         )
+        if dashboard_cache:
+            logger.info(f"   Dashboard cache keys: {list(dashboard_cache.keys())}")
 
         # EARLY EXIT: Don't populate tabs on component add/edit pages
         # This prevents the callback from running at all when editing/adding components
@@ -110,9 +115,9 @@ def register_tab_callbacks(app):
 
             main_tab = main_tab_response.json()
 
-            # Fetch all dashboards to find child tabs
+            # Fetch all dashboards to find child tabs (include_child_tabs=true for sidebar)
             all_dashboards_response = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/dashboards/list",
+                f"{API_BASE_URL}/depictio/api/v1/dashboards/list?include_child_tabs=true",
                 headers={"Authorization": f"Bearer {token}"},
             )
 
@@ -130,6 +135,11 @@ def register_tab_callbacks(app):
                     if not d.get("is_main_tab", True)
                     and str(d.get("parent_dashboard_id", "")) == parent_id
                 ]
+
+                logger.info(
+                    f"Found {len(child_tabs)} child tabs for parent {parent_id}: "
+                    f"{[t.get('title') for t in child_tabs]}"
+                )
 
                 # Combine and sort by tab_order
                 tabs = [main_tab] + child_tabs
@@ -156,10 +166,15 @@ def register_tab_callbacks(app):
                     dmc.TabsTab(
                         tab_label,
                         value=tab_dashboard_id,
-                        leftSection=DashIconify(
-                            icon=icon_name,
+                        leftSection=dmc.ActionIcon(
+                            DashIconify(
+                                icon=icon_name,
+                                width=20,  # Slightly smaller for tab context
+                            ),
                             color=icon_color,
-                            width=24,
+                            radius="xl",  # Circular shape
+                            size="md",  # Medium size for tabs
+                            variant="filled",  # Solid filled background
                         ),
                         style={
                             "width": "100%",
@@ -170,27 +185,43 @@ def register_tab_callbacks(app):
                 )
 
             # Add "+ Add Tab" button in edit mode
+            logger.info(
+                f"🔍 Checking if we should add '+ Add Tab': is_edit_mode={is_edit_mode}, has_cache={bool(dashboard_cache)}"
+            )
+
             if is_edit_mode and dashboard_cache:
-                # Check if user is owner
-                user_id = local_data.get("user_id")
-                owner_ids = [
-                    str(owner["id"])
-                    for owner in dashboard_cache.get("permissions", {}).get("owners", [])
-                ]
-                is_owner = str(user_id) in owner_ids if user_id else False
+                # Check if user is owner using user_permissions from init endpoint
+                # The API endpoint already validates the user via JWT and returns permission level
+                user_permissions = dashboard_cache.get("user_permissions", {})
+                is_owner = user_permissions.get("level") == "owner"
+
+                logger.info(
+                    f"🔐 Permission check for Add Tab:\n"
+                    f"   - is_edit_mode: {is_edit_mode}\n"
+                    f"   - has_dashboard_cache: {bool(dashboard_cache)}\n"
+                    f"   - dashboard_cache keys: {list(dashboard_cache.keys()) if dashboard_cache else 'None'}\n"
+                    f"   - user_permissions: {user_permissions}\n"
+                    f"   - level: {user_permissions.get('level')}\n"
+                    f"   - is_owner: {is_owner}"
+                )
 
                 if is_owner:
+                    logger.info("✅ Adding '+ Add Tab' button to sidebar")
                     tab_items.append(
                         dmc.TabsTab(
-                            "+ Add Tab",
+                            "Add Tab",
                             value="__add_tab__",
-                            leftSection=DashIconify(icon="mdi:plus", color="blue", width=24),
+                            leftSection=DashIconify(icon="mdi:plus", color="grey", width=24),
                             style={
                                 "width": "100%",
                                 "fontSize": "16px",
                                 "padding": "16px 16px",  # Increased height to match other tabs
                             },
                         )
+                    )
+                else:
+                    logger.warning(
+                        f"❌ Not adding '+ Add Tab' button - user level is '{user_permissions.get('level')}', not 'owner'"
                     )
 
             logger.info(f"Loaded {len(tab_items)} tabs for dashboard {dashboard_id}")
@@ -287,34 +318,48 @@ def register_tab_callbacks(app):
         raise PreventUpdate
 
     @app.callback(
-        Output("url", "pathname", allow_duplicate=True),
+        [
+            Output("url", "pathname", allow_duplicate=True),
+            Output("tab-modal", "opened", allow_duplicate=True),
+        ],
         Input("tab-modal-submit", "n_clicks"),
         [
             State("tab-name-input", "value"),
             State("tab-icon-select", "value"),
+            State("tab-icon-color-picker", "value"),
             State("url", "pathname"),
             State("dashboard-init-data", "data"),
             State("local-store", "data"),
         ],
         prevent_initial_call=True,
     )
-    def create_tab(n_clicks, tab_name, tab_icon, pathname, dashboard_cache, local_data):
+    def create_tab(
+        n_clicks, tab_name, tab_icon, tab_icon_color, pathname, dashboard_cache, local_data
+    ):
         """
         Create new tab and navigate to it.
 
         Args:
             n_clicks: Number of times submit button was clicked
             tab_name: Name for the new tab
-            tab_icon: Icon for the new tab
+            tab_icon: Icon for the new tab (e.g., "mdi:view-dashboard")
+            tab_icon_color: Color for the icon (hex format, e.g., "#ff6b35")
             pathname: Current URL pathname
             dashboard_cache: Cached dashboard data
             local_data: Local storage data containing access token
 
         Returns:
-            str: New pathname to navigate to the created tab
+            tuple: (new_pathname, modal_closed) - New pathname and modal state
         """
         if not n_clicks or not tab_name:
             raise PreventUpdate
+
+        logger.info(
+            f"🎨 Creating new tab:\n"
+            f"   - tab_name: {tab_name}\n"
+            f"   - tab_icon: {tab_icon}\n"
+            f"   - tab_icon_color: {tab_icon_color}"
+        )
 
         if not local_data or "access_token" not in local_data:
             logger.error("No access token available")
@@ -356,45 +401,92 @@ def register_tab_callbacks(app):
         ]
         next_order = len(child_tabs) + 1  # Main tab is 0
 
-        # Create new dashboard using existing register endpoint
+        # Fetch parent dashboard's full permissions to copy to new tab
+        parent_response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{parent_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        if parent_response.status_code == 200:
+            parent_dashboard = parent_response.json()
+            parent_permissions_dict = parent_dashboard.get("permissions", {})
+            parent_project_id = str(
+                parent_dashboard.get("project_id", dashboard_cache.get("project_id"))
+            )
+        else:
+            logger.warning("Failed to fetch parent dashboard, using cached data")
+            parent_permissions_dict = {}
+            parent_project_id = str(dashboard_cache.get("project_id"))
+
+        # Convert parent permissions dict to Permission model
+        parent_permissions = Permission(**parent_permissions_dict)
+
+        # Generate new dashboard ID for the tab
+        new_dashboard_id = PyObjectId()
+
+        logger.info(
+            f"🎨 Creating DashboardData instance:\n"
+            f"   - icon (from modal): {tab_icon}\n"
+            f"   - icon_color (from modal): {tab_icon_color}\n"
+            f"   - parent_dashboard_id: {parent_id}"
+        )
+
+        # Create DashboardData instance for the new tab, copying structure from parent
+        new_tab_dashboard = DashboardData(
+            dashboard_id=new_dashboard_id,
+            version=1,
+            title=tab_name,
+            subtitle="",
+            icon=tab_icon,
+            icon_color=tab_icon_color,  # Use color from modal, not parent
+            icon_variant="filled",
+            workflow_system="none",
+            notes_content="",
+            permissions=parent_permissions,
+            is_public=False,
+            last_saved_ts="",
+            project_id=PyObjectId(parent_project_id),  # Convert string to PyObjectId
+            # Tab-specific fields
+            is_main_tab=False,
+            parent_dashboard_id=PyObjectId(parent_id),  # Convert string to PyObjectId
+            tab_order=next_order,
+        )
+
+        # Convert to JSON-serializable dict
+        new_tab_payload = convert_objectid_to_str(new_tab_dashboard.model_dump())
+
         new_tab_response = httpx.post(
-            f"{API_BASE_URL}/depictio/api/v1/dashboards/register",
+            f"{API_BASE_URL}/depictio/api/v1/dashboards/save/{str(new_dashboard_id)}",
             headers={
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json",
             },
-            json={
-                "title": tab_name,
-                "icon": tab_icon,
-                "icon_color": dashboard_cache.get("icon_color", "orange"),
-                "project_id": str(dashboard_cache["project_id"]),
-                # Tab-specific fields
-                "is_main_tab": False,
-                "parent_dashboard_id": parent_id,
-                "tab_order": next_order,
-                # Copy permissions from parent
-                "permissions": dashboard_cache.get("permissions", {}),
-            },
+            json=new_tab_payload,
         )
 
         if new_tab_response.status_code != 200:
             logger.error(f"Failed to create new tab: {new_tab_response.text}")
             raise PreventUpdate
 
-        new_tab = new_tab_response.json()
-        new_dashboard_id = new_tab["dashboard_id"]
-
-        logger.info(f"Created new tab: {tab_name} (ID: {new_dashboard_id})")
+        # The /save/ endpoint returns the saved DashboardData
+        # new_dashboard_id was generated above, so we already have it
+        saved_tab = new_tab_response.json()
+        logger.info(
+            f"✅ Created new tab: {tab_name} (ID: {str(new_dashboard_id)})\n"
+            f"   - Saved icon value: {saved_tab.get('icon', 'NOT FOUND')}\n"
+            f"   - Saved icon_color: {saved_tab.get('icon_color', 'NOT FOUND')}"
+        )
 
         # Navigate to new tab (preserves viewer/editor app context)
         if "/dashboard-edit/" in pathname:
             # Editor app: use /dashboard-edit/ prefix
-            new_pathname = f"/dashboard-edit/{new_dashboard_id}"
+            new_pathname = f"/dashboard-edit/{str(new_dashboard_id)}"
         else:
             # Viewer app
-            new_pathname = f"/dashboard/{new_dashboard_id}"
+            new_pathname = f"/dashboard/{str(new_dashboard_id)}"
             if is_edit_mode:
                 # Legacy edit mode: append /edit suffix
                 new_pathname += "/edit"
 
-        return new_pathname
+        # Close modal and navigate to new tab
+        return new_pathname, False

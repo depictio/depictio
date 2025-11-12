@@ -220,14 +220,64 @@ def get_build_functions() -> dict:
     """
     Get a dictionary mapping component types to their build functions.
 
+    Includes logging wrapper to track build function executions and detect double-rendering.
+    Returns a special '_reset_counts' function to clear counters between dashboard loads.
+
     Returns:
-        dict: Dictionary with component types as keys and build functions as values
+        dict: Dictionary with component types as keys and wrapped build functions as values,
+              plus '_reset_counts' key with reset function
     """
-    return {
-        component_type: metadata["build_function"]
+    import functools
+
+    from depictio.api.v1.configs.logging_init import logger
+
+    # Track build counts globally (persists across all builds until reset)
+    build_counts = {}
+
+    def reset_counts():
+        """Clear all build counts - call this at start of each dashboard render"""
+        build_counts.clear()
+        logger.info("🔄 BUILD COUNTS RESET")
+
+    def wrap_build_function(component_type, original_func):
+        """Wrapper to log and track build function executions"""
+
+        @functools.wraps(original_func)
+        def wrapper(**kwargs):
+            # Get component identifier
+            component_id = kwargs.get("index", "unknown")
+
+            # Create unique key for this component
+            key = f"{component_type}:{component_id}"
+
+            # Increment build count
+            build_counts[key] = build_counts.get(key, 0) + 1
+            count = build_counts[key]
+
+            # Log execution with count
+            logger.error(f"🔨 BUILD [{count}x] {component_type.upper()} - Index: {component_id}")
+
+            # Call original build function
+            result = original_func(**kwargs)
+
+            # Log completion
+            logger.error(f"✅ BUILT [{count}x] {component_type.upper()} - Index: {component_id}")
+
+            return result
+
+        return wrapper
+
+    # Wrap each build function
+    wrapped_functions = {
+        component_type: wrap_build_function(component_type, metadata["build_function"])
         for component_type, metadata in COMPONENT_METADATA.items()
         if "build_function" in metadata
     }
+
+    # Attach reset function
+    wrapped_functions["_reset_counts"] = reset_counts
+
+    return wrapped_functions
 
 
 def get_async_build_functions() -> dict:

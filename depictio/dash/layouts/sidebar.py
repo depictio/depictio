@@ -13,6 +13,7 @@ def create_sidebar_footer():
 
     This footer is used in both the management app sidebar and dashboard viewer sidebar.
     It includes:
+    - Visual separator (divider)
     - Theme toggle controls (light/dark mode)
     - Server status indicator
     - Horizontal divider
@@ -24,13 +25,19 @@ def create_sidebar_footer():
     return html.Div(
         id="sidebar-footer",
         children=[
+            # Separator above theme section
+            dmc.Divider(variant="solid", my="md"),
+            # Theme controls
             dmc.Center(create_theme_controls()),
+            # Server status
             dmc.Grid(
                 id="sidebar-footer-server-status",
                 align="center",
                 justify="center",
             ),
-            html.Hr(),
+            # Divider before avatar
+            dmc.Divider(my="sm"),
+            # User avatar
             html.Div(
                 id="avatar-container",
                 style={
@@ -165,9 +172,13 @@ def create_static_navbar_content():
 def register_sidebar_callbacks(app):
     # Import and register tab callbacks
     from depictio.dash.layouts.tab_callbacks import register_tab_callbacks
+    from depictio.dash.layouts.tab_modal import register_tab_modal_callbacks
 
     register_tab_callbacks(app)
     logger.info("✅ SIDEBAR: Tab callbacks registered")
+
+    register_tab_modal_callbacks(app)
+    logger.info("✅ SIDEBAR: Tab modal callbacks registered")
 
     # Inject JavaScript to handle the resize when sidebar state changes
     # app.clientside_callback(
@@ -222,7 +233,7 @@ def register_sidebar_callbacks(app):
             console.log('🔧 CLIENTSIDE FAVICON: collapsed=' + is_collapsed + ', pathname=' + pathname);
 
             // Only manage favicon on dashboard pages
-            if (!pathname || !pathname.startsWith('/dashboard/')) {
+            if (!pathname || !(pathname.startsWith('/dashboard/') || pathname.startsWith('/dashboard-edit/'))) {
                 console.log('❌ Not a dashboard page - hiding favicon');
                 return {"display": "none"};
             }
@@ -252,7 +263,7 @@ def register_sidebar_callbacks(app):
             console.log('🔧 CLIENTSIDE NAVBAR COLLAPSED: collapsed=' + is_collapsed + ', pathname=' + pathname);
 
             // Only allow collapse on dashboard pages
-            if (!pathname || !pathname.startsWith('/dashboard/')) {
+            if (!pathname || !(pathname.startsWith('/dashboard/') || pathname.startsWith('/dashboard-edit/'))) {
                 console.log('❌ Not a dashboard page - keeping navbar expanded');
                 return window.dash_clientside.no_update;
             }
@@ -349,92 +360,226 @@ def register_sidebar_callbacks(app):
     # NOTE: Avatar callback removed - replaced with "Powered by Depictio" section
     # NOTE: Theme-aware logo callbacks removed - no logos to invert anymore
 
-    # PHASE 2A OPTIMIZATION: Track last rendered server status to prevent duplicate renders
-    _last_server_status_state = {"status": None, "version": None}
-
+    # Populate API base URL for clientside callbacks
     @app.callback(
+        Output("api-base-url-store", "data"),
+        Input("url", "pathname"),
+        prevent_initial_call=False,
+    )
+    def populate_api_base_url(pathname):
+        """Provide API base URL to clientside callbacks.
+
+        Uses external_url for browser-based fetch requests (not internal Docker URLs).
+        """
+        from depictio.api.v1.configs.config import settings
+
+        # Use external URL for browser fetch (internal URL only works within Docker network)
+        return settings.fastapi.external_url
+
+    # Server status periodic check (30 second interval)
+    # Pure clientside implementation - browser directly fetches from API
+    app.clientside_callback(
+        """
+        async function(n_intervals, current_cache, api_base_url) {
+            console.log('🔄 Clientside server status check:', n_intervals);
+            console.log('🔧 API Base URL:', api_base_url);
+
+            // Don't trigger on initial load (n_intervals === 0) or if API URL not set
+            if (n_intervals === 0 || !api_base_url) {
+                return window.dash_clientside.no_update;
+            }
+
+            try {
+                // Direct fetch from browser to API endpoint (no Dash server involved)
+                const status_url = `${api_base_url}/depictio/api/v1/utils/status`;
+                console.log('🌐 Fetching server status from:', status_url);
+
+                const response = await fetch(status_url, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    // Use no-cache to avoid stale responses
+                    cache: 'no-cache',
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                console.log('✅ Server status fetched:', data);
+
+                // Return updated cache with timestamp
+                return {
+                    status: data.status || 'online',
+                    version: data.version || 'unknown',
+                    timestamp: Date.now() / 1000,  // Convert to seconds
+                };
+            } catch (error) {
+                console.error('❌ Server status check failed:', error);
+
+                // Return offline status on error
+                return {
+                    status: 'offline',
+                    version: current_cache?.version || 'unknown',
+                    timestamp: Date.now() / 1000,
+                };
+            }
+        }
+        """,
+        Output("server-status-cache", "data"),
+        Input("server-status-interval", "n_intervals"),
+        State("server-status-cache", "data"),
+        State("api-base-url-store", "data"),
+        prevent_initial_call=True,
+    )
+
+    # COMMENTED OUT: Server-side callback - Testing clientside version below
+    # # PHASE 2A OPTIMIZATION: Track last rendered server status to prevent duplicate renders
+    # _last_server_status_state = {"status": None, "version": None}
+
+    # @app.callback(
+    #     Output("sidebar-footer-server-status", "children"),
+    #     Input("server-status-cache", "data"),
+    #     State("sidebar-footer-server-status", "children"),
+    #     prevent_initial_call=False,  # Must be False to check ctx.triggered
+    # )
+    # def update_server_status(server_cache, current_children):
+    #     """
+    #     PERFORMANCE OPTIMIZATION (Phase 2A): Enhanced guards to prevent redundant updates.
+
+    #     Guards:
+    #     1. Skip if no trigger or empty value (initial load)
+    #     2. Skip if server status hasn't actually changed (content comparison)
+
+    #     This reduces callback fires from 4 → 1 during dashboard load.
+    #     """
+    #     from dash import ctx
+
+    #     # # DEBUG LOGGING: Log all inputs for troubleshooting
+    #     # logger.info("🔍 SERVER STATUS CALLBACK TRIGGERED")
+    #     # logger.info(f"  - Trigger: {ctx.triggered}")
+    #     # logger.info(f"  - server_cache: {server_cache}")
+    #     # logger.info(f"  - current_children type: {type(current_children)}")
+    #     # logger.info(f"  - _last_server_status_state: {_last_server_status_state}")
+
+    #     # Get server status from server-status-cache store
+    #     # server_cache contains data like: {"status": "online", "version": "0.5.2"}
+    #     server_status = server_cache
+
+    #     # GUARD 1: Skip if no valid cache data exists
+    #     if not server_status or "status" not in server_status:
+    #         logger.debug("🔴 GUARD 1: No valid cache data - preventing update")
+    #         raise dash.exceptions.PreventUpdate
+
+    #     # GUARD 2: Skip if server status hasn't changed AND element already has content
+    #     # Compare relevant fields only (status + version)
+    #     # IMPORTANT: Always render if current_children is None (element is empty in DOM)
+    #     current_status = server_status.get("status")
+    #     current_version = server_status.get("version")
+
+    #     if (
+    #         current_children is not None  # Element already has content
+    #         and _last_server_status_state["status"] is not None
+    #         and _last_server_status_state["status"] == current_status
+    #         and _last_server_status_state["version"] == current_version
+    #     ):
+    #         logger.info(
+    #             f"🔴 GUARD 2: Status unchanged ({current_status}, {current_version}) and element has content - preventing update"
+    #         )
+    #         raise dash.exceptions.PreventUpdate
+
+    #     # Update tracking state
+    #     _last_server_status_state["status"] = current_status
+    #     _last_server_status_state["version"] = current_version
+
+    #     # logger.info(
+    #     #     f"✅ update_server_status: Rendering new status ({current_status}, {current_version})"
+    #     # )
+
+    #     # Render server status badge
+    #     if server_status["status"] == "online":
+    #         server_status_badge = dmc.GridCol(
+    #             dmc.Badge(
+    #                 f"Server online - {server_status['version']}",
+    #                 variant="dot",
+    #                 color="green",
+    #                 size="sm",
+    #             ),
+    #             span="content",
+    #         )
+    #         return [dmc.Group([server_status_badge], justify="space-between")]
+    #     else:
+    #         server_status_badge = dmc.GridCol(
+    #             dmc.Badge(
+    #                 "Server offline",
+    #                 variant="outline",
+    #                 color="red",
+    #                 size="sm",
+    #                 style={"padding": "5px 5px"},
+    #             ),
+    #             span="content",
+    #         )
+    #         return [server_status_badge]
+
+    # Clientside callback to render server status badge
+    app.clientside_callback(
+        """
+        function(server_cache) {
+            console.log('🎨 CLIENTSIDE: Rendering server status badge', server_cache);
+
+            // Guard: Skip if no valid cache data
+            if (!server_cache || !server_cache.status) {
+                console.log('❌ No valid cache data - no update');
+                return window.dash_clientside.no_update;
+            }
+
+            // Render badge based on status
+            if (server_cache.status === 'online') {
+                return [{
+                    type: 'Group',
+                    namespace: 'dash_mantine_components',
+                    props: {
+                        justify: 'space-between',
+                        children: [{
+                            type: 'GridCol',
+                            namespace: 'dash_mantine_components',
+                            props: {
+                                span: 'content',
+                                children: {
+                                    type: 'Badge',
+                                    namespace: 'dash_mantine_components',
+                                    props: {
+                                        children: 'Server online - ' + (server_cache.version || 'unknown'),
+                                        variant: 'dot',
+                                        color: 'green',
+                                        size: 'sm'
+                                    }
+                                }
+                            }
+                        }]
+                    }
+                }];
+            } else {
+                return [{
+                    type: 'Badge',
+                    namespace: 'dash_mantine_components',
+                    props: {
+                        children: 'Server offline',
+                        variant: 'outline',
+                        color: 'red',
+                        size: 'sm',
+                        style: { padding: '5px 5px' }
+                    }
+                }];
+            }
+        }
+        """,
         Output("sidebar-footer-server-status", "children"),
         Input("server-status-cache", "data"),
-        State("sidebar-footer-server-status", "children"),
-        prevent_initial_call=False,  # Must be False to check ctx.triggered
+        prevent_initial_call=False,
     )
-    def update_server_status(server_cache, current_children):
-        """
-        PERFORMANCE OPTIMIZATION (Phase 2A): Enhanced guards to prevent redundant updates.
-
-        Guards:
-        1. Skip if no trigger or empty value (initial load)
-        2. Skip if server status hasn't actually changed (content comparison)
-
-        This reduces callback fires from 4 → 1 during dashboard load.
-        """
-        from dash import ctx
-
-        # DEBUG LOGGING: Log all inputs for troubleshooting
-        logger.info("🔍 SERVER STATUS CALLBACK TRIGGERED")
-        logger.info(f"  - Trigger: {ctx.triggered}")
-        logger.info(f"  - server_cache: {server_cache}")
-        logger.info(f"  - current_children type: {type(current_children)}")
-        logger.info(f"  - _last_server_status_state: {_last_server_status_state}")
-
-        # Get server status from server-status-cache store
-        # server_cache contains data like: {"status": "online", "version": "0.5.2"}
-        server_status = server_cache
-
-        # GUARD 1: Skip if no valid cache data exists
-        if not server_status or "status" not in server_status:
-            logger.debug("🔴 GUARD 1: No valid cache data - preventing update")
-            raise dash.exceptions.PreventUpdate
-
-        # GUARD 2: Skip if server status hasn't changed AND element already has content
-        # Compare relevant fields only (status + version)
-        # IMPORTANT: Always render if current_children is None (element is empty in DOM)
-        current_status = server_status.get("status")
-        current_version = server_status.get("version")
-
-        if (
-            current_children is not None  # Element already has content
-            and _last_server_status_state["status"] is not None
-            and _last_server_status_state["status"] == current_status
-            and _last_server_status_state["version"] == current_version
-        ):
-            logger.info(
-                f"🔴 GUARD 2: Status unchanged ({current_status}, {current_version}) and element has content - preventing update"
-            )
-            raise dash.exceptions.PreventUpdate
-
-        # Update tracking state
-        _last_server_status_state["status"] = current_status
-        _last_server_status_state["version"] = current_version
-
-        logger.info(
-            f"✅ update_server_status: Rendering new status ({current_status}, {current_version})"
-        )
-
-        # Render server status badge
-        if server_status["status"] == "online":
-            server_status_badge = dmc.GridCol(
-                dmc.Badge(
-                    f"Server online - {server_status['version']}",
-                    variant="dot",
-                    color="green",
-                    size="sm",
-                ),
-                span="content",
-            )
-            return [dmc.Group([server_status_badge], justify="space-between")]
-        else:
-            server_status_badge = dmc.GridCol(
-                dmc.Badge(
-                    "Server offline",
-                    variant="outline",
-                    color="red",
-                    size="sm",
-                    style={"padding": "5px 5px"},
-                ),
-                span="content",
-            )
-            return [server_status_badge]
 
     # Admin link visibility - server-side callback using local-store
     @app.callback(
@@ -568,6 +713,8 @@ def create_dashboard_viewer_sidebar():
     """
     logger.info("🏗️ Creating dashboard viewer sidebar with tab container")
 
+    from depictio.dash.colors import colors
+
     # Create empty tabs component - will be populated by callback
     sidebar_tabs = dmc.Tabs(
         id="sidebar-tabs",
@@ -575,6 +722,8 @@ def create_dashboard_viewer_sidebar():
         placement="left",
         value=None,
         w="100%",  # Full width
+        # variant="pills",
+        color=colors["orange"],
         children=[
             dmc.TabsList(
                 [],
@@ -585,21 +734,60 @@ def create_dashboard_viewer_sidebar():
     )
     logger.info("✅ Created sidebar-tabs with sidebar-tabs-list")
 
+    # Create "Back to Dashboards" navigation link for top of sidebar
+    back_to_dashboards = html.Div(
+        children=[
+            dmc.Center(
+                html.A(
+                    children=[
+                        DashIconify(
+                            icon="mdi:arrow-left",
+                            height=14,
+                            style={
+                                "marginRight": "6px",
+                                "display": "inline-block",
+                                "color": "var(--app-text-color, #000000)",
+                                "opacity": "0.7",
+                            },
+                        ),
+                        dmc.Text("Back to Dashboards", c="gray", size="sm"),
+                    ],
+                    href="/dashboards",
+                    style={
+                        "textDecoration": "none",
+                        "display": "flex",
+                        "alignItems": "center",
+                        "transition": "opacity 0.2s",
+                    },
+                    className="hover-link",
+                )
+            ),
+            # Divider to separate from tabs section
+            dmc.Divider(variant="solid", mt="md", mb="xs"),
+        ],
+        style={"padding": "16px 16px 0 16px"},
+    )
+
     # Create standardized sidebar footer
     sidebar_footer = create_sidebar_footer()
 
-    # Return tabs with footer at bottom
+    # Return navigation link at top, tabs in middle, footer at bottom
     return [
         dmc.Stack(
             [
-                sidebar_tabs,
+                back_to_dashboards,
+                html.Div(
+                    sidebar_tabs,
+                    style={"flex": "1", "overflowY": "auto"},  # Tabs grow to fill space
+                ),
                 sidebar_footer,
             ],
-            justify="space-between",
             h="100%",
             style={
                 "height": "100%",
                 "width": "100%",  # Full width stack
+                "display": "flex",
+                "flexDirection": "column",
             },
         )
     ]

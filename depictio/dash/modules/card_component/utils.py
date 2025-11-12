@@ -526,7 +526,7 @@ def build_card_frame(index, children=None, show_border=False):
                     id={"type": "card-loading-overlay", "index": index},
                     visible=False,
                     overlayProps={"radius": "sm", "blur": 2},
-                    loaderProps={"type": "dots"},
+                    loaderProps={"type": "dots", "size": "lg"},
                     zIndex=10,
                 ),
                 dmc.Center(
@@ -569,7 +569,7 @@ def build_card_frame(index, children=None, show_border=False):
                     id={"type": "card-loading-overlay", "index": index},
                     visible=False,
                     overlayProps={"radius": "sm", "blur": 2},
-                    loaderProps={"type": "dots"},
+                    loaderProps={"type": "dots", "size": "lg"},
                     zIndex=10,
                 ),
                 dmc.Stack(
@@ -797,7 +797,7 @@ def build_card(**kwargs):
     if v is not None:
         display_value = str(v)
     else:
-        display_value = html.Div(
+        display_value = html.Span(
             dmc.Loader(type="dots", size="lg"), style={"textAlign": "center", "padding": "10px"}
         )
 

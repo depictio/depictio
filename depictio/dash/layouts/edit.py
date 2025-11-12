@@ -696,11 +696,9 @@ def enable_box_edit_mode(
                         [
                             html.Div(
                                 f"Showing: {displayed_count:,} points",
-                                key=f"showing-{btn_index}-{displayed_count}",
                             ),
                             html.Div(
                                 f"Total: {total_count:,} points",
-                                key=f"total-{btn_index}-{total_count}",
                             ),
                             html.Div(
                                 "Full dataset available for analysis",
@@ -709,10 +707,8 @@ def enable_box_edit_mode(
                                     "fontStyle": "italic",
                                     "fontSize": "0.9em",
                                 },
-                                key=f"footer-{btn_index}",
                             ),
                         ],
-                        key=f"content-wrapper-{btn_index}-{displayed_count}-{total_count}",
                     ),
                     id={"type": "partial-data-popover-content", "index": f"{btn_index}"},
                 ),
@@ -847,7 +843,6 @@ def enable_box_edit_mode(
     content_div = html.Div(
         content_children,
         id=f"content-{box_uuid}",
-        key=f"content-{btn_index}",  # Stable key for React reconciliation
         className="dashboard-component-hover responsive-content",
         style={
             "overflow": "visible",
@@ -878,7 +873,6 @@ def enable_box_edit_mode(
     return html.Div(
         draggable_wrapper,
         id=box_uuid,  # CRITICAL: Add the ID to the outer wrapper so it can be found for duplication
-        key=f"wrapper-{btn_index}",  # Stable key for outer wrapper
         className="responsive-wrapper",  # Critical: This class makes it work!
         style={
             "position": "relative",

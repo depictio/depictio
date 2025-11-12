@@ -1,25 +1,22 @@
 """
-Direct edit page for component modification without stepper wizard.
+Generic edit page renderer for component modification.
 
-This module provides a standalone edit page that shows only the design interface
-with pre-populated settings. No stepper wizard, no -tmp index handling.
+This module provides page layout and rendering for component editing.
+Component-specific save logic lives in the respective component modules:
+- depictio/dash/modules/card_component/callbacks/edit.py
+- depictio/dash/modules/interactive_component/callbacks/edit.py
 
 Key features:
 - Direct to design form (no wizard steps)
 - Uses actual component ID throughout (no -tmp suffix)
-- Dedicated save callback for edit page
-- Cleaner, faster UX for component editing
+- Generic page structure works for all component types
+- Component-specific callbacks registered via module lazy loading
 """
 
-from datetime import datetime
-
 import dash_mantine_components as dmc
-import httpx
-from dash import ALL, Input, Output, State, ctx, dcc, html
-from dash.exceptions import PreventUpdate
+from dash import dcc, html
 from dash_iconify import DashIconify
 
-from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
@@ -175,11 +172,14 @@ def create_edit_page(
         style={"display": "none"},
     )
 
-    # Save button (uses actual component_id)
+    # Save button (uses component-specific type to avoid callback conflicts)
+    component_type = component_data.get("component_type", "unknown")
+    button_type = f"btn-save-edit-{component_type}"
+
     save_button = dmc.Center(
         dmc.Button(
             "Save Changes",
-            id={"type": "btn-save-edit", "index": component_id},
+            id={"type": button_type, "index": component_id},
             color="green",
             variant="filled",
             n_clicks=0,
@@ -247,174 +247,3 @@ def create_edit_page(
     logger.info(f"✅ EDIT PAGE CREATED - Component {component_id}")
 
     return page_layout
-
-
-def register_edit_page_callbacks(app):
-    """Register callbacks for edit page functionality."""
-
-    @app.callback(
-        Output("url", "pathname", allow_duplicate=True),
-        Input({"type": "btn-save-edit", "index": ALL}, "n_clicks"),
-        State("edit-page-context", "data"),
-        State("local-store", "data"),
-        State("url", "pathname"),
-        State({"type": "card-input", "index": ALL}, "value"),
-        State({"type": "card-dropdown-column", "index": ALL}, "value"),
-        State({"type": "card-dropdown-aggregation", "index": ALL}, "value"),
-        State({"type": "card-color-background", "index": ALL}, "value"),
-        State({"type": "card-color-title", "index": ALL}, "value"),
-        State({"type": "card-icon-selector", "index": ALL}, "value"),
-        State({"type": "card-title-font-size", "index": ALL}, "value"),
-        prevent_initial_call=True,
-    )
-    def save_edited_card_component(
-        btn_clicks,
-        edit_context,
-        local_store,
-        current_pathname,
-        card_titles,
-        card_columns,
-        card_aggregations,
-        card_bg_colors,
-        card_title_colors,
-        card_icons,
-        card_font_sizes,
-    ):
-        """
-        Save edited card component directly (no -tmp index handling).
-
-        Uses the actual component ID throughout. Updates the component
-        metadata in place without any temporary index gymnastics.
-
-        Args:
-            btn_clicks: List of n_clicks from save buttons
-            edit_context: Edit page context with dashboard_id, component_id, component_data
-            local_store: Local storage with access token
-            card_titles: Card title values
-            card_columns: Card column values
-            card_aggregations: Card aggregation values
-            card_bg_colors: Card background color values
-            card_title_colors: Card title color values
-            card_icons: Card icon values
-            card_font_sizes: Card font size values
-
-        Returns:
-            str: Redirect pathname to dashboard
-        """
-        logger.info("=" * 80)
-        logger.info("🚀 SAVE CALLBACK TRIGGERED")
-        logger.info(f"   ctx.triggered_id: {ctx.triggered_id}")
-        logger.info(f"   btn_clicks: {btn_clicks}")
-        logger.info(f"   edit_context keys: {edit_context.keys() if edit_context else None}")
-
-        if not ctx.triggered_id or not any(btn_clicks):
-            logger.warning("⚠️ SAVE CALLBACK - No trigger or clicks, preventing update")
-            raise PreventUpdate
-
-        dashboard_id = edit_context["dashboard_id"]
-        component_id = edit_context["component_id"]  # Actual ID, not tmp
-        component_data = edit_context["component_data"]
-
-        logger.info(f"💾 SAVE EDIT - Component: {component_id}")
-        logger.info(f"   Dashboard: {dashboard_id}")
-        logger.info(f"   Component type: {component_data.get('component_type')}")
-        logger.info(
-            f"   Received States - titles: {card_titles}, columns: {card_columns}, aggregations: {card_aggregations}"
-        )
-
-        # Get the index of the component in the arrays (should be 0 for edit page)
-        idx = 0
-
-        # Helper to safely get value from array or fall back to component_data
-        def get_value(arr, idx, fallback_key, default=""):
-            """Safely extract value from State array with fallback to component_data."""
-            if arr and len(arr) > idx and arr[idx] is not None:
-                return arr[idx]
-            return component_data.get(fallback_key, default)
-
-        # Update component metadata with new values
-        # CRITICAL: Use actual component_id, no -tmp suffix
-        updated_metadata = {
-            **component_data,
-            "index": component_id,  # Keep actual ID
-            "title": get_value(card_titles, idx, "title", ""),
-            "column_name": get_value(card_columns, idx, "column_name", None),
-            "aggregation": get_value(card_aggregations, idx, "aggregation", None),
-            "background_color": get_value(card_bg_colors, idx, "background_color", ""),
-            "title_color": get_value(card_title_colors, idx, "title_color", ""),
-            "icon_name": get_value(card_icons, idx, "icon_name", "mdi:chart-line"),
-            "title_font_size": get_value(card_font_sizes, idx, "title_font_size", "md"),
-            "last_updated": datetime.now().isoformat(),
-        }
-
-        logger.info(f"   Updated title: {updated_metadata['title']}")
-        logger.info(f"   Updated column: {updated_metadata['column_name']}")
-        logger.info(f"   Updated aggregation: {updated_metadata['aggregation']}")
-        logger.info(f"   Updated background_color: {updated_metadata['background_color']}")
-        logger.info(f"   Updated title_color: {updated_metadata['title_color']}")
-        logger.info(f"   Updated icon: {updated_metadata['icon_name']}")
-        logger.info(f"   Updated font_size: {updated_metadata['title_font_size']}")
-
-        # Call API to update dashboard
-        TOKEN = local_store["access_token"]
-
-        try:
-            # Fetch current dashboard data
-            response = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}",
-                headers={"Authorization": f"Bearer {TOKEN}"},
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            dashboard_data = response.json()
-
-            # Update the specific component in stored_metadata
-            existing_metadata = dashboard_data.get("stored_metadata", [])
-
-            # Replace the component with updated metadata
-            updated_metadata_list = []
-            component_found = False
-            for meta in existing_metadata:
-                if str(meta.get("index")) == str(component_id):
-                    updated_metadata_list.append(updated_metadata)
-                    component_found = True
-                    logger.info(f"   ✓ Replaced component {component_id} in metadata")
-                else:
-                    updated_metadata_list.append(meta)
-
-            if not component_found:
-                logger.error(f"   ✗ Component {component_id} not found in metadata!")
-                return f"/dashboard/{dashboard_id}"
-
-            # Update entire dashboard data with modified metadata
-            dashboard_data["stored_metadata"] = updated_metadata_list
-
-            # Save dashboard via API (POST /save endpoint expects full DashboardData)
-            update_response = httpx.post(
-                f"{API_BASE_URL}/depictio/api/v1/dashboards/save/{dashboard_id}",
-                headers={"Authorization": f"Bearer {TOKEN}"},
-                json=dashboard_data,
-                timeout=30.0,
-            )
-            update_response.raise_for_status()
-
-            logger.info(f"✅ SAVE EDIT SUCCESS - Component {component_id} updated")
-            logger.info(f"   API Response status: {update_response.status_code}")
-            logger.info(f"   API Response: {update_response.json()}")
-
-        except Exception as e:
-            logger.error(f"❌ SAVE EDIT FAILED - Error: {e}")
-            logger.error(f"   Error type: {type(e).__name__}")
-            import traceback
-
-            logger.error(f"   Traceback: {traceback.format_exc()}")
-
-        # Redirect back to dashboard - detect app context from current URL
-        app_prefix = "dashboard"  # default to viewer
-        if current_pathname and "/dashboard-edit/" in current_pathname:
-            app_prefix = "dashboard-edit"
-
-        logger.info(f"🔄 Redirecting to /{app_prefix}/{dashboard_id}")
-        return f"/{app_prefix}/{dashboard_id}"
-
-    logger.info("✅ Edit page callbacks registered")
