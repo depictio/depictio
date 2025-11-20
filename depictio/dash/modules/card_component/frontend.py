@@ -143,6 +143,549 @@ def register_callbacks_card_component(app):
     def reset_aggregation_value(column_name):
         return None
 
+    # Callback to switch between simple and advanced mode
+    @app.callback(
+        Output({"type": "card-simple-container", "index": MATCH}, "style"),
+        Output({"type": "card-advanced-container", "index": MATCH}, "style"),
+        Output({"type": "card-advanced-container", "index": MATCH}, "children"),
+        Input({"type": "card-metric-mode", "index": MATCH}, "value"),
+        State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+        State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+        State("current-edit-parent-index", "data"),
+        State({"type": "card-metric-mode", "index": MATCH}, "id"),
+        State("local-store", "data"),
+        State("url", "pathname"),
+        prevent_initial_call=True,
+    )
+    def switch_card_mode(mode, wf_tag, dc_tag, parent_index, component_id, local_data, pathname):
+        """
+        Callback to switch between simple and advanced card configuration modes.
+
+        Args:
+            mode: "simple" or "advanced"
+            wf_tag: Workflow tag
+            dc_tag: Data collection tag
+            parent_index: Parent component index (edit mode)
+            component_id: Component ID dict with index
+            local_data: Local storage data (contains TOKEN)
+            pathname: Current URL pathname
+
+        Returns:
+            Tuple: (simple_style, advanced_style, advanced_children)
+        """
+        logger.info(f"=== CARD MODE SWITCH: {mode} ===")
+
+        if not local_data:
+            logger.error("No local_data available!")
+            return {"display": "block"}, {"display": "none"}, []
+
+        TOKEN = local_data["access_token"]
+        index = component_id["index"]
+
+        # In edit mode, get workflow/dc IDs from component data if needed
+        if parent_index is not None and (not wf_tag or not dc_tag):
+            logger.info(f"Edit mode - fetching component data for parent_index: {parent_index}")
+            dashboard_id = pathname.split("/")[-1]
+            component_data = get_component_data(
+                input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN
+            )
+            if component_data:
+                wf_tag = component_data.get("wf_id")
+                dc_tag = component_data.get("dc_id")
+                logger.info(f"Retrieved from component_data - wf_tag: {wf_tag}, dc_tag: {dc_tag}")
+
+        # Get columns from data collection
+        if not wf_tag or not dc_tag:
+            logger.warning(f"Missing workflow/dc tags - wf_tag: {wf_tag}, dc_tag: {dc_tag}")
+            df_columns = []
+        else:
+            cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
+            df_columns = list(cols_json.keys()) if cols_json else []
+
+        logger.info(f"Mode: {mode}, Columns available: {len(df_columns)}")
+
+        # Toggle visibility based on mode
+        if mode == "simple":
+            simple_style = {"display": "block"}
+            advanced_style = {"display": "none"}
+            advanced_children = []
+        else:
+            simple_style = {"display": "none"}
+            advanced_style = {"display": "block"}
+            advanced_children = create_advanced_stepper_ui(index, df_columns)
+
+        return simple_style, advanced_style, advanced_children
+
+    # Callback to handle stepper navigation (Back/Next buttons)
+    @app.callback(
+        Output({"type": "card-operation-stepper", "index": MATCH}, "active"),
+        Output({"type": "card-step-1-panel", "index": MATCH}, "style"),
+        Output({"type": "card-step-2-panel", "index": MATCH}, "style"),
+        Output({"type": "card-step-3-panel", "index": MATCH}, "style"),
+        Output({"type": "card-completed-panel", "index": MATCH}, "style"),
+        Input({"type": "card-stepper-back", "index": MATCH}, "n_clicks"),
+        Input({"type": "card-stepper-next", "index": MATCH}, "n_clicks"),
+        State({"type": "card-operation-stepper", "index": MATCH}, "active"),
+        prevent_initial_call=True,
+    )
+    def navigate_stepper(back_clicks, next_clicks, current_step):
+        """
+        Handle stepper navigation with Back and Next buttons.
+
+        Args:
+            back_clicks: Number of Back button clicks
+            next_clicks: Number of Next button clicks
+            current_step: Current active step (0-3)
+
+        Returns:
+            Tuple: (new_active_step, step1_style, step2_style, step3_style, completed_style)
+        """
+        from dash import ctx
+
+        if not ctx.triggered_id:
+            return (
+                current_step,
+                {"display": "block"},
+                {"display": "none"},
+                {"display": "none"},
+                {"display": "none"},
+            )
+
+        # Determine which button was clicked
+        button_type = ctx.triggered_id["type"]
+
+        # Update active step
+        if button_type == "card-stepper-back" and current_step > 0:
+            new_step = current_step - 1
+        elif button_type == "card-stepper-next" and current_step < 3:
+            new_step = current_step + 1
+        else:
+            new_step = current_step
+
+        # Set panel visibility based on active step
+        panel_styles = [
+            {"display": "block"} if new_step == i else {"display": "none"} for i in range(4)
+        ]
+
+        logger.info(f"Stepper navigation: {button_type}, current={current_step}, new={new_step}")
+
+        return new_step, *panel_styles
+
+    # Callback to show config panel for operation step 1
+    @app.callback(
+        Output({"type": "card-filter-config-1", "index": MATCH}, "style"),
+        Output({"type": "card-groupby-config-1", "index": MATCH}, "style"),
+        Output({"type": "card-filter-column-1", "index": MATCH}, "data"),
+        Output({"type": "card-groupby-columns-1", "index": MATCH}, "data"),
+        Input({"type": "card-operation-type-1", "index": MATCH}, "value"),
+        State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+        State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+        State("current-edit-parent-index", "data"),
+        State({"type": "card-operation-type-1", "index": MATCH}, "id"),
+        State("local-store", "data"),
+        State("url", "pathname"),
+        prevent_initial_call=True,
+    )
+    def show_step_1_config(
+        operation_type, wf_tag, dc_tag, parent_index, component_id, local_data, pathname
+    ):
+        """
+        Toggle visibility of step 1 config panels and update column data.
+
+        Args:
+            operation_type: Selected operation type ("skip", "filter", or "groupby")
+            wf_tag: Workflow tag
+            dc_tag: Data collection tag
+            parent_index: Parent component index (edit mode)
+            component_id: Component ID dict with index
+            local_data: Local storage data (contains TOKEN)
+            pathname: Current URL pathname
+
+        Returns:
+            Tuple: (filter_style, groupby_style, filter_columns, groupby_columns)
+        """
+        logger.info(f"Step 1 operation type selected: {operation_type}")
+
+        # Get columns from data collection
+        df_columns = []
+        if local_data:
+            TOKEN = local_data["access_token"]
+
+            # Get columns from data collection
+            if parent_index is not None and (not wf_tag or not dc_tag):
+                dashboard_id = pathname.split("/")[-1]
+                component_data = get_component_data(
+                    input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN
+                )
+                if component_data:
+                    wf_tag = component_data.get("wf_id")
+                    dc_tag = component_data.get("dc_id")
+
+            if wf_tag and dc_tag:
+                cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
+                df_columns = list(cols_json.keys()) if cols_json else []
+
+        # Build column options
+        column_options = [{"label": c, "value": c} for c in df_columns]
+
+        # Toggle visibility and update data based on operation type
+        if operation_type == "skip":
+            return (
+                {"display": "none"},  # filter style
+                {"display": "none"},  # groupby style
+                column_options,  # filter columns
+                column_options,  # groupby columns
+            )
+        elif operation_type == "filter":
+            return (
+                {"display": "block"},  # filter style
+                {"display": "none"},  # groupby style
+                column_options,  # filter columns
+                column_options,  # groupby columns
+            )
+        elif operation_type == "groupby":
+            return (
+                {"display": "none"},  # filter style
+                {"display": "block"},  # groupby style
+                column_options,  # filter columns
+                column_options,  # groupby columns
+            )
+
+        return {"display": "none"}, {"display": "none"}, column_options, column_options
+
+    # Callback to show config panel for operation step 2
+    @app.callback(
+        Output({"type": "card-filter-config-2", "index": MATCH}, "style"),
+        Output({"type": "card-groupby-config-2", "index": MATCH}, "style"),
+        Output({"type": "card-filter-column-2", "index": MATCH}, "data"),
+        Output({"type": "card-groupby-columns-2", "index": MATCH}, "data"),
+        Input({"type": "card-operation-type-2", "index": MATCH}, "value"),
+        State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+        State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+        State("current-edit-parent-index", "data"),
+        State({"type": "card-operation-type-2", "index": MATCH}, "id"),
+        State("local-store", "data"),
+        State("url", "pathname"),
+        prevent_initial_call=True,
+    )
+    def show_step_2_config(
+        operation_type, wf_tag, dc_tag, parent_index, component_id, local_data, pathname
+    ):
+        """
+        Toggle visibility of step 2 config panels and update column data.
+
+        Args:
+            operation_type: Selected operation type ("skip", "filter", or "groupby")
+            wf_tag: Workflow tag
+            dc_tag: Data collection tag
+            parent_index: Parent component index (edit mode)
+            component_id: Component ID dict with index
+            local_data: Local storage data (contains TOKEN)
+            pathname: Current URL pathname
+
+        Returns:
+            Tuple: (filter_style, groupby_style, filter_columns, groupby_columns)
+        """
+        logger.info(f"Step 2 operation type selected: {operation_type}")
+
+        # Get columns from data collection
+        df_columns = []
+        if local_data:
+            TOKEN = local_data["access_token"]
+
+            # Get columns from data collection
+            if parent_index is not None and (not wf_tag or not dc_tag):
+                dashboard_id = pathname.split("/")[-1]
+                component_data = get_component_data(
+                    input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN
+                )
+                if component_data:
+                    wf_tag = component_data.get("wf_id")
+                    dc_tag = component_data.get("dc_id")
+
+            if wf_tag and dc_tag:
+                cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
+                df_columns = list(cols_json.keys()) if cols_json else []
+
+        # Build column options
+        column_options = [{"label": c, "value": c} for c in df_columns]
+
+        # Toggle visibility and update data based on operation type
+        if operation_type == "skip":
+            return (
+                {"display": "none"},  # filter style
+                {"display": "none"},  # groupby style
+                column_options,  # filter columns
+                column_options,  # groupby columns
+            )
+        elif operation_type == "filter":
+            return (
+                {"display": "block"},  # filter style
+                {"display": "none"},  # groupby style
+                column_options,  # filter columns
+                column_options,  # groupby columns
+            )
+        elif operation_type == "groupby":
+            return (
+                {"display": "none"},  # filter style
+                {"display": "block"},  # groupby style
+                column_options,  # filter columns
+                column_options,  # groupby columns
+            )
+
+        return {"display": "none"}, {"display": "none"}, column_options, column_options
+
+    # Callback to build and store pipeline configuration from user selections
+    @app.callback(
+        Output({"type": "card-pipeline-store", "index": MATCH}, "data"),
+        Output({"type": "card-pipeline-summary", "index": MATCH}, "children"),
+        Input({"type": "card-operation-type-1", "index": MATCH}, "value"),
+        Input({"type": "card-operation-type-2", "index": MATCH}, "value"),
+        Input({"type": "card-final-aggregation-method", "index": MATCH}, "value"),
+        State({"type": "card-filter-column-1", "index": MATCH}, "value"),
+        State({"type": "card-filter-operator-1", "index": MATCH}, "value"),
+        State({"type": "card-filter-value-1", "index": MATCH}, "value"),
+        State({"type": "card-groupby-columns-1", "index": MATCH}, "value"),
+        State({"type": "card-filter-column-2", "index": MATCH}, "value"),
+        State({"type": "card-filter-operator-2", "index": MATCH}, "value"),
+        State({"type": "card-filter-value-2", "index": MATCH}, "value"),
+        State({"type": "card-groupby-columns-2", "index": MATCH}, "value"),
+        State({"type": "card-final-aggregation-column", "index": MATCH}, "value"),
+        prevent_initial_call=True,
+    )
+    def build_pipeline_from_selections(
+        op_type_1,
+        op_type_2,
+        agg_method,
+        # Step 1 configs
+        filter_col_1,
+        filter_op_1,
+        filter_val_1,
+        groupby_cols_1,
+        # Step 2 configs
+        filter_col_2,
+        filter_op_2,
+        filter_val_2,
+        groupby_cols_2,
+        # Aggregation
+        agg_column,
+    ):
+        """
+        Build CardPipeline object from user selections in advanced mode stepper.
+
+        Collects all operation configurations and constructs a valid CardPipeline
+        that can be passed to CardOperationExecutor.
+
+        Args:
+            op_type_1: Operation type for step 1 (skip/filter/groupby)
+            op_type_2: Operation type for step 2 (skip/filter/groupby)
+            agg_method: Final aggregation method
+            filter_col_1, filter_op_1, filter_val_1: Step 1 filter config
+            groupby_cols_1: Step 1 groupby config
+            filter_col_2, filter_op_2, filter_val_2: Step 2 filter config
+            groupby_cols_2: Step 2 groupby config
+            agg_column: Column for aggregation (if required)
+
+        Returns:
+            Tuple: (pipeline_data_dict, summary_text)
+        """
+        from depictio.models.models.card_operations import (
+            AggregateOperation,
+            CardOperationStep,
+            CardPipeline,
+            FilterOperation,
+            GroupByOperation,
+        )
+
+        logger.info("🔨 Building pipeline from user selections")
+        logger.debug(f"Step 1: {op_type_1}, Step 2: {op_type_2}, Aggregation: {agg_method}")
+
+        try:
+            # Build operation steps list (skip "skip" operations - only add actual operations)
+            operations = []
+
+            # Step 1 - only add if not skip
+            if op_type_1 == "filter" and filter_col_1 and filter_op_1:
+                # Parse filter value - convert to appropriate type
+                parsed_value = filter_val_1
+                if filter_op_1 in ["in", "not_in"] and filter_val_1:
+                    # Convert comma-separated string to list
+                    parsed_value = [v.strip() for v in filter_val_1.split(",")]
+
+                operations.append(
+                    CardOperationStep(
+                        step_number=len(operations) + 1,  # Sequential numbering
+                        operation_type="filter",
+                        config=FilterOperation(
+                            column=filter_col_1, operator=filter_op_1, value=parsed_value
+                        ),
+                    )
+                )
+                logger.debug(
+                    f"Added step {len(operations)} filter: {filter_col_1} {filter_op_1} {parsed_value}"
+                )
+
+            elif op_type_1 == "groupby" and groupby_cols_1:
+                operations.append(
+                    CardOperationStep(
+                        step_number=len(operations) + 1,  # Sequential numbering
+                        operation_type="groupby",
+                        config=GroupByOperation(columns=groupby_cols_1),
+                    )
+                )
+                logger.debug(f"Added step {len(operations)} groupby: {groupby_cols_1}")
+
+            elif op_type_1 == "skip":
+                logger.debug("Step 1 skipped - not adding to operations list")
+
+            # Step 2 - only add if not skip
+            if op_type_2 == "filter" and filter_col_2 and filter_op_2:
+                # Parse filter value
+                parsed_value = filter_val_2
+                if filter_op_2 in ["in", "not_in"] and filter_val_2:
+                    parsed_value = [v.strip() for v in filter_val_2.split(",")]
+
+                operations.append(
+                    CardOperationStep(
+                        step_number=len(operations) + 1,  # Sequential numbering
+                        operation_type="filter",
+                        config=FilterOperation(
+                            column=filter_col_2, operator=filter_op_2, value=parsed_value
+                        ),
+                    )
+                )
+                logger.debug(
+                    f"Added step {len(operations)} filter: {filter_col_2} {filter_op_2} {parsed_value}"
+                )
+
+            elif op_type_2 == "groupby" and groupby_cols_2:
+                operations.append(
+                    CardOperationStep(
+                        step_number=len(operations) + 1,  # Sequential numbering
+                        operation_type="groupby",
+                        config=GroupByOperation(columns=groupby_cols_2),
+                    )
+                )
+                logger.debug(f"Added step {len(operations)} groupby: {groupby_cols_2}")
+
+            elif op_type_2 == "skip":
+                logger.debug("Step 2 skipped - not adding to operations list")
+
+            # Build final aggregation
+            # Define which methods require a column
+            METHODS_REQUIRING_COLUMN = [
+                "sum",
+                "mean",
+                "median",
+                "min",
+                "max",
+                "std",
+                "var",
+                "nunique",
+            ]
+
+            # Check if method requires column but none selected yet
+            if agg_method in METHODS_REQUIRING_COLUMN and not agg_column:
+                error_msg = f"Please select a column for '{agg_method}' aggregation"
+                logger.warning(f"⚠️ {error_msg}")
+                return None, dmc.Text(error_msg, size="sm", c="orange")
+
+            final_aggregate = AggregateOperation(method=agg_method, column=agg_column)
+            logger.debug(f"Final aggregation: {agg_method}({agg_column if agg_column else ''})")
+
+            # Build pipeline
+            pipeline = CardPipeline(
+                mode="advanced", operations=operations, final_aggregate=final_aggregate
+            )
+
+            # Get display summary
+            summary_text = pipeline.get_display_summary()
+            logger.info(f"✅ Pipeline built successfully: {summary_text}")
+
+            # Convert to dict for storage (Pydantic model_dump)
+            pipeline_dict = pipeline.model_dump()
+
+            return pipeline_dict, dmc.Text(summary_text, size="sm", c="green")
+
+        except Exception as e:
+            logger.error(f"❌ Failed to build pipeline: {e}", exc_info=True)
+            error_msg = f"Error building pipeline: {str(e)}"
+            return None, dmc.Text(error_msg, size="sm", c="red")
+
+    # Callback to show column selector for aggregation methods that require it
+    @app.callback(
+        Output({"type": "card-final-aggregation-column-hidden", "index": MATCH}, "style"),
+        Output({"type": "card-final-aggregation-column", "index": MATCH}, "data"),
+        Input({"type": "card-final-aggregation-method", "index": MATCH}, "value"),
+        State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+        State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+        State("current-edit-parent-index", "data"),
+        State({"type": "card-final-aggregation-method", "index": MATCH}, "id"),
+        State("local-store", "data"),
+        State("url", "pathname"),
+        prevent_initial_call=True,
+    )
+    def show_aggregation_column_selector(
+        aggregation_method, wf_tag, dc_tag, parent_index, component_id, local_data, pathname
+    ):
+        """
+        Toggle visibility of column selector and update column data.
+
+        Count doesn't need a column, but all other methods do.
+
+        Args:
+            aggregation_method: Selected aggregation method
+            wf_tag: Workflow tag
+            dc_tag: Data collection tag
+            parent_index: Parent component index (edit mode)
+            component_id: Component ID dict with index
+            local_data: Local storage data (contains TOKEN)
+            pathname: Current URL pathname
+
+        Returns:
+            Tuple: (column_selector_style, column_options)
+        """
+        logger.info(f"Aggregation method selected: {aggregation_method}")
+        logger.debug(f"wf_tag: {wf_tag}, dc_tag: {dc_tag}, parent_index: {parent_index}")
+
+        # Get columns from data collection
+        df_columns = []
+        if local_data:
+            TOKEN = local_data["access_token"]
+
+            # Get columns from data collection
+            if parent_index is not None and (not wf_tag or not dc_tag):
+                logger.debug("Fetching wf_tag/dc_tag from parent component")
+                dashboard_id = pathname.split("/")[-1]
+                component_data = get_component_data(
+                    input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN
+                )
+                if component_data:
+                    wf_tag = component_data.get("wf_id")
+                    dc_tag = component_data.get("dc_id")
+                    logger.debug(f"Retrieved wf_tag: {wf_tag}, dc_tag: {dc_tag} from parent")
+
+            if wf_tag and dc_tag:
+                cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
+                df_columns = list(cols_json.keys()) if cols_json else []
+                logger.debug(f"Retrieved {len(df_columns)} columns: {df_columns}")
+            else:
+                logger.warning("⚠️ Cannot get columns - missing wf_tag or dc_tag")
+
+        # Build column options
+        column_options = [{"label": c, "value": c} for c in df_columns]
+
+        # Count doesn't need a column - hide selector
+        if aggregation_method == "count":
+            logger.debug("Hiding column selector for 'count' aggregation")
+            return {"display": "none"}, column_options
+
+        # Other methods need column - show selector
+        logger.info(
+            f"✅ Showing column selector with {len(column_options)} options for '{aggregation_method}'"
+        )
+        return {"display": "block"}, column_options
+
     @app.callback(
         Output({"type": "btn-done-edit", "index": MATCH}, "disabled", allow_duplicate=True),
         [
@@ -176,6 +719,9 @@ def register_callbacks_card_component(app):
             State({"type": "card-dropdown-column", "index": MATCH}, "id"),
             State("local-store", "data"),
             State("url", "pathname"),
+            Input(
+                {"type": "card-pipeline-store", "index": MATCH}, "data"
+            ),  # Advanced mode pipeline - triggers callback when pipeline updates
         ],
         # prevent_initial_call=True,
     )
@@ -193,6 +739,7 @@ def register_callbacks_card_component(app):
         id,
         local_data,
         pathname,
+        pipeline_data,  # Pipeline from advanced mode (None for simple mode)
     ):
         """
         Callback to update card body based on the selected column and aggregation
@@ -302,8 +849,17 @@ def register_callbacks_card_component(app):
         )
 
         # If any of the input values are None, return an empty list
+        # BUT: In advanced mode, column_name and aggregation_value can be None
+        # because we use pipeline_data instead
         if column_name is None or aggregation_value is None or wf_id is None or dc_id is None:
-            if not component_data:
+            # Check if we're in advanced mode with valid pipeline
+            if pipeline_data is not None:
+                # Advanced mode - pipeline is valid, proceed with rendering
+                # Use placeholder values for simple mode fields (won't be used)
+                column_name = "advanced_mode_placeholder"
+                aggregation_value = "count"  # Placeholder
+                logger.info("🔬 ADVANCED MODE: Bypassing simple mode validation")
+            elif not component_data:
                 return ([], None, columns_description_df)
             else:
                 column_name = component_data["column_name"]
@@ -314,39 +870,47 @@ def register_callbacks_card_component(app):
                 logger.info(f"aggregation_value: {aggregation_value}")
                 logger.info(f"input_value: {input_value}")
 
-        # Get the type of the selected column
-        column_type = cols_json[column_name]["type"]
+        # Simple mode specific logic - skip in advanced mode
+        if pipeline_data is None:
+            # Get the type of the selected column (simple mode only)
+            column_type = cols_json[column_name]["type"]
 
-        aggregation_description = html.Div(
-            children=[
-                html.Hr(),
-                dmc.Tooltip(
-                    children=dmc.Badge(
-                        children="Aggregation description",
-                        leftSection=DashIconify(icon="mdi:information", color="white", width=20),
+            aggregation_description = html.Div(
+                children=[
+                    html.Hr(),
+                    dmc.Tooltip(
+                        children=dmc.Badge(
+                            children="Aggregation description",
+                            leftSection=DashIconify(
+                                icon="mdi:information", color="white", width=20
+                            ),
+                            color="gray",
+                            radius="lg",
+                        ),
+                        label=agg_functions[str(column_type)]["card_methods"][aggregation_value][
+                            "description"
+                        ],
+                        multiline=True,
+                        w=300,
+                        # transition="pop",
+                        # transitionDuration=300,
+                        transitionProps={
+                            "name": "pop",
+                            "duration": 300,
+                        },
+                        withinPortal=False,
+                        # justify="flex-end",
+                        withArrow=True,
+                        openDelay=500,
+                        closeDelay=500,
                         color="gray",
-                        radius="lg",
                     ),
-                    label=agg_functions[str(column_type)]["card_methods"][aggregation_value][
-                        "description"
-                    ],
-                    multiline=True,
-                    w=300,
-                    # transition="pop",
-                    # transitionDuration=300,
-                    transitionProps={
-                        "name": "pop",
-                        "duration": 300,
-                    },
-                    withinPortal=False,
-                    # justify="flex-end",
-                    withArrow=True,
-                    openDelay=500,
-                    closeDelay=500,
-                    color="gray",
-                ),
-            ]
-        )
+                ]
+            )
+        else:
+            # Advanced mode - use placeholder values
+            column_type = "object"  # Generic placeholder type
+            aggregation_description = None  # No aggregation description in advanced mode
 
         # Get the workflow and data collection ids from the tags selected
         # workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag, TOKEN=TOKEN)
@@ -383,7 +947,7 @@ def register_callbacks_card_component(app):
             ).json()
 
         # Get the type of the selected column and the value for the selected aggregation
-        column_type = cols_json[column_name]["type"]
+        # Note: column_type already set above (either from cols_json in simple mode or placeholder in advanced mode)
         # v = cols_json[column_name]["specs"][aggregation_value]
 
         dashboard_data
@@ -408,6 +972,8 @@ def register_callbacks_card_component(app):
             "icon_color": title_color,  # Use same as title for consistency
             "title_font_size": title_font_size,
             "metric_theme": None,  # Not using themes anymore for new cards
+            # Advanced mode pipeline
+            "pipeline": pipeline_data,  # None for simple mode, dict for advanced mode
         }
 
         if relevant_metadata:
@@ -436,6 +1002,8 @@ def register_callbacks_card_component(app):
 
         Triggers when card component mounts and trigger store is populated.
         Loads full dataset, computes aggregation value, stores reference value.
+
+        Supports both simple mode (column + aggregation) and advanced mode (pipeline).
 
         Args:
             trigger_data: Data from card-trigger store containing all necessary params
@@ -467,17 +1035,35 @@ def register_callbacks_card_component(app):
         # Extract parameters from trigger store
         wf_id = trigger_data.get("wf_id")
         dc_id = trigger_data.get("dc_id")
-        column_name = trigger_data.get("column_name")
-        aggregation = trigger_data.get("aggregation")
         access_token = trigger_data.get("access_token")
         cols_json = trigger_data.get("cols_json", {})
 
-        # Validate required parameters
-        if not all([wf_id, dc_id, column_name, aggregation]):
-            logger.error(
-                f"Missing required parameters - wf_id: {wf_id}, dc_id: {dc_id}, "
-                f"column_name: {column_name}, aggregation: {aggregation}"
-            )
+        # Check for pipeline data (advanced mode)
+        pipeline_data = trigger_data.get("pipeline")
+
+        # Simple mode parameters
+        column_name = trigger_data.get("column_name")
+        aggregation = trigger_data.get("aggregation")
+
+        # Determine mode
+        if pipeline_data:
+            mode = "advanced"
+            logger.info("🔬 ADVANCED MODE: Using CardOperationExecutor with pipeline")
+        else:
+            mode = "simple"
+            logger.info("📊 SIMPLE MODE: Using compute_value for basic aggregation")
+
+            # Validate required parameters for simple mode
+            if not all([column_name, aggregation]):
+                logger.error(
+                    f"Simple mode missing required parameters - "
+                    f"column_name: {column_name}, aggregation: {aggregation}"
+                )
+                return "Error", {"error": "Missing parameters"}
+
+        # Validate common required parameters
+        if not all([wf_id, dc_id]):
+            logger.error(f"Missing required parameters - wf_id: {wf_id}, dc_id: {dc_id}")
             return "Error", {"error": "Missing parameters"}
 
         try:
@@ -500,11 +1086,39 @@ def register_callbacks_card_component(app):
 
             logger.debug(f"Loaded data shape: {data.shape}")
 
-            # Compute aggregation value
-            from depictio.dash.modules.card_component.utils import compute_value
+            # Compute value based on mode
+            if mode == "advanced":
+                # Advanced mode: Execute pipeline
+                from depictio.dash.modules.card_component.operations import CardOperationExecutor
+                from depictio.models.models.card_operations import CardPipeline
 
-            value = compute_value(data, column_name, aggregation)
-            logger.debug(f"Computed value: {value}")
+                # Reconstruct CardPipeline from dict
+                pipeline = CardPipeline(**pipeline_data)
+                logger.debug(f"Pipeline: {pipeline.get_display_summary()}")
+
+                # Execute pipeline
+                executor = CardOperationExecutor()
+                result = executor.execute_pipeline(data, pipeline)
+
+                # Handle result - could be scalar or DataFrame
+                if isinstance(result, (int, float, str)):
+                    value = result
+                    logger.debug(f"Pipeline result (scalar): {value}")
+                else:
+                    # DataFrame result (from groupby) - for now, just show row count
+                    # TODO: Future enhancement - display grouped results in a table
+                    value = len(result)
+                    logger.warning(
+                        f"Pipeline returned DataFrame with {len(result)} rows - "
+                        f"showing row count for now"
+                    )
+
+            else:
+                # Simple mode: Use existing compute_value function
+                from depictio.dash.modules.card_component.utils import compute_value
+
+                value = compute_value(data, column_name, aggregation)
+                logger.debug(f"Computed value: {value}")
 
             # Format value
             try:
@@ -513,17 +1127,23 @@ def register_callbacks_card_component(app):
                 else:
                     formatted_value = "N/A"
             except (ValueError, TypeError):
-                formatted_value = "Error"
+                formatted_value = str(value) if value is not None else "N/A"
 
             # Store metadata for patching callback
             metadata = {
                 "reference_value": value,
-                "column_name": column_name,
-                "aggregation": aggregation,
+                "mode": mode,
                 "wf_id": wf_id,
                 "dc_id": dc_id,
                 "cols_json": cols_json,
             }
+
+            # Add mode-specific metadata
+            if mode == "simple":
+                metadata["column_name"] = column_name
+                metadata["aggregation"] = aggregation
+            else:
+                metadata["pipeline"] = pipeline_data
 
             logger.info(f"✅ CARD RENDER: Value computed successfully: {formatted_value}")
             return formatted_value, metadata
@@ -957,25 +1577,68 @@ def design_card(id, df):
                                     },
                                     value="",
                                 ),
-                                # Dropdown for the column selection
-                                dmc.Select(
-                                    label="Select your column",
-                                    id={
-                                        "type": "card-dropdown-column",
-                                        "index": id["index"],
-                                    },
-                                    data=[{"label": e, "value": e} for e in df.columns],
-                                    value=None,
+                                html.Hr(),
+                                # Mode toggle: Simple vs Advanced
+                                dmc.Stack(
+                                    [
+                                        dmc.Text("Metric Configuration", size="sm", fw="bold"),
+                                        dmc.SegmentedControl(
+                                            id={
+                                                "type": "card-metric-mode",
+                                                "index": id["index"],
+                                            },
+                                            data=[
+                                                {"label": "Simple", "value": "simple"},
+                                                {"label": "Advanced", "value": "advanced"},
+                                            ],
+                                            value="simple",
+                                            fullWidth=True,
+                                        ),
+                                        # Simple mode container (always present, visibility toggled)
+                                        html.Div(
+                                            id={
+                                                "type": "card-simple-container",
+                                                "index": id["index"],
+                                            },
+                                            style={"display": "block"},
+                                            children=[
+                                                # Dropdown for the column selection
+                                                dmc.Select(
+                                                    label="Select your column",
+                                                    id={
+                                                        "type": "card-dropdown-column",
+                                                        "index": id["index"],
+                                                    },
+                                                    data=[
+                                                        {"label": e, "value": e} for e in df.columns
+                                                    ],
+                                                    value=None,
+                                                ),
+                                                # Dropdown for the aggregation method selection
+                                                dmc.Select(
+                                                    label="Select your aggregation method",
+                                                    id={
+                                                        "type": "card-dropdown-aggregation",
+                                                        "index": id["index"],
+                                                    },
+                                                    value=None,
+                                                ),
+                                            ],
+                                        ),
+                                        # Advanced mode container (always present, visibility toggled)
+                                        # Pre-create with empty columns - will be populated with real columns when activated
+                                        html.Div(
+                                            id={
+                                                "type": "card-advanced-container",
+                                                "index": id["index"],
+                                            },
+                                            style={"display": "none"},
+                                            children=create_advanced_stepper_ui(id["index"], []),
+                                        ),
+                                    ],
+                                    gap="sm",
                                 ),
-                                # Dropdown for the aggregation method selection
-                                dmc.Select(
-                                    label="Select your aggregation method",
-                                    id={
-                                        "type": "card-dropdown-aggregation",
-                                        "index": id["index"],
-                                    },
-                                    value=None,
-                                ),
+                                html.Hr(),
                                 # Individual style controls
                                 dmc.Stack(
                                     [
@@ -1274,9 +1937,15 @@ def design_card(id, df):
         style={"marginTop": "2rem"},
     )
 
+    # Add Store component for pipeline state
+    pipeline_store = dcc.Store(
+        id={"type": "card-pipeline-store", "index": id["index"]},
+        data=None,  # Will be populated by pipeline builder callback
+    )
+
     card_row = [
         dmc.Stack(
-            [main_layout, html.Hr(), bottom_section],
+            [main_layout, html.Hr(), bottom_section, pipeline_store],
             gap="lg",
         ),
     ]
@@ -1326,3 +1995,388 @@ def create_stepper_card_button(n, disabled=None):
     )
 
     return button, store
+
+
+# ============================================================================
+# HELPER FUNCTIONS FOR ADVANCED CARD OPERATIONS UI
+# ============================================================================
+
+
+def create_simple_config_ui(index, df_columns):
+    """
+    Create simple mode UI: column and aggregation dropdowns.
+
+    Args:
+        index: Component index for pattern-matching IDs
+        df_columns: List of available columns
+
+    Returns:
+        List of DMC components for simple configuration
+    """
+    return [
+        dmc.Select(
+            label="Select your column",
+            id={
+                "type": "card-dropdown-column",
+                "index": index,
+            },
+            data=[{"label": e, "value": e} for e in df_columns],
+            value=None,
+        ),
+        dmc.Select(
+            label="Select your aggregation method",
+            id={
+                "type": "card-dropdown-aggregation",
+                "index": index,
+            },
+            value=None,
+        ),
+    ]
+
+
+def create_advanced_stepper_ui(index, df_columns):
+    """
+    Create advanced mode UI with stepper on left and config on right (side by side).
+
+    Args:
+        index: Component index for pattern-matching IDs
+        df_columns: List of available columns
+
+    Returns:
+        Grid layout with stepper (left) and config panels (right)
+    """
+    return dmc.Paper(
+        [
+            dmc.Text("Advanced Pipeline Configuration", size="sm", fw="bold", mb="xs"),
+            dmc.Text(
+                "Build a multi-step operation pipeline: Filter → GroupBy → Aggregate",
+                size="xs",
+                c="gray",
+                mb="md",
+            ),
+            # Grid with stepper on left (vertical) and config on right (vertical)
+            dmc.Grid(
+                [
+                    # Left column: Vertical stepper
+                    dmc.GridCol(
+                        dmc.Stepper(
+                            id={"type": "card-operation-stepper", "index": index},
+                            active=0,
+                            orientation="vertical",
+                            children=[
+                                dmc.StepperStep(
+                                    label="Step 1",
+                                    description="Filter data",
+                                ),
+                                dmc.StepperStep(
+                                    label="Step 2",
+                                    description="Group by columns",
+                                ),
+                                dmc.StepperStep(
+                                    label="Step 3",
+                                    description="Aggregate",
+                                ),
+                                dmc.StepperCompleted(
+                                    children=dmc.Text("Pipeline ready!", size="sm", c="green")
+                                ),
+                            ],
+                        ),
+                        span=4,
+                    ),
+                    # Right column: Config panels for each step
+                    dmc.GridCol(
+                        dmc.Stack(
+                            [
+                                # Step 1 config (Filter)
+                                html.Div(
+                                    id={"type": "card-step-1-panel", "index": index},
+                                    children=create_operation_step_ui(index, step_num=1),
+                                    style={"display": "block"},
+                                ),
+                                # Step 2 config (GroupBy)
+                                html.Div(
+                                    id={"type": "card-step-2-panel", "index": index},
+                                    children=create_operation_step_ui(index, step_num=2),
+                                    style={"display": "none"},
+                                ),
+                                # Step 3 config (Aggregation)
+                                html.Div(
+                                    id={"type": "card-step-3-panel", "index": index},
+                                    children=create_aggregation_step_ui(index),
+                                    style={"display": "none"},
+                                ),
+                                # Completed panel (Summary)
+                                html.Div(
+                                    id={"type": "card-completed-panel", "index": index},
+                                    style={"display": "none"},
+                                    children=[
+                                        dmc.Alert(
+                                            "Pipeline configured successfully!",
+                                            title="Ready",
+                                            color="green",
+                                            icon=DashIconify(icon="mdi:check-circle"),
+                                        ),
+                                        html.Div(
+                                            id={"type": "card-pipeline-summary", "index": index},
+                                            children="Pipeline summary will appear here",
+                                        ),
+                                    ],
+                                ),
+                            ],
+                            gap="sm",
+                        ),
+                        span=8,
+                    ),
+                ],
+                gutter="md",
+            ),
+            # Navigation buttons for stepper
+            dmc.Group(
+                [
+                    dmc.Button(
+                        "Back",
+                        id={"type": "card-stepper-back", "index": index},
+                        variant="default",
+                    ),
+                    dmc.Button(
+                        "Next",
+                        id={"type": "card-stepper-next", "index": index},
+                        variant="filled",
+                    ),
+                ],
+                justify="flex-end",
+                mt="md",
+            ),
+        ],
+        withBorder=True,
+        p="md",
+    )
+
+
+def create_operation_step_ui(index, step_num):
+    """
+    Create UI for a single operation step (Filter or GroupBy or Skip).
+
+    Pre-creates both filter and groupby config components as hidden elements
+    to ensure all callback State dependencies exist from the start.
+
+    Args:
+        index: Component index
+        step_num: Step number (1 or 2)
+
+    Returns:
+        DMC components for operation selection
+    """
+    # Pre-create hidden filter components (for callback State dependencies)
+    hidden_filter_components = html.Div(
+        id={"type": f"card-filter-config-{step_num}", "index": index},
+        style={"display": "none"},
+        children=[
+            dmc.Select(
+                label="Column",
+                id={"type": f"card-filter-column-{step_num}", "index": index},
+                data=[],
+                value=None,
+            ),
+            dmc.Select(
+                label="Operator",
+                id={"type": f"card-filter-operator-{step_num}", "index": index},
+                data=[
+                    {"label": "Equals", "value": "=="},
+                    {"label": "Not equals", "value": "!="},
+                    {"label": "Greater than", "value": ">"},
+                    {"label": "Less than", "value": "<"},
+                    {"label": "Greater or equal", "value": ">="},
+                    {"label": "Less or equal", "value": "<="},
+                    {"label": "Contains", "value": "contains"},
+                    {"label": "In list", "value": "in"},
+                    {"label": "Is null", "value": "is_null"},
+                    {"label": "Not null", "value": "not_null"},
+                ],
+                value=None,
+            ),
+            dmc.TextInput(
+                label="Value",
+                id={"type": f"card-filter-value-{step_num}", "index": index},
+                value=None,
+            ),
+        ],
+    )
+
+    # Pre-create hidden groupby components (for callback State dependencies)
+    hidden_groupby_components = html.Div(
+        id={"type": f"card-groupby-config-{step_num}", "index": index},
+        style={"display": "none"},
+        children=[
+            dmc.MultiSelect(
+                label="Group By Columns",
+                id={"type": f"card-groupby-columns-{step_num}", "index": index},
+                data=[],
+                value=None,
+            ),
+        ],
+    )
+
+    return dmc.Stack(
+        [
+            dmc.SegmentedControl(
+                id={"type": f"card-operation-type-{step_num}", "index": index},
+                data=[
+                    {"label": "Skip", "value": "skip"},
+                    {"label": "Filter", "value": "filter"},
+                    {"label": "GroupBy", "value": "groupby"},
+                ],
+                value="skip",
+                fullWidth=True,
+            ),
+            # Dynamic configuration container based on operation type
+            html.Div(
+                id={"type": f"card-operation-config-{step_num}", "index": index},
+                children=[],  # Will be populated by callback (toggles visibility)
+            ),
+            # Hidden pre-created components for callback State dependencies
+            hidden_filter_components,
+            hidden_groupby_components,
+        ],
+        gap="sm",
+    )
+
+
+def create_aggregation_step_ui(index):
+    """
+    Create UI for final aggregation step (always required).
+
+    Pre-creates the column selector as a hidden element to ensure
+    callback State dependency exists from the start.
+
+    Args:
+        index: Component index
+
+    Returns:
+        DMC components for aggregation configuration
+    """
+    # Pre-create hidden column selector (for callback State dependency)
+    # Now placed inside the container div so visibility toggle works correctly
+    hidden_column_selector = html.Div(
+        id={"type": "card-final-aggregation-column-hidden", "index": index},
+        style={"display": "none"},
+        children=[
+            dmc.Select(
+                label="Column",
+                description="Select column to aggregate",
+                id={"type": "card-final-aggregation-column", "index": index},
+                data=[],
+                value=None,
+                searchable=True,
+                required=True,
+            ),
+        ],
+    )
+
+    return dmc.Stack(
+        [
+            dmc.Select(
+                label="Aggregation Method",
+                description="How to compute the final metric value",
+                id={"type": "card-final-aggregation-method", "index": index},
+                data=[
+                    {"label": "Count", "value": "count"},
+                    {"label": "Sum", "value": "sum"},
+                    {"label": "Mean", "value": "mean"},
+                    {"label": "Median", "value": "median"},
+                    {"label": "Min", "value": "min"},
+                    {"label": "Max", "value": "max"},
+                    {"label": "Std Dev", "value": "std"},
+                    {"label": "Variance", "value": "var"},
+                    {"label": "Unique Count", "value": "nunique"},
+                ],
+                value="count",
+                required=True,
+            ),
+            # Column selector (hidden by default, shown when aggregation method needs it)
+            hidden_column_selector,
+        ],
+        gap="sm",
+    )
+
+
+def create_filter_config_ui(index, step_num, df_columns):
+    """
+    Create filter operation configuration panel.
+
+    Args:
+        index: Component index
+        step_num: Step number
+        df_columns: Available columns
+
+    Returns:
+        DMC components for filter configuration
+    """
+    return dmc.Stack(
+        [
+            dmc.Select(
+                label="Column",
+                description="Column to filter on",
+                id={"type": f"card-filter-column-{step_num}", "index": index},
+                data=[{"label": c, "value": c} for c in df_columns],
+                searchable=True,
+            ),
+            dmc.Select(
+                label="Operator",
+                description="Comparison operator",
+                id={"type": f"card-filter-operator-{step_num}", "index": index},
+                data=[
+                    {"label": "Equals", "value": "=="},
+                    {"label": "Not equals", "value": "!="},
+                    {"label": "Greater than", "value": ">"},
+                    {"label": "Less than", "value": "<"},
+                    {"label": "Greater or equal", "value": ">="},
+                    {"label": "Less or equal", "value": "<="},
+                    {"label": "Contains", "value": "contains"},
+                    {"label": "In list", "value": "in"},
+                    {"label": "Is null", "value": "is_null"},
+                    {"label": "Not null", "value": "not_null"},
+                ],
+            ),
+            dmc.TextInput(
+                label="Value",
+                description="Filter value (not needed for null checks)",
+                id={"type": f"card-filter-value-{step_num}", "index": index},
+                placeholder="Enter value...",
+            ),
+        ],
+        gap="xs",
+    )
+
+
+def create_groupby_config_ui(index, step_num, df_columns):
+    """
+    Create groupby operation configuration panel.
+
+    Args:
+        index: Component index
+        step_num: Step number
+        df_columns: Available columns
+
+    Returns:
+        DMC components for groupby configuration
+    """
+    return dmc.Stack(
+        [
+            dmc.MultiSelect(
+                label="Group By Columns",
+                description="Select one or more columns to group by",
+                id={"type": f"card-groupby-columns-{step_num}", "index": index},
+                data=[{"label": c, "value": c} for c in df_columns],
+                searchable=True,
+                required=True,
+                placeholder="Select columns...",
+            ),
+            dmc.Alert(
+                "Data will be grouped by selected columns before aggregation",
+                color="blue",
+                icon=DashIconify(icon="mdi:information"),
+            ),
+        ],
+        gap="xs",
+    )
