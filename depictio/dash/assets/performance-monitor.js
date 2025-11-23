@@ -12,6 +12,9 @@
 (function() {
     'use strict';
 
+    // DISABLED: Return early to disable performance monitoring
+    return;
+
     // Performance data store
     const performanceData = {
         callbacks: {},
@@ -22,13 +25,52 @@
     const originalFetch = window.fetch;
     window.fetch = function(...args) {
         const url = args[0];
+        const options = args[1] || {};
 
         // Only track Dash callback requests
         if (typeof url === 'string' && url.includes('_dash-update-component')) {
-            const callbackId = extractCallbackId(url);
             const startTime = performance.now();
 
-            console.log(`⏱️ CLIENT PROFILING: Callback ${callbackId} - Request sent`);
+            // Parse request body to extract callback details
+            let requestBody = null;
+            let inputs = [];
+            let state = [];
+
+            if (options.body) {
+                try {
+                    requestBody = JSON.parse(options.body);
+                    inputs = requestBody.inputs || [];
+                    state = requestBody.state || [];
+                } catch (e) {
+                    // Unable to parse request body
+                }
+            }
+
+            // Extract outputs from URL
+            const outputs = extractOutputs(url);
+            const callbackId = outputs.length > 0 ? outputs[0].id : extractCallbackId(url);
+
+            // Create detailed callback info
+            const callbackInfo = {
+                url: url,
+                outputs: outputs,
+                inputs: inputs.map(inp => ({
+                    id: inp.id,
+                    property: inp.property,
+                    value: truncateValue(inp.value)
+                })),
+                state: state.map(st => ({
+                    id: st.id,
+                    property: st.property
+                }))
+            };
+
+            console.log(`⏱️ CLIENT PROFILING: Callback Request`);
+            console.log(`  📤 Outputs: ${outputs.map(o => `${o.id}.${o.property}`).join(', ')}`);
+            console.log(`  📥 Inputs: ${callbackInfo.inputs.map(i => `${i.id}.${i.property}`).join(', ')}`);
+            if (callbackInfo.state.length > 0) {
+                console.log(`  📋 State: ${callbackInfo.state.map(s => `${s.id}.${s.property}`).join(', ')}`);
+            }
 
             return originalFetch.apply(this, args).then(response => {
                 const networkTime = performance.now() - startTime;
@@ -50,30 +92,37 @@
                     // Calculate payload size
                     const payloadSize = new Blob([JSON.stringify(data)]).size;
 
+                    // Analyze response structure
+                    const responseInfo = analyzeResponse(data);
+
                     // Store performance data
                     performanceData.callbacks[callbackId] = {
                         startTime: startTime,
                         networkTime: networkTime,
                         deserializeTime: deserializeTime,
                         payloadSize: payloadSize,
-                        timestamp: new Date().toISOString()
+                        timestamp: new Date().toISOString(),
+                        callbackInfo: callbackInfo,
+                        responseInfo: responseInfo
                     };
 
                     console.log(
-                        `⏱️ CLIENT PROFILING: Callback ${callbackId} - Network: ${networkTime.toFixed(1)}ms, ` +
+                        `⏱️ CLIENT PROFILING: Callback Response\n` +
+                        `  ⏱️  Network: ${networkTime.toFixed(1)}ms, ` +
                         `Deserialize: ${deserializeTime.toFixed(1)}ms, ` +
-                        `Payload: ${(payloadSize / 1024).toFixed(1)}KB`
+                        `Payload: ${(payloadSize / 1024).toFixed(1)}KB\n` +
+                        `  📦 Response: ${responseInfo.summary}`
                     );
 
                     // Schedule render time measurement
                     requestAnimationFrame(() => {
-                        measureRenderTime(callbackId, deserializeEnd);
+                        measureRenderTime(callbackId, deserializeEnd, callbackInfo, responseInfo);
                     });
 
                     return response;
                 }).catch(err => {
                     // JSON parse error - likely not a callback response
-                    console.debug(`⏱️ CLIENT PROFILING: Skipped non-JSON response for ${callbackId}`);
+                    console.debug(`⏱️ CLIENT PROFILING: Skipped non-JSON response`);
                     return response;
                 });
             });
@@ -88,7 +137,63 @@
         return match ? decodeURIComponent(match[1]) : 'unknown';
     }
 
-    function measureRenderTime(callbackId, deserializeEndTime) {
+    function extractOutputs(url) {
+        // Extract output components from URL
+        const match = url.match(/output=([^&]+)/);
+        if (!match) return [];
+
+        try {
+            const decoded = decodeURIComponent(match[1]);
+            const outputs = JSON.parse(decoded);
+            return Array.isArray(outputs) ? outputs : [outputs];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function truncateValue(value) {
+        // Truncate large values for display
+        if (value === null || value === undefined) return value;
+        const str = JSON.stringify(value);
+        return str.length > 50 ? str.substring(0, 50) + '...' : str;
+    }
+
+    function analyzeResponse(data) {
+        // Analyze response payload structure
+        if (!data || !data.response) {
+            return { summary: 'Empty response', details: {} };
+        }
+
+        const response = data.response;
+        const keys = Object.keys(response);
+
+        const details = {};
+        let totalItems = 0;
+
+        keys.forEach(key => {
+            const value = response[key];
+            if (Array.isArray(value)) {
+                details[key] = `Array[${value.length}]`;
+                totalItems += value.length;
+            } else if (value && typeof value === 'object') {
+                const objKeys = Object.keys(value);
+                details[key] = `Object{${objKeys.length} keys}`;
+                totalItems += objKeys.length;
+            } else if (typeof value === 'string') {
+                details[key] = `String[${value.length} chars]`;
+            } else {
+                details[key] = typeof value;
+            }
+        });
+
+        const summary = keys.length > 0
+            ? `${keys.length} output(s): ${keys.map(k => `${k}=${details[k]}`).join(', ')}`
+            : 'No outputs';
+
+        return { summary, details, totalItems };
+    }
+
+    function measureRenderTime(callbackId, deserializeEndTime, callbackInfo, responseInfo) {
         // Use MutationObserver to detect DOM changes
         let renderComplete = false;
         const renderStart = performance.now();
@@ -108,9 +213,9 @@
                 });
 
                 console.log(
-                    `⏱️ CLIENT PROFILING: Callback ${callbackId} - Render: ${renderTime.toFixed(1)}ms, ` +
-                    `Mutations: ${mutations.length}, ` +
-                    `Total (deserialize + render): ${totalTime.toFixed(1)}ms`
+                    `⏱️ CLIENT PROFILING: Callback Render Complete\n` +
+                    `  🎨 Render: ${renderTime.toFixed(1)}ms, ` +
+                    `Mutations: ${mutations.length}`
                 );
 
                 // Print total breakdown
@@ -118,12 +223,15 @@
                 if (callbackData) {
                     const total = callbackData.networkTime + callbackData.deserializeTime + renderTime;
                     console.log(
-                        `⏱️ CLIENT PROFILING: Callback ${callbackId} - TOTAL BREAKDOWN:\n` +
-                        `  Network: ${callbackData.networkTime.toFixed(1)}ms (${(callbackData.networkTime / total * 100).toFixed(1)}%)\n` +
-                        `  Deserialize: ${callbackData.deserializeTime.toFixed(1)}ms (${(callbackData.deserializeTime / total * 100).toFixed(1)}%)\n` +
-                        `  Render: ${renderTime.toFixed(1)}ms (${(renderTime / total * 100).toFixed(1)}%)\n` +
-                        `  TOTAL: ${total.toFixed(1)}ms\n` +
-                        `  Payload: ${(callbackData.payloadSize / 1024).toFixed(1)}KB`
+                        `⏱️ CLIENT PROFILING: COMPLETE BREAKDOWN\n` +
+                        `  📤 Output: ${callbackInfo.outputs.map(o => `${o.id}.${o.property}`).join(', ')}\n` +
+                        `  📥 Input:  ${callbackInfo.inputs.map(i => `${i.id}.${i.property}=${i.value}`).join(', ')}\n` +
+                        `  ⏱️  Timing:\n` +
+                        `     Network:     ${callbackData.networkTime.toFixed(1)}ms (${(callbackData.networkTime / total * 100).toFixed(1)}%)\n` +
+                        `     Deserialize: ${callbackData.deserializeTime.toFixed(1)}ms (${(callbackData.deserializeTime / total * 100).toFixed(1)}%)\n` +
+                        `     Render:      ${renderTime.toFixed(1)}ms (${(renderTime / total * 100).toFixed(1)}%)\n` +
+                        `     TOTAL:       ${total.toFixed(1)}ms\n` +
+                        `  📦 Payload: ${(callbackData.payloadSize / 1024).toFixed(1)}KB - ${responseInfo.summary}`
                     );
                 }
 
@@ -142,7 +250,7 @@
         setTimeout(() => {
             if (!renderComplete) {
                 observer.disconnect();
-                console.log(`⏱️ CLIENT PROFILING: Callback ${callbackId} - No render detected (timeout)`);
+                console.log(`⏱️ CLIENT PROFILING: No render detected (timeout) for ${callbackInfo.outputs.map(o => o.id).join(', ')}`);
             }
         }, 2000);
     }

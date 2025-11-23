@@ -92,7 +92,7 @@ services:
     environment:
         DEV_MODE: "${DEV_MODE:-false}"
         DEPICTIO_LOGGING_VERBOSITY_LEVEL: "${DEPICTIO_LOGGING_VERBOSITY_LEVEL:-DEBUG}"
-        DEPICTIO_CONTEXT: "celery"
+        DEPICTIO_CONTEXT: "server"
     command: ["/app/run_celery_worker.sh"]
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:

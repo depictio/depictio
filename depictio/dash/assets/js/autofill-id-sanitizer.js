@@ -126,6 +126,18 @@
                 if (mutation.type === 'childList') {
                     mutation.addedNodes.forEach((node) => {
                         if (node.nodeType === Node.ELEMENT_NODE) {
+                            // CRITICAL: Check for label elements with JSON 'for' attributes
+                            // This catches DMC components creating labels before browser extensions query them
+                            if (node.tagName === 'LABEL') {
+                                const forAttr = node.getAttribute('for');
+                                if (forAttr && (forAttr.includes('{"type"') || forAttr.includes('{"index"'))) {
+                                    // Sanitize the label's 'for' attribute immediately
+                                    const safeId = createSafeId(forAttr);
+                                    node.setAttribute('for', safeId);
+                                    console.debug('🏷️ Sanitized label[for] immediately:', forAttr, '->', safeId);
+                                }
+                            }
+
                             // Check if the added element or its children have JSON IDs
                             if (node.id && (node.id.includes('{"type"') || node.id.includes('{"index"'))) {
                                 shouldSanitize = true;
@@ -138,6 +150,17 @@
                                         break;
                                     }
                                 }
+
+                                // Also check for labels with JSON 'for' attributes
+                                const labelsWithJsonFor = node.querySelectorAll('label[for]');
+                                labelsWithJsonFor.forEach(label => {
+                                    const forAttr = label.getAttribute('for');
+                                    if (forAttr && (forAttr.includes('{"type"') || forAttr.includes('{"index"'))) {
+                                        const safeId = createSafeId(forAttr);
+                                        label.setAttribute('for', safeId);
+                                        console.debug('🏷️ Sanitized label[for] from children:', forAttr, '->', safeId);
+                                    }
+                                });
                             }
                         }
                     });
@@ -148,6 +171,16 @@
                     const newId = mutation.target.getAttribute('id');
                     if (newId && (newId.includes('{"type"') || newId.includes('{"index"'))) {
                         shouldSanitize = true;
+                    }
+                }
+
+                // CRITICAL: Monitor label 'for' attribute changes
+                if (mutation.type === 'attributes' && mutation.attributeName === 'for') {
+                    const forAttr = mutation.target.getAttribute('for');
+                    if (forAttr && (forAttr.includes('{"type"') || forAttr.includes('{"index"'))) {
+                        const safeId = createSafeId(forAttr);
+                        mutation.target.setAttribute('for', safeId);
+                        console.debug('🏷️ Sanitized label[for] attribute change:', forAttr, '->', safeId);
                     }
                 }
             });
@@ -167,7 +200,7 @@
             childList: true,
             subtree: true,
             attributes: true,
-            attributeFilter: ['id']
+            attributeFilter: ['id', 'for']  // Monitor both 'id' and 'for' attributes
         });
 
         return observer;
@@ -242,6 +275,24 @@
             return false;
         }
     }, true);
+
+    // CRITICAL: Handle Promise rejections from browser extensions (e.g., bootstrap-autofill-overlay)
+    // These async errors bypass the synchronous error handler above
+    window.addEventListener('unhandledrejection', function(event) {
+        if (event.reason && event.reason.message) {
+            const message = event.reason.message;
+            // Check for autofill/querySelectorAll errors
+            if ((message.includes('querySelectorAll') || message.includes('querySelector')) &&
+                (message.includes('not a valid selector') || message.includes('SyntaxError'))) {
+                console.debug('🚨 Caught async autofill selector error (Promise):', message);
+                // Try to sanitize immediately
+                setTimeout(sanitizePatternMatchingIds, 0);
+                // Prevent error from reaching console
+                event.preventDefault();
+                return false;
+            }
+        }
+    });
 
     // Initialize when DOM is ready
     if (document.readyState === 'loading') {
