@@ -180,7 +180,7 @@ def register_routing_callback(app):
         Output("header-content", "children"),
         Output("url", "pathname"),
         Output("local-store", "data", allow_duplicate=True),
-        Output("server-status-cache", "data"),
+        # ✅ REMOVED: server-status-cache output (now handled by clientside callback in sidebar.py)
         [
             Input("url", "pathname"),
             Input("local-store", "data"),
@@ -198,20 +198,9 @@ def register_routing_callback(app):
             theme_store: Theme store data (light/dark)
 
         Returns:
-            tuple: (page_content, header, pathname, local_data, server_status_cache)
+            tuple: (page_content, header, pathname, local_data)
         """
         logger.info(f"🔄 MANAGEMENT ROUTING: pathname={pathname}")
-
-        # Prepare server status cache data
-        from depictio.version import get_version
-
-        try:
-            depictio_version = get_version()
-        except Exception as e:
-            logger.warning(f"Failed to get version: {e}")
-            depictio_version = "unknown"
-
-        server_status_cache = {"status": "online", "version": depictio_version}
 
         # Extract theme
         theme = extract_theme_from_store(theme_store)
@@ -231,7 +220,6 @@ def register_routing_callback(app):
                 header,
                 "/auth",
                 {"logged_in": False, "access_token": None},
-                server_status_cache,
             )
 
         # Redirect root path to /dashboards
@@ -250,13 +238,12 @@ def register_routing_callback(app):
                 header,
                 "/auth",
                 {"logged_in": False, "access_token": None},
-                server_status_cache,
             )
 
         # Route to appropriate page
         content, header = route_authenticated_user(pathname, updated_local_data, theme)
 
-        return content, header, pathname, updated_local_data, server_status_cache
+        return content, header, pathname, updated_local_data
 
 
 def route_authenticated_user(
