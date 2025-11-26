@@ -86,17 +86,9 @@ def add_filter(
                 f"Creating filter: column='{column_name}', values={value}, type={interactive_component_type}"
             )
 
-            # Cast both the column and values to string to ensure type compatibility
-            try:
-                # Convert values to strings to match string casting
-                string_values = [str(v) for v in value]
-                filter_list.append(pl.col(column_name).cast(pl.String).is_in(string_values))
-            except Exception as e:
-                logger.warning(
-                    f"Failed to apply filter with string casting on column '{column_name}': {e}"
-                )
-                # Fallback to original filter without casting
-                filter_list.append(pl.col(column_name).is_in(value))
+            # Use native type filtering - Polars handles type coercion automatically
+            # Join type mismatches are handled separately by normalize_join_column_types()
+            filter_list.append(pl.col(column_name).is_in(value))
 
     elif interactive_component_type == "TextInput":
         if value:
@@ -1657,12 +1649,22 @@ def apply_runtime_filters(df: pl.DataFrame, metadata: list[dict] | None) -> pl.D
         return df
 
     filter_expressions = process_metadata_and_filter(metadata)
+
+    # Debug logging for filter expressions
+    if filter_expressions:
+        logger.debug(f"🔍 Generated {len(filter_expressions)} filter expression(s):")
+        for i, expr in enumerate(filter_expressions, 1):
+            logger.debug(f"   Filter {i}: {expr}")
+
     if filter_expressions:
         try:
             # Apply filters using Polars expressions on materialized DataFrame
             combined_filter = filter_expressions[0]
             for filt in filter_expressions[1:]:
                 combined_filter &= filt
+
+            logger.debug(f"🔍 Combined filter expression: {combined_filter}")
+
             df = df.filter(combined_filter)
             filtered_row_count = df.height
             logger.info(
