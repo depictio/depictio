@@ -1,7 +1,7 @@
 import re
 from pathlib import Path
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.logging import logger
@@ -206,3 +206,13 @@ class DataCollection(MongoModel):
                 if field not in ["id", "registration_time"]
             )
         return NotImplemented
+
+
+class DataCollectionResponse(DataCollection):
+    """Permissive DataCollection model for API responses.
+
+    Allows extra fields like delta_location and last_aggregation
+    that may be added by API endpoints.
+    """
+
+    model_config = ConfigDict(extra="allow")

@@ -8,9 +8,9 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.models.base import MongoModel
-from depictio.models.models.data_collections import DataCollection
+from depictio.models.models.data_collections import DataCollection, DataCollectionResponse
 from depictio.models.models.users import Permission
-from depictio.models.models.workflows import Workflow
+from depictio.models.models.workflows import Workflow, WorkflowResponse
 
 
 class ProjectPermissionRequest(BaseModel):
@@ -88,6 +88,21 @@ class Project(MongoModel):
         if not re.match(r"https?://", v):
             raise ValueError("Invalid URL")
         return v
+
+
+class ProjectResponse(Project):
+    """Permissive Project model for API responses.
+
+    Extends Project with extra="allow" and uses WorkflowResponse for nested workflows
+    to handle extra fields at all nesting levels.
+    Inherits the from_mongo() method from MongoModel which handles _id → id conversion.
+    """
+
+    # Override to use permissive response models
+    workflows: list[WorkflowResponse] = []  # type: ignore[assignment]
+    data_collections: list[DataCollectionResponse] = []  # type: ignore[assignment]
+
+    model_config = ConfigDict(extra="allow")
 
 
 class ProjectBeanie(Project, Document):
