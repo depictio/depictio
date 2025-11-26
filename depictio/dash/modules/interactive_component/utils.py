@@ -642,21 +642,24 @@ def build_interactive(**kwargs):
     else:
         value_div_type = "interactive-component-value"
 
-    # SKELETON APPROACH: Show skeleton initially when build_frame=True, populate via callback
-    # Similar to card components: skeleton → callback → populated component
+    # COMPONENT-AT-BUILD-TIME APPROACH: Create actual component immediately (like cards)
+    # Component exists in DOM with disabled state, callback enables and populates it
+    # This eliminates race conditions with dash.ALL callbacks
     if build_frame:
-        logger.info(f"📦 BUILD_FRAME MODE: Returning skeleton for interactive component {index}")
+        logger.info(f"📦 BUILD_FRAME MODE: Creating disabled component for interactive {index}")
 
-        # Create skeleton placeholder
-        # IMPORTANT: Use different ID type for container to avoid duplicate IDs
-        # The async callback will populate this with a component that has "interactive-component-value" ID
-        skeleton = html.Div(
+        # Show only a loader until callback renders final component
+        # This avoids the "Loading..." -> component transition (eliminates visual flicker)
+        # The callback will replace this entire container with the final component
+        component_with_loader = html.Div(
             id={"type": f"{value_div_type}-container", "index": str(index)},
             children=[
-                dmc.Text("Loading options...", size="sm", c="gray", style={"marginBottom": "10px"}),
-                dmc.Loader(type="dots", size="lg"),
+                dmc.Center(
+                    dmc.Loader(type="dots", size="lg"),
+                    style={"minHeight": "120px"},
+                )
             ],
-            style={"textAlign": "center", "padding": "20px", "minHeight": "120px"},
+            style={"padding": "10px"},
         )
 
         # Create trigger store with ALL metadata needed for callback
@@ -709,11 +712,11 @@ def build_interactive(**kwargs):
             storage_type="memory",
         )
 
-        # Build frame with skeleton and stores
-        frame_with_skeleton = build_interactive_frame(
+        # Build frame with component and stores
+        frame_with_component = build_interactive_frame(
             index=index,
             children=[
-                skeleton,
+                component_with_loader,
                 trigger_store,
                 metadata_store,
                 options_data_store,
@@ -721,7 +724,7 @@ def build_interactive(**kwargs):
             ],
         )
 
-        return frame_with_skeleton
+        return frame_with_component
 
     # Log optimization info
     if init_data:
@@ -804,7 +807,7 @@ def build_interactive(**kwargs):
         )
         if not wf_id or not dc_id:
             logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
-            df_for_options = pl.DataFrame()
+            df_for_options = pl.DataFrame({})  # Empty DataFrame with no columns
         else:
             # Always load unfiltered data for categorical component options
             # Handle joined data collection IDs - don't convert to ObjectId
@@ -836,7 +839,7 @@ def build_interactive(**kwargs):
         # Validate that we have valid IDs before calling load_deltatable_lite
         if not wf_id or not dc_id:
             logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
-            df = pl.DataFrame()  # Return empty DataFrame if IDs are missing
+            df = pl.DataFrame({})  # Return empty DataFrame if IDs are missing
         else:
             # Handle joined data collection IDs - don't convert to ObjectId
             if isinstance(dc_id, str) and "--" in dc_id:
