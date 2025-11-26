@@ -35,11 +35,10 @@ def register_callbacks_interactive_component(app):
 
 def load_design_callbacks(app):
     """
-    Lazy-load design callbacks for interactive component.
+    Lazy-load design and edit callbacks for interactive component.
 
-    Currently, interactive component has no server-side design callbacks,
-    only UI creation functions. This function is kept for consistency
-    and future extensibility.
+    This function is called when a user enters edit mode (edit page or stepper).
+    It registers design-related callbacks including pre-population and edit save.
 
     Args:
         app: Dash application instance
@@ -52,8 +51,11 @@ def load_design_callbacks(app):
     if _design_callbacks_loaded:
         return False
 
-    # No design callbacks to register for interactive component yet
-    # (all design callbacks are currently commented out in original code)
+    from .design import register_interactive_design_callbacks
+    from .edit import register_interactive_edit_callback
+
+    register_interactive_design_callbacks(app)
+    register_interactive_edit_callback(app)
 
     _design_callbacks_loaded = True
 
