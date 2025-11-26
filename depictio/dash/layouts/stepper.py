@@ -24,6 +24,7 @@ from depictio.dash.layouts.stepper_parts.part_two import register_callbacks_step
 from depictio.dash.modules.card_component.frontend import design_card
 from depictio.dash.modules.figure_component.frontend import design_figure
 from depictio.dash.modules.interactive_component.frontend import design_interactive
+from depictio.models.models.projects import ProjectResponse
 
 min_step = 0
 max_step = 3
@@ -385,14 +386,18 @@ def register_callbacks_stepper(app):
                 },
             )
             response.raise_for_status()
-            project = response.json()
+            response_data = response.json()
+            # Handle nested 'project' key in response (API returns {'project': {...}, 'delta_locations': {}})
+            project_dict = response_data.get("project", response_data)
+            # Use ProjectResponse.from_mongo() to convert _id → id recursively
+            project = ProjectResponse.from_mongo(project_dict).model_dump()
         except Exception as e:
             logger.error(f"Failed to fetch project from dashboard_id {dashboard_id}: {e}")
             raise dash.exceptions.PreventUpdate
 
         # Guard: Check if project has workflows
         if "workflows" not in project or not project["workflows"]:
-            logger.warning(f"Project has no workflows: {project}")
+            logger.warning(f"Project has no workflows: {response_data}")
             return [], None
 
         all_wf_dc = project["workflows"]
@@ -421,7 +426,7 @@ def register_callbacks_stepper(app):
                 seen_workflow_ids.add(wf["id"])
                 valid_wfs.append(
                     {
-                        "label": f"{wf['engine']['name']}/{wf['name']}",
+                        "label": wf.get("workflow_tag", wf.get("name", wf["id"])),
                         "value": wf["id"],
                     }
                 )
@@ -471,7 +476,11 @@ def register_callbacks_stepper(app):
                 },
             )
             response.raise_for_status()
-            project = response.json()
+            response_data = response.json()
+            # Handle nested 'project' key in response (API returns {'project': {...}, 'delta_locations': {}})
+            project_dict = response_data.get("project", response_data)
+            # Use ProjectResponse.from_mongo() to convert _id → id recursively
+            project = ProjectResponse.from_mongo(project_dict).model_dump()
         except Exception as e:
             logger.error(f"Failed to fetch project from dashboard_id {dashboard_id}: {e}")
             raise dash.exceptions.PreventUpdate
@@ -481,7 +490,7 @@ def register_callbacks_stepper(app):
 
         # Guard: Check if project has workflows
         if "workflows" not in project or not project["workflows"]:
-            logger.warning(f"Project has no workflows: {project}")
+            logger.warning(f"Project has no workflows: {response_data}")
             return [], None
 
         all_wf_dc = project["workflows"]
