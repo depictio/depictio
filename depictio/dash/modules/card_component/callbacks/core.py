@@ -215,6 +215,7 @@ def register_core_callbacks(app):
         State("dashboard-init-data", "data"),  # REFACTORING: Access centralized column_specs
         State("local-store", "data"),  # SECURITY: Access token from centralized store
         prevent_initial_call=False,
+        background=True,  # ✅ Enable Celery background processing for consistent async execution
     )
     def render_card_value_background(
         trigger_data, project_metadata, existing_metadata, dashboard_init_data, local_data
@@ -222,17 +223,19 @@ def register_core_callbacks(app):
         """
         PATTERN-MATCHING: Render callback for initial card value computation.
 
-        TWO-STAGE RENDERING OPTIMIZATION:
-        - Stage 1: Renders immediately with trigger_data (before project_metadata available)
-        - Stage 2: Re-renders when project-metadata-store arrives (contains delta_locations)
-
-        This eliminates race condition where cards rendered before delta locations fetched.
-        Session storage ensures delta locations persist across refreshes for instant optimization.
+        SINGLE-STAGE RENDERING (CELERY BACKGROUND):
+        - Executes in Celery worker (background=True) for consistent async execution
+        - Waits for BOTH trigger_data AND project_metadata before rendering
+        - Matches interactive component pattern (conservative rendering)
+        - Always uses cached delta_locations (no API calls during render)
+        - Ensures fast, consistent rendering with cached data
+        - Loader visible during background task execution (~200ms)
 
         PERFORMANCE OPTIMIZATION:
         - Extracts delta_locations from project-metadata-store (no separate store needed)
         - Project metadata includes full delta_locations via MongoDB $lookup join
         - For 9 cards: all share same project metadata cache
+        - Single render per card (idempotency prevents duplicate renders)
 
         Args:
             trigger_data: Data from card-trigger store containing all necessary params
@@ -261,7 +264,17 @@ def register_core_callbacks(app):
         triggered_by = ctx.triggered_id if ctx.triggered else "initial"
         logger.error(f"🔥 CARD CALLBACK FIRED - Index: {index}, Triggered by: {triggered_by}")
 
-        logger.info(f"🔄 CARD RENDER: Starting value computation for trigger: {trigger_data}")
+        # IDEMPOTENCY CHECK: Skip if already initialized (prevents spurious re-renders)
+        # This ensures single-pass rendering by blocking all re-renders after initial render
+        # OPTIMIZATION: Moved to top to exit early before any expensive operations
+        if existing_metadata and existing_metadata.get("reference_value") is not None:
+            logger.debug(
+                "✅ CARD RENDER: Already initialized, skipping re-render "
+                "(Patch operation or spurious Store update detected)"
+            )
+            logger.error(f"✅ CARD CALLBACK COMPLETE - Index: {index} (idempotency block)")
+            return no_update, no_update
+
         # DEFENSIVE CHECK 1: Skip if trigger_data not ready (progressive loading race condition)
         # During progressive loading, the callback might fire before React fully commits the component tree
         # This prevents attempting to update components that don't exist yet in the DOM
@@ -273,33 +286,30 @@ def register_core_callbacks(app):
             logger.error(f"✅ CARD CALLBACK COMPLETE - Index: {index} (trigger not ready)")
             return no_update, no_update
 
-        # ✅ CACHE OPTIMIZATION: Extract delta_locations from project-metadata-store
-        delta_locations = None
-        if project_metadata:
-            delta_locations = {}
-            project_data = project_metadata.get("project", {})
-            for wf in project_data.get("workflows", []):
-                for dc in wf.get("data_collections", []):
-                    dc_id = str(dc.get("_id"))
-                    if dc.get("delta_location"):
-                        delta_locations[dc_id] = {
-                            "delta_location": dc["delta_location"],
-                            "size_bytes": -1,
-                        }
-
-        # IDEMPOTENCY CHECK: Skip if already initialized (prevents spurious re-renders)
-        # This ensures single-pass rendering by blocking all re-renders after initial render
-        if existing_metadata and existing_metadata.get("reference_value") is not None:
-            logger.debug(
-                "✅ CARD RENDER: Already initialized, skipping re-render "
-                "(Patch operation or spurious Store update detected)"
+        # DEFENSIVE CHECK 2: Wait for project_metadata (SINGLE-STAGE RENDERING)
+        # Matches interactive component pattern: wait for metadata before rendering
+        # Ensures we always use cached delta_locations (no API calls during render)
+        if not project_metadata or not isinstance(project_metadata, dict):
+            logger.info(
+                f"⏭️  CARD RENDER: Waiting for project_metadata (keeping loader visible) - Index: {index}"
             )
-            logger.error(f"✅ CARD CALLBACK COMPLETE - Index: {index} (idempotency block)")
+            logger.error(f"✅ CARD CALLBACK COMPLETE - Index: {index} (waiting for metadata)")
             return no_update, no_update
 
-        if not trigger_data:
-            logger.warning("No trigger data provided")
-            return "...", {}
+        logger.info(f"🔄 CARD RENDER: Starting value computation for trigger: {trigger_data}")
+
+        # ✅ CACHE OPTIMIZATION: Extract delta_locations from project-metadata-store (REQUIRED)
+        # Since we now wait for project_metadata, this is guaranteed to be present
+        delta_locations = {}
+        project_data = project_metadata.get("project", {})
+        for wf in project_data.get("workflows", []):
+            for dc in wf.get("data_collections", []):
+                dc_id = str(dc.get("_id"))
+                if dc.get("delta_location"):
+                    delta_locations[dc_id] = {
+                        "delta_location": dc["delta_location"],
+                        "size_bytes": -1,
+                    }
 
         # Extract parameters from trigger store
         wf_id = trigger_data.get("wf_id")
@@ -321,18 +331,13 @@ def register_core_callbacks(app):
         else:
             logger.debug("⚠️  dashboard-init-data not available, cols_json will be empty")
 
-        # TWO-STAGE OPTIMIZATION: Use delta_locations when available
-        # Stage 1: delta_locations is None → use API calls (slower)
-        # Stage 2: delta_locations populated → use cached data (faster)
-        # Pass delta_locations directly to load_deltatable_lite
-        init_data = None
-        if delta_locations:
-            init_data = delta_locations  # Pass delta_locations dict to load_deltatable_lite
-            logger.info(
-                f"📡 CARD RENDER STAGE 2: Using delta_locations with {len(delta_locations)} locations"
-            )
-        else:
-            logger.debug("🔄 CARD RENDER STAGE 1: No delta_locations yet, using API calls")
+        # SINGLE-STAGE OPTIMIZATION: Always use cached delta_locations
+        # Since we wait for project_metadata, we always have delta_locations available
+        # This ensures fast rendering with cached data (no API calls)
+        init_data = delta_locations
+        logger.info(
+            f"📡 CARD RENDER: Using cached delta_locations with {len(delta_locations)} locations"
+        )
 
         # Validate required parameters
         if not all([wf_id, dc_id, column_name, aggregation]):
@@ -389,6 +394,7 @@ def register_core_callbacks(app):
                 "cols_json": cols_json,
                 "delta_locations_available": delta_locations
                 is not None,  # Track if delta_locations was available
+                "has_been_patched": False,  # Track patch state - allows first patch even at defaults
             }
 
             logger.info(f"✅ CARD RENDER: Value computed successfully: {formatted_value}")
@@ -400,11 +406,87 @@ def register_core_callbacks(app):
             logger.error(f"✅ CARD CALLBACK COMPLETE - Index: {index} (error)")
             return "Error", {"error": str(e)}
 
+    def is_default_value(component: dict) -> bool:
+        """
+        Check if an interactive component's value matches its default state.
+
+        Compares current value against stored default_state metadata to detect
+        whether user has interacted with the filter.
+
+        Args:
+            component: Enriched component dict with 'value', 'metadata', etc.
+
+        Returns:
+            True if value matches default, False if user has modified it
+        """
+        current_value = component.get("value")
+        metadata = component.get("metadata", {})
+        default_state = metadata.get("default_state", {})
+        component_type = metadata.get("interactive_component_type")
+
+        # Handle Select-type components (Select, MultiSelect, SegmentedControl)
+        if component_type in ["Select", "MultiSelect", "SegmentedControl"]:
+            default_value = default_state.get("default_value")
+
+            # Handle semantic equivalence: None and [] both mean "All" / no filter
+            # For MultiSelect: default_value=None but component returns []
+            # For Select: default_value=None and component returns None
+            if default_value is None:
+                return current_value is None or current_value == []
+
+            # Otherwise do direct comparison
+            return current_value == default_value
+
+        # Handle RangeSlider
+        elif component_type == "RangeSlider":
+            default_range = default_state.get("default_range")
+
+            # Validate both are lists with 2 elements
+            if not isinstance(current_value, list) or not isinstance(default_range, list):
+                return False
+            if len(current_value) != 2 or len(default_range) != 2:
+                return False
+
+            # Compare with floating point tolerance (round to 2 decimals)
+            return round(current_value[0], 2) == round(default_range[0], 2) and round(
+                current_value[1], 2
+            ) == round(default_range[1], 2)
+
+        # Handle DateRangePicker
+        elif component_type == "DateRangePicker":
+            default_range = default_state.get("default_range")
+
+            # Validate both are lists
+            if not isinstance(current_value, list) or not isinstance(default_range, list):
+                return False
+
+            # Normalize to strings for comparison
+            current_str = [str(v) for v in current_value]
+            default_str = [str(v) for v in default_range]
+
+            return current_str == default_str
+
+        # Handle Slider (uses same structure as RangeSlider)
+        elif component_type == "Slider":
+            default_range = default_state.get("default_range")
+            if not isinstance(default_range, list) or len(default_range) != 2:
+                return False
+
+            # Slider value is single number, compare against range
+            # Default is typically max value or midpoint
+            default_value = default_range[1]  # Use max as default
+            return round(float(current_value), 2) == round(float(default_value), 2)
+
+        # Unknown component type - conservatively assume not default
+        logger.warning(f"Unknown component type for default comparison: {component_type}")
+        return False
+
     # PATTERN-MATCHING: Patching callback for filter-based updates
     @app.callback(
         Output({"type": "card-value", "index": MATCH}, "children", allow_duplicate=True),
         Output({"type": "card-comparison", "index": MATCH}, "children", allow_duplicate=True),
         Output({"type": "card-loading-overlay", "index": MATCH}, "visible"),
+        Output({"type": "card-metadata", "index": MATCH}, "data", allow_duplicate=True),
         Input("interactive-values-store", "data"),
         State({"type": "card-metadata", "index": MATCH}, "data"),
         State({"type": "card-trigger", "index": MATCH}, "data"),
@@ -457,13 +539,7 @@ def register_core_callbacks(app):
             raise dash.exceptions.PreventUpdate
 
         # RECONSTRUCT FULL METADATA: Combine lightweight store (index + value) with full metadata
-        logger.error("=" * 80)
-        logger.error("🔍 METADATA ENRICHMENT START")
-        logger.error(
-            f"   Input - Interactive metadata list count: {len(interactive_metadata_list)}"
-        )
-        logger.error(f"   Input - Interactive metadata IDs count: {len(interactive_metadata_ids)}")
-        logger.error(f"   Input - Filters data: {filters_data is not None}")
+        logger.debug("🔍 Enriching lightweight store data with full metadata")
 
         # Create index → metadata mapping
         metadata_by_index = {}
@@ -472,34 +548,19 @@ def register_core_callbacks(app):
                 if i < len(interactive_metadata_list):
                     index = meta_id["index"]
                     metadata_by_index[index] = interactive_metadata_list[i]
-                    logger.error(f"   📋 Mapped metadata for index: {index[:8]}... (item {i + 1})")
-
-        logger.error(f"   Metadata lookup created with {len(metadata_by_index)} entries")
-        logger.error(
-            f"   Metadata lookup keys: {[k[:8] + '...' for k in metadata_by_index.keys()]}"
-        )
 
         # Enrich lightweight store data with full metadata
         lightweight_components = (
             filters_data.get("interactive_components_values", []) if filters_data else []
         )
-        logger.error(f"   Lightweight components from store: {len(lightweight_components)}")
 
         enriched_components = []
-        for idx, component in enumerate(lightweight_components):
+        for component in lightweight_components:
             index = component.get("index")
             value = component.get("value")
             full_metadata = metadata_by_index.get(index, {})
 
-            logger.error(f"   🔄 Processing component {idx + 1}:")
-            logger.error(f"      - Index: {index[:8] if index else 'None'}...")
-            logger.error(f"      - Value: {value}")
-            logger.error(f"      - Metadata found: {bool(full_metadata)}")
-
             if full_metadata:
-                logger.error(
-                    f"      - Column: {full_metadata.get('column_name')}, DC: {str(full_metadata.get('dc_id'))[:8]}..."
-                )
                 enriched_components.append(
                     {
                         "index": index,
@@ -508,26 +569,66 @@ def register_core_callbacks(app):
                     }
                 )
             else:
-                logger.error(f"      ⚠️ NO METADATA FOUND for index {index[:8]}... - skipping!")
+                logger.warning(f"No metadata found for component {index[:8]}... - skipping")
 
-        logger.error(f"   ✅ Enrichment complete: {len(enriched_components)} components enriched")
-        logger.error(
-            f"   ⚠️ Components skipped (no metadata): {len(lightweight_components) - len(enriched_components)}"
+        logger.debug(
+            f"Enriched {len(enriched_components)}/{len(lightweight_components)} components with metadata"
         )
-        logger.error("🔍 METADATA ENRICHMENT END")
-        logger.error("=" * 80)
 
         # Replace filters_data with enriched version for backward compatibility
         filters_data = {"interactive_components_values": enriched_components}
 
+        # ⭐ OPTIMIZATION: Detect if any user interaction has occurred
+        # Check each component individually against its stored default_state
+        if enriched_components:
+            # Find components that differ from their defaults
+            modified_components = [
+                comp for comp in enriched_components if not is_default_value(comp)
+            ]
+
+            # Check if this is the first patch or a subsequent one
+            has_been_patched = metadata.get("has_been_patched", False) if metadata else False
+            reference_value = metadata.get("reference_value") if metadata else None
+
+            # If ALL components are still at default AND card has been patched before, skip patch
+            if not modified_components and has_been_patched:
+                logger.debug(
+                    f"🔍 CARD PATCH: All {len(enriched_components)} filters at default values "
+                    f"(components: {[c.get('metadata', {}).get('column_name', 'unknown') for c in enriched_components]}), "
+                    f"skipping patch - card already initialized"
+                )
+                from dash.exceptions import PreventUpdate
+
+                raise PreventUpdate
+            elif not modified_components and not has_been_patched:
+                # RACE CONDITION CHECK: Ensure reference_value is populated before first patch
+                # If metadata exists but reference_value is None, render_card_value_background hasn't completed yet
+                if reference_value is None:
+                    logger.debug(
+                        "🔍 CARD PATCH: First patch triggered but reference_value not ready - waiting for render_card_value_background"
+                    )
+                    from dash.exceptions import PreventUpdate
+
+                    raise PreventUpdate
+
+                logger.debug(
+                    f"🔍 CARD PATCH: First patch with default values - allowing to initialize card data "
+                    f"(components: {[c.get('metadata', {}).get('column_name', 'unknown') for c in enriched_components]})"
+                )
+            else:
+                logger.debug(
+                    f"🔍 CARD PATCH: Detected user interaction on {len(modified_components)}/{len(enriched_components)} filters "
+                    f"(modified: {[c.get('metadata', {}).get('column_name', 'unknown') for c in modified_components]})"
+                )
+
         # Check if metadata and trigger_data are properly populated
         if metadata is None or trigger_data is None:
-            return "...", [], False
+            return "...", [], False, metadata
 
         # Check if metadata has been populated by render_card_value_background
         reference_value = metadata.get("reference_value")
         if reference_value is None:
-            return "...", [], False
+            return "...", [], False, metadata
 
         # Extract parameters
         wf_id = trigger_data.get("wf_id")
@@ -540,7 +641,7 @@ def register_core_callbacks(app):
         access_token = local_data.get("access_token") if local_data else None
         if not access_token:
             logger.error("No access_token available in local-store")
-            return "Auth Error", [], False
+            return "Auth Error", [], False, metadata
 
         # Skip patching for dummy/random cards (no data source)
         if not all([wf_id, dc_id, column_name, aggregation]):
@@ -554,7 +655,7 @@ def register_core_callbacks(app):
             else:
                 formatted_value = "N/A"
 
-            return formatted_value, [], False
+            return formatted_value, [], False, metadata
 
         try:
             # Extract interactive components from filters_data
@@ -604,7 +705,7 @@ def register_core_callbacks(app):
                         formatted_value = str(reference_value)
                 else:
                     formatted_value = "N/A"
-                return formatted_value, [], False
+                return formatted_value, [], False, metadata
 
             # Determine if filters have active (non-empty) values
             has_active_filters = False
@@ -877,8 +978,13 @@ def register_core_callbacks(app):
                     logger.warning(f"Error creating comparison: {e}")
 
             logger.info(f"✅ CARD PATCH: Value updated successfully: {formatted_value}")
-            return formatted_value, comparison_components, False
+
+            # Update metadata to mark card as patched
+            updated_metadata = metadata.copy() if metadata else {}
+            updated_metadata["has_been_patched"] = True
+
+            return formatted_value, comparison_components, False, updated_metadata
 
         except Exception as e:
             logger.error(f"❌ CARD PATCH: Error applying filters: {e}", exc_info=True)
-            return "Error", [], False
+            return "Error", [], False, metadata

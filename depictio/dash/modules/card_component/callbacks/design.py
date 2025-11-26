@@ -207,6 +207,15 @@ def register_design_callbacks(app):
                 f"Using wf/dc from States (hidden selects) - wf_tag: {wf_id}, dc_tag: {dc_id}"
             )
 
+        # CRITICAL: Validate that wf_id and dc_id are not None after extraction
+        # This prevents API calls with None values which cause 422 errors
+        if not wf_id or not dc_id:
+            logger.warning(
+                f"Card design: wf_id or dc_id still None after extraction (wf_id={wf_id}, dc_id={dc_id}). "
+                "Returning empty preview."
+            )
+            return ([], None, None)
+
         logger.info(f"component_data: {component_data}")
 
         headers = {
@@ -342,6 +351,14 @@ def register_design_callbacks(app):
             }
         else:
             # Regular data collection - fetch from API
+            # DEFENSIVE: Final check before API call (should never be reached if early returns work)
+            if not dc_id or dc_id == "None":
+                logger.error(
+                    f"Card design: dc_id is invalid before API call (dc_id={dc_id}). "
+                    "This should have been caught earlier. Returning empty preview."
+                )
+                return ([], None, columns_description_df)
+
             dc_specs = httpx.get(
                 f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_id}",
                 headers=headers,
