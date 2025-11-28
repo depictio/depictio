@@ -518,7 +518,9 @@ def register_profile_callbacks(app):
         [
             Output("avatar-placeholder", "children"),
             Output("user-info-placeholder", "children"),
-            Output("upgrade-to-temporary-button", "style"),
+            Output("logout-button", "children"),
+            Output("logout-button", "leftSection"),
+            Output("logout-button", "style"),
         ],
         [State("local-store", "data"), Input("url", "pathname")],
     )
@@ -526,13 +528,25 @@ def register_profile_callbacks(app):
         logger.info(f"URL pathname: {pathname}")
         logger.info(f"session_data: {local_data}")
         if local_data is None or "access_token" not in local_data:
-            return html.Div(), html.Div(), {"display": "none"}
+            return (
+                html.Div(),
+                html.Div(),
+                "Login",
+                DashIconify(icon="mdi:login", width=ICON_SIZE),
+                {"backgroundColor": colors["blue"]},
+            )
 
         user = api_call_fetch_user_from_token(local_data["access_token"])
         logger.info(f"PROFILE user: {user}")
 
         if user is None:
-            return html.Div(), html.Div(), {"display": "none"}
+            return (
+                html.Div(),
+                html.Div(),
+                "Login",
+                DashIconify(icon="mdi:login", width=ICON_SIZE),
+                {"backgroundColor": colors["blue"]},
+            )
 
         user = user.model_dump()
 
@@ -596,17 +610,19 @@ def register_profile_callbacks(app):
 
         user_info_display = dmc.Stack(info_items, gap="xs")
 
-        # Determine if upgrade button should be visible
-        # Show button in unauthenticated mode for anonymous users (not temporary)
-        show_upgrade_button = (
-            settings.auth.unauthenticated_mode
-            and user.get("is_anonymous", False)
-            and not user.get("is_temporary", False)
-        )
+        # Check if user is anonymous to show different button text/style
+        is_anonymous = user.get("is_anonymous", False)
 
-        upgrade_button_style = {"display": "block"} if show_upgrade_button else {"display": "none"}
+        if is_anonymous and settings.auth.unauthenticated_mode:
+            button_text = "Login"
+            button_icon = DashIconify(icon="mdi:login", width=ICON_SIZE)
+            button_style = {"backgroundColor": colors["blue"]}
+        else:
+            button_text = "Logout"
+            button_icon = DashIconify(icon="mdi:logout", width=ICON_SIZE)
+            button_style = {"backgroundColor": colors["red"]}
 
-        return avatar, user_info_display, upgrade_button_style
+        return avatar, user_info_display, button_text, button_icon, button_style
 
     @app.callback(
         [
@@ -614,13 +630,27 @@ def register_profile_callbacks(app):
             Output("local-store", "data", allow_duplicate=True),
         ],
         [Input("logout-button", "n_clicks")],
+        [State("local-store", "data")],
         prevent_initial_call=True,
     )
-    def logout_user_callback(n_clicks):
+    def logout_user_callback(n_clicks, local_data):
         logger.info(f"Logout button clicked: {n_clicks}")
         if n_clicks is None:
             return dash.no_update, dash.no_update
 
+        # Check if this is an anonymous user clicking "Login"
+        if local_data and local_data.get("access_token"):
+            try:
+                user = api_call_fetch_user_from_token(local_data["access_token"])
+                if user and hasattr(user, "is_anonymous") and user.is_anonymous:
+                    # Anonymous user clicking "Login" - just redirect, don't logout
+                    logger.info("Anonymous user clicking Login - redirecting to /auth")
+                    return "/auth", dash.no_update
+            except Exception as e:
+                logger.error(f"Error checking user type in logout: {e}")
+
+        # Real user logout
+        logger.info("Real user logout - clearing session and redirecting to /auth")
         return "/auth", logout_user()
 
     @app.callback(
