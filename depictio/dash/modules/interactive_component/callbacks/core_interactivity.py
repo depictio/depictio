@@ -44,6 +44,9 @@ def register_store_update_callback(app):
     - All values are None (initial page load - components not yet rendered)
     - Values are identical to previous state (no user interaction occurred)
 
+    RESET DETECTION: Detects reset actions by state transition - if previous values
+    were non-default and current values are all default, that's a reset (not init).
+
     Args:
         app: Dash application instance
     """
@@ -59,7 +62,11 @@ def register_store_update_callback(app):
         prevent_initial_call=False,
     )
     def update_interactive_values_store(
-        values, ids, previous_store_data, metadata_list, metadata_ids
+        values,
+        ids,
+        previous_store_data,
+        metadata_list,
+        metadata_ids,
     ):
         """
         Aggregate interactive component values into lightweight session store.
@@ -85,99 +92,145 @@ def register_store_update_callback(app):
 
         start_time = time.perf_counter()
 
+        # ⭐ DEBUG: Detailed logging for reset troubleshooting
+        logger.error("=" * 80)
+        logger.error("🔄 STORE UPDATE CALLBACK FIRED")
+        logger.error(f"   Components count: {len(values)}")
+        logger.error(f"   Metadata count: {len(metadata_list) if metadata_list else 0}")
+        logger.error(f"   Values: {values}")
+        logger.error(f"   IDs: {[id_dict.get('index', 'unknown')[:8] for id_dict in ids]}")
+
+        # Show what triggered this callback
+        if dash.callback_context.triggered:
+            trigger_info = dash.callback_context.triggered[0]
+            logger.error(f"   Triggered by: {trigger_info['prop_id']}")
+            logger.error(f"   Trigger value: {trigger_info['value']}")
+
+        # Show previous store state
+        if previous_store_data:
+            prev_values = previous_store_data.get("interactive_components_values", [])
+            logger.error(f"   Previous store had {len(prev_values)} components")
+            if prev_values:
+                logger.error(f"   Previous values sample: {prev_values[:2]}")
+        else:
+            logger.error("   Previous store: EMPTY (first load)")
+
         logger.debug(
             f"🔄 Store update: {len(values)} components, metadata: {len(metadata_list) if metadata_list else 0}"
         )
 
-        # ⭐ OPTIMIZATION: Check if all values are at defaults (prevents spurious card re-renders)
-        # Trigger when:
-        # 1. We have all interactive component values (metadata count == value count)
-        # 2. Previous store exists (not the very first render ever)
-        # This prevents store updates when components render with default values,
-        # which in turn prevents patch_card_with_filters from firing unnecessarily
-        optimization_check_triggered = (
-            len(values) > 0
-            and metadata_list
-            and len(metadata_list) == len(values)
-            and previous_store_data is not None
-            and "interactive_components_values" in previous_store_data
-        )
-        if optimization_check_triggered:
-            logger.debug("   ⚙️ ENTERING default value optimization check...")
-            # Create metadata lookup by index
-            metadata_by_index = {}
-            try:
-                for i, meta_id in enumerate(metadata_ids):
-                    if i < len(metadata_list) and metadata_list[i]:
-                        metadata_by_index[meta_id["index"]] = metadata_list[i]
-            except Exception as e:
-                logger.warning(f"⚠️ Error creating metadata lookup: {e}")
-                # Continue with normal processing if metadata lookup fails
+        # ⭐ OPTIMIZATION DISABLED: "All at defaults" check removed
+        # REASON: This optimization blocked legitimate reset actions - when users clicked "Reset",
+        # filters returned to defaults but cards didn't refresh because this check prevented
+        # the store update. The "values unchanged" check below is sufficient for optimization.
+        # REMOVED: Lines that checked if all values are at defaults and blocked store updates
+        # SEE: Git history for original implementation if needed
 
-            if metadata_by_index:
-                # Check if all values are at their defaults
-                all_at_defaults = True
-                for i, value in enumerate(values):
-                    if i >= len(ids):
-                        continue
-
-                    component_index = ids[i]["index"]
-                    metadata = metadata_by_index.get(component_index)
-
-                    if not metadata or "default_state" not in metadata:
-                        all_at_defaults = False
-                        break
-
-                    default_state = metadata.get("default_state", {})
-                    is_at_default = False
-
-                    # Check based on component type
-                    comp_type = default_state.get("type")
-                    if comp_type == "range":
-                        default_range = default_state.get("default_range")
-                        is_at_default = value == default_range
-                    elif comp_type == "select":
-                        default_value = default_state.get("default_value")
-                        is_at_default = value == default_value or (
-                            value == [] and default_value is None
-                        )
-                    elif comp_type == "date_range":
-                        default_range = default_state.get("default_range")
-                        is_at_default = value == default_range
-                    else:
-                        is_at_default = False
-
-                    if not is_at_default:
-                        all_at_defaults = False
-                        break
-
-                if all_at_defaults:
-                    # ⭐ CRITICAL: Only prevent update if we're NOT adding new components
-                    # Check if current update has MORE components than previous store
-                    prev_component_count = len(
-                        previous_store_data.get("interactive_components_values", [])
-                    )
-                    current_component_count = len(values)
-
-                    if current_component_count > prev_component_count:
-                        # We're adding NEW components - ALLOW update to populate store fully
-                        logger.debug(
-                            f"   ℹ️ Adding new components ({prev_component_count} → {current_component_count}) - allowing update despite defaults"
-                        )
-                    else:
-                        # Same or fewer components, all at defaults - PREVENT redundant update
-                        elapsed_ms = (time.perf_counter() - start_time) * 1000
-                        logger.info(
-                            "🚫 OPTIMIZATION: All values at defaults (preventing spurious re-render)"
-                        )
-                        logger.debug(
-                            f"   Detected {len(values)} interactive components with default values"
-                        )
-                        logger.debug(
-                            "   Preventing unnecessary store update and card loading overlay"
-                        )
-                        logger.debug(f"   ⏱️ Optimization check time: {elapsed_ms:.1f}ms")
-                        raise dash.exceptions.PreventUpdate
+        # # ⭐ RESET DETECTION: Check if callback was triggered by reset button
+        # # If so, bypass optimization checks to ensure cards refresh
+        # triggered_by_reset = False
+        # if dash.callback_context.triggered:
+        #     trigger_id = dash.callback_context.triggered[0]["prop_id"]
+        #     if (
+        #         "reset-selection-graph-button" in trigger_id
+        #         or "reset-all-filters-button" in trigger_id
+        #     ):
+        #         triggered_by_reset = True
+        #         logger.info(
+        #             f"🔄 RESET TRIGGER: Store update triggered by reset button: {trigger_id}"
+        #         )
+        #
+        # # ⭐ OPTIMIZATION: Check if all values are at defaults (prevents spurious card re-renders)
+        # # Trigger when:
+        # # 1. We have all interactive component values (metadata count == value count)
+        # # 2. Previous store exists (not the very first render ever)
+        # # 3. NOT triggered by reset button (reset should always update cards)
+        # # This prevents store updates when components render with default values,
+        # # which in turn prevents patch_card_with_filters from firing unnecessarily
+        # optimization_check_triggered = (
+        #     not triggered_by_reset
+        #     and len(values) > 0
+        #     and metadata_list
+        #     and len(metadata_list) == len(values)
+        #     and previous_store_data is not None
+        #     and "interactive_components_values" in previous_store_data
+        # )
+        # if optimization_check_triggered:
+        #     logger.debug("   ⚙️ ENTERING default value optimization check...")
+        #     # Create metadata lookup by index
+        #     metadata_by_index = {}
+        #     try:
+        #         for i, meta_id in enumerate(metadata_ids):
+        #             if i < len(metadata_list) and metadata_list[i]:
+        #                 metadata_by_index[meta_id["index"]] = metadata_list[i]
+        #     except Exception as e:
+        #         logger.warning(f"⚠️ Error creating metadata lookup: {e}")
+        #         # Continue with normal processing if metadata lookup fails
+        #
+        #     if metadata_by_index:
+        #         # Check if all values are at their defaults
+        #         all_at_defaults = True
+        #         for i, value in enumerate(values):
+        #             if i >= len(ids):
+        #                 continue
+        #
+        #             component_index = ids[i]["index"]
+        #             metadata = metadata_by_index.get(component_index)
+        #
+        #             if not metadata or "default_state" not in metadata:
+        #                 all_at_defaults = False
+        #                 break
+        #
+        #             default_state = metadata.get("default_state", {})
+        #             is_at_default = False
+        #
+        #             # Check based on component type
+        #             comp_type = default_state.get("type")
+        #             if comp_type == "range":
+        #                 default_range = default_state.get("default_range")
+        #                 is_at_default = value == default_range
+        #             elif comp_type == "select":
+        #                 default_value = default_state.get("default_value")
+        #                 is_at_default = value == default_value or (
+        #                     value == [] and default_value is None
+        #                 )
+        #             elif comp_type == "date_range":
+        #                 default_range = default_state.get("default_range")
+        #                 is_at_default = value == default_range
+        #             else:
+        #                 is_at_default = False
+        #
+        #             if not is_at_default:
+        #                 all_at_defaults = False
+        #                 break
+        #
+        #         if all_at_defaults:
+        #             # ⭐ CRITICAL: Only prevent update if we're NOT adding new components
+        #             # Check if current update has MORE components than previous store
+        #             prev_component_count = len(
+        #                 previous_store_data.get("interactive_components_values", [])
+        #             )
+        #             current_component_count = len(values)
+        #
+        #             if current_component_count > prev_component_count:
+        #                 # We're adding NEW components - ALLOW update to populate store fully
+        #                 logger.debug(
+        #                     f"   ℹ️ Adding new components ({prev_component_count} → {current_component_count}) - allowing update despite defaults"
+        #                 )
+        #             else:
+        #                 # Same or fewer components, all at defaults - PREVENT redundant update
+        #                 elapsed_ms = (time.perf_counter() - start_time) * 1000
+        #                 logger.info(
+        #                     "🚫 OPTIMIZATION: All values at defaults (preventing spurious re-render)"
+        #                 )
+        #                 logger.debug(
+        #                     f"   Detected {len(values)} interactive components with default values"
+        #                 )
+        #                 logger.debug(
+        #                     "   Preventing unnecessary store update and card loading overlay"
+        #                 )
+        #                 logger.debug(f"   ⏱️ Optimization check time: {elapsed_ms:.1f}ms")
+        #                 raise dash.exceptions.PreventUpdate
 
         components_values = []
 
@@ -209,14 +262,21 @@ def register_store_update_callback(app):
             # Deep comparison of values
             if prev_components == new_components:
                 elapsed_ms = (time.perf_counter() - start_time) * 1000
-                logger.info("🚫 OPTIMIZATION: Store values unchanged")
-                logger.debug(
+                logger.error("🚫 OPTIMIZATION BLOCKED: Store values unchanged")
+                logger.error(
                     f"   Previous: {len(prev_components)} components, New: {len(new_components)} components"
                 )
-                logger.debug(
-                    f"   Values are identical - preventing redundant update and card re-renders (checked in {elapsed_ms:.1f}ms)"
+                logger.error(f"   Prev values: {prev_components}")
+                logger.error(f"   New values: {new_components}")
+                logger.error(
+                    f"   Values are identical - preventing redundant update (checked in {elapsed_ms:.1f}ms)"
                 )
+                logger.error("=" * 80)
                 raise dash.exceptions.PreventUpdate
+            else:
+                logger.error("✅ OPTIMIZATION BYPASSED: Values changed")
+                logger.error(f"   Previous: {prev_components}")
+                logger.error(f"   New: {new_components}")
         elif previous_store_data is None or not previous_store_data.get(
             "interactive_components_values"
         ):
@@ -225,8 +285,10 @@ def register_store_update_callback(app):
             logger.debug("   ℹ️ First store population - allowing update")
 
         elapsed_ms = (time.perf_counter() - start_time) * 1000
-        logger.debug(
-            f"✅ Store updated: {len(components_values)}/{len(values)} components ({elapsed_ms:.1f}ms)"
+        logger.error(
+            f"✅ STORE UPDATE ALLOWED: {len(components_values)}/{len(values)} components ({elapsed_ms:.1f}ms)"
         )
+        logger.error(f"   Returning data: {new_store_data}")
+        logger.error("=" * 80)
 
         return new_store_data

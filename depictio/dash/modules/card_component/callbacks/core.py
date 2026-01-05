@@ -590,17 +590,27 @@ def register_core_callbacks(app):
             has_been_patched = metadata.get("has_been_patched", False) if metadata else False
             reference_value = metadata.get("reference_value") if metadata else None
 
-            # If ALL components are still at default AND card has been patched before, skip patch
-            if not modified_components and has_been_patched:
-                logger.debug(
-                    f"🔍 CARD PATCH: All {len(enriched_components)} filters at default values "
-                    f"(components: {[c.get('metadata', {}).get('column_name', 'unknown') for c in enriched_components]}), "
-                    f"skipping patch - card already initialized"
-                )
-                from dash.exceptions import PreventUpdate
+            # ⭐ OPTIMIZATION DISABLED: "All at defaults" check removed
+            # REASON: This optimization blocked legitimate reset actions - when users clicked "Reset",
+            # filters returned to defaults but cards didn't refresh because this check prevented
+            # the patch callback from executing. The store update optimization was already removed
+            # for the same reason in core_interactivity.py. Cards should refresh whenever filter
+            # values change, regardless of whether the new values are defaults or not.
+            # REMOVED: Lines that checked if all values are at defaults and blocked card patches
+            # SEE: Git history for original implementation if needed
 
-                raise PreventUpdate
-            elif not modified_components and not has_been_patched:
+            # # If ALL components are still at default AND card has been patched before, skip patch
+            # if not modified_components and has_been_patched:
+            #     logger.debug(
+            #         f"🔍 CARD PATCH: All {len(enriched_components)} filters at default values "
+            #         f"(components: {[c.get('metadata', {}).get('column_name', 'unknown') for c in enriched_components]}), "
+            #         f"skipping patch - card already initialized"
+            #     )
+            #     from dash.exceptions import PreventUpdate
+            #
+            #     raise PreventUpdate
+
+            if not modified_components and not has_been_patched:
                 # RACE CONDITION CHECK: Ensure reference_value is populated before first patch
                 # If metadata exists but reference_value is None, render_card_value_background hasn't completed yet
                 if reference_value is None:
