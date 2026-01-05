@@ -1,11 +1,12 @@
 import json
 
 import dash
-from dash import ALL, Input, State
+from dash import ALL, Input, Output, State
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import (
     api_call_get_dashboard,
+    api_call_save_dashboard,
 )
 
 
@@ -86,6 +87,7 @@ def register_callbacks_save_lite(app):
     """
 
     @app.callback(
+        Output("notification-container", "sendNotifications"),
         Input("save-button-dashboard", "n_clicks"),
         State("url", "pathname"),
         State("local-store", "data"),
@@ -174,16 +176,32 @@ def register_callbacks_save_lite(app):
         # Separate components by panel
         interactive_components, right_panel_components = separate_components_by_panel(all_metadata)
 
+        # Extract layout data from pattern-matched grids with proper validation
+        # Pattern-matched ALL returns list of lists: [[layout_data], ...]
+        left_panel_saved_data = None
+        if left_panel_layouts and len(left_panel_layouts) > 0 and left_panel_layouts[0]:
+            left_panel_saved_data = left_panel_layouts[0]
+            logger.info(f"📐 LEFT: Captured {len(left_panel_saved_data)} layout items from grid")
+        else:
+            logger.warning("⚠️ LEFT: No layout data captured from grid - using metadata only")
+
+        right_panel_saved_data = None
+        if right_panel_layouts and len(right_panel_layouts) > 0 and right_panel_layouts[0]:
+            right_panel_saved_data = right_panel_layouts[0]
+            logger.info(f"📐 RIGHT: Captured {len(right_panel_saved_data)} layout items from grid")
+        else:
+            logger.warning("⚠️ RIGHT: No layout data captured from grid - using metadata only")
+
         # Recalculate fresh layout positions using current metadata
         # Pass existing saved data so we preserve user's drag positions (x/y)
-        # but enforce correct IDs (JSON-stringified) and dimensions (h=5 for cards)
+        # These functions PRESERVE user positions when saved_layout_data is provided
         left_panel_layout = calculate_left_panel_positions(
             interactive_components,
-            saved_layout_data=left_panel_layouts[0] if left_panel_layouts else None,
+            saved_layout_data=left_panel_saved_data,
         )
         right_panel_layout = calculate_right_panel_positions(
             right_panel_components,
-            saved_layout_data=right_panel_layouts[0] if right_panel_layouts else None,
+            saved_layout_data=right_panel_saved_data,
         )
 
         logger.info(f"Recalculated left panel layout: {len(left_panel_layout)} items")
@@ -224,23 +242,45 @@ def register_callbacks_save_lite(app):
             )
         logger.info("=" * 80)
 
-        # API CALL COMMENTED OUT FOR DEBUGGING - WILL NOT SAVE TO DATABASE
-        # success = api_call_save_dashboard(
-        #     dashboard_id,
-        #     dashboard_model.model_dump(),
-        #     TOKEN,
-        #     enrich=False,
-        # )
-
-        # Simulate success for callback flow
-        success = True
+        # Save to database via API
+        logger.info("💾 SAVE: Calling API to persist dashboard data")
+        success = api_call_save_dashboard(
+            dashboard_id,
+            dashboard_dict,
+            TOKEN,
+            enrich=False,  # Fast save, no enrichment needed
+        )
 
         if success:
-            logger.info(f"✅ Save preview logged: {len(all_metadata)} components")
+            logger.info(f"✅ SAVE: Successfully saved dashboard {dashboard_id}")
         else:
-            logger.error(f"❌ Minimal save failed for {dashboard_id}")
+            logger.error(f"❌ SAVE: Failed to save dashboard {dashboard_id}")
 
-        # Dash v3: No return needed for side-effect callback
+        # Return notification to user
+        from dash_iconify import DashIconify
+
+        if success:
+            return [
+                {
+                    "id": "save-success",
+                    "title": "Dashboard Saved",
+                    "message": f"Successfully saved {len(all_metadata)} components and layout positions",
+                    "color": "teal",
+                    "icon": DashIconify(icon="mdi:check-circle"),
+                    "autoClose": 3000,
+                }
+            ]
+        else:
+            return [
+                {
+                    "id": "save-error",
+                    "title": "Save Failed",
+                    "message": "Failed to save dashboard. Please try again.",
+                    "color": "red",
+                    "icon": DashIconify(icon="mdi:alert-circle"),
+                    "autoClose": 5000,
+                }
+            ]
 
 
 # ==============================================================================

@@ -10,7 +10,11 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.colors import colors
 
 # Import centralized component dimensions from metadata
-from depictio.dash.component_metadata import get_build_functions, get_component_dimensions_dict
+from depictio.dash.component_metadata import (
+    get_build_functions,
+    get_component_dimensions_dict,
+    get_dual_panel_dimensions,
+)
 
 # Depictio layout imports for stepper
 # Depictio layout imports for header
@@ -336,17 +340,6 @@ def calculate_left_panel_positions(components, saved_layout_data=None):
     layout = []
     current_y = 0
 
-    # Component height mapping for interactive components
-    # Heights in grid units (with rowHeight=50, 1*50=50px for compact minimal height)
-    component_heights = {
-        "Select": 1,
-        "MultiSelect": 1,
-        "SegmentedControl": 1,
-        "Slider": 1,
-        "RangeSlider": 1,
-        "DateRangePicker": 1,
-    }
-
     # Create lookup dict for saved positions (keyed by component index)
     # Handle both plain UUIDs and JSON-stringified dict IDs from DashGridLayout
     saved_positions = {}
@@ -363,36 +356,60 @@ def calculate_left_panel_positions(components, saved_layout_data=None):
                     if isinstance(parsed_id, dict) and "index" in parsed_id:
                         component_id = str(parsed_id["index"])
                     else:
-                        component_id = str(item_id)
+                        # Strip box- prefix for consistent lookup
+                        component_id = (
+                            str(item_id).replace("box-", "")
+                            if str(item_id).startswith("box-")
+                            else str(item_id)
+                        )
                 except (json.JSONDecodeError, TypeError):
-                    # Not JSON, use as-is
-                    component_id = str(item_id)
+                    # Not JSON, use as-is (strip box- prefix for consistent lookup)
+                    component_id = (
+                        str(item_id).replace("box-", "")
+                        if str(item_id).startswith("box-")
+                        else str(item_id)
+                    )
 
                 saved_positions[component_id] = saved_item
+
+    logger.info(f"📐 LEFT: Built saved_positions lookup with {len(saved_positions)} items")
+    if saved_positions:
+        logger.info(f"📐 LEFT: Sample saved_positions keys: {list(saved_positions.keys())[:3]}")
 
     for metadata in components:
         index = metadata.get("index")
         interactive_type = metadata.get("interactive_component_type", "Select")
         component_id = str(index)
+        logger.debug(
+            f"📐 LEFT: Processing component {component_id}, checking if in saved_positions"
+        )
 
         # Check if we have saved position for this component
         if component_id in saved_positions:
-            # Use saved position
+            # Use saved POSITION (x, y) but enforce correct SIZE (w, h) for LEFT panel
             saved_pos = saved_positions[component_id]
             x = saved_pos.get("x", 0)
             y = saved_pos.get("y", current_y)
-            w = saved_pos.get("w", 1)
-            h = saved_pos.get("h", component_heights.get(interactive_type, 1.5))
+            # LEFT panel: Use centralized dimensions from component_metadata
+            dims = get_dual_panel_dimensions("interactive")
+            w = dims["w"]  # Always 1 for single-column grid
+            h = dims["h"]  # Standard height from centralized config
             logger.info(
                 f"📐 LEFT: Using saved position for component {index} ({interactive_type}): "
-                f"x={x}, y={y}, w={w}, h={h}"
+                f"x={x}, y={y} (from saved), w={w}, h={h} (enforced)"
             )
         else:
             # Auto-position: full width (1 column), stack vertically
+            logger.warning(
+                f"📐 LEFT: No saved position found for component {index} ({interactive_type}) - auto-positioning"
+            )
+            logger.warning(f"   Available keys in saved_positions: {list(saved_positions.keys())}")
             x = 0
             y = current_y
-            w = 1
-            h = component_heights.get(interactive_type, 1.5)
+            # Use centralized dimensions from component_metadata
+            dims = get_dual_panel_dimensions("interactive")
+            w = dims["w"]
+            h = dims["h"]
             logger.info(
                 f"📐 LEFT: Auto-positioning new component {index} ({interactive_type}): "
                 f"x={x}, y={y}, w={w}, h={h}"
@@ -400,7 +417,7 @@ def calculate_left_panel_positions(components, saved_layout_data=None):
 
         layout.append(
             {
-                "i": component_id,  # Plain UUID string for clean data storage
+                "i": f"box-{component_id}",  # ID with box- prefix to match restore expectations
                 "x": int(x),
                 "y": int(y),
                 "w": w,
@@ -451,12 +468,25 @@ def calculate_right_panel_positions(components, saved_layout_data=None):
                     if isinstance(parsed_id, dict) and "index" in parsed_id:
                         component_id = str(parsed_id["index"])
                     else:
-                        component_id = str(item_id)
+                        # Strip box- prefix for consistent lookup
+                        component_id = (
+                            str(item_id).replace("box-", "")
+                            if str(item_id).startswith("box-")
+                            else str(item_id)
+                        )
                 except (json.JSONDecodeError, TypeError):
-                    # Not JSON, use as-is
-                    component_id = str(item_id)
+                    # Not JSON, use as-is (strip box- prefix for consistent lookup)
+                    component_id = (
+                        str(item_id).replace("box-", "")
+                        if str(item_id).startswith("box-")
+                        else str(item_id)
+                    )
 
                 saved_positions[component_id] = saved_item
+
+    logger.info(f"📐 RIGHT: Built saved_positions lookup with {len(saved_positions)} items")
+    if saved_positions:
+        logger.info(f"📐 RIGHT: Sample saved_positions keys: {list(saved_positions.keys())[:3]}")
 
     # Cards: 4-column grid (2 columns per card in 8-column system)
     # With rowHeight=100: h=5 gives 500px height, w=2 gives 25% width (4 per row)
@@ -464,6 +494,7 @@ def calculate_right_panel_positions(components, saved_layout_data=None):
     for idx, card in enumerate(cards):
         index = card.get("index")
         component_id = str(index)
+        logger.debug(f"📐 RIGHT: Processing card {component_id}, checking if in saved_positions")
 
         # Check if we have saved position for this component
         if component_id in saved_positions:
@@ -472,20 +503,26 @@ def calculate_right_panel_positions(components, saved_layout_data=None):
             saved_pos = saved_positions[component_id]
             x = saved_pos.get("x", 0)
             y = saved_pos.get("y", 0)
-            w = 2  # Always use standard card width (25% of 8-column grid)
-            h = 5  # Always use standard card height (500px with rowHeight=100)
+            # Use centralized dimensions from component_metadata
+            dims = get_dual_panel_dimensions("card")
+            w = dims["w"]  # Standard card width (25% of 8-column grid)
+            h = dims["h"]  # Standard card height from centralized config
             logger.info(
                 f"📐 RIGHT: Using saved position for card {index}: x={x}, y={y}, "
                 f"w={w} (standard), h={h} (standard)"
             )
         else:
             # Auto-position: 4 cards per row
+            logger.warning(f"📐 RIGHT: No saved position found for card {index} - auto-positioning")
+            logger.warning(f"   Available keys in saved_positions: {list(saved_positions.keys())}")
+            # Use centralized dimensions from component_metadata
+            dims = get_dual_panel_dimensions("card")
+            w = dims["w"]
+            h = dims["h"]
             col = idx % 4
             row = idx // 4
-            x = col * 2  # 2 columns per card (8/4)
-            y = row * 5  # 5 rows per card (with rowHeight=100 = 500px)
-            w = 2  # Fixed card width (25% of 8 columns = 4 cards per row)
-            h = 5  # Fixed card height (500px with rowHeight=100)
+            x = col * w  # Position based on card width
+            y = row * h  # Position based on card height
             logger.info(
                 f"📐 RIGHT: Auto-positioning new card {index}: "
                 f"x={x}, y={y}, w={w}, h={h} (col={col}, row={row})"
@@ -493,7 +530,7 @@ def calculate_right_panel_positions(components, saved_layout_data=None):
 
         layout.append(
             {
-                "i": component_id,  # Plain UUID string for clean data storage
+                "i": f"box-{component_id}",  # ID with box- prefix to match restore expectations
                 "x": int(x),
                 "y": int(y),
                 "w": w,
@@ -1144,7 +1181,7 @@ def design_draggable(
         left_grid_items = [
             html.Div(
                 child,
-                id={"type": "grid-item", "index": component_id},
+                id=f"box-{component_id}",  # Must match layout 'i' field exactly
                 style={
                     "width": "100%",
                     "height": "100%",
@@ -1153,12 +1190,15 @@ def design_draggable(
             for child, component_id in zip(interactive_children, interactive_ids)
         ]
         logger.info(f"🎨 Created {len(left_grid_items)} left grid items")
-        logger.info(f"🎨 Left grid item IDs: {interactive_ids}")
+        logger.info(f"🎨 Left grid item IDs (from interactive_ids): {interactive_ids}")
+        logger.info(
+            f"🎨 Left layout IDs (from left_layout): {[item.get('i') for item in left_layout]}"
+        )
 
         right_grid_items = [
             html.Div(
                 child,
-                id={"type": "grid-item", "index": component_id},
+                id=f"box-{component_id}",  # Must match layout 'i' field exactly
                 style={
                     "width": "100%",
                     "height": "100%",
@@ -1167,7 +1207,10 @@ def design_draggable(
             for child, component_id in zip(right_panel_children, right_panel_ids)
         ]
         logger.info(f"🎨 Created {len(right_grid_items)} right grid items")
-        logger.info(f"🎨 Right grid item IDs: {right_panel_ids}")
+        logger.info(f"🎨 Right grid item IDs (from right_panel_ids): {right_panel_ids}")
+        logger.info(
+            f"🎨 Right layout IDs (from right_layout): {[item.get('i') for item in right_layout]}"
+        )
 
         # Get edit mode state
         is_owner = local_data.get("user_id") == local_data.get("dashboard_owner_id", None)
@@ -1286,7 +1329,10 @@ def design_draggable(
     # logger.info(f"design_draggable - Project: {project_json}")
     from depictio.models.models.projects import Project
 
-    project = Project.from_mongo(project_json)
+    # Extract project data from enriched API response
+    # API returns: {"project": {...}, "delta_locations": {...}}
+    project_data = project_json.get("project", project_json)
+    project = Project.from_mongo(project_data)
     # logger.info(f"design_draggable - Project: {project}")
     workflows = project.workflows
     data_available = False  # Track if any data (DeltaTables or MultiQC) is available

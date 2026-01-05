@@ -64,6 +64,8 @@ def create_editor_layout():
     # Create additional stores specific to Editor App
     # Note: project-cache, theme-relay-store, and dashboard-init-data are already in create_shared_stores()
     additional_stores = [
+        # Notification container for user feedback (save operations, errors, etc.)
+        dmc.NotificationContainer(id="notification-container"),
         # Analytics tracking
         create_analytics_tracker(),
         # Hidden output divs for clientside callbacks
@@ -484,6 +486,15 @@ def load_and_render_dashboard(
     # Extract dual-panel layout data
     left_panel_layout_data = depictio_dash_data.get("left_panel_layout_data", [])
     right_panel_layout_data = depictio_dash_data.get("right_panel_layout_data", [])
+
+    # DEBUG: Log loaded layout data
+    logger.info("📐 EDITOR: Loaded layout data from dashboard:")
+    logger.info(f"   - LEFT panel: {len(left_panel_layout_data)} layout items")
+    logger.info(f"   - RIGHT panel: {len(right_panel_layout_data)} layout items")
+    if left_panel_layout_data:
+        logger.info(f"   - LEFT sample: {left_panel_layout_data[:2]}")
+    if right_panel_layout_data:
+        logger.info(f"   - RIGHT sample: {right_panel_layout_data[:2]}")
 
     # Render draggable layout (EDIT MODE)
     core = design_draggable(

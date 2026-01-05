@@ -135,6 +135,59 @@ COMPONENT_METADATA = {
     },
 }
 
+# ============================================================================
+# DUAL-PANEL GRID LAYOUT DIMENSIONS
+# ============================================================================
+# Centralized dimensions for the current dual-panel dashboard layout system
+# LEFT panel: 1 column grid, rowHeight=50
+# RIGHT panel: 8 column grid, rowHeight=100
+#
+# To adjust component sizes, modify these values:
+# - w: width in grid columns
+# - h: height in grid units (multiplied by rowHeight to get pixels)
+# ============================================================================
+
+DUAL_PANEL_DIMENSIONS = {
+    # LEFT PANEL: Interactive components (1-column grid, rowHeight=50)
+    "interactive": {
+        "w": 1,  # Always 1 (single column grid)
+        "h": 2,  # 3 × 50px = 150px - comfortable height for controls
+    },
+    # RIGHT PANEL: Cards and other components (8-column grid, rowHeight=100)
+    "card": {
+        "w": 2,  # 2/8 columns = 25% width (4 cards per row)
+        "h": 2,  # 3 × 100px = 300px - reasonable card height
+    },
+    "figure": {
+        "w": 4,  # 4/8 columns = 50% width (2 figures per row)
+        "h": 4,  # 4 × 100px = 400px
+    },
+    "table": {
+        "w": 8,  # 8/8 columns = 100% width (full row)
+        "h": 6,  # 6 × 100px = 600px
+    },
+}
+
+
+def get_dual_panel_dimensions(component_type: str) -> dict:
+    """
+    Get grid dimensions for a component type in the dual-panel layout.
+
+    Args:
+        component_type: Component type ('interactive', 'card', 'figure', 'table')
+
+    Returns:
+        dict: {'w': width, 'h': height} in grid units
+
+    Example:
+        >>> get_dual_panel_dimensions('card')
+        {'w': 2, 'h': 3}  # 2 columns wide, 3 rows tall
+    """
+    return DUAL_PANEL_DIMENSIONS.get(
+        component_type,
+        {"w": 2, "h": 3},  # Default: card dimensions
+    )
+
 
 def get_component_metadata(component_type: str) -> dict:
     """
