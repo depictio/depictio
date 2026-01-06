@@ -206,19 +206,31 @@ def register_core_callbacks(app):
 
     @app.callback(
         Output({"type": "card-value", "index": MATCH}, "children"),
-        Output({"type": "card-metadata", "index": MATCH}, "data"),
+        Output(
+            {"type": "card-metadata-initial", "index": MATCH}, "data"
+        ),  # Write to initial metadata store
         Input({"type": "card-trigger", "index": MATCH}, "data"),
         Input(
             "project-metadata-store", "data"
         ),  # ✅ MIGRATED: Read directly from project metadata cache
-        State({"type": "card-metadata", "index": MATCH}, "data"),
+        State(
+            {"type": "card-metadata-initial", "index": MATCH}, "data"
+        ),  # Read from initial metadata store
+        State(
+            {"type": "stored-metadata-component", "index": MATCH}, "data"
+        ),  # Fallback metadata from database
         State("dashboard-init-data", "data"),  # REFACTORING: Access centralized column_specs
         State("local-store", "data"),  # SECURITY: Access token from centralized store
         prevent_initial_call=False,
         background=True,  # ✅ Enable Celery background processing for consistent async execution
     )
     def render_card_value_background(
-        trigger_data, project_metadata, existing_metadata, dashboard_init_data, local_data
+        trigger_data,
+        project_metadata,
+        existing_metadata,
+        stored_metadata,
+        dashboard_init_data,
+        local_data,
     ):
         """
         PATTERN-MATCHING: Render callback for initial card value computation.
@@ -247,53 +259,95 @@ def register_core_callbacks(app):
         Returns:
             tuple: (formatted_value, metadata_dict)
         """
+        import time
+        import uuid
+
         from bson import ObjectId
         from dash import callback_context as ctx
         from dash import no_update
 
         from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
-        # Get component identifier for logging
-        index = (
-            trigger_data.get("index", "unknown")
-            if trigger_data and isinstance(trigger_data, dict)
-            else "unknown"
-        )
+        # Generate task correlation ID and start timing
+        task_id = str(uuid.uuid4())[:8]
+
+        # Extract component ID from callback context outputs (same pattern as patch callback)
+        component_id = "unknown"
+        if ctx.outputs_list:
+            output_id = ctx.outputs_list[0].get("id", {})
+            if isinstance(output_id, dict):
+                component_id = output_id.get("index", "unknown")[:8]
+
+        start_time = time.time()
 
         # Log callback execution with trigger information
         triggered_by = ctx.triggered_id if ctx.triggered else "initial"
-        logger.error(f"🔥 CARD CALLBACK FIRED - Index: {index}, Triggered by: {triggered_by}")
+        logger.info(
+            f"[{task_id}] 🚀 CARD RENDER START - Component: {component_id}, Triggered by: {triggered_by}"
+        )
 
         # IDEMPOTENCY CHECK: Skip if already initialized (prevents spurious re-renders)
         # This ensures single-pass rendering by blocking all re-renders after initial render
         # OPTIMIZATION: Moved to top to exit early before any expensive operations
-        if existing_metadata and existing_metadata.get("reference_value") is not None:
-            logger.debug(
-                "✅ CARD RENDER: Already initialized, skipping re-render "
-                "(Patch operation or spurious Store update detected)"
+        # FALLBACK: Check stored_metadata if existing_metadata is empty (handles re-renders)
+
+        # DEBUG: Log metadata state from both sources
+        logger.debug(f"🔍 IDEMPOTENCY CHECK - Component: {component_id}")
+        logger.debug(f"   existing_metadata type: {type(existing_metadata)}")
+        logger.debug(f"   existing_metadata value: {existing_metadata}")
+        logger.debug(
+            f"   existing has reference_value: {existing_metadata.get('reference_value') if existing_metadata else 'N/A'}"
+        )
+        logger.debug(f"   stored_metadata type: {type(stored_metadata)}")
+        logger.debug(f"   stored_metadata value: {stored_metadata}")
+        logger.debug(
+            f"   stored has reference_value: {stored_metadata.get('reference_value') if stored_metadata else 'N/A'}"
+        )
+
+        # Check existing_metadata first (normal case), fallback to stored_metadata (re-render case)
+        metadata_to_use = existing_metadata if existing_metadata else stored_metadata
+
+        if metadata_to_use and metadata_to_use.get("reference_value") is not None:
+            duration_ms = (time.time() - start_time) * 1000
+            source = "existing_metadata" if existing_metadata else "stored_metadata (fallback)"
+            logger.info(
+                f"🔄 CARD RENDER: Already initialized, returning existing values from {source} "
+                "(Re-render triggered by layout operation) - Component: {component_id}"
             )
-            logger.error(f"✅ CARD CALLBACK COMPLETE - Index: {index} (idempotency block)")
-            return no_update, no_update
+            logger.info(
+                f"[{task_id}] ✅ CARD RENDER COMPLETE - Component: {component_id} - Duration: {duration_ms:.2f}ms (idempotency block)"
+            )
+            # Return existing values to display content immediately (prevents loader from staying visible)
+            reference_value = metadata_to_use.get("reference_value")
+            formatted_value = str(reference_value) if reference_value is not None else "N/A"
+            # Return metadata to whichever store needs it (prefer existing_metadata if available)
+            return formatted_value, metadata_to_use
 
         # DEFENSIVE CHECK 1: Skip if trigger_data not ready (progressive loading race condition)
         # During progressive loading, the callback might fire before React fully commits the component tree
         # This prevents attempting to update components that don't exist yet in the DOM
         if not trigger_data or not isinstance(trigger_data, dict):
+            duration_ms = (time.time() - start_time) * 1000
             logger.warning(
                 "⚠️ CARD RENDER: Trigger data not ready, deferring render "
                 "(Progressive loading race condition detected)"
             )
-            logger.error(f"✅ CARD CALLBACK COMPLETE - Index: {index} (trigger not ready)")
+            logger.info(
+                f"[{task_id}] ✅ CARD RENDER COMPLETE - Component: {component_id} - Duration: {duration_ms:.2f}ms (trigger not ready)"
+            )
             return no_update, no_update
 
         # DEFENSIVE CHECK 2: Wait for project_metadata (SINGLE-STAGE RENDERING)
         # Matches interactive component pattern: wait for metadata before rendering
         # Ensures we always use cached delta_locations (no API calls during render)
         if not project_metadata or not isinstance(project_metadata, dict):
+            duration_ms = (time.time() - start_time) * 1000
             logger.info(
-                f"⏭️  CARD RENDER: Waiting for project_metadata (keeping loader visible) - Index: {index}"
+                f"⏭️  CARD RENDER: Waiting for project_metadata (keeping loader visible) - Component: {component_id}"
             )
-            logger.error(f"✅ CARD CALLBACK COMPLETE - Index: {index} (waiting for metadata)")
+            logger.info(
+                f"[{task_id}] ✅ CARD RENDER COMPLETE - Component: {component_id} - Duration: {duration_ms:.2f}ms (waiting for metadata)"
+            )
             return no_update, no_update
 
         logger.info(f"🔄 CARD RENDER: Starting value computation for trigger: {trigger_data}")
@@ -397,13 +451,29 @@ def register_core_callbacks(app):
                 "has_been_patched": False,  # Track patch state - allows first patch even at defaults
             }
 
+            duration_ms = (time.time() - start_time) * 1000
             logger.info(f"✅ CARD RENDER: Value computed successfully: {formatted_value}")
-            logger.error(f"✅ CARD CALLBACK COMPLETE - Index: {index} (success)")
+
+            # DEBUG: Log what we're about to return
+            logger.debug(f"🔍 CARD RENDER RETURN DEBUG - Component: {component_id}")
+            logger.debug(f"   formatted_value: {formatted_value}")
+            logger.debug(f"   metadata type: {type(metadata)}")
+            logger.debug(f"   metadata keys: {metadata.keys() if metadata else 'N/A'}")
+            logger.debug(
+                f"   metadata reference_value: {metadata.get('reference_value') if metadata else 'N/A'}"
+            )
+
+            logger.info(
+                f"[{task_id}] ✅ CARD RENDER COMPLETE - Component: {component_id} - Duration: {duration_ms:.2f}ms (success)"
+            )
             return formatted_value, metadata
 
         except Exception as e:
+            duration_ms = (time.time() - start_time) * 1000
             logger.error(f"❌ CARD RENDER: Error computing value: {e}", exc_info=True)
-            logger.error(f"✅ CARD CALLBACK COMPLETE - Index: {index} (error)")
+            logger.error(
+                f"[{task_id}] ✅ CARD RENDER COMPLETE - Component: {component_id} - Duration: {duration_ms:.2f}ms (error)"
+            )
             return "Error", {"error": str(e)}
 
     def is_default_value(component: dict) -> bool:
@@ -486,9 +556,19 @@ def register_core_callbacks(app):
         Output({"type": "card-value", "index": MATCH}, "children", allow_duplicate=True),
         Output({"type": "card-comparison", "index": MATCH}, "children", allow_duplicate=True),
         Output({"type": "card-loading-overlay", "index": MATCH}, "visible"),
-        Output({"type": "card-metadata", "index": MATCH}, "data", allow_duplicate=True),
+        Output(
+            {"type": "card-metadata", "index": MATCH}, "data"
+        ),  # No allow_duplicate - only patch writes here
         Input("interactive-values-store", "data"),
-        State({"type": "card-metadata", "index": MATCH}, "data"),
+        State(
+            {"type": "card-metadata-initial", "index": MATCH}, "data"
+        ),  # Read reference_value from initial store
+        State(
+            {"type": "card-metadata", "index": MATCH}, "data"
+        ),  # Read has_been_patched from patch store
+        State(
+            {"type": "stored-metadata-component", "index": MATCH}, "data"
+        ),  # Fallback metadata from database
         State({"type": "card-trigger", "index": MATCH}, "data"),
         State({"type": "interactive-stored-metadata", "index": dash.ALL}, "data"),
         State({"type": "interactive-stored-metadata", "index": dash.ALL}, "id"),
@@ -499,7 +579,9 @@ def register_core_callbacks(app):
     )
     def patch_card_with_filters(
         filters_data,
-        metadata,
+        initial_metadata,  # From card-metadata-initial (has reference_value)
+        patch_metadata,  # From card-metadata (has has_been_patched)
+        stored_metadata,  # Fallback metadata from database
         trigger_data,
         interactive_metadata_list,
         interactive_metadata_ids,
@@ -520,14 +602,47 @@ def register_core_callbacks(app):
             interactive_metadata_ids: IDs of all interactive component metadata stores
 
         Returns:
-            tuple: (formatted_value, comparison_components)
+            tuple: (formatted_value, comparison_components, loading_visible, metadata)
         """
+        import time
+        import uuid
+
         from bson import ObjectId
+        from dash import callback_context as ctx
 
         from depictio.api.v1.deltatables_utils import load_deltatable_lite
         from depictio.dash.modules.card_component.utils import (
             compute_value,
             get_adaptive_trend_colors,
+        )
+
+        # Generate task correlation ID and start timing
+        task_id = str(uuid.uuid4())[:8]
+        component_id = "unknown"
+        if ctx.outputs_list:
+            output_id = ctx.outputs_list[0].get("id", {})
+            if isinstance(output_id, dict):
+                component_id = output_id.get("index", "unknown")[:8]
+        start_time = time.time()
+
+        # Log callback execution
+        triggered_by = ctx.triggered_id if ctx.triggered else "initial"
+        logger.info(
+            f"[{task_id}] 🔄 CARD PATCH START - Component: {component_id}, Triggered by: {triggered_by}"
+        )
+
+        # ⭐ CRITICAL DEBUG: Log incoming metadata State values
+        # This tells us if render callback's metadata Output is being persisted
+        logger.debug(f"🔍 PATCH CALLBACK METADATA STATE - Component: {component_id}")
+        logger.debug(f"   initial_metadata type: {type(initial_metadata)}")
+        logger.debug(f"   initial_metadata value: {initial_metadata}")
+        logger.debug(
+            f"   initial has reference_value: {initial_metadata.get('reference_value') if initial_metadata else 'N/A'}"
+        )
+        logger.debug(f"   patch_metadata type: {type(patch_metadata)}")
+        logger.debug(f"   patch_metadata value: {patch_metadata}")
+        logger.debug(
+            f"   patch has_been_patched: {patch_metadata.get('has_been_patched', False) if patch_metadata else False}"
         )
 
         # DEFENSIVE CHECK: Handle dashboards with no interactive components
@@ -587,8 +702,28 @@ def register_core_callbacks(app):
             ]
 
             # Check if this is the first patch or a subsequent one
-            has_been_patched = metadata.get("has_been_patched", False) if metadata else False
-            reference_value = metadata.get("reference_value") if metadata else None
+            has_been_patched = (
+                patch_metadata.get("has_been_patched", False) if patch_metadata else False
+            )
+
+            # FALLBACK: Use stored_metadata if initial_metadata is empty (happens during re-renders)
+            metadata_to_use = initial_metadata if initial_metadata else stored_metadata
+            reference_value = metadata_to_use.get("reference_value") if metadata_to_use else None
+
+            # DEBUG: Log metadata state to diagnose race condition
+            logger.debug(f"🔍 CARD PATCH DEBUG - Component: {component_id}")
+            logger.debug(f"   initial_metadata type: {type(initial_metadata)}")
+            logger.debug(
+                f"   initial_metadata keys: {initial_metadata.keys() if initial_metadata else 'N/A'}"
+            )
+            logger.debug(f"   stored_metadata type: {type(stored_metadata)}")
+            logger.debug(
+                f"   stored_metadata has reference_value: {stored_metadata.get('reference_value') if stored_metadata else 'N/A'}"
+            )
+            logger.debug(
+                f"   reference_value (using {'initial' if initial_metadata else 'stored'}): {reference_value}"
+            )
+            logger.debug(f"   has_been_patched: {has_been_patched}")
 
             # ⭐ OPTIMIZATION DISABLED: "All at defaults" check removed
             # REASON: This optimization blocked legitimate reset actions - when users clicked "Reset",
@@ -614,12 +749,21 @@ def register_core_callbacks(app):
                 # RACE CONDITION CHECK: Ensure reference_value is populated before first patch
                 # If metadata exists but reference_value is None, render_card_value_background hasn't completed yet
                 if reference_value is None:
+                    duration_ms = (time.time() - start_time) * 1000
                     logger.debug(
-                        "🔍 CARD PATCH: First patch triggered but reference_value not ready - waiting for render_card_value_background"
+                        "🔍 CARD PATCH: First patch triggered but reference_value not ready - deferring (returning no_update)"
                     )
-                    from dash.exceptions import PreventUpdate
+                    logger.info(
+                        f"[{task_id}] ✅ CARD PATCH COMPLETE - Component: {component_id} - Duration: {duration_ms:.2f}ms (reference not ready)"
+                    )
+                    from dash import no_update
 
-                    raise PreventUpdate
+                    # Return no_update for card value/comparison/metadata, but explicitly hide overlay
+                    # This prevents stuck loading overlay while waiting for render_card_value_background
+                    logger.debug(
+                        "🔍 PATCH RETURN (reference not ready): returning (no_update, no_update, False, no_update)"
+                    )
+                    return no_update, no_update, False, no_update
 
                 logger.debug(
                     f"🔍 CARD PATCH: First patch with default values - allowing to initialize card data "
@@ -631,32 +775,54 @@ def register_core_callbacks(app):
                     f"(modified: {[c.get('metadata', {}).get('column_name', 'unknown') for c in modified_components]})"
                 )
 
-        # Check if metadata and trigger_data are properly populated
-        if metadata is None or trigger_data is None:
-            return "...", [], False, metadata
+        # Check if metadata (from any source) and trigger_data are properly populated
+        # FALLBACK: Use stored_metadata if initial_metadata is empty (happens during re-renders)
+        metadata_for_patch = initial_metadata if initial_metadata else stored_metadata
+        if metadata_for_patch is None or trigger_data is None:
+            duration_ms = (time.time() - start_time) * 1000
+            logger.info(
+                f"[{task_id}] ✅ CARD PATCH COMPLETE - Component: {component_id} - Duration: {duration_ms:.2f}ms (metadata/trigger not ready)"
+            )
+            logger.debug(
+                "🔍 PATCH RETURN (metadata/trigger not ready): returning ('...', [], False, {})"
+            )
+            return "...", [], False, {}
 
         # Check if metadata has been populated by render_card_value_background
-        reference_value = metadata.get("reference_value")
+        reference_value = metadata_for_patch.get("reference_value")
         if reference_value is None:
-            return "...", [], False, metadata
+            duration_ms = (time.time() - start_time) * 1000
+            logger.info(
+                f"[{task_id}] ✅ CARD PATCH COMPLETE - Component: {component_id} - Duration: {duration_ms:.2f}ms (reference value not ready)"
+            )
+            logger.debug(
+                "🔍 PATCH RETURN (reference value not ready): returning ('...', [], False, {})"
+            )
+            return "...", [], False, {}
 
         # Extract parameters
         wf_id = trigger_data.get("wf_id")
         dc_id = trigger_data.get("dc_id")
         column_name = trigger_data.get("column_name")
         aggregation = trigger_data.get("aggregation")
-        reference_value = metadata.get("reference_value")
+        reference_value = metadata_for_patch.get("reference_value")
 
         # SECURITY: Extract access_token from local-store (centralized, not per-component)
         access_token = local_data.get("access_token") if local_data else None
         if not access_token:
+            duration_ms = (time.time() - start_time) * 1000
             logger.error("No access_token available in local-store")
-            return "Auth Error", [], False, metadata
+            logger.error(
+                f"[{task_id}] ✅ CARD PATCH COMPLETE - Component: {component_id} - Duration: {duration_ms:.2f}ms (auth error)"
+            )
+            logger.debug("🔍 PATCH RETURN (auth error): returning ('Auth Error', [], False, {})")
+            return "Auth Error", [], False, {}
 
         # Skip patching for dummy/random cards (no data source)
         if not all([wf_id, dc_id, column_name, aggregation]):
+            duration_ms = (time.time() - start_time) * 1000
             # Return current value formatted consistently with initial render
-            current_value = metadata.get("reference_value")
+            current_value = metadata_for_patch.get("reference_value")
             if current_value is not None:
                 try:
                     formatted_value = str(round(float(current_value), 4))
@@ -665,7 +831,13 @@ def register_core_callbacks(app):
             else:
                 formatted_value = "N/A"
 
-            return formatted_value, [], False, metadata
+            logger.info(
+                f"[{task_id}] ✅ CARD PATCH COMPLETE - Component: {component_id} - Duration: {duration_ms:.2f}ms (no data source)"
+            )
+            logger.debug(
+                f"🔍 PATCH RETURN (no data source): returning ('{formatted_value}', [], False, {{}})"
+            )
+            return formatted_value, [], False, {}
 
         try:
             # Extract interactive components from filters_data
@@ -707,6 +879,7 @@ def register_core_callbacks(app):
 
             card_dc_type = dc_config.get("type", "table")
             if card_dc_type in ["multiqc", "jbrowse2"]:
+                duration_ms = (time.time() - start_time) * 1000
                 # Return reference value with no comparison
                 if reference_value is not None:
                     try:
@@ -715,7 +888,13 @@ def register_core_callbacks(app):
                         formatted_value = str(reference_value)
                 else:
                     formatted_value = "N/A"
-                return formatted_value, [], False, metadata
+                logger.info(
+                    f"[{task_id}] ✅ CARD PATCH COMPLETE - Component: {component_id} - Duration: {duration_ms:.2f}ms (non-table DC type)"
+                )
+                logger.debug(
+                    f"🔍 PATCH RETURN (non-table DC): returning ('{formatted_value}', [], False, {{}})"
+                )
+                return formatted_value, [], False, {}
 
             # Determine if filters have active (non-empty) values
             has_active_filters = False
@@ -987,14 +1166,27 @@ def register_core_callbacks(app):
                 except (ValueError, TypeError) as e:
                     logger.warning(f"Error creating comparison: {e}")
 
+            duration_ms = (time.time() - start_time) * 1000
             logger.info(f"✅ CARD PATCH: Value updated successfully: {formatted_value}")
+            logger.info(
+                f"[{task_id}] ✅ CARD PATCH COMPLETE - Component: {component_id} - Duration: {duration_ms:.2f}ms (success)"
+            )
 
             # Update metadata to mark card as patched
-            updated_metadata = metadata.copy() if metadata else {}
+            # Start from patch_metadata (may have previous state), add has_been_patched flag
+            updated_metadata = patch_metadata.copy() if patch_metadata else {}
             updated_metadata["has_been_patched"] = True
 
+            logger.debug(
+                f"🔍 PATCH RETURN (success): returning ('{formatted_value}', comparison_components, False, updated_metadata={updated_metadata})"
+            )
             return formatted_value, comparison_components, False, updated_metadata
 
         except Exception as e:
+            duration_ms = (time.time() - start_time) * 1000
             logger.error(f"❌ CARD PATCH: Error applying filters: {e}", exc_info=True)
-            return "Error", [], False, metadata
+            logger.error(
+                f"[{task_id}] ✅ CARD PATCH COMPLETE - Component: {component_id} - Duration: {duration_ms:.2f}ms (error)"
+            )
+            logger.debug("🔍 PATCH RETURN (exception): returning ('Error', [], False, {})")
+            return "Error", [], False, {}

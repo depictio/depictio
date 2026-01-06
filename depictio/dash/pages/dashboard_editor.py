@@ -699,12 +699,19 @@ def register_component_editing_callbacks(app):
 
     register_edit_component_simple_callback(app)
 
-    # Register remove component callback
-    from depictio.dash.layouts.remove_component_simple import (
-        register_remove_component_simple_callback,
+    # Register remove component callback (new dual-panel implementation)
+    from depictio.dash.layouts.callbacks.remove_component import (
+        register_remove_component_callback,
     )
 
-    register_remove_component_simple_callback(app)
+    register_remove_component_callback(app)
+
+    # Register duplicate component callback (new dual-panel implementation)
+    from depictio.dash.layouts.callbacks.duplicate_component import (
+        register_duplicate_component_callback,
+    )
+
+    register_duplicate_component_callback(app)
 
     # Register stepper callbacks (for component creation flow)
     from depictio.dash.layouts.stepper import register_callbacks_stepper
