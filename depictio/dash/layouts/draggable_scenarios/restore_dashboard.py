@@ -12,7 +12,9 @@ build_functions = get_build_functions()
 
 # DEBUGGING: Test flag to use simple DMC layout instead of draggable grid
 # Set to True to test if component disappearance is related to grid layout system
-USE_SIMPLE_LAYOUT_FOR_TESTING = True  # ENABLED FOR DEBUGGING
+# NOTE: "Simple layout" = NEW dual-panel DashGridLayout system with saved positions
+# False = OLD ReactGridLayout single-panel system (deprecated)
+USE_SIMPLE_LAYOUT_FOR_TESTING = True  # ENABLED - Use new dual-panel grid system
 
 
 def render_dashboard(

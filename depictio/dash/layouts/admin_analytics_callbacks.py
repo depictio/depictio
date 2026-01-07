@@ -7,9 +7,9 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go  # type: ignore
 import requests
-
 from dash import Input, Output, State, dash_table, html
 from dash.exceptions import PreventUpdate
+
 from depictio.api.v1.configs.config import settings
 from depictio.dash.api_calls import api_call_fetch_user_from_token
 from depictio.dash.layouts.admin_analytics import (
