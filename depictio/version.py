@@ -1,12 +1,11 @@
 """
 Version retrieval module.
 
-This module provides a way to get the project version from pyproject.toml.
+This module provides a way to get the project version from VERSION file.
 """
 
 from pathlib import Path
 
-import tomli
 from pydantic import validate_call
 
 from depictio.api.v1.configs.logging_init import logger
@@ -15,18 +14,17 @@ from depictio.api.v1.configs.logging_init import logger
 @validate_call(validate_return=True)  # noqa: F821
 def get_version() -> str:
     """
-    Retrieve the version from pyproject.toml.
+    Retrieve the version from VERSION file.
 
     Returns:
         str: Project version
     """
     project_root = Path(__file__).parent.parent
-    pyproject_path = project_root / "pyproject.toml"
+    version_path = project_root / "VERSION"
 
-    with open(pyproject_path, "rb") as f:
-        pyproject_data = tomli.load(f)
+    with open(version_path, "r") as f:
+        version = f.read().strip()
 
-    version = pyproject_data["project"]["version"]
     logger.debug(f"Project version: {version}")
 
     return version
