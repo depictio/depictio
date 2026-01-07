@@ -1,0 +1,7208 @@
+{
+  "header-content.children\u2192local-store.data\u2192page-content.children\u2192url.pathname": {
+    "function": "display_page",
+    "file": "performance_analysis/../../depictio/dash/core/callbacks.py",
+    "line": 66,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "page-content",
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": "header-content",
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": "url",
+        "property": "pathname"
+      },
+      {
+        "type": "Output",
+        "id": "local-store",
+        "property": "data"
+      }
+    ],
+    "docstring": "Main callback for handling page routing and authentication."
+  },
+  "display_page": {
+    "function": "display_page",
+    "file": "performance_analysis/../../depictio/dash/core/callbacks.py",
+    "line": 66,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "page-content",
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": "header-content",
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": "url",
+        "property": "pathname"
+      },
+      {
+        "type": "Output",
+        "id": "local-store",
+        "property": "data"
+      }
+    ],
+    "docstring": "Main callback for handling page routing and authentication."
+  },
+  "depictio-joins-selection-info.children": {
+    "function": "update_selection_info",
+    "file": "performance_analysis/../../depictio/dash/components/depictio_cytoscape_joins.py",
+    "line": 832,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "depictio-joins-selection-info",
+        "property": "children"
+      }
+    ],
+    "docstring": "Update selection info panel based on selected elements."
+  },
+  "update_selection_info": {
+    "function": "update_selection_info",
+    "file": "performance_analysis/../../depictio/dash/components/depictio_cytoscape_joins.py",
+    "line": 832,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "depictio-joins-selection-info",
+        "property": "children"
+      }
+    ],
+    "docstring": "Update selection info panel based on selected elements."
+  },
+  "save_data_dashboard": {
+    "function": "save_data_dashboard",
+    "file": "performance_analysis/../../depictio/dash/layouts/save.py",
+    "line": 130,
+    "inputs": [],
+    "outputs": [],
+    "docstring": ""
+  },
+  "pattern.size": {
+    "function": "update_modal_size_regular",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper.py",
+    "line": 1657,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "size"
+      }
+    ],
+    "docstring": "Update regular modal size when it opens."
+  },
+  "update_modal_size": {
+    "function": "update_modal_size",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper.py",
+    "line": 1647,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "size"
+      }
+    ],
+    "docstring": "Update modal size when it opens."
+  },
+  "update_modal_size_regular": {
+    "function": "update_modal_size_regular",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper.py",
+    "line": 1657,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "size"
+      }
+    ],
+    "docstring": "Update regular modal size when it opens."
+  },
+  "stored-add-button.data": {
+    "function": "initialize_stepper_button_store",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper.py",
+    "line": 63,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "stepper-init-trigger",
+        "property": "n_intervals"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "stored-add-button",
+        "property": "data"
+      }
+    ],
+    "docstring": "Initialize the stored-add-button Store for stepper page on load."
+  },
+  "stepper-init-trigger.n_intervals\u2192stored-add-button.data": {
+    "function": "initialize_stepper_button_store",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper.py",
+    "line": 63,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "stepper-init-trigger",
+        "property": "n_intervals"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "stored-add-button",
+        "property": "data"
+      }
+    ],
+    "docstring": "Initialize the stored-add-button Store for stepper page on load."
+  },
+  "initialize_stepper_button_store": {
+    "function": "initialize_stepper_button_store",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper.py",
+    "line": 63,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "stepper-init-trigger",
+        "property": "n_intervals"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "stored-add-button",
+        "property": "data"
+      }
+    ],
+    "docstring": "Initialize the stored-add-button Store for stepper page on load."
+  },
+  "stepper-save-status.data": {
+    "function": "save_stepper_component",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper.py",
+    "line": 85,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "stepper-save-status",
+        "property": "data"
+      }
+    ],
+    "docstring": "Save component metadata from stepper page to dashboard before redirecting."
+  },
+  "pattern.n_clicks\u2192stepper-save-status.data": {
+    "function": "save_stepper_component",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper.py",
+    "line": 85,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "stepper-save-status",
+        "property": "data"
+      }
+    ],
+    "docstring": "Save component metadata from stepper page to dashboard before redirecting."
+  },
+  "save_stepper_component": {
+    "function": "save_stepper_component",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper.py",
+    "line": 85,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "stepper-save-status",
+        "property": "data"
+      }
+    ],
+    "docstring": "Save component metadata from stepper page to dashboard before redirecting."
+  },
+  "url.pathname": {
+    "function": "navigate_to_edit_component",
+    "file": "performance_analysis/../../depictio/dash/layouts/edit_component_simple.py",
+    "line": 24,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "url",
+        "property": "pathname"
+      }
+    ],
+    "docstring": "Navigate to the component editing stepper page."
+  },
+  "stepper-save-status.data\u2192url.pathname": {
+    "function": "complete_component_and_return",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper.py",
+    "line": 266,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "stepper-save-status",
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "url",
+        "property": "pathname"
+      }
+    ],
+    "docstring": "Navigate back to dashboard after component save completion."
+  },
+  "complete_component_and_return": {
+    "function": "complete_component_and_return",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper.py",
+    "line": 266,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "stepper-save-status",
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "url",
+        "property": "pathname"
+      }
+    ],
+    "docstring": "Navigate back to dashboard after component save completion."
+  },
+  "pattern.opened": {
+    "function": "handle_edit_project_name_confirm",
+    "file": "performance_analysis/../../depictio/dash/layouts/projects.py",
+    "line": 2143,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "opened"
+      }
+    ],
+    "docstring": "Handle project name edit confirmation with API call."
+  },
+  "close_modal": {
+    "function": "close_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper.py",
+    "line": 313,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "opened"
+      }
+    ],
+    "docstring": "Legacy modal close - kept for backward compatibility."
+  },
+  "close_edit_modal": {
+    "function": "close_edit_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper.py",
+    "line": 327,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "opened"
+      }
+    ],
+    "docstring": ""
+  },
+  "pattern.data\u2192pattern.value": {
+    "function": "update_plot_options",
+    "file": "performance_analysis/../../depictio/dash/modules/multiqc_component/frontend.py",
+    "line": 1088,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "docstring": ""
+  },
+  "pattern.n_clicks\u2192pattern.data+pattern.value": {
+    "function": "set_datacollection_options",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper.py",
+    "line": 441,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN",
+          "value": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "docstring": ""
+  },
+  "set_workflow_options": {
+    "function": "set_workflow_options",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper.py",
+    "line": 352,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN",
+          "value": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "docstring": ""
+  },
+  "set_datacollection_options": {
+    "function": "set_datacollection_options",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper.py",
+    "line": 441,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN",
+          "value": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "docstring": ""
+  },
+  "update_stepper": {
+    "function": "update_stepper",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper.py",
+    "line": 604,
+    "inputs": [],
+    "outputs": [],
+    "docstring": ""
+  },
+  "pattern.children": {
+    "function": "update_text_component",
+    "file": "performance_analysis/../../depictio/dash/modules/text_component/frontend.py",
+    "line": 412,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      }
+    ],
+    "docstring": "Callback to update text component based on configuration settings"
+  },
+  "update_stepper_data_preview": {
+    "function": "update_stepper_data_preview",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper.py",
+    "line": 681,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      }
+    ],
+    "docstring": "Update data preview in stepper when workflow/data collection changes."
+  },
+  "dc-viewer-data-content.children": {
+    "function": "load_dc_viewer_data",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 1500,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "dc-viewer-data-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Load and display data in the data collection viewer using AG Grid."
+  },
+  "load_dc_viewer_data": {
+    "function": "load_dc_viewer_data",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 1500,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "dc-viewer-data-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Load and display data in the data collection viewer using AG Grid."
+  },
+  "load_project_data_and_workflows": {
+    "function": "load_project_data_and_workflows",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 1692,
+    "inputs": [],
+    "outputs": [],
+    "docstring": "Load project data and populate workflows manager based on project type."
+  },
+  "handle_workflow_selection": {
+    "function": "handle_workflow_selection",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 1902,
+    "inputs": [],
+    "outputs": [],
+    "docstring": "Handle workflow card selection for advanced projects only."
+  },
+  "workflows-manager-section.children": {
+    "function": "update_workflow_selection_visual",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 1959,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "workflows-manager-section",
+        "property": "children"
+      }
+    ],
+    "docstring": "Update workflow cards to show selected state."
+  },
+  "update_workflow_selection_visual": {
+    "function": "update_workflow_selection_visual",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 1959,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "workflows-manager-section",
+        "property": "children"
+      }
+    ],
+    "docstring": "Update workflow cards to show selected state."
+  },
+  "data-collection-viewer-content.children": {
+    "function": "initialize_data_collection_viewer",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 1996,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "data-collection-viewer-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Initialize the data collection viewer with empty state."
+  },
+  "initialize_data_collection_viewer": {
+    "function": "initialize_data_collection_viewer",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 1996,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "data-collection-viewer-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Initialize the data collection viewer with empty state."
+  },
+  "handle_data_collection_selection": {
+    "function": "handle_data_collection_selection",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 2018,
+    "inputs": [],
+    "outputs": [],
+    "docstring": "Handle data collection card selection and populate viewer."
+  },
+  "populate_multiqc_metadata_content": {
+    "function": "populate_multiqc_metadata_content",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 2087,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      }
+    ],
+    "docstring": "Populate MultiQC metadata content when a MultiQC data collection is selected."
+  },
+  "data-collections-content.children": {
+    "function": "handle_data_collection_actions",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 2297,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "data-collections-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Handle data collection action button clicks."
+  },
+  "handle_data_collection_actions": {
+    "function": "handle_data_collection_actions",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 2297,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "data-collections-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Handle data collection action button clicks."
+  },
+  "update_joins_visualization": {
+    "function": "update_joins_visualization",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 2342,
+    "inputs": [],
+    "outputs": [],
+    "docstring": "Update joins visualization based on project data."
+  },
+  "update_separator_visibility": {
+    "function": "update_separator_visibility",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 2395,
+    "inputs": [],
+    "outputs": [],
+    "docstring": "Control visibility of separator options based on file format."
+  },
+  "create-data-collection-button.disabled": {
+    "function": "control_create_button_access",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 2490,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "create-data-collection-button",
+        "property": "disabled"
+      }
+    ],
+    "docstring": "Control access to Create Data Collection button based on user role."
+  },
+  "control_create_button_access": {
+    "function": "control_create_button_access",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 2490,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "create-data-collection-button",
+        "property": "disabled"
+      }
+    ],
+    "docstring": "Control access to Create Data Collection button based on user role."
+  },
+  "control_dc_action_buttons_access": {
+    "function": "control_dc_action_buttons_access",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 2506,
+    "inputs": [],
+    "outputs": [],
+    "docstring": "Control access to data collection action buttons based on user role."
+  },
+  "toggle_data_collection_modal": {
+    "function": "toggle_data_collection_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 2538,
+    "inputs": [],
+    "outputs": [],
+    "docstring": "Handle opening and closing of data collection creation modal."
+  },
+  "data-collection-creation-file-info.children": {
+    "function": "validate_file_with_polars",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 2647,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "data-collection-creation-file-info",
+        "property": "children"
+      }
+    ],
+    "docstring": "Validate uploaded file using polars and display detailed information."
+  },
+  "handle_file_upload": {
+    "function": "handle_file_upload",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 2563,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "data-collection-creation-file-info",
+        "property": "children"
+      }
+    ],
+    "docstring": "Handle file upload and display file information."
+  },
+  "create-data-collection-creation-submit.disabled": {
+    "function": "update_submit_button_state",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 2626,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "create-data-collection-creation-submit",
+        "property": "disabled"
+      }
+    ],
+    "docstring": "Enable/disable submit button based on form completeness."
+  },
+  "update_submit_button_state": {
+    "function": "update_submit_button_state",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 2626,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "create-data-collection-creation-submit",
+        "property": "disabled"
+      }
+    ],
+    "docstring": "Enable/disable submit button based on form completeness."
+  },
+  "validate_file_with_polars": {
+    "function": "validate_file_with_polars",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 2647,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "data-collection-creation-file-info",
+        "property": "children"
+      }
+    ],
+    "docstring": "Validate uploaded file using polars and display detailed information."
+  },
+  "submit_data_collection_creation": {
+    "function": "submit_data_collection_creation",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 2827,
+    "inputs": [],
+    "outputs": [],
+    "docstring": "Handle data collection creation submission with file processing."
+  },
+  "dc-action-modals-container.children": {
+    "function": "handle_dc_action_buttons",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 2947,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "dc-action-modals-container",
+        "property": "children"
+      }
+    ],
+    "docstring": "Handle data collection action button clicks by creating appropriate modals."
+  },
+  "handle_dc_action_buttons": {
+    "function": "handle_dc_action_buttons",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 2947,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "dc-action-modals-container",
+        "property": "children"
+      }
+    ],
+    "docstring": "Handle data collection action button clicks by creating appropriate modals."
+  },
+  "data-collection-overwrite-modal.opened": {
+    "function": "close_overwrite_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 3007,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "data-collection-overwrite-modal",
+        "property": "opened"
+      }
+    ],
+    "docstring": "Close overwrite modal when cancel is clicked."
+  },
+  "close_overwrite_modal": {
+    "function": "close_overwrite_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 3007,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "data-collection-overwrite-modal",
+        "property": "opened"
+      }
+    ],
+    "docstring": "Close overwrite modal when cancel is clicked."
+  },
+  "data-collection-edit-name-modal.opened": {
+    "function": "close_edit_name_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 3018,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "data-collection-edit-name-modal",
+        "property": "opened"
+      }
+    ],
+    "docstring": "Close edit name modal when cancel is clicked."
+  },
+  "close_edit_name_modal": {
+    "function": "close_edit_name_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 3018,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "data-collection-edit-name-modal",
+        "property": "opened"
+      }
+    ],
+    "docstring": "Close edit name modal when cancel is clicked."
+  },
+  "data-collection-delete-modal.opened": {
+    "function": "close_delete_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 3029,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "data-collection-delete-modal",
+        "property": "opened"
+      }
+    ],
+    "docstring": "Close delete modal when cancel is clicked."
+  },
+  "close_delete_modal": {
+    "function": "close_delete_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 3029,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "data-collection-delete-modal",
+        "property": "opened"
+      }
+    ],
+    "docstring": "Close delete modal when cancel is clicked."
+  },
+  "handle_edit_name_submit": {
+    "function": "handle_edit_name_submit",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 3052,
+    "inputs": [],
+    "outputs": [],
+    "docstring": "Handle edit name modal submission."
+  },
+  "handle_delete_submit": {
+    "function": "handle_delete_submit",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 3116,
+    "inputs": [],
+    "outputs": [],
+    "docstring": "Handle delete modal submission."
+  },
+  "confirm-data-collection-overwrite-submit.disabled": {
+    "function": "update_overwrite_submit_button_state",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 3172,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "confirm-data-collection-overwrite-submit",
+        "property": "disabled"
+      }
+    ],
+    "docstring": "Enable/disable overwrite submit button based on file upload and validation."
+  },
+  "update_overwrite_submit_button_state": {
+    "function": "update_overwrite_submit_button_state",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 3172,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "confirm-data-collection-overwrite-submit",
+        "property": "disabled"
+      }
+    ],
+    "docstring": "Enable/disable overwrite submit button based on file upload and validation."
+  },
+  "handle_overwrite_file_upload": {
+    "function": "handle_overwrite_file_upload",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 3255,
+    "inputs": [],
+    "outputs": [],
+    "docstring": "Handle file upload for overwrite modal with schema validation."
+  },
+  "handle_overwrite_submit": {
+    "function": "handle_overwrite_submit",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 3480,
+    "inputs": [],
+    "outputs": [],
+    "docstring": "Handle overwrite modal submission."
+  },
+  "storage-size-display.children": {
+    "function": "update_storage_size_display",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 3561,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "storage-size-display",
+        "property": "children"
+      }
+    ],
+    "docstring": "Update the storage size display card with cumulative size of all data collections."
+  },
+  "update_storage_size_display": {
+    "function": "update_storage_size_display",
+    "file": "performance_analysis/../../depictio/dash/layouts/project_data_collections.py",
+    "line": 3561,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "storage-size-display",
+        "property": "children"
+      }
+    ],
+    "docstring": "Update the storage size display card with cumulative size of all data collections."
+  },
+  "sidebar-footer-server-status.children": {
+    "function": "update_server_status",
+    "file": "performance_analysis/../../depictio/dash/layouts/sidebar.py",
+    "line": 338,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "server-status-cache",
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "sidebar-footer-server-status",
+        "property": "children"
+      }
+    ],
+    "docstring": "PERFORMANCE OPTIMIZATION (Phase 2A): Enhanced guards to prevent redundant updates."
+  },
+  "server-status-cache.data\u2192sidebar-footer-server-status.children": {
+    "function": "update_server_status",
+    "file": "performance_analysis/../../depictio/dash/layouts/sidebar.py",
+    "line": 338,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "server-status-cache",
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "sidebar-footer-server-status",
+        "property": "children"
+      }
+    ],
+    "docstring": "PERFORMANCE OPTIMIZATION (Phase 2A): Enhanced guards to prevent redundant updates."
+  },
+  "update_server_status": {
+    "function": "update_server_status",
+    "file": "performance_analysis/../../depictio/dash/layouts/sidebar.py",
+    "line": 338,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "server-status-cache",
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "sidebar-footer-server-status",
+        "property": "children"
+      }
+    ],
+    "docstring": "PERFORMANCE OPTIMIZATION (Phase 2A): Enhanced guards to prevent redundant updates."
+  },
+  "stored-add-button.data\u2192url.pathname": {
+    "function": "navigate_to_add_component",
+    "file": "performance_analysis/../../depictio/dash/layouts/add_component_simple.py",
+    "line": 28,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "add-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "url",
+        "property": "pathname"
+      },
+      {
+        "type": "Output",
+        "id": "stored-add-button",
+        "property": "data"
+      }
+    ],
+    "docstring": "Navigate to the component creation stepper page."
+  },
+  "add-button.n_clicks\u2192url.pathname+stored-add-button.data": {
+    "function": "navigate_to_add_component",
+    "file": "performance_analysis/../../depictio/dash/layouts/add_component_simple.py",
+    "line": 28,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "add-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "url",
+        "property": "pathname"
+      },
+      {
+        "type": "Output",
+        "id": "stored-add-button",
+        "property": "data"
+      }
+    ],
+    "docstring": "Navigate to the component creation stepper page."
+  },
+  "navigate_to_add_component": {
+    "function": "navigate_to_add_component",
+    "file": "performance_analysis/../../depictio/dash/layouts/add_component_simple.py",
+    "line": 28,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "add-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "url",
+        "property": "pathname"
+      },
+      {
+        "type": "Output",
+        "id": "stored-add-button",
+        "property": "data"
+      }
+    ],
+    "docstring": "Navigate to the component creation stepper page."
+  },
+  "make-project-public-button.color": {
+    "function": "update_visibility_button_color",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 546,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "make-project-public-button",
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": "url",
+        "property": "pathname"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "make-project-public-button",
+        "property": "color"
+      }
+    ],
+    "docstring": "Update the color of the project visibility button based on its value."
+  },
+  "make-project-public-button.value+url.pathname\u2192make-project-public-button.color": {
+    "function": "update_visibility_button_color",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 546,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "make-project-public-button",
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": "url",
+        "property": "pathname"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "make-project-public-button",
+        "property": "color"
+      }
+    ],
+    "docstring": "Update the color of the project visibility button based on its value."
+  },
+  "update_visibility_button_color": {
+    "function": "update_visibility_button_color",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 546,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "make-project-public-button",
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": "url",
+        "property": "pathname"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "make-project-public-button",
+        "property": "color"
+      }
+    ],
+    "docstring": "Update the color of the project visibility button based on its value."
+  },
+  "permissions-manager-grid-store.data\u2192permissions-manager-grid.columnDefs\u2192permissions-manager-grid.dashGridOptions\u2192permissions-manager-grid.rowData\u2192permissions-manager-input-email.data\u2192permissions-manager-project-header.children\u2192permissions-manager-user-permissions.data": {
+    "function": "initialize_data",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 563,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "permissions-manager-project-header",
+        "property": "children"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "permissions-manager-input-email",
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid",
+        "property": "rowData"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid-store",
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-project-header",
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid",
+        "property": "columnDefs"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid",
+        "property": "dashGridOptions"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-user-permissions",
+        "property": "data"
+      }
+    ],
+    "docstring": "Initialize UI components with data fetched from the API when the page loads."
+  },
+  "permissions-manager-project....children\u2192permissions-manager-input-e....data+permissions-manager-grid.rowData+permissions-manager-grid-store.data+permissions-manager-project....children+permissions-manager-grid.columnDefs++2more": {
+    "function": "initialize_data",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 563,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "permissions-manager-project-header",
+        "property": "children"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "permissions-manager-input-email",
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid",
+        "property": "rowData"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid-store",
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-project-header",
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid",
+        "property": "columnDefs"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid",
+        "property": "dashGridOptions"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-user-permissions",
+        "property": "data"
+      }
+    ],
+    "docstring": "Initialize UI components with data fetched from the API when the page loads."
+  },
+  "initialize_data": {
+    "function": "initialize_data",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 563,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "permissions-manager-project-header",
+        "property": "children"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "permissions-manager-input-email",
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid",
+        "property": "rowData"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid-store",
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-project-header",
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid",
+        "property": "columnDefs"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid",
+        "property": "dashGridOptions"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-user-permissions",
+        "property": "data"
+      }
+    ],
+    "docstring": "Initialize UI components with data fetched from the API when the page loads."
+  },
+  "permissions-manager-btn-add-user.disabled\u2192permissions-manager-checkbox-editor.disabled\u2192permissions-manager-checkbox-owner.disabled\u2192permissions-manager-checkbox-viewer.disabled\u2192permissions-manager-input-email.disabled": {
+    "function": "toggle_add_buttons",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 696,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "permissions-manager-input-email",
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": "permissions-manager-checkbox-owner",
+        "property": "checked"
+      },
+      {
+        "type": "Input",
+        "id": "permissions-manager-checkbox-editor",
+        "property": "checked"
+      },
+      {
+        "type": "Input",
+        "id": "permissions-manager-checkbox-viewer",
+        "property": "checked"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "permissions-manager-btn-add-user",
+        "property": "disabled"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-checkbox-owner",
+        "property": "disabled"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-checkbox-editor",
+        "property": "disabled"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-checkbox-viewer",
+        "property": "disabled"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-input-email",
+        "property": "disabled"
+      }
+    ],
+    "docstring": "Enable or disable Add buttons and checkboxes based on current user and selections."
+  },
+  "permissions-manager-input-e....value+permissions-manager-checkbo....checked+permissions-manager-checkbo....checked+permissions-manager-checkbo....checked\u2192permissions-manager-btn-add....disabled+permissions-manager-checkbo....disabled+permissions-manager-checkbo....disabled+permissions-manager-checkbo....disabled+permissions-manager-input-e....disabled": {
+    "function": "toggle_add_buttons",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 696,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "permissions-manager-input-email",
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": "permissions-manager-checkbox-owner",
+        "property": "checked"
+      },
+      {
+        "type": "Input",
+        "id": "permissions-manager-checkbox-editor",
+        "property": "checked"
+      },
+      {
+        "type": "Input",
+        "id": "permissions-manager-checkbox-viewer",
+        "property": "checked"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "permissions-manager-btn-add-user",
+        "property": "disabled"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-checkbox-owner",
+        "property": "disabled"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-checkbox-editor",
+        "property": "disabled"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-checkbox-viewer",
+        "property": "disabled"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-input-email",
+        "property": "disabled"
+      }
+    ],
+    "docstring": "Enable or disable Add buttons and checkboxes based on current user and selections."
+  },
+  "toggle_add_buttons": {
+    "function": "toggle_add_buttons",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 696,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "permissions-manager-input-email",
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": "permissions-manager-checkbox-owner",
+        "property": "checked"
+      },
+      {
+        "type": "Input",
+        "id": "permissions-manager-checkbox-editor",
+        "property": "checked"
+      },
+      {
+        "type": "Input",
+        "id": "permissions-manager-checkbox-viewer",
+        "property": "checked"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "permissions-manager-btn-add-user",
+        "property": "disabled"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-checkbox-owner",
+        "property": "disabled"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-checkbox-editor",
+        "property": "disabled"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-checkbox-viewer",
+        "property": "disabled"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-input-email",
+        "property": "disabled"
+      }
+    ],
+    "docstring": "Enable or disable Add buttons and checkboxes based on current user and selections."
+  },
+  "permissions-manager-checkbox-editor.checked\u2192permissions-manager-checkbox-owner.checked\u2192permissions-manager-checkbox-viewer.checked\u2192permissions-manager-grid.defaultColDef\u2192permissions-manager-grid.rowData\u2192permissions-manager-input-email.data\u2192permissions-manager-input-email.value": {
+    "function": "add_users",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 771,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "permissions-manager-btn-add-user",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "local-store",
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid",
+        "property": "rowData"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid",
+        "property": "defaultColDef"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-input-email",
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-checkbox-owner",
+        "property": "checked"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-checkbox-editor",
+        "property": "checked"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-checkbox-viewer",
+        "property": "checked"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-input-email",
+        "property": "data"
+      }
+    ],
+    "docstring": "Add selected users to the project with specified permissions."
+  },
+  "permissions-manager-btn-add....n_clicks+local-store.data\u2192permissions-manager-grid.rowData+permissions-manager-grid.defaultColDef+permissions-manager-input-e....value+permissions-manager-checkbo....checked+permissions-manager-checkbo....checked++2more": {
+    "function": "add_users",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 771,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "permissions-manager-btn-add-user",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "local-store",
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid",
+        "property": "rowData"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid",
+        "property": "defaultColDef"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-input-email",
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-checkbox-owner",
+        "property": "checked"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-checkbox-editor",
+        "property": "checked"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-checkbox-viewer",
+        "property": "checked"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-input-email",
+        "property": "data"
+      }
+    ],
+    "docstring": "Add selected users to the project with specified permissions."
+  },
+  "add_users": {
+    "function": "add_users",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 771,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "permissions-manager-btn-add-user",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "local-store",
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid",
+        "property": "rowData"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid",
+        "property": "defaultColDef"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-input-email",
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-checkbox-owner",
+        "property": "checked"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-checkbox-editor",
+        "property": "checked"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-checkbox-viewer",
+        "property": "checked"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-input-email",
+        "property": "data"
+      }
+    ],
+    "docstring": "Add selected users to the project with specified permissions."
+  },
+  "permissions-manager-input-email.data": {
+    "function": "update_dropdown_on_grid_change",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 899,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "permissions-manager-grid",
+        "property": "rowData"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "permissions-manager-input-email",
+        "property": "data"
+      }
+    ],
+    "docstring": "Update dropdown options when grid data changes (users added/removed)."
+  },
+  "permissions-manager-grid.rowData\u2192permissions-manager-input-e....data": {
+    "function": "update_dropdown_on_grid_change",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 899,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "permissions-manager-grid",
+        "property": "rowData"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "permissions-manager-input-email",
+        "property": "data"
+      }
+    ],
+    "docstring": "Update dropdown options when grid data changes (users added/removed)."
+  },
+  "update_dropdown_on_grid_change": {
+    "function": "update_dropdown_on_grid_change",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 899,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "permissions-manager-grid",
+        "property": "rowData"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "permissions-manager-input-email",
+        "property": "data"
+      }
+    ],
+    "docstring": "Update dropdown options when grid data changes (users added/removed)."
+  },
+  "cannot_change_last_owner_modal_id.opened\u2192permissions-manager-grid-store.data\u2192permissions-manager-grid.rowData": {
+    "function": "handle_cell_interactions",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 939,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "permissions-manager-grid",
+        "property": "cellClicked"
+      },
+      {
+        "type": "Input",
+        "id": "permissions-manager-grid",
+        "property": "cellValueChanged"
+      },
+      {
+        "type": "Input",
+        "id": "confirm-cannot-change-last-owner-add-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "cancel-cannot-change-last-owner-add-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid",
+        "property": "rowData"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid-store",
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": "cannot_change_last_owner_modal_id",
+        "property": "opened"
+      }
+    ],
+    "docstring": "Handle cell click events for delete actions and permission changes."
+  },
+  "permissions-manager-grid.cellClicked+permissions-manager-grid.cellValueChanged+confirm-cannot-change-last-....n_clicks+cancel-cannot-change-last-o....n_clicks\u2192permissions-manager-grid.rowData+permissions-manager-grid-store.data+cannot_change_last_owner_mo....opened": {
+    "function": "handle_cell_interactions",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 939,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "permissions-manager-grid",
+        "property": "cellClicked"
+      },
+      {
+        "type": "Input",
+        "id": "permissions-manager-grid",
+        "property": "cellValueChanged"
+      },
+      {
+        "type": "Input",
+        "id": "confirm-cannot-change-last-owner-add-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "cancel-cannot-change-last-owner-add-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid",
+        "property": "rowData"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid-store",
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": "cannot_change_last_owner_modal_id",
+        "property": "opened"
+      }
+    ],
+    "docstring": "Handle cell click events for delete actions and permission changes."
+  },
+  "handle_cell_interactions": {
+    "function": "handle_cell_interactions",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 939,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "permissions-manager-grid",
+        "property": "cellClicked"
+      },
+      {
+        "type": "Input",
+        "id": "permissions-manager-grid",
+        "property": "cellValueChanged"
+      },
+      {
+        "type": "Input",
+        "id": "confirm-cannot-change-last-owner-add-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "cancel-cannot-change-last-owner-add-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid",
+        "property": "rowData"
+      },
+      {
+        "type": "Output",
+        "id": "permissions-manager-grid-store",
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": "cannot_change_last_owner_modal_id",
+        "property": "opened"
+      }
+    ],
+    "docstring": "Handle cell click events for delete actions and permission changes."
+  },
+  "user_exists_modal_id.opened": {
+    "function": "toggle_user_exists_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 1139,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "permissions-manager-btn-add-user",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "confirm-user-exists-add-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "cancel-user-exists-add-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "user_exists_modal_id",
+        "property": "opened"
+      }
+    ],
+    "docstring": "Toggle the modal warning if any of the selected users already exists."
+  },
+  "permissions-manager-btn-add....n_clicks+confirm-user-exists-add-button.n_clicks+cancel-user-exists-add-button.n_clicks\u2192user_exists_modal_id.opened": {
+    "function": "toggle_user_exists_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 1139,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "permissions-manager-btn-add-user",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "confirm-user-exists-add-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "cancel-user-exists-add-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "user_exists_modal_id",
+        "property": "opened"
+      }
+    ],
+    "docstring": "Toggle the modal warning if any of the selected users already exists."
+  },
+  "toggle_user_exists_modal": {
+    "function": "toggle_user_exists_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 1139,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "permissions-manager-btn-add-user",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "confirm-user-exists-add-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "cancel-user-exists-add-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "user_exists_modal_id",
+        "property": "opened"
+      }
+    ],
+    "docstring": "Toggle the modal warning if any of the selected users already exists."
+  },
+  "cannot_delete_owner_modal_id.opened": {
+    "function": "toggle_cannot_delete_owner_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 1170,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "permissions-manager-grid",
+        "property": "cellClicked"
+      },
+      {
+        "type": "Input",
+        "id": "confirm-cannot-delete-owner-add-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "cancel-cannot-delete-owner-add-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "cannot_delete_owner_modal_id",
+        "property": "opened"
+      }
+    ],
+    "docstring": "Toggle the modal warning if trying to delete the last owner."
+  },
+  "permissions-manager-grid.cellClicked+confirm-cannot-delete-owner....n_clicks+cancel-cannot-delete-owner-....n_clicks\u2192cannot_delete_owner_modal_id.opened": {
+    "function": "toggle_cannot_delete_owner_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 1170,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "permissions-manager-grid",
+        "property": "cellClicked"
+      },
+      {
+        "type": "Input",
+        "id": "confirm-cannot-delete-owner-add-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "cancel-cannot-delete-owner-add-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "cannot_delete_owner_modal_id",
+        "property": "opened"
+      }
+    ],
+    "docstring": "Toggle the modal warning if trying to delete the last owner."
+  },
+  "toggle_cannot_delete_owner_modal": {
+    "function": "toggle_cannot_delete_owner_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 1170,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "permissions-manager-grid",
+        "property": "cellClicked"
+      },
+      {
+        "type": "Input",
+        "id": "confirm-cannot-delete-owner-add-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "cancel-cannot-delete-owner-add-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "cannot_delete_owner_modal_id",
+        "property": "opened"
+      }
+    ],
+    "docstring": "Toggle the modal warning if trying to delete the last owner."
+  },
+  "make-project-public-button.value\u2192make_project_public_modal_id.opened\u2192store-make-project-public.data": {
+    "function": "toggle_make_project_public_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 1212,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "make-project-public-button",
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": "confirm-make-project-public-add-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "cancel-make-project-public-add-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "make_project_public_modal_id",
+        "property": "opened"
+      },
+      {
+        "type": "Output",
+        "id": "make-project-public-button",
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": "store-make-project-public",
+        "property": "data"
+      }
+    ],
+    "docstring": "Handle modal display and API call for toggling project visibility."
+  },
+  "make-project-public-button.value+confirm-make-project-public....n_clicks+cancel-make-project-public-....n_clicks\u2192make_project_public_modal_id.opened+make-project-public-button.value+store-make-project-public.data": {
+    "function": "toggle_make_project_public_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 1212,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "make-project-public-button",
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": "confirm-make-project-public-add-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "cancel-make-project-public-add-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "make_project_public_modal_id",
+        "property": "opened"
+      },
+      {
+        "type": "Output",
+        "id": "make-project-public-button",
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": "store-make-project-public",
+        "property": "data"
+      }
+    ],
+    "docstring": "Handle modal display and API call for toggling project visibility."
+  },
+  "toggle_make_project_public_modal": {
+    "function": "toggle_make_project_public_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/projectwise_user_management.py",
+    "line": 1212,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "make-project-public-button",
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": "confirm-make-project-public-add-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "cancel-make-project-public-add-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "make_project_public_modal_id",
+        "property": "opened"
+      },
+      {
+        "type": "Output",
+        "id": "make-project-public-button",
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": "store-make-project-public",
+        "property": "data"
+      }
+    ],
+    "docstring": "Handle modal display and API call for toggling project visibility."
+  },
+  "share-modal-dashboard.is_open": {
+    "function": "toggle_share_modal_dashboard",
+    "file": "performance_analysis/../../depictio/dash/layouts/header.py",
+    "line": 410,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "share-modal-dashboard",
+        "property": "is_open"
+      }
+    ],
+    "docstring": ""
+  },
+  "toggle_share_modal_dashboard": {
+    "function": "toggle_share_modal_dashboard",
+    "file": "performance_analysis/../../depictio/dash/layouts/header.py",
+    "line": 410,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "share-modal-dashboard",
+        "property": "is_open"
+      }
+    ],
+    "docstring": ""
+  },
+  "notes-footer-content.className\u2192offcanvas-parameters.opened\u2192page-content.className": {
+    "function": "toggle_offcanvas_parameters",
+    "file": "performance_analysis/../../depictio/dash/layouts/header.py",
+    "line": 443,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "open-offcanvas-parameters-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "offcanvas-parameters",
+        "property": "opened"
+      },
+      {
+        "type": "Output",
+        "id": "notes-footer-content",
+        "property": "className"
+      },
+      {
+        "type": "Output",
+        "id": "page-content",
+        "property": "className"
+      }
+    ],
+    "docstring": ""
+  },
+  "open-offcanvas-parameters-b....n_clicks\u2192offcanvas-parameters.opened+notes-footer-content.className+page-content.className": {
+    "function": "toggle_offcanvas_parameters",
+    "file": "performance_analysis/../../depictio/dash/layouts/header.py",
+    "line": 443,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "open-offcanvas-parameters-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "offcanvas-parameters",
+        "property": "opened"
+      },
+      {
+        "type": "Output",
+        "id": "notes-footer-content",
+        "property": "className"
+      },
+      {
+        "type": "Output",
+        "id": "page-content",
+        "property": "className"
+      }
+    ],
+    "docstring": ""
+  },
+  "toggle_offcanvas_parameters": {
+    "function": "toggle_offcanvas_parameters",
+    "file": "performance_analysis/../../depictio/dash/layouts/header.py",
+    "line": 443,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "open-offcanvas-parameters-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "offcanvas-parameters",
+        "property": "opened"
+      },
+      {
+        "type": "Output",
+        "id": "notes-footer-content",
+        "property": "className"
+      },
+      {
+        "type": "Output",
+        "id": "page-content",
+        "property": "className"
+      }
+    ],
+    "docstring": ""
+  },
+  "update_reset_button_style": {
+    "function": "update_reset_button_style",
+    "file": "performance_analysis/../../depictio/dash/layouts/header.py",
+    "line": 650,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "interactive-values-store",
+        "property": "data"
+      }
+    ],
+    "outputs": [],
+    "docstring": "Update reset button style and icon color based on filter activity."
+  },
+  "dashboard-projects.data": {
+    "function": "load_projects",
+    "file": "performance_analysis/../../depictio/dash/layouts/dashboards_management.py",
+    "line": 889,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "dashboard-modal",
+        "property": "opened"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "dashboard-projects",
+        "property": "data"
+      }
+    ],
+    "docstring": ""
+  },
+  "dashboard-modal.opened\u2192dashboard-projects.data": {
+    "function": "load_projects",
+    "file": "performance_analysis/../../depictio/dash/layouts/dashboards_management.py",
+    "line": 889,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "dashboard-modal",
+        "property": "opened"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "dashboard-projects",
+        "property": "data"
+      }
+    ],
+    "docstring": ""
+  },
+  "load_projects": {
+    "function": "load_projects",
+    "file": "performance_analysis/../../depictio/dash/layouts/dashboards_management.py",
+    "line": 889,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "dashboard-modal",
+        "property": "opened"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "dashboard-projects",
+        "property": "data"
+      }
+    ],
+    "docstring": ""
+  },
+  "update_icon_preview": {
+    "function": "update_icon_preview",
+    "file": "performance_analysis/../../depictio/dash/layouts/dashboards_management.py",
+    "line": 940,
+    "inputs": [],
+    "outputs": [],
+    "docstring": "Update the dashboard icon preview in real-time as users modify icon settings."
+  },
+  "update_dashboards": {
+    "function": "update_dashboards",
+    "file": "performance_analysis/../../depictio/dash/layouts/dashboards_management.py",
+    "line": 1041,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      }
+    ],
+    "docstring": ""
+  },
+  "handle_edit_name_modal": {
+    "function": "handle_edit_name_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/dashboards_management.py",
+    "line": 1355,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "opened"
+      }
+    ],
+    "docstring": ""
+  },
+  "handle_create_dashboard_and_toggle_modal": {
+    "function": "handle_create_dashboard_and_toggle_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/dashboards_management.py",
+    "line": 1400,
+    "inputs": [],
+    "outputs": [],
+    "docstring": ""
+  },
+  "open_delete_modal": {
+    "function": "open_delete_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/dashboards_management.py",
+    "line": 1582,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "opened"
+      }
+    ],
+    "docstring": ""
+  },
+  "landing-page.children": {
+    "function": "update_landing_page",
+    "file": "performance_analysis/../../depictio/dash/layouts/dashboards_management.py",
+    "line": 1593,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "landing-page",
+        "property": "children"
+      }
+    ],
+    "docstring": ""
+  },
+  "update_landing_page": {
+    "function": "update_landing_page",
+    "file": "performance_analysis/../../depictio/dash/layouts/dashboards_management.py",
+    "line": 1593,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "landing-page",
+        "property": "children"
+      }
+    ],
+    "docstring": ""
+  },
+  "local-store-components-metadata.data": {
+    "function": "store_wf_dc_selection",
+    "file": "performance_analysis/../../depictio/dash/layouts/draggable.py",
+    "line": 268,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "local-store-components-metadata",
+        "property": "data"
+      }
+    ],
+    "docstring": "Callback to store all components' workflow and data collection data in a centralized store."
+  },
+  "store_wf_dc_selection": {
+    "function": "store_wf_dc_selection",
+    "file": "performance_analysis/../../depictio/dash/layouts/draggable.py",
+    "line": 268,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "local-store-components-metadata",
+        "property": "data"
+      }
+    ],
+    "docstring": "Callback to store all components' workflow and data collection data in a centralized store."
+  },
+  "update_interactive_values_store": {
+    "function": "update_interactive_values_store",
+    "file": "performance_analysis/../../depictio/dash/layouts/draggable.py",
+    "line": 653,
+    "inputs": [],
+    "outputs": [],
+    "docstring": ""
+  },
+  "update_grid_edit_mode": {
+    "function": "update_grid_edit_mode",
+    "file": "performance_analysis/../../depictio/dash/layouts/draggable.py",
+    "line": 1181,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "unified-edit-mode-button",
+        "property": "checked"
+      }
+    ],
+    "outputs": [],
+    "docstring": "Update draggable grid edit mode based on edit dashboard button state"
+  },
+  "unified-edit-mode-button.checked": {
+    "function": "enable_edit_mode_from_welcome_message",
+    "file": "performance_analysis/../../depictio/dash/layouts/draggable.py",
+    "line": 1362,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "welcome-message-clickable",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "unified-edit-mode-button",
+        "property": "checked"
+      }
+    ],
+    "docstring": "Enable edit mode when clicking on the welcome message."
+  },
+  "welcome-message-clickable.n_clicks\u2192unified-edit-mode-button.checked": {
+    "function": "enable_edit_mode_from_welcome_message",
+    "file": "performance_analysis/../../depictio/dash/layouts/draggable.py",
+    "line": 1362,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "welcome-message-clickable",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "unified-edit-mode-button",
+        "property": "checked"
+      }
+    ],
+    "docstring": "Enable edit mode when clicking on the welcome message."
+  },
+  "enable_edit_mode_from_welcome_message": {
+    "function": "enable_edit_mode_from_welcome_message",
+    "file": "performance_analysis/../../depictio/dash/layouts/draggable.py",
+    "line": 1362,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "welcome-message-clickable",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "unified-edit-mode-button",
+        "property": "checked"
+      }
+    ],
+    "docstring": "Enable edit mode when clicking on the welcome message."
+  },
+  "add-button.n_clicks": {
+    "function": "trigger_add_button_from_message",
+    "file": "performance_analysis/../../depictio/dash/layouts/draggable.py",
+    "line": 1376,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "add-component-message-clickable",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "add-button",
+        "property": "n_clicks"
+      }
+    ],
+    "docstring": "Trigger add button when clicking on the add component message."
+  },
+  "add-component-message-click....n_clicks\u2192add-button.n_clicks": {
+    "function": "trigger_add_button_from_message",
+    "file": "performance_analysis/../../depictio/dash/layouts/draggable.py",
+    "line": 1376,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "add-component-message-clickable",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "add-button",
+        "property": "n_clicks"
+      }
+    ],
+    "docstring": "Trigger add button when clicking on the add component message."
+  },
+  "trigger_add_button_from_message": {
+    "function": "trigger_add_button_from_message",
+    "file": "performance_analysis/../../depictio/dash/layouts/draggable.py",
+    "line": 1376,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "add-component-message-clickable",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "add-button",
+        "property": "n_clicks"
+      }
+    ],
+    "docstring": "Trigger add button when clicking on the add component message."
+  },
+  "trigger_save_on_enter": {
+    "function": "trigger_save_on_enter",
+    "file": "performance_analysis/../../depictio/dash/layouts/users_management.py",
+    "line": 662,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "auth-modal-listener",
+        "property": "n_events"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "login-button",
+        "property": "n_clicks"
+      }
+    ],
+    "docstring": ""
+  },
+  "edit_password_callback": {
+    "function": "edit_password_callback",
+    "file": "performance_analysis/../../depictio/dash/layouts/profile.py",
+    "line": 336,
+    "inputs": [],
+    "outputs": [],
+    "docstring": ""
+  },
+  "populate_user_info": {
+    "function": "populate_user_info",
+    "file": "performance_analysis/../../depictio/dash/layouts/profile.py",
+    "line": 526,
+    "inputs": [],
+    "outputs": [],
+    "docstring": ""
+  },
+  "logout_user_callback": {
+    "function": "logout_user_callback",
+    "file": "performance_analysis/../../depictio/dash/layouts/profile.py",
+    "line": 620,
+    "inputs": [],
+    "outputs": [],
+    "docstring": ""
+  },
+  "upgrade-confirmation-modal.opened": {
+    "function": "close_upgrade_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/profile.py",
+    "line": 643,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "upgrade-confirmation-modal",
+        "property": "opened"
+      }
+    ],
+    "docstring": "Close upgrade confirmation modal when cancel is clicked."
+  },
+  "show_upgrade_modal": {
+    "function": "show_upgrade_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/profile.py",
+    "line": 632,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "upgrade-confirmation-modal",
+        "property": "opened"
+      }
+    ],
+    "docstring": "Show upgrade confirmation modal when button is clicked."
+  },
+  "close_upgrade_modal": {
+    "function": "close_upgrade_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/profile.py",
+    "line": 643,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "upgrade-confirmation-modal",
+        "property": "opened"
+      }
+    ],
+    "docstring": "Close upgrade confirmation modal when cancel is clicked."
+  },
+  "upgrade_to_temporary_callback": {
+    "function": "upgrade_to_temporary_callback",
+    "file": "performance_analysis/../../depictio/dash/layouts/profile.py",
+    "line": 660,
+    "inputs": [],
+    "outputs": [],
+    "docstring": "Handle upgrade from anonymous to temporary user after confirmation."
+  },
+  "handle_position_change": {
+    "function": "handle_position_change",
+    "file": "performance_analysis/../../depictio/dash/layouts/position_controls.py",
+    "line": 336,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [],
+    "docstring": "Handle position button clicks and update component positions."
+  },
+  "draggable.children": {
+    "function": "remove_component_from_dashboard",
+    "file": "performance_analysis/../../depictio/dash/layouts/remove_component_simple.py",
+    "line": 70,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "draggable",
+        "property": "children"
+      }
+    ],
+    "docstring": "Remove component by patching the children tree."
+  },
+  "pattern.n_clicks\u2192draggable.children": {
+    "function": "remove_component_from_dashboard",
+    "file": "performance_analysis/../../depictio/dash/layouts/remove_component_simple.py",
+    "line": 70,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "draggable",
+        "property": "children"
+      }
+    ],
+    "docstring": "Remove component by patching the children tree."
+  },
+  "remove_component_from_dashboard": {
+    "function": "remove_component_from_dashboard",
+    "file": "performance_analysis/../../depictio/dash/layouts/remove_component_simple.py",
+    "line": 70,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "draggable",
+        "property": "children"
+      }
+    ],
+    "docstring": "Remove component by patching the children tree."
+  },
+  "copy-config-clipboard.content": {
+    "function": "copy_config",
+    "file": "performance_analysis/../../depictio/dash/layouts/tokens_management.py",
+    "line": 408,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "copy-config-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "copy-config-clipboard",
+        "property": "content"
+      }
+    ],
+    "docstring": ""
+  },
+  "copy-config-button.n_clicks\u2192copy-config-clipboard.content": {
+    "function": "copy_config",
+    "file": "performance_analysis/../../depictio/dash/layouts/tokens_management.py",
+    "line": 408,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "copy-config-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "copy-config-clipboard",
+        "property": "content"
+      }
+    ],
+    "docstring": ""
+  },
+  "copy_config": {
+    "function": "copy_config",
+    "file": "performance_analysis/../../depictio/dash/layouts/tokens_management.py",
+    "line": 408,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "copy-config-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "copy-config-clipboard",
+        "property": "content"
+      }
+    ],
+    "docstring": ""
+  },
+  "delete-confirm-input.value\u2192delete-modal.opened\u2192delete-token-id-store.data\u2192display-agent.children\u2192display-token-modal.opened\u2192token-modal.opened\u2192token-name-alert.children\u2192token-name-alert.style\u2192tokens-list.children": {
+    "function": "handle_callbacks",
+    "file": "performance_analysis/../../depictio/dash/layouts/tokens_management.py",
+    "line": 439,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "add-token-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "save-token-name",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "confirm-delete-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "cancel-token-modal",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "cancel-delete-modal",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "token-modal",
+        "property": "opened"
+      },
+      {
+        "type": "Output",
+        "id": "delete-modal",
+        "property": "opened"
+      },
+      {
+        "type": "Output",
+        "id": "tokens-list",
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": "display-token-modal",
+        "property": "opened"
+      },
+      {
+        "type": "Output",
+        "id": "display-agent",
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": "delete-token-id-store",
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": "delete-confirm-input",
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": "token-name-alert",
+        "property": "style"
+      },
+      {
+        "type": "Output",
+        "id": "token-name-alert",
+        "property": "children"
+      }
+    ],
+    "docstring": ""
+  },
+  "add-token-button.n_clicks+save-token-name.n_clicks+confirm-delete-button.n_clicks+cancel-token-modal.n_clicks+cancel-delete-modal.n_clicks++1more\u2192token-modal.opened+delete-modal.opened+tokens-list.children+display-token-modal.opened+display-agent.children++4more": {
+    "function": "handle_callbacks",
+    "file": "performance_analysis/../../depictio/dash/layouts/tokens_management.py",
+    "line": 439,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "add-token-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "save-token-name",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "confirm-delete-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "cancel-token-modal",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "cancel-delete-modal",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "token-modal",
+        "property": "opened"
+      },
+      {
+        "type": "Output",
+        "id": "delete-modal",
+        "property": "opened"
+      },
+      {
+        "type": "Output",
+        "id": "tokens-list",
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": "display-token-modal",
+        "property": "opened"
+      },
+      {
+        "type": "Output",
+        "id": "display-agent",
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": "delete-token-id-store",
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": "delete-confirm-input",
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": "token-name-alert",
+        "property": "style"
+      },
+      {
+        "type": "Output",
+        "id": "token-name-alert",
+        "property": "children"
+      }
+    ],
+    "docstring": ""
+  },
+  "handle_callbacks": {
+    "function": "handle_callbacks",
+    "file": "performance_analysis/../../depictio/dash/layouts/tokens_management.py",
+    "line": 439,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "add-token-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "save-token-name",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "confirm-delete-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "cancel-token-modal",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "cancel-delete-modal",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "token-modal",
+        "property": "opened"
+      },
+      {
+        "type": "Output",
+        "id": "delete-modal",
+        "property": "opened"
+      },
+      {
+        "type": "Output",
+        "id": "tokens-list",
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": "display-token-modal",
+        "property": "opened"
+      },
+      {
+        "type": "Output",
+        "id": "display-agent",
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": "delete-token-id-store",
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": "delete-confirm-input",
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": "token-name-alert",
+        "property": "style"
+      },
+      {
+        "type": "Output",
+        "id": "token-name-alert",
+        "property": "children"
+      }
+    ],
+    "docstring": ""
+  },
+  "upgrade-modal.opened": {
+    "function": "toggle_upgrade_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/upgrade_modal.py",
+    "line": 96,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "upgrade-modal",
+        "property": "opened"
+      }
+    ],
+    "docstring": "Toggle the upgrade modal visibility."
+  },
+  "toggle_upgrade_modal": {
+    "function": "toggle_upgrade_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/upgrade_modal.py",
+    "line": 96,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "upgrade-modal",
+        "property": "opened"
+      }
+    ],
+    "docstring": "Toggle the upgrade modal visibility."
+  },
+  "handle_upgrade_confirmation": {
+    "function": "handle_upgrade_confirmation",
+    "file": "performance_analysis/../../depictio/dash/layouts/upgrade_modal.py",
+    "line": 120,
+    "inputs": [],
+    "outputs": [],
+    "docstring": "Handle the upgrade confirmation."
+  },
+  "toggle_notes_footer": {
+    "function": "toggle_notes_footer",
+    "file": "performance_analysis/../../depictio/dash/layouts/notes_footer.py",
+    "line": 182,
+    "inputs": [],
+    "outputs": [],
+    "docstring": "Toggle footer visibility and fullscreen mode when buttons are clicked."
+  },
+  "notes-editor-store.data": {
+    "function": "store_notes_content",
+    "file": "performance_analysis/../../depictio/dash/layouts/notes_footer.py",
+    "line": 268,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "notes-rich-text-editor",
+        "property": "html"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "notes-editor-store",
+        "property": "data"
+      }
+    ],
+    "docstring": "Store notes content when it changes."
+  },
+  "notes-rich-text-editor.html\u2192notes-editor-store.data": {
+    "function": "store_notes_content",
+    "file": "performance_analysis/../../depictio/dash/layouts/notes_footer.py",
+    "line": 268,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "notes-rich-text-editor",
+        "property": "html"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "notes-editor-store",
+        "property": "data"
+      }
+    ],
+    "docstring": "Store notes content when it changes."
+  },
+  "store_notes_content": {
+    "function": "store_notes_content",
+    "file": "performance_analysis/../../depictio/dash/layouts/notes_footer.py",
+    "line": 268,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "notes-rich-text-editor",
+        "property": "html"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "notes-editor-store",
+        "property": "data"
+      }
+    ],
+    "docstring": "Store notes content when it changes."
+  },
+  "pattern.n_clicks\u2192url.pathname": {
+    "function": "navigate_to_edit_component",
+    "file": "performance_analysis/../../depictio/dash/layouts/edit_component_simple.py",
+    "line": 24,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "url",
+        "property": "pathname"
+      }
+    ],
+    "docstring": "Navigate to the component editing stepper page."
+  },
+  "save_edited_card_component": {
+    "function": "save_edited_card_component",
+    "file": "performance_analysis/../../depictio/dash/layouts/edit_page.py",
+    "line": 246,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "url",
+        "property": "pathname"
+      }
+    ],
+    "docstring": "Save edited card component directly (no -tmp index handling)."
+  },
+  "navigate_to_edit_component": {
+    "function": "navigate_to_edit_component",
+    "file": "performance_analysis/../../depictio/dash/layouts/edit_component_simple.py",
+    "line": 24,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "url",
+        "property": "pathname"
+      }
+    ],
+    "docstring": "Navigate to the component editing stepper page."
+  },
+  "pattern.n_clicks+pattern.n_clicks\u2192pattern.opened": {
+    "function": "open_group_delete_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_management.py",
+    "line": 701,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "opened"
+      }
+    ],
+    "docstring": ""
+  },
+  "open_user_delete_modal": {
+    "function": "open_user_delete_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_management.py",
+    "line": 681,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "opened"
+      }
+    ],
+    "docstring": ""
+  },
+  "open_group_delete_modal": {
+    "function": "open_group_delete_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_management.py",
+    "line": 701,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "opened"
+      }
+    ],
+    "docstring": ""
+  },
+  "group-add-confirmation-modal-message.children\u2192group-add-confirmation-modal-message.style\u2192group-add-confirmation-modal.opened": {
+    "function": "add_group",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_management.py",
+    "line": 726,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "confirm-group-add-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "cancel-group-add-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "group-add-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "group-add-confirmation-modal",
+        "property": "opened"
+      },
+      {
+        "type": "Output",
+        "id": "group-add-confirmation-modal-message",
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": "group-add-confirmation-modal-message",
+        "property": "style"
+      }
+    ],
+    "docstring": ""
+  },
+  "confirm-group-add-button.n_clicks+cancel-group-add-button.n_clicks+group-add-button.n_clicks\u2192group-add-confirmation-modal.opened+group-add-confirmation-moda....children+group-add-confirmation-moda....style": {
+    "function": "add_group",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_management.py",
+    "line": 726,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "confirm-group-add-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "cancel-group-add-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "group-add-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "group-add-confirmation-modal",
+        "property": "opened"
+      },
+      {
+        "type": "Output",
+        "id": "group-add-confirmation-modal-message",
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": "group-add-confirmation-modal-message",
+        "property": "style"
+      }
+    ],
+    "docstring": ""
+  },
+  "add_group": {
+    "function": "add_group",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_management.py",
+    "line": 726,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "confirm-group-add-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "cancel-group-add-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "group-add-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "group-add-confirmation-modal",
+        "property": "opened"
+      },
+      {
+        "type": "Output",
+        "id": "group-add-confirmation-modal-message",
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": "group-add-confirmation-modal-message",
+        "property": "style"
+      }
+    ],
+    "docstring": ""
+  },
+  "admin-management-content.children\u2192group-add-button.style": {
+    "function": "create_admin_management_content",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_management.py",
+    "line": 773,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "confirm-group-add-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "url",
+        "property": "pathname"
+      },
+      {
+        "type": "Input",
+        "id": "admin-tabs",
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "admin-management-content",
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": "group-add-button",
+        "property": "style"
+      }
+    ],
+    "docstring": ""
+  },
+  "confirm-group-add-button.n_clicks+pattern.n_clicks+pattern.n_clicks+url.pathname+admin-tabs.value++2more\u2192admin-management-content.children+group-add-button.style": {
+    "function": "create_admin_management_content",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_management.py",
+    "line": 773,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "confirm-group-add-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "url",
+        "property": "pathname"
+      },
+      {
+        "type": "Input",
+        "id": "admin-tabs",
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "admin-management-content",
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": "group-add-button",
+        "property": "style"
+      }
+    ],
+    "docstring": ""
+  },
+  "create_admin_management_content": {
+    "function": "create_admin_management_content",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_management.py",
+    "line": 773,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "confirm-group-add-button",
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": "url",
+        "property": "pathname"
+      },
+      {
+        "type": "Input",
+        "id": "admin-tabs",
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "admin-management-content",
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": "group-add-button",
+        "property": "style"
+      }
+    ],
+    "docstring": ""
+  },
+  "toggle_project_modal": {
+    "function": "toggle_project_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/projects.py",
+    "line": 1590,
+    "inputs": [],
+    "outputs": [],
+    "docstring": "Toggle the project creation modal and reset states."
+  },
+  "step-1-content.children": {
+    "function": "initialize_step_content",
+    "file": "performance_analysis/../../depictio/dash/layouts/projects.py",
+    "line": 1662,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "project-creation-modal",
+        "property": "opened"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "step-1-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Initialize step content when modal opens."
+  },
+  "project-creation-modal.opened\u2192step-1-content.children": {
+    "function": "initialize_step_content",
+    "file": "performance_analysis/../../depictio/dash/layouts/projects.py",
+    "line": 1662,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "project-creation-modal",
+        "property": "opened"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "step-1-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Initialize step content when modal opens."
+  },
+  "initialize_step_content": {
+    "function": "initialize_step_content",
+    "file": "performance_analysis/../../depictio/dash/layouts/projects.py",
+    "line": 1662,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "project-creation-modal",
+        "property": "opened"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "step-1-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Initialize step content when modal opens."
+  },
+  "manage_stepper_content": {
+    "function": "manage_stepper_content",
+    "file": "performance_analysis/../../depictio/dash/layouts/projects.py",
+    "line": 1690,
+    "inputs": [],
+    "outputs": [],
+    "docstring": "Manage stepper content and navigation."
+  },
+  "handle_project_card_click": {
+    "function": "handle_project_card_click",
+    "file": "performance_analysis/../../depictio/dash/layouts/projects.py",
+    "line": 1757,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "basic-project-card",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [],
+    "docstring": "Handle project type card clicks."
+  },
+  "handle_project_creation": {
+    "function": "handle_project_creation",
+    "file": "performance_analysis/../../depictio/dash/layouts/projects.py",
+    "line": 1800,
+    "inputs": [],
+    "outputs": [],
+    "docstring": "Handle project creation when Create Project button is clicked."
+  },
+  "pattern.getRowsResponse": {
+    "function": "infinite_scroll_component",
+    "file": "performance_analysis/../../depictio/dash/modules/table_component/frontend.py",
+    "line": 152,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "getRowsResponse"
+      }
+    ],
+    "docstring": "INFINITE SCROLL CALLBACK WITH INTERACTIVE COMPONENT SUPPORT"
+  },
+  "pattern.getRowsRequest\u2192pattern.getRowsResponse": {
+    "function": "infinite_scroll_project_dc_table",
+    "file": "performance_analysis/../../depictio/dash/layouts/projects.py",
+    "line": 1920,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "getRowsRequest"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "getRowsResponse"
+      }
+    ],
+    "docstring": "Handle infinite scrolling for data collection tables."
+  },
+  "infinite_scroll_project_dc_table": {
+    "function": "infinite_scroll_project_dc_table",
+    "file": "performance_analysis/../../depictio/dash/layouts/projects.py",
+    "line": 1920,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "getRowsRequest"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "getRowsResponse"
+      }
+    ],
+    "docstring": "Handle infinite scrolling for data collection tables."
+  },
+  "projects-content.children": {
+    "function": "refresh_projects_after_edit",
+    "file": "performance_analysis/../../depictio/dash/layouts/projects.py",
+    "line": 2197,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "opened"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "projects-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Refresh projects list when edit modal closes after successful edit."
+  },
+  "update_projects_content": {
+    "function": "update_projects_content",
+    "file": "performance_analysis/../../depictio/dash/layouts/projects.py",
+    "line": 1994,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "projects-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Update the projects list based on the current path and user token."
+  },
+  "project-creation-modal.opened\u2192projects-content.children": {
+    "function": "refresh_projects_after_creation",
+    "file": "performance_analysis/../../depictio/dash/layouts/projects.py",
+    "line": 2017,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "project-creation-modal",
+        "property": "opened"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "projects-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Refresh projects list after successful project creation."
+  },
+  "refresh_projects_after_creation": {
+    "function": "refresh_projects_after_creation",
+    "file": "performance_analysis/../../depictio/dash/layouts/projects.py",
+    "line": 2017,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "project-creation-modal",
+        "property": "opened"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "projects-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Refresh projects list after successful project creation."
+  },
+  "pattern.n_clicks\u2192pattern.opened": {
+    "function": "handle_edit_project_name_confirm",
+    "file": "performance_analysis/../../depictio/dash/layouts/projects.py",
+    "line": 2143,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "opened"
+      }
+    ],
+    "docstring": "Handle project name edit confirmation with API call."
+  },
+  "open_edit_project_name_modal": {
+    "function": "open_edit_project_name_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/projects.py",
+    "line": 2038,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "opened"
+      }
+    ],
+    "docstring": "Open the edit project name modal when button is clicked."
+  },
+  "open_delete_project_modal": {
+    "function": "open_delete_project_modal",
+    "file": "performance_analysis/../../depictio/dash/layouts/projects.py",
+    "line": 2049,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "opened"
+      }
+    ],
+    "docstring": "Open the delete project confirmation modal when button is clicked."
+  },
+  "handle_delete_project_confirm": {
+    "function": "handle_delete_project_confirm",
+    "file": "performance_analysis/../../depictio/dash/layouts/projects.py",
+    "line": 2069,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "opened"
+      }
+    ],
+    "docstring": "Handle project deletion confirmation with API call."
+  },
+  "pattern.opened\u2192projects-content.children": {
+    "function": "refresh_projects_after_edit",
+    "file": "performance_analysis/../../depictio/dash/layouts/projects.py",
+    "line": 2197,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "opened"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "projects-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Refresh projects list when edit modal closes after successful edit."
+  },
+  "refresh_projects_after_deletion": {
+    "function": "refresh_projects_after_deletion",
+    "file": "performance_analysis/../../depictio/dash/layouts/projects.py",
+    "line": 2108,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "opened"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "projects-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Refresh projects list when delete modal closes after successful deletion."
+  },
+  "handle_edit_project_name_confirm": {
+    "function": "handle_edit_project_name_confirm",
+    "file": "performance_analysis/../../depictio/dash/layouts/projects.py",
+    "line": 2143,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "opened"
+      }
+    ],
+    "docstring": "Handle project name edit confirmation with API call."
+  },
+  "refresh_projects_after_edit": {
+    "function": "refresh_projects_after_edit",
+    "file": "performance_analysis/../../depictio/dash/layouts/projects.py",
+    "line": 2197,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "opened"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "projects-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Refresh projects list when edit modal closes after successful edit."
+  },
+  "analytics-dashboard-content.children": {
+    "function": "render_analytics_dashboard",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 30,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "analytics-dashboard-trigger",
+        "property": "id"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "analytics-dashboard-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Render analytics dashboard if user has admin privileges."
+  },
+  "analytics-dashboard-trigger.id\u2192analytics-dashboard-content.children": {
+    "function": "render_analytics_dashboard",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 30,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "analytics-dashboard-trigger",
+        "property": "id"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "analytics-dashboard-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Render analytics dashboard if user has admin privileges."
+  },
+  "render_analytics_dashboard": {
+    "function": "render_analytics_dashboard",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 30,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "analytics-dashboard-trigger",
+        "property": "id"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "analytics-dashboard-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Render analytics dashboard if user has admin privileges."
+  },
+  "update_realtime_metrics": {
+    "function": "update_realtime_metrics",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 67,
+    "inputs": [],
+    "outputs": [],
+    "docstring": "Update real-time metrics display."
+  },
+  "daily-activity-chart.figure": {
+    "function": "update_daily_activity_chart",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 130,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "daily-activity-chart",
+        "property": "figure"
+      }
+    ],
+    "docstring": "Update daily activity trends chart."
+  },
+  "update_daily_activity_chart": {
+    "function": "update_daily_activity_chart",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 130,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "daily-activity-chart",
+        "property": "figure"
+      }
+    ],
+    "docstring": "Update daily activity trends chart."
+  },
+  "user-types-chart.figure": {
+    "function": "update_user_types_chart",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 222,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "user-types-chart",
+        "property": "figure"
+      }
+    ],
+    "docstring": "Update user types distribution pie chart."
+  },
+  "update_user_types_chart": {
+    "function": "update_user_types_chart",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 222,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "user-types-chart",
+        "property": "figure"
+      }
+    ],
+    "docstring": "Update user types distribution pie chart."
+  },
+  "users-active-today-content.children": {
+    "function": "update_users_active_today",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 306,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "users-active-today-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Update users active today metrics."
+  },
+  "update_users_active_today": {
+    "function": "update_users_active_today",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 306,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "users-active-today-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Update users active today metrics."
+  },
+  "activity-overview-content.children": {
+    "function": "update_activity_overview",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 373,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "activity-overview-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Update activity overview content."
+  },
+  "update_activity_overview": {
+    "function": "update_activity_overview",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 373,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "activity-overview-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Update activity overview content."
+  },
+  "analytics-loading-output.children": {
+    "function": "refresh_all_analytics_data",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 487,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "refresh-all-analytics",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "analytics-loading-output",
+        "property": "children"
+      }
+    ],
+    "docstring": "Trigger ETL refresh for all analytics data."
+  },
+  "refresh-all-analytics.n_clicks\u2192analytics-loading-output.children": {
+    "function": "refresh_all_analytics_data",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 487,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "refresh-all-analytics",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "analytics-loading-output",
+        "property": "children"
+      }
+    ],
+    "docstring": "Trigger ETL refresh for all analytics data."
+  },
+  "refresh_all_analytics_data": {
+    "function": "refresh_all_analytics_data",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 487,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "refresh-all-analytics",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "analytics-loading-output",
+        "property": "children"
+      }
+    ],
+    "docstring": "Trigger ETL refresh for all analytics data."
+  },
+  "specific-user-filter.data": {
+    "function": "update_user_filter_options",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 516,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "analytics-auto-refresh",
+        "property": "n_intervals"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "specific-user-filter",
+        "property": "data"
+      }
+    ],
+    "docstring": "Update the user filter dropdown options."
+  },
+  "analytics-auto-refresh.n_intervals\u2192specific-user-filter.data": {
+    "function": "update_user_filter_options",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 516,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "analytics-auto-refresh",
+        "property": "n_intervals"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "specific-user-filter",
+        "property": "data"
+      }
+    ],
+    "docstring": "Update the user filter dropdown options."
+  },
+  "update_user_filter_options": {
+    "function": "update_user_filter_options",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 516,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "analytics-auto-refresh",
+        "property": "n_intervals"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "specific-user-filter",
+        "property": "data"
+      }
+    ],
+    "docstring": "Update the user filter dropdown options."
+  },
+  "top-pages-content.children": {
+    "function": "update_top_pages",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 552,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "top-pages-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Update top pages content."
+  },
+  "update_top_pages": {
+    "function": "update_top_pages",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 552,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "top-pages-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Update top pages content."
+  },
+  "clear_all_filters": {
+    "function": "clear_all_filters",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 623,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "clear-filters",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [],
+    "docstring": "Clear all filters when clear button is clicked."
+  },
+  "comprehensive-summary-content.children": {
+    "function": "update_comprehensive_summary",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 647,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "comprehensive-summary-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Update comprehensive analytics summary."
+  },
+  "update_comprehensive_summary": {
+    "function": "update_comprehensive_summary",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 647,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "comprehensive-summary-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Update comprehensive analytics summary."
+  },
+  "unique-connections-content.children": {
+    "function": "update_unique_connections",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 878,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "unique-connections-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Update unique connections and IP address analytics."
+  },
+  "update_unique_connections": {
+    "function": "update_unique_connections",
+    "file": "performance_analysis/../../depictio/dash/layouts/admin_analytics_callbacks.py",
+    "line": 878,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "unique-connections-content",
+        "property": "children"
+      }
+    ],
+    "docstring": "Update unique connections and IP address analytics."
+  },
+  "google-oauth-redirect.href": {
+    "function": "handle_google_oauth_login",
+    "file": "performance_analysis/../../depictio/dash/layouts/users_management.py",
+    "line": 884,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "google-oauth-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "google-oauth-redirect",
+        "property": "href"
+      }
+    ],
+    "docstring": "Handle Google OAuth login button click."
+  },
+  "google-oauth-button.n_clicks\u2192google-oauth-redirect.href": {
+    "function": "handle_google_oauth_login",
+    "file": "performance_analysis/../../depictio/dash/layouts/users_management.py",
+    "line": 884,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "google-oauth-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "google-oauth-redirect",
+        "property": "href"
+      }
+    ],
+    "docstring": "Handle Google OAuth login button click."
+  },
+  "handle_google_oauth_login": {
+    "function": "handle_google_oauth_login",
+    "file": "performance_analysis/../../depictio/dash/layouts/users_management.py",
+    "line": 884,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "google-oauth-button",
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "google-oauth-redirect",
+        "property": "href"
+      }
+    ],
+    "docstring": "Handle Google OAuth login button click."
+  },
+  "login-button.n_clicks": {
+    "function": "trigger_save_on_enter",
+    "file": "performance_analysis/../../depictio/dash/layouts/users_management.py",
+    "line": 662,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "auth-modal-listener",
+        "property": "n_events"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "login-button",
+        "property": "n_clicks"
+      }
+    ],
+    "docstring": ""
+  },
+  "auth-modal-listener.n_events\u2192login-button.n_clicks": {
+    "function": "trigger_save_on_enter",
+    "file": "performance_analysis/../../depictio/dash/layouts/users_management.py",
+    "line": 662,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "auth-modal-listener",
+        "property": "n_events"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": "login-button",
+        "property": "n_clicks"
+      }
+    ],
+    "docstring": ""
+  },
+  "disable_login_button": {
+    "function": "disable_login_button",
+    "file": "performance_analysis/../../depictio/dash/layouts/users_management.py",
+    "line": 672,
+    "inputs": [],
+    "outputs": [],
+    "docstring": ""
+  },
+  "disable_register_button": {
+    "function": "disable_register_button",
+    "file": "performance_analysis/../../depictio/dash/layouts/users_management.py",
+    "line": 682,
+    "inputs": [],
+    "outputs": [],
+    "docstring": ""
+  },
+  "handle_auth_and_switch_forms": {
+    "function": "handle_auth_and_switch_forms",
+    "file": "performance_analysis/../../depictio/dash/layouts/users_management.py",
+    "line": 716,
+    "inputs": [],
+    "outputs": [],
+    "docstring": ""
+  },
+  "pattern.n_clicks\u2192pattern.children": {
+    "function": "update_component_selected_display",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper_parts/part_one.py",
+    "line": 22,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN",
+          "value": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      }
+    ],
+    "docstring": "Update component-selected display for components that don't need data selection like Text."
+  },
+  "update_component_selected_display": {
+    "function": "update_component_selected_display",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper_parts/part_one.py",
+    "line": 22,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN",
+          "value": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      }
+    ],
+    "docstring": "Update component-selected display for components that don't need data selection like Text."
+  },
+  "pattern.children\u2192pattern.children": {
+    "function": "update_step_1",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper_parts/part_one.py",
+    "line": 58,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN",
+          "value": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      }
+    ],
+    "docstring": ""
+  },
+  "pattern.value+pattern.value+pattern.n_clicks\u2192pattern.children+pattern.children": {
+    "function": "update_step_1",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper_parts/part_one.py",
+    "line": 58,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN",
+          "value": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      }
+    ],
+    "docstring": ""
+  },
+  "update_step_1": {
+    "function": "update_step_1",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper_parts/part_one.py",
+    "line": 58,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN",
+          "value": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      }
+    ],
+    "docstring": ""
+  },
+  "update_button_list": {
+    "function": "update_button_list",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper_parts/part_two.py",
+    "line": 26,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "stored-add-button",
+        "property": "data"
+      }
+    ],
+    "outputs": [],
+    "docstring": ""
+  },
+  "pattern.data": {
+    "function": "update_aggregation_options",
+    "file": "performance_analysis/../../depictio/dash/modules/card_component/frontend.py",
+    "line": 42,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "Callback to update aggregation dropdown options based on the selected column"
+  },
+  "pattern.n_clicks\u2192pattern.data": {
+    "function": "refresh_multiqc_component",
+    "file": "performance_analysis/../../depictio/dash/modules/multiqc_component/frontend.py",
+    "line": 991,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "Trigger a refresh of the MultiQC component by updating the store data."
+  },
+  "update_last_button_using_btn_option_value": {
+    "function": "update_last_button_using_btn_option_value",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper_parts/part_two.py",
+    "line": 144,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN",
+          "value": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": ""
+  },
+  "pattern.children\u2192pattern.data": {
+    "function": "render_card_value_background",
+    "file": "performance_analysis/../../depictio/dash/modules/card_component/frontend.py",
+    "line": 547,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "PATTERN-MATCHING: Render callback for initial card value computation."
+  },
+  "pattern.value+pattern.value+pattern.n_clicks+pattern.data\u2192pattern.children+pattern.data": {
+    "function": "update_step_3",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper_parts/part_three.py",
+    "line": 130,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN",
+          "value": "PATTERN"
+        },
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN",
+          "value": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN",
+          "value": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": ""
+  },
+  "update_step_3": {
+    "function": "update_step_3",
+    "file": "performance_analysis/../../depictio/dash/layouts/stepper_parts/part_three.py",
+    "line": 130,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN",
+          "value": "PATTERN"
+        },
+        "property": "n_clicks"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN",
+          "value": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN",
+          "value": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": ""
+  },
+  "pattern.n_intervals\u2192pattern.children": {
+    "function": "load_figure_component",
+    "file": "performance_analysis/../../depictio/dash/layouts/draggable_scenarios/progressive_loading.py",
+    "line": 415,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_intervals"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      }
+    ],
+    "docstring": "Load figure component when interval fires."
+  },
+  "load_component": {
+    "function": "load_component",
+    "file": "performance_analysis/../../depictio/dash/layouts/draggable_scenarios/progressive_loading_component.py",
+    "line": 52,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_intervals"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      }
+    ],
+    "docstring": "Load component when interval fires."
+  },
+  "pattern.n_intervals\u2192pattern.data": {
+    "function": "initialize_component_trigger",
+    "file": "performance_analysis/../../depictio/dash/layouts/draggable_scenarios/progressive_loading_component.py",
+    "line": 174,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_intervals"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "Populate trigger Stores after DOM commitment delay."
+  },
+  "initialize_component_trigger": {
+    "function": "initialize_component_trigger",
+    "file": "performance_analysis/../../depictio/dash/layouts/draggable_scenarios/progressive_loading_component.py",
+    "line": 174,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_intervals"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "Populate trigger Stores after DOM commitment delay."
+  },
+  "load_figure_component": {
+    "function": "load_figure_component",
+    "file": "performance_analysis/../../depictio/dash/layouts/draggable_scenarios/progressive_loading.py",
+    "line": 415,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_intervals"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      }
+    ],
+    "docstring": "Load figure component when interval fires."
+  },
+  "refresh_multiqc_component": {
+    "function": "refresh_multiqc_component",
+    "file": "performance_analysis/../../depictio/dash/modules/multiqc_component/frontend.py",
+    "line": 991,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "n_clicks"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "Trigger a refresh of the MultiQC component by updating the store data."
+  },
+  "pattern.value+pattern.value+pattern.value\u2192pattern.data": {
+    "function": "update_stored_metadata",
+    "file": "performance_analysis/../../depictio/dash/modules/multiqc_component/frontend.py",
+    "line": 1009,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "Update stored metadata with current MultiQC visualization state using Pydantic models."
+  },
+  "update_stored_metadata": {
+    "function": "update_stored_metadata",
+    "file": "performance_analysis/../../depictio/dash/modules/multiqc_component/frontend.py",
+    "line": 1009,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "Update stored metadata with current MultiQC visualization state using Pydantic models."
+  },
+  "pattern.data\u2192pattern.data+pattern.value": {
+    "function": "populate_module_options",
+    "file": "performance_analysis/../../depictio/dash/modules/multiqc_component/frontend.py",
+    "line": 1065,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "docstring": ""
+  },
+  "populate_module_options": {
+    "function": "populate_module_options",
+    "file": "performance_analysis/../../depictio/dash/modules/multiqc_component/frontend.py",
+    "line": 1065,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "docstring": ""
+  },
+  "pattern.value\u2192pattern.data+pattern.value": {
+    "function": "update_plot_options",
+    "file": "performance_analysis/../../depictio/dash/modules/multiqc_component/frontend.py",
+    "line": 1088,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "docstring": ""
+  },
+  "update_plot_options": {
+    "function": "update_plot_options",
+    "file": "performance_analysis/../../depictio/dash/modules/multiqc_component/frontend.py",
+    "line": 1088,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "docstring": ""
+  },
+  "pattern.data\u2192pattern.style\u2192pattern.value": {
+    "function": "update_dataset_options",
+    "file": "performance_analysis/../../depictio/dash/modules/multiqc_component/frontend.py",
+    "line": 1128,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "style"
+      }
+    ],
+    "docstring": ""
+  },
+  "pattern.value\u2192pattern.data+pattern.value+pattern.style": {
+    "function": "update_dataset_options",
+    "file": "performance_analysis/../../depictio/dash/modules/multiqc_component/frontend.py",
+    "line": 1128,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "style"
+      }
+    ],
+    "docstring": ""
+  },
+  "update_dataset_options": {
+    "function": "update_dataset_options",
+    "file": "performance_analysis/../../depictio/dash/modules/multiqc_component/frontend.py",
+    "line": 1128,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "style"
+      }
+    ],
+    "docstring": ""
+  },
+  "pattern.value+pattern.value+pattern.value\u2192pattern.children": {
+    "function": "generate_multiqc_plot",
+    "file": "performance_analysis/../../depictio/dash/modules/multiqc_component/frontend.py",
+    "line": 1163,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      }
+    ],
+    "docstring": ""
+  },
+  "generate_multiqc_plot": {
+    "function": "generate_multiqc_plot",
+    "file": "performance_analysis/../../depictio/dash/modules/multiqc_component/frontend.py",
+    "line": 1163,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      }
+    ],
+    "docstring": ""
+  },
+  "pattern.children\u2192pattern.color\u2192pattern.data\u2192pattern.data": {
+    "function": "update_multiqc_component",
+    "file": "performance_analysis/../../depictio/dash/modules/multiqc_component/frontend.py",
+    "line": 1239,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "color"
+      }
+    ],
+    "docstring": "Update MultiQC component with actual data and visualizations."
+  },
+  "pattern.data+pattern.data\u2192pattern.data+pattern.data+pattern.children+pattern.color": {
+    "function": "update_multiqc_component",
+    "file": "performance_analysis/../../depictio/dash/modules/multiqc_component/frontend.py",
+    "line": 1239,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "color"
+      }
+    ],
+    "docstring": "Update MultiQC component with actual data and visualizations."
+  },
+  "update_multiqc_component": {
+    "function": "update_multiqc_component",
+    "file": "performance_analysis/../../depictio/dash/modules/multiqc_component/frontend.py",
+    "line": 1239,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "color"
+      }
+    ],
+    "docstring": "Update MultiQC component with actual data and visualizations."
+  },
+  "debug_interactive_values": {
+    "function": "debug_interactive_values",
+    "file": "performance_analysis/../../depictio/dash/modules/multiqc_component/frontend.py",
+    "line": 1307,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "interactive-values-store",
+        "property": "data"
+      }
+    ],
+    "outputs": [],
+    "docstring": ""
+  },
+  "pattern.figure": {
+    "function": "update_theme_figure",
+    "file": "performance_analysis/../../depictio/dash/modules/figure_component/frontend.py",
+    "line": 2283,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "theme-store",
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "figure"
+      }
+    ],
+    "docstring": "Update figure theme based on current theme using Patch."
+  },
+  "interactive-values-store.data\u2192pattern.figure": {
+    "function": "patch_multiqc_plot_with_interactive_filtering",
+    "file": "performance_analysis/../../depictio/dash/modules/multiqc_component/frontend.py",
+    "line": 1323,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "interactive-values-store",
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "figure"
+      }
+    ],
+    "docstring": "Patch MultiQC plots when interactive filtering is applied (only for joined workflows)."
+  },
+  "patch_multiqc_plot_with_interactive_filtering": {
+    "function": "patch_multiqc_plot_with_interactive_filtering",
+    "file": "performance_analysis/../../depictio/dash/modules/multiqc_component/frontend.py",
+    "line": 1323,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "interactive-values-store",
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "figure"
+      }
+    ],
+    "docstring": "Patch MultiQC plots when interactive filtering is applied (only for joined workflows)."
+  },
+  "theme-store.data\u2192pattern.figure": {
+    "function": "update_theme_figure",
+    "file": "performance_analysis/../../depictio/dash/modules/figure_component/frontend.py",
+    "line": 2283,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "theme-store",
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "figure"
+      }
+    ],
+    "docstring": "Update figure theme based on current theme using Patch."
+  },
+  "update_multiqc_theme": {
+    "function": "update_multiqc_theme",
+    "file": "performance_analysis/../../depictio/dash/modules/multiqc_component/frontend.py",
+    "line": 1652,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "theme-store",
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "figure"
+      }
+    ],
+    "docstring": "Update MultiQC figure theme using Patch - matches figure component pattern."
+  },
+  "pattern.data\u2192pattern.figure": {
+    "function": "patch_figure_interactive",
+    "file": "performance_analysis/../../depictio/dash/modules/figure_component/frontend.py",
+    "line": 2790,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "interactive-values-store",
+        "property": "data"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "figure"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "Handle interactive component filtering (range sliders, dropdowns, etc.)."
+  },
+  "pattern.data\u2192pattern.figure+pattern.data": {
+    "function": "render_multiqc_plot_background",
+    "file": "performance_analysis/../../depictio/dash/modules/multiqc_component/frontend.py",
+    "line": 1684,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "figure"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "Generate MultiQC plot for dashboard restoration."
+  },
+  "render_multiqc_plot_background": {
+    "function": "render_multiqc_plot_background",
+    "file": "performance_analysis/../../depictio/dash/modules/multiqc_component/frontend.py",
+    "line": 1684,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "figure"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "Generate MultiQC plot for dashboard restoration."
+  },
+  "update_jbrowse": {
+    "function": "update_jbrowse",
+    "file": "performance_analysis/../../depictio/dash/modules/jbrowse_component/frontend.py",
+    "line": 30,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      }
+    ],
+    "docstring": ""
+  },
+  "infinite_scroll_component": {
+    "function": "infinite_scroll_component",
+    "file": "performance_analysis/../../depictio/dash/modules/table_component/frontend.py",
+    "line": 152,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "getRowsResponse"
+      }
+    ],
+    "docstring": "INFINITE SCROLL CALLBACK WITH INTERACTIVE COMPONENT SUPPORT"
+  },
+  "design_table_component": {
+    "function": "design_table_component",
+    "file": "performance_analysis/../../depictio/dash/modules/table_component/frontend.py",
+    "line": 845,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      }
+    ],
+    "docstring": "Callback to update card body based on the selected column and aggregation"
+  },
+  "toggle_edit_mode": {
+    "function": "toggle_edit_mode",
+    "file": "performance_analysis/../../depictio/dash/modules/text_component/frontend.py",
+    "line": 62,
+    "inputs": [],
+    "outputs": [],
+    "docstring": "Toggle between display and edit modes."
+  },
+  "start_edit_mode": {
+    "function": "start_edit_mode",
+    "file": "performance_analysis/../../depictio/dash/modules/text_component/frontend.py",
+    "line": 114,
+    "inputs": [],
+    "outputs": [],
+    "docstring": "Start edit mode when title is clicked (triggered by double-click via clientside)."
+  },
+  "update_title_content": {
+    "function": "update_title_content",
+    "file": "performance_analysis/../../depictio/dash/modules/text_component/frontend.py",
+    "line": 177,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "outputs": [],
+    "docstring": "Update title content and order when data changes."
+  },
+  "update_text_alignment": {
+    "function": "update_text_alignment",
+    "file": "performance_analysis/../../depictio/dash/modules/text_component/frontend.py",
+    "line": 216,
+    "inputs": [],
+    "outputs": [],
+    "docstring": "Update text alignment when alignment buttons are clicked."
+  },
+  "pattern.data\u2192pattern.data": {
+    "function": "sync_text_content_for_save",
+    "file": "performance_analysis/../../depictio/dash/modules/text_component/frontend.py",
+    "line": 266,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "Sync text-store updates with stored-metadata-component"
+  },
+  "sync_text_content_for_save": {
+    "function": "sync_text_content_for_save",
+    "file": "performance_analysis/../../depictio/dash/modules/text_component/frontend.py",
+    "line": 266,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "Sync text-store updates with stored-metadata-component"
+  },
+  "update_text_component": {
+    "function": "update_text_component",
+    "file": "performance_analysis/../../depictio/dash/modules/text_component/frontend.py",
+    "line": 412,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      }
+    ],
+    "docstring": "Callback to update text component based on configuration settings"
+  },
+  "update_theme_figure": {
+    "function": "update_theme_figure",
+    "file": "performance_analysis/../../depictio/dash/modules/figure_component/frontend.py",
+    "line": 2283,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "theme-store",
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "figure"
+      }
+    ],
+    "docstring": "Update figure theme based on current theme using Patch."
+  },
+  "pattern.data\u2192pattern.data\u2192pattern.figure": {
+    "function": "render_figure_callback",
+    "file": "performance_analysis/../../depictio/dash/modules/figure_component/frontend.py",
+    "line": 2326,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "figure"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "Pattern-matching callback for independent figure rendering."
+  },
+  "pattern.data\u2192pattern.figure+pattern.data+pattern.data": {
+    "function": "render_figure_callback",
+    "file": "performance_analysis/../../depictio/dash/modules/figure_component/frontend.py",
+    "line": 2326,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "figure"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "Pattern-matching callback for independent figure rendering."
+  },
+  "render_figure_callback": {
+    "function": "render_figure_callback",
+    "file": "performance_analysis/../../depictio/dash/modules/figure_component/frontend.py",
+    "line": 2326,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "figure"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "Pattern-matching callback for independent figure rendering."
+  },
+  "interactive-values-store.data+pattern.data\u2192pattern.figure+pattern.data": {
+    "function": "patch_figure_interactive",
+    "file": "performance_analysis/../../depictio/dash/modules/figure_component/frontend.py",
+    "line": 2790,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "interactive-values-store",
+        "property": "data"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "figure"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "Handle interactive component filtering (range sliders, dropdowns, etc.)."
+  },
+  "patch_figure_interactive": {
+    "function": "patch_figure_interactive",
+    "file": "performance_analysis/../../depictio/dash/modules/figure_component/frontend.py",
+    "line": 2790,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "interactive-values-store",
+        "property": "data"
+      },
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "figure"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "Handle interactive component filtering (range sliders, dropdowns, etc.)."
+  },
+  "update_aggregation_options": {
+    "function": "update_aggregation_options",
+    "file": "performance_analysis/../../depictio/dash/modules/card_component/frontend.py",
+    "line": 42,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "Callback to update aggregation dropdown options based on the selected column"
+  },
+  "pattern.value": {
+    "function": "reset_aggregation_value",
+    "file": "performance_analysis/../../depictio/dash/modules/card_component/frontend.py",
+    "line": 148,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "docstring": ""
+  },
+  "pattern.value\u2192pattern.value": {
+    "function": "reset_aggregation_value",
+    "file": "performance_analysis/../../depictio/dash/modules/card_component/frontend.py",
+    "line": 148,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "docstring": ""
+  },
+  "reset_aggregation_value": {
+    "function": "reset_aggregation_value",
+    "file": "performance_analysis/../../depictio/dash/modules/card_component/frontend.py",
+    "line": 148,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "docstring": ""
+  },
+  "pattern.value\u2192pattern.value\u2192pattern.value\u2192pattern.value\u2192pattern.value\u2192pattern.value\u2192pattern.value": {
+    "function": "pre_populate_card_settings_for_edit",
+    "file": "performance_analysis/../../depictio/dash/modules/card_component/frontend.py",
+    "line": 166,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "edit-page-context",
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "docstring": "Pre-populate card design settings when in edit mode."
+  },
+  "edit-page-context.data\u2192pattern.value+pattern.value+pattern.value+pattern.value+pattern.value++2more": {
+    "function": "pre_populate_card_settings_for_edit",
+    "file": "performance_analysis/../../depictio/dash/modules/card_component/frontend.py",
+    "line": 166,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "edit-page-context",
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "docstring": "Pre-populate card design settings when in edit mode."
+  },
+  "pre_populate_card_settings_for_edit": {
+    "function": "pre_populate_card_settings_for_edit",
+    "file": "performance_analysis/../../depictio/dash/modules/card_component/frontend.py",
+    "line": 166,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "edit-page-context",
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "value"
+      }
+    ],
+    "docstring": "Pre-populate card design settings when in edit mode."
+  },
+  "pattern.children\u2192pattern.children\u2192pattern.children": {
+    "function": "design_card_body",
+    "file": "performance_analysis/../../depictio/dash/modules/card_component/frontend.py",
+    "line": 269,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      }
+    ],
+    "docstring": "Callback to update card body based on the selected column and aggregation"
+  },
+  "design_card_body": {
+    "function": "design_card_body",
+    "file": "performance_analysis/../../depictio/dash/modules/card_component/frontend.py",
+    "line": 269,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      }
+    ],
+    "docstring": "Callback to update card body based on the selected column and aggregation"
+  },
+  "pattern.data\u2192pattern.children+pattern.data": {
+    "function": "render_card_value_background",
+    "file": "performance_analysis/../../depictio/dash/modules/card_component/frontend.py",
+    "line": 547,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "PATTERN-MATCHING: Render callback for initial card value computation."
+  },
+  "render_card_value_background": {
+    "function": "render_card_value_background",
+    "file": "performance_analysis/../../depictio/dash/modules/card_component/frontend.py",
+    "line": 547,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "PATTERN-MATCHING: Render callback for initial card value computation."
+  },
+  "pattern.children\u2192pattern.children\u2192pattern.data": {
+    "function": "patch_card_with_filters",
+    "file": "performance_analysis/../../depictio/dash/modules/card_component/frontend.py",
+    "line": 671,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "interactive-values-store",
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "PATTERN-MATCHING: Patching callback for filter-based card updates."
+  },
+  "interactive-values-store.data\u2192pattern.children+pattern.children+pattern.data": {
+    "function": "patch_card_with_filters",
+    "file": "performance_analysis/../../depictio/dash/modules/card_component/frontend.py",
+    "line": 671,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "interactive-values-store",
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "PATTERN-MATCHING: Patching callback for filter-based card updates."
+  },
+  "patch_card_with_filters": {
+    "function": "patch_card_with_filters",
+    "file": "performance_analysis/../../depictio/dash/modules/card_component/frontend.py",
+    "line": 671,
+    "inputs": [
+      {
+        "type": "Input",
+        "id": "interactive-values-store",
+        "property": "data"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "children"
+      },
+      {
+        "type": "Output",
+        "id": {
+          "type": "PATTERN",
+          "index": "PATTERN"
+        },
+        "property": "data"
+      }
+    ],
+    "docstring": "PATTERN-MATCHING: Patching callback for filter-based card updates."
+  }
+}

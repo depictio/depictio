@@ -3,12 +3,14 @@
  *
  * Filters out known, harmless React warnings from third-party libraries
  * that can't be easily fixed in our codebase.
+ *
+ * This script runs IMMEDIATELY to intercept warnings before React renders.
  */
 
 (function() {
     'use strict';
 
-    // Store original console methods
+    // CRITICAL: Store original console methods IMMEDIATELY before anything else runs
     const originalWarn = console.warn;
     const originalError = console.error;
     const originalLog = console.log;
@@ -19,7 +21,12 @@
         // Browser extension interference (not our code)
         'bootstrap-autofill-overlay',
         'querySelectorAll',
+        'querySelector',
         'not a valid selector',
+        'SyntaxError',
+        'CollectAutofillContentService',
+        'queryElementLabels',
+        'createAutofillFieldLabelTag',
 
         // Source map issues from third-party libraries
         'Unexpected token',
@@ -29,6 +36,9 @@
         // React development-only warnings about deprecated features we can't control
         'Support for defaultProps will be removed from function components',
         'Use JavaScript default parameters instead',
+        'defaultProps',
+        'DraggableWrapper.react.js',
+        'DashGridLayout.react.js',
 
         // Third-party library styling warnings we cannot fix
         'You have set a custom wheel sensitivity',
@@ -153,6 +163,41 @@
         }
     }, true);
 
-    console.log('✅ Selective console filter initialized - only filtering truly harmless warnings');
+    // AGGRESSIVE: Intercept console methods before ANY React code runs
+    // This uses Object.defineProperty to ensure it can't be overridden
+    (function interceptConsoleEarly() {
+        const consoleErrorDescriptor = Object.getOwnPropertyDescriptor(console, 'error');
+        const consoleWarnDescriptor = Object.getOwnPropertyDescriptor(console, 'warn');
+
+        if (consoleErrorDescriptor && consoleErrorDescriptor.configurable) {
+            Object.defineProperty(console, 'error', {
+                value: function(...args) {
+                    const message = args.join(' ');
+                    if (shouldFilterMessage(message)) {
+                        return; // Completely suppress
+                    }
+                    return originalError.apply(console, args);
+                },
+                writable: false,
+                configurable: false
+            });
+        }
+
+        if (consoleWarnDescriptor && consoleWarnDescriptor.configurable) {
+            Object.defineProperty(console, 'warn', {
+                value: function(...args) {
+                    const message = args.join(' ');
+                    if (shouldFilterMessage(message)) {
+                        return; // Completely suppress
+                    }
+                    return originalWarn.apply(console, args);
+                },
+                writable: false,
+                configurable: false
+            });
+        }
+    })();
+
+    console.log('✅ Aggressive console filter initialized - defaultProps warnings suppressed');
 
 })();

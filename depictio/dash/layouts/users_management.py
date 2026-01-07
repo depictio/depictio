@@ -1,13 +1,13 @@
 import re
 
+import dash
 import dash_mantine_components as dmc
 import httpx
+from dash import Input, Output, State, ctx, dcc, html
+from dash.exceptions import PreventUpdate
 from dash_extensions import EventListener
 from dash_iconify import DashIconify
 
-import dash
-from dash import Input, Output, State, ctx, dcc, html
-from dash.exceptions import PreventUpdate
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _verify_password
@@ -15,7 +15,6 @@ from depictio.api.v1.endpoints.user_endpoints.utils import login_user
 from depictio.dash.api_calls import (
     api_call_fetch_user_from_email,
     api_call_get_google_oauth_login_url,
-    api_call_handle_google_oauth_callback,
     api_call_register_user,
 )
 from depictio.dash.colors import colors  # Import Depictio color palette
@@ -653,7 +652,94 @@ layout = html.Div(
 )
 
 
+def register_google_oauth_callbacks(app):
+    """
+    Register Google OAuth authentication callbacks.
+
+    Only called when settings.auth.google_oauth_enabled is True.
+
+    Args:
+        app: Dash app instance
+    """
+    logger.info("🔐 Registering Google OAuth callbacks")
+
+    # Google OAuth callback using server-side callback
+    @app.callback(
+        Output("google-oauth-redirect", "href"),
+        Input("google-oauth-button", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def handle_google_oauth_login(n_clicks):
+        """Handle Google OAuth login button click."""
+        if not n_clicks:
+            raise PreventUpdate
+
+        if not settings.auth.google_oauth_enabled:
+            logger.warning("Google OAuth is not enabled")
+            raise PreventUpdate
+
+        try:
+            # Call the API to get the Google OAuth login URL
+            oauth_data = api_call_get_google_oauth_login_url()
+
+            if oauth_data and "authorization_url" in oauth_data:
+                authorization_url = oauth_data["authorization_url"]
+                logger.info(f"Redirecting to Google OAuth: {authorization_url}")
+                return authorization_url
+            else:
+                logger.error("Failed to get OAuth URL from API")
+                raise PreventUpdate
+
+        except Exception as e:
+            logger.error(f"Error initiating Google OAuth: {e}")
+            raise PreventUpdate
+
+    # Add JavaScript redirect handling for Google OAuth
+    app.clientside_callback(
+        """
+        function(href) {
+            if (href && href !== "") {
+                window.location.href = href;
+            }
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("google-oauth-redirect", "target"),
+        Input("google-oauth-redirect", "href"),
+        prevent_initial_call=True,
+    )
+
+
 def register_callbacks_users_management(app):
+    @app.callback(
+        [
+            Output("auth-modal", "opened", allow_duplicate=True),
+            Output("modal-content", "children", allow_duplicate=True),
+            Output("modal-state-store", "data", allow_duplicate=True),
+        ],
+        [Input("url", "pathname")],
+        [State("local-store", "data")],
+        prevent_initial_call=True,
+    )
+    def auto_open_auth_modal_on_auth_page(pathname, local_data):
+        """Automatically open the auth modal when user navigates to /auth page."""
+        logger.info(
+            f"Auto-open check: pathname={pathname}, logged_in={local_data.get('logged_in', False) if local_data else False}"
+        )
+
+        if pathname != "/auth":
+            return dash.no_update, dash.no_update, dash.no_update
+
+        # Don't show modal for authenticated users
+        if local_data and local_data.get("logged_in", False):
+            logger.info("User is already logged in, not showing auth modal")
+            return False, dash.no_update, dash.no_update
+
+        # Open modal with login form
+        logger.info("Opening auth modal with login form")
+        content = render_login_form()
+        return True, content, "login"
+
     @app.callback(
         Output("login-button", "n_clicks"),
         Input("auth-modal-listener", "n_events"),
@@ -712,6 +798,7 @@ def register_callbacks_users_management(app):
             State("modal-open-store", "data"),
             State("local-store", "data"),
         ],
+        prevent_initial_call=True,
     )
     def handle_auth_and_switch_forms(
         n_clicks_register,
@@ -874,116 +961,115 @@ def register_callbacks_users_management(app):
             dash.no_update,
         )
 
-
-# Google OAuth callback using server-side callback
-@dash.callback(
-    Output("google-oauth-redirect", "href"),
-    Input("google-oauth-button", "n_clicks"),
-    prevent_initial_call=True,
-)
-def handle_google_oauth_login(n_clicks):
-    """Handle Google OAuth login button click."""
-    if not n_clicks:
-        raise PreventUpdate
-
-    if not settings.auth.google_oauth_enabled:
-        logger.warning("Google OAuth is not enabled")
-        raise PreventUpdate
-
-    try:
-        # Call the API to get the Google OAuth login URL
-        oauth_data = api_call_get_google_oauth_login_url()
-
-        if oauth_data and "authorization_url" in oauth_data:
-            authorization_url = oauth_data["authorization_url"]
-            logger.info(f"Redirecting to Google OAuth: {authorization_url}")
-            return authorization_url
-        else:
-            logger.error("Failed to get OAuth URL from API")
-            raise PreventUpdate
-
-    except Exception as e:
-        logger.error(f"Error initiating Google OAuth: {e}")
-        raise PreventUpdate
-
-
-# Add JavaScript redirect handling for Google OAuth
-dash.clientside_callback(
-    """
-    function(href) {
-        if (href && href !== "") {
-            window.location.href = href;
-        }
-        return window.dash_clientside.no_update;
-    }
-    """,
-    Output("google-oauth-redirect", "target"),
-    Input("google-oauth-redirect", "href"),
-    prevent_initial_call=True,
-)
+    # Google OAuth callbacks - only register if enabled in settings
+    if settings.auth.google_oauth_enabled:
+        register_google_oauth_callbacks(app)
+    else:
+        logger.info("🔐 Google OAuth disabled - skipping OAuth callback registration")
 
 
 # Add Google OAuth callback handler for when user returns from Google
-@dash.callback(
-    [
-        Output("local-store", "data", allow_duplicate=True),
-    ],
-    [
-        Input("url", "search"),
-    ],
-    [
-        State("local-store", "data"),
-    ],
-    prevent_initial_call=True,
-)
-def handle_google_oauth_callback(search_params, local_data):
-    """Handle OAuth callback when user returns from Google."""
-    if not search_params:
-        raise PreventUpdate
+# @dash.callback(
+#     [
+#         Output("local-store", "data", allow_duplicate=True),
+#     ],
+#     [
+#         Input("url", "search"),
+#     ],
+#     [
+#         State("local-store", "data"),
+#     ],
+#     prevent_initial_call=True,
+# )
+# def handle_google_oauth_callback(search_params, local_data):
+#     """
+#     Handle OAuth callback when user returns from Google.
 
-    # Parse URL parameters
-    from urllib.parse import parse_qs, urlparse
+#     PERFORMANCE OPTIMIZATION (Phase 4E-3):
+#     - Added CRITICAL early return BEFORE any overhead (uuid, time, logging)
+#     - This callback is triggered by url.search on EVERY page load
+#     - Only needs to process when returning from Google OAuth (with ?code= and ?state= params)
+#     - Early return eliminates ~87ms callback execution from baseline flow
+#     """
+#     # CRITICAL OPTIMIZATION: Skip immediately if no search params
+#     # Prevents uuid generation, time tracking, and logging overhead on normal page loads
+#     if not search_params or search_params in ["", "?"]:
+#         raise PreventUpdate
 
-    parsed = urlparse(f"?{search_params}" if not search_params.startswith("?") else search_params)
-    params = parse_qs(parsed.query)
+#     # Profiling code only runs when search params are present (OAuth callback)
+#     import time
+#     import uuid
 
-    # Check if this is an OAuth callback
-    if "code" not in params or "state" not in params:
-        raise PreventUpdate
+#     # Generate unique call ID for tracking duplicates
+#     call_id = str(uuid.uuid4())[:8]
+#     start_time = time.time()
 
-    code = params["code"][0]
-    state = params["state"][0]
+#     logger.info(f"[PERF-4E][{call_id}] 🔐 OAUTH CALLBACK ENTRY (has search params)")
+#     logger.info(f"[PERF-4E][{call_id}]   search_params: {search_params[:100]}")
+#     logger.info(f"[PERF-4E][{call_id}]   local_data: {'present' if local_data else 'None'}")
 
-    try:
-        # Call the OAuth callback API
-        oauth_result = api_call_handle_google_oauth_callback(code, state)
+#     # Parse URL parameters
+#     from urllib.parse import parse_qs, urlparse
 
-        if oauth_result and oauth_result.get("success"):
-            # Extract token data and user info
-            token_data = oauth_result["token"]
-            user_data = oauth_result["user"]
+#     parse_start = time.time()
+#     parsed = urlparse(f"?{search_params}" if not search_params.startswith("?") else search_params)
+#     params = parse_qs(parsed.query)
+#     parse_duration = (time.time() - parse_start) * 1000
+#     logger.info(f"[PERF-4E][{call_id}]   URL parse: {parse_duration:.0f}ms")
 
-            # Create session data similar to regular login (only include TokenBase compatible fields)
-            session_data = {
-                "access_token": token_data["access_token"],
-                "refresh_token": token_data["refresh_token"],
-                "token_type": token_data["token_type"],
-                "expire_datetime": token_data["expire_datetime"],
-                "refresh_expire_datetime": token_data["refresh_expire_datetime"],
-                "logged_in": True,
-                "user_id": token_data["user_id"],
-            }
+#     # Check if this is an OAuth callback
+#     if "code" not in params or "state" not in params:
+#         elapsed = (time.time() - start_time) * 1000
+#         logger.info(
+#             f"[PERF-4E][{call_id}] 🔐 OAUTH CALLBACK EXIT (not OAuth flow) - {elapsed:.0f}ms"
+#         )
+#         raise PreventUpdate
 
-            logger.info(f"Google OAuth login successful for: {user_data['email']}")
+#     code = params["code"][0]
+#     state = params["state"][0]
+#     logger.info(f"[PERF-4E][{call_id}]   OAuth code present: {code[:20]}...")
 
-            # Update session
-            return [session_data]
-        else:
-            logger.error(
-                f"OAuth callback failed: {oauth_result.get('message', 'Unknown error') if oauth_result else 'API call failed'}"
-            )
-            raise PreventUpdate
+#     try:
+#         # Call the OAuth callback API
+#         api_start = time.time()
+#         oauth_result = api_call_handle_google_oauth_callback(code, state)
+#         api_duration = (time.time() - api_start) * 1000
+#         logger.info(f"[PERF-4E][{call_id}]   API call: {api_duration:.0f}ms")
 
-    except Exception as e:
-        logger.error(f"Error handling OAuth callback: {e}")
-        raise PreventUpdate
+#         if oauth_result and oauth_result.get("success"):
+#             # Extract token data and user info
+#             token_data = oauth_result["token"]
+#             user_data = oauth_result["user"]
+
+#             # Create session data similar to regular login (only include TokenBase compatible fields)
+#             session_data = {
+#                 "access_token": token_data["access_token"],
+#                 "refresh_token": token_data["refresh_token"],
+#                 "token_type": token_data["token_type"],
+#                 "expire_datetime": token_data["expire_datetime"],
+#                 "refresh_expire_datetime": token_data["refresh_expire_datetime"],
+#                 "logged_in": True,
+#                 "user_id": token_data["user_id"],
+#             }
+
+#             elapsed = (time.time() - start_time) * 1000
+#             logger.info(f"[PERF-4E][{call_id}] 🔐 OAUTH CALLBACK EXIT (success) - {elapsed:.0f}ms")
+#             logger.info(f"Google OAuth login successful for: {user_data['email']}")
+
+#             # Update session
+#             return [session_data]
+#         else:
+#             elapsed = (time.time() - start_time) * 1000
+#             logger.info(
+#                 f"[PERF-4E][{call_id}] 🔐 OAUTH CALLBACK EXIT (API failed) - {elapsed:.0f}ms"
+#             )
+#             logger.error(
+#                 f"OAuth callback failed: {oauth_result.get('message', 'Unknown error') if oauth_result else 'API call failed'}"
+#             )
+#             raise PreventUpdate
+
+#     except Exception as e:
+#         elapsed = (time.time() - start_time) * 1000
+#         logger.info(f"[PERF-4E][{call_id}] 🔐 OAUTH CALLBACK EXIT (exception) - {elapsed:.0f}ms")
+#         logger.error(f"Error handling OAuth callback: {e}")
+#         raise PreventUpdate

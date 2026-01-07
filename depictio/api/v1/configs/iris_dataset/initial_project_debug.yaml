@@ -1,0 +1,36 @@
+id: "646b0f3c1e4a2d7f8e5b8c9a"
+name: "Iris Dataset Project Data Analysis"
+is_public: true
+workflows:
+  - id: "646b0f3c1e4a2d7f8e5b8c9b"
+    name: "iris_workflow"
+    engine:
+      name: "python"
+    data_location:
+      structure: "flat"
+      locations:
+        # - "{DEPICTIO_DEMO_DATA_LOCATION}/iris_dataset"
+        - ../api/v1/configs/iris_dataset
+    data_collections:
+      - id: "646b0f3c1e4a2d7f8e5b8c9c"
+        data_collection_tag: "iris_table"
+        description: "Iris dataset in CSV format"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: single
+            scan_parameters:
+              filename: "../api/v1/configs/iris_dataset/iris.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+                "sepal.length": "Length of the sepal in cm"
+                "sepal.width": "Width of the sepal in cm"
+                "petal.length": "Length of the petal in cm"
+                "petal.width": "Width of the petal in cm"
+                "variety": "Species of the iris flower"
+                "depictio_run_id": "Unique identifier for the run"
+                "aggregation_time": "Timestamp of the aggregation"

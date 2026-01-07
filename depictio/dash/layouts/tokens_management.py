@@ -434,6 +434,7 @@ def register_tokens_management_callbacks(app):
         State({"type": "delete-token", "index": ALL}, "id"),
         State("local-store", "data"),
         State("delete-token-id-store", "data"),
+        prevent_initial_call=True,
     )
     def handle_callbacks(
         add_clicks,

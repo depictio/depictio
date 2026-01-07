@@ -1,14 +1,21 @@
+from datetime import datetime
+
 import dash
 import dash_ag_grid as dag
 import dash_mantine_components as dmc
 import httpx
-from dash import ALL, MATCH, Input, Output, State, callback, ctx, html
+from dash import ALL, MATCH, Input, Output, State, callback, clientside_callback, ctx, html
 from dash_iconify import DashIconify
 
 # Depictio imports
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
+from depictio.dash.api_calls import (
+    api_call_fetch_user_from_token,
+    api_call_get_dashboard,
+    api_call_save_dashboard,
+)
 
 # Stepper parts imports
 from depictio.dash.layouts.stepper_parts.part_one import register_callbacks_stepper_part_one
@@ -17,6 +24,7 @@ from depictio.dash.layouts.stepper_parts.part_two import register_callbacks_step
 from depictio.dash.modules.card_component.frontend import design_card
 from depictio.dash.modules.figure_component.frontend import design_figure
 from depictio.dash.modules.interactive_component.frontend import design_interactive
+from depictio.models.models.projects import ProjectResponse
 
 min_step = 0
 max_step = 3
@@ -46,12 +54,270 @@ def register_callbacks_stepper(app):
     register_callbacks_stepper_part_two(app)
     register_callbacks_stepper_part_three(app)
 
+    # Initialize stored-add-button for stepper page
+    @app.callback(
+        Output("stored-add-button", "data", allow_duplicate=True),
+        Input("stepper-init-trigger", "n_intervals"),
+        State("stepper-page-context", "data"),
+        prevent_initial_call=True,
+    )
+    def initialize_stepper_button_store(n_intervals, stepper_context):
+        """Initialize the stored-add-button Store for stepper page on load."""
+        if n_intervals and n_intervals > 0 and stepper_context:
+            component_id = stepper_context.get("component_id", "stepper-component")
+            logger.info(
+                f"🎯 STEPPER INIT - Initializing button store with component_id: {component_id}"
+            )
+            # Use stepper-component as the index for pattern matching
+            return {
+                "count": 1,
+                "_id": "stepper-component",  # Fixed index for stepper page
+            }
+        raise dash.exceptions.PreventUpdate
+
+    @app.callback(
+        Output("stepper-save-status", "data"),
+        Input({"type": "btn-done", "index": "stepper-component"}, "n_clicks"),
+        State({"type": "stored-metadata-component", "index": ALL}, "data"),
+        State("stepper-page-context", "data"),
+        State("local-store", "data"),
+        prevent_initial_call=True,
+    )
+    def save_stepper_component(n_clicks, stored_metadata, stepper_context, local_store):
+        """
+        Save component metadata from stepper page to dashboard before redirecting.
+
+        This callback is triggered when btn-done is clicked on the stepper page.
+        It collects the component configuration from the stored-metadata-component Store,
+        adds it to the dashboard, and saves to the database.
+
+        Args:
+            n_clicks: Button click count
+            stored_metadata: List of component metadata from all stored-metadata-component Stores
+            stepper_context: Context data with dashboard_id, component_id, and mode
+            local_store: User authentication data
+
+        Returns:
+            dict: Save status with success/error information
+        """
+        if not n_clicks or n_clicks == 0:
+            raise dash.exceptions.PreventUpdate
+
+        logger.info("💾 STEPPER SAVE - Starting component save from stepper page")
+
+        # Validate authentication
+        if not local_store or "access_token" not in local_store:
+            error_msg = "User not authenticated"
+            logger.error(f"❌ STEPPER SAVE - {error_msg}")
+            return {"success": False, "error": error_msg}
+
+        TOKEN = local_store["access_token"]
+
+        # Extract context
+        if not stepper_context:
+            error_msg = "Stepper context missing"
+            logger.error(f"❌ STEPPER SAVE - {error_msg}")
+            return {"success": False, "error": error_msg}
+
+        dashboard_id = stepper_context.get("dashboard_id")
+        component_id = stepper_context.get("component_id")
+        mode = stepper_context.get("mode", "add")
+
+        logger.info(
+            f"💾 STEPPER SAVE - Dashboard: {dashboard_id}, Component: {component_id}, Mode: {mode}"
+        )
+
+        # Fetch current dashboard data
+        try:
+            dashboard_data = api_call_get_dashboard(dashboard_id, TOKEN)
+            if not dashboard_data:
+                error_msg = f"Failed to fetch dashboard data for {dashboard_id}"
+                logger.error(f"❌ STEPPER SAVE - {error_msg}")
+                return {"success": False, "error": error_msg}
+        except Exception as e:
+            error_msg = f"Error fetching dashboard: {str(e)}"
+            logger.error(f"❌ STEPPER SAVE - {error_msg}")
+            return {"success": False, "error": error_msg}
+
+        # Check user permissions
+        current_user = api_call_fetch_user_from_token(TOKEN)
+        if not current_user:
+            error_msg = "Failed to fetch user from token"
+            logger.error(f"❌ STEPPER SAVE - {error_msg}")
+            return {"success": False, "error": error_msg}
+
+        owner_ids = [str(e["id"]) for e in dashboard_data.get("permissions", {}).get("owners", [])]
+        if str(current_user.id) not in owner_ids:
+            error_msg = "User does not have permission to edit this dashboard"
+            logger.error(f"❌ STEPPER SAVE - {error_msg}")
+            return {"success": False, "error": error_msg}
+
+        # Find the new component metadata
+        # The stepper always uses fixed index "stepper-component" (see stepper_page.py:148)
+        # We need to find metadata with this index and then update it to the final component_id
+        STEPPER_INDEX = "stepper-component"
+        new_component_metadata = None
+
+        for meta in stored_metadata:
+            if meta and meta.get("index"):
+                meta_index = str(meta["index"])
+                # Match the stepper fixed index with or without -tmp suffix
+                if meta_index == STEPPER_INDEX or meta_index == f"{STEPPER_INDEX}-tmp":
+                    new_component_metadata = meta.copy()
+                    logger.info(
+                        f"💾 STEPPER SAVE - Found component metadata with stepper index: {meta_index}"
+                    )
+                    break
+
+        if not new_component_metadata:
+            error_msg = f"Could not find component metadata with stepper index '{STEPPER_INDEX}'"
+            logger.error(f"❌ STEPPER SAVE - {error_msg}")
+            logger.error(
+                f"❌ STEPPER SAVE - Available metadata indices: {[m.get('index') for m in stored_metadata if m]}"
+            )
+            return {"success": False, "error": error_msg}
+
+        # Clean up metadata: remove -tmp suffix, set correct index
+        new_component_metadata["index"] = component_id
+        new_component_metadata["parent_index"] = None  # Not a child component
+        new_component_metadata["last_updated"] = datetime.now().isoformat()
+
+        logger.info(
+            f"💾 STEPPER SAVE - Component metadata: type={new_component_metadata.get('component_type')}, "
+            f"title={new_component_metadata.get('title')}"
+        )
+
+        # Get existing metadata and layout
+        existing_metadata = dashboard_data.get("stored_metadata", [])
+        existing_layout = dashboard_data.get("stored_layout_data", [])
+
+        if mode == "edit":
+            # Edit mode: replace existing component
+            existing_metadata = [m for m in existing_metadata if m.get("index") != component_id]
+            existing_layout = [
+                layout_item
+                for layout_item in existing_layout
+                if layout_item.get("i") != f"box-{component_id}"
+            ]
+            logger.info(f"💾 STEPPER SAVE - EDIT mode: Replacing component {component_id}")
+        else:
+            # Add mode: create new component
+            logger.info(f"💾 STEPPER SAVE - ADD mode: Adding new component {component_id}")
+
+        # Add new component to metadata
+        existing_metadata.append(new_component_metadata)
+
+        # Create default layout for new component if not in edit mode
+        if mode == "add" or not any(
+            layout_item.get("i") == f"box-{component_id}" for layout_item in existing_layout
+        ):
+            # Calculate position: try to place new component in an empty spot
+            # For simplicity, place at bottom of existing components
+            max_y = 0
+            if existing_layout:
+                max_y = max(
+                    layout_item.get("y", 0) + layout_item.get("h", 0)
+                    for layout_item in existing_layout
+                )
+
+            new_layout = {
+                "i": f"box-{component_id}",
+                "x": 0,
+                "y": max_y,
+                "w": 6,  # Half width
+                "h": 4,  # Medium height
+                "minW": 2,
+                "minH": 2,
+            }
+            existing_layout.append(new_layout)
+            logger.info(f"💾 STEPPER SAVE - Created default layout: {new_layout}")
+
+        # Update dashboard data
+        dashboard_data["stored_metadata"] = existing_metadata
+        dashboard_data["stored_layout_data"] = existing_layout
+
+        # Save to database
+        try:
+            save_success = api_call_save_dashboard(dashboard_id, dashboard_data, TOKEN)
+            if save_success:
+                logger.info(
+                    f"✅ STEPPER SAVE - Successfully saved component {component_id} to dashboard {dashboard_id}"
+                )
+                return {
+                    "success": True,
+                    "dashboard_id": dashboard_id,
+                    "component_id": component_id,
+                    "mode": mode,
+                }
+            else:
+                error_msg = "Save operation returned False"
+                logger.error(f"❌ STEPPER SAVE - {error_msg}")
+                return {"success": False, "error": error_msg}
+        except Exception as e:
+            error_msg = f"Error saving dashboard: {str(e)}"
+            logger.error(f"❌ STEPPER SAVE - {error_msg}")
+            return {"success": False, "error": error_msg}
+
+    @app.callback(
+        Output("url", "pathname", allow_duplicate=True),
+        Input("stepper-save-status", "data"),
+        State("stepper-page-context", "data"),
+        prevent_initial_call=True,
+    )
+    def complete_component_and_return(save_status, stepper_context):
+        """
+        Navigate back to dashboard after component save completion.
+
+        This callback waits for the save_stepper_component callback to complete,
+        then navigates back to the dashboard.
+
+        Args:
+            save_status: Save status from save_stepper_component callback
+            stepper_context: Context data with dashboard_id and component_id
+
+        Returns:
+            str: Dashboard URL to navigate to
+        """
+        if not save_status:
+            raise dash.exceptions.PreventUpdate
+
+        # Check if save was successful
+        if not save_status.get("success"):
+            error_msg = save_status.get("error", "Unknown error")
+            logger.error(f"❌ STEPPER COMPLETE - Save failed: {error_msg}")
+            # TODO: Show notification to user
+            raise dash.exceptions.PreventUpdate
+
+        # Get dashboard_id from save_status or context
+        dashboard_id = save_status.get("dashboard_id")
+        if not dashboard_id and stepper_context:
+            dashboard_id = stepper_context.get("dashboard_id")
+
+        if not dashboard_id:
+            logger.error("❌ STEPPER COMPLETE - Could not determine dashboard_id")
+            raise dash.exceptions.PreventUpdate
+
+        component_id = save_status.get("component_id", "unknown")
+
+        # Detect app context from stepper context
+        is_edit_mode = stepper_context.get("is_edit_mode", False) if stepper_context else False
+        app_prefix = "dashboard-edit" if is_edit_mode else "dashboard"
+
+        logger.info(
+            f"✅ STEPPER COMPLETE - Returning to {app_prefix} {dashboard_id} "
+            f"(component: {component_id})"
+        )
+
+        return f"/{app_prefix}/{dashboard_id}"
+
+    # Legacy modal close callback - kept for backward compatibility
     @app.callback(
         Output({"type": "modal", "index": MATCH}, "opened"),
         [Input({"type": "btn-done", "index": MATCH}, "n_clicks")],
         prevent_initial_call=True,
     )
     def close_modal(n_clicks):
+        """Legacy modal close - kept for backward compatibility."""
         if n_clicks > 0:
             return False
         return True
@@ -104,12 +370,36 @@ def register_callbacks_stepper(app):
         else:
             component_selected = "None"
 
-        project = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/projects/get/from_dashboard_id/{pathname.split('/')[-1]}",
-            headers={
-                "Authorization": f"Bearer {TOKEN}",
-            },
-        ).json()
+        # Extract dashboard_id from pathname
+        # URL format: /dashboard/{dashboard_id}/component/add/{component_id}
+        path_parts = pathname.split("/")
+        if "/component/add/" in pathname:
+            dashboard_id = path_parts[2]  # Get dashboard_id, not component_id
+        else:
+            dashboard_id = path_parts[-1]  # Fallback for regular dashboard URLs
+
+        try:
+            response = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/projects/get/from_dashboard_id/{dashboard_id}",
+                headers={
+                    "Authorization": f"Bearer {TOKEN}",
+                },
+            )
+            response.raise_for_status()
+            response_data = response.json()
+            # Handle nested 'project' key in response (API returns {'project': {...}, 'delta_locations': {}})
+            project_dict = response_data.get("project", response_data)
+            # Use ProjectResponse.from_mongo() to convert _id → id recursively
+            project = ProjectResponse.from_mongo(project_dict).model_dump()
+        except Exception as e:
+            logger.error(f"Failed to fetch project from dashboard_id {dashboard_id}: {e}")
+            raise dash.exceptions.PreventUpdate
+
+        # Guard: Check if project has workflows
+        if "workflows" not in project or not project["workflows"]:
+            logger.warning(f"Project has no workflows: {response_data}")
+            return [], None
+
         all_wf_dc = project["workflows"]
 
         mapping_component_data_collection = {
@@ -136,7 +426,7 @@ def register_callbacks_stepper(app):
                 seen_workflow_ids.add(wf["id"])
                 valid_wfs.append(
                     {
-                        "label": f"{wf['engine']['name']}/{wf['name']}",
+                        "label": wf.get("workflow_tag", wf.get("name", wf["id"])),
                         "value": wf["id"],
                     }
                 )
@@ -170,14 +460,39 @@ def register_callbacks_stepper(app):
         else:
             component_selected = "None"
 
-        project = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/projects/get/from_dashboard_id/{pathname.split('/')[-1]}",
-            headers={
-                "Authorization": f"Bearer {TOKEN}",
-            },
-        ).json()
+        # Extract dashboard_id from pathname
+        # URL format: /dashboard/{dashboard_id}/component/add/{component_id}
+        path_parts = pathname.split("/")
+        if "/component/add/" in pathname:
+            dashboard_id = path_parts[2]  # Get dashboard_id, not component_id
+        else:
+            dashboard_id = path_parts[-1]  # Fallback for regular dashboard URLs
+
+        try:
+            response = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/projects/get/from_dashboard_id/{dashboard_id}",
+                headers={
+                    "Authorization": f"Bearer {TOKEN}",
+                },
+            )
+            response.raise_for_status()
+            response_data = response.json()
+            # Handle nested 'project' key in response (API returns {'project': {...}, 'delta_locations': {}})
+            project_dict = response_data.get("project", response_data)
+            # Use ProjectResponse.from_mongo() to convert _id → id recursively
+            project = ProjectResponse.from_mongo(project_dict).model_dump()
+        except Exception as e:
+            logger.error(f"Failed to fetch project from dashboard_id {dashboard_id}: {e}")
+            raise dash.exceptions.PreventUpdate
+
         logger.info(f"Id: {id}")
         logger.info(f"Selected workflow: {selected_workflow}")
+
+        # Guard: Check if project has workflows
+        if "workflows" not in project or not project["workflows"]:
+            logger.warning(f"Project has no workflows: {response_data}")
+            return [], None
+
         all_wf_dc = project["workflows"]
         logger.info(f"All workflows and data collections: {all_wf_dc}")
         selected_wf_list = [wf for wf in all_wf_dc if wf["id"] == selected_workflow]
@@ -489,7 +804,7 @@ def register_callbacks_stepper(app):
                 [
                     dmc.Group(
                         [
-                            DashIconify(icon="mdi:table-eye", width=20, color="#228be6"),
+                            DashIconify(icon="mdi:table-eye", width=20),
                             dmc.Text("Data Preview", fw="bold", size="md"),
                         ],
                         gap="xs",
@@ -973,9 +1288,9 @@ def create_stepper_output(n, active):
                 opened=True,
                 size=MODAL_CONFIG["size"],
                 centered=False,  # Don't center for fullscreen
-                withCloseButton=True,
-                closeOnClickOutside=True,
-                closeOnEscape=True,
+                withCloseButton=False,
+                closeOnClickOutside=False,
+                closeOnEscape=False,
                 trapFocus=False,  # Fix DMC Switch clickability in modals
                 fullScreen=True,
                 styles={
@@ -997,6 +1312,305 @@ def create_stepper_output(n, active):
     # logger.info(f"TEST MODAL: {modal}")
 
     return modal
+
+
+def create_stepper_content(n, active):
+    """
+    Create stepper content as standard layout (not modal).
+
+    This function creates the same stepper structure as create_stepper_output,
+    but returns it as a standard page layout instead of wrapping it in a modal.
+    This is used by the stepper page for route-based component creation/editing.
+
+    Args:
+        n: Component index/identifier for pattern matching callbacks
+        active: Initial active step (0-3)
+
+    Returns:
+        dmc.Stack: Stepper content with footer in standard page layout
+    """
+    logger.info(f"Creating stepper content (standard layout) for index {n}")
+    logger.info(f"Active step: {active}")
+
+    # Component Selection Display and Data Source (Step 2)
+    stepper_dropdowns = dmc.Stack(
+        [
+            # Component Selection Display
+            dmc.Stack(
+                [
+                    dmc.Title(
+                        "Select Data Source",
+                        order=3,
+                        ta="center",
+                        fw="bold",
+                        mb="xs",
+                    ),
+                    dmc.Text(
+                        "Choose the workflow and data collection for your component",
+                        size="sm",
+                        c="gray",
+                        ta="center",
+                        mb="md",
+                    ),
+                ],
+                gap="xs",
+            ),
+            # Selected Component Badge
+            dmc.Group(
+                [
+                    dmc.Text(
+                        "Selected Component:",
+                        fw="bold",
+                        size="md",
+                    ),
+                    html.Div(
+                        id={"type": "component-selected", "index": n},
+                        children=dmc.Badge(
+                            "None",
+                            size="lg",
+                            variant="outline",
+                            color="gray",
+                        ),
+                    ),
+                ],
+                justify="center",
+                align="center",
+                gap="sm",
+            ),
+            dmc.Divider(variant="solid"),
+            # Data Selection
+            dmc.Stack(
+                [
+                    dmc.SimpleGrid(
+                        cols=2,
+                        spacing="lg",
+                        children=[
+                            dmc.Select(
+                                id={"type": "workflow-selection-label", "index": n},
+                                label=dmc.Group(
+                                    [
+                                        DashIconify(icon="flat-color-icons:workflow", width=20),
+                                        dmc.Text("Workflow", fw="bold", size="md"),
+                                    ],
+                                    gap="xs",
+                                ),
+                                placeholder="Select workflow...",
+                                size="md",
+                            ),
+                            dmc.Select(
+                                id={
+                                    "type": "datacollection-selection-label",
+                                    "index": n,
+                                },
+                                label=dmc.Group(
+                                    [
+                                        DashIconify(icon="bxs:data", width=20),
+                                        dmc.Text("Data Collection", fw="bold", size="md"),
+                                    ],
+                                    gap="xs",
+                                ),
+                                placeholder="Select data collection...",
+                                size="md",
+                            ),
+                        ],
+                    ),
+                ],
+                gap="sm",
+            ),
+            # Data Collection Information
+            html.Div(id={"type": "dropdown-output", "index": n}),
+            # Data Preview Section
+            html.Div(id={"type": "stepper-data-preview", "index": n}),
+        ],
+        gap="lg",
+    )
+
+    # Component Type Selection (Step 1)
+    buttons_list = html.Div(
+        [
+            html.Div(
+                id={
+                    "type": "buttons-list",
+                    "index": n,
+                }
+            ),
+            html.Div(
+                id={
+                    "type": "store-list",
+                    "index": n,
+                }
+            ),
+        ]
+    )
+
+    # Define stepper steps
+    step_one = dmc.StepperStep(
+        label="Component Type",
+        description="Choose the type of dashboard component to create",
+        children=buttons_list,
+        id={"type": "stepper-step-2", "index": n},
+    )
+
+    step_two = dmc.StepperStep(
+        label="Data Source",
+        description="Connect your component to data",
+        children=stepper_dropdowns,
+        id={"type": "stepper-step-1", "index": n},
+    )
+
+    step_three = dmc.StepperStep(
+        label="Component Design",
+        description="Customize the appearance and behavior of your component",
+        children=html.Div(
+            id={
+                "type": "output-stepper-step-3",
+                "index": n,
+            },
+        ),
+        id={"type": "stepper-step-3", "index": n},
+    )
+
+    step_completed = dmc.StepperCompleted(
+        children=[
+            dmc.Stack(
+                [
+                    dmc.Title(
+                        "Component Ready!",
+                        order=2,
+                        ta="center",
+                        fw="bold",
+                        c="green",
+                    ),
+                    # Dynamic text based on mode (add/edit)
+                    html.Div(
+                        id={"type": "completion-text", "index": n},
+                        children=dmc.Text(
+                            "Your component has been configured and is ready to be added to your dashboard.",
+                            size="md",
+                            ta="center",
+                            c="gray",
+                            mb="xl",
+                        ),
+                    ),
+                    dmc.Center(
+                        dmc.Button(
+                            # Dynamic button text based on mode
+                            children=html.Div(
+                                id={"type": "btn-done-text", "index": n},
+                                children="Add to Dashboard",
+                            ),
+                            id={
+                                "type": "btn-done",
+                                "index": n,
+                            },
+                            color="green",
+                            variant="filled",
+                            n_clicks=0,
+                            size="xl",
+                            style={
+                                "height": "60px",
+                                "fontSize": "18px",
+                                "fontWeight": "bold",
+                            },
+                            leftSection=DashIconify(icon="bi:check-circle", width=24),
+                        )
+                    ),
+                ],
+                gap="md",
+                align="center",
+            ),
+        ],
+    )
+
+    steps = [step_one, step_two, step_three, step_completed]
+
+    # Create stepper component
+    stepper = dmc.Stepper(
+        id={"type": "stepper-basic-usage", "index": n},
+        active=active,
+        children=steps,
+        color="gray",
+        size="lg",
+        iconSize=42,
+        styles={
+            "stepLabel": {
+                "fontSize": "16px",
+                "fontWeight": "bold",
+            },
+            "stepDescription": {
+                "fontSize": "14px",
+                "color": "var(--mantine-color-dimmed)",
+            },
+        },
+    )
+
+    # Create stepper navigation footer
+    stepper_footer = dmc.Group(
+        justify="center",
+        align="center",
+        children=[
+            dmc.Button(
+                "Back",
+                id={"type": "back-basic-usage", "index": n},
+                variant="outline",
+                color="gray",
+                size="lg",
+                n_clicks=0,
+                leftSection=DashIconify(icon="mdi:arrow-left", width=20),
+            ),
+            dmc.Button(
+                "Next Step",
+                id={"type": "next-basic-usage", "index": n},
+                variant="filled",
+                disabled=True,
+                n_clicks=0,
+                color="gray",
+                size="lg",
+                rightSection=DashIconify(icon="mdi:arrow-right", width=20),
+            ),
+        ],
+    )
+
+    # Create standard layout (NOT modal) with sticky footer
+    content = dmc.Stack(
+        [
+            # Stepper content - scrollable
+            dmc.Box(
+                stepper,
+                style={
+                    "flex": 1,
+                    "overflowY": "auto",
+                    "overflowX": "hidden",
+                    "padding": "1rem",
+                    "minHeight": "0",  # Allow flex item to shrink
+                },
+            ),
+            # Footer - sticky at bottom
+            dmc.Paper(
+                stepper_footer,
+                withBorder=True,
+                p="md",
+                style={
+                    "position": "sticky",
+                    "bottom": 0,
+                    "backgroundColor": "var(--app-surface-color, #ffffff)",
+                    "borderTop": "1px solid var(--app-border-color, #e9ecef)",
+                    "zIndex": 100,
+                    "flexShrink": 0,
+                },
+            ),
+        ],
+        gap=0,
+        style={
+            "height": "100%",
+            "display": "flex",
+            "flexDirection": "column",
+            "overflow": "hidden",
+        },
+    )
+
+    logger.info(f"✅ Created stepper content (standard layout) for index {n}")
+    return content
 
 
 # Modal configuration constants
@@ -1059,11 +1673,15 @@ def update_modal_size_regular(opened):
     return MODAL_CONFIG["size"]
 
 
-@callback(
+# PHASE 2C: Converted to clientside callback for better performance
+clientside_callback(
+    """
+    function(themeData) {
+        const theme = themeData || 'light';
+        return theme === 'dark' ? 'ag-theme-alpine-dark' : 'ag-theme-alpine';
+    }
+    """,
     Output({"type": "stepper-data-grid", "index": MATCH}, "className"),
     Input("theme-store", "data"),
     prevent_initial_call=False,
 )
-def update_ag_grid_theme(theme_data):
-    """Update AG Grid theme class based on current theme."""
-    return _get_ag_grid_theme_class(theme_data)

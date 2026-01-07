@@ -191,6 +191,7 @@
 .react-grid-item:hover .mantine-ActionIcon-root[id*="duplicate_box_button"],
 .react-grid-item:hover .mantine-ActionIcon-root[id*="reset_selection_graph_button"],
 .react-grid-item:hover .mantine-ActionIcon-root[id*="metadata-info-button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="position_menu_btn"],
 .react-grid-item:hover .mantine-ActionIcon-root[id*="partial-data-warning-button"] {
     opacity: 1 !important;
     pointer-events: auto !important;
@@ -217,21 +218,52 @@
     background-color: transparent !important;
 }
 
-/* Hide all action buttons and drag handles completely when edit mode is disabled */
-.drag-handles-hidden .mantine-ActionIconGroup-root,
+/* Hide edit-only action buttons in view mode */
+/* Note: Only hiding .component-action-buttons ActionIconGroup, not .component-view-buttons */
+.drag-handles-hidden .component-action-buttons .mantine-ActionIconGroup-root,
 .drag-handles-hidden .mantine-ActionIcon-root[id*="drag-handle"],
 .drag-handles-hidden .mantine-ActionIcon-root[id*="remove_box_button"],
 .drag-handles-hidden .mantine-ActionIcon-root[id*="edit_box_button"],
 .drag-handles-hidden .mantine-ActionIcon-root[id*="duplicate_box_button"],
+.drag-handles-hidden .mantine-ActionIcon-root[id*="position_menu_btn"],
 .drag-handles-hidden .mantine-ActionIcon-root[id*="alignment_menu_btn"],
-.drag-handles-hidden .mantine-ActionIcon-root[id*="metadata-info-button"],
-.drag-handles-hidden .mantine-ActionIcon-root[id*="partial-data-warning-button"],
-.drag-handles-hidden .metadata-button-wrapper {
+.drag-handles-hidden .mantine-ActionIcon-root[id*="partial-data-warning-button"] {
     display: none !important;
     visibility: hidden !important;
 }
 
+/* View-accessible buttons (reset, metadata): hover-only visibility */
+.drag-handles-hidden .component-view-buttons .mantine-ActionIconGroup-root,
+.drag-handles-hidden .component-view-buttons .mantine-ActionIcon-root {
+    opacity: 0 !important;
+    transition: opacity 0.2s ease !important;
+    pointer-events: auto !important;
+}
+
+/* Show view-accessible buttons on component hover */
+.drag-handles-hidden .react-grid-item:hover .component-view-buttons .mantine-ActionIconGroup-root,
+.drag-handles-hidden .react-grid-item:hover .component-view-buttons .mantine-ActionIcon-root {
+    opacity: 1 !important;
+}
+
+/* Metadata button in view mode: hover-only visibility (like reset buttons) */
+.drag-handles-hidden .metadata-button-wrapper,
+.drag-handles-hidden .mantine-ActionIcon-root[id*="metadata-info-button"] {
+    display: inline-flex !important;
+    visibility: visible !important;
+    opacity: 0 !important;
+    pointer-events: auto !important;
+    transition: opacity 0.2s ease !important;
+}
+
+/* Show metadata button on component hover in view mode */
+.drag-handles-hidden .react-grid-item:hover .metadata-button-wrapper,
+.drag-handles-hidden .react-grid-item:hover .mantine-ActionIcon-root[id*="metadata-info-button"] {
+    opacity: 1 !important;
+}
+
 /* Exception: Keep reset button visible in non-edit mode for scatter plots and interactive components */
+/* Simplified: hover-only visibility in view mode */
 .drag-handles-hidden .mantine-ActionIcon-root[id*="reset_selection_graph_button"] {
     display: flex !important;
     visibility: visible !important;
@@ -243,37 +275,6 @@
 /* Show reset button on component hover (consistent with edit mode behavior) */
 .drag-handles-hidden .react-grid-item:hover .mantine-ActionIcon-root[id*="reset_selection_graph_button"] {
     opacity: 1 !important;
-}
-
-/* ALWAYS show orange reset buttons (when filters are active) - override hover-only behavior */
-/* Try multiple attribute selectors to catch different DMC implementations */
-.react-grid-item .mantine-ActionIcon-root[id*="reset_selection_graph_button"][data-color="orange"],
-.react-grid-item .mantine-ActionIcon-root[id*="reset_selection_graph_button"][color="orange"],
-.react-grid-item .mantine-ActionIcon-root[id*="reset_selection_graph_button"].mantine-ActionIcon-filled,
-.drag-handles-hidden .mantine-ActionIcon-root[id*="reset_selection_graph_button"][data-color="orange"],
-.drag-handles-hidden .mantine-ActionIcon-root[id*="reset_selection_graph_button"][color="orange"],
-.drag-handles-hidden .mantine-ActionIcon-root[id*="reset_selection_graph_button"].mantine-ActionIcon-filled {
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    display: flex !important;
-    visibility: visible !important;
-}
-
-/* Ensure orange reset buttons stay visible in edit mode too */
-.react-grid-item .mantine-ActionIcon-root[id*="reset_selection_graph_button"][data-color="orange"],
-.react-grid-item .mantine-ActionIcon-root[id*="reset_selection_graph_button"][color="orange"],
-.react-grid-item .mantine-ActionIcon-root[id*="reset_selection_graph_button"].mantine-ActionIcon-filled {
-    opacity: 1 !important;
-    pointer-events: auto !important;
-}
-
-/* Class-based approach for more reliable targeting */
-.react-grid-item .reset-button-filtered,
-.drag-handles-hidden .reset-button-filtered {
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    display: flex !important;
-    visibility: visible !important;
 }
 
 /* Reset button container in non-edit mode - transparent by default (for scatter plots and interactive components) */
@@ -303,6 +304,34 @@
 
 /* Hide drag handles when edit mode is disabled */
 .drag-handles-hidden .react-grid-dragHandle {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* Hide all component action buttons in view mode - target the button container */
+.drag-handles-hidden .component-action-buttons {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* Also hide ActionIcon drag handles in view mode - more specific selector */
+.drag-handles-hidden .mantine-ActionIcon-root.react-grid-dragHandle {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* Prevent showing drag handles on hover in view mode */
+.drag-handles-hidden .react-grid-item:hover .mantine-ActionIcon-root.react-grid-dragHandle {
+    display: none !important;
+    opacity: 0 !important;
+}
+
+/* Hide entire ActionIconGroup in view mode */
+.drag-handles-hidden .mantine-ActionIconGroup-root {
     display: none !important;
     visibility: hidden !important;
 }
@@ -372,8 +401,8 @@
     opacity: 1 !important;
 }
 
-/* Show drag handle on component hover */
-.react-grid-item:hover .mantine-ActionIcon-root.react-grid-dragHandle {
+/* Show drag handle on component hover (edit mode only) */
+.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root.react-grid-dragHandle {
     opacity: 1 !important;
 }
 
@@ -411,12 +440,30 @@
     right: 4px !important;
 }
 
+/* Hide all button wrappers by default (both edit-only and view-accessible) */
+.react-grid-item .component-action-buttons-item,
+.react-grid-item .component-view-buttons-item {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* VIEW MODE: Hide edit-only buttons completely (not even on hover) */
+.drag-handles-hidden .component-action-buttons-item {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
 /* Individual action button base styling
    Purpose: Hide specific action buttons by default
    Targets: remove, edit, duplicate, reset buttons, alignment menu button, metadata info button, partial data warning button */
 .react-grid-item .mantine-ActionIcon-root[id*="remove_box_button"],
 .react-grid-item .mantine-ActionIcon-root[id*="edit_box_button"],
 .react-grid-item .mantine-ActionIcon-root[id*="duplicate_box_button"],
+.react-grid-item .mantine-ActionIcon-root[id*="position_menu_btn"],
 .react-grid-item .mantine-ActionIcon-root[id*="reset_selection_graph_button"],
 .react-grid-item .mantine-ActionIcon-root[id*="alignment_menu_btn"],
 .react-grid-item .mantine-ActionIcon-root[id*="partial-data-warning-button"] {
@@ -439,12 +486,31 @@
     z-index: 1001 !important;
 }
 
+/* EDIT MODE: Show all button items on hover (both edit-only and view-accessible) */
+.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .component-action-buttons-item,
+.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .component-view-buttons-item {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
+
+/* VIEW MODE: Show only view-accessible button items on hover */
+.drag-handles-hidden .react-grid-item:hover .component-view-buttons-item {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
+
 /* Show individual action buttons on component hover (only when edit mode is ON) */
+.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="drag-handle"],
 .draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="remove_box_button"],
 .draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="edit_box_button"],
 .draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="duplicate_box_button"],
-.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="reset_selection_graph_button"],
+.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="position_menu_btn"],
 .draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="alignment_menu_btn"],
+.draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="reset_selection_graph_button"],
 .draggable-grid-container:not(.drag-handles-hidden) .react-grid-item:hover .mantine-ActionIcon-root[id*="partial-data-warning-button"] {
     opacity: 1 !important;
     pointer-events: auto !important;
@@ -520,3 +586,41 @@
    - Use CSS containment for drag performance
    - Consider will-change property for dragged elements
 */
+
+/* =============================================================================
+   8. POSITION OPTIMIZATION - CSS ORDER SUPPORT
+   ============================================================================= */
+
+/* Enable flexbox order property for lightweight position changes
+   Purpose: Allow components to be reordered visually without DOM restructuring
+   Benefit: Preserves component state (filters, zoom, selections) during moves
+   Performance: Much faster than full re-render (no React reconciliation)
+
+   This system works with clientside callback in position_controls.py which
+   applies CSS order changes instead of rebuilding the entire dashboard.
+*/
+
+/* Left panel - vertical stack with flexbox order support */
+.left-panel-stack,
+.right-panel-other-stack {
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+/* Cards grid - CSS Grid with explicit positioning support */
+.cards-grid-container {
+    display: grid !important;
+    /* Grid will use gridRow and gridColumn set by clientside callback */
+}
+
+/* Smooth transitions for position changes (optional, can be disabled for instant updates) */
+.react-grid-item {
+    transition: order 0.3s ease, grid-row 0.3s ease, grid-column 0.3s ease;
+}
+
+/* Accessibility: Ensure visual order matches DOM order for screen readers
+   Note: When using CSS order, visual order differs from DOM order
+   This is acceptable for this use case as components are purely visual */
+.react-grid-item {
+    /* Components will have inline order style set by clientside callback */
+}

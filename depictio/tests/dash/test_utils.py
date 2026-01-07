@@ -114,10 +114,10 @@ class TestGetColumnsFromDataCollection:
     """Test data collection columns retrieval functionality."""
 
     def setup_method(self):
-        """Set up test fixtures."""
-        from depictio.dash.utils import _data_collection_specs_cache
+        """Clear LRU cache before each test."""
+        from depictio.dash.utils import _fetch_columns_with_lru_cache
 
-        _data_collection_specs_cache.clear()
+        _fetch_columns_with_lru_cache.cache_clear()
 
     @patch("depictio.dash.utils.httpx.get")
     def test_get_columns_from_data_collection_success(self, mock_httpx_get):

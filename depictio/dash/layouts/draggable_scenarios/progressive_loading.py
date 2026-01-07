@@ -76,6 +76,165 @@ def create_skeleton_component(component_type: str) -> html.Div:
     )
 
 
+def create_figure_placeholder(component_uuid: str) -> html.Div:
+    """
+    Create a lightweight placeholder for figure components during initial render.
+
+    PERFORMANCE OPTIMIZATION (Phase 5B):
+    This is a minimal placeholder that reduces initial React rendering burden.
+    Unlike create_skeleton_component(), this doesn't create a full modal overlay.
+
+    The actual figure component will be loaded incrementally via pattern-matching callback.
+
+    Args:
+        component_uuid (str): UUID of the figure component
+
+    Returns:
+        html.Div: Lightweight placeholder with loading indicator
+    """
+    return html.Div(
+        [
+            dmc.Center(
+                dmc.Stack(
+                    [
+                        dmc.Loader(
+                            type="bars",
+                            color="blue",
+                            size="md",
+                        ),
+                        dmc.Text(
+                            "Loading visualization...",
+                            size="sm",
+                            c="gray",
+                        ),
+                    ],
+                    align="center",
+                    gap="xs",
+                ),
+                style={"height": "100%", "minHeight": "200px"},
+            )
+        ],
+        id={
+            "type": "figure-placeholder",
+            "index": component_uuid,
+        },  # Changed "uuid" to "index" for consistency
+        style={
+            "width": "100%",
+            "height": "100%",
+            "display": "flex",
+            "alignItems": "center",
+            "justifyContent": "center",
+            "backgroundColor": "var(--app-surface-color, #ffffff)",
+            "border": "1px dashed var(--app-border-color, #ddd)",
+            "borderRadius": "8px",
+        },
+    )
+
+
+def create_card_placeholder(component_uuid: str) -> html.Div:
+    """
+    Create a lightweight placeholder for card components during initial render.
+
+    PERFORMANCE OPTIMIZATION (Phase 5B):
+    Cards are simpler than figures, so use a minimal loading indicator.
+
+    Args:
+        component_uuid (str): UUID of the card component
+
+    Returns:
+        html.Div: Lightweight placeholder with loading indicator
+    """
+    return html.Div(
+        [
+            dmc.Center(
+                dmc.Stack(
+                    [
+                        dmc.Loader(
+                            type="dots",
+                            color="green",
+                            size="sm",
+                        ),
+                        dmc.Text(
+                            "Loading card...",
+                            size="xs",
+                            c="gray",
+                        ),
+                    ],
+                    align="center",
+                    gap="xs",
+                ),
+                style={"height": "100%", "minHeight": "150px"},
+            )
+        ],
+        id={
+            "type": "card-placeholder",
+            "index": component_uuid,
+        },  # Changed "uuid" to "index" for consistency
+        style={
+            "width": "100%",
+            "height": "100%",
+            "display": "flex",
+            "alignItems": "center",
+            "justifyContent": "center",
+            "backgroundColor": "var(--app-surface-color, #ffffff)",
+            "border": "1px dashed var(--app-border-color, #ddd)",
+            "borderRadius": "6px",
+        },
+    )
+
+
+def create_interactive_placeholder(component_uuid: str) -> html.Div:
+    """
+    Create a lightweight placeholder for interactive components during initial render.
+
+    PERFORMANCE OPTIMIZATION (Phase 5B):
+    Interactive components include filters, controls, etc.
+
+    Args:
+        component_uuid (str): UUID of the interactive component
+
+    Returns:
+        html.Div: Lightweight placeholder with loading indicator
+    """
+    return html.Div(
+        [
+            dmc.Center(
+                dmc.Stack(
+                    [
+                        dmc.Loader(
+                            type="oval",
+                            color="violet",
+                            size="md",
+                        ),
+                        dmc.Text(
+                            "Loading controls...",
+                            size="sm",
+                            c="gray",
+                        ),
+                    ],
+                    align="center",
+                    gap="xs",
+                ),
+                style={"height": "100%", "minHeight": "180px"},
+            )
+        ],
+        id={
+            "type": "interactive-placeholder",
+            "index": component_uuid,
+        },  # Changed "uuid" to "index" for consistency
+        style={
+            "width": "100%",
+            "height": "100%",
+            "display": "flex",
+            "alignItems": "center",
+            "justifyContent": "center",
+            "backgroundColor": "var(--app-surface-color, #ffffff)",
+            "border": "1px dashed var(--app-border-color, #ddd)",
+            "borderRadius": "8px",
+        },
+    )
+
+
 # =============================================================================
 # PROGRESSIVE LOADING DISPLAY COMPONENTS
 # =============================================================================
@@ -217,10 +376,126 @@ def create_loading_progress_display(dashboard_id: str):
     )
 
 
+def register_figure_loading_callback(app):
+    """
+    Register callback to load figure components incrementally.
+
+    PERFORMANCE OPTIMIZATION (Phase 5B):
+    This callback loads figure components progressively via dcc.Interval triggers,
+    reducing the initial 378-mutation React render into smaller chunks.
+
+    Each figure placeholder has a dcc.Interval that fires once with a staggered delay.
+    This callback builds the actual figure component when triggered.
+    """
+    from dash import ALL, Input, Output, State, callback_context, no_update
+
+    from depictio.dash.component_metadata import get_build_functions
+    from depictio.dash.layouts.edit import enable_box_edit_mode
+
+    logger.info("⚡ PHASE 5B: Registering incremental figure loading callback")
+
+    # Get figure build function
+    build_functions = get_build_functions()
+    figure_build_function = build_functions.get("figure")
+
+    if not figure_build_function:
+        logger.warning(
+            "⚠️  PHASE 5B: Figure build function not found, skipping callback registration"
+        )
+        return
+
+    @app.callback(
+        # CRITICAL FIX: Use "index" instead of "uuid" for consistency with pattern-matching
+        Output({"type": "figure-container", "index": ALL}, "children"),
+        Input({"type": "figure-load-trigger", "index": ALL}, "n_intervals"),
+        State({"type": "figure-metadata-store", "index": ALL}, "data"),
+        State({"type": "figure-container", "index": ALL}, "id"),
+        prevent_initial_call=True,
+    )
+    def load_figure_component(n_intervals_list, metadata_list, container_ids):
+        """
+        Load figure component when interval fires.
+
+        Args:
+            n_intervals_list: List of n_intervals for each trigger
+            metadata_list: List of component metadata for each figure
+            container_ids: List of container IDs
+
+        Returns:
+            List of figure components (or no_update for non-triggered figures)
+        """
+        ctx = callback_context
+        if not ctx.triggered:
+            return [no_update] * len(container_ids)
+
+        # Find which interval triggered
+        trigger_id = ctx.triggered_id
+        if not trigger_id or trigger_id.get("type") != "figure-load-trigger":
+            return [no_update] * len(container_ids)
+
+        # CRITICAL FIX: Use "index" key consistently (changed from "uuid")
+        triggered_index = trigger_id.get("index")
+
+        logger.info(f"⚡ PROGRESSIVE LOADING: Loading figure component {triggered_index}")
+
+        # Build output list
+        outputs = []
+        for i, (n_intervals, metadata, container_id) in enumerate(
+            zip(n_intervals_list, metadata_list, container_ids)
+        ):
+            # CRITICAL FIX: Use "index" key consistently (changed from "uuid")
+            container_index = container_id.get("index")
+
+            # Only build the figure that was triggered
+            if container_index == triggered_index and n_intervals and n_intervals > 0:
+                logger.info(f"⚡ PROGRESSIVE LOADING: Building figure {container_index}")
+
+                try:
+                    # Build the actual figure component
+                    figure_component = figure_build_function(**metadata)
+
+                    # Wrap with enable_box_edit_mode like in render_dashboard
+                    wrapped_component = enable_box_edit_mode(
+                        figure_component,
+                        switch_state=metadata.get("edit_components_button", False),
+                        dashboard_id=metadata.get("dashboard_id"),
+                        component_data=metadata,
+                        TOKEN=metadata.get("access_token"),
+                    )
+
+                    outputs.append(wrapped_component)
+                    logger.info(
+                        f"✅ PROGRESSIVE LOADING: Figure {container_index} loaded successfully"
+                    )
+
+                except Exception as e:
+                    logger.error(
+                        f"❌ PROGRESSIVE LOADING: Error loading figure {container_index}: {e}"
+                    )
+                    # Return placeholder on error
+                    outputs.append(no_update)
+            else:
+                # Keep placeholder for non-triggered figures
+                outputs.append(no_update)
+
+        return outputs
+
+    logger.info("⚡ PHASE 5B: Incremental figure loading callback registered")
+
+
 def register_progressive_loading_callbacks(app):
     """Register simple progressive loading visual effects - just like the prototype."""
 
     logger.info("Registering simple progressive loading callbacks")
+
+    # PERFORMANCE OPTIMIZATION (Phase 5B): Register callbacks to load components incrementally
+    from depictio.dash.layouts.draggable_scenarios.progressive_loading_component import (
+        register_component_loading_callback,
+    )
+
+    # Register callbacks for each component type
+    for component_type in ["figure", "card", "interactive"]:
+        register_component_loading_callback(app, component_type)
 
     # PERFORMANCE OPTIMIZATION: Check settings to control animations
     if settings.performance.disable_animations:

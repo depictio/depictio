@@ -1,6 +1,6 @@
 import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
-from dash import MATCH, Input, Output, State, html
+from dash import html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
@@ -76,160 +76,51 @@ def register_partial_data_button_callbacks(app):
     #     return updated_children
 
     # Server-side callback to control button wrapper visibility
-    @app.callback(
-        Output({"type": "partial-data-button-wrapper", "index": MATCH}, "style"),
-        Input({"type": "stored-metadata-component", "index": MATCH}, "data"),
-        State({"type": "partial-data-button-wrapper", "index": MATCH}, "id"),
-        prevent_initial_call=False,
-    )
-    def update_partial_data_button_visibility(metadata, wrapper_id):
-        """Show/hide the partial data warning button based on whether data was sampled."""
-        # Default: hidden
-        hidden_style = {"display": "none", "visibility": "hidden"}
-        visible_style = {"display": "inline-flex", "visibility": "visible"}
-
-        if not metadata:
-            logger.info("📊 No metadata yet, keeping button hidden")
-            return hidden_style
-
-        # Extract sampling information
-        was_sampled = metadata.get("was_sampled", False)
-        displayed_count = metadata.get("displayed_data_count", 0)
-        total_count = metadata.get("total_data_count", 0)
-
-        # Show button only if data was actually sampled
-        should_show = was_sampled and (displayed_count < total_count)
-
-        component_index = wrapper_id.get("index", "unknown") if wrapper_id else "unknown"
-
-        logger.info(
-            f"📊 [{component_index}] Button visibility: sampled={was_sampled}, "
-            f"displayed={displayed_count:,}, total={total_count:,}, show={should_show}"
-        )
-
-        return visible_style if should_show else hidden_style
+    # DISABLED FOR PERFORMANCE TESTING - Phase 4C
+    # This callback was being triggered frequently, contributing to overhead
+    # @app.callback(
+    #     Output({"type": "partial-data-button-wrapper", "index": MATCH}, "style"),
+    #     Input({"type": "stored-metadata-component", "index": MATCH}, "data"),
+    #     State({"type": "partial-data-button-wrapper", "index": MATCH}, "id"),
+    #     prevent_initial_call=False,
+    # )
+    # def update_partial_data_button_visibility(metadata, wrapper_id):
+    #     """Show/hide the partial data warning button based on whether data was sampled."""
+    #     # Default: hidden
+    #     hidden_style = {"display": "none", "visibility": "hidden"}
+    #     visible_style = {"display": "inline-flex", "visibility": "visible"}
+    #
+    #     if not metadata:
+    #         logger.info("📊 No metadata yet, keeping button hidden")
+    #         return hidden_style
+    #
+    #     # Extract sampling information
+    #     was_sampled = metadata.get("was_sampled", False)
+    #     displayed_count = metadata.get("displayed_data_count", 0)
+    #     total_count = metadata.get("total_data_count", 0)
+    #
+    #     # Show button only if data was actually sampled
+    #     should_show = was_sampled and (displayed_count < total_count)
+    #
+    #     component_index = wrapper_id.get("index", "unknown") if wrapper_id else "unknown"
+    #
+    #     logger.info(
+    #         f"📊 [{component_index}] Button visibility: sampled={was_sampled}, "
+    #         f"displayed={displayed_count:,}, total={total_count:,}, show={should_show}"
+    #     )
+    #
+    #     return visible_style if should_show else hidden_style
+    pass  # Placeholder to keep function structure valid
 
 
 def register_reset_button_callbacks(app):
-    """Register callbacks to update reset button colors based on filter activity."""
+    """
+    Register callbacks to update reset button colors based on filter activity.
 
-    # Use clientside callback for better performance and direct DOM manipulation
-    app.clientside_callback(
-        """
-        function(interactive_values, pathname) {
-            console.log('🔄 Clientside callback triggered with:', interactive_values);
-
-            if (!interactive_values) {
-                console.log('No interactive values, skipping update');
-                return '';
-            }
-
-            // Find all reset buttons
-            const resetButtons = document.querySelectorAll('[id*="reset-selection-graph-button"]');
-            console.log('Found reset buttons:', resetButtons.length);
-
-            resetButtons.forEach(button => {
-                try {
-                    // Extract component index from button ID
-                    const buttonId = button.id;
-                    console.log('Processing button:', buttonId);
-
-                    // Parse the component index from the ID
-                    let componentIndex = null;
-                    const match = buttonId.match(/index":"([^"]+)"/);
-                    if (match) {
-                        componentIndex = match[1];
-                        console.log('Found component index:', componentIndex);
-
-                        // Check if this component has active filters
-                        const hasFilter = checkComponentFilter(interactive_values, componentIndex);
-                        console.log('Component', componentIndex, 'has filter:', hasFilter);
-
-                        if (hasFilter) {
-                            // Make button orange and always visible
-                            button.setAttribute('data-color', 'orange');
-                            button.classList.add('reset-button-filtered');
-                            button.style.opacity = '1';
-                            button.style.pointerEvents = 'auto';
-                            button.style.display = 'flex';
-                            button.style.visibility = 'visible';
-                            console.log('Set button to orange/visible for component', componentIndex);
-                        } else {
-                            // Make button gray and follow normal hover behavior
-                            button.setAttribute('data-color', 'gray');
-                            button.classList.remove('reset-button-filtered');
-                            console.log('Set button to gray/normal for component', componentIndex);
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error processing button:', error);
-                }
-            });
-
-            return 'updated';
-
-            function checkComponentFilter(interactive_values, componentIndex) {
-                try {
-                    let interactive_data = [];
-
-                    if (interactive_values.interactive_components_values) {
-                        interactive_data = interactive_values.interactive_components_values;
-                    } else if (typeof interactive_values === 'object') {
-                        for (const [key, value] of Object.entries(interactive_values)) {
-                            if (value && typeof value === 'object' && value.value !== undefined) {
-                                interactive_data.push(value);
-                            }
-                        }
-                    }
-
-                    console.log('Checking', interactive_data.length, 'components for index', componentIndex);
-
-                    for (const component of interactive_data) {
-                        if (component.metadata && component.metadata.index === componentIndex) {
-                            const currentValue = component.value;
-                            const defaultState = component.metadata.default_state;
-
-                            console.log('Found component', componentIndex, 'value:', currentValue, 'default:', defaultState);
-
-                            if (!defaultState || currentValue === null || currentValue === undefined) {
-                                return false;
-                            }
-
-                            // Check if different from default
-                            if (defaultState.default_range) {
-                                return JSON.stringify(currentValue) !== JSON.stringify(defaultState.default_range);
-                            } else if (defaultState.default_value !== undefined) {
-                                // Special handling for MultiSelect: both empty array [] and null should be considered equivalent
-                                const isCurrentEmpty = currentValue === null || currentValue === undefined || (Array.isArray(currentValue) && currentValue.length === 0);
-                                const isDefaultEmpty = defaultState.default_value === null || defaultState.default_value === undefined || (Array.isArray(defaultState.default_value) && defaultState.default_value.length === 0);
-
-                                if (isCurrentEmpty && isDefaultEmpty) {
-                                    return false; // Both are empty, so no difference
-                                }
-
-                                return currentValue !== defaultState.default_value;
-                            }
-
-                            return false;
-                        }
-                    }
-
-                    console.log('Component', componentIndex, 'not found in interactive data');
-                    return false;
-                } catch (error) {
-                    console.error('Error checking component filter:', error);
-                    return false;
-                }
-            }
-        }
-        """,
-        # Output("button-style-tracker", "data"),
-        [
-            Input("interactive-values-store", "data", allow_optional=True),
-            Input("url", "pathname"),  # Also trigger when page changes
-        ],
-        prevent_initial_call=True,
-    )
+    ⚠️ TEMPORARILY DISABLED FOR DEBUGGING
+    """
+    logger.info("⚠️ Reset button callback DISABLED for debugging")
+    pass
 
 
 def _check_component_filter_activity(interactive_values, component_index):
@@ -291,6 +182,11 @@ def _check_component_filter_activity(interactive_values, component_index):
     return False
 
 
+# REMOVED: Position menu functions (_create_position_menu_vertical and _create_position_menu_grid)
+# Replaced with drag & drop using DashGridLayout for all component positioning
+# Components now use drag handles instead of button-based position controls
+
+
 def _create_component_buttons(
     component_type,
     component_data,
@@ -307,54 +203,57 @@ def _create_component_buttons(
     """Create action buttons based on component type and configuration.
 
     Returns:
-        dmc.ActionIconGroup: Configured button group for the component
+        tuple: (edit_buttons_group, view_buttons_group)
+            - edit_buttons_group: ActionIconGroup with edit-only buttons (hidden in view mode)
+            - view_buttons_group: ActionIconGroup with view-accessible buttons (always visible)
     """
     # Define button configurations for different component types
+    # Buttons are categorized:
+    # - edit_only: drag, duplicate, edit, remove, alignment (hidden in view mode)
+    # - view_accessible: reset, metadata, partial_data (visible in view mode)
+
     button_configs = {
         "figure": {
             "orientation": "vertical",
-            "buttons": ["drag", "remove", "edit", "duplicate", "metadata"],
-            "scatter_buttons": [
-                "partial_data",  # Show partial data warning first for scatter plots
-                "drag",
-                "remove",
-                "edit",
-                "duplicate",
-                "reset",
-                "metadata",
-            ],  # Special case for scatter plots
+            "edit_only": ["drag", "duplicate", "edit", "remove"],
+            "view_accessible": ["metadata"],
+            "scatter_edit_only": ["partial_data", "drag", "duplicate", "edit", "remove"],
+            "scatter_view_accessible": ["metadata", "reset"],
         },
         "interactive": {
             "orientation": "horizontal",
-            "buttons": [
-                "drag",
-                "remove",
-                "edit",
-                "duplicate",
-                "reset",
-                "metadata",
-            ],  # Interactive components get reset button
+            "edit_only": ["drag", "duplicate", "edit", "remove"],
+            "view_accessible": ["metadata", "reset"],
         },
         "card": {
             "orientation": "horizontal",
-            "buttons": [
-                "drag",
-                "remove",
-                "edit",
-                "duplicate",
-                "metadata",
-            ],
+            "edit_only": ["drag", "duplicate", "edit", "remove"],
+            "view_accessible": ["metadata"],
         },
-        "table": {"orientation": "horizontal", "buttons": ["drag", "remove", "metadata"]},
-        "jbrowse": {"orientation": "horizontal", "buttons": ["drag", "remove", "metadata"]},
-        "multiqc": {"orientation": "vertical", "buttons": ["drag", "remove", "metadata"]},
+        "table": {
+            "orientation": "horizontal",
+            "edit_only": ["drag", "remove"],
+            "view_accessible": ["metadata"],
+        },
+        "jbrowse": {
+            "orientation": "horizontal",
+            "edit_only": ["drag", "remove"],
+            "view_accessible": ["metadata"],
+        },
+        "multiqc": {
+            "orientation": "vertical",
+            "edit_only": ["drag", "remove"],
+            "view_accessible": ["metadata"],
+        },
         "text": {
             "orientation": "horizontal",
-            "buttons": ["drag", "remove", "duplicate", "alignment", "metadata"],
-        },  # Text components get alignment button (no edit button)
+            "edit_only": ["drag", "duplicate", "alignment", "remove"],
+            "view_accessible": ["metadata"],
+        },
         "default": {
             "orientation": "horizontal",
-            "buttons": ["drag", "remove", "metadata"],
+            "edit_only": ["drag", "remove"],
+            "view_accessible": ["metadata"],
         },
     }
 
@@ -365,11 +264,14 @@ def _create_component_buttons(
     if component_type == "figure":
         visu_type = component_data.get("visu_type", None) if component_data else None
         if visu_type and visu_type.lower() == "scatter":
-            button_list = config["scatter_buttons"].copy()
+            edit_only_list = config.get("scatter_edit_only", config["edit_only"])
+            view_accessible_list = config.get("scatter_view_accessible", config["view_accessible"])
         else:
-            button_list = config["buttons"]
+            edit_only_list = config["edit_only"]
+            view_accessible_list = config["view_accessible"]
     else:
-        button_list = config["buttons"]
+        edit_only_list = config["edit_only"]
+        view_accessible_list = config["view_accessible"]
 
     # Map button names to functions
     button_functions = {
@@ -392,16 +294,41 @@ def _create_component_buttons(
     if create_partial_data_warning_button is not None:
         button_functions["partial_data"] = create_partial_data_warning_button
 
-    # Create the actual button components
-    button_components = [button_functions[btn]() for btn in button_list if btn in button_functions]
+    # Create edit-only button components (wrapped with CSS class for conditional visibility)
+    edit_only_components = [
+        html.Div(button_functions[btn](), className="component-action-buttons-item")
+        for btn in edit_only_list
+        if btn in button_functions
+    ]
+
+    # Create view-accessible button components (wrapped with CSS class - always visible)
+    view_accessible_components = [
+        html.Div(button_functions[btn](), className="component-view-buttons-item")
+        for btn in view_accessible_list
+        if btn in button_functions
+    ]
+
+    # Combine all buttons into a single list (edit buttons first, then view buttons)
+    all_button_components = edit_only_components + view_accessible_components
 
     # Log configuration for debugging
     if component_type:
         logger.debug(
-            f"Creating {config['orientation']} buttons for {component_type}: {button_list}"
+            f"Creating {config['orientation']} buttons for {component_type}:"
+            f"\n  Edit-only: {edit_only_list}"
+            f"\n  View-accessible: {view_accessible_list}"
+            f"\n  Total buttons: {len(all_button_components)}"
         )
 
-    return dmc.ActionIconGroup(button_components, orientation=config["orientation"])
+    # Return single ActionIconGroup with all buttons
+    # Each button is wrapped with appropriate CSS class for conditional visibility
+    unified_button_group = (
+        dmc.ActionIconGroup(all_button_components, orientation=config["orientation"])
+        if all_button_components
+        else None
+    )
+
+    return unified_button_group, None  # Return None for second value to maintain API compatibility
 
 
 def edit_component(index, parent_id, active=0, component_data=None, TOKEN=None):
@@ -478,6 +405,7 @@ def enable_box_edit_mode(
             # Use style override instead of color parameter to avoid type errors
             variant="filled",
             size="sm",
+            radius=0,  # Remove border radius
             children=DashIconify(
                 icon="mdi:dots-grid", width=14, color="black"
             ),  # More subtle grid icon
@@ -491,16 +419,20 @@ def enable_box_edit_mode(
             color="red",
             variant="filled",
             size="sm",
+            radius=0,  # Remove border radius
             children=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
+            n_clicks=0,  # Required for callback to trigger properly
         )
 
     def create_edit_button():
         return dmc.ActionIcon(
-            id={"type": "edit-box-button", "index": f"{btn_index}"},
+            id={"type": "edit_box_button", "index": f"{btn_index}"},
             color="blue",
             variant="filled",
             size="sm",
+            radius=0,  # Remove border radius
             children=DashIconify(icon="mdi:pen", width=16, color="white"),
+            n_clicks=0,  # Required for callback to trigger properly
         )
 
     def create_duplicate_button():
@@ -509,7 +441,9 @@ def enable_box_edit_mode(
             color="gray",
             variant="filled",
             size="sm",
+            radius=0,  # Remove border radius
             children=DashIconify(icon="mdi:content-copy", width=16, color="white"),
+            n_clicks=0,  # Required for callback to trigger properly
         )
 
     # category_button = dmc.Select(
@@ -532,6 +466,7 @@ def enable_box_edit_mode(
             color="orange",
             variant="filled",
             size="sm",
+            radius=0,  # Remove border radius
             children=DashIconify(icon="bx:reset", width=16, color="white"),
         )
 
@@ -547,6 +482,7 @@ def enable_box_edit_mode(
                         color=get_dmc_button_color("text"),
                         variant="filled",
                         size="sm",
+                        radius=0,  # Remove border radius
                     )
                 ),
                 dmc.MenuDropdown(
@@ -762,11 +698,9 @@ def enable_box_edit_mode(
                         [
                             html.Div(
                                 f"Showing: {displayed_count:,} points",
-                                key=f"showing-{btn_index}-{displayed_count}",
                             ),
                             html.Div(
                                 f"Total: {total_count:,} points",
-                                key=f"total-{btn_index}-{total_count}",
                             ),
                             html.Div(
                                 "Full dataset available for analysis",
@@ -775,10 +709,8 @@ def enable_box_edit_mode(
                                     "fontStyle": "italic",
                                     "fontSize": "0.9em",
                                 },
-                                key=f"footer-{btn_index}",
                             ),
                         ],
-                        key=f"content-wrapper-{btn_index}-{displayed_count}-{total_count}",
                     ),
                     id={"type": "partial-data-popover-content", "index": f"{btn_index}"},
                 ),
@@ -820,16 +752,21 @@ def enable_box_edit_mode(
         )
 
     # ALWAYS create buttons regardless of edit mode - CSS will control visibility
+    # DISABLED FOR PERFORMANCE TESTING - Phase 4C
     # Conditionally create partial data warning button only for scatter plots with large datasets
-    partial_data_button_func = None
-    if component_type == "figure" and component_data:
-        visu_type = component_data.get("visu_type", None)
-        # Check if this is a scatter plot that might have partial data
-        # The actual check for data size will happen at render time
-        if visu_type and visu_type.lower() == "scatter":
-            partial_data_button_func = create_partial_data_warning_button
+    # partial_data_button_func = None
+    # if component_type == "figure" and component_data:
+    #     visu_type = component_data.get("visu_type", None)
+    #     # Check if this is a scatter plot that might have partial data
+    #     # The actual check for data size will happen at render time
+    #     if visu_type and visu_type.lower() == "scatter":
+    #         partial_data_button_func = create_partial_data_warning_button
 
-    buttons = _create_component_buttons(
+    # Explicitly set to None to disable popover button creation
+    partial_data_button_func = None
+
+    # Get both button groups (edit-only and view-accessible)
+    edit_buttons, view_buttons = _create_component_buttons(
         component_type,
         component_data,
         btn_index,
@@ -879,14 +816,23 @@ def enable_box_edit_mode(
         content_children.append(box_components_list)
 
     # Add buttons positioned absolutely - always present in DOM, CSS controls visibility
-    content_children.append(
-        html.Div(
-            buttons,
+    # Single unified ActionIconGroup with all buttons (edit-only + view-accessible)
+    # CSS classes on individual button wrappers control which buttons are visible:
+    # - .component-action-buttons-item: Edit-only buttons (hidden in view mode)
+    # - .component-view-buttons-item: Always visible buttons (reset, metadata)
+
+    # edit_buttons is now a single ActionIconGroup containing all buttons
+    # view_buttons is None (maintained for API compatibility)
+    if edit_buttons:
+        button_container = html.Div(
+            edit_buttons,
             style={
                 "position": "absolute",
                 "top": "4px",
                 "right": "8px",
-                "zIndex": 1000,
+                "display": "flex",
+                "flexDirection": "row",
+                "gap": "4px",
                 "alignItems": "center",
                 "height": "auto",
                 "background": "transparent",
@@ -894,7 +840,7 @@ def enable_box_edit_mode(
                 "padding": "4px",
             },
         )
-    )
+        content_children.append(button_container)
 
     content_div = html.Div(
         content_children,
@@ -918,6 +864,7 @@ def enable_box_edit_mode(
     )
 
     # Create DraggableWrapper with the UUID as ID (like in the prototype)
+    # Note: DraggableWrapper doesn't support 'key' prop - we'll add it to the outer wrapper instead
     draggable_wrapper = dgl.DraggableWrapper(
         id=box_uuid,  # Use UUID as ID for layout tracking
         children=[content_div],

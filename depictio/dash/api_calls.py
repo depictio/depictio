@@ -24,7 +24,15 @@ API_QUERY_PARAMS = {"test_mode": "true"} if is_testing else {}
 
 # Simple cache for user data to reduce redundant API calls
 _user_cache: dict[str, tuple[Any, float]] = {}
-_cache_timeout = 30  # seconds
+# Configurable cache timeout via environment variable (default 5 minutes)
+_cache_timeout = int(os.getenv("DEPICTIO_USER_CACHE_TTL", "300"))  # seconds
+
+# Minimalistic cache usage counters
+_cache_stats = {
+    "hits": 0,
+    "misses": 0,
+    "expirations": 0,
+}
 
 # Cache for token validity to eliminate API calls during routing
 _token_validity_cache: dict[str, tuple[dict, float]] = {}
@@ -81,6 +89,9 @@ def api_call_fetch_user_from_token(token: str) -> User | None:
     Fetch a user from the authentication service using a token.
     Synchronous version for Dash compatibility with caching to reduce redundant API calls.
 
+    Uses manual caching with configurable TTL (default 5 minutes) instead of @lru_cache
+    to support cache expiration and prevent stale user data.
+
     Args:
         token: The authentication token
 
@@ -93,11 +104,24 @@ def api_call_fetch_user_from_token(token: str) -> User | None:
 
     if cache_key in _user_cache:
         cached_data, cache_time = _user_cache[cache_key]
-        if current_time - cache_time < _cache_timeout:
-            logger.debug("Returning cached user data")
+        cache_age = current_time - cache_time
+        if cache_age < _cache_timeout:
+            _cache_stats["hits"] += 1
+            logger.info(
+                f"🎯 CACHE HIT: user_token (age={cache_age:.1f}s, ttl={_cache_timeout}s, email={cached_data.email if cached_data else 'None'})"
+            )
             return cached_data
+        else:
+            _cache_stats["expirations"] += 1
+            logger.info(
+                f"⏱️  CACHE EXPIRED: user_token (age={cache_age:.1f}s, ttl={_cache_timeout}s)"
+            )
+            # Remove expired entry
+            del _user_cache[cache_key]
 
     # Make API call if not cached or expired
+    _cache_stats["misses"] += 1
+    logger.info(f"❌ CACHE MISS: user_token - fetching from API (cache_size={len(_user_cache)})")
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token",
         params={"token": token},
@@ -687,7 +711,9 @@ def api_call_get_dashboard(dashboard_id: str, token: str) -> dict[str, Any] | No
 
 
 @validate_call(validate_return=True)
-def api_call_save_dashboard(dashboard_id: str, dashboard_data: dict, token: str) -> bool:
+def api_call_save_dashboard(
+    dashboard_id: str, dashboard_data: dict, token: str, enrich: bool = False
+) -> bool:
     """
     Save dashboard data by calling the API.
     Uses environment-specific timeout settings.
@@ -696,6 +722,8 @@ def api_call_save_dashboard(dashboard_id: str, dashboard_data: dict, token: str)
         dashboard_id: The dashboard ID
         dashboard_data: The dashboard data to save
         token: The authentication token
+        enrich: If True, enriches component metadata (slower). Default False for fast saves.
+                Only manual user saves should pass enrich=True.
 
     Returns:
         bool: True if successful, False otherwise
@@ -719,6 +747,7 @@ def api_call_save_dashboard(dashboard_id: str, dashboard_data: dict, token: str)
 
         response = httpx.post(
             f"{API_BASE_URL}/depictio/api/v1/dashboards/save/{dashboard_id}",
+            params={"enrich": enrich},  # Pass enrichment flag to backend
             json=dashboard_data,
             headers={"Authorization": f"Bearer {token}"},
             timeout=settings.performance.api_request_timeout,

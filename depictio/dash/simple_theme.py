@@ -6,7 +6,7 @@ Uses MantineProvider's forceColorScheme for native theme support.
 """
 
 import dash_mantine_components as dmc
-from dash import Input, Output, State, clientside_callback
+from dash import Input, Output, State
 from dash_iconify import DashIconify
 
 
@@ -85,7 +85,7 @@ def register_simple_theme_system(app):
     )
 
     # Handle manual theme switch - dcc.Store handles localStorage automatically
-    clientside_callback(
+    app.clientside_callback(
         """
         function(checked, current_theme) {
             // CRITICAL: If checked is undefined/null, the switch component doesn't have a valid state yet
@@ -121,7 +121,7 @@ def register_simple_theme_system(app):
     )
 
     # Re-apply theme on URL navigation to ensure MantineProvider stays synchronized
-    clientside_callback(
+    app.clientside_callback(
         """
         function(pathname, theme_data) {
             console.log('🔄 URL Navigation triggered for path:', pathname);
@@ -233,37 +233,37 @@ def register_simple_theme_system(app):
     #     prevent_initial_call=True,
     # )
 
-    # Update navbar logo based on theme (minimal styling needed)
-    @app.callback(
+    # Update navbar logo based on theme - CLIENTSIDE for instant response
+    app.clientside_callback(
+        """
+        function(theme_data) {
+            const theme = theme_data || 'light';
+            console.log('🖼️ CLIENTSIDE NAVBAR LOGO: theme=' + theme);
+            return theme === 'dark'
+                ? '/assets/images/logos/logo_white.svg'
+                : '/assets/images/logos/logo_black.svg';
+        }
+        """,
         Output("navbar-logo-content", "src"),
         Input("theme-store", "data"),
         prevent_initial_call=False,
     )
-    def update_navbar_logo(theme_data):
-        """Update navbar logo for theme."""
-        import dash
 
-        theme = theme_data or "light"
-        logo_src = dash.get_asset_url(
-            "images/logos/logo_white.svg" if theme == "dark" else "images/logos/logo_black.svg"
-        )
-        return logo_src
-
-    # Update header "Powered by" logo based on theme
-    @app.callback(
+    # Update header "Powered by" logo based on theme - CLIENTSIDE for instant response
+    app.clientside_callback(
+        """
+        function(theme_data) {
+            const theme = theme_data || 'light';
+            console.log('🖼️ CLIENTSIDE HEADER LOGO: theme=' + theme);
+            return theme === 'dark'
+                ? '/assets/images/logos/logo_white.svg'
+                : '/assets/images/logos/logo_black.svg';
+        }
+        """,
         Output("header-powered-by-logo", "src"),
         Input("theme-store", "data"),
         prevent_initial_call=False,
     )
-    def update_header_powered_by_logo(theme_data):
-        """Update header powered by logo for theme."""
-        import dash
-
-        theme = theme_data or "light"
-        logo_src = dash.get_asset_url(
-            "images/logos/logo_white.svg" if theme == "dark" else "images/logos/logo_black.svg"
-        )
-        return logo_src
 
     # Disable theme switch on dashboard pages only
     # @app.callback(

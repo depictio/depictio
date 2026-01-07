@@ -221,18 +221,116 @@ async def get_dashboard(
     return dashboard_data
 
 
+@dashboards_endpoint_router.get("/init/{dashboard_id}")
+async def init_dashboard(
+    dashboard_id: PyObjectId,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """
+    Dashboard initialization endpoint - returns ONLY dashboard-specific data.
+
+    Project-wide data (dc_configs, column_specs, delta_locations) should be
+    fetched separately via /projects/get/from_id endpoint for better caching.
+
+    Returns:
+        dict: Dashboard-specific initialization data
+            {
+                "dashboard": DashboardData (layout, metadata, notes, title),
+                "project_id": str,
+                "user_permissions": {level, can_edit, can_delete}
+            }
+    """
+    logger.info(f"🚀 Dashboard init for dashboard {dashboard_id}")
+
+    # 1. Fetch dashboard with permission check
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(
+            status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
+        )
+
+    # Get project_id from dashboard
+    project_id = dashboard_data.get("project_id")
+    if not project_id:
+        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
+
+    # Check project-based permissions
+    if not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to access this dashboard."
+        )
+
+    dashboard = DashboardData.from_mongo(dashboard_data)
+    logger.debug("✅ Dashboard access granted via project permissions")
+
+    # 2. Determine user permission level
+    # Need to fetch project for permissions check (lightweight query)
+    from depictio.api.v1.endpoints.projects_endpoints.utils import (
+        get_project_with_delta_locations,
+    )
+
+    project_data = await get_project_with_delta_locations(project_id, current_user)
+
+    user_permission_level = "viewer"  # Default
+    permissions = project_data.get("permissions", {})
+    owner_ids = [str(owner.get("_id", "")) for owner in permissions.get("owners", [])]
+    editor_ids = [str(editor.get("_id", "")) for editor in permissions.get("editors", [])]
+
+    # Convert current_user.id to string for comparison (it's an ObjectId)
+    current_user_id_str = str(current_user.id)
+
+    logger.info(
+        f"🔐 Permission check for user {current_user_id_str}:\n"
+        f"   - Project owner IDs: {owner_ids}\n"
+        f"   - Project editor IDs: {editor_ids}"
+    )
+
+    if current_user_id_str in owner_ids:
+        user_permission_level = "owner"
+    elif current_user_id_str in editor_ids:
+        user_permission_level = "editor"
+
+    logger.info(f"   - Determined permission level: {user_permission_level}")
+
+    # 3. Build dashboard-only response
+    # Frontend will fetch project data separately via /projects/get/from_id/{project_id}
+    response = {
+        "dashboard": dashboard.model_dump(),
+        "project_id": str(project_id),
+        "user_permissions": {
+            "level": user_permission_level,
+            "can_edit": user_permission_level in ["owner", "editor"],
+            "can_delete": user_permission_level == "owner",
+        },
+    }
+
+    # 4. Sanitize response (convert ObjectIds to strings for JSON serialization)
+    sanitized_response = convert_objectid_to_str(response)
+
+    logger.info(f"✅ Dashboard init complete for {dashboard_id}")
+
+    return sanitized_response
+
+
 @dashboards_endpoint_router.get("/list")
 async def list_dashboards(
+    include_child_tabs: bool = False,
     current_user: User = Depends(get_user_or_anonymous),
 ):
     """
     Fetch a list of dashboards for the current user.
+
+    Args:
+        include_child_tabs: If True, includes child tabs in addition to main dashboards.
+                           If False (default), returns only main dashboards.
     """
 
     user_id = current_user.id
     logger.debug(f"Current user ID: {user_id}")
 
-    result = load_dashboards_from_db(owner=user_id, admin_mode=False, user=current_user)
+    result = load_dashboards_from_db(
+        owner=user_id, admin_mode=False, user=current_user, include_child_tabs=include_child_tabs
+    )
 
     if not result["success"]:
         raise HTTPException(status_code=404, detail=result["message"])
@@ -668,20 +766,40 @@ async def delete_dashboard(
 ):
     """
     Delete a dashboard with the given dashboard ID.
+    If the dashboard is a main tab, also delete all child tabs.
     """
 
     user_id = current_user.id
 
-    result = dashboards_collection.delete_one(
+    # First, check if the dashboard exists and user has permission
+    dashboard = dashboards_collection.find_one(
         {"dashboard_id": dashboard_id, "permissions.owners._id": user_id}
     )
 
-    if result.deleted_count > 0:
-        return {"message": f"Dashboard with ID '{str(dashboard_id)}' deleted successfully."}
-    else:
+    if not dashboard:
         raise HTTPException(
-            status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
+            status_code=404,
+            detail=f"Dashboard with ID '{dashboard_id}' not found or access denied.",
         )
+
+    # Check if this is a main tab - if so, delete all child tabs first
+    child_tabs_deleted = 0
+    if dashboard.get("is_main_tab", True):
+        # Delete all child tabs
+        child_result = dashboards_collection.delete_many({"parent_dashboard_id": dashboard_id})
+        child_tabs_deleted = child_result.deleted_count
+        logger.info(f"Deleted {child_tabs_deleted} child tabs for dashboard {dashboard_id}")
+
+    # Delete the dashboard itself
+    result = dashboards_collection.delete_one({"dashboard_id": dashboard_id})
+
+    if result.deleted_count > 0:
+        message = f"Dashboard with ID '{str(dashboard_id)}' deleted successfully."
+        if child_tabs_deleted > 0:
+            message += f" Also deleted {child_tabs_deleted} child tabs."
+        return {"message": message, "child_tabs_deleted": child_tabs_deleted}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to delete dashboard.")
 
 
 @dashboards_endpoint_router.get("/get_component_data/{dashboard_id}/{component_id}")

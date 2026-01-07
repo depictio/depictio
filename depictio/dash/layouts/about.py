@@ -1,9 +1,7 @@
-import dash_mantine_components as dmc
-from dash_iconify import DashIconify
-
 import dash
-from dash import dcc, html
-from depictio.dash.colors import colors  # Import our color palette
+import dash_mantine_components as dmc
+from dash import html
+from dash_iconify import DashIconify
 
 # Create a Stack to vertically arrange all elements with proper spacing
 layout = dmc.Container(
@@ -513,131 +511,6 @@ layout = dmc.Container(
                                             }
                                         },
                                     ),
-                                    style={"marginTop": "auto"},  # Pushes button to bottom
-                                ),
-                            ],
-                        ),
-                    ),
-                ],
-            ),
-            # Additional Resources Section
-            dmc.Paper(
-                p="xl",
-                radius="md",
-                withBorder=False,
-                shadow=None,
-                mt="xl",
-                children=[
-                    # Title for Additional Resources section
-                    dmc.Text(
-                        "Additional Resources",
-                        size="xl",
-                        fw="bold",
-                        ta="center",
-                        mb="xl",
-                    ),
-                    # Color Palette Card centered
-                    dmc.Center(
-                        dmc.Card(
-                            withBorder=True,
-                            shadow="md",
-                            radius="md",
-                            p="lg",
-                            style={
-                                "textAlign": "center",
-                                "maxWidth": "500px",
-                                "width": "100%",
-                                "display": "flex",
-                                "flexDirection": "column",
-                                "minHeight": "400px",  # Use minHeight instead of fixed height
-                            },
-                            children=[
-                                # Card content wrapper
-                                html.Div(
-                                    style={
-                                        "flex": "1",  # Takes up available space
-                                        "display": "flex",
-                                        "flexDirection": "column",
-                                    },
-                                    children=[
-                                        # Icon and Title
-                                        dmc.Group(
-                                            justify="center",
-                                            gap="sm",
-                                            children=[
-                                                DashIconify(
-                                                    icon="mdi:palette",
-                                                    width=40,
-                                                    style={"color": colors["purple"]},
-                                                ),
-                                                dmc.Text(
-                                                    "Depictio Color Palette",
-                                                    size="xl",
-                                                    fw="bold",
-                                                    style={"color": colors["purple"]},
-                                                ),
-                                            ],
-                                        ),
-                                        # Description
-                                        dmc.Text(
-                                            "Explore Depictio's brand colors for consistent design across your applications.",
-                                            size="md",
-                                            c="gray",
-                                            mt="sm",
-                                        ),
-                                        # Color preview strip
-                                        dmc.Group(
-                                            [
-                                                html.Div(
-                                                    style={
-                                                        "backgroundColor": color,
-                                                        "height": "30px",
-                                                        "flex": "1",
-                                                    }
-                                                )
-                                                for color in [
-                                                    colors["purple"],
-                                                    colors["blue"],
-                                                    colors["teal"],
-                                                    colors["green"],
-                                                    colors["yellow"],
-                                                    colors["orange"],
-                                                    colors["red"],
-                                                ]
-                                            ],
-                                            grow=True,
-                                            gap=0,
-                                            style={
-                                                "borderRadius": "8px",
-                                                "overflow": "hidden",
-                                                "marginTop": "15px",
-                                                "marginBottom": "10px",
-                                                "boxShadow": "0 2px 8px rgba(0, 0, 0, 0.1)",
-                                            },
-                                        ),
-                                    ],
-                                ),
-                                # Color Palette Button with Link
-                                dcc.Link(
-                                    children=dmc.Button(
-                                        "View Color Palette",
-                                        variant="filled",
-                                        size="md",
-                                        radius="md",
-                                        leftSection=DashIconify(
-                                            icon="mdi:palette-outline",
-                                            width=20,
-                                        ),
-                                        styles={
-                                            "root": {
-                                                "backgroundColor": colors["purple"],
-                                                "&:hover": {
-                                                    "backgroundColor": colors["purple"] + "cc"
-                                                },
-                                            }
-                                        },
-                                    ),
-                                    href="/palette",  # Link to your color palette page
                                     style={"marginTop": "auto"},  # Pushes button to bottom
                                 ),
                             ],

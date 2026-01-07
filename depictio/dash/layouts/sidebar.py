@@ -3,10 +3,183 @@ import dash_mantine_components as dmc
 from dash import ALL, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
+from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.simple_theme import create_theme_controls
 
 
+def create_sidebar_footer():
+    """
+    Create standardized sidebar footer with theme controls and server status.
+
+    This footer is used in both the management app sidebar and dashboard viewer sidebar.
+    It includes:
+    - Visual separator (divider)
+    - Theme toggle controls (light/dark mode)
+    - Server status indicator
+    - Horizontal divider
+    - User avatar container
+
+    Returns:
+        html.Div: Sidebar footer component with consistent styling
+    """
+    return html.Div(
+        id="sidebar-footer",
+        children=[
+            # Separator above theme section
+            dmc.Divider(variant="solid", my="md"),
+            # Theme controls
+            dmc.Center(create_theme_controls()),
+            # Server status
+            dmc.Grid(
+                id="sidebar-footer-server-status",
+                align="center",
+                justify="center",
+            ),
+            # Divider before avatar
+            dmc.Divider(my="sm"),
+            # User avatar
+            html.Div(
+                id="avatar-container",
+                style={
+                    "textAlign": "center",
+                    "justifyContent": "center",
+                    "display": "flex",
+                    "alignItems": "center",
+                    "flexDirection": "row",
+                    "paddingBottom": "16px",
+                },
+            ),
+        ],
+        style={
+            "flexShrink": 0,
+        },
+    )
+
+
+def create_static_navbar_content():
+    """
+    PERFORMANCE OPTIMIZATION: Generate static navbar HTML once at app startup.
+
+    This function generates the navbar content that was previously built dynamically
+    via a callback on every page load, causing ~2419ms delay.
+
+    Returns:
+        list: Navbar children to be passed to AppShellNavbar
+    """
+    depictio_logo_container = html.Div(
+        id="navbar-logo-container",
+        children=[
+            dcc.Link(
+                dmc.Image(
+                    id="navbar-logo-content",
+                    src=dash.get_asset_url("images/logos/logo_black.svg"),
+                    w=185,
+                ),
+                href="/",
+                style={"alignItems": "center", "justifyContent": "center", "display": "flex"},
+            )
+        ],
+    )
+
+    sidebar_links = dmc.Stack(
+        id="sidebar-content",
+        children=[
+            dmc.NavLink(
+                id={"type": "sidebar-link", "index": "dashboards"},
+                label=dmc.Text(
+                    "Dashboards",
+                    size="lg",
+                    style={"fontSize": "16px"},
+                    className="section-accent",
+                ),
+                leftSection=DashIconify(icon="material-symbols:dashboard", height=25),
+                href="/dashboards",
+                style={"padding": "20px"},
+                color="orange",
+            ),
+            dmc.NavLink(
+                id={"type": "sidebar-link", "index": "projects"},
+                label=dmc.Text(
+                    "Projects",
+                    size="lg",
+                    style={"fontSize": "16px"},
+                    className="section-accent",
+                ),
+                leftSection=DashIconify(icon="mdi:jira", height=25),
+                href="/projects",
+                style={"padding": "20px"},
+                color="teal",
+            ),
+            dmc.NavLink(
+                id={"type": "sidebar-link", "index": "administration"},
+                label=dmc.Text(
+                    "Administration",
+                    size="lg",
+                    style={"fontSize": "16px"},
+                    className="section-accent",
+                ),
+                leftSection=DashIconify(icon="material-symbols:settings", height=25),
+                href="/admin",
+                style={"padding": "20px", "display": "none"},
+                color="blue",
+            ),
+            dmc.NavLink(
+                id={"type": "sidebar-link", "index": "about"},
+                label=dmc.Text(
+                    "About",
+                    size="lg",
+                    style={"fontSize": "16px"},
+                    className="section-accent",
+                ),
+                leftSection=DashIconify(icon="mingcute:question-line", height=25),
+                href="/about",
+                style={"padding": "20px"},
+                color="gray",
+            ),
+        ],
+        gap="xs",
+        style={
+            "whiteSpace": "nowrap",
+            "flex": "1",
+            "overflowY": "auto",
+        },
+    )
+
+    # Create standardized sidebar footer
+    sidebar_footer = create_sidebar_footer()
+
+    # Return layout - same for all pages
+    return [
+        dmc.Stack(
+            [
+                dmc.Center(
+                    [depictio_logo_container],
+                    id="navbar-logo-center",
+                    pt="md",
+                ),
+                sidebar_links,
+                sidebar_footer,
+            ],
+            justify="space-between",
+            h="100%",
+            style={
+                "height": "100%",
+            },
+        )
+    ]
+
+
 def register_sidebar_callbacks(app):
+    # Import and register tab callbacks
+    from depictio.dash.layouts.tab_callbacks import register_tab_callbacks
+    from depictio.dash.layouts.tab_modal import register_tab_modal_callbacks
+
+    register_tab_callbacks(app)
+    logger.info("✅ SIDEBAR: Tab callbacks registered")
+
+    register_tab_modal_callbacks(app)
+    logger.info("✅ SIDEBAR: Tab modal callbacks registered")
+
     # Inject JavaScript to handle the resize when sidebar state changes
     # app.clientside_callback(
     #     """
@@ -60,7 +233,7 @@ def register_sidebar_callbacks(app):
             console.log('🔧 CLIENTSIDE FAVICON: collapsed=' + is_collapsed + ', pathname=' + pathname);
 
             // Only manage favicon on dashboard pages
-            if (!pathname || !pathname.startsWith('/dashboard/')) {
+            if (!pathname || !(pathname.startsWith('/dashboard/') || pathname.startsWith('/dashboard-edit/'))) {
                 console.log('❌ Not a dashboard page - hiding favicon');
                 return {"display": "none"};
             }
@@ -90,7 +263,7 @@ def register_sidebar_callbacks(app):
             console.log('🔧 CLIENTSIDE NAVBAR COLLAPSED: collapsed=' + is_collapsed + ', pathname=' + pathname);
 
             // Only allow collapse on dashboard pages
-            if (!pathname || !pathname.startsWith('/dashboard/')) {
+            if (!pathname || !(pathname.startsWith('/dashboard/') || pathname.startsWith('/dashboard-edit/'))) {
                 console.log('❌ Not a dashboard page - keeping navbar expanded');
                 return window.dash_clientside.no_update;
             }
@@ -187,254 +360,434 @@ def register_sidebar_callbacks(app):
     # NOTE: Avatar callback removed - replaced with "Powered by Depictio" section
     # NOTE: Theme-aware logo callbacks removed - no logos to invert anymore
 
+    # Populate API base URL for clientside callbacks
     @app.callback(
+        Output("api-base-url-store", "data"),
+        Input("url", "pathname"),
+        prevent_initial_call=False,
+    )
+    def populate_api_base_url(pathname):
+        """Provide API base URL to clientside callbacks.
+
+        Uses external_url for browser-based fetch requests (not internal Docker URLs).
+        """
+        from depictio.api.v1.configs.config import settings
+
+        # Use external URL for browser fetch (internal URL only works within Docker network)
+        return settings.fastapi.external_url
+
+    # Server status periodic check (30 second interval)
+    # Pure clientside implementation - browser directly fetches from API
+    app.clientside_callback(
+        """
+        async function(n_intervals, current_cache, api_base_url) {
+            console.log('🔄 Clientside server status check:', n_intervals);
+            console.log('🔧 API Base URL:', api_base_url);
+
+            // Don't trigger on initial load (n_intervals === 0) or if API URL not set
+            if (n_intervals === 0 || !api_base_url) {
+                return window.dash_clientside.no_update;
+            }
+
+            try {
+                // Direct fetch from browser to API endpoint (no Dash server involved)
+                const status_url = `${api_base_url}/depictio/api/v1/utils/status`;
+                console.log('🌐 Fetching server status from:', status_url);
+
+                const response = await fetch(status_url, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    // Use no-cache to avoid stale responses
+                    cache: 'no-cache',
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                console.log('✅ Server status fetched:', data);
+
+                // Return updated cache with timestamp
+                return {
+                    status: data.status || 'online',
+                    version: data.version || 'unknown',
+                    timestamp: Date.now() / 1000,  // Convert to seconds
+                };
+            } catch (error) {
+                console.error('❌ Server status check failed:', error);
+
+                // Return offline status on error
+                return {
+                    status: 'offline',
+                    version: current_cache?.version || 'unknown',
+                    timestamp: Date.now() / 1000,
+                };
+            }
+        }
+        """,
+        Output("server-status-cache", "data"),
+        Input("server-status-interval", "n_intervals"),
+        State("server-status-cache", "data"),
+        State("api-base-url-store", "data"),
+        prevent_initial_call=True,
+    )
+
+    # COMMENTED OUT: Server-side callback - Testing clientside version below
+    # # PHASE 2A OPTIMIZATION: Track last rendered server status to prevent duplicate renders
+    # _last_server_status_state = {"status": None, "version": None}
+
+    # @app.callback(
+    #     Output("sidebar-footer-server-status", "children"),
+    #     Input("server-status-cache", "data"),
+    #     State("sidebar-footer-server-status", "children"),
+    #     prevent_initial_call=False,  # Must be False to check ctx.triggered
+    # )
+    # def update_server_status(server_cache, current_children):
+    #     """
+    #     PERFORMANCE OPTIMIZATION (Phase 2A): Enhanced guards to prevent redundant updates.
+
+    #     Guards:
+    #     1. Skip if no trigger or empty value (initial load)
+    #     2. Skip if server status hasn't actually changed (content comparison)
+
+    #     This reduces callback fires from 4 → 1 during dashboard load.
+    #     """
+    #     from dash import ctx
+
+    #     # # DEBUG LOGGING: Log all inputs for troubleshooting
+    #     # logger.info("🔍 SERVER STATUS CALLBACK TRIGGERED")
+    #     # logger.info(f"  - Trigger: {ctx.triggered}")
+    #     # logger.info(f"  - server_cache: {server_cache}")
+    #     # logger.info(f"  - current_children type: {type(current_children)}")
+    #     # logger.info(f"  - _last_server_status_state: {_last_server_status_state}")
+
+    #     # Get server status from server-status-cache store
+    #     # server_cache contains data like: {"status": "online", "version": "0.5.2"}
+    #     server_status = server_cache
+
+    #     # GUARD 1: Skip if no valid cache data exists
+    #     if not server_status or "status" not in server_status:
+    #         logger.debug("🔴 GUARD 1: No valid cache data - preventing update")
+    #         raise dash.exceptions.PreventUpdate
+
+    #     # GUARD 2: Skip if server status hasn't changed AND element already has content
+    #     # Compare relevant fields only (status + version)
+    #     # IMPORTANT: Always render if current_children is None (element is empty in DOM)
+    #     current_status = server_status.get("status")
+    #     current_version = server_status.get("version")
+
+    #     if (
+    #         current_children is not None  # Element already has content
+    #         and _last_server_status_state["status"] is not None
+    #         and _last_server_status_state["status"] == current_status
+    #         and _last_server_status_state["version"] == current_version
+    #     ):
+    #         logger.info(
+    #             f"🔴 GUARD 2: Status unchanged ({current_status}, {current_version}) and element has content - preventing update"
+    #         )
+    #         raise dash.exceptions.PreventUpdate
+
+    #     # Update tracking state
+    #     _last_server_status_state["status"] = current_status
+    #     _last_server_status_state["version"] = current_version
+
+    #     # logger.info(
+    #     #     f"✅ update_server_status: Rendering new status ({current_status}, {current_version})"
+    #     # )
+
+    #     # Render server status badge
+    #     if server_status["status"] == "online":
+    #         server_status_badge = dmc.GridCol(
+    #             dmc.Badge(
+    #                 f"Server online - {server_status['version']}",
+    #                 variant="dot",
+    #                 color="green",
+    #                 size="sm",
+    #             ),
+    #             span="content",
+    #         )
+    #         return [dmc.Group([server_status_badge], justify="space-between")]
+    #     else:
+    #         server_status_badge = dmc.GridCol(
+    #             dmc.Badge(
+    #                 "Server offline",
+    #                 variant="outline",
+    #                 color="red",
+    #                 size="sm",
+    #                 style={"padding": "5px 5px"},
+    #             ),
+    #             span="content",
+    #         )
+    #         return [server_status_badge]
+
+    # Clientside callback to render server status badge
+    app.clientside_callback(
+        """
+        function(server_cache) {
+            console.log('🎨 CLIENTSIDE: Rendering server status badge', server_cache);
+
+            // Guard: Skip if no valid cache data
+            if (!server_cache || !server_cache.status) {
+                console.log('❌ No valid cache data - no update');
+                return window.dash_clientside.no_update;
+            }
+
+            // Render badge based on status
+            if (server_cache.status === 'online') {
+                return [{
+                    type: 'Group',
+                    namespace: 'dash_mantine_components',
+                    props: {
+                        justify: 'space-between',
+                        children: [{
+                            type: 'GridCol',
+                            namespace: 'dash_mantine_components',
+                            props: {
+                                span: 'content',
+                                children: {
+                                    type: 'Badge',
+                                    namespace: 'dash_mantine_components',
+                                    props: {
+                                        children: 'Server online - ' + (server_cache.version || 'unknown'),
+                                        variant: 'dot',
+                                        color: 'green',
+                                        size: 'sm'
+                                    }
+                                }
+                            }
+                        }]
+                    }
+                }];
+            } else {
+                return [{
+                    type: 'Badge',
+                    namespace: 'dash_mantine_components',
+                    props: {
+                        children: 'Server offline',
+                        variant: 'outline',
+                        color: 'red',
+                        size: 'sm',
+                        style: { padding: '5px 5px' }
+                    }
+                }];
+            }
+        }
+        """,
         Output("sidebar-footer-server-status", "children"),
         Input("server-status-cache", "data"),
         prevent_initial_call=False,
     )
-    def update_server_status(server_cache):
-        from depictio.dash.layouts.consolidated_api import get_cached_server_status
 
-        # Get server status from consolidated cache
-        server_status = get_cached_server_status(server_cache)
-        if not server_status:
-            return []
+    # Admin link visibility - server-side callback using local-store
+    @app.callback(
+        Output({"type": "sidebar-link", "index": "administration"}, "style"),
+        Input("local-store", "data"),
+        prevent_initial_call=False,
+    )
+    def update_admin_link_visibility(local_data):
+        """
+        Show/hide admin link based on user's admin status.
+        """
+        if not local_data or not local_data.get("logged_in"):
+            return {"padding": "20px", "display": "none"}
 
-        if server_status["status"] == "online":
-            server_status_badge = dmc.GridCol(
-                dmc.Badge(
-                    f"Server online - {server_status['version']}",
-                    variant="dot",
-                    color="green",
-                    size="sm",
-                ),
-                span="content",
-            )
-            return [dmc.Group([server_status_badge], justify="space-between")]
-        else:
-            server_status_badge = dmc.GridCol(
-                dmc.Badge(
-                    "Server offline",
-                    variant="outline",
-                    color="red",
-                    size="sm",
-                    style={"padding": "5px 5px"},
-                ),
-                span="content",
-            )
-            return [server_status_badge]
+        try:
+            # Fetch user details using cached API call
+            from depictio.dash.api_calls import api_call_fetch_user_from_token
 
-    # Move admin link visibility to clientside for instant response
+            user = api_call_fetch_user_from_token(local_data.get("access_token"))
+            if user and user.is_admin:
+                logger.debug(f"✅ Showing admin link for admin user: {user.email}")
+                return {"padding": "20px"}
+            else:
+                logger.debug(
+                    f"🔧 Hiding admin link for non-admin user: {user.email if user else 'unknown'}"
+                )
+                return {"padding": "20px", "display": "none"}
+        except Exception as e:
+            logger.error(f"❌ Error checking admin status: {e}")
+            return {"padding": "20px", "display": "none"}
+
     app.clientside_callback(
         """
-        function(user_cache) {
-            console.log('🔧 CLIENTSIDE ADMIN LINK: user_cache received:', !!user_cache);
+        function(local_data) {
+            console.log('🔧 CLIENTSIDE AVATAR: local_data received:', !!local_data);
 
-            if (!user_cache || !user_cache.user) {
-                console.log('🔧 CLIENTSIDE ADMIN LINK: No user, hiding admin link');
-                return {"padding": "20px", "display": "none"};
+            // Check if user is logged in
+            if (!local_data || !local_data.logged_in) {
+                console.log('❌ No local_data or not logged in - returning empty');
+                return [];
             }
 
-            var user = user_cache.user;
-            if (user.is_admin) {
-                console.log('✅ CLIENTSIDE ADMIN LINK: Showing admin link for', user.email);
-                return {"padding": "20px"};
-            } else {
-                console.log('🔧 CLIENTSIDE ADMIN LINK: Hiding admin link for non-admin', user.email);
-                return {"padding": "20px", "display": "none"};
+            // Read token name which contains email with timestamp suffix
+            // Example: "admin@example.com_20251107090126"
+            var tokenName = local_data.name;
+            if (!tokenName) {
+                console.log('❌ No token name in local_data - returning empty');
+                return [];
             }
+
+            // Extract email by removing timestamp suffix (everything after first underscore)
+            var email = tokenName.split('_')[0];
+
+            // Extract name from email (before @)
+            var name = email.split('@')[0];
+
+            console.log('✅ CLIENTSIDE AVATAR: Creating avatar for', email, 'from token name', tokenName);
+
+            // Create avatar link with image using clean email
+            var avatarSrc = 'https://ui-avatars.com/api/?format=svg&name=' + encodeURIComponent(email) +
+                           '&background=AEC8FF&color=white&rounded=true&bold=true&format=svg&size=16';
+
+            return [
+                {
+                    namespace: 'dash_core_components',
+                    type: 'Link',
+                    props: {
+                        href: '/profile',
+                        children: {
+                            namespace: 'dash_mantine_components',
+                            type: 'Avatar',
+                            props: {
+                                id: 'avatar',
+                                src: avatarSrc,
+                                size: 'md',
+                                radius: 'xl'
+                            }
+                        }
+                    }
+                },
+                {
+                    namespace: 'dash_mantine_components',
+                    type: 'Text',
+                    props: {
+                        children: name,
+                        size: 'sm',
+                        style: {marginLeft: '5px'}
+                    }
+                }
+            ];
         }
         """,
-        Output({"type": "sidebar-link", "index": "administration"}, "style"),
-        Input("user-cache-store", "data"),
-        prevent_initial_call=False,
-    )
-
-    # Avatar callback - populate avatar container with user info
-    @app.callback(
         Output("avatar-container", "children"),
-        Input("user-cache-store", "data"),
+        Input("local-store", "data"),
         prevent_initial_call=False,
     )
-    def update_avatar(user_cache):
-        """Update avatar with user information from consolidated cache."""
-        from depictio.api.v1.configs.logging_init import logger
 
-        # Get user from consolidated cache
-        if user_cache and isinstance(user_cache, dict) and "user" in user_cache:
-            user_data = user_cache["user"]
+    # NOTE: Dynamic navbar callback removed (Phase 1B performance optimization)
+    # Navbar content is now generated statically at app startup via create_static_navbar_content()
+    # This eliminated ~2419ms delay on every page load. See git history for original implementation.
 
-            if user_data and user_data.get("email"):
-                email = user_data["email"]
-                name = user_data.get("name", email.split("@")[0])
-            else:
-                return []
-        else:
-            return []
+    # Minimal callback to reference sidebar tabs (dashboard viewer only)
+    # NOTE: Only register this if sidebar-tabs component exists (viewer app)
+    try:
 
-        avatar = dcc.Link(
-            dmc.Avatar(
-                id="avatar",
-                src=f"https://ui-avatars.com/api/?format=svg&name={email}&background=AEC8FF&color=white&rounded=true&bold=true&format=svg&size=16",
-                size="md",
-                radius="xl",
-            ),
-            href="/profile",
+        @app.callback(
+            Input("sidebar-tabs", "value"),
+            prevent_initial_call=True,
         )
-        name_text = dmc.Text(name, size="sm", style={"marginLeft": "5px"})
-        logger.info(f"✅ AVATAR CALLBACK: Created avatar for {email}")
-        return [avatar, name_text]
+        def sidebar_tabs_callback(tab_value):
+            """
+            Minimal callback to reference sidebar tabs component (dashboard viewer).
+            No output - Dash supports callbacks without return statements.
+            This prevents component ID errors while allowing for future expansion.
+            """
+            logger.debug(f"Sidebar tab changed to: {tab_value}")
+            # No return statement - Dash allows this for callbacks without outputs
+    except Exception as e:
+        # Sidebar tabs may not exist in management app, skip callback
+        logger.debug(f"Sidebar tabs callback not registered: {e}")
 
-    # Static Navbar Content - same layout for all pages
-    @app.callback(
-        Output("app-shell-navbar-content", "children"),
-        Input("url", "pathname"),
-        prevent_initial_call=False,
+
+def create_dashboard_viewer_sidebar():
+    """
+    Create sidebar for dashboard viewer with tabs and footer.
+
+    Tabs are populated dynamically via callback based on current dashboard and user permissions.
+
+    Returns:
+        list: Sidebar children with empty tabs container and footer
+    """
+    logger.info("🏗️ Creating dashboard viewer sidebar with tab container")
+
+    from depictio.dash.colors import colors
+
+    # Create empty tabs component - will be populated by callback
+    sidebar_tabs = dmc.Tabs(
+        id="sidebar-tabs",
+        orientation="vertical",
+        placement="left",
+        value=None,
+        w="100%",  # Full width
+        # variant="pills",
+        color=colors["orange"],
+        children=[
+            dmc.TabsList(
+                [],
+                id="sidebar-tabs-list",
+                style={"width": "100%"},  # Full width tabs list
+            )
+        ],
     )
-    def render_dynamic_navbar_content(pathname):
-        """Render navbar content with logo, navlinks, and footer with avatar."""
-        depictio_logo_container = html.Div(
-            id="navbar-logo-container",
-            children=[
-                dcc.Link(
-                    dmc.Image(
-                        id="navbar-logo-content",
-                        src=dash.get_asset_url("images/logos/logo_black.svg"),
-                        # h=38,
-                        w=185,
-                    ),
-                    href="/",
-                    style={"alignItems": "center", "justifyContent": "center", "display": "flex"},
-                )
-            ],
-        )
+    logger.info("✅ Created sidebar-tabs with sidebar-tabs-list")
 
-        sidebar_links = dmc.Stack(
-            id="sidebar-content",
-            children=[
-                dmc.NavLink(
-                    id={"type": "sidebar-link", "index": "dashboards"},
-                    label=dmc.Text(
-                        "Dashboards",
-                        size="lg",
-                        style={"fontSize": "16px"},
-                        className="section-accent",
-                    ),
-                    leftSection=DashIconify(icon="material-symbols:dashboard", height=25),
+    # Create "Back to Dashboards" navigation link for top of sidebar
+    back_to_dashboards = html.Div(
+        children=[
+            dmc.Center(
+                html.A(
+                    children=[
+                        DashIconify(
+                            icon="mdi:arrow-left",
+                            height=14,
+                            style={
+                                "marginRight": "6px",
+                                "display": "inline-block",
+                                "color": "var(--app-text-color, #000000)",
+                                "opacity": "0.7",
+                            },
+                        ),
+                        dmc.Text("Back to Dashboards", c="gray", size="sm"),
+                    ],
                     href="/dashboards",
-                    style={"padding": "20px"},
-                    color="orange",
-                ),
-                dmc.NavLink(
-                    id={"type": "sidebar-link", "index": "projects"},
-                    label=dmc.Text(
-                        "Projects",
-                        size="lg",
-                        style={"fontSize": "16px"},
-                        className="section-accent",
-                    ),
-                    leftSection=DashIconify(icon="mdi:jira", height=25),
-                    href="/projects",
-                    style={"padding": "20px"},
-                    color="teal",
-                ),
-                dmc.NavLink(
-                    id={"type": "sidebar-link", "index": "administration"},
-                    label=dmc.Text(
-                        "Administration",
-                        size="lg",
-                        style={"fontSize": "16px"},
-                        className="section-accent",
-                    ),
-                    leftSection=DashIconify(icon="material-symbols:settings", height=25),
-                    href="/admin",
-                    style={"padding": "20px", "display": "none"},
-                    color="blue",
-                ),
-                dmc.NavLink(
-                    id={"type": "sidebar-link", "index": "about"},
-                    label=dmc.Text(
-                        "About",
-                        size="lg",
-                        style={"fontSize": "16px"},
-                        className="section-accent",
-                    ),
-                    leftSection=DashIconify(icon="mingcute:question-line", height=25),
-                    href="/about",
-                    style={"padding": "20px"},
-                    color="gray",
-                ),
-            ],
-            gap="xs",
-            style={
-                "whiteSpace": "nowrap",
-                "flex": "1",
-                "overflowY": "auto",
-            },
-        )
-
-        sidebar_footer = html.Div(
-            id="sidebar-footer",
-            children=[
-                dmc.Center(create_theme_controls()),
-                dmc.Grid(
-                    id="sidebar-footer-server-status",
-                    align="center",
-                    justify="center",
-                ),
-                html.Hr(),
-                html.Div(
-                    id="avatar-container",
                     style={
-                        "textAlign": "center",
-                        "justifyContent": "center",
+                        "textDecoration": "none",
                         "display": "flex",
                         "alignItems": "center",
-                        "flexDirection": "row",
-                        "paddingBottom": "16px",  # Add padding to bottom of avatar
+                        "transition": "opacity 0.2s",
                     },
+                    className="hover-link",
+                )
+            ),
+            # Divider to separate from tabs section
+            dmc.Divider(variant="solid", mt="md", mb="xs"),
+        ],
+        style={"padding": "16px 16px 0 16px"},
+    )
+
+    # Create standardized sidebar footer
+    sidebar_footer = create_sidebar_footer()
+
+    # Return navigation link at top, tabs in middle, footer at bottom
+    return [
+        dmc.Stack(
+            [
+                back_to_dashboards,
+                html.Div(
+                    sidebar_tabs,
+                    style={"flex": "1", "overflowY": "auto"},  # Tabs grow to fill space
                 ),
+                sidebar_footer,
             ],
+            h="100%",
             style={
-                "flexShrink": 0,
+                "height": "100%",
+                "width": "100%",  # Full width stack
+                "display": "flex",
+                "flexDirection": "column",
             },
         )
-
-        # Return layout - same for all pages
-        return [
-            dmc.Stack(
-                [
-                    dmc.Center(
-                        [depictio_logo_container],
-                        id="navbar-logo-center",
-                        pt="md",  # Add padding to top of logo
-                    ),
-                    sidebar_links,
-                    sidebar_footer,
-                ],
-                justify="space-between",
-                h="100%",
-                style={
-                    "height": "100%",
-                },
-            )
-        ]
-
-
-def _create_powered_by_footer():
-    """Create footer with theme controls and server status for dashboard pages."""
-    return dmc.Stack(
-        id="powered-by-footer",
-        children=[
-            dmc.Center(create_theme_controls()),
-            dmc.Grid(
-                id="sidebar-footer-server-status",
-                align="center",
-                justify="center",
-            ),
-        ],
-        gap="sm",
-        style={
-            "flexShrink": 0,
-        },
-    )
+    ]

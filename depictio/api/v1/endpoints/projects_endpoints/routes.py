@@ -3,11 +3,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 # depictio imports
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.db import dashboards_collection, projects_collection
+from depictio.api.v1.db import dashboards_collection, deltatables_collection, projects_collection
 from depictio.api.v1.endpoints.projects_endpoints.utils import (
     _async_get_all_projects,
-    _async_get_project_from_id,
     _async_get_project_from_name,
+    get_project_with_delta_locations,
     validate_workflow_uniqueness_in_project,
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
@@ -35,22 +35,28 @@ async def get_all_projects(current_user: User = Depends(get_current_user)) -> li
     return _async_get_all_projects(current_user, projects_collection)
 
 
-@projects_endpoint_router.get("/get/from_id", response_model=Project)
+@projects_endpoint_router.get("/get/from_id")
 async def get_project_from_id(
     project_id: PyObjectId = Query(default="646b0f3c1e4a2d7f8e5b8c9a"),
     current_user: User = Depends(get_user_or_anonymous),
 ):
-    """Get a project by ID.
-    This endpoint retrieves a project from the database using its ID. It checks if the user has the necessary permissions to access the project.
+    """Get a project by ID with delta_locations joined via MongoDB aggregation.
+
+    This endpoint retrieves a project from the database using its ID and joins
+    delta_table_location data from the DeltaTableAggregated collection at query time.
+    This ensures always-fresh delta_locations without needing to cache them in dashboard metadata.
 
     Args:
-        project_id (PyObjectId, optional): _description_. Defaults to Query(default="646b0f3c1e4a2d7f8e5b8c9a").
-        current_user (User, optional): _description_. Defaults to Depends(get_current_user).
+        project_id (PyObjectId, optional): The project ID to retrieve.
+        current_user (User, optional): The authenticated user. Defaults to Depends(get_user_or_anonymous).
 
     Returns:
-        _type_: Project: The project object retrieved from the database.
+        dict: Project document with delta_locations nested in data_collections.
+              Each data collection includes:
+              - delta_location: S3/MinIO path to delta table
+              - last_aggregation: Most recent aggregation metadata with column specs
     """
-    return _async_get_project_from_id(project_id, current_user, projects_collection)
+    return await get_project_with_delta_locations(project_id, current_user)
 
 
 @projects_endpoint_router.get("/get/from_name/{project_name}", response_model=Project)
@@ -67,7 +73,7 @@ async def get_project_from_name(project_name: str, current_user: User = Depends(
     return _async_get_project_from_name(project_name, current_user, projects_collection)
 
 
-@projects_endpoint_router.get("/get/from_dashboard_id/{dashboard_id}", response_model=Project)
+@projects_endpoint_router.get("/get/from_dashboard_id/{dashboard_id}")
 async def get_project_from_dashboard_id(
     dashboard_id: PyObjectId, current_user: User = Depends(get_user_or_anonymous)
 ):
@@ -91,7 +97,47 @@ async def get_project_from_dashboard_id(
     # - Project is_public = True
     # - User is admin
     project = await get_project_from_id(str(project_id), current_user)
-    return project
+
+    # NEW: Fetch delta table locations for all data collections in the project
+    dc_ids = []
+    workflows = project.get("workflows", []) if isinstance(project, dict) else project.workflows
+    if workflows:
+        for workflow in workflows:
+            # Handle both dict and object access
+            data_collections = (
+                workflow.get("data_collections", [])
+                if isinstance(workflow, dict)
+                else workflow.data_collections
+            )
+            if data_collections:
+                for dc in data_collections:
+                    # Handle both dict and object access for dc.id
+                    dc_id = dc.get("_id") if isinstance(dc, dict) else dc.id
+                    if dc_id:
+                        dc_ids.append(dc_id)
+
+    logger.info(f"Fetching delta table locations for {len(dc_ids)} data collections")
+
+    # Batch query deltatables collection
+    delta_locations = {}
+    if dc_ids:
+        deltatables_cursor = deltatables_collection.find(
+            {"data_collection_id": {"$in": dc_ids}},
+            {"data_collection_id": 1, "delta_table_location": 1},
+        )
+
+        for dt in deltatables_cursor:
+            dc_id = str(dt["data_collection_id"])
+            delta_locations[dc_id] = dt.get("delta_table_location")
+
+    logger.info(f"Found {len(delta_locations)} delta table locations")
+
+    # Return project data with additional metadata for dashboard optimization
+    # Note: s3_config is not returned - load_deltatable_lite() uses module-level polars_s3_config directly
+    return {
+        "project": project.model_dump() if hasattr(project, "model_dump") else project,
+        "delta_locations": delta_locations,
+    }
 
 
 @projects_endpoint_router.post("/create")

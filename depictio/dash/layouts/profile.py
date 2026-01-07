@@ -331,6 +331,7 @@ def register_profile_callbacks(app):
             State("confirm-new-password", "value"),
             State("local-store", "data"),
         ],
+        prevent_initial_call=True,
     )
     def edit_password_callback(
         edit_clicks,

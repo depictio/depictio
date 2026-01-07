@@ -4,7 +4,7 @@ from dash import dcc, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.api_calls import api_call_fetch_user_from_token, purge_expired_tokens
+from depictio.dash.api_calls import api_call_fetch_user_from_token
 
 # Analytics tracking
 from depictio.dash.components.analytics_tracker import (
@@ -22,8 +22,9 @@ from depictio.dash.layouts.draggable import design_draggable
 from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data_sync
 from depictio.dash.layouts.header import design_header
 from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
-from depictio.dash.layouts.notes_footer import create_notes_footer
-from depictio.dash.layouts.palette import create_color_palette_page
+
+# TEMPORARILY DISABLED FOR PERFORMANCE (Phase 4E-3)
+# from depictio.dash.layouts.palette import create_color_palette_page
 from depictio.dash.layouts.profile import layout as profile_layout
 from depictio.dash.layouts.project_data_collections import (
     layout as project_data_collections_layout,
@@ -32,65 +33,11 @@ from depictio.dash.layouts.projects import layout as projects_layout
 from depictio.dash.layouts.projectwise_user_management import (
     layout as projectwise_user_management_layout,
 )
+from depictio.dash.layouts.sidebar import create_static_navbar_content
+from depictio.dash.layouts.tab_callbacks import *  # noqa: F401,F403 - Imports callbacks for registration
+from depictio.dash.layouts.tab_modal import create_tab_modal
 from depictio.dash.layouts.tokens_management import layout as tokens_management_layout
 from depictio.dash.layouts.users_management import layout as users_management_layout
-
-
-def perform_defensive_cache_check(dashboard_id, local_data, cached_project_data):
-    """
-    DEFENSIVE CACHE CHECK - Ensure project data is available before design_draggable needs it.
-    This prevents race condition with async consolidated callback.
-
-    Args:
-        dashboard_id: Dashboard ID to fetch project for
-        local_data: User authentication data
-        cached_project_data: Existing cached project data (if any)
-
-    Returns:
-        Updated cached_project_data dict or original if already valid
-    """
-    import time
-
-    import httpx
-
-    from depictio.api.v1.configs.config import API_BASE_URL
-
-    cache_key = f"project_{dashboard_id}"
-    if not cached_project_data or cached_project_data.get("cache_key") != cache_key:
-        logger.info(
-            f"⚡ PREFETCH: Cache miss for {dashboard_id} - fetching project synchronously to avoid blocking in design_draggable"
-        )
-        start_time = time.time()
-
-        # Synchronous fetch (blocking but guaranteed to work, prevents larger block later)
-        try:
-            project_json = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/projects/get/from_dashboard_id/{dashboard_id}",
-                headers={"Authorization": f"Bearer {local_data['access_token']}"},
-                timeout=10.0,
-            ).json()
-
-            # Update cached_project_data for downstream use in design_draggable
-            cached_project_data = {
-                "project": project_json,
-                "cache_key": cache_key,
-                "timestamp": time.time(),
-            }
-
-            duration_ms = (time.time() - start_time) * 1000
-            logger.info(
-                f"⚡ PREFETCH: Fetched project in {duration_ms:.0f}ms - cache now populated for design_draggable"
-            )
-        except Exception as e:
-            logger.error(f"❌ PREFETCH: Failed to fetch project data: {e}")
-            # Continue without cached data - design_draggable will handle fallback
-    else:
-        cache_age = time.time() - cached_project_data.get("timestamp", 0)
-        logger.info(
-            f"✅ PREFETCH: Using cached project data (age: {cache_age:.2f}s) - no HTTP call needed"
-        )
-
-    return cached_project_data
 
 
 def return_create_dashboard_button(email, is_anonymous=False):
@@ -155,35 +102,161 @@ def handle_unauthenticated_user(pathname):
     )
 
 
-def handle_authenticated_user(pathname, local_data, theme="light", cached_project_data=None):
+def handle_authenticated_user(
+    pathname,
+    local_data,
+    theme="light",
+    cached_project_data=None,
+    dashboard_init_data=None,
+):
+    """
+    Handle authenticated user routing and page rendering.
+
+    PERFORMANCE OPTIMIZATION (API Consolidation):
+    - Added dashboard_init_data parameter from consolidated /dashboards/init endpoint
+    - Passes enriched metadata to render_dashboard to eliminate component-level API calls
+
+    Args:
+        pathname: URL pathname to route to
+        local_data: User authentication data
+        theme: Current theme (light/dark)
+        cached_project_data: Cached project data from consolidated API
+    """
     logger.info(f"User logged in: {local_data.get('email', 'Unknown')}")
     # logger.info(f"Local data: {local_data}")
 
-    purge_expired_tokens(local_data["access_token"])
+    # PERFORMANCE OPTIMIZATION (Phase 4E-4): Disabled purge on every page load
+    # Token cleanup now runs hourly via cleanup_tasks.py:periodic_purge_expired_tokens()
+    # This saves 30-50ms per page load while maintaining token hygiene
+    # purge_expired_tokens(local_data["access_token"])
 
     # Map the pathname to the appropriate content and header
-    if pathname.startswith("/dashboard/"):
-        dashboard_id = pathname.split("/")[-1]
+    # Component creation/editing page - must be checked BEFORE general dashboard route
+    if pathname.startswith("/dashboard/") and "/component/add/" in pathname:
+        from depictio.dash.layouts.stepper_page import create_stepper_page
 
-        # Load dashboard data and create layout directly
-        logger.info(f"🔄 DASHBOARD NAVIGATION: Loading dashboard {dashboard_id}")
+        parts = pathname.split("/")
+        # URL structure: /dashboard/{dashboard_id}/component/add/{component_id}
+        # parts: ['', 'dashboard', '{dashboard_id}', 'component', 'add', '{component_id}']
+        dashboard_id = parts[2]
+        component_id = parts[5]  # Fixed: was parts[4] which extracted 'add'
 
-        # Perform defensive cache check to ensure project data is available
-        cached_project_data = perform_defensive_cache_check(
-            dashboard_id, local_data, cached_project_data
+        logger.info(f"🎨 COMPONENT STEPPER - Dashboard: {dashboard_id}, Component: {component_id}")
+
+        # Create stepper page layout
+        stepper_page = create_stepper_page(
+            dashboard_id=dashboard_id,
+            component_id=component_id,
+            theme=theme,
+            TOKEN=local_data.get("access_token"),
         )
 
+        # Minimal header for consistency (though stepper_page has its own header)
+        header_content = create_default_header("Component Designer")
+
+        return stepper_page, header_content, pathname, local_data
+
+    # Component editing page - must be checked BEFORE general dashboard route
+    elif pathname.startswith("/dashboard/") and "/component/edit/" in pathname:
+        from depictio.dash.api_calls import api_call_get_dashboard
+        from depictio.dash.layouts.edit_page import create_edit_page
+
+        parts = pathname.split("/")
+        # URL structure: /dashboard/{dashboard_id}/component/edit/{component_id}
+        # parts: ['', 'dashboard', '{dashboard_id}', 'component', 'edit', '{component_id}']
+        dashboard_id = parts[2]
+        component_id = parts[5]
+
+        logger.info(f"✏️ EDIT COMPONENT - Dashboard: {dashboard_id}, Component: {component_id}")
+
+        # Fetch dashboard data to get component metadata
+        dashboard_data = None
+        component_data = None
+
+        if local_data:
+            try:
+                dashboard_data = api_call_get_dashboard(dashboard_id, local_data["access_token"])
+
+                # Find component in stored_metadata
+                stored_metadata = dashboard_data.get("stored_metadata", [])
+                for meta in stored_metadata:
+                    if str(meta.get("index")) == str(component_id):
+                        component_data = meta
+                        logger.info(
+                            f"   Found component type: {component_data.get('component_type')}"
+                        )
+                        break
+            except Exception as e:
+                logger.error(f"Failed to fetch component data: {e}")
+
+        if not component_data:
+            # Component not found - redirect to dashboard
+            logger.warning(f"Component {component_id} not found, redirecting to dashboard")
+            error_content = dmc.Center(
+                dmc.Alert(
+                    "Component not found",
+                    title="Error",
+                    color="red",
+                )
+            )
+            return (
+                error_content,
+                create_default_header("Error"),
+                f"/dashboard/{dashboard_id}",
+                local_data,
+            )
+
+        # Create edit page layout (no stepper, direct to design, no -tmp)
+        dashboard_title = (
+            dashboard_data.get("dashboard_name", dashboard_data.get("title"))
+            if dashboard_data
+            else None
+        )
+        edit_page = create_edit_page(
+            dashboard_id=dashboard_id,
+            component_id=component_id,  # Use actual ID
+            component_data=component_data,
+            dashboard_title=dashboard_title,
+            theme=theme,
+            TOKEN=local_data.get("access_token"),
+        )
+
+        header_content = create_default_header("Edit Component")
+        return edit_page, header_content, pathname, local_data
+
+    elif pathname.startswith("/dashboard/"):
+        # Determine if this is view mode or edit mode based on URL
+        is_edit_mode = pathname.endswith("/edit")
+
+        # Extract dashboard ID (handle both /dashboard/{id} and /dashboard/{id}/edit)
+        path_parts = pathname.split("/")
+        # path_parts: ['', 'dashboard', '{dashboard_id}', 'edit'(optional)]
+        dashboard_id = path_parts[2]
+
+        # Load dashboard data and create layout directly
+        mode_label = "EDIT" if is_edit_mode else "VIEW"
+        logger.info(
+            f"🔄 DASHBOARD NAVIGATION ({mode_label} MODE): Loading dashboard {dashboard_id}"
+        )
+
+        # ✅ ASYNC OPTIMIZATION: Project data now populated by consolidated_api callback
+        # No blocking HTTP call needed - rely on project-metadata-store from async population
         logger.info(f"🔄 DASHBOARD NAVIGATION: theme - {theme}")
         # Load dashboard data synchronously
+        # PERFORMANCE OPTIMIZATION (Phase 5A): Pass cached user data to avoid redundant API call
+        # PERFORMANCE OPTIMIZATION (API Consolidation): Pass dashboard_init_data to eliminate component API calls
         depictio_dash_data = load_depictio_data_sync(
             dashboard_id=dashboard_id,
             local_data=local_data,
             theme=theme,
+            init_data=dashboard_init_data,  # Pass consolidated init data for components
         )
 
-        # Create dashboard layout
+        # # Create dashboard layout
         if depictio_dash_data:
-            header_content, backend_components = design_header(depictio_dash_data, local_data)
+            header_content, backend_components = design_header(
+                depictio_dash_data, local_data, edit_mode=is_edit_mode
+            )
 
             # Create dashboard layout
             dashboard_layout = create_dashboard_layout(
@@ -193,6 +266,7 @@ def handle_authenticated_user(pathname, local_data, theme="light", cached_projec
                 backend_components=backend_components,
                 theme=theme,
                 cached_project_data=cached_project_data,
+                edit_mode=is_edit_mode,
             )
 
             return dashboard_layout, header_content, pathname, local_data
@@ -208,7 +282,7 @@ def handle_authenticated_user(pathname, local_data, theme="light", cached_projec
             return error_layout, header_content, pathname, local_data
 
     elif pathname == "/dashboards":
-        user = api_call_fetch_user_from_token(local_data["access_token"])
+        user = api_call_fetch_user_from_token(local_data["access_token"])  # Fallback only
         # user = fetch_user_from_token(local_data["access_token"])
         # logger.info(f"User: {user}")
 
@@ -231,7 +305,8 @@ def handle_authenticated_user(pathname, local_data, theme="light", cached_projec
         # return projects, header, pathname, local_data
 
     elif pathname == "/projects":
-        user = api_call_fetch_user_from_token(local_data["access_token"])
+        # PERFORMANCE OPTIMIZATION (Phase 4E-4): Use cached user data
+        user = api_call_fetch_user_from_token(local_data["access_token"])  # Fallback only
 
         # Check if user is anonymous
         is_anonymous = hasattr(user, "is_anonymous") and user.is_anonymous
@@ -245,9 +320,12 @@ def handle_authenticated_user(pathname, local_data, theme="light", cached_projec
         header = create_default_header("Profile")
         return create_profile_layout(), header, pathname, local_data
 
-    elif pathname == "/palette":
-        header = create_default_header("Depictio Color Palette")
-        return create_color_palette_page(), header, pathname, local_data
+    # TEMPORARILY DISABLED FOR PERFORMANCE (Phase 4E-3)
+    # Palette route adds overhead to routing callback
+    # Re-enable when palette functionality is needed
+    # elif pathname == "/palette":
+    #     header = create_default_header("Depictio Color Palette")
+    #     return create_color_palette_page(), header, pathname, local_data
 
     elif pathname == "/cli_configs":
         header = create_default_header("Depictio-CLI configs Management")
@@ -255,7 +333,8 @@ def handle_authenticated_user(pathname, local_data, theme="light", cached_projec
 
     elif pathname == "/admin":
         # Check if user is admin
-        user = api_call_fetch_user_from_token(local_data["access_token"])
+        # PERFORMANCE OPTIMIZATION (Phase 4E-4): Use cached user data
+        user = api_call_fetch_user_from_token(local_data["access_token"])  # Fallback only
         if not user.is_admin:
             # Fallback to dashboards if user is not admin
             content = create_dashboards_management_layout()
@@ -279,7 +358,8 @@ def handle_authenticated_user(pathname, local_data, theme="light", cached_projec
         return about_layout, header, pathname, local_data
     else:
         # Fallback to dashboards if path is unrecognized
-        user = api_call_fetch_user_from_token(local_data["access_token"])
+        # PERFORMANCE OPTIMIZATION (Phase 4E-4): Use cached user data
+        user = api_call_fetch_user_from_token(local_data["access_token"])  # Fallback only
         # Check if user is anonymous
         is_anonymous = hasattr(user, "is_anonymous") and user.is_anonymous
 
@@ -520,7 +600,16 @@ def create_dashboard_layout(
     backend_components=None,
     theme="light",
     cached_project_data=None,
+    edit_mode: bool = False,
 ):
+    import time
+
+    start_time_total = time.time()
+    mode_label = "EDIT" if edit_mode else "VIEW"
+    logger.info(
+        f"⏱️ PROFILING: Starting create_dashboard_layout ({mode_label} MODE) for {dashboard_id}"
+    )
+
     # Init layout and children if depictio_dash_data is available, else set to empty
     if depictio_dash_data and isinstance(depictio_dash_data, dict):
         # logger.info(f"Depictio dash data: {depictio_dash_data}")
@@ -542,13 +631,24 @@ def create_dashboard_layout(
     # Generate draggable layout
     # Ensure local_data is a dict
     local_data = local_data or {}
+
+    # Extract stored_metadata from depictio_dash_data
+    stored_metadata = None
+    if depictio_dash_data and isinstance(depictio_dash_data, dict):
+        stored_metadata = depictio_dash_data.get("stored_metadata", [])
+
+    start_draggable = time.time()
     core = design_draggable(
         init_layout,
         init_children,
         dashboard_id,
         local_data,
         cached_project_data=cached_project_data,
+        stored_metadata=stored_metadata,
+        edit_mode=edit_mode,
     )
+    draggable_duration_ms = (time.time() - start_draggable) * 1000
+    logger.info(f"⏱️ PROFILING: design_draggable took {draggable_duration_ms:.1f}ms")
 
     # Add progressive loading components if we have metadata
     progressive_loading_components = []
@@ -582,6 +682,12 @@ def create_dashboard_layout(
     else:
         logger.debug("🎨 APP_LAYOUT: cached_project_data is None or not a dict")
 
+    total_duration_ms = (time.time() - start_time_total) * 1000
+    logger.info(
+        f"⏱️ PROFILING: create_dashboard_layout TOTAL took {total_duration_ms:.1f}ms "
+        f"(design_draggable={draggable_duration_ms:.1f}ms)"
+    )
+
     return dmc.Container(
         [
             # Include backend components (Store components)
@@ -595,7 +701,7 @@ def create_dashboard_layout(
                 ],
             ),
             # Notes footer - positioned as overlay
-            create_notes_footer(dashboard_data=depictio_dash_data),
+            # create_notes_footer(dashboard_data=depictio_dash_data),
             # Workflow logo overlay - positioned as overlay in bottom-right
             workflow_logo_overlay,
             # html.Div(id="test-input"),
@@ -649,29 +755,32 @@ def create_app_layout():
                 storage_type="local",  # Changed to local storage to persist user preference
                 data=False,  # Default to expanded if no preference saved
             ),
-            # Consolidated user cache to reduce API calls
+            # Dummy store for edit mode navigation clientside callback
             dcc.Store(
-                id="user-cache-store",
+                id="edit-mode-navigation-dummy",
                 storage_type="memory",
-                data=None,  # Will be populated by consolidated callback
             ),
-            # Server status cache
+            # ✅ MIGRATED TO SHARED STORES: All cache stores now in shared_app_shell.py
+            # - server-status-cache (session storage, was memory)
+            # - project-metadata-store (session storage, renamed from project-cache)
+            # - dashboard-init-data (session storage, new for two-cache architecture)
+            # ✅ ELIMINATED: delta-locations-store (components read directly from project-metadata-store)
+            # POSITION OPTIMIZATION: Store for component position metadata
+            # Used by position_controls.py to trigger lightweight position updates
+            # without full dashboard re-render. Clientside callback reads this to
+            # apply CSS order changes while preserving component state.
             dcc.Store(
-                id="server-status-cache",
+                id="position-metadata-store",
                 storage_type="memory",
-                data=None,  # Will be populated by consolidated callback
+                data=None,  # Updated by position change callback
             ),
-            # Project data cache (dashboard-specific)
-            dcc.Store(
-                id="project-cache-store",
-                storage_type="memory",
-                data=None,  # Will be populated by consolidated callback
-            ),
-            dcc.Store(
-                id="local-store-components-metadata",
-                data={},
-                storage_type="local",
-            ),
+            # Hidden div for clientside callback output (position updates)
+            html.Div(id="position-update-dummy", style={"display": "none"}),
+            # REMOVED: Debounced save infrastructure (position-pending-save-store,
+            # position-last-change-timestamp, position-save-interval) - no longer needed
+            # since position control buttons have been replaced with drag & drop
+            # DEPRECATED: Used by old stepper-based edit flow (now obsolete with direct edit page)
+            # Kept for backward compatibility - no longer actively populated or used
             dcc.Store(id="current-edit-parent-index", storage_type="memory"),
             # Tab state management (frontend only, no backend persistence)
             # Global store - always available before dashboard-specific callbacks run
@@ -705,6 +814,8 @@ def create_app_layout():
             ),
             dmc.NotificationContainer(id="notification-container"),
             html.Div(id="admin-password-warning-trigger", style={"display": "none"}),
+            # Tab creation modal
+            create_tab_modal(),
             dmc.AppShell(
                 id="app-shell",  # Add ID for callback targeting
                 layout="alt",  # Default to alt layout for non-dashboard pages (navbar extends to top)
@@ -724,7 +835,7 @@ def create_app_layout():
                 },
                 children=[
                     dmc.AppShellNavbar(  # type: ignore[unresolved-attribute]
-                        children=[],  # Content populated by render_dynamic_navbar_content() callback
+                        children=create_static_navbar_content(),  # PERFORMANCE OPTIMIZATION: Static navbar content - no callback needed
                         id="app-shell-navbar-content",
                     ),
                     dmc.AppShellHeader(  # type: ignore[unresolved-attribute]

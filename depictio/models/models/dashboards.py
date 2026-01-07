@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import ConfigDict, field_serializer
 
 from depictio.models.models.base import MongoModel, PyObjectId, convert_objectid_to_str
@@ -12,8 +14,11 @@ class DashboardData(MongoModel):
     stored_children_data: list = []
     stored_metadata: list = []
     stored_edit_dashboard_mode_button: list = []
+    # Dual-panel layout storage (for left/right grid layouts)
+    left_panel_layout_data: list = []
+    right_panel_layout_data: list = []
     buttons_data: dict = {
-        "unified_edit_mode": False,  # Default edit mode OFF for new dashboards
+        "unified_edit_mode": True,  # Default edit mode ON for dashboard owners
         "add_components_button": {"count": 0},
     }
     stored_add_button: dict = {"count": 0}
@@ -28,6 +33,12 @@ class DashboardData(MongoModel):
     is_public: bool = False
     last_saved_ts: str = ""
     project_id: PyObjectId
+
+    # Tab support (backward compatible)
+    is_main_tab: bool = True
+    parent_dashboard_id: Optional[PyObjectId] = None
+    tab_order: int = 0
+
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
         # json_encoders={ObjectId: lambda oid: str(oid)},
@@ -46,6 +57,12 @@ class DashboardData(MongoModel):
     @field_serializer("dashboard_id")
     def serialize_dashboard_id(self, dashboard_id: PyObjectId) -> str:
         return str(dashboard_id)
+
+    @field_serializer("parent_dashboard_id")
+    def serialize_parent_dashboard_id(
+        self, parent_dashboard_id: Optional[PyObjectId]
+    ) -> Optional[str]:
+        return str(parent_dashboard_id) if parent_dashboard_id else None
 
     @field_serializer("stored_metadata")
     def serialize_stored_metadata(self, stored_metadata: list) -> list:

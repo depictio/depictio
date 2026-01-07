@@ -1,6 +1,9 @@
 import concurrent.futures
+import hashlib
 import itertools
+import json
 import sys
+import warnings
 
 import httpx
 import polars as pl
@@ -9,6 +12,53 @@ from bson import ObjectId
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.s3 import polars_s3_config
+
+# FEATURE FLAGS
+ENABLE_CACHING = True  # Global toggle for caching system
+ENABLE_JOINS = True  # Global toggle for joined data collection loading
+
+
+# PERFORMANCE OPTIMIZATION: Filter hash generation for caching filtered DataFrames
+def _generate_filter_hash(metadata: list[dict] | None) -> str:
+    """
+    Generate a stable hash from metadata filters for cache key generation.
+
+    Args:
+        metadata: List of metadata dicts containing filter information
+
+    Returns:
+        Short hash string (8 chars) representing the filter state
+    """
+    if not metadata:
+        return "nofilters"
+
+    # Create a stable representation of filters
+    # Sort by column name to ensure consistent ordering
+    filter_repr = []
+    for component in metadata:
+        # Extract metadata from nested structure if needed
+        if "metadata" in component:
+            meta = component["metadata"]
+            column_name = meta.get("column_name", "")
+            component_type = meta.get("interactive_component_type", "")
+            value = component.get("value")
+        else:
+            column_name = component.get("column_name", "")
+            component_type = component.get("interactive_component_type", "")
+            value = component.get("value")
+
+        # Create stable representation
+        filter_dict = {"col": column_name, "type": component_type, "val": value}
+        filter_repr.append(filter_dict)
+
+    # Sort for stability
+    filter_repr.sort(key=lambda x: (x["col"], x["type"]))
+
+    # Convert to JSON and hash
+    filter_json = json.dumps(filter_repr, sort_keys=True)
+    filter_hash = hashlib.md5(filter_json.encode()).hexdigest()[:8]
+
+    return filter_hash
 
 
 # Function to add filter criteria to a list
@@ -36,18 +86,9 @@ def add_filter(
                 f"Creating filter: column='{column_name}', values={value}, type={interactive_component_type}"
             )
 
-            # Cast both the column and values to string to ensure type compatibility
-            try:
-                # Convert values to strings to match string casting
-                string_values = [str(v) for v in value]
-                filter_list.append(pl.col(column_name).cast(pl.String).is_in(string_values))
-                logger.debug(f"Applied string casting for filter on column '{column_name}'")
-            except Exception as e:
-                logger.warning(
-                    f"Failed to apply filter with string casting on column '{column_name}': {e}"
-                )
-                # Fallback to original filter without casting
-                filter_list.append(pl.col(column_name).is_in(value))
+            # Use native type filtering - Polars handles type coercion automatically
+            # Join type mismatches are handled separately by normalize_join_column_types()
+            filter_list.append(pl.col(column_name).is_in(value))
 
     elif interactive_component_type == "TextInput":
         if value:
@@ -85,7 +126,6 @@ def add_filter(
                 date_col = pl.col(column_name).cast(pl.Datetime)
                 filter_list.append((date_col >= start_date) & (date_col <= end_date))
 
-                logger.debug(f"Applied date range filter on column '{column_name}'")
             except Exception as e:
                 logger.warning(f"Failed to apply date range filter on column '{column_name}': {e}")
 
@@ -494,17 +534,19 @@ def load_deltatable_lite(
     workflow_id: ObjectId,
     data_collection_id: ObjectId | str,  # Allow string for joined DC IDs like "dc1--dc2"
     metadata: list[dict] | None = None,
-    TOKEN: str | None = None,
+    TOKEN: str | None = None,  # DEPRECATED: kept for backward compat, use init_data instead
     limit_rows: int | None = None,
     load_for_options: bool = False,  # New parameter to load unfiltered data for component options
     load_for_preview: bool = False,  # New parameter to separate preview cache from full data cache
     select_columns: list[str] | None = None,  # Column projection for efficient data loading
+    init_data: dict[str, dict]
+    | None = None,  # NEW: {"dc_id": {"delta_location": str, "size_bytes": int}}
 ) -> pl.DataFrame:
     """
     Load a Delta table with adaptive memory management based on DataFrame size.
 
     ADAPTIVE MEMORY STRATEGY:
-    - Small DataFrames (<1GB): Cached in memory for fast filtering
+    - Small DataFrames (<1GB): Cached in memory for fast filtering (when ENABLE_CACHING=True)
     - Large DataFrames (>=1GB): Always use lazy loading to prevent OOM
 
     COLUMN PROJECTION:
@@ -512,27 +554,43 @@ def load_deltatable_lite(
     - Projection happens at scan level (Polars predicate pushdown)
     - For joined DCs, projection applied after join to preserve join columns
 
+    DASHBOARD INITIALIZATION (NEW):
+    - Pass init_data to avoid API/DB calls on every data load
+    - init_data should contain delta_location and size_bytes for each DC
+    - When init_data is None, falls back to legacy API/DB call path (with deprecation warning)
+
     Supports both regular data collection IDs and joined data collection IDs (format: "dc1--dc2").
 
     Args:
         workflow_id (ObjectId): The ID of the workflow.
         data_collection_id (ObjectId | str): The ID of the data collection or joined ID like "dc1--dc2".
         metadata (Optional[list[dict]], optional): List of metadata dicts for filtering the DataFrame. Defaults to None.
-        TOKEN (Optional[str], optional): Authorization token. Defaults to None.
+        TOKEN (Optional[str], optional): DEPRECATED - Authorization token. Use init_data instead to avoid API calls.
         limit_rows (Optional[int], optional): Maximum number of rows to return. Defaults to None.
         load_for_options (bool): Whether loading unfiltered data for component options.
         load_for_preview (bool): Whether loading for preview (separate cache).
         select_columns (Optional[list[str]]): Columns to select for projection (None = all columns).
+        init_data (Optional[dict[str, dict]]): Dashboard initialization data to avoid API/DB calls.
+            Structure: {"dc_id": {"delta_location": str, "size_bytes": int}}
+            When None, falls back to legacy path with API/DB calls.
 
     Returns:
         pl.DataFrame: The loaded and optionally filtered DataFrame.
 
     Raises:
-        Exception: If the HTTP request to load the Delta table fails.
+        Exception: If the HTTP request to load the Delta table fails (legacy path).
+        NotImplementedError: If attempting to load joined DC with ENABLE_JOINS=False.
     """
     # Check if this is a joined data collection ID
     data_collection_id_str = str(data_collection_id)
     if isinstance(data_collection_id, str) and "--" in data_collection_id:
+        # FEATURE FLAG: Joining system disabled
+        if not ENABLE_JOINS:
+            raise NotImplementedError(
+                f"Joined DC '{data_collection_id}' requested but joining is disabled (ENABLE_JOINS=False). "
+                "Please load individual data collections instead."
+            )
+
         # Handle joined data collection - pass column selection through
         logger.info(f"Loading joined data collection: {data_collection_id}")
         return _load_joined_deltatable(
@@ -549,6 +607,73 @@ def load_deltatable_lite(
     # Convert ObjectId to string for regular data collections
     workflow_id_str = str(workflow_id)
     data_collection_id_str = str(data_collection_id)
+
+    # FEATURE FLAG: Bypass all caching logic when disabled
+    if not ENABLE_CACHING:
+        logger.debug("⚠️  Caching disabled (ENABLE_CACHING=False), loading directly from storage")
+
+        # NEW PATH: Use init_data if provided
+        if init_data and data_collection_id_str in init_data:
+            file_id = init_data[data_collection_id_str]["delta_location"]
+            logger.info(f"✅ Using init_data for DC {data_collection_id_str}: {file_id}")
+        else:
+            # LEGACY PATH: Make API call with deprecation warning
+            warnings.warn(
+                f"Loading DC {data_collection_id_str} without init_data - making API call (deprecated). "
+                "Pass init_data parameter to avoid API calls on every load.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            url = f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{data_collection_id_str}"
+            headers = {"Authorization": f"Bearer {TOKEN}"} if TOKEN else {}
+
+            try:
+                response = httpx.get(url, headers=headers)
+                response.raise_for_status()
+            except httpx.HTTPError as e:
+                logger.error(
+                    f"HTTP error loading deltatable for workflow {workflow_id_str} "
+                    f"and data collection {data_collection_id_str}: {e}"
+                )
+                raise Exception("Error loading deltatable") from e
+
+            file_id = response.json().get("delta_table_location")
+            if not file_id:
+                logger.error(
+                    f"No 'delta_table_location' found in response for workflow {workflow_id_str} "
+                    f"and data collection {data_collection_id_str}"
+                )
+                raise Exception("Invalid response: missing 'delta_table_location'")
+
+        # Load data from Delta table
+        delta_scan = pl.scan_delta(file_id, storage_options=polars_s3_config)
+
+        # Apply column projection if specified
+        if select_columns:
+            delta_scan = delta_scan.select(select_columns)
+            logger.debug(f"Applied column projection: {len(select_columns)} columns")
+
+        # Apply row limit if specified
+        if limit_rows:
+            delta_scan = delta_scan.limit(limit_rows)
+            logger.debug(f"Applied row limit: {limit_rows}")
+
+        # Collect the DataFrame
+        df = delta_scan.collect()
+        logger.info(f"📊 Loaded DataFrame: {df.height:,} rows × {df.width} columns")
+
+        # Apply filters (CORE FUNCTIONALITY - must be preserved)
+        if metadata and not load_for_options:
+            logger.info(f"🎯 Applying {len(metadata)} filter(s)")
+            df = apply_runtime_filters(df, metadata)
+            logger.info(f"📊 After filters: {df.height:,} rows × {df.width} columns")
+
+        # Drop aggregation time column if exists
+        if "depictio_aggregation_time" in df.columns:
+            df = df.drop("depictio_aggregation_time")
+            logger.debug("Dropped 'depictio_aggregation_time' column")
+
+        return df
 
     # CACHE STATUS: Check both Redis and memory cache
     try:
@@ -571,6 +696,7 @@ def load_deltatable_lite(
     # PERFORMANCE OPTIMIZATION: Early cache check to skip expensive operations
     # Separate cache keys for preview vs full data to prevent conflicts
     # Include column selection in cache key to avoid conflicts between different projections
+    # FILTER CACHING: Include filter hash in cache key to cache filtered DataFrames (~5-8s savings)
     cache_suffix = "preview" if load_for_preview else "base"
     if select_columns:
         # Create deterministic string from sorted column list
@@ -580,17 +706,54 @@ def load_deltatable_lite(
         )
     else:
         base_cache_key = f"{workflow_id_str}_{data_collection_id_str}_{cache_suffix}"
-    logger.debug(
-        f"🔑 Generated cache key: {base_cache_key} (load_for_preview={load_for_preview}, columns={len(select_columns) if select_columns else 'all'})"
-    )
+
+    # Generate filter hash for cache key (only if filters exist and not loading for options)
+    filter_hash = None
+    if metadata and not load_for_options:
+        filter_hash = _generate_filter_hash(metadata)
+        filtered_cache_key = f"{base_cache_key}_filters_{filter_hash}"
+        logger.debug(
+            f"🔑 Generated FILTERED cache key: {filtered_cache_key} (filters={len(metadata)})"
+        )
+    else:
+        filtered_cache_key = base_cache_key
+        logger.debug(
+            f"🔑 Generated BASE cache key: {base_cache_key} (load_for_preview={load_for_preview}, columns={len(select_columns) if select_columns else 'all'})"
+        )
 
     # REDIS INTEGRATION: Check Redis cache first, then fallback to memory
+    # PERFORMANCE OPTIMIZATION: Check filtered cache first if filters exist (~5-8s savings)
     try:
-        from depictio.api.cache import get_cached_dataframe
+        from depictio.api.cache import cache_dataframe, get_cached_dataframe
 
+        # STEP 1: If filters exist, check filtered cache first
+        if filter_hash:
+            filtered_cached_df = get_cached_dataframe(filtered_cache_key)
+            if filtered_cached_df is not None:
+                logger.info(
+                    f"🚀🎯 FILTERED CACHE HIT: Returning pre-filtered DataFrame for key: {filtered_cache_key}"
+                )
+                logger.info(
+                    f"📊 FILTERED DATAFRAME SIZE: {filtered_cached_df.height:,} rows × {filtered_cached_df.width} columns"
+                )
+
+                # Apply row limit if needed
+                if limit_rows:
+                    filtered_cached_df = filtered_cached_df.limit(limit_rows)
+                    logger.debug(f"Applied row limit: {limit_rows}")
+
+                # Drop aggregation time column if exists
+                if "depictio_aggregation_time" in filtered_cached_df.columns:
+                    filtered_cached_df = filtered_cached_df.drop("depictio_aggregation_time")
+
+                return filtered_cached_df
+
+        # STEP 2: Check base cache (unfiltered data)
         redis_cached_df = get_cached_dataframe(base_cache_key)
         if redis_cached_df is not None:
-            logger.info(f"🚀 REDIS CACHE HIT: Skipping DB/HTTP calls for key: {base_cache_key}")
+            logger.info(
+                f"🚀 REDIS CACHE HIT (base): Skipping DB/HTTP calls for key: {base_cache_key}"
+            )
             logger.info(
                 f"📊 CACHED DATAFRAME SIZE: {redis_cached_df.height:,} rows × {redis_cached_df.width} columns"
             )
@@ -605,18 +768,18 @@ def load_deltatable_lite(
             else:
                 df = redis_cached_df
 
-            # DEBUG: Check filter application conditions
-            logger.debug(
-                f"🔍 PRE-FILTER CHECK: metadata={metadata is not None}, "
-                f"load_for_options={load_for_options}, "
-                f"metadata_len={len(metadata) if metadata else 0}"
-            )
-
-            # Apply metadata filters in memory (very fast)
+            # STEP 3: Apply filters to base cache and cache the filtered result
             if metadata and not load_for_options:
                 logger.info(f"🎯 APPLYING FILTERS: {len(metadata)} filter(s) to cached DataFrame")
                 df = apply_runtime_filters(df, metadata)
                 logger.info(f"📊 AFTER FILTERS: {df.height:,} rows × {df.width} columns")
+
+                # Cache the filtered result for future requests (~5-8s savings on next request)
+                if filter_hash:
+                    cache_dataframe(filtered_cache_key, df)
+                    logger.info(
+                        f"💾 CACHED FILTERED RESULT: {filtered_cache_key} ({df.height:,} rows)"
+                    )
             else:
                 logger.debug("⏭️  SKIPPING FILTERS: metadata empty or load_for_options=True")
 
@@ -636,8 +799,25 @@ def load_deltatable_lite(
         logger.debug(f"Redis cache check failed, falling back to memory: {e}")
 
     # Fallback to existing memory cache
+    # PERFORMANCE OPTIMIZATION: Check filtered cache first if filters exist
+    if filter_hash and filtered_cache_key in _dataframe_memory_cache:
+        logger.info(
+            f"💾🎯 FILTERED MEMORY CACHE HIT: Returning pre-filtered DataFrame for key: {filtered_cache_key}"
+        )
+        update_cache_timestamp(filtered_cache_key)
+        df = _dataframe_memory_cache[filtered_cache_key]
+        logger.info(f"📊 FILTERED DATAFRAME SIZE: {df.height:,} rows × {df.width} columns")
+
+        # Apply row limit if needed
+        if limit_rows:
+            df = df.limit(limit_rows)
+            logger.debug(f"Applied row limit: {limit_rows}")
+
+        return df
+
+    # Check base memory cache
     if base_cache_key in _dataframe_memory_cache:
-        logger.info(f"💾 MEMORY CACHE HIT: Skipping DB/HTTP calls for key: {base_cache_key}")
+        logger.info(f"💾 MEMORY CACHE HIT (base): Skipping DB/HTTP calls for key: {base_cache_key}")
         update_cache_timestamp(base_cache_key)
 
         # Get cached DataFrame and apply column projection if needed
@@ -657,10 +837,23 @@ def load_deltatable_lite(
         else:
             df = cached_df
 
-        # Apply metadata filters in memory (very fast)
+        # Apply metadata filters in memory and cache the filtered result
         if metadata and not load_for_options:
             df = apply_runtime_filters(df, metadata)
             logger.debug(f"📊 AFTER FILTERS: {df.height:,} rows × {df.width} columns")
+
+            # Cache the filtered result in memory for future requests
+            if filter_hash:
+                import time
+
+                _dataframe_memory_cache[filtered_cache_key] = df
+                _cache_metadata[filtered_cache_key] = {
+                    "size_bytes": sys.getsizeof(df),
+                    "timestamp": time.time(),
+                }
+                logger.info(
+                    f"💾 CACHED FILTERED RESULT (memory): {filtered_cache_key} ({df.height:,} rows)"
+                )
 
         # Apply row limit AFTER filters to avoid limiting joined data prematurely
         if limit_rows:
@@ -673,7 +866,14 @@ def load_deltatable_lite(
     data_collection_id_obj = (
         ObjectId(data_collection_id) if isinstance(data_collection_id, str) else data_collection_id
     )
-    size_bytes = get_deltatable_size_from_db(data_collection_id_obj)
+
+    # NEW PATH: Use init_data if provided
+    if init_data and data_collection_id_str in init_data:
+        size_bytes = init_data[data_collection_id_str].get("size_bytes", -1)
+        logger.debug(f"Using size from init_data: {size_bytes} bytes")
+    else:
+        # LEGACY PATH: Query database
+        size_bytes = get_deltatable_size_from_db(data_collection_id_obj)
 
     if size_bytes > 0:
         logger.debug(
@@ -684,29 +884,42 @@ def load_deltatable_lite(
             f"Loading deltatable {data_collection_id_str}: size unknown, will estimate dynamically"
         )
 
-    # Prepare the request URL and headers
-    url = f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{data_collection_id_str}"
-    headers = {"Authorization": f"Bearer {TOKEN}"} if TOKEN else {}
-
-    # Make the HTTP GET request to fetch the Delta table location
-    try:
-        response = httpx.get(url, headers=headers)
-        response.raise_for_status()
-    except httpx.HTTPError as e:
-        logger.error(
-            f"HTTP error loading deltatable for workflow {workflow_id_str} "
-            f"and data collection {data_collection_id_str}: {e}"
+    # NEW PATH: Check init_data first to avoid API call
+    if init_data and data_collection_id_str in init_data:
+        file_id = init_data[data_collection_id_str]["delta_location"]
+        logger.info(f"✅ Using init_data for DC {data_collection_id_str}")
+    else:
+        # LEGACY PATH: Make API call with deprecation warning
+        warnings.warn(
+            f"Loading DC {data_collection_id_str} without init_data - making API call (deprecated). "
+            "Pass init_data parameter to avoid API calls on every load.",
+            DeprecationWarning,
+            stacklevel=2,
         )
-        raise Exception("Error loading deltatable") from e
 
-    # Extract the file ID from the response
-    file_id = response.json().get("delta_table_location")
-    if not file_id:
-        logger.error(
-            f"No 'delta_table_location' found in response for workflow {workflow_id_str} "
-            f"and data collection {data_collection_id_str}: {response.json()}"
-        )
-        raise Exception("Invalid response: missing 'delta_table_location'")
+        # Prepare the request URL and headers
+        url = f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{data_collection_id_str}"
+        headers = {"Authorization": f"Bearer {TOKEN}"} if TOKEN else {}
+
+        # Make the HTTP GET request to fetch the Delta table location
+        try:
+            response = httpx.get(url, headers=headers)
+            response.raise_for_status()
+        except httpx.HTTPError as e:
+            logger.error(
+                f"HTTP error loading deltatable for workflow {workflow_id_str} "
+                f"and data collection {data_collection_id_str}: {e}"
+            )
+            raise Exception("Error loading deltatable") from e
+
+        # Extract the file ID from the response
+        file_id = response.json().get("delta_table_location")
+        if not file_id:
+            logger.error(
+                f"No 'delta_table_location' found in response for workflow {workflow_id_str} "
+                f"and data collection {data_collection_id_str}: {response.json()}"
+            )
+            raise Exception("Invalid response: missing 'delta_table_location'")
 
     # Initialize the Delta table scan
     delta_scan = pl.scan_delta(file_id, storage_options=polars_s3_config)
@@ -815,9 +1028,30 @@ def load_deltatable_lite(
         # Load and cache the base DataFrame (no filters)
         df = load_and_cache_dataframe(base_cache_key, size_bytes, delta_scan)
 
-        # Apply metadata filters in memory after caching
+        # Apply metadata filters in memory after caching and cache filtered result
         if metadata and not load_for_options:
             df = apply_runtime_filters(df, metadata)
+
+            # Cache the filtered result for future requests (~5-8s savings)
+            if filter_hash:
+                from depictio.api.cache import cache_dataframe
+
+                if cache_dataframe(filtered_cache_key, df):
+                    logger.info(
+                        f"💾 CACHED FILTERED RESULT (fresh load): {filtered_cache_key} ({df.height:,} rows)"
+                    )
+                else:
+                    # Fallback to memory cache
+                    import time
+
+                    _dataframe_memory_cache[filtered_cache_key] = df
+                    _cache_metadata[filtered_cache_key] = {
+                        "size_bytes": sys.getsizeof(df),
+                        "timestamp": time.time(),
+                    }
+                    logger.info(
+                        f"💾 CACHED FILTERED RESULT (memory, fresh load): {filtered_cache_key} ({df.height:,} rows)"
+                    )
 
     else:
         # LARGE DATAFRAME: Always use lazy loading to prevent memory issues
@@ -1415,12 +1649,22 @@ def apply_runtime_filters(df: pl.DataFrame, metadata: list[dict] | None) -> pl.D
         return df
 
     filter_expressions = process_metadata_and_filter(metadata)
+
+    # Debug logging for filter expressions
+    if filter_expressions:
+        logger.debug(f"🔍 Generated {len(filter_expressions)} filter expression(s):")
+        for i, expr in enumerate(filter_expressions, 1):
+            logger.debug(f"   Filter {i}: {expr}")
+
     if filter_expressions:
         try:
             # Apply filters using Polars expressions on materialized DataFrame
             combined_filter = filter_expressions[0]
             for filt in filter_expressions[1:]:
                 combined_filter &= filt
+
+            logger.debug(f"🔍 Combined filter expression: {combined_filter}")
+
             df = df.filter(combined_filter)
             filtered_row_count = df.height
             logger.info(

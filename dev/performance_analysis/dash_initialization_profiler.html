@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dash Initialization Profiler</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+        .timeline {
+            margin: 20px 0;
+            border-left: 3px solid #4CAF50;
+            padding-left: 20px;
+        }
+        .event {
+            margin: 10px 0;
+            padding: 10px;
+            background: #2d2d2d;
+            border-radius: 4px;
+        }
+        .event-time {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .event-duration {
+            color: #FFC107;
+            margin-left: 10px;
+        }
+        .event-desc {
+            margin-top: 5px;
+            color: #9cdcfe;
+        }
+        .critical {
+            border-left: 3px solid #f44336;
+        }
+        h1 {
+            color: #4CAF50;
+        }
+        .instructions {
+            background: #2d2d2d;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .code {
+            background: #1e1e1e;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: #ce9178;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>⏱️ Dash Initialization Profiler</h1>
+
+    <div class="instructions">
+        <h2>📋 Instructions</h2>
+        <ol>
+            <li>Open Chrome DevTools (F12) → Performance tab</li>
+            <li>Start recording</li>
+            <li>Navigate to your dashboard: <span class="code">http://localhost:5080/dashboard/{dashboard_id}</span></li>
+            <li>Stop recording after page loads</li>
+            <li>Paste this script in the Console tab:</li>
+        </ol>
+    </div>
+
+    <pre class="code" id="profiler-script" style="white-space: pre-wrap; user-select: all; cursor: pointer;" onclick="copyToClipboard()">// Dash Initialization Timing Analysis
+(function() {
+    const perfEntries = performance.getEntriesByType('resource');
+    const navigationEntry = performance.getEntriesByType('navigation')[0];
+
+    console.log('='.repeat(80));
+    console.log('🎯 DASH INITIALIZATION TIMELINE ANALYSIS');
+    console.log('='.repeat(80));
+
+    // 1. Page Load Start
+    console.log(`\n📍 PAGE LOAD START: 0ms`);
+
+    // 2. HTML Document Load
+    const docLoadTime = navigationEntry.responseEnd;
+    console.log(`📄 HTML Document Loaded: ${docLoadTime.toFixed(2)}ms`);
+
+    // 3. Find Dash-specific resources
+    const dashResources = perfEntries.filter(e =&gt;
+        e.name.includes('dash') ||
+        e.name.includes('_dash-') ||
+        e.name.includes('mantine') ||
+        e.name.includes('plotly')
+    );
+
+    console.log(`\n📦 DASH RESOURCES (${dashResources.length} files):`);
+    dashResources.forEach(r =&gt; {
+        const duration = r.responseEnd - r.startTime;
+        console.log(`  ${r.name.split('/').pop()}: ${r.responseEnd.toFixed(2)}ms (+${duration.toFixed(2)}ms)`);
+    });
+
+    // 4. Find when _dash-layout and _dash-dependencies were requested
+    const dashLayout = perfEntries.find(e =&gt; e.name.includes('_dash-layout'));
+    const dashDeps = perfEntries.find(e =&gt; e.name.includes('_dash-dependencies'));
+
+    if (dashLayout) {
+        console.log(`\n🔧 _DASH-LAYOUT REQUEST: ${dashLayout.startTime.toFixed(2)}ms`);
+        console.log(`   Response: ${dashLayout.responseEnd.toFixed(2)}ms (+${(dashLayout.responseEnd - dashLayout.startTime).toFixed(2)}ms)`);
+    }
+
+    if (dashDeps) {
+        console.log(`🔧 _DASH-DEPENDENCIES REQUEST: ${dashDeps.startTime.toFixed(2)}ms`);
+        console.log(`   Response: ${dashDeps.responseEnd.toFixed(2)}ms (+${(dashDeps.responseEnd - dashDeps.startTime).toFixed(2)}ms)`);
+    }
+
+    // 5. Calculate the "dead time" gap
+    const lastJsFile = dashResources
+        .filter(r =&gt; r.name.endsWith('.js'))
+        .sort((a, b) =&gt; b.responseEnd - a.responseEnd)[0];
+
+    if (lastJsFile &amp;&amp; dashLayout) {
+        const deadTime = dashLayout.startTime - lastJsFile.responseEnd;
+        console.log(`\n⚠️  INITIALIZATION GAP: ${deadTime.toFixed(2)}ms`);
+        console.log(`   Last JS loaded: ${lastJsFile.responseEnd.toFixed(2)}ms`);
+        console.log(`   First Dash API: ${dashLayout.startTime.toFixed(2)}ms`);
+        console.log(`\n   ❓ What's happening during this gap?`);
+        console.log(`      - Dash renderer initialization`);
+        console.log(`      - Building callback dependency graph`);
+        console.log(`      - Component registry setup`);
+        console.log(`      - localStorage reads`);
+    }
+
+    // 6. Check localStorage operations
+    console.log(`\n💾 LOCALSTORAGE SIZE:`);
+    let totalSize = 0;
+    for (let key in localStorage) {
+        if (localStorage.hasOwnProperty(key)) {
+            const size = new Blob([localStorage[key]]).size;
+            totalSize += size;
+            if (size &gt; 1000) {  // Show items &gt; 1KB
+                console.log(`   ${key}: ${(size / 1024).toFixed(2)} KB`);
+            }
+        }
+    }
+    console.log(`   TOTAL: ${(totalSize / 1024).toFixed(2)} KB`);
+
+    // 7. Summary
+    console.log(`\n${'='.repeat(80)}`);
+    console.log(`📊 SUMMARY:`);
+    console.log(`   HTML Loaded: ${docLoadTime.toFixed(2)}ms`);
+    console.log(`   All JS Loaded: ${lastJsFile ? lastJsFile.responseEnd.toFixed(2) : 'N/A'}ms`);
+    console.log(`   First Dash API: ${dashLayout ? dashLayout.startTime.toFixed(2) : 'N/A'}ms`);
+    if (lastJsFile &amp;&amp; dashLayout) {
+        console.log(`   🔴 DEAD TIME: ${(dashLayout.startTime - lastJsFile.responseEnd).toFixed(2)}ms`);
+    }
+    console.log(`${'='.repeat(80)}\n`);
+
+})();</pre>
+
+    <button onclick="copyToClipboard()" style="margin-top: 10px; padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">
+        📋 Copy Script to Clipboard
+    </button>
+
+    <script>
+    function copyToClipboard() {
+        const code = document.getElementById('profiler-script').textContent;
+        navigator.clipboard.writeText(code).then(() => {
+            alert('✅ Script copied to clipboard! Paste it in Chrome DevTools Console.');
+        }).catch(err => {
+            console.error('Failed to copy:', err);
+        });
+    }
+    </script>
+
+    <h2>🔍 What to Look For</h2>
+    <div class="timeline">
+        <div class="event">
+            <div class="event-time">0-200ms</div>
+            <div class="event-desc">Expected: HTML, CSS, JS loading</div>
+        </div>
+        <div class="event critical">
+            <div class="event-time">200-850ms</div>
+            <div class="event-duration">⚠️ THE GAP (650ms)</div>
+            <div class="event-desc">
+                <strong>This is where we need to optimize!</strong><br>
+                During this time, Dash is:<br>
+                • Building callback dependency graph<br>
+                • Initializing component registry<br>
+                • Reading from localStorage<br>
+                • Constructing React component tree
+            </div>
+        </div>
+        <div class="event">
+            <div class="event-time">850ms+</div>
+            <div class="event-desc">Expected: _dash-layout, _dash-dependencies, callbacks execute</div>
+        </div>
+    </div>
+
+    <h2>🎯 Optimization Targets</h2>
+    <div class="instructions">
+        <h3>If the gap is caused by:</h3>
+        <ul>
+            <li><strong>Callback graph building</strong> → Reduce number of callbacks (lazy load page-specific ones)</li>
+            <li><strong>localStorage reads</strong> → Reduce localStorage payload size</li>
+            <li><strong>Component registry</strong> → Lazy load non-critical components</li>
+            <li><strong>React tree construction</strong> → Simplify initial layout tree</li>
+        </ul>
+    </div>
+
+    <h2>📊 Expected Results</h2>
+    <div class="instructions">
+        <p><strong>After commenting out admin analytics callbacks:</strong></p>
+        <ul>
+            <li>Callback count should decrease by 8</li>
+            <li>Expected improvement: 50-100ms reduction in initialization gap</li>
+            <li>Monitor: Gap should drop from ~650ms to ~550-600ms</li>
+        </ul>
+    </div>
+
+</body>
+</html>

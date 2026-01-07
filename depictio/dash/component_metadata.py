@@ -35,6 +35,8 @@ from depictio.dash.modules.table_component.utils import build_table
 from depictio.dash.modules.text_component.utils import build_text
 
 # Component metadata dictionary - centralized configuration
+# NOTE: Only Card & Interactive components are currently enabled for editing
+# Other component types (Figure, Table, Text, JBrowse, MultiQC) are disabled
 COMPONENT_METADATA = {
     "figure": {
         "icon": "mdi:graph-box",
@@ -43,7 +45,7 @@ COMPONENT_METADATA = {
         "color": colors["blue"],
         "supports_edit": True,
         "supports_reset": True,  # For scatter plots
-        "enabled": True,  # Enable by default
+        "enabled": False,  # DISABLED: Focus on Card & Interactive only
         "build_function": build_figure,
         "default_dimensions": {"w": 20, "h": 16},  # Adjusted for 48-column grid with rowHeight=20
     },
@@ -54,7 +56,7 @@ COMPONENT_METADATA = {
         "color": colors["violet"],  # Use same color for skeleton loader
         "supports_edit": True,
         "supports_reset": False,
-        "enabled": True,  # Enable by default
+        "enabled": True,  # ENABLED: Card component available
         "build_function": build_card,
         "default_dimensions": {
             "w": 10,
@@ -68,7 +70,7 @@ COMPONENT_METADATA = {
         "color": colors["teal"],  # Use blue for interactive components
         "supports_edit": True,
         "supports_reset": False,
-        "enabled": True,  # Enable by default
+        "enabled": True,  # ENABLED: Interactive component available
         "build_function": build_interactive,
         "default_dimensions": {
             "w": 16,
@@ -82,7 +84,7 @@ COMPONENT_METADATA = {
         "color": colors["yellow"],
         "supports_edit": False,  # Tables don't have edit functionality
         "supports_reset": False,
-        "enabled": True,  # Enable by default
+        "enabled": False,  # DISABLED: Focus on Card & Interactive only
         "build_function": build_table,
         "default_dimensions": {
             "w": 24,
@@ -96,7 +98,7 @@ COMPONENT_METADATA = {
         "color": colors["orange"],
         "supports_edit": False,  # JBrowse doesn't have edit functionality
         "supports_reset": False,
-        "enabled": False,  # Disable by default
+        "enabled": False,  # DISABLED: Focus on Card & Interactive only
         "build_function": build_jbrowse,
         "default_dimensions": {
             "w": 24,
@@ -110,7 +112,7 @@ COMPONENT_METADATA = {
         "color": colors["pink"],
         "supports_edit": True,  # Text supports editing
         "supports_reset": True,  # Can clear/reset text content
-        "enabled": True,  # Enable by default
+        "enabled": False,  # DISABLED: Focus on Card & Interactive only
         "build_function": build_text,
         "default_dimensions": {
             "w": 10,
@@ -123,8 +125,8 @@ COMPONENT_METADATA = {
         "description": "MultiQC quality control reports and visualizations",
         "color": colors["orange"],
         "supports_edit": False,  # MultiQC is read-only visualization
-        "supports_reset": False,  # No reset functionality
-        "enabled": True,  # Enable by default
+        "supports_reset": False,
+        "enabled": False,  # DISABLED: Focus on Card & Interactive only
         "build_function": build_multiqc,
         "default_dimensions": {
             "w": 24,
@@ -132,6 +134,59 @@ COMPONENT_METADATA = {
         },  # Adjusted for 48-column grid with rowHeight=20 - full-featured MultiQC reports
     },
 }
+
+# ============================================================================
+# DUAL-PANEL GRID LAYOUT DIMENSIONS
+# ============================================================================
+# Centralized dimensions for the current dual-panel dashboard layout system
+# LEFT panel: 1 column grid, rowHeight=50
+# RIGHT panel: 8 column grid, rowHeight=100
+#
+# To adjust component sizes, modify these values:
+# - w: width in grid columns
+# - h: height in grid units (multiplied by rowHeight to get pixels)
+# ============================================================================
+
+DUAL_PANEL_DIMENSIONS = {
+    # LEFT PANEL: Interactive components (1-column grid, rowHeight=50)
+    "interactive": {
+        "w": 1,  # Always 1 (single column grid)
+        "h": 2,  # 3 × 50px = 150px - comfortable height for controls
+    },
+    # RIGHT PANEL: Cards and other components (8-column grid, rowHeight=100)
+    "card": {
+        "w": 2,  # 2/8 columns = 25% width (4 cards per row)
+        "h": 2,  # 3 × 100px = 300px - reasonable card height
+    },
+    "figure": {
+        "w": 4,  # 4/8 columns = 50% width (2 figures per row)
+        "h": 4,  # 4 × 100px = 400px
+    },
+    "table": {
+        "w": 8,  # 8/8 columns = 100% width (full row)
+        "h": 6,  # 6 × 100px = 600px
+    },
+}
+
+
+def get_dual_panel_dimensions(component_type: str) -> dict:
+    """
+    Get grid dimensions for a component type in the dual-panel layout.
+
+    Args:
+        component_type: Component type ('interactive', 'card', 'figure', 'table')
+
+    Returns:
+        dict: {'w': width, 'h': height} in grid units
+
+    Example:
+        >>> get_dual_panel_dimensions('card')
+        {'w': 2, 'h': 3}  # 2 columns wide, 3 rows tall
+    """
+    return DUAL_PANEL_DIMENSIONS.get(
+        component_type,
+        {"w": 2, "h": 3},  # Default: card dimensions
+    )
 
 
 def get_component_metadata(component_type: str) -> dict:
@@ -218,14 +273,64 @@ def get_build_functions() -> dict:
     """
     Get a dictionary mapping component types to their build functions.
 
+    Includes logging wrapper to track build function executions and detect double-rendering.
+    Returns a special '_reset_counts' function to clear counters between dashboard loads.
+
     Returns:
-        dict: Dictionary with component types as keys and build functions as values
+        dict: Dictionary with component types as keys and wrapped build functions as values,
+              plus '_reset_counts' key with reset function
     """
-    return {
-        component_type: metadata["build_function"]
+    import functools
+
+    from depictio.api.v1.configs.logging_init import logger
+
+    # Track build counts globally (persists across all builds until reset)
+    build_counts = {}
+
+    def reset_counts():
+        """Clear all build counts - call this at start of each dashboard render"""
+        build_counts.clear()
+        logger.info("🔄 BUILD COUNTS RESET")
+
+    def wrap_build_function(component_type, original_func):
+        """Wrapper to log and track build function executions"""
+
+        @functools.wraps(original_func)
+        def wrapper(**kwargs):
+            # Get component identifier
+            component_id = kwargs.get("index", "unknown")
+
+            # Create unique key for this component
+            key = f"{component_type}:{component_id}"
+
+            # Increment build count
+            build_counts[key] = build_counts.get(key, 0) + 1
+            count = build_counts[key]
+
+            # Log execution with count
+            logger.error(f"🔨 BUILD [{count}x] {component_type.upper()} - Index: {component_id}")
+
+            # Call original build function
+            result = original_func(**kwargs)
+
+            # Log completion
+            logger.error(f"✅ BUILT [{count}x] {component_type.upper()} - Index: {component_id}")
+
+            return result
+
+        return wrapper
+
+    # Wrap each build function
+    wrapped_functions = {
+        component_type: wrap_build_function(component_type, metadata["build_function"])
         for component_type, metadata in COMPONENT_METADATA.items()
         if "build_function" in metadata
     }
+
+    # Attach reset function
+    wrapped_functions["_reset_counts"] = reset_counts
+
+    return wrapped_functions
 
 
 def get_async_build_functions() -> dict:

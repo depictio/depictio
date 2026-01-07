@@ -1,10 +1,9 @@
 import dash_mantine_components as dmc
 import numpy as np
 import pandas as pd
-from dash import dcc
+from dash import dcc, html
 from dash_iconify import DashIconify
 
-from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.colors import colors
 
@@ -523,6 +522,13 @@ def build_card_frame(index, children=None, show_border=False):
     if not children:
         return dmc.Paper(
             children=[
+                dmc.LoadingOverlay(
+                    id={"type": "card-loading-overlay", "index": index},
+                    visible=False,
+                    overlayProps={"radius": "sm", "blur": 2},
+                    loaderProps={"type": "dots", "size": "lg"},
+                    zIndex=10,
+                ),
                 dmc.Center(
                     dmc.Text(
                         "Configure your card using the edit menu",
@@ -540,12 +546,13 @@ def build_card_frame(index, children=None, show_border=False):
                         "height": "100%",
                         "minWidth": "150px",
                     },
-                )
+                ),
             ],
             id={
                 "type": "card-component",
                 "index": index,
             },
+            pos="relative",
             withBorder=show_border,
             radius="sm",
             p="md",
@@ -558,6 +565,13 @@ def build_card_frame(index, children=None, show_border=False):
     else:
         return dmc.Paper(
             children=[
+                dmc.LoadingOverlay(
+                    id={"type": "card-loading-overlay", "index": index},
+                    visible=False,
+                    overlayProps={"radius": "sm", "blur": 2},
+                    loaderProps={"type": "dots", "size": "lg"},
+                    zIndex=10,
+                ),
                 dmc.Stack(
                     children=children,
                     id={
@@ -568,12 +582,13 @@ def build_card_frame(index, children=None, show_border=False):
                     style={
                         "height": "100%",
                     },
-                )
+                ),
             ],
             id={
                 "type": "card-component",
                 "index": index,
             },
+            pos="relative",
             withBorder=show_border,
             radius="sm",
             p="xs",
@@ -607,7 +622,6 @@ def build_card(**kwargs):
     title = kwargs.get("title", "Default Title")
     wf_id = kwargs.get("wf_id")
     dc_id = kwargs.get("dc_id")
-    dc_config = kwargs.get("dc_config")
     column_name = kwargs.get("column_name")
     column_type = kwargs.get("column_type")
     aggregation = kwargs.get("aggregation")
@@ -615,10 +629,23 @@ def build_card(**kwargs):
     build_frame = kwargs.get("build_frame", False)
     stepper = kwargs.get("stepper", False)
     color = kwargs.get("color", None)
-    cols_json = kwargs.get("cols_json", {})
-    access_token = kwargs.get("access_token")
+    # SECURITY: access_token removed - no longer stored in component metadata
     parent_index = kwargs.get("parent_index", None)
     metric_theme = kwargs.get("metric_theme", None)
+
+    # DASHBOARD OPTIMIZATION: Extract init_data for API call elimination
+    init_data = kwargs.get("init_data", None)
+    logger.debug(f"Init data provided: {init_data is not None}")
+
+    # REFACTORING: cols_json and dc_config no longer stored in component metadata
+    # Callbacks access these directly from dashboard-init-data store via State input
+    # This eliminates per-component data duplication and reduces payload size
+    if init_data:
+        logger.info(
+            f"📡 CARD OPTIMIZATION: init_data available with {len(init_data.get('column_specs', {}))} column_specs"
+        )
+    else:
+        logger.debug("⚠️  init_data not available (edit mode or stepper mode)")
 
     # New individual style parameters
     # Convert empty strings to None for DMC theme compliance
@@ -661,6 +688,10 @@ def build_card(**kwargs):
         if not str(index).endswith("-tmp"):
             index = f"{index}-tmp"
 
+    # SIMPLE SKELETON APPROACH: Build actual component with skeleton placeholder
+    # No progressive loading - component renders with skeleton, callback populates it
+    # Removed early return that was showing separate placeholder spinner
+
     # PATTERN-MATCHING ARCHITECTURE: All data loading and value computation moved to callbacks
     # This function only creates the UI structure - values populate asynchronously via:
     # - render_card_value_background() for initial values
@@ -689,7 +720,7 @@ def build_card(**kwargs):
             "title": title,
             "wf_id": wf_id,
             "dc_id": dc_id,
-            "dc_config": dc_config,
+            # REFACTORING: dc_config removed - available via dashboard-init-data
             "aggregation": aggregation,
             "column_type": column_type,
             "column_name": column_name,
@@ -708,6 +739,10 @@ def build_card(**kwargs):
 
     # PATTERN-MATCHING: Trigger store - initiates async rendering
     # This store triggers the render_card_value_background callback
+    #
+    # NOTE: Progressive loading components create their own empty trigger Store
+    # via progressive_loading_component.py:136-139. This trigger Store is used
+    # for non-progressive components (stepper mode, direct builds).
     trigger_store = dcc.Store(
         id={
             "type": "card-trigger",
@@ -721,8 +756,7 @@ def build_card(**kwargs):
             "aggregation": aggregation,
             "title": title,
             "color": color,
-            "cols_json": cols_json,
-            "access_token": access_token,
+            # SECURITY: access_token removed - accessed from local-store in callbacks
             "stepper": stepper,
             "metric_theme": metric_theme,  # Deprecated, kept for backward compatibility
             # New individual style fields
@@ -732,6 +766,8 @@ def build_card(**kwargs):
             "icon_color": icon_color,
             "title_font_size": title_font_size,
             "value_font_size": value_font_size,
+            # REFACTORING: cols_json and dc_config removed from component stores
+            # Callbacks access dashboard-init-data store directly via State input
         },
     )
 
@@ -739,6 +775,18 @@ def build_card(**kwargs):
     metadata_store = dcc.Store(
         id={
             "type": "card-metadata",
+            "index": str(index),
+        },
+        data={},  # Populated by patch callback with has_been_patched flag
+    )
+
+    # PATTERN-MATCHING: Initial metadata store - for render callback
+    # CRITICAL: Separate store to avoid Dash background callback bug with allow_duplicate=True
+    # This store is written ONLY by render_card_value_background (contains reference_value)
+    # Patch callback reads from this store to get reference_value
+    metadata_initial_store = dcc.Store(
+        id={
+            "type": "card-metadata-initial",
             "index": str(index),
         },
         data={},  # Populated by render callback with reference_value
@@ -756,8 +804,14 @@ def build_card(**kwargs):
     # Actual values will be populated by render_card_value_background callback
     # Comparison text will be added by patch_card_with_filters callback
 
-    # Use legacy value if provided (for backward compatibility), otherwise show loading placeholder
-    display_value = str(v) if v is not None else "..."
+    # Use legacy value if provided (for backward compatibility), otherwise show loading skeleton
+    # Simple skeleton loader that will be replaced by callback
+    if v is not None:
+        display_value = str(v)
+    else:
+        display_value = html.Span(
+            dmc.Loader(type="dots", size="lg"), style={"textAlign": "center", "padding": "10px"}
+        )
 
     # Add icon overlay (always show icon now, not just for themed cards)
     # Build icon style (no color - DashIconify uses direct color prop)
@@ -831,6 +885,7 @@ def build_card(**kwargs):
         # Pattern-matching stores (for async rendering)
         trigger_store,
         metadata_store,
+        metadata_initial_store,  # Separate store for render callback (avoids allow_duplicate bug)
     ]
     # Removed the conditional insert as icon_overlay_component is now unpacked directly
 
@@ -858,71 +913,32 @@ def build_card(**kwargs):
     if background_color:
         card_section_kwargs["bg"] = background_color
 
-    if stepper and not build_frame:
-        # Return card with minimal styling - no extra borders or padding
-        card_style = {
-            "boxSizing": "content-box",
-            "height": "100%",
-            "minHeight": "120px",
-        }
+    # Build the card component with standard styling
+    card_style = {
+        "boxSizing": "content-box",
+        "height": "100%",
+        "minHeight": "120px",
+    }
 
-        new_card_body = dmc.Card(
-            children=[dmc.CardSection(**card_section_kwargs)],
-            withBorder=True,
-            shadow="sm",
-            style=card_style,
-            id={
-                "type": "card",
-                "index": str(index),
-            },
-        )
-    else:
-        # Normal mode with standard card styling
-        card_style = {
-            "boxSizing": "content-box",
-            "height": "100%",
-            "minHeight": "120px",
-        }
-
-        new_card_body = dmc.Card(
-            children=[dmc.CardSection(**card_section_kwargs)],
-            withBorder=True,
-            shadow="sm",
-            style=card_style,
-            id={
-                "type": "card",
-                "index": str(index),
-            },
-        )
+    new_card_body = dmc.Card(
+        children=[dmc.CardSection(**card_section_kwargs)],
+        withBorder=True,
+        shadow="sm",
+        style=card_style,
+        id={
+            "type": "card",
+            "index": str(index),
+        },
+    )
 
     if not build_frame:
+        # Return single component (not wrapped in list) for consistency
+        # The callback output 'children' can accept single component or list
         return new_card_body
     else:
-        if not stepper:
-            # Dashboard mode - return card directly without extra wrapper
-            from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
-                create_skeleton_component,
-            )
-
-            # PERFORMANCE OPTIMIZATION: Conditional loading spinner
-            if settings.performance.disable_loading_spinners:
-                logger.info("🚀 PERFORMANCE MODE: Card loading spinners disabled")
-                return new_card_body  # Return content directly, no loading wrapper
-            else:
-                # Optimized loading with fast delays
-                return dcc.Loading(
-                    children=new_card_body,
-                    custom_spinner=create_skeleton_component("card"),
-                    delay_show=5,  # Fast delay for better UX
-                    delay_hide=25,  # Quick hide for performance
-                    id={"index": index},
-                )
-        else:
-            # Build the card component for stepper mode
-            card_component = build_card_frame(
-                index=index, children=new_card_body, show_border=stepper
-            )
-            return card_component
+        # Build the card frame with LoadingOverlay for both dashboard and stepper modes
+        card_component = build_card_frame(index=index, children=new_card_body, show_border=stepper)
+        return card_component
 
 
 # List of all the possible aggregation methods for each data type

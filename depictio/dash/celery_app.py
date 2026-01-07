@@ -46,9 +46,25 @@ def health_check(self):
     }
 
 
+# NOTE: Dash apps will import celery_app when they're created in flask_dispatcher.py
+# Background callbacks are registered automatically when apps are initialized
+# No need to import apps here - that would create a circular dependency:
+#   1. flask_dispatcher.py imports celery_app (to create background_callback_manager)
+#   2. If celery_app.py imported flask_dispatcher, it would fail (flask_dispatcher not fully loaded)
+#
+# The multi-app architecture in flask_dispatcher.py handles callback registration:
+#   - Line 379: Apps are created with background_callback_manager
+#   - Background callbacks are registered when app modules wire up their callbacks
+#   - Celery workers discover tasks through the apps, not through this module
+
+logger.info("✅ CELERY: Celery app ready for background callbacks")
+logger.info(
+    "   - Background callbacks will be registered by flask_dispatcher.py when apps are created"
+)
+logger.info("   - Management, Viewer, and Editor apps each have their own callback registry")
+
+
 # Auto-discovery of tasks on app start
 if __name__ == "__main__":
     logger.info("🚀 CELERY: Starting worker directly...")
     celery_app.start()
-else:
-    logger.info("📦 CELERY: App imported successfully")

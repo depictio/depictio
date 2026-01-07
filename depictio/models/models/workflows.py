@@ -4,12 +4,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.logging import logger
 from depictio.models.models.base import DirectoryPath, MongoModel, PyObjectId
-from depictio.models.models.data_collections import DataCollection
+from depictio.models.models.data_collections import DataCollection, DataCollectionResponse
 from depictio.models.models.users import Permission
 
 
@@ -256,19 +256,25 @@ class Workflow(MongoModel):
     def generate_workflow_tag(cls, values):
         engine = values.get("engine", {})
         name = values.get("name")
+        catalog = values.get("catalog")
 
+        # Special case: nf-core workflows ALWAYS use nf-core/{name} format
+        if isinstance(catalog, WorkflowCatalog) and catalog.name == "nf-core":
+            values["workflow_tag"] = f"nf-core/{name}"
+            return values
+
+        # Preserve existing workflow_tag if already set and non-empty (non-nf-core)
+        existing_tag = values.get("workflow_tag")
+        if existing_tag:
+            return values
+
+        # Generate default tag based on engine
         if not isinstance(engine, WorkflowEngine):
             values["workflow_tag"] = values.get("name", "")
             return values
-        catalog = values.get("catalog")
-        if not isinstance(catalog, WorkflowCatalog):
-            catalog = None
+
         logger.debug(f"Engine: {engine}, Name: {name}, Catalog: {catalog}")
         values["workflow_tag"] = f"{engine.name}/{name}"
-        if catalog:
-            catalog_name = catalog.name
-            if catalog_name == "nf-core":
-                values["workflow_tag"] = f"{catalog_name}/{name}"
         return values
 
     def __eq__(self, other):
@@ -321,3 +327,22 @@ class Workflow(MongoModel):
         if not isinstance(value, dict):
             raise ValueError("runs must be a dictionary")
         return value
+
+
+class WorkflowResponse(Workflow):
+    """Permissive Workflow model for API responses.
+
+    Extends Workflow with extra="allow" to handle extra fields like delta_location
+    that may be added to nested data collections by API endpoints.
+    API may return workflow_tag instead of name, and may omit engine/data_location.
+    """
+
+    # Override required fields to be optional for API responses
+    name: str | None = None  # type: ignore[assignment]
+    engine: WorkflowEngine | None = None  # type: ignore[assignment]
+    data_location: WorkflowDataLocation | None = None  # type: ignore[assignment]
+
+    # Override to use permissive DataCollectionResponse
+    data_collections: list[DataCollectionResponse] = []  # type: ignore[assignment]
+
+    model_config = ConfigDict(extra="allow")

@@ -33,18 +33,19 @@ def create_dash_app():
     # assets_folder = os.path.join(dash_root_path, "assets/debug")
     assets_folder = os.path.join(dash_root_path, "assets")
 
-    # Setup Celery background callback manager
+    # # Setup Celery background callback manager
     logger.info("🔧 DASH: Setting up Celery background callback manager...")
 
     # Import the Dash-side Celery app
-    # from depictio.dash.celery_app import celery_app
+    from depictio.dash.celery_app import celery_app
 
-    # background_callback_manager = dash.CeleryManager(celery_app)
-    # logger.info("✅ DASH: Celery background callback manager configured")
+    background_callback_manager = dash.CeleryManager(celery_app)
+    logger.info("✅ DASH: Celery background callback manager configured")
 
     # import diskcache
+
     # cache = diskcache.Cache("/app/cache")
-    # background_callback_manager = DiskcacheManager(cache)
+    # background_callback_manager = dash.DiskcacheManager(cache)
     # logger.info(
     #     f"Diskcache background callback manager configured with cache path: {cache.directory}"
     # )
@@ -63,9 +64,10 @@ def create_dash_app():
         ],
         suppress_callback_exceptions=True,
         title="Depictio",
+        include_assets_files=True,
         assets_folder=assets_folder,
         assets_url_path="/assets",  # Explicitly set the assets URL path
-        # background_callback_manager=background_callback_manager,  # Enable background callbacks
+        background_callback_manager=background_callback_manager,  # Enable background callbacks
         # show_undo_redo=False,
     )
 
@@ -73,6 +75,36 @@ def create_dash_app():
     server = app.server
     server.logger.handlers = logger.handlers  # type: ignore[possibly-unbound-attribute]
     server.logger.setLevel(logger.level)  # type: ignore[possibly-unbound-attribute]
+
+    # PERFORMANCE OPTIMIZATION: Configure Flask to use orjson for JSON serialization
+    # orjson is 10-16x faster than standard json library
+    try:
+        import orjson
+        from flask.json.provider import JSONProvider
+
+        class OrjsonProvider(JSONProvider):
+            """Custom JSON provider using orjson for faster serialization."""
+
+            def dumps(self, obj, **kwargs):
+                """Serialize obj to JSON bytes using orjson."""
+                # orjson.dumps returns bytes, Flask expects str
+                return orjson.dumps(obj).decode("utf-8")
+
+            def loads(self, s, **kwargs):
+                """Deserialize JSON string to Python object using orjson."""
+                # Convert to bytes if needed (orjson.loads accepts bytes or str)
+                if isinstance(s, str):
+                    s = s.encode("utf-8")
+                return orjson.loads(s)
+
+        server.json = OrjsonProvider(server)
+        logger.info(
+            "✅ DASH: Configured Flask to use orjson for JSON serialization (10-16x faster)"
+        )
+    except ImportError:
+        logger.warning(
+            "⚠️  DASH: orjson not available, using standard json (consider installing: pip install orjson)"
+        )
 
     # Configure static folder for Flask server
     # This is separate from Dash's assets folder

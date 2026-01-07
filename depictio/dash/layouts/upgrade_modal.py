@@ -2,11 +2,11 @@
 Upgrade modal component for transitioning from anonymous to temporary user.
 """
 
+import dash
 import dash_mantine_components as dmc
+from dash import Input, Output, State, html
 from dash_iconify import DashIconify
 
-import dash
-from dash import Input, Output, State, html
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_upgrade_to_temporary_user
