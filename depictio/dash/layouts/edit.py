@@ -421,6 +421,7 @@ def enable_box_edit_mode(
             size="sm",
             radius=0,  # Remove border radius
             children=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
+            n_clicks=0,  # Required for callback to trigger properly
         )
 
     def create_edit_button():
@@ -442,6 +443,7 @@ def enable_box_edit_mode(
             size="sm",
             radius=0,  # Remove border radius
             children=DashIconify(icon="mdi:content-copy", width=16, color="white"),
+            n_clicks=0,  # Required for callback to trigger properly
         )
 
     # category_button = dmc.Select(
