@@ -113,12 +113,6 @@ class TestGetComponentData:
 class TestGetColumnsFromDataCollection:
     """Test data collection columns retrieval functionality."""
 
-    def setup_method(self):
-        """Set up test fixtures."""
-        from depictio.dash.utils import _data_collection_specs_cache
-
-        _data_collection_specs_cache.clear()
-
     @patch("depictio.dash.utils.httpx.get")
     def test_get_columns_from_data_collection_success(self, mock_httpx_get):
         """Test successful data collection columns retrieval."""
