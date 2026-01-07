@@ -777,6 +777,18 @@ def build_card(**kwargs):
             "type": "card-metadata",
             "index": str(index),
         },
+        data={},  # Populated by patch callback with has_been_patched flag
+    )
+
+    # PATTERN-MATCHING: Initial metadata store - for render callback
+    # CRITICAL: Separate store to avoid Dash background callback bug with allow_duplicate=True
+    # This store is written ONLY by render_card_value_background (contains reference_value)
+    # Patch callback reads from this store to get reference_value
+    metadata_initial_store = dcc.Store(
+        id={
+            "type": "card-metadata-initial",
+            "index": str(index),
+        },
         data={},  # Populated by render callback with reference_value
     )
 
@@ -873,6 +885,7 @@ def build_card(**kwargs):
         # Pattern-matching stores (for async rendering)
         trigger_store,
         metadata_store,
+        metadata_initial_store,  # Separate store for render callback (avoids allow_duplicate bug)
     ]
     # Removed the conditional insert as icon_overlay_component is now unpacked directly
 
