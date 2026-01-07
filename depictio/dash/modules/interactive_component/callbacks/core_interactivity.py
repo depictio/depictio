@@ -93,27 +93,27 @@ def register_store_update_callback(app):
         start_time = time.perf_counter()
 
         # ⭐ DEBUG: Detailed logging for reset troubleshooting
-        logger.error("=" * 80)
-        logger.error("🔄 STORE UPDATE CALLBACK FIRED")
-        logger.error(f"   Components count: {len(values)}")
-        logger.error(f"   Metadata count: {len(metadata_list) if metadata_list else 0}")
-        logger.error(f"   Values: {values}")
-        logger.error(f"   IDs: {[id_dict.get('index', 'unknown')[:8] for id_dict in ids]}")
+        logger.debug("=" * 80)
+        logger.debug("🔄 STORE UPDATE CALLBACK FIRED")
+        logger.debug(f"   Components count: {len(values)}")
+        logger.debug(f"   Metadata count: {len(metadata_list) if metadata_list else 0}")
+        logger.debug(f"   Values: {values}")
+        logger.debug(f"   IDs: {[id_dict.get('index', 'unknown')[:8] for id_dict in ids]}")
 
         # Show what triggered this callback
         if dash.callback_context.triggered:
             trigger_info = dash.callback_context.triggered[0]
-            logger.error(f"   Triggered by: {trigger_info['prop_id']}")
-            logger.error(f"   Trigger value: {trigger_info['value']}")
+            logger.debug(f"   Triggered by: {trigger_info['prop_id']}")
+            logger.debug(f"   Trigger value: {trigger_info['value']}")
 
         # Show previous store state
         if previous_store_data:
             prev_values = previous_store_data.get("interactive_components_values", [])
-            logger.error(f"   Previous store had {len(prev_values)} components")
+            logger.debug(f"   Previous store had {len(prev_values)} components")
             if prev_values:
-                logger.error(f"   Previous values sample: {prev_values[:2]}")
+                logger.debug(f"   Previous values sample: {prev_values[:2]}")
         else:
-            logger.error("   Previous store: EMPTY (first load)")
+            logger.debug("   Previous store: EMPTY (first load)")
 
         logger.debug(
             f"🔄 Store update: {len(values)} components, metadata: {len(metadata_list) if metadata_list else 0}"
@@ -247,7 +247,16 @@ def register_store_update_callback(app):
 
         # ⭐ OPTIMIZATION: Compare with previous state to prevent redundant updates
         # This prevents the spurious second render when interactive components finish rendering
-        new_store_data = {"interactive_components_values": components_values}
+
+        # Determine if this is the first load (initial population with default values)
+        is_first_load = previous_store_data is None or not previous_store_data.get(
+            "interactive_components_values"
+        )
+
+        new_store_data = {
+            "interactive_components_values": components_values,
+            "first_load": is_first_load,  # Flag to distinguish initial load from user interactions
+        }
 
         if previous_store_data is not None and previous_store_data.get(
             "interactive_components_values"
@@ -262,33 +271,41 @@ def register_store_update_callback(app):
             # Deep comparison of values
             if prev_components == new_components:
                 elapsed_ms = (time.perf_counter() - start_time) * 1000
-                logger.error("🚫 OPTIMIZATION BLOCKED: Store values unchanged")
-                logger.error(
+                logger.info("🚫 OPTIMIZATION BLOCKED: Store values unchanged")
+                logger.debug(
                     f"   Previous: {len(prev_components)} components, New: {len(new_components)} components"
                 )
-                logger.error(f"   Prev values: {prev_components}")
-                logger.error(f"   New values: {new_components}")
-                logger.error(
+                logger.debug(f"   Prev values: {prev_components}")
+                logger.debug(f"   New values: {new_components}")
+                logger.debug(
                     f"   Values are identical - preventing redundant update (checked in {elapsed_ms:.1f}ms)"
                 )
-                logger.error("=" * 80)
+                logger.debug("=" * 80)
                 raise dash.exceptions.PreventUpdate
             else:
-                logger.error("✅ OPTIMIZATION BYPASSED: Values changed")
-                logger.error(f"   Previous: {prev_components}")
-                logger.error(f"   New: {new_components}")
+                logger.info("✅ OPTIMIZATION BYPASSED: Values changed")
+                logger.debug(f"   Previous: {prev_components}")
+                logger.debug(f"   New: {new_components}")
         elif previous_store_data is None or not previous_store_data.get(
             "interactive_components_values"
         ):
-            # ⭐ FIRST UPDATE: Allow it to proceed even if values are at defaults
-            # This is necessary for the initial population of the store
-            logger.debug("   ℹ️ First store population - allowing update")
+            # ⭐ FIRST UPDATE: Wait for all components to be ready before initial store population
+            # This prevents premature card patch callbacks that race with card initial render
+            expected_count = len(metadata_list) if metadata_list else 0
+            if expected_count > 0 and len(components_values) < expected_count:
+                logger.debug(
+                    f"⏳ Waiting for all components: {len(components_values)}/{expected_count} ready"
+                )
+                raise dash.exceptions.PreventUpdate
+            logger.debug(
+                f"   ℹ️ First store population - allowing update ({len(components_values)}/{expected_count} components ready)"
+            )
 
         elapsed_ms = (time.perf_counter() - start_time) * 1000
-        logger.error(
+        logger.info(
             f"✅ STORE UPDATE ALLOWED: {len(components_values)}/{len(values)} components ({elapsed_ms:.1f}ms)"
         )
-        logger.error(f"   Returning data: {new_store_data}")
-        logger.error("=" * 80)
+        logger.debug(f"   Returning data: {new_store_data}")
+        logger.debug("=" * 80)
 
         return new_store_data

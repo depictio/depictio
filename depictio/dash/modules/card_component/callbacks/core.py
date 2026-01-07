@@ -35,6 +35,14 @@ def register_core_callbacks(app):
                 return [];
             }
 
+            // OPTIMIZATION: Skip overlay on first load (default values initialization)
+            // This prevents unnecessary blur during initial page load when interactive
+            // components populate the store with their default values
+            if (filters_data && filters_data.first_load === true) {
+                console.log('[CARD LOADING] First load detected - skipping overlay');
+                return existing_visible;  // Keep existing state (no overlay)
+            }
+
             const shouldShow = filters_data ? true : false;
             console.log('[CARD LOADING] Setting all overlays to:', shouldShow);
 
