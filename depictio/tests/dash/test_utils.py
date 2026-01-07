@@ -113,6 +113,12 @@ class TestGetComponentData:
 class TestGetColumnsFromDataCollection:
     """Test data collection columns retrieval functionality."""
 
+    def setup_method(self):
+        """Clear LRU cache before each test."""
+        from depictio.dash.utils import _fetch_columns_with_lru_cache
+
+        _fetch_columns_with_lru_cache.cache_clear()
+
     @patch("depictio.dash.utils.httpx.get")
     def test_get_columns_from_data_collection_success(self, mock_httpx_get):
         """Test successful data collection columns retrieval."""
