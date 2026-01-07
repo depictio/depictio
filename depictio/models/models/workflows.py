@@ -254,26 +254,27 @@ class Workflow(MongoModel):
     @model_validator(mode="before")
     @classmethod
     def generate_workflow_tag(cls, values):
-        # Preserve existing workflow_tag if already set and non-empty
+        engine = values.get("engine", {})
+        name = values.get("name")
+        catalog = values.get("catalog")
+
+        # Special case: nf-core workflows ALWAYS use nf-core/{name} format
+        if isinstance(catalog, WorkflowCatalog) and catalog.name == "nf-core":
+            values["workflow_tag"] = f"nf-core/{name}"
+            return values
+
+        # Preserve existing workflow_tag if already set and non-empty (non-nf-core)
         existing_tag = values.get("workflow_tag")
         if existing_tag:
             return values
 
-        engine = values.get("engine", {})
-        name = values.get("name")
-
+        # Generate default tag based on engine
         if not isinstance(engine, WorkflowEngine):
             values["workflow_tag"] = values.get("name", "")
             return values
-        catalog = values.get("catalog")
-        if not isinstance(catalog, WorkflowCatalog):
-            catalog = None
+
         logger.debug(f"Engine: {engine}, Name: {name}, Catalog: {catalog}")
         values["workflow_tag"] = f"{engine.name}/{name}"
-        if catalog:
-            catalog_name = catalog.name
-            if catalog_name == "nf-core":
-                values["workflow_tag"] = f"{catalog_name}/{name}"
         return values
 
     def __eq__(self, other):
