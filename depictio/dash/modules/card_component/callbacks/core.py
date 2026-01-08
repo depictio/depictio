@@ -615,6 +615,128 @@ def register_core_callbacks(app):
         all_comparisons = []
         all_metadata = []
 
+        # ⭐ OPTIMIZATION: Pre-load unique DC+filter combinations in parallel
+        # Scan all cards to identify unique data loads, then execute in parallel
+        logger.info(f"[{batch_task_id}] 📊 Analyzing {len(trigger_ids)} cards for parallel loading")
+
+        import concurrent.futures
+        import hashlib
+        import json
+
+        # Step 1: Build index of unique DC loads
+        dc_load_registry = {}  # Key: (wf_id, dc_id, filters_hash) -> filters metadata
+        card_to_load_key = {}  # Map: card_index -> load_key
+
+        for i, trigger_data in enumerate(trigger_data_list):
+            if not trigger_data or not isinstance(trigger_data, dict):
+                continue
+
+            wf_id = trigger_data.get("wf_id")
+            dc_id = trigger_data.get("dc_id")
+
+            if not all([wf_id, dc_id]):
+                continue
+
+            # Get filters for this card
+            card_dc_str = str(dc_id)
+            metadata_list = filters_data.get("interactive_components_values", [])
+
+            # Group filters by DC
+            filters_by_dc = {}
+            if metadata_list:
+                for component in metadata_list:
+                    component_dc = str(component.get("metadata", {}).get("dc_id"))
+                    if component_dc not in filters_by_dc:
+                        filters_by_dc[component_dc] = []
+                    filters_by_dc[component_dc].append(component)
+
+            # Get relevant filters for card's DC
+            relevant_filters = filters_by_dc.get(card_dc_str, [])
+
+            # Determine if filters are active
+            has_active_filters = any(
+                c.get("value") not in [None, [], "", False] for c in relevant_filters
+            )
+
+            if has_active_filters:
+                active_filters = [
+                    c for c in relevant_filters if c.get("value") not in [None, [], "", False]
+                ]
+                metadata_to_pass = active_filters
+            else:
+                metadata_to_pass = []
+
+            # Create stable hash of filters for deduplication
+            # Use column_name + value pairs, sorted for consistency
+            filter_signature = sorted(
+                [
+                    (c.get("metadata", {}).get("column_name"), str(c.get("value")))
+                    for c in metadata_to_pass
+                ]
+            )
+            filters_hash = hashlib.md5(
+                json.dumps(filter_signature, sort_keys=True).encode()
+            ).hexdigest()[:8]
+
+            load_key = (str(wf_id), str(dc_id), filters_hash)
+
+            # Register this unique load
+            if load_key not in dc_load_registry:
+                dc_load_registry[load_key] = metadata_to_pass
+
+            # Map card to its load key
+            card_to_load_key[i] = load_key
+
+        logger.info(
+            f"[{batch_task_id}] 📊 Found {len(dc_load_registry)} unique DC loads "
+            f"for {len(card_to_load_key)} cards"
+        )
+
+        # Step 2: Load all unique DCs in parallel
+        dc_cache = {}  # Cache: load_key -> DataFrame
+
+        def load_single_dc(load_key, metadata_to_pass):
+            """Load a single DC with filters (thread-safe operation)."""
+            wf_id, dc_id, filters_hash = load_key
+            try:
+                data = load_deltatable_lite(
+                    ObjectId(wf_id),
+                    ObjectId(dc_id),
+                    metadata=metadata_to_pass,
+                    TOKEN=access_token,
+                )
+                logger.debug(
+                    f"   ✅ Parallel load: {dc_id[:8]}...{filters_hash} "
+                    f"({data.height:,} rows × {data.width} cols)"
+                )
+                return load_key, data
+            except Exception as e:
+                logger.error(f"   ❌ Parallel load failed: {dc_id[:8]}...{filters_hash}: {e}")
+                return load_key, None
+
+        # Execute parallel loads (max 4 concurrent workers)
+        parallel_start = time.time()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            # Submit all load tasks
+            future_to_key = {
+                executor.submit(load_single_dc, load_key, metadata): load_key
+                for load_key, metadata in dc_load_registry.items()
+            }
+
+            # Collect results as they complete
+            for future in concurrent.futures.as_completed(future_to_key):
+                load_key, data = future.result()
+                if data is not None:
+                    dc_cache[load_key] = data
+
+        parallel_duration = (time.time() - parallel_start) * 1000
+        cache_hit_rate = len(dc_cache) / len(dc_load_registry) * 100 if dc_load_registry else 0
+        logger.info(
+            f"[{batch_task_id}] ⚡ Parallel loading complete: "
+            f"{len(dc_cache)}/{len(dc_load_registry)} DCs loaded in {parallel_duration:.1f}ms "
+            f"(hit rate: {cache_hit_rate:.0f}%)"
+        )
+
         # BATCH PROCESSING: Process each card in the loop
         for i, (
             initial_metadata,
@@ -1001,36 +1123,49 @@ def register_core_callbacks(app):
 
                 else:
                     # SAME-DC PATH: Card's DC has filters, apply them directly
-                    relevant_filters = filters_by_dc.get(card_dc_str, [])
+                    # ⚡ OPTIMIZATION: Use pre-loaded data from parallel cache
+                    load_key = card_to_load_key.get(i)
 
-                    if has_active_filters:
-                        # Filter out components with empty values
-                        active_filters = [
-                            c
-                            for c in relevant_filters
-                            if c.get("value") not in [None, [], "", False]
-                        ]
+                    if load_key and load_key in dc_cache:
+                        # Cache hit - use pre-loaded DataFrame
+                        data = dc_cache[load_key]
                         logger.info(
-                            f"📄 SAME-DC filtering - applying {len(active_filters)} active filters to card DC"
+                            f"⚡ SAME-DC (cached): {dc_id[:8]}... "
+                            f"({data.height:,} rows × {data.width} cols)"
                         )
-                        metadata_to_pass = active_filters
                     else:
-                        # Clearing filters - load ALL unfiltered data
-                        logger.info("📄 SAME-DC clearing filters - loading ALL unfiltered data")
-                        metadata_to_pass = []
+                        # Cache miss - fallback to synchronous load
+                        # This should be rare (only for cards skipped during pre-scan)
+                        relevant_filters = filters_by_dc.get(card_dc_str, [])
 
-                    logger.info(
-                        f"📂 Loading data: {wf_id}:{dc_id} ({len(metadata_to_pass)} filters)"
-                    )
+                        if has_active_filters:
+                            # Filter out components with empty values
+                            active_filters = [
+                                c
+                                for c in relevant_filters
+                                if c.get("value") not in [None, [], "", False]
+                            ]
+                            logger.info(
+                                f"📄 SAME-DC filtering - applying {len(active_filters)} active filters to card DC"
+                            )
+                            metadata_to_pass = active_filters
+                        else:
+                            # Clearing filters - load ALL unfiltered data
+                            logger.info("📄 SAME-DC clearing filters - loading ALL unfiltered data")
+                            metadata_to_pass = []
 
-                    data = load_deltatable_lite(
-                        ObjectId(wf_id),
-                        ObjectId(dc_id),
-                        metadata=metadata_to_pass,
-                        TOKEN=access_token,
-                    )
+                        logger.warning(
+                            f"⚠️ Cache miss for card {i} - loading synchronously: {wf_id}:{dc_id}"
+                        )
 
-                    logger.info(f"📊 Loaded {data.height:,} rows × {data.width} columns")
+                        data = load_deltatable_lite(
+                            ObjectId(wf_id),
+                            ObjectId(dc_id),
+                            metadata=metadata_to_pass,
+                            TOKEN=access_token,
+                        )
+
+                        logger.info(f"📊 Loaded {data.height:,} rows × {data.width} columns")
 
                 logger.debug("Loaded filtered data")
 
