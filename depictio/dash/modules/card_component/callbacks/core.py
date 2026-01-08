@@ -731,10 +731,11 @@ def register_core_callbacks(app):
 
         parallel_duration = (time.time() - parallel_start) * 1000
         cache_hit_rate = len(dc_cache) / len(dc_load_registry) * 100 if dc_load_registry else 0
+        dedup_ratio = len(card_to_load_key) / len(dc_load_registry) if dc_load_registry else 1
         logger.info(
             f"[{batch_task_id}] ⚡ Parallel loading complete: "
             f"{len(dc_cache)}/{len(dc_load_registry)} DCs loaded in {parallel_duration:.1f}ms "
-            f"(hit rate: {cache_hit_rate:.0f}%)"
+            f"(dedup: {dedup_ratio:.1f}x, success: {cache_hit_rate:.0f}%)"
         )
 
         # BATCH PROCESSING: Process each card in the loop
@@ -1176,6 +1177,7 @@ def register_core_callbacks(app):
 
                 # Compute new value on filtered data
                 # has_filters=True because this callback only triggers on filter changes
+                compute_start = time.time()
                 current_value = compute_value(
                     data,
                     column_name,
@@ -1183,7 +1185,11 @@ def register_core_callbacks(app):
                     cols_json=cols_json,
                     has_filters=has_active_filters,
                 )
-                logger.debug(f"Computed filtered value: {current_value}")
+                compute_duration = (time.time() - compute_start) * 1000
+                logger.info(
+                    f"[{task_id}] ⏱️  Computation: {compute_duration:.1f}ms "
+                    f"({aggregation} on {column_name}, result={current_value})"
+                )
 
                 # Format current value
                 try:
