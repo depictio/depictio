@@ -282,7 +282,7 @@ jobs:
           fi
           echo "✅ Frontend container is running"
 
-      - name: Debug Docker networking
+      - name: Debug Docker networking and frontend startup
         run: |
           echo "🔍 Docker Network Debugging"
           echo "📊 List all networks:"
@@ -303,6 +303,23 @@ jobs:
           echo ""
           echo "🔍 Test connectivity from backend to frontend:"
           docker compose exec -T depictio-backend sh -c "curl -v --max-time 5 http://depictio-frontend:5080/ || echo 'Connection failed'"
+
+          echo ""
+          echo "🔍 Frontend container details:"
+          echo "Container is running: $(docker inspect depictio-frontend --format='{{.State.Running}}')"
+          echo "Container exit code: $(docker inspect depictio-frontend --format='{{.State.ExitCode}}')"
+
+          echo ""
+          echo "🔍 Check if Dash is listening on port 5080:"
+          docker compose exec -T depictio-frontend sh -c "netstat -tlnp 2>/dev/null | grep 5080 || echo 'Port 5080 not listening'"
+
+          echo ""
+          echo "📋 Full frontend logs (ALL):"
+          docker compose logs depictio-frontend
+
+          echo ""
+          echo "🔍 Check running processes in frontend:"
+          docker compose exec -T depictio-frontend sh -c "ps aux | grep -E 'dash|python|gunicorn' || echo 'No Python processes found'"
 
       - name: Logs depictio-backend
         run: sleep 3 && docker compose logs depictio-backend
