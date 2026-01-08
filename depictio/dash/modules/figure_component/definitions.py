@@ -1,9 +1,14 @@
 """
 Dynamic visualization type definitions.
 
-This module provides future-proof definitions for all supported Plotly Express
-visualizations using dynamic parameter discovery. This replaces hardcoded
-definitions and automatically adapts to new Plotly versions.
+Phase 1: Simplified to support only 4 core visualization types:
+- scatter: 2D scatter plot
+- line: Line chart for time series
+- bar: Categorical bar chart
+- box: Distribution box plot
+
+This replaces the comprehensive dynamic discovery with a focused set of
+visualizations for initial re-integration.
 """
 
 from typing import Dict, List
@@ -11,16 +16,28 @@ from typing import Dict, List
 from .models import VisualizationDefinition
 from .parameter_discovery import discover_all_visualizations
 
+# Phase 1: Core visualization types (expanded to include histogram)
+ALLOWED_VISUALIZATIONS = {"scatter", "line", "bar", "box", "histogram"}
+
 # Cache for discovered visualizations to avoid repeated discovery
 _visualization_cache: Dict[str, VisualizationDefinition] = {}
 _cache_initialized = False
 
 
 def _ensure_cache_initialized():
-    """Initialize the visualization cache if not already done."""
+    """Initialize the visualization cache if not already done.
+
+    Phase 1: Only include allowed visualization types.
+    """
     global _cache_initialized, _visualization_cache
     if not _cache_initialized:
-        _visualization_cache = discover_all_visualizations()
+        # Discover all visualizations, then filter to allowed types only
+        all_visualizations = discover_all_visualizations()
+        _visualization_cache = {
+            name: viz_def
+            for name, viz_def in all_visualizations.items()
+            if name in ALLOWED_VISUALIZATIONS
+        }
         _cache_initialized = True
 
 

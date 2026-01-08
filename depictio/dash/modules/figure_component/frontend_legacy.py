@@ -1,3 +1,19 @@
+"""
+DEPRECATED: This file has been archived as part of the Figure Component re-integration (Phase 1).
+
+This legacy frontend implementation has been replaced with a new architecture:
+- New callback structure: callbacks/__init__.py (lazy loading coordinator)
+- Batch rendering: callbacks/core.py (ALL pattern with parallel data loading)
+- Simplified build function: utils.py::build_figure() (view mode only)
+
+DO NOT USE THIS FILE FOR NEW DEVELOPMENT.
+This file is preserved for reference only and will be removed in a future release.
+
+Migration Date: January 2026
+Replacement Architecture: Phase 1 - View Mode Only
+See: /Users/tweber/.claude/plans/cosmic-riding-horizon.md for implementation details
+"""
+
 # Import necessary libraries
 from typing import Any, Dict, List
 
@@ -282,7 +298,23 @@ def _is_stepper_component(component_id: str) -> bool:
 
 
 def register_callbacks_figure_component(app):
-    """Register all callbacks for the robust figure component system."""
+    """
+    DEPRECATED: This function is no longer used.
+
+    All figure component callbacks have been migrated to:
+    - depictio/dash/modules/figure_component/callbacks/core.py (batch rendering with ALL pattern)
+
+    Use the new registration function instead:
+    - from depictio.dash.modules.figure_component.callbacks import register_callbacks_figure_component
+
+    This legacy implementation is preserved for reference only.
+    All callbacks below are commented out and non-functional.
+    """
+    # All callbacks have been commented out and replaced by new architecture
+    # See callbacks/core.py for the new implementation
+    pass  # This function does nothing - callbacks are now in callbacks/core.py
+
+    # LEGACY COMMENTED-OUT CALLBACKS BELOW (for reference only):
 
     # @dash.callback(
     #     Output({"type": "collapse", "index": MATCH}, "children"),

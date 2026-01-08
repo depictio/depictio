@@ -7,14 +7,11 @@ import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import plotly.express as px
 import polars as pl
-from bson import ObjectId
 from dash import dcc, html
 from dash_iconify import DashIconify
 
 # PERFORMANCE OPTIMIZATION: Use centralized config
-from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
 from .clustering import get_clustering_function
 from .definitions import get_visualization_definition
@@ -1959,380 +1956,99 @@ def validate_parameters(visu_type: str, parameters: Dict[str, Any]) -> Dict[str,
 
 
 def build_figure(**kwargs) -> html.Div | dcc.Loading:
-    """Build figure component with robust parameter handling.
+    """Build figure component - Phase 1: View mode only.
+
+    This simplified version creates a skeleton structure that will be populated
+    by the batch rendering callback (callbacks/core.py). No stepper mode, no code mode,
+    no parameter interface building - just the basic structure for view mode rendering.
 
     Args:
         **kwargs: Figure configuration parameters
+            - index: Component index (required)
+            - visu_type: Visualization type (default: "scatter")
+            - dict_kwargs: Figure parameters (default: {})
+            - wf_id: Workflow ID
+            - dc_id: Data collection ID
+            - theme: Theme (default: "light")
 
     Returns:
-        Figure component as HTML div
+        Figure component as HTML div with skeleton loader
     """
-    # DUPLICATION TRACKING: Enhanced logging to find source of duplicate builds
-    import inspect
-    import traceback
-
-    caller_info = "UNKNOWN"
-    try:
-        # Get the calling function details
-        frame = inspect.currentframe()
-        if frame and frame.f_back:
-            caller_frame = frame.f_back
-            caller_info = f"{caller_frame.f_code.co_filename}:{caller_frame.f_lineno} in {caller_frame.f_code.co_name}()"
-    except Exception:
-        pass
-
-    logger.info("=" * 60)
-    logger.info("🔍 BUILD FIGURE CALLED - DUPLICATION TRACKING")
-    logger.info(f"📍 CALLER: {caller_info}")
-    logger.info(f"🏷️  INDEX: {kwargs.get('index', 'UNKNOWN')}")
-    logger.info(f"🎯 STEPPER: {kwargs.get('stepper', False)}")
-    logger.info(f"🔧 BUILD_FRAME: {kwargs.get('build_frame', False)}")
-    logger.info(f"👤 PARENT_INDEX: {kwargs.get('parent_index', 'NONE')}")
-
-    # Check for bulk data availability
-    if "_bulk_component_data" in kwargs:
-        logger.info("✅ BULK DATA: Pre-fetched data available")
-    else:
-        logger.warning("⚠️ NO BULK DATA: Will fetch individually - potential performance hit")
-
-    # Print condensed call stack to see the path
-    logger.info("📚 CALL STACK (condensed):")
-    stack = traceback.extract_stack()
-    for i, frame in enumerate(stack[-5:-1]):  # Last 4 frames before this one
-        logger.info(f"   {i + 1}. {frame.filename.split('/')[-1]}:{frame.lineno} in {frame.name}()")
-    logger.info("=" * 60)
-
+    # Extract essential parameters
     index = kwargs.get("index")
+    visu_type = kwargs.get("visu_type", "scatter")
     dict_kwargs = kwargs.get("dict_kwargs", {})
+    wf_id = kwargs.get("wf_id")
+    dc_id = kwargs.get("dc_id")
+    theme = kwargs.get("theme", "light")
 
     # Defensive handling: ensure dict_kwargs is always a dict
     if not isinstance(dict_kwargs, dict):
         logger.warning(f"Expected dict for dict_kwargs, got {type(dict_kwargs)}: {dict_kwargs}")
         dict_kwargs = {}
 
-    logger.info(f"INDEX: {index}")
-    logger.info(f"DICT_KWARGS RECEIVED: {dict_kwargs}")
-    logger.info(f"DICT_KWARGS TYPE: {type(dict_kwargs)}")
-    logger.info(f"DICT_KWARGS EMPTY: {not dict_kwargs}")
-    visu_type = kwargs.get("visu_type", "scatter")
-    wf_id = kwargs.get("wf_id")
-    dc_id = kwargs.get("dc_id")
-    dc_config = kwargs.get("dc_config")
-    build_frame = kwargs.get("build_frame", False)
-    stepper = kwargs.get("stepper", False)
-    parent_index = kwargs.get("parent_index", None)
-    df = kwargs.get("df", pl.DataFrame())
-    # Ensure df is never None
-    if df is None:
-        logger.warning("df was None, using empty DataFrame")
-        df = pl.DataFrame()
-    TOKEN = kwargs.get("access_token")
-    filter_applied = kwargs.get("filter_applied", False)
-    theme = kwargs.get("theme", "light")
+    logger.info(f"Building figure component {index} (visu_type: {visu_type}, theme: {theme})")
 
-    # Handle stepper mode index properly for stored-metadata-component
-    # For stepper mode, use the temporary index to avoid conflicts with existing components
-    # For normal mode, use the original index (remove -tmp suffix if present)
-    if stepper:
-        # Defensive check: only append -tmp if not already present
-        if not str(index).endswith("-tmp"):
-            index = f"{index}-tmp"
+    # Phase 1: Create simple skeleton structure that will be populated by callback
+    # The batch rendering callback in callbacks/core.py handles all data loading and figure generation
 
-    # Metadata management - matches build_card pattern
-    if stepper:
-        # Remove -tmp suffix to match code mode behavior and Done button expectations
-        # Done button expects: metadata.index + "-tmp" == triggered_index
-        # This matches frontend.py:1912-1915 behavior for code mode
-        store_index = index.replace("-tmp", "") if index and "-tmp" in str(index) else index
-        data_index = index.replace("-tmp", "") if index else "unknown"
-        logger.info(
-            f"📝 STEPPER MODE: Storing metadata without -tmp suffix (index={index} -> store_index={store_index})"
-        )
-    else:
-        store_index = index.replace("-tmp", "") if index else "unknown"
-        data_index = store_index
-
-    logger.info(f"Building figure component {index}")
-    logger.info(
-        f"Stepper mode: {stepper}, store_index: {store_index}, data_index: {data_index if stepper else store_index}"
-    )
-    logger.info(f"Visualization type: {visu_type}")
-    logger.info(f"Theme: {theme}")
-
-    # Log the exact format that will be used for target_components
-    if not stepper and build_frame:
-        target_id_format = f'{{"index":"{index}","type":"graph"}}'
-        logger.info(f"🎯 target_components will use: {target_id_format}")
-        logger.info(f'📍 Graph component ID will be: {{"type":"graph","index":"{index}"}}')
-
-    # Check if this is a code mode component
-    is_code_mode = kwargs.get("mode") == "code" or kwargs.get("code_content") is not None
-    logger.info(
-        f"🔍 MODE DETECTION: is_code_mode={is_code_mode}, mode={kwargs.get('mode')}, has_code_content={kwargs.get('code_content') is not None}"
-    )
-
-    # Create component metadata
+    # Component metadata for dashboard save/restore
     store_component_data = {
-        "index": str(store_index),
+        "index": str(index),
         "component_type": "figure",
-        "dict_kwargs": dict_kwargs,
         "visu_type": visu_type,
+        "dict_kwargs": dict_kwargs,
         "wf_id": wf_id,
         "dc_id": dc_id,
-        "dc_config": dc_config,
-        "parent_index": parent_index,
-        "filter_applied": filter_applied,
         "last_updated": datetime.now().isoformat(),
-        "mode": kwargs.get("mode", "ui"),  # Store the mode in component metadata
     }
 
-    # CRITICAL: Preserve code_content in stored metadata for code mode components
-    if kwargs.get("mode") == "code" and "code_content" in kwargs:
-        store_component_data["code_content"] = kwargs["code_content"]
-        logger.info(
-            f"📝 STORED code_content for component {str(store_index)} (length: {len(kwargs['code_content'])})"
-        )
-    logger.info(f"Component metadata: {store_component_data}")
-
-    # Validate component completeness
-    is_valid, error_msg = validate_figure_component_metadata(store_component_data)
-    if not is_valid:
-        logger.warning(f"⚠️ INCOMPLETE COMPONENT CREATED: {error_msg}")
-        logger.warning(
-            f"⚠️ Component index: {store_index}, mode: {store_component_data.get('mode')}"
-        )
-        logger.warning("⚠️ This component may fail to save properly")
-
-    # Log code mode component details
-    if kwargs.get("mode") == "code":
-        if "code_content" in kwargs:
-            logger.info(
-                f"✅ CODE MODE: code_content present (length: {len(kwargs['code_content'])})"
-            )
-        else:
-            logger.warning("⚠️ CODE MODE: code_content missing - will attempt database recovery")
-
-    # Ensure dc_config is available for build_figure
-    if not dc_config and wf_id and dc_id:
-        # PERFORMANCE OPTIMIZATION: Check bulk data first to avoid individual API calls
-        bulk_component_data = kwargs.get("_bulk_component_data")
-        if bulk_component_data and "dc_config" in bulk_component_data:
-            logger.info(f"✅ BULK DATA: Using pre-fetched dc_config for figure {index}")
-            dc_config = bulk_component_data["dc_config"]
-            store_component_data["dc_config"] = dc_config
-        else:
-            logger.warning(
-                f"⚠️ INDIVIDUAL FETCH: dc_config missing for figure {index}, fetching from API"
-            )
-            try:
-                import httpx
-
-                from depictio.api.v1.configs.config import API_BASE_URL
-
-                headers = {"Authorization": f"Bearer {TOKEN}"} if TOKEN else {}
-                # Handle joined data collection IDs
-                if isinstance(dc_id, str) and "--" in dc_id:
-                    # For joined data collections, create synthetic specs
-                    dc_specs = {
-                        "config": {"type": "table", "metatype": "joined"},
-                        "data_collection_tag": f"Joined data collection ({dc_id})",
-                        "description": "Virtual joined data collection",
-                        "_id": dc_id,
-                    }
-                else:
-                    # Regular data collection - fetch from API
-                    dc_specs = httpx.get(
-                        f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_id}",
-                        headers=headers,
-                    ).json()
-                dc_config = dc_specs.get("config", {})
-                store_component_data["dc_config"] = dc_config
-                logger.info(f"📡 INDIVIDUAL SUCCESS: Fetched dc_config for figure {index}")
-            except Exception as e:
-                logger.error(
-                    f"❌ INDIVIDUAL FAILED: Failed to fetch dc_config for figure {index}: {e}"
-                )
-                dc_config = {}
-
-    # Validate and clean parameters
-    validated_kwargs = validate_parameters(visu_type, dict_kwargs)
-
-    # THEME RESTORATION FIX: Ensure template is populated for dashboard restore
-    # This fixes the issue where figures don't pick up correct theme during restore
-    # when template is empty in the database
-    template_value = validated_kwargs.get("template")
-    if not template_value or template_value == "":
-        validated_kwargs["template"] = _get_theme_template(theme)
-        logger.info(
-            f"🎨 RESTORE FIX: Populated empty template with {validated_kwargs['template']} for theme {theme}"
-        )
-    else:
-        logger.info(f"🎨 RESTORE: Using existing template: {template_value}")
-
-    # Handle data loading
-    if df is not None and df.is_empty() and kwargs.get("refresh", True):
-        if wf_id and dc_id:
-            logger.info(f"Loading data for {wf_id}:{dc_id}")
-            try:
-                # LOG DETAILED INFO ABOUT DATA LOADING
-                logger.info("🔍 FIGURE COMPONENT DATA LOADING:")
-                logger.info(f"  - Component expects column: {dict_kwargs.get('x', 'N/A')}")
-                logger.info(f"  - Workflow ID: {wf_id}")
-                logger.info(f"  - Data Collection ID: {dc_id}")
-                logger.info(f"  - DC ID type: {type(dc_id)}")
-                logger.info(f"  - Is joined DC: {'--' in str(dc_id) if dc_id else False}")
-
-                # Handle joined data collection IDs - don't convert to ObjectId
-                if isinstance(dc_id, str) and "--" in dc_id:
-                    # For joined data collections, pass the DC ID as string
-                    logger.info(f"  - Loading joined data collection: {dc_id}")
-                    df = load_deltatable_lite(ObjectId(wf_id), dc_id, TOKEN=TOKEN)
-                else:
-                    # Regular data collection - convert to ObjectId
-                    logger.info(f"  - Loading regular data collection: {dc_id}")
-                    df = load_deltatable_lite(ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN)
-
-                # LOG THE RESULTING DATAFRAME SCHEMA
-                logger.info("📊 LOADED DATAFRAME SCHEMA:")
-                logger.info(f"  - Shape: {df.shape}")
-                logger.info(f"  - Columns: {df.columns}")
-                logger.info(
-                    f"  - Expected column '{dict_kwargs.get('x', 'N/A')}' present: {dict_kwargs.get('x', 'N/A') in df.columns}"
-                )
-            except Exception as e:
-                logger.error(f"Failed to load data: {e}")
-                df = pl.DataFrame()
-        else:
-            logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
-
-    # CALLBACK ARCHITECTURE: Create placeholder figure instead of synchronous rendering
-    # Figure will be rendered by pattern-matching callback in frontend.py
-    logger.info("🔄 CALLBACK ARCHITECTURE: Creating placeholder for async rendering")
-    logger.info(f"  validated_kwargs: {validated_kwargs}")
-    logger.info(f"  visu_type: {visu_type}")
-    logger.info(f"  theme: {theme}")
-    logger.info(f"  is_code_mode: {is_code_mode}")
-
-    # Create placeholder figure with theme-aware template
-    # placeholder_figure = create_figure_placeholder(theme=theme, visu_type=visu_type)
-
-    # Create info badges
-    badges = _create_info_badges(
-        index or "unknown",
-        df if df is not None else pl.DataFrame(),
-        visu_type,
-        filter_applied,
-        build_frame,
-    )
-
-    # Create the figure div with conditional Store component
-    # In stepper mode with build_frame=False, don't include Store to avoid duplication
-    figure_components = [
-        badges,
-        dcc.Graph(
-            # figure=placeholder_figure,  # Use placeholder instead of synchronously rendered figure
-            id={"type": "graph", "index": index},
-            config={
-                "editable": True,
-                "scrollZoom": True,
-                "responsive": True,
-                "displayModeBar": "hover",
-            },
-            className="responsive-graph",  # Add responsive graph class for vertical growing
-            # style={
-            #     "width": "100%",
-            #     "height": "100%",  # FIXED: Use full height for vertical growing
-            #     "flex": "1",  # Critical for vertical growing
-            #     "backgroundColor": "transparent",  # Fix white background issue
-            #     # "minHeight": "200px",  # Minimum height for usability
-            # },
-        ),
-        # CALLBACK ARCHITECTURE: Add render trigger store for pattern-matching callback
-        dcc.Store(
-            id={"type": "figure-render-trigger", "index": index},
-            data={
-                "dict_kwargs": validated_kwargs,
-                "visu_type": visu_type,
-                "wf_id": wf_id,
-                "dc_id": dc_id,
-                "theme": theme,
-                "mode": kwargs.get("mode", "ui"),
-                "code_content": kwargs.get("code_content") if is_code_mode else None,
-                "timestamp": datetime.now().isoformat(),
-            },
-        ),
-        # CALLBACK ARCHITECTURE: Add trace metadata store for efficient patching
-        dcc.Store(
-            id={"type": "figure-trace-metadata", "index": index},
-            data={},  # Will be populated by render callback
-        ),
-    ]
-
-    # Component metadata store (for dashboard save/restore)
-    # IMPORTANT: Only create in NON-stepper mode to avoid duplicates
-    # In stepper mode, design_figure() already created this store (frontend.py:3088-3103)
-    # for pattern-matching callback compatibility
-    # When user clicks "Done", component transitions to non-stepper mode with proper metadata
-    if not stepper:
-        figure_components.append(
+    # Phase 1: Simple structure - Trigger store + Skeleton + Graph + Metadata store
+    return html.Div(
+        id={"type": "figure-container", "index": index},
+        className="figure-container",
+        children=[
+            # Trigger store - initiates batch rendering callback
             dcc.Store(
+                id={"type": "figure-trigger", "index": index},
+                data={
+                    "index": index,
+                    "wf_id": wf_id,
+                    "dc_id": dc_id,
+                    "visu_type": visu_type,
+                    "dict_kwargs": dict_kwargs,
+                },
+            ),
+            # Metadata store - for callback results
+            dcc.Store(
+                id={"type": "figure-metadata", "index": index},
+                data={},
+            ),
+            # Component metadata store - for dashboard save/restore
+            dcc.Store(
+                id={"type": "stored-metadata-component", "index": index},
                 data=store_component_data,
-                id={"type": "stored-metadata-component", "index": store_index},
-            )
-        )
-
-    figure_div = html.Div(
-        figure_components,
-        # style={
-        #     "width": "100%",
-        #     "height": "100%",
-        #     "flex": "1",  # Critical for vertical growing
-        #     "display": "flex",
-        #     "flexDirection": "column",
-        #     # "minHeight": "200px",  # Reduce from 400px for better flexibility
-        #     "backgroundColor": "transparent",
-        # },
+            ),
+            # Loading overlay + Graph (populated by callback)
+            dcc.Loading(
+                id={"type": "figure-loading", "index": index},
+                type="dot",  # dot, default, circle, cube, or graph
+                color="#6495ED",  # Blue color for figure loading indicator
+                children=dcc.Graph(
+                    id={"type": "figure-graph", "index": index},
+                    figure={},  # Empty - populated by batch rendering callback
+                    config={"displayModeBar": True, "responsive": True},
+                    style={"height": "100%", "width": "100%"},
+                ),
+            ),
+        ],
+        style={
+            "height": "100%",
+            "width": "100%",
+            "display": "flex",
+            "flexDirection": "column",
+        },
     )
-
-    if not build_frame:
-        return figure_div
-    else:
-        # For figure components, we don't create a new frame here because one already exists
-        # from the design phase. Instead, we return the content that will populate the existing frame.
-        # This prevents duplicate figure-body component IDs.
-
-        # For stepper mode with loading
-        if not stepper:
-            # Build the figure component with frame
-            figure_component = build_figure_frame(index=index, children=figure_div)
-
-            # Add targeted loading for the graph component specifically
-            from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
-                create_skeleton_component,
-            )
-
-            # Use Dash's stringify_id function to generate exact target format
-            graph_id_dict = {"type": "graph", "index": index}
-            target_id = stringify_id(graph_id_dict)
-
-            logger.info(f"🎯 Using stringify_id for target_components: {target_id}")
-
-            # PERFORMANCE OPTIMIZATION: Conditional loading spinner
-            if settings.performance.disable_loading_spinners:
-                logger.info("🚀 PERFORMANCE MODE: Loading spinners disabled")
-                return figure_component  # Return content directly, no loading wrapper
-            else:
-                # Optimized loading with fast delays
-                return dcc.Loading(
-                    children=figure_component,
-                    custom_spinner=create_skeleton_component("figure"),
-                    target_components={target_id: "figure"},
-                    delay_show=5,  # Fast delay for better UX
-                    delay_hide=25,  # Quick hide for performance
-                    id={"type": "figure-loading", "index": index},
-                )
-        else:
-            return figure_div  # Return content directly for stepper mode
 
 
 def _create_info_badges(

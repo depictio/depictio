@@ -535,19 +535,69 @@ def calculate_right_panel_positions(components, saved_layout_data=None):
                 "y": int(y),
                 "w": w,
                 "h": h,
-                "static": False,
+                "static": True,  # Cards: Fixed size, no drag/resize
             }
         )
 
         card_y = max(card_y, y + h)
 
-    # Other components: Deferred for later implementation
-    # Will be added below cards when figure/table positioning is ready
-    if other:
-        logger.info(f"⏳ RIGHT PANEL: Skipping {len(other)} non-card components (deferred)")
+    # Other components: Process figures, tables, etc.
+    # Figures positioned below cards using centralized dimensions
+    for idx, component in enumerate(other):
+        component_type = component.get("component_type", "figure")
+        index = component.get("index")
+        component_id = str(index)
+
+        logger.debug(f"📐 RIGHT: Processing {component_type} {component_id}")
+
+        # Check if we have saved position for this component
+        if component_id in saved_positions:
+            # Use saved position but enforce standard dimensions
+            saved_pos = saved_positions[component_id]
+            x = saved_pos.get("x", 0)
+            y = saved_pos.get("y", card_y)  # Default below cards if no saved y
+            # Use centralized dimensions from component_metadata
+            dims = get_dual_panel_dimensions(component_type)
+            w = dims["w"]
+            h = dims["h"]
+            logger.info(
+                f"📐 RIGHT: Using saved position for {component_type} {index}: x={x}, y={y}, "
+                f"w={w}, h={h}"
+            )
+        else:
+            # Auto-position: figures take 50% width (w=4 in 8-column grid)
+            logger.warning(
+                f"📐 RIGHT: No saved position for {component_type} {index} - auto-positioning"
+            )
+            # Use centralized dimensions from component_metadata
+            dims = get_dual_panel_dimensions(component_type)
+            w = dims["w"]
+            h = dims["h"]
+            # Position: 2 figures per row for w=4, stacked below cards
+            col = idx % 2  # 2 figures per row (8/4 = 2)
+            row = idx // 2
+            x = col * w  # Position based on component width
+            y = card_y + (row * h)  # Stack below cards
+            logger.info(
+                f"📐 RIGHT: Auto-positioning {component_type} {index}: "
+                f"x={x}, y={y}, w={w}, h={h} (col={col}, row={row})"
+            )
+
+        layout.append(
+            {
+                "i": f"box-{component_id}",
+                "x": int(x),
+                "y": int(y),
+                "w": w,
+                "h": h,
+                "static": False,
+                "resizeHandles": ["se", "s", "e", "sw", "w"],  # Figures: Full resize handles
+            }
+        )
 
     logger.info(
-        f"📐 RIGHT PANEL: Generated {len(layout)} positions ({len(cards)} cards), max_y={card_y}"
+        f"📐 RIGHT PANEL: Generated {len(layout)} positions "
+        f"({len(cards)} cards, {len(other)} other components)"
     )
     return layout
 
@@ -1252,7 +1302,7 @@ def design_draggable(
             rowHeight=100,
             cols={"lg": 8, "md": 8, "sm": 8, "xs": 8, "xxs": 8},
             showRemoveButton=False,
-            showResizeHandles=False,  # Never allow resizing
+            showResizeHandles=True,  # Enable per-item resize handles (controlled by resizeHandles property)
             className=grid_className,
             allowOverlap=False,
             compactType="vertical",

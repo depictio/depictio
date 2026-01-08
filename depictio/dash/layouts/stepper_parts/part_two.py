@@ -7,7 +7,8 @@ from depictio.dash.component_metadata import is_enabled
 from depictio.dash.modules.card_component.frontend import create_stepper_card_button
 
 # Depictio components imports - button step
-from depictio.dash.modules.figure_component.frontend import create_stepper_figure_button
+# DEPRECATED: Figure component stepper integration - Phase 1 uses view mode only
+from depictio.dash.modules.figure_component.frontend_legacy import create_stepper_figure_button
 from depictio.dash.modules.interactive_component.frontend import create_stepper_interactive_button
 from depictio.dash.modules.multiqc_component.frontend import create_stepper_multiqc_button
 from depictio.dash.modules.table_component.frontend import create_stepper_table_button

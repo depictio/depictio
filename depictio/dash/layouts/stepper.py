@@ -22,7 +22,10 @@ from depictio.dash.layouts.stepper_parts.part_one import register_callbacks_step
 from depictio.dash.layouts.stepper_parts.part_three import register_callbacks_stepper_part_three
 from depictio.dash.layouts.stepper_parts.part_two import register_callbacks_stepper_part_two
 from depictio.dash.modules.card_component.frontend import design_card
-from depictio.dash.modules.figure_component.frontend import design_figure
+
+# DEPRECATED: Figure component stepper integration - Phase 1 uses view mode only
+# Phase 2 will implement new design UI for figures
+from depictio.dash.modules.figure_component.frontend_legacy import design_figure
 from depictio.dash.modules.interactive_component.frontend import design_interactive
 from depictio.models.models.projects import ProjectResponse
 

@@ -43,9 +43,9 @@ COMPONENT_METADATA = {
         "display_name": "Figure",
         "description": "Interactive data visualizations",
         "color": colors["blue"],
-        "supports_edit": True,
-        "supports_reset": True,  # For scatter plots
-        "enabled": False,  # DISABLED: Focus on Card & Interactive only
+        "supports_edit": False,  # Phase 1: View mode only, no editing yet
+        "supports_reset": False,  # Phase 1: No reset functionality yet
+        "enabled": True,  # ENABLED: Phase 1 re-integration (view mode only)
         "build_function": build_figure,
         "default_dimensions": {"w": 20, "h": 16},  # Adjusted for 48-column grid with rowHeight=20
     },
