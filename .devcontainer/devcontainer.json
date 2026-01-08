@@ -24,7 +24,7 @@
   },
   // "initializeCommand": "init", // script to run before the containers are started
   "initializeCommand": ".devcontainer/pre_create_setup.sh",
-  "postStartCommand": "bash -c 'git config --global --add safe.directory /workspace; if [ -f /workspace/.git ] && grep -q \"gitdir:\" /workspace/.git; then git config --global --add safe.directory /workspaces/depictio && WORKTREE_NAME=$(basename $(grep \"gitdir:\" /workspace/.git | cut -d\" \" -f2)) && echo \"gitdir: /workspaces/depictio/.git/worktrees/${WORKTREE_NAME}\" > /workspace/.git; fi'",
+  "postStartCommand": "bash /workspace/.devcontainer/fix_git_worktree.sh",
   "postCreateCommand": "post_create_setup.sh" // script to run after the containers are started
   // Note: Ports are dynamically allocated per branch (see .env.instance)
   // VS Code will auto-detect and forward published ports from Docker Compose
