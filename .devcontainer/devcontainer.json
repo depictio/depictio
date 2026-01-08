@@ -1,9 +1,9 @@
 {
   "name": "depictio devcontainer (multi-instance)",
   "dockerComposeFile": [
-    "../docker-compose.dev.yaml",
-    "../docker-compose/docker-compose.minio.yaml",
-    "./docker-compose.devcontainer.yaml"
+    "${localWorkspaceFolder}/docker-compose.dev.yaml",
+    "${localWorkspaceFolder}/docker-compose/docker-compose.minio.yaml",
+    "${localWorkspaceFolder}/.devcontainer/docker-compose.devcontainer.yaml"
   ],
   "service": "app", // devcontainer (additional container in the docker compose)
   // "workspaceFolder": "/app/depictio",
