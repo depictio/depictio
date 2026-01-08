@@ -282,6 +282,28 @@ jobs:
           fi
           echo "✅ Frontend container is running"
 
+      - name: Debug Docker networking
+        run: |
+          echo "🔍 Docker Network Debugging"
+          echo "📊 List all networks:"
+          docker network ls
+
+          echo ""
+          echo "📊 Frontend container network:"
+          docker inspect depictio-frontend --format='{{range $net, $conf := .NetworkSettings.Networks}}{{$net}} {{end}}'
+
+          echo ""
+          echo "📊 Backend container network:"
+          docker inspect depictio-backend --format='{{range $net, $conf := .NetworkSettings.Networks}}{{$net}} {{end}}'
+
+          echo ""
+          echo "🔍 Test DNS resolution from backend to frontend:"
+          docker compose exec -T depictio-backend sh -c "getent hosts depictio-frontend || echo 'DNS resolution failed'"
+
+          echo ""
+          echo "🔍 Test connectivity from backend to frontend:"
+          docker compose exec -T depictio-backend sh -c "curl -v --max-time 5 http://depictio-frontend:5080/ || echo 'Connection failed'"
+
       - name: Logs depictio-backend
         run: sleep 3 && docker compose logs depictio-backend
 
