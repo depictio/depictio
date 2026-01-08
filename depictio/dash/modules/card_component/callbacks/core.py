@@ -21,7 +21,8 @@ from depictio.dash.modules.card_component.utils import agg_functions
 from depictio.dash.utils import get_columns_from_data_collection, get_component_data
 
 # Toggle for background callback mode (experimental performance optimization)
-USE_BACKGROUND_CALLBACKS = os.getenv("DEPICTIO_USE_BACKGROUND_CALLBACKS", "true").lower() == "true"
+# TEMPORARILY DISABLED: Debugging dual-panel rendering issue
+USE_BACKGROUND_CALLBACKS = os.getenv("DEPICTIO_USE_BACKGROUND_CALLBACKS", "false").lower() == "true"
 logger.info(f"Card callbacks background mode: {USE_BACKGROUND_CALLBACKS}")
 
 
