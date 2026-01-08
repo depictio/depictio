@@ -58,6 +58,12 @@ def create_viewer_layout():
     # Create additional stores specific to Viewer App
     # Note: project-cache, theme-relay-store, and dashboard-init-data are already in create_shared_stores()
     additional_stores = [
+        # Notification container for user feedback (filter updates, etc.)
+        dmc.NotificationContainer(
+            id="notification-container",
+            position="bottom-right",
+            zIndex=10000,
+        ),
         # Analytics tracking
         create_analytics_tracker(),
         # Hidden output divs for clientside callbacks

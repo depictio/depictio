@@ -2,7 +2,7 @@ import dash
 import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
 import httpx
-from dash import ALL, Input, Output, ctx, html
+from dash import ALL, Input, Output, State, ctx, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
@@ -800,9 +800,11 @@ def register_callbacks_draggable(app):
             Output({"type": "right-panel-grid", "index": ALL}, "className", allow_duplicate=True),
         ],
         Input("url", "pathname"),
+        State({"type": "left-panel-grid", "index": ALL}, "className"),
+        State({"type": "right-panel-grid", "index": ALL}, "className"),
         prevent_initial_call="initial_duplicate",
     )
-    def update_grid_edit_mode(pathname):
+    def update_grid_edit_mode(pathname, left_grids, right_grids):
         """Update dual-panel grid edit mode based on URL path (edit mode detection)"""
         # Detect edit mode from URL:
         # - Editor app: /dashboard-edit/{id}
@@ -829,8 +831,12 @@ def register_callbacks_draggable(app):
             # View mode: Add .drag-handles-hidden class → CSS hides all action icons
             class_name = "draggable-grid-container drag-handles-hidden"
 
-        # Return lists for ALL pattern-matched grids (left and right panels)
-        return [[class_name], [class_name]]
+        # Return lists matching the actual number of grids in each panel
+        # If a panel has 0 grids, return empty list; otherwise return list with class_name for each grid
+        left_output = [class_name] * len(left_grids) if left_grids else []
+        right_output = [class_name] * len(right_grids) if right_grids else []
+
+        return [left_output, right_output]
 
     # KEEPME - MODULARISE - IS SUPPOSED TO FILL PREDEFINED MESSAGE FOR USER (Activate EDIT ON / CREATE FIRST COMPONENT ...)
     # @app.callback(

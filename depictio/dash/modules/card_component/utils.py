@@ -457,14 +457,42 @@ AGGREGATION_MAPPING = {
 }
 
 
-def compute_value(data, column_name, aggregation):
-    logger.debug(f"Computing value for {column_name} with {aggregation}")
+def compute_value(data, column_name, aggregation, cols_json=None, has_filters=False):
+    """
+    Compute aggregated value for a column.
 
-    # FIXME: optimization - consider checking if data is already a pandas DataFrame
-    data = data.to_pandas()
+    Args:
+        data: Polars or Pandas DataFrame
+        column_name: Column to aggregate
+        aggregation: Aggregation type (sum, average, etc.)
+        cols_json: Optional column metadata with pre-computed statistics
+        has_filters: Whether filters are active (skips pre-computed stats if True)
 
+    Returns:
+        Aggregated value
+    """
+    logger.debug(f"Computing value for {column_name} with {aggregation} (filters={has_filters})")
+
+    # OPTIMIZATION 1: Try pre-computed statistics first (only when no filters active)
+    if not has_filters and cols_json:
+        reference_value = get_reference_value_from_cols_json(cols_json, column_name, aggregation)
+        if reference_value is not None:
+            logger.debug(f"✅ Using pre-computed value: {reference_value} (saved computation)")
+            return reference_value
+
+    # OPTIMIZATION 2: Use Polars native operations (avoid pandas conversion)
+    # Check if data is already Polars DataFrame
+    import polars as pl
+
+    is_polars = isinstance(data, pl.DataFrame) or isinstance(data, pl.LazyFrame)
+
+    # Convert to pandas only if necessary (for mode aggregation)
     if aggregation == "mode":
-        mode_series = data[column_name].mode()
+        if is_polars:
+            data_pd = data.to_pandas()
+        else:
+            data_pd = data
+        mode_series = data_pd[column_name].mode()
         if not mode_series.empty:
             new_value = mode_series.iloc[0]
             logger.debug(f"Computed mode: {new_value}")
@@ -473,43 +501,98 @@ def compute_value(data, column_name, aggregation):
             new_value = None
             logger.warning("No mode found; returning None")
     elif aggregation == "range":
-        series = data[column_name]
-        if pd.api.types.is_numeric_dtype(series):
-            new_value = series.max() - series.min()
-            logger.debug(f"Computed range: {new_value} (Type: {type(new_value)})")
+        if is_polars:
+            # Polars native range computation
+            col = data[column_name]
+            new_value = col.max() - col.min()
+            logger.debug(f"Computed range (Polars): {new_value}")
         else:
-            logger.error(
-                f"Range aggregation is not supported for non-numeric column '{column_name}'."
-            )
-            new_value = None
-
-    else:
-        pandas_agg = AGGREGATION_MAPPING.get(aggregation)
-
-        if not pandas_agg:
-            logger.error(f"Aggregation '{aggregation}' is not supported.")
-            return None
-        elif pandas_agg == "range":
-            # This case is already handled above
-            logger.error(
-                f"Aggregation '{aggregation}' requires special handling and should not reach here."
-            )
-            return None
-        else:
-            try:
-                logger.debug(f"Applying aggregation function '{pandas_agg}'")
-                # logger.info(f"Column name: {column_name}")
-                # logger.info(f"Data: {data}")
-                # logger.info(f"Data cols {data.columns}")
-                # logger.info(f"Data type: {data[column_name].dtype}")
-                # logger.info(f"Data: {data[column_name]}")
-                new_value = data[column_name].agg(pandas_agg)
-                logger.debug(
-                    f"Computed {aggregation} ({pandas_agg}): {new_value} (Type: {type(new_value)})"
+            series = data[column_name]
+            if pd.api.types.is_numeric_dtype(series):
+                new_value = series.max() - series.min()
+                logger.debug(f"Computed range: {new_value} (Type: {type(new_value)})")
+            else:
+                logger.error(
+                    f"Range aggregation is not supported for non-numeric column '{column_name}'."
                 )
-            except AttributeError as e:
-                logger.error(f"Aggregation function '{pandas_agg}' failed: {e}")
                 new_value = None
+    else:
+        # Map to appropriate function
+        if is_polars:
+            # Polars aggregation mapping
+            polars_agg_map = {
+                "count": "count",
+                "sum": "sum",
+                "average": "mean",
+                "median": "median",
+                "min": "min",
+                "max": "max",
+                "variance": "var",
+                "std_dev": "std",
+                "nunique": "n_unique",
+            }
+            polars_agg = polars_agg_map.get(aggregation)
+
+            if not polars_agg:
+                logger.error(f"Aggregation '{aggregation}' is not supported for Polars.")
+                return None
+
+            try:
+                logger.debug(f"Applying Polars aggregation '{polars_agg}'")
+                col = data[column_name]
+
+                # Use Polars expression API
+                if polars_agg == "count":
+                    new_value = col.len()
+                elif polars_agg == "sum":
+                    new_value = col.sum()
+                elif polars_agg == "mean":
+                    new_value = col.mean()
+                elif polars_agg == "median":
+                    new_value = col.median()
+                elif polars_agg == "min":
+                    new_value = col.min()
+                elif polars_agg == "max":
+                    new_value = col.max()
+                elif polars_agg == "var":
+                    new_value = col.var()
+                elif polars_agg == "std":
+                    new_value = col.std()
+                elif polars_agg == "n_unique":
+                    new_value = col.n_unique()
+                else:
+                    logger.error(f"Unhandled Polars aggregation: {polars_agg}")
+                    new_value = None
+
+                logger.debug(
+                    f"Computed {aggregation} ({polars_agg}) [Polars]: {new_value} (Type: {type(new_value)})"
+                )
+            except Exception as e:
+                logger.error(f"Polars aggregation '{polars_agg}' failed: {e}")
+                new_value = None
+        else:
+            # Pandas aggregation (fallback)
+            pandas_agg = AGGREGATION_MAPPING.get(aggregation)
+
+            if not pandas_agg:
+                logger.error(f"Aggregation '{aggregation}' is not supported.")
+                return None
+            elif pandas_agg == "range":
+                # This case is already handled above
+                logger.error(
+                    f"Aggregation '{aggregation}' requires special handling and should not reach here."
+                )
+                return None
+            else:
+                try:
+                    logger.debug(f"Applying aggregation function '{pandas_agg}'")
+                    new_value = data[column_name].agg(pandas_agg)
+                    logger.debug(
+                        f"Computed {aggregation} ({pandas_agg}): {new_value} (Type: {type(new_value)})"
+                    )
+                except AttributeError as e:
+                    logger.error(f"Aggregation function '{pandas_agg}' failed: {e}")
+                    new_value = None
 
         if isinstance(new_value, np.float64):
             new_value = round(new_value, 4)
