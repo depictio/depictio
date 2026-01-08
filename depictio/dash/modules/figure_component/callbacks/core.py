@@ -211,12 +211,13 @@ def register_core_callbacks(app):
             wf_id, dc_id, filters_hash = load_key
             try:
                 # Load with column projection for performance
+                # NOTE: select_columns disabled - causes hang in ThreadPoolExecutor context
                 data = load_deltatable_lite(
                     ObjectId(wf_id),
                     ObjectId(dc_id),
                     metadata=metadata_to_pass,
                     TOKEN=access_token,
-                    select_columns=required_columns if required_columns else None,
+                    # select_columns=required_columns if required_columns else None,  # DISABLED - causes hang
                 )
                 logger.debug(
                     f"   ✅ Parallel load: {dc_id[:8]} "
