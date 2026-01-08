@@ -289,16 +289,16 @@ def register_store_update_callback(app):
         elif previous_store_data is None or not previous_store_data.get(
             "interactive_components_values"
         ):
-            # ⭐ FIRST UPDATE: Wait for all components to be ready before initial store population
-            # This prevents premature card patch callbacks that race with card initial render
-            expected_count = len(metadata_list) if metadata_list else 0
-            if expected_count > 0 and len(components_values) < expected_count:
-                logger.debug(
-                    f"⏳ Waiting for all components: {len(components_values)}/{expected_count} ready"
-                )
+            # ⭐ OPTIMIZATION: Progressive store updates - don't block on component count
+            # Allow store updates as soon as any component has a value for better responsiveness
+            # Cards will handle partial data gracefully via idempotency checks
+            if not components_values:
+                logger.debug("⏳ No components ready yet, preventing update")
                 raise dash.exceptions.PreventUpdate
+
+            expected_count = len(metadata_list) if metadata_list else 0
             logger.debug(
-                f"   ℹ️ First store population - allowing update ({len(components_values)}/{expected_count} components ready)"
+                f"   ℹ️ Progressive store update - allowing partial data ({len(components_values)}/{expected_count} components ready)"
             )
 
         elapsed_ms = (time.perf_counter() - start_time) * 1000

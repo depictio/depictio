@@ -346,8 +346,10 @@ def register_core_callbacks(app):
                         init_data=delta_locations,
                     )
 
-                # Compute value
-                value = compute_value(data, column_name, aggregation)
+                # Compute value (no filters at initial load)
+                value = compute_value(
+                    data, column_name, aggregation, cols_json=cols_json, has_filters=False
+                )
 
                 # Format value
                 try:
@@ -1032,8 +1034,20 @@ def register_core_callbacks(app):
 
                 logger.debug("Loaded filtered data")
 
+                # Get column specs for optimization
+                cols_json = {}
+                if dashboard_init_data and "column_specs" in dashboard_init_data:
+                    cols_json = dashboard_init_data.get("column_specs", {}).get(str(dc_id), {})
+
                 # Compute new value on filtered data
-                current_value = compute_value(data, column_name, aggregation)
+                # has_filters=True because this callback only triggers on filter changes
+                current_value = compute_value(
+                    data,
+                    column_name,
+                    aggregation,
+                    cols_json=cols_json,
+                    has_filters=has_active_filters,
+                )
                 logger.debug(f"Computed filtered value: {current_value}")
 
                 # Format current value
