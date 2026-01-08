@@ -270,6 +270,18 @@ jobs:
       - name: Logs
         run: sleep 3 && docker compose logs
 
+      - name: Check frontend container status
+        run: |
+          echo "🔍 Checking if depictio-frontend is running..."
+          docker compose ps depictio-frontend
+          if ! docker compose ps depictio-frontend | grep -q "Up"; then
+            echo "❌ Frontend container is not running!"
+            echo "📋 Frontend logs:"
+            docker compose logs depictio-frontend
+            exit 1
+          fi
+          echo "✅ Frontend container is running"
+
       - name: Logs depictio-backend
         run: sleep 3 && docker compose logs depictio-backend
 
@@ -363,11 +375,17 @@ jobs:
           echo "📊 Container status:"
           docker compose ps
 
+          echo "📋 Recent frontend logs (last 50 lines):"
+          docker compose logs --tail=50 depictio-frontend || echo "Failed to get frontend logs"
+
           echo "📋 Recent backend logs (last 20 lines):"
           docker compose logs --tail=20 depictio-backend || echo "Failed to get backend logs"
 
           echo "🌐 Testing basic API connectivity:"
           curl -s -o /dev/null -w "Status: %{http_code}, Time: %{time_total}s\n" http://localhost:8058/depictio/api/v1/utils/status || echo "API connectivity test failed"
+
+          echo "🌐 Testing frontend accessibility:"
+          curl -s -o /dev/null -w "Frontend Status: %{http_code}, Time: %{time_total}s\n" http://localhost:5080/ || echo "Frontend connectivity test failed"
 
           # Make the API call and capture response with timeout
           SCREENSHOT_RESPONSE=$(timeout 60s curl -s -w "\n%{http_code}" http://localhost:8058/depictio/api/v1/utils/screenshot-dash-fixed/$DASHBOARD_ID || echo -e "\nTIMEOUT")
