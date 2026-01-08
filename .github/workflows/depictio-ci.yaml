@@ -30,8 +30,13 @@ jobs:
           # - Pre-commit hooks (.pre-commit-config.yaml)
           # - Test configuration (pytest.ini)
           # - This workflow file itself
+          # Only hash files that actually exist (filter out deleted/missing files)
           HASH=$(git ls-files '*.py' 'pyproject.toml' '.pre-commit-config.yaml' 'pytest.ini' '.github/workflows/depictio-ci.yaml' | \
-            xargs cat | sha256sum | cut -d' ' -f1)
+            while read -r file; do
+              if [ -f "$file" ]; then
+                cat "$file"
+              fi
+            done | sha256sum | cut -d' ' -f1)
           echo "hash=$HASH" >> $GITHUB_OUTPUT
           echo "📝 Code hash: $HASH"
 
