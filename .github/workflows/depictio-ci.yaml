@@ -1309,8 +1309,8 @@ jobs:
           cp .env.example .env
           # Enable dev mode
           sed -i 's/# DEV_MODE=false/DEV_MODE=true/' docker-compose/.env
-          mkdir -p depictioDB minio_data
-          chmod 777 depictioDB minio_data
+          mkdir -p depictioDB minio_data prof_files cache
+          chmod 777 depictioDB minio_data prof_files cache
 
       - name: Log in and start services
         run: |
@@ -1390,8 +1390,8 @@ jobs:
           # Enable unauthenticated mode
           sed -i 's/# DEPICTIO_AUTH_UNAUTHENTICATED_MODE=false/DEPICTIO_AUTH_UNAUTHENTICATED_MODE=true/' docker-compose/.env
           sed -i 's/# DEV_MODE=false/DEV_MODE=true/' docker-compose/.env
-          mkdir -p depictioDB minio_data
-          chmod 777 depictioDB minio_data
+          mkdir -p depictioDB minio_data prof_files cache
+          chmod 777 depictioDB minio_data prof_files cache
 
       - name: Log in and start services
         run: |
