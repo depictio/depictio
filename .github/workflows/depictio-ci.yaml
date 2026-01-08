@@ -257,8 +257,8 @@ jobs:
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
           cp .env.example .env
-          mkdir -p depictioDB minio_data
-          chmod 777 depictioDB minio_data
+          mkdir -p depictioDB minio_data prof_files cache
+          chmod 777 depictioDB minio_data prof_files cache
 
       - name: Start services
         run: |
@@ -480,8 +480,8 @@ jobs:
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
           cp .env.example .env
-          mkdir -p depictioDB minio_data
-          chmod 777 depictioDB minio_data
+          mkdir -p depictioDB minio_data prof_files cache
+          chmod 777 depictioDB minio_data prof_files cache
 
       - name: Log in and start services
         run: |
@@ -581,8 +581,8 @@ jobs:
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
           cp .env.example .env
-          mkdir -p depictioDB minio_data
-          chmod 777 depictioDB minio_data
+          mkdir -p depictioDB minio_data prof_files cache
+          chmod 777 depictioDB minio_data prof_files cache
 
       - name: Log in and start services
         run: |
