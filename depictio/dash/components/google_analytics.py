@@ -58,13 +58,126 @@ class GoogleAnalyticsIntegration:
         """
         ga_script = self.generate_ga_script()
 
+        # Inline console filter - must load FIRST before React
+        # Intercepts React's internal warning system
+        console_filter = """
+        <script>
+        (function() {
+            'use strict';
+
+            // Store original console methods
+            const originalWarn = console.warn;
+            const originalError = console.error;
+            const originalLog = console.log;
+
+            const filtersToSuppress = [
+                'defaultProps', 'DraggableWrapper', 'DashGridLayout',
+                'bootstrap-autofill-overlay', 'querySelectorAll', 'not a valid selector',
+                'overlayBlur', 'overlayOpacity', 'callback ref',
+                'dash_mantine_components', 'SyntaxError', 'Failed to execute',
+                'CollectAutofillContentService', 'queryElementLabels'
+            ];
+
+            function shouldFilter(msg) {
+                if (!msg) return false;
+                const str = String(msg).toLowerCase();
+                return filtersToSuppress.some(f => str.includes(f.toLowerCase()));
+            }
+
+            // Override console.warn
+            console.warn = function(...args) {
+                const msg = args.join(' ');
+                if (shouldFilter(msg)) {
+                    // Completely suppress
+                    return;
+                }
+                originalWarn.apply(console, args);
+            };
+
+            // Override console.error - React warnings come through here
+            console.error = function(...args) {
+                const msg = args.join(' ');
+                if (shouldFilter(msg)) {
+                    // Completely suppress
+                    return;
+                }
+                originalError.apply(console, args);
+            };
+
+            // Intercept React DOM's warning system at the lowest level
+            // React 18 uses a special internal warning function
+            const ErrorDescriptor = Object.getOwnPropertyDescriptor(window.console, 'error');
+            if (ErrorDescriptor && ErrorDescriptor.configurable) {
+                Object.defineProperty(window.console, 'error', {
+                    value: function(...args) {
+                        const msg = args.join(' ');
+                        if (shouldFilter(msg)) return;
+                        originalError.apply(console, args);
+                    },
+                    writable: true,
+                    configurable: true
+                });
+            }
+
+            // Global error handler for browser extension errors
+            window.addEventListener('error', function(e) {
+                // Check both message and filename (for extension scripts)
+                const msg = (e.message || '') + ' ' + (e.filename || '');
+                if (shouldFilter(msg)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    return false;
+                }
+            }, true);
+
+            // Alternative: window.onerror for catching extension errors
+            const originalOnerror = window.onerror;
+            window.onerror = function(message, source, lineno, colno, error) {
+                const msg = [message, source, error?.message || ''].join(' ');
+                if (shouldFilter(msg)) {
+                    // Suppress by not calling original handler
+                    return true; // Prevents default error handling
+                }
+                if (originalOnerror) {
+                    return originalOnerror(message, source, lineno, colno, error);
+                }
+                return false;
+            };
+
+            // Unhandled promise rejections (for async errors from extensions)
+            window.addEventListener('unhandledrejection', function(e) {
+                // Check multiple properties where the message might be
+                const reason = e.reason || {};
+                const msgParts = [
+                    String(reason),
+                    reason.message || '',
+                    reason.stack || '',
+                    e.type || ''
+                ].join(' ');
+
+                if (shouldFilter(msgParts)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    return false;
+                }
+            }, true);
+
+            console.log('✅ Aggressive console filter active (inline)');
+        })();
+        </script>
+        """
+
         return f"""<!DOCTYPE html>
 <html>
     <head>
+        {console_filter}
         {ga_script}
         {{%metas%}}
         <title>{{%title%}}</title>
-        {{%favicon%}}
+        <link rel="icon" type="image/x-icon" href="/assets/images/icons/favicon.ico">
+        <link rel="icon" type="image/png" href="/assets/images/icons/favicon.png">
         {{%css%}}
     </head>
     <body>
@@ -81,15 +194,20 @@ class GoogleAnalyticsIntegration:
         """
         Inject Google Analytics into a Dash application.
 
+        Also injects console filter (always) to suppress third-party warnings.
+
         Args:
             app: Dash application instance
             title: Default page title
         """
+        # Always inject index_string to include console filter
+        # GA script is only included if enabled
+        app.index_string = self.generate_index_string(title)
+
         if self.enabled:
-            app.index_string = self.generate_index_string(title)
             print(f"✅ Google Analytics integrated with tracking ID: {self.tracking_id}")
         else:
-            print("⚠️ Google Analytics integration disabled or no tracking ID provided")
+            print("⚠️ Google Analytics disabled, but console filter injected")
 
 
 # Global instance for easy import
