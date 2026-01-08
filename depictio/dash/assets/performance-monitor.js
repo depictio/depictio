@@ -12,8 +12,9 @@
 (function() {
     'use strict';
 
-    // DISABLED: Return early to disable performance monitoring
-    return;
+    // ENABLED: Client-side performance monitoring active
+    // Remove the early return to enable profiling
+    // return;
 
     // Performance data store
     const performanceData = {
