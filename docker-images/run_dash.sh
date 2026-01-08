@@ -74,16 +74,16 @@ fi
 
 sleep 5 # Allow time for other services to start
 
-if [ "$DEV_MODE" = "true" ]; then
+if [ "$DEPICTIO_DEV_MODE" = "true" ]; then
     # Development mode with reload
     # Debug mode is passed to Dash in flask_dispatcher.py
-    export DEV_MODE=true
+    export DEPICTIO_DEV_MODE=true
     echo "Running in development mode on $DASH_HOST:$DASH_PORT" with "$DASH_WORKERS" workers
     python depictio/dash/flask_dispatcher.py
     # gunicorn --workers=2 --reload --bind="$DASH_HOST:$DASH_PORT" --timeout=120 depictio.dash.wsgi:server
 else
     # Production mode with workers
-    export DEV_MODE=false
+    export DEPICTIO_DEV_MODE=false
     echo "Running in production mode on $DASH_HOST:$DASH_PORT with $DASH_WORKERS workers"
     gunicorn \
         --workers="$DASH_WORKERS" \
