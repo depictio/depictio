@@ -332,10 +332,24 @@ jobs:
       - name: Logs
         run: sleep 3 && docker compose logs
 
+      - name: Logs depictio-frontend (early check)
+        run: |
+          echo "📋 Frontend container logs (early check):"
+          docker compose logs depictio-frontend || echo "Failed to get frontend logs"
+
       - name: Check frontend container status
         run: |
           echo "🔍 Checking if depictio-frontend is running..."
           docker compose ps depictio-frontend
+
+          echo ""
+          echo "🔍 Container detailed status:"
+          docker inspect depictio-frontend --format='Status: {{.State.Status}}, Running: {{.State.Running}}, ExitCode: {{.State.ExitCode}}, Restarting: {{.State.Restarting}}'
+
+          echo ""
+          echo "🔍 Container restart count:"
+          docker inspect depictio-frontend --format='RestartCount: {{.RestartCount}}'
+
           if ! docker compose ps depictio-frontend | grep -q "Up"; then
             echo "❌ Frontend container is not running!"
             echo "📋 Frontend logs:"
@@ -397,6 +411,12 @@ jobs:
 
       - name: Logs depictio-backend
         run: sleep 3 && docker compose logs depictio-backend
+
+      - name: Final frontend logs check
+        if: always()
+        run: |
+          echo "📋 Final frontend container logs (complete):"
+          docker compose logs depictio-frontend
 
       - name: Wait and verify services
         id: health
