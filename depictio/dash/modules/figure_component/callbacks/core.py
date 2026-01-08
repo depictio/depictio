@@ -38,13 +38,20 @@ def register_core_callbacks(app):
     # ============================================================================
     # CALLBACK 1: Initial Figure Rendering (NO filter listening)
     # ============================================================================
+    # UNIFIED CALLBACK: Handles both initial render AND filter updates
+    # ============================================================================
     @app.callback(
         Output({"type": "figure-graph", "index": ALL}, "figure"),
         Output({"type": "figure-metadata", "index": ALL}, "data"),
         Input({"type": "figure-trigger", "index": ALL}, "data"),
+        Input("interactive-values-store", "data"),  # Also listen to filters!
         State({"type": "figure-trigger", "index": ALL}, "id"),
         State({"type": "figure-metadata", "index": ALL}, "data"),
         State({"type": "stored-metadata-component", "index": ALL}, "data"),
+        State(
+            {"type": "interactive-stored-metadata", "index": ALL}, "data"
+        ),  # Full filter metadata!
+        State({"type": "interactive-stored-metadata", "index": ALL}, "id"),
         State("project-metadata-store", "data"),
         State("local-store", "data"),
         State("theme-store", "data"),
@@ -52,21 +59,25 @@ def register_core_callbacks(app):
     )
     def render_figures_batch(
         trigger_data_list,
+        filters_data,  # NEW: Filter state from interactive-values-store
         trigger_ids,
         existing_metadata_list,
         stored_metadata_list,
+        interactive_metadata_list,  # Full metadata for filters
+        interactive_metadata_ids,
         project_metadata,
         local_data,
         theme_data,
     ):
         """
-        INITIAL BATCH RENDERING: Process ALL figures in single callback (no filters).
+        UNIFIED BATCH RENDERING: Process ALL figures with optional filter application.
 
-        This callback handles the initial rendering of figures when they are first created.
-        It does NOT respond to filter changes - that is handled by patch_figures_with_filters.
+        This single callback handles BOTH initial rendering and filter updates, avoiding
+        the race condition and duplicate Output issues from having separate callbacks.
 
         Args:
             trigger_data_list: List of trigger data for each figure
+            filters_data: Filter state from interactive-values-store (None on initial load)
             trigger_ids: List of component IDs
             existing_metadata_list: List of existing metadata stores
             stored_metadata_list: List of stored component metadata
@@ -132,15 +143,53 @@ def register_core_callbacks(app):
             # Extract required columns from parameters
             required_columns = _extract_required_columns(dict_kwargs, visu_type)
 
-            # No filters on initial render - load full dataset
+            # Extract filters for this figure's DC (if filters exist)
             metadata_to_pass = []
+            if filters_data and filters_data.get("interactive_components_values"):
+                # Build index → full metadata mapping for interactive components
+                metadata_by_index = {}
+                if interactive_metadata_list and interactive_metadata_ids:
+                    for idx, meta_id in enumerate(interactive_metadata_ids):
+                        if idx < len(interactive_metadata_list):
+                            index = meta_id["index"]
+                            metadata_by_index[index] = interactive_metadata_list[idx]
 
-            # Create load key: (wf_id, dc_id, columns_hash)
-            # No filters_hash needed for initial render
-            columns_hash = hashlib.md5(
-                json.dumps(sorted(required_columns), sort_keys=True).encode()
-            ).hexdigest()[:8]
-            load_key = (str(wf_id), str(dc_id), columns_hash)
+                # Enrich lightweight filter data with full metadata (including dc_id)
+                lightweight_components = filters_data.get("interactive_components_values", [])
+                enriched_components = []
+                for comp in lightweight_components:
+                    comp_index = comp.get("index")
+                    full_metadata = metadata_by_index.get(comp_index, {})
+                    enriched_comp = {**comp, "metadata": full_metadata}
+                    enriched_components.append(enriched_comp)
+
+                # Group filters by DC
+                card_dc_str = str(dc_id)
+                filters_by_dc = {}
+                for component in enriched_components:
+                    component_dc = str(component.get("metadata", {}).get("dc_id", ""))
+                    if component_dc and component_dc not in filters_by_dc:
+                        filters_by_dc[component_dc] = []
+                    if component_dc:
+                        filters_by_dc[component_dc].append(component)
+
+                # Get relevant filters for this figure's DC
+                relevant_filters = filters_by_dc.get(card_dc_str, [])
+                active_filters = [
+                    c for c in relevant_filters if c.get("value") not in [None, [], "", False]
+                ]
+                metadata_to_pass = active_filters
+
+            # Create load key: (wf_id, dc_id, filters_hash)
+            filters_hash = (
+                hashlib.md5(
+                    json.dumps(metadata_to_pass, sort_keys=True, default=str).encode()
+                ).hexdigest()[:8]
+                if metadata_to_pass
+                else "nofilter"
+            )
+
+            load_key = (str(wf_id), str(dc_id), filters_hash)
 
             # Register this unique load
             if load_key not in dc_load_registry:
@@ -158,16 +207,17 @@ def register_core_callbacks(app):
         dc_cache = {}  # Cache: load_key -> DataFrame
 
         def load_single_dc(load_key, metadata_to_pass, required_columns):
-            """Load a single DC with column projection (thread-safe operation, no filters)."""
-            wf_id, dc_id, columns_hash = load_key
+            """Load a single DC with optional filters (thread-safe operation)."""
+            wf_id, dc_id, filters_hash = load_key
             try:
                 # Load with column projection for performance
+                # TEMPORARY: Remove select_columns to test if it's causing the hang
                 data = load_deltatable_lite(
                     ObjectId(wf_id),
                     ObjectId(dc_id),
                     metadata=metadata_to_pass,
                     TOKEN=access_token,
-                    select_columns=required_columns if required_columns else None,
+                    # select_columns=required_columns if required_columns else None,  # DISABLED for testing
                 )
                 logger.debug(
                     f"   ✅ Parallel load: {dc_id[:8]} "
@@ -175,7 +225,7 @@ def register_core_callbacks(app):
                 )
                 return load_key, data
             except Exception as e:
-                logger.error(f"   ❌ Parallel load failed: {dc_id[:8]}: {e}")
+                logger.error(f"   ❌ Parallel load failed: {dc_id[:8]}: {e}", exc_info=True)
                 return load_key, None
 
         # Execute parallel loads (max 4 concurrent workers)
@@ -192,7 +242,6 @@ def register_core_callbacks(app):
                 load_key, data = future.result()
                 if data is not None:
                     dc_cache[load_key] = data
-
         parallel_duration = (time.time() - parallel_start) * 1000
         cache_hit_rate = len(dc_cache) / len(dc_load_registry) * 100 if dc_load_registry else 0
         dedup_ratio = len(figure_to_load_key) / len(dc_load_registry) if dc_load_registry else 1
@@ -246,7 +295,12 @@ def register_core_callbacks(app):
                 figure_duration = (time.time() - figure_start_time) * 1000
                 logger.debug(f"[{task_id}] ✅ Figure rendered in {figure_duration:.1f}ms")
 
-                all_figures.append(fig)
+                # Convert to JSON-serializable dict (handles NumPy arrays)
+                if isinstance(fig, go.Figure):
+                    fig_dict = json.loads(fig.to_json())  # Plotly's to_json() handles ndarrays
+                    all_figures.append(fig_dict)
+                else:
+                    all_figures.append(fig)
                 all_metadata.append(
                     {
                         "index": component_id,
@@ -271,20 +325,25 @@ def register_core_callbacks(app):
         return all_figures, all_metadata
 
     # ============================================================================
-    # CALLBACK 2: Patch Figures with Filters (responds to interactive changes)
+    # REMOVED: Separate patch callback (merged into unified callback above)
     # ============================================================================
-    @app.callback(
-        Output({"type": "figure-graph", "index": ALL}, "figure", allow_duplicate=True),
-        Input("interactive-values-store", "data"),
-        State({"type": "figure-trigger", "index": ALL}, "data"),
-        State({"type": "figure-trigger", "index": ALL}, "id"),
-        State("project-metadata-store", "data"),
-        State("local-store", "data"),
-        State("theme-store", "data"),
-        prevent_initial_call=True,
-    )
+    # The patch_figures_with_filters callback has been removed and its logic
+    # merged into render_figures_batch to avoid duplicate Output conflicts.
+    #
+    # @app.callback(
+    #     Output({"type": "figure-graph", "index": ALL}, "figure", allow_duplicate=True),
+    #     Input("interactive-values-store", "data"),
+    #     State({"type": "figure-graph", "index": ALL}, "id"),
+    #     State({"type": "figure-trigger", "index": ALL}, "data"),
+    #     State({"type": "figure-trigger", "index": ALL}, "id"),
+    #     State("project-metadata-store", "data"),
+    #     State("local-store", "data"),
+    #     State("theme-store", "data"),
+    #     prevent_initial_call=True,
+    # )
     def patch_figures_with_filters(
         filters_data,
+        figure_graph_ids,
         trigger_data_list,
         trigger_ids,
         project_metadata,
@@ -292,38 +351,69 @@ def register_core_callbacks(app):
         theme_data,
     ):
         """
-        FILTER PATCH: Update ALL figures when filters change.
+        DISABLED: This callback has been merged into render_figures_batch.
 
-        This callback is triggered ONLY when interactive components change.
-        It applies filters to the data and re-renders all figures with the filtered data.
-
-        Args:
-            filters_data: Filter state from interactive-values-store
-            trigger_data_list: List of trigger data for each figure
-            trigger_ids: List of component IDs
-            project_metadata: Dashboard metadata
-            local_data: User/token data
-            theme_data: Theme state
-
-        Returns:
-            List of updated figures
+        Kept for reference but immediately prevents updates to avoid conflicts.
         """
+        # DISABLED: Logic merged into unified callback above
+        logger.info("⏭️ Patch callback disabled - using unified callback instead")
+        raise dash.exceptions.PreventUpdate
+
+        # Import dash utilities
+        from dash import callback_context as ctx
+
         # Generate batch task correlation ID
         batch_task_id = str(uuid.uuid4())[:8]
         batch_start_time = time.time()
 
-        # Extract filter count for logging
-        filter_count = (
-            len(filters_data.get("interactive_components_values", [])) if filters_data else 0
+        # Log what triggered this callback
+        triggered_by = ctx.triggered_id if ctx.triggered else "initial"
+        logger.info(f"[{batch_task_id}] 🎯 CALLBACK TRIGGERED BY: {triggered_by}")
+        logger.info(f"[{batch_task_id}] 🔍 CTX.TRIGGERED: {ctx.triggered}")
+
+        # Extract filter state
+        interactive_values = (
+            filters_data.get("interactive_components_values", []) if filters_data else []
         )
 
+        # CRITICAL: Prevent update if this is the initial empty state (race condition with render_figures_batch)
+        # The initial render callback handles the first render, patch should only run on actual filter changes
+        if not interactive_values:
+            logger.info(
+                f"[{batch_task_id}] ⏭️  No filter values - preventing update (initial state or no filters)"
+            )
+            raise dash.exceptions.PreventUpdate
+
+        filter_count = len(interactive_values)
+
         logger.info(
-            f"[{batch_task_id}] 🔄 FIGURE FILTER PATCH - {len(trigger_ids)} figures, "
+            f"[{batch_task_id}] 🔄 FIGURE FILTER PATCH - {len(figure_graph_ids)} figures, "
             f"{filter_count} active filters"
         )
 
-        # Handle empty dashboard
-        if not trigger_data_list or not trigger_ids:
+        # Debug: Check if trigger data is available and IDs match
+        logger.debug(
+            f"   🔍 Figure graph IDs: {[fid.get('index') for fid in figure_graph_ids] if figure_graph_ids else []}"
+        )
+        logger.debug(
+            f"   🔍 Trigger IDs: {[tid.get('index') for tid in trigger_ids] if trigger_ids else []}"
+        )
+        logger.debug(
+            f"   🔍 Trigger data available: {len([t for t in trigger_data_list if t])} "
+            f"of {len(trigger_data_list)}"
+        )
+
+        # Handle empty dashboard or missing trigger data
+        if not trigger_data_list or not figure_graph_ids:
+            logger.warning("No trigger data or figure components available - preventing update")
+            raise dash.exceptions.PreventUpdate
+
+        # Check if any trigger data is actually populated
+        valid_triggers = [t for t in trigger_data_list if t and isinstance(t, dict)]
+        if not valid_triggers:
+            logger.warning(
+                f"All {len(trigger_data_list)} trigger data items are None/invalid - preventing update"
+            )
             raise dash.exceptions.PreventUpdate
 
         # Extract theme
@@ -334,7 +424,7 @@ def register_core_callbacks(app):
         if not access_token:
             logger.error("No access_token available")
             empty_fig = {"data": [], "layout": {"title": "Auth Error"}}
-            return [empty_fig] * len(trigger_ids)
+            return [empty_fig] * len(figure_graph_ids)
 
         # Process figures with filters
         all_figures = []
@@ -470,9 +560,16 @@ def register_core_callbacks(app):
         )
 
         # Generate figures using cached filtered data
-        for i, (trigger_data, trigger_id) in enumerate(zip(trigger_data_list, trigger_ids)):
+        # IMPORTANT: Iterate over figure_graph_ids to ensure length matches Output
+        for i, fig_id in enumerate(figure_graph_ids):
             try:
+                # Get corresponding trigger data
+                trigger_data = trigger_data_list[i] if i < len(trigger_data_list) else None
+
                 if not trigger_data or not isinstance(trigger_data, dict):
+                    logger.warning(
+                        f"   ⚠️  Figure {i} ({fig_id.get('index')}): No valid trigger data"
+                    )
                     all_figures.append(_create_error_figure("Invalid trigger data", current_theme))
                     continue
 
@@ -494,18 +591,58 @@ def register_core_callbacks(app):
                     theme=current_theme,
                 )
 
-                all_figures.append(fig)
+                # Convert to JSON-serializable dict (handles NumPy arrays)
+                if isinstance(fig, go.Figure):
+                    fig_dict = json.loads(fig.to_json())  # Plotly's to_json() handles ndarrays
+                    all_figures.append(fig_dict)
+                else:
+                    all_figures.append(fig)
 
             except Exception as e:
                 logger.error(f"Figure patch failed: {e}", exc_info=True)
                 all_figures.append(_create_error_figure(f"Error: {str(e)}", current_theme))
 
-        # Log completion
+        # Log completion with debug info
         batch_duration = (time.time() - batch_start_time) * 1000
         logger.info(
             f"[{batch_task_id}] 🔄 FIGURE FILTER PATCH COMPLETE - "
             f"{len(all_figures)} figures updated in {batch_duration:.1f}ms"
         )
+
+        # Debug: Verify figures count and validate dicts
+        logger.info(
+            f"[{batch_task_id}] 📊 Returning {len(all_figures)} figures "
+            f"for {len(figure_graph_ids)} graph components"
+        )
+
+        if len(all_figures) != len(figure_graph_ids):
+            logger.error(
+                f"   ⚠️  LENGTH MISMATCH! Returning {len(all_figures)} figures "
+                f"but have {len(figure_graph_ids)} graph components"
+            )
+
+        for i, fig in enumerate(all_figures):
+            if isinstance(fig, dict):
+                data_count = len(fig.get("data", []))
+                logger.debug(f"   ✅ Figure {i}: Returning figure dict with {data_count} traces")
+
+                # Verify figure is JSON-serializable
+                try:
+                    json.dumps(fig)
+                    logger.debug(f"      ✅ Figure {i}: JSON serialization OK")
+                except (TypeError, ValueError) as e:
+                    logger.error(f"      ❌ Figure {i}: JSON serialization FAILED - {e}")
+
+                # Debug: Log target component ID
+                if i < len(figure_graph_ids):
+                    target_id = figure_graph_ids[i]
+                    logger.debug(f"      🎯 Target component ID: {target_id}")
+
+                # Debug: Log figure structure keys
+                logger.debug(f"      📋 Figure keys: {list(fig.keys())}")
+                logger.debug(f"      📋 Layout type: {type(fig.get('layout'))}")
+            else:
+                logger.warning(f"   ⚠️  Figure {i}: Unexpected type {type(fig)} - should be dict")
 
         return all_figures
 
