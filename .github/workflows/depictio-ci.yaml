@@ -383,6 +383,18 @@ jobs:
           echo "🔍 Check running processes in frontend:"
           docker compose exec -T depictio-frontend sh -c "ps aux | grep -E 'dash|python|gunicorn' || echo 'No Python processes found'"
 
+          echo ""
+          echo "🔍 Check startup script and environment:"
+          docker compose exec -T depictio-frontend sh -c "echo 'Working directory:' && pwd"
+          docker compose exec -T depictio-frontend sh -c "echo 'DEV_MODE=' && echo \$DEV_MODE"
+          docker compose exec -T depictio-frontend sh -c "echo 'Script executable:' && ls -la /app/run_dash.sh"
+          docker compose exec -T depictio-frontend sh -c "echo 'Python available:' && which python || echo 'Python not found'"
+          docker compose exec -T depictio-frontend sh -c "echo 'Files in /app:' && ls -la /app/ | head -20"
+
+          echo ""
+          echo "🔍 Manually run startup script to see errors:"
+          docker compose exec -T depictio-frontend bash -c "cd /app && bash -x /app/run_dash.sh" || echo "Script failed with exit code: $?"
+
       - name: Logs depictio-backend
         run: sleep 3 && docker compose logs depictio-backend
 
