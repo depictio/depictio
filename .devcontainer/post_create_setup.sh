@@ -8,40 +8,33 @@ fi
 
 echo "Waiting for services to become ready..."
 
+# Function to wait for a service using bash built-in TCP connection
+wait_for_service() {
+    local host=$1
+    local port=$2
+    local service_name=$3
+
+    until timeout 1 bash -c "cat < /dev/null > /dev/tcp/${host}/${port}" 2>/dev/null; do
+        echo "⏳ Waiting for ${service_name}..."
+        sleep 2
+    done
+    echo "✓ ${service_name} is ready"
+}
+
 # Wait for MongoDB
-until nc -z mongo 27018; do
-  echo "⏳ Waiting for MongoDB..."
-  sleep 2
-done
-echo "✓ MongoDB is ready"
+wait_for_service mongo 27018 "MongoDB"
 
 # Wait for Redis
-until nc -z redis 6379; do
-  echo "⏳ Waiting for Redis..."
-  sleep 2
-done
-echo "✓ Redis is ready"
+wait_for_service redis 6379 "Redis"
 
 # Wait for MinIO
-until nc -z minio 9000; do
-  echo "⏳ Waiting for MinIO..."
-  sleep 2
-done
-echo "✓ MinIO is ready"
+wait_for_service minio 9000 "MinIO"
 
 # Wait for backend
-until nc -z depictio-backend 8058; do
-  echo "⏳ Waiting for FastAPI backend..."
-  sleep 2
-done
-echo "✓ FastAPI backend is ready"
+wait_for_service depictio-backend 8058 "FastAPI backend"
 
 # Wait for frontend
-until nc -z depictio-frontend 5080; do
-  echo "⏳ Waiting for Dash frontend..."
-  sleep 2
-done
-echo "✓ Dash frontend is ready"
+wait_for_service depictio-frontend 5080 "Dash frontend"
 
 echo "All services are ready! Setting up development environment..."
 
