@@ -621,6 +621,56 @@ def register_callbacks_header(app):
         prevent_initial_call="initial_duplicate",
     )
 
+    # UNSAVED CHANGES TRACKER: Listen to layout change trigger from JavaScript
+    # JavaScript drag event listener triggers the hidden button
+    app.clientside_callback(
+        """
+        function(layoutChangeTrigger) {
+            console.log('⚠️ LAYOUT TRACKER: Layout change detected via trigger');
+            return false;  // Mark as unsaved
+        }
+        """,
+        Output("layout-saved-state", "data"),
+        Input("layout-change-trigger", "n_clicks"),
+        prevent_initial_call=True,
+    )
+
+    # SAVE BUTTON TRACKER: Mark as saved when save button clicked
+    app.clientside_callback(
+        """
+        function(saveClicks) {
+            console.log('✅ LAYOUT TRACKER: Save clicked, marking as saved');
+            return true;  // Mark as saved
+        }
+        """,
+        Output("layout-saved-state", "data", allow_duplicate=True),
+        Input("save-button-dashboard", "n_clicks"),
+        prevent_initial_call=True,
+    )
+
+    # SAVE BUTTON VISUAL INDICATOR: Update button color based on saved state
+    # Adds pulsing animation class when unsaved
+    app.clientside_callback(
+        """
+        function(isSaved) {
+            console.log('🎨 SAVE BUTTON UPDATE: isSaved=', isSaved);
+
+            if (isSaved === false) {
+                // Unsaved changes - orange color with pulsing animation
+                console.log('⚠️ Showing UNSAVED indicator (orange + pulse)');
+                return ['orange', 'save-button-unsaved'];  // Array for multiple outputs
+            } else {
+                // Saved - normal teal color
+                console.log('✅ Showing SAVED state (teal)');
+                return ['teal', ''];  // Array for multiple outputs
+            }
+        }
+        """,
+        Output("save-button-dashboard", "color"),
+        Output("save-button-dashboard", "className"),
+        Input("layout-saved-state", "data"),
+    )
+
 
 # =============================================================================
 # MAIN LAYOUT FUNCTION
@@ -724,7 +774,7 @@ def design_header(data, local_store, edit_mode: bool = False):
 
     # Create "Exit" button for edit mode (navigates back to view URL)
     exit_edit_button = dmc.Button(
-        "Exit Edit mode",
+        "Exit Edit",
         id="exit-edit-mode-button",
         leftSection=DashIconify(icon="mdi:eye", width=16, color="white"),
         size="sm",
@@ -736,7 +786,7 @@ def design_header(data, local_store, edit_mode: bool = False):
 
     # Create "Add Component" button for edit mode
     add_component_button = dmc.Button(
-        "Add Component",
+        "Add",
         id="add-button",  # Must match callback in add_component_simple.py
         leftSection=DashIconify(icon="mdi:plus-circle", width=16, color="white"),
         size="sm",

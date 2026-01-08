@@ -27,7 +27,7 @@ Key Features:
 from typing import Optional
 
 import dash_mantine_components as dmc
-from dash import Input, Output, State, ctx, html, no_update
+from dash import Input, Output, State, ctx, dcc, html, no_update
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.components.analytics_tracker import create_analytics_tracker
@@ -68,6 +68,10 @@ def create_editor_layout():
         dmc.NotificationContainer(id="notification-container"),
         # Analytics tracking
         create_analytics_tracker(),
+        # Hidden store to track if dashboard layout has unsaved changes (True = saved, False = unsaved)
+        dcc.Store(id="layout-saved-state", data=True, storage_type="memory"),
+        # Hidden button that JavaScript can trigger to mark layout as unsaved
+        html.Button(id="layout-change-trigger", style={"display": "none"}, n_clicks=0),
         # Hidden output divs for clientside callbacks
         html.Div(id="dummy-plotly-output", style={"display": "none"}),
         html.Div(id="test-output", style={"display": "none"}),

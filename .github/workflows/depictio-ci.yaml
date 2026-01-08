@@ -8,8 +8,57 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Smart caching for quality checks - skip tests if code hasn't changed
+  # Hashes all Python files, config files, and test files to detect changes
+  # If hash matches a previous successful run, quality job is skipped
+  check-quality-cache:
+    runs-on: ubuntu-22.04
+    outputs:
+      cache-hit: ${{ steps.cache-quality.outputs.cache-hit }}
+      code-hash: ${{ steps.hash.outputs.hash }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history to compare with previous commit
+
+      - name: Generate code hash
+        id: hash
+        run: |
+          # Hash all relevant files that affect quality checks:
+          # - All Python source files (*.py)
+          # - Dependency configuration (pyproject.toml)
+          # - Pre-commit hooks (.pre-commit-config.yaml)
+          # - Test configuration (pytest.ini)
+          # - This workflow file itself
+          # Only hash files that actually exist (filter out deleted/missing files)
+          HASH=$(git ls-files '*.py' 'pyproject.toml' '.pre-commit-config.yaml' 'pytest.ini' '.github/workflows/depictio-ci.yaml' | \
+            while read -r file; do
+              if [ -f "$file" ]; then
+                cat "$file"
+              fi
+            done | sha256sum | cut -d' ' -f1)
+          echo "hash=$HASH" >> $GITHUB_OUTPUT
+          echo "📝 Code hash: $HASH"
+
+      - name: Check quality cache
+        id: cache-quality
+        uses: actions/cache@v4
+        with:
+          path: .quality-passed
+          key: quality-${{ steps.hash.outputs.hash }}
+
+      - name: Report cache status
+        run: |
+          if [ "${{ steps.cache-quality.outputs.cache-hit }}" == "true" ]; then
+            echo "✅ Quality checks passed for this code state previously - skipping"
+          else
+            echo "🔍 No cache found - quality checks will run"
+          fi
+
   quality:
     runs-on: ubuntu-22.04
+    needs: check-quality-cache
+    if: needs.check-quality-cache.outputs.cache-hit != 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -108,8 +157,26 @@ jobs:
           source venv/bin/activate
           python -m pytest -xvs -n auto
 
+      - name: Save quality cache marker
+        if: success()
+        run: |
+          echo "Quality checks passed at $(date)" > .quality-passed
+          echo "✅ Quality cache marker created"
+
+      - name: Update quality cache
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: .quality-passed
+          key: quality-${{ needs.check-quality-cache.outputs.code-hash }}
+
   docker-build:
-    needs: quality
+    needs: [check-quality-cache, quality]
+    # Run if quality passed OR if it was skipped due to cache hit
+    if: |
+      always() &&
+      (needs.quality.result == 'success' ||
+       (needs.quality.result == 'skipped' && needs.check-quality-cache.outputs.cache-hit == 'true'))
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -257,8 +324,8 @@ jobs:
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
           cp .env.example .env
-          mkdir -p depictioDB minio_data
-          chmod 777 depictioDB minio_data
+          mkdir -p depictioDB minio_data prof_files cache
+          chmod 777 depictioDB minio_data prof_files cache
 
       - name: Start services
         run: |
@@ -270,8 +337,91 @@ jobs:
       - name: Logs
         run: sleep 3 && docker compose logs
 
+      - name: Logs depictio-frontend (early check)
+        run: |
+          echo "📋 Frontend container logs (early check):"
+          docker compose logs depictio-frontend || echo "Failed to get frontend logs"
+
+      - name: Check frontend container status
+        run: |
+          echo "🔍 Checking if depictio-frontend is running..."
+          docker compose ps depictio-frontend
+
+          echo ""
+          echo "🔍 Container detailed status:"
+          docker inspect depictio-frontend --format='Status: {{.State.Status}}, Running: {{.State.Running}}, ExitCode: {{.State.ExitCode}}, Restarting: {{.State.Restarting}}'
+
+          echo ""
+          echo "🔍 Container restart count:"
+          docker inspect depictio-frontend --format='RestartCount: {{.RestartCount}}'
+
+          if ! docker compose ps depictio-frontend | grep -q "Up"; then
+            echo "❌ Frontend container is not running!"
+            echo "📋 Frontend logs:"
+            docker compose logs depictio-frontend
+            exit 1
+          fi
+          echo "✅ Frontend container is running"
+
+      - name: Debug Docker networking and frontend startup
+        run: |
+          echo "🔍 Docker Network Debugging"
+          echo "📊 List all networks:"
+          docker network ls
+
+          echo ""
+          echo "📊 Frontend container network:"
+          docker inspect depictio-frontend --format='{{range $net, $conf := .NetworkSettings.Networks}}{{$net}} {{end}}'
+
+          echo ""
+          echo "📊 Backend container network:"
+          docker inspect depictio-backend --format='{{range $net, $conf := .NetworkSettings.Networks}}{{$net}} {{end}}'
+
+          echo ""
+          echo "🔍 Test DNS resolution from backend to frontend:"
+          docker compose exec -T depictio-backend sh -c "getent hosts depictio-frontend || echo 'DNS resolution failed'"
+
+          echo ""
+          echo "🔍 Test connectivity from backend to frontend:"
+          docker compose exec -T depictio-backend sh -c "curl -v --max-time 5 http://depictio-frontend:5080/ || echo 'Connection failed'"
+
+          echo ""
+          echo "🔍 Frontend container details:"
+          echo "Container is running: $(docker inspect depictio-frontend --format='{{.State.Running}}')"
+          echo "Container exit code: $(docker inspect depictio-frontend --format='{{.State.ExitCode}}')"
+
+          echo ""
+          echo "🔍 Check if Dash is listening on port 5080:"
+          docker compose exec -T depictio-frontend sh -c "netstat -tlnp 2>/dev/null | grep 5080 || echo 'Port 5080 not listening'"
+
+          echo ""
+          echo "📋 Full frontend logs (ALL):"
+          docker compose logs depictio-frontend
+
+          echo ""
+          echo "🔍 Check running processes in frontend:"
+          docker compose exec -T depictio-frontend sh -c "ps aux | grep -E 'dash|python|gunicorn' || echo 'No Python processes found'"
+
+          echo ""
+          echo "🔍 Check startup script and environment:"
+          docker compose exec -T depictio-frontend sh -c "echo 'Working directory:' && pwd"
+          docker compose exec -T depictio-frontend sh -c "echo 'DEV_MODE=' && echo \$DEV_MODE"
+          docker compose exec -T depictio-frontend sh -c "echo 'Script executable:' && ls -la /app/run_dash.sh"
+          docker compose exec -T depictio-frontend sh -c "echo 'Python available:' && which python || echo 'Python not found'"
+          docker compose exec -T depictio-frontend sh -c "echo 'Files in /app:' && ls -la /app/ | head -20"
+
+          echo ""
+          echo "🔍 Manually run startup script to see errors:"
+          docker compose exec -T depictio-frontend bash -c "cd /app && bash -x /app/run_dash.sh" || echo "Script failed with exit code: $?"
+
       - name: Logs depictio-backend
         run: sleep 3 && docker compose logs depictio-backend
+
+      - name: Final frontend logs check
+        if: always()
+        run: |
+          echo "📋 Final frontend container logs (complete):"
+          docker compose logs depictio-frontend
 
       - name: Wait and verify services
         id: health
@@ -363,11 +513,17 @@ jobs:
           echo "📊 Container status:"
           docker compose ps
 
+          echo "📋 Recent frontend logs (last 50 lines):"
+          docker compose logs --tail=50 depictio-frontend || echo "Failed to get frontend logs"
+
           echo "📋 Recent backend logs (last 20 lines):"
           docker compose logs --tail=20 depictio-backend || echo "Failed to get backend logs"
 
           echo "🌐 Testing basic API connectivity:"
           curl -s -o /dev/null -w "Status: %{http_code}, Time: %{time_total}s\n" http://localhost:8058/depictio/api/v1/utils/status || echo "API connectivity test failed"
+
+          echo "🌐 Testing frontend accessibility:"
+          curl -s -o /dev/null -w "Frontend Status: %{http_code}, Time: %{time_total}s\n" http://localhost:5080/ || echo "Frontend connectivity test failed"
 
           # Make the API call and capture response with timeout
           SCREENSHOT_RESPONSE=$(timeout 60s curl -s -w "\n%{http_code}" http://localhost:8058/depictio/api/v1/utils/screenshot-dash-fixed/$DASHBOARD_ID || echo -e "\nTIMEOUT")
@@ -480,8 +636,8 @@ jobs:
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
           cp .env.example .env
-          mkdir -p depictioDB minio_data
-          chmod 777 depictioDB minio_data
+          mkdir -p depictioDB minio_data prof_files cache
+          chmod 777 depictioDB minio_data prof_files cache
 
       - name: Log in and start services
         run: |
@@ -581,8 +737,8 @@ jobs:
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
           cp .env.example .env
-          mkdir -p depictioDB minio_data
-          chmod 777 depictioDB minio_data
+          mkdir -p depictioDB minio_data prof_files cache
+          chmod 777 depictioDB minio_data prof_files cache
 
       - name: Log in and start services
         run: |
@@ -1309,8 +1465,8 @@ jobs:
           cp .env.example .env
           # Enable dev mode
           sed -i 's/# DEV_MODE=false/DEV_MODE=true/' docker-compose/.env
-          mkdir -p depictioDB minio_data
-          chmod 777 depictioDB minio_data
+          mkdir -p depictioDB minio_data prof_files cache
+          chmod 777 depictioDB minio_data prof_files cache
 
       - name: Log in and start services
         run: |
@@ -1390,8 +1546,8 @@ jobs:
           # Enable unauthenticated mode
           sed -i 's/# DEPICTIO_AUTH_UNAUTHENTICATED_MODE=false/DEPICTIO_AUTH_UNAUTHENTICATED_MODE=true/' docker-compose/.env
           sed -i 's/# DEV_MODE=false/DEV_MODE=true/' docker-compose/.env
-          mkdir -p depictioDB minio_data
-          chmod 777 depictioDB minio_data
+          mkdir -p depictioDB minio_data prof_files cache
+          chmod 777 depictioDB minio_data prof_files cache
 
       - name: Log in and start services
         run: |

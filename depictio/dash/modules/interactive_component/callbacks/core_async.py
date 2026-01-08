@@ -10,7 +10,7 @@ This ensures all Celery task parameters and returns are JSON serializable.
 
 import dash_mantine_components as dmc
 from bson import ObjectId
-from dash import MATCH, Input, Output, State, no_update
+from dash import ALL, Input, Output, State, no_update
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
@@ -29,81 +29,60 @@ def register_async_rendering_callback(app):
     """
 
     @app.callback(
-        # Output to container DIV (not the inner component) to avoid duplicate IDs
-        Output({"type": "interactive-component-value-container", "index": MATCH}, "children"),
-        Output({"type": "interactive-metadata", "index": MATCH}, "data"),
-        Output({"type": "interactive-stored-metadata", "index": MATCH}, "data"),
-        Input({"type": "interactive-trigger", "index": MATCH}, "data"),
+        # BATCH RENDERING: ALL pattern - process all interactive components in single callback
+        Output({"type": "interactive-component-value-container", "index": ALL}, "children"),
+        Output({"type": "interactive-metadata", "index": ALL}, "data"),
+        Output({"type": "interactive-stored-metadata", "index": ALL}, "data"),
+        Input({"type": "interactive-trigger", "index": ALL}, "data"),
         Input(
             "project-metadata-store", "data"
         ),  # Keep as Input - needed for Stage 2 when metadata arrives
-        State({"type": "interactive-metadata", "index": MATCH}, "data"),
+        State({"type": "interactive-metadata", "index": ALL}, "data"),
+        State({"type": "interactive-trigger", "index": ALL}, "id"),  # Add: Need IDs for indexing
         State("local-store", "data"),  # SECURITY: Access token from centralized store
         prevent_initial_call=False,  # Must be False - trigger store has data at creation time
-        background=True,  # ✅ RE-ENABLED for Celery worker background processing
+        background=False,  # DISABLED: Batch processing faster than Celery overhead
     )
-    # NOTE: @callback_lock intentionally not re-added
-    # The idempotency check at line 92 (existing_metadata.get("options")) prevents duplicate renders
-    # This check is more robust than a lock because it survives worker restarts
-    def render_interactive_options_background(
-        trigger_data, project_metadata, existing_metadata, local_data
+    # NOTE: Batch rendering optimization - same as cards (8.4× speedup)
+    # Idempotency checks per component prevent duplicate renders
+    def render_interactive_options_background_batch(
+        trigger_data_list, project_metadata, existing_metadata_list, trigger_ids, local_data
     ):
         """
-        PATTERN-MATCHING: Async rendering callback for interactive components.
+        BATCH RENDERING: Process ALL interactive components in single callback.
 
-        Similar to render_card_value_background but builds entire interactive component.
+        Similar to card batch rendering - reduces N×700ms Dash overhead to 1×700ms.
 
-        SINGLE-RENDER PATTERN WITH OPTIMIZED DATA:
-        - Waits for BOTH trigger_data AND project_metadata to be ready
-        - Renders once with cached delta_locations (eliminates API calls)
-        - Loader remains visible until both inputs available
+        OPTIMIZATION STRATEGY:
+        - Extract delta_locations once (shared across all components)
+        - Process each component in loop
+        - Idempotency checks per component prevent duplicate renders
+        - Handle heterogeneous types (Select, Slider, DatePicker) in single callback
 
         Args:
-            trigger_data: Data from interactive-trigger store containing all necessary params
+            trigger_data_list: List of trigger data for all components
             project_metadata: Full project metadata cache (includes delta_locations from MongoDB join)
-            existing_metadata: Existing metadata from previous render (for idempotency check)
+            existing_metadata_list: List of existing metadata (for idempotency checks)
+            trigger_ids: List of trigger IDs for indexing
             local_data: User authentication data from local-store
 
         Returns:
-            tuple: (built_component, metadata_dict, stored_metadata_dict)
+            tuple: (all_components, all_metadata, all_stored_metadata) - lists for all components
         """
+        import time
 
-        from dash import callback_context as ctx
+        batch_start = time.time()
 
-        # CRITICAL: With 2 Inputs, callback fires multiple times
-        # Only process when BOTH are ready AND we haven't rendered yet
-
-        if not trigger_data or not isinstance(trigger_data, dict):
-            logger.debug("⏭️  Waiting for trigger_data")
-            return no_update, no_update, no_update
-
-        # Extract component info early for logging
-        index = trigger_data.get("index", "unknown")
-        component_type = trigger_data.get("interactive_component_type", "unknown")
-
-        # Debug: Log what triggered this callback
-        triggered_by = ctx.triggered_id if ctx.triggered else "unknown"
-        logger.error(
-            f"🔥 INTERACTIVE CALLBACK FIRED - Type: {component_type}, Index: {index}, Triggered by: {triggered_by}"
-        )
-
-        # IDEMPOTENCY CHECK FIRST: If already rendered, skip ALL triggers
-        if existing_metadata and existing_metadata.get("options") is not None:
-            logger.info(f"✅ [{component_type}/{index}] Already rendered, skipping")
-            logger.error(f"✅ INTERACTIVE CALLBACK COMPLETE - Index: {index} (idempotency block)")
-            return no_update, no_update, no_update
-
-        # If not rendered yet, check if project_metadata is ready
+        # Early validation - Wait for project_metadata
         if not project_metadata or not isinstance(project_metadata, dict):
-            logger.info(
-                f"⏭️  [{component_type}/{index}] Waiting for project_metadata (keeping loader visible)"
+            logger.debug("⏭️  Batch waiting for project_metadata")
+            return (
+                [no_update] * len(trigger_data_list),
+                [no_update] * len(trigger_data_list),
+                [no_update] * len(trigger_data_list),
             )
-            logger.error(
-                f"✅ INTERACTIVE CALLBACK COMPLETE - Index: {index} (waiting for metadata)"
-            )
-            return no_update, no_update, no_update
 
-        # ✅ CACHE OPTIMIZATION: Extract delta_locations from project-metadata-store
+        # ✅ CACHE OPTIMIZATION: Extract delta_locations once (shared across all components)
         delta_locations = {}
         project_data = project_metadata.get("project", {})
         for wf in project_data.get("workflows", []):
@@ -116,81 +95,123 @@ def register_async_rendering_callback(app):
                     }
 
         logger.info(
-            f"🔄 INTERACTIVE RENDER: {component_type} component {index} "
+            f"🚀 BATCH INTERACTIVE RENDER START - {len(trigger_data_list)} components "
             f"(delta_locations: {len(delta_locations)})"
         )
 
-        # Extract parameters from trigger store
-        wf_id = trigger_data.get("wf_id")
-        dc_id = trigger_data.get("dc_id")
-        column_name = trigger_data.get("column_name")
-        component_type = trigger_data.get("interactive_component_type")
-
-        # SECURITY: Extract access_token from local-store (centralized, not per-component)
+        # SECURITY: Extract access_token once (shared)
         access_token = local_data.get("access_token") if local_data else None
         if not access_token:
             logger.error("No access_token available in local-store")
-            return "Auth Error", {}, {}
-
-        # Validate required parameters
-        if not all([wf_id, dc_id, column_name, component_type]):
-            logger.error(
-                f"Missing required parameters: wf_id={wf_id}, dc_id={dc_id}, "
-                f"column_name={column_name}, component_type={component_type}"
+            # Return errors for all components
+            error_result = ("Auth Error", {}, {})
+            return (
+                [error_result[0]] * len(trigger_data_list),
+                [error_result[1]] * len(trigger_data_list),
+                [error_result[2]] * len(trigger_data_list),
             )
-            return "Error: Missing parameters", {}, {}
 
-        try:
-            # TWO-STAGE OPTIMIZATION: Use delta_locations when available
-            init_data = delta_locations if delta_locations else None
+        # Initialize result lists
+        all_components = []
+        all_metadata = []
+        all_stored_metadata = []
 
-            # Handle joined data collection IDs
-            if isinstance(dc_id, str) and "--" in dc_id:
-                df = load_deltatable_lite(
-                    ObjectId(wf_id),
-                    dc_id,
-                    TOKEN=access_token,
-                    init_data=init_data,
-                )
-            else:
-                df = load_deltatable_lite(
-                    ObjectId(wf_id),
-                    ObjectId(dc_id),
-                    TOKEN=access_token,
-                    init_data=init_data,
-                )
+        # Process each interactive component
+        for i, (trigger_data, existing_meta, trigger_id) in enumerate(
+            zip(trigger_data_list, existing_metadata_list, trigger_ids)
+        ):
+            # Idempotency check - Skip if no trigger data
+            if not trigger_data or not isinstance(trigger_data, dict):
+                all_components.append(no_update)
+                all_metadata.append(no_update)
+                all_stored_metadata.append(no_update)
+                continue
 
-            # Build component based on type
-            if component_type in ["Select", "MultiSelect", "SegmentedControl"]:
-                logger.error(
-                    f"✅ INTERACTIVE CALLBACK COMPLETE - Index: {index} (success - select component)"
-                )
-                return build_select_component(
-                    df, column_name, component_type, trigger_data, delta_locations
-                )
-            elif component_type in ["Slider", "RangeSlider"]:
-                logger.error(
-                    f"✅ INTERACTIVE CALLBACK COMPLETE - Index: {index} (success - slider component)"
-                )
-                return build_slider_component(
-                    df, column_name, component_type, trigger_data, delta_locations
-                )
-            elif component_type == "DateRangePicker":
-                logger.error(
-                    f"✅ INTERACTIVE CALLBACK COMPLETE - Index: {index} (success - datepicker component)"
-                )
-                return build_datepicker_component(df, column_name, trigger_data, delta_locations)
-            else:
-                logger.error(f"Unsupported component type: {component_type}")
-                logger.error(
-                    f"✅ INTERACTIVE CALLBACK COMPLETE - Index: {index} (error - unsupported type)"
-                )
-                return f"Error: Unsupported component type: {component_type}", {}, {}
+            # Extract component info
+            index = trigger_data.get("index", trigger_id.get("index", "unknown"))
+            component_type = trigger_data.get("interactive_component_type", "unknown")
 
-        except Exception as e:
-            logger.error(f"Interactive render error: {e}", exc_info=True)
-            logger.error(f"✅ INTERACTIVE CALLBACK COMPLETE - Index: {index} (error - exception)")
-            return f"Error loading component: {str(e)}", {}, {}
+            # IDEMPOTENCY CHECK: If already rendered, skip
+            if existing_meta and existing_meta.get("options") is not None:
+                logger.info(f"✅ [{component_type}/{index}] Already rendered, skipping")
+                all_components.append(no_update)
+                all_metadata.append(no_update)
+                all_stored_metadata.append(no_update)
+                continue
+
+            # Extract parameters from trigger store
+            wf_id = trigger_data.get("wf_id")
+            dc_id = trigger_data.get("dc_id")
+            column_name = trigger_data.get("column_name")
+
+            # Validate required parameters
+            if not all([wf_id, dc_id, column_name, component_type]):
+                logger.error(
+                    f"[{i}] Missing parameters: wf_id={wf_id}, dc_id={dc_id}, "
+                    f"column={column_name}, type={component_type}"
+                )
+                all_components.append("Error: Missing parameters")
+                all_metadata.append({})
+                all_stored_metadata.append({})
+                continue
+
+            try:
+                # Load Delta table with shared cache
+                init_data = delta_locations if delta_locations else None
+
+                # Handle joined data collection IDs
+                if isinstance(dc_id, str) and "--" in dc_id:
+                    df = load_deltatable_lite(
+                        ObjectId(wf_id),
+                        dc_id,
+                        TOKEN=access_token,
+                        init_data=init_data,
+                    )
+                else:
+                    df = load_deltatable_lite(
+                        ObjectId(wf_id),
+                        ObjectId(dc_id),
+                        TOKEN=access_token,
+                        init_data=init_data,
+                    )
+
+                # Build component based on type
+                if component_type in ["Select", "MultiSelect", "SegmentedControl"]:
+                    component, metadata, stored_metadata = build_select_component(
+                        df, column_name, component_type, trigger_data, delta_locations
+                    )
+                elif component_type in ["Slider", "RangeSlider"]:
+                    component, metadata, stored_metadata = build_slider_component(
+                        df, column_name, component_type, trigger_data, delta_locations
+                    )
+                elif component_type == "DateRangePicker":
+                    component, metadata, stored_metadata = build_datepicker_component(
+                        df, column_name, trigger_data, delta_locations
+                    )
+                else:
+                    logger.error(f"Unsupported component type: {component_type}")
+                    component = f"Error: Unsupported type: {component_type}"
+                    metadata = {}
+                    stored_metadata = {}
+
+                all_components.append(component)
+                all_metadata.append(metadata)
+                all_stored_metadata.append(stored_metadata)
+
+                logger.info(f"✅ [{i}] {component_type}/{index} rendered successfully")
+
+            except Exception as e:
+                logger.error(f"[{i}] Interactive render error: {e}", exc_info=True)
+                all_components.append(f"Error: {str(e)}")
+                all_metadata.append({})
+                all_stored_metadata.append({})
+
+        batch_duration = (time.time() - batch_start) * 1000
+        logger.info(
+            f"✅ BATCH INTERACTIVE RENDER COMPLETE - {len(all_components)} components in {batch_duration:.1f}ms"
+        )
+
+        return all_components, all_metadata, all_stored_metadata
 
 
 def build_select_component(df, column_name, component_type, trigger_data, delta_locations):

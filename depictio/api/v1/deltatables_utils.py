@@ -2,6 +2,7 @@ import concurrent.futures
 import hashlib
 import itertools
 import json
+import os
 import sys
 import warnings
 
@@ -16,6 +17,63 @@ from depictio.api.v1.s3 import polars_s3_config
 # FEATURE FLAGS
 ENABLE_CACHING = True  # Global toggle for caching system
 ENABLE_JOINS = True  # Global toggle for joined data collection loading
+
+# PERFORMANCE TESTING: Toggle for local filesystem caching
+USE_LOCAL_FILES = os.getenv("DEPICTIO_USE_LOCAL_FILES", "false").lower() == "true"
+DELTA_CACHE_DIR = "/app/cache/delta_cache"
+logger.info(f"Data loading mode: {'LOCAL CACHE' if USE_LOCAL_FILES else 'S3/MinIO'}")
+
+
+def get_local_cache_path(s3_path: str) -> str:
+    """
+    Get local cache path for a Delta table.
+
+    Example:
+        s3://depictio-bucket/646b0f3c1e4a2d7f8e5b8c9c
+        → /app/cache/delta_cache/646b0f3c1e4a2d7f8e5b8c9c
+    """
+    if s3_path.startswith("s3://"):
+        # Extract data collection ID from S3 path
+        dc_id = s3_path.split("/")[-1]
+        return os.path.join(DELTA_CACHE_DIR, dc_id)
+    return s3_path
+
+
+def cache_delta_table_from_s3(s3_path: str, polars_s3_config: dict) -> str:
+    """
+    Cache Delta table from S3 to local filesystem for faster subsequent reads.
+
+    Args:
+        s3_path: S3 path to Delta table (e.g., s3://depictio-bucket/646b0f3c1e4a2d7f8e5b8c9c)
+        polars_s3_config: S3 configuration for Polars
+
+    Returns:
+        Local cache path where Delta table is stored
+    """
+    import shutil
+
+    cache_path = get_local_cache_path(s3_path)
+
+    # Check if already cached
+    if os.path.exists(cache_path) and os.path.exists(os.path.join(cache_path, "_delta_log")):
+        logger.debug(f"📦 Cache hit: {cache_path}")
+        return cache_path
+
+    # Create cache directory
+    os.makedirs(DELTA_CACHE_DIR, exist_ok=True)
+
+    # Remove stale cache if exists
+    if os.path.exists(cache_path):
+        shutil.rmtree(cache_path)
+
+    logger.info(f"📥 Caching from S3 to local: {s3_path} → {cache_path}")
+
+    # Read from S3 and write to local cache
+    df = pl.scan_delta(s3_path, storage_options=polars_s3_config).collect()
+    df.write_delta(cache_path, mode="overwrite")
+
+    logger.info(f"✅ Cache created: {cache_path} ({len(df)} rows)")
+    return cache_path
 
 
 # PERFORMANCE OPTIMIZATION: Filter hash generation for caching filtered DataFrames
@@ -646,7 +704,14 @@ def load_deltatable_lite(
                 raise Exception("Invalid response: missing 'delta_table_location'")
 
         # Load data from Delta table
-        delta_scan = pl.scan_delta(file_id, storage_options=polars_s3_config)
+        if USE_LOCAL_FILES:
+            # Cache from S3 to local, then read from cache
+            cache_path = cache_delta_table_from_s3(file_id, polars_s3_config)
+            logger.info(f"📂 Reading from local cache: {cache_path}")
+            delta_scan = pl.scan_delta(cache_path)  # No storage_options for local files
+        else:
+            logger.debug(f"☁️ Reading from S3: {file_id}")
+            delta_scan = pl.scan_delta(file_id, storage_options=polars_s3_config)
 
         # Apply column projection if specified
         if select_columns:
@@ -922,7 +987,14 @@ def load_deltatable_lite(
             raise Exception("Invalid response: missing 'delta_table_location'")
 
     # Initialize the Delta table scan
-    delta_scan = pl.scan_delta(file_id, storage_options=polars_s3_config)
+    if USE_LOCAL_FILES:
+        # Cache from S3 to local, then read from cache
+        cache_path = cache_delta_table_from_s3(file_id, polars_s3_config)
+        logger.info(f"📂 Reading from local cache: {cache_path}")
+        delta_scan = pl.scan_delta(cache_path)  # No storage_options for local files
+    else:
+        logger.debug(f"☁️ Reading from S3: {file_id}")
+        delta_scan = pl.scan_delta(file_id, storage_options=polars_s3_config)
 
     # COLUMN PROJECTION: Apply column selection at scan level for efficient I/O
     # This is predicate pushdown - only read specified columns from storage
@@ -956,12 +1028,9 @@ def load_deltatable_lite(
                 f"📊 RAW DATAFRAME LOADED: {df.height:,} rows × {df.width} columns (DC: {data_collection_id_str})"
             )
             logger.debug(f"RAW DataFrame columns: {df.columns}")
-            # Use Polars' estimated_size method if available, fallback to rough estimation
-            if hasattr(df, "estimated_size"):
-                actual_size = df.estimated_size("b")
-            else:
-                # Fallback: rough estimate based on shape and data types
-                actual_size = df.height * df.width * 8  # 8 bytes per cell average
+            # PERFORMANCE: Use fast row-based estimate instead of expensive df.estimated_size() scan
+            # Rough estimate: 8 bytes per cell average (acceptable for cache sizing decisions)
+            actual_size = df.height * df.width * 8
 
             logger.debug(
                 f"Estimated DataFrame size: {actual_size} bytes ({actual_size / (1024 * 1024):.2f} MB)"
@@ -1559,8 +1628,33 @@ def load_and_cache_dataframe(cache_key: str, size_bytes: int, delta_scan) -> pl.
     logger.debug(f"Materializing DataFrame for cache key: {cache_key}")
     df = delta_scan.collect()
 
-    # Calculate actual size
-    actual_size = df.estimated_size("b") if hasattr(df, "estimated_size") else size_bytes
+    # PERFORMANCE: Use fast row count instead of expensive estimated_size() for small datasets
+    # For datasets < 100KB, pickling overhead exceeds recalculation cost - skip Redis entirely
+    row_count = df.height
+    REDIS_SKIP_THRESHOLD_ROWS = 1000  # Skip Redis for datasets < 1000 rows (~100KB)
+
+    if row_count < REDIS_SKIP_THRESHOLD_ROWS:
+        # TINY DATASET: Skip Redis pickling overhead, use memory-only cache
+        logger.debug(
+            f"⚡ TINY DATASET ({row_count} rows < {REDIS_SKIP_THRESHOLD_ROWS} threshold) - Skipping Redis, memory-only cache"
+        )
+        actual_size = size_bytes  # Use estimate, avoid expensive df.estimated_size() scan
+
+        # Memory cache only (much faster than Redis for tiny datasets)
+        if _total_memory_usage + actual_size <= MEMORY_THRESHOLD_BYTES:
+            _dataframe_memory_cache[cache_key] = df
+            _cache_metadata[cache_key] = {
+                "size_bytes": actual_size,
+                "timestamp": time.time(),
+            }
+            _total_memory_usage += actual_size
+            logger.debug(f"💾 Memory cached (Redis skipped): {cache_key} ({row_count} rows)")
+
+        return df
+
+    # LARGER DATASET: Use Redis + memory caching
+    # Use fast estimate (df.estimated_size() scan disabled for performance)
+    actual_size = df.height * df.width * 8  # 8 bytes per cell average
 
     # Try to cache in Redis first (persistent across page refreshes)
     try:

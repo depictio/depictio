@@ -225,3 +225,24 @@
     75% { transform: translate(-10px, -40px) rotate(-180deg); }
     100% { transform: translate(0, 0) rotate(-240deg); }
 }
+
+/* =============================================================================
+   SAVE BUTTON UNSAVED STATE ANIMATION
+   Modern pulsing glow effect to draw attention to unsaved changes
+   ============================================================================= */
+
+@keyframes pulseGlow {
+    0%, 100% {
+        box-shadow: 0 0 8px rgba(255, 140, 0, 0.4);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(255, 140, 0, 0.8), 0 0 30px rgba(255, 140, 0, 0.4);
+        transform: scale(1.02);
+    }
+}
+
+/* Apply animation to save button when it has unsaved changes */
+.save-button-unsaved {
+    animation: pulseGlow 2s ease-in-out infinite;
+}

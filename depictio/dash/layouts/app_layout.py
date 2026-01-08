@@ -793,6 +793,12 @@ def create_app_layout():
                     "maxTabs": 5,
                 },
             ),
+            # Hidden store to trigger card filter update notifications
+            dcc.Store(id="card-filter-notification-trigger", storage_type="memory"),
+            # Hidden store to track if dashboard layout has unsaved changes (True = saved, False = unsaved)
+            dcc.Store(id="layout-saved-state", data=True, storage_type="memory"),
+            # Hidden button that JavaScript can trigger to mark layout as unsaved
+            html.Button(id="layout-change-trigger", style={"display": "none"}, n_clicks=0),
             # dcc.Interval(id="interval-component", interval=60 * 60 * 1000, n_intervals=0),
             html.Div(
                 id="dummy-plotly-output", style={"display": "none"}
@@ -812,7 +818,9 @@ def create_app_layout():
                 overlayProps={"overlayOpacity": 0.1},
                 children=[],
             ),
-            dmc.NotificationContainer(id="notification-container"),
+            dmc.NotificationContainer(
+                id="notification-container", position="bottom-right", zIndex=10000
+            ),
             html.Div(id="admin-password-warning-trigger", style={"display": "none"}),
             # Tab creation modal
             create_tab_modal(),

@@ -36,8 +36,10 @@ services:
       - ./depictio:/app/depictio
       - ./docker-images/run_dash.sh:/app/run_dash.sh
       - ./pyproject.toml:/app/pyproject.toml
+      - ./VERSION:/app/VERSION
       - ./prof_files:/app/prof_files
       - ./cache:/app/cache
+      - ./minio_data:/app/minio_data
     env_file:
       - docker-compose/.env
     environment:
@@ -62,8 +64,10 @@ services:
     volumes:
       - ./depictio:/app/depictio
       - ./pyproject.toml:/app/pyproject.toml
+      - ./VERSION:/app/VERSION
       - ./docker-images/run_fastapi.sh:/app/run_fastapi.sh
       - ./prof_files:/app/prof_files
+      - ./minio_data:/app/minio_data
     env_file:
       - docker-compose/.env
     environment:
@@ -77,6 +81,8 @@ services:
 
   depictio-celery-worker:
     container_name: depictio-celery-worker
+    profiles:
+      - async  # Only start with --profile async (for background callbacks)
     # Use the same image as backend
     image: ${DEPICTIO_VERSION:-depictio:dev}
     build:
