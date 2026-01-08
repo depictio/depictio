@@ -524,10 +524,11 @@ def build_card_frame(index, children=None, show_border=False):
             children=[
                 dmc.LoadingOverlay(
                     id={"type": "card-loading-overlay", "index": index},
-                    visible=False,
+                    visible=False,  # Always hidden for baseline performance testing
                     overlayProps={"radius": "sm", "blur": 2},
                     loaderProps={"type": "dots", "size": "lg"},
                     zIndex=10,
+                    style={"display": "none"},  # Force hide to eliminate overlay overhead
                 ),
                 dmc.Center(
                     dmc.Text(
@@ -567,10 +568,11 @@ def build_card_frame(index, children=None, show_border=False):
             children=[
                 dmc.LoadingOverlay(
                     id={"type": "card-loading-overlay", "index": index},
-                    visible=False,
+                    visible=False,  # Always hidden for baseline performance testing
                     overlayProps={"radius": "sm", "blur": 2},
                     loaderProps={"type": "dots", "size": "lg"},
                     zIndex=10,
+                    style={"display": "none"},  # Force hide to eliminate overlay overhead
                 ),
                 dmc.Stack(
                     children=children,
