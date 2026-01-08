@@ -8,8 +8,52 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Smart caching for quality checks - skip tests if code hasn't changed
+  # Hashes all Python files, config files, and test files to detect changes
+  # If hash matches a previous successful run, quality job is skipped
+  check-quality-cache:
+    runs-on: ubuntu-22.04
+    outputs:
+      cache-hit: ${{ steps.cache-quality.outputs.cache-hit }}
+      code-hash: ${{ steps.hash.outputs.hash }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history to compare with previous commit
+
+      - name: Generate code hash
+        id: hash
+        run: |
+          # Hash all relevant files that affect quality checks:
+          # - All Python source files (*.py)
+          # - Dependency configuration (pyproject.toml)
+          # - Pre-commit hooks (.pre-commit-config.yaml)
+          # - Test configuration (pytest.ini)
+          # - This workflow file itself
+          HASH=$(git ls-files '*.py' 'pyproject.toml' '.pre-commit-config.yaml' 'pytest.ini' '.github/workflows/depictio-ci.yaml' | \
+            xargs cat | sha256sum | cut -d' ' -f1)
+          echo "hash=$HASH" >> $GITHUB_OUTPUT
+          echo "📝 Code hash: $HASH"
+
+      - name: Check quality cache
+        id: cache-quality
+        uses: actions/cache@v4
+        with:
+          path: .quality-passed
+          key: quality-${{ steps.hash.outputs.hash }}
+
+      - name: Report cache status
+        run: |
+          if [ "${{ steps.cache-quality.outputs.cache-hit }}" == "true" ]; then
+            echo "✅ Quality checks passed for this code state previously - skipping"
+          else
+            echo "🔍 No cache found - quality checks will run"
+          fi
+
   quality:
     runs-on: ubuntu-22.04
+    needs: check-quality-cache
+    if: needs.check-quality-cache.outputs.cache-hit != 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -108,8 +152,26 @@ jobs:
           source venv/bin/activate
           python -m pytest -xvs -n auto
 
+      - name: Save quality cache marker
+        if: success()
+        run: |
+          echo "Quality checks passed at $(date)" > .quality-passed
+          echo "✅ Quality cache marker created"
+
+      - name: Update quality cache
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: .quality-passed
+          key: quality-${{ needs.check-quality-cache.outputs.code-hash }}
+
   docker-build:
-    needs: quality
+    needs: [check-quality-cache, quality]
+    # Run if quality passed OR if it was skipped due to cache hit
+    if: |
+      always() &&
+      (needs.quality.result == 'success' ||
+       (needs.quality.result == 'skipped' && needs.check-quality-cache.outputs.cache-hit == 'true'))
     runs-on: ubuntu-22.04
     permissions:
       contents: read
