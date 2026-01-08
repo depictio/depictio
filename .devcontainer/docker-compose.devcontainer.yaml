@@ -1,11 +1,11 @@
 services:
   app:
     build:
-      context: ..
+      context: ${PWD:-.}
       dockerfile: .devcontainer/Dockerfile
     init: true
     volumes:
-      - ..:/workspace:cached
+      - ${PWD:-.}:/workspace:cached
       - /var/run/docker.sock:/var/run/docker.sock
     command: sleep infinity
     user: vscode
