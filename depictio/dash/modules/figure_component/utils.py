@@ -2050,12 +2050,12 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
 def design_figure(index, workflow_id=None, data_collection_id=None, local_data=None) -> html.Div:
     """Design figure component for stepper workflow (Phase 2A - simple UI, no custom JS).
 
-    This function is called from the stepper (part_three.py) to render the design UI
-    for creating new figure components. It loads column metadata and calls
+    This function is called from the stepper (part_three.py and stepper.py) to render
+    the design UI for creating new figure components. It loads column metadata and calls
     build_figure_design_ui() to render the parameter input form.
 
     Args:
-        index: Component index/ID
+        index: Component index/ID (can be dict pattern-matching ID or simple value)
         workflow_id: Workflow ID
         data_collection_id: Data collection ID
         local_data: Local storage data with access token
@@ -2063,6 +2063,16 @@ def design_figure(index, workflow_id=None, data_collection_id=None, local_data=N
     Returns:
         HTML div with figure design UI
     """
+    # Extract actual index value if it's a dict (pattern-matching ID)
+    if isinstance(index, dict):
+        actual_index = index.get("index", index)
+    else:
+        actual_index = index
+
+    logger.info(
+        f"design_figure called with index={index}, workflow_id={workflow_id}, dc_id={data_collection_id}"
+    )
+
     # Load column metadata for data collection
     columns = []
     if workflow_id and data_collection_id and local_data:
@@ -2083,10 +2093,14 @@ def design_figure(index, workflow_id=None, data_collection_id=None, local_data=N
                 logger.info(f"Loaded {len(columns)} columns for figure design UI")
         except Exception as e:
             logger.error(f"Failed to load columns for figure design: {e}")
+    else:
+        logger.warning(
+            f"Missing parameters for column loading: wf_id={workflow_id}, dc_id={data_collection_id}, local_data={local_data is not None}"
+        )
 
-    # Call the actual design UI builder
+    # Call the actual design UI builder with the extracted index
     return build_figure_design_ui(
-        index=index,
+        index=actual_index,
         visu_type="scatter",  # Default to scatter
         dict_kwargs={},  # Empty parameters for new figure
         wf_id=workflow_id,
