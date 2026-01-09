@@ -22,6 +22,13 @@ from depictio.dash.modules.table_component.frontend import design_table
 def return_design_component(
     component_selected, id, df, btn_component, wf_id=None, dc_id=None, local_data=None
 ):
+    logger.info("🔍 return_design_component called:")
+    logger.info(f"   component_selected={component_selected}")
+    logger.info(f"   id={id}")
+    logger.info(f"   wf_id={wf_id}")
+    logger.info(f"   dc_id={dc_id}")
+    logger.info(f"   local_data present={local_data is not None}")
+
     # Check if DC is MultiQC type and override component selection
     # MultiQC data collections should use standalone MultiQC component, not Figure
     if component_selected == "Figure" and dc_id and local_data:
