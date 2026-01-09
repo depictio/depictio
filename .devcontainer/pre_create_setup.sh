@@ -72,7 +72,7 @@ if [ -f .git ] && grep -q "gitdir:" .git; then
 services:
   app:
     volumes:
-      - ${MAIN_GIT_PATH}:/workspaces/depictio/.git:ro
+      - ${MAIN_GIT_PATH}:/workspaces/depictio/.git:rw
 EOF
         echo "✓ Git mount configuration created"
     fi
