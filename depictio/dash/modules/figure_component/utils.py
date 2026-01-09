@@ -2078,23 +2078,23 @@ def design_figure(index, workflow_id=None, data_collection_id=None, local_data=N
     if workflow_id and data_collection_id and local_data:
         try:
             TOKEN = local_data.get("access_token")
-            # Fetch DC metadata to get columns
             import httpx
 
+            # Use /deltatables/specs/ endpoint which returns column specifications
             response = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
+                f"{API_BASE_URL}/depictio/api/v1/deltatables/specs/{data_collection_id}",
                 headers={"Authorization": f"Bearer {TOKEN}"},
                 timeout=30.0,
             )
             if response.status_code == 200:
-                dc_data = response.json()
-                # Extract column names from DC schema/config
-                table_schema = dc_data.get("table_schema", {})
-                if not table_schema:
-                    # Try config.columns as fallback
-                    table_schema = dc_data.get("config", {}).get("columns", {})
-                columns = list(table_schema.keys())
+                # Response is array of column objects: [{"name": "col1", "type": "int64", ...}, ...]
+                columns_data = response.json()
+                columns = [col["name"] for col in columns_data]
                 logger.info(f"✅ Loaded {len(columns)} columns for figure design UI: {columns}")
+            else:
+                logger.error(
+                    f"Failed to load columns: {response.status_code} - {response.text[:200]}"
+                )
         except Exception as e:
             logger.error(f"Failed to load columns for figure design: {e}")
     else:

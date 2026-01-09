@@ -236,7 +236,7 @@ def register_callbacks_stepper_part_three(app):
                     try:
                         # Get data collection info to check type
                         response = httpx.get(
-                            f"{API_BASE_URL}/depictio/api/v1/datacollections/{dc_id}",
+                            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_id}",
                             headers={"Authorization": f"Bearer {TOKEN}"},
                         )
 
