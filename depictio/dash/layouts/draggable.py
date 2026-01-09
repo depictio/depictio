@@ -314,6 +314,7 @@ def separate_components_by_panel(stored_metadata):
         else:
             metadata["panel"] = "right"
             right_panel_components.append(metadata)
+            logger.info(f"  ➡️ RIGHT PANEL: {component_type} component {metadata.get('index')}")
 
     logger.info(
         f"📊 COMPONENT SEPARATION: {len(interactive_components)} interactive, "

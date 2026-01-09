@@ -2029,12 +2029,17 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
                 id={"type": "stored-metadata-component", "index": index},
                 data=store_component_data,
             ),
-            # Graph (populated by callback) - No Loading wrapper to allow dynamic updates
-            dcc.Graph(
-                id={"type": "figure-graph", "index": index},
-                figure={},  # Empty - populated by batch rendering callback
-                config={"displayModeBar": True, "responsive": True},
-                style={"height": "100%", "width": "100%"},
+            # Loading overlay + Graph (populated by callback)
+            dcc.Loading(
+                id={"type": "figure-loading", "index": index},
+                type="dot",  # dot, default, circle, cube, or graph
+                color="#6495ED",  # Blue color for figure loading indicator
+                children=dcc.Graph(
+                    id={"type": "figure-graph", "index": index},
+                    figure={},  # Empty - populated by batch rendering callback
+                    config={"displayModeBar": True, "responsive": True},
+                    style={"height": "100%", "width": "100%"},
+                ),
             ),
         ],
         style={

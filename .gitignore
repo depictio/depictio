@@ -269,3 +269,14 @@ dev/dev-multiqc-parquet/detailed_extraction_reports/
 depictio/api/v1/configs/pools_dataset/*.xlsx
 *.bak*
 cache/
+
+# Multi-instance devcontainer files
+.env.instance
+.env
+data/depictio-*/
+.devcontainer/docker-compose.git-mount.yaml
+
+# Old data directories (kept for backward compatibility reference)
+# depictioDB/
+# minio_data/
+# cache/

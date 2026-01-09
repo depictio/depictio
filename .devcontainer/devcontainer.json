@@ -1,8 +1,10 @@
 {
-  "name": "depictio devcontainer",
+  "name": "depictio devcontainer (multi-instance)",
   "dockerComposeFile": [
-    "../docker-compose.yaml",
-    "./docker-compose.devcontainer.yaml"
+    "${localWorkspaceFolder}/docker-compose.dev.yaml",
+    "${localWorkspaceFolder}/docker-compose/docker-compose.minio.yaml",
+    "${localWorkspaceFolder}/.devcontainer/docker-compose.devcontainer.yaml",
+    "${localWorkspaceFolder}/.devcontainer/docker-compose.git-mount.yaml"
   ],
   "service": "app", // devcontainer (additional container in the docker compose)
   // "workspaceFolder": "/app/depictio",
@@ -23,28 +25,37 @@
   },
   // "initializeCommand": "init", // script to run before the containers are started
   "initializeCommand": ".devcontainer/pre_create_setup.sh",
-  "postCreateCommand": "post_create_setup.sh", // script to run after the containers are started
-  "forwardPorts": [
-    27018,
-    3000,
-    9010,
-    5080,
-    8058,
-    9000,
-    9001
-  ],
+  "postStartCommand": "bash /workspace/.devcontainer/fix_git_worktree.sh",
+  "postCreateCommand": "post_create_setup.sh" // script to run after the containers are started
+  // Note: Ports are dynamically allocated per branch (see .env.instance)
+  // VS Code will auto-detect and forward published ports from Docker Compose
+  "forwardPorts": [],
   "remoteUser": "vscode", // user that must be in devcontainer
   "remoteEnv": {
+    "DEPICTIO_CONTEXT": "server",
     "MINIO_ROOT_USER": "minio",
     "MINIO_ROOT_PASSWORD": "minio123",
     "DEPICTIO_BACKEND_DATA_VOLUME_HOST": "/workspace/depictio-data",
+    "DEPICTIO_MINIO_ROOT_USER": "minio",
+    "DEPICTIO_MINIO_ROOT_PASSWORD": "minio123",
+    "DEPICTIO_MINIO_ENDPOINT_URL": "http://minio:9000",
+    "DEPICTIO_LOGGING_VERBOSITY_LEVEL": "DEBUG",
+    "DEV_MODE": "true",
+    "DEPICTIO_MONGODB_WIPE": "false"
   },
   "containerEnv": {
     "TC_HOST": "host.docker.internal",
     "DOCKER_HOST": "unix:///var/run/docker.sock",
+    "DEPICTIO_CONTEXT": "server",
     "MINIO_ROOT_USER": "minio",
     "MINIO_ROOT_PASSWORD": "minio123",
     "DEPICTIO_BACKEND_DATA_VOLUME_HOST": "/workspace/depictio-data",
+    "DEPICTIO_MINIO_ROOT_USER": "minio",
+    "DEPICTIO_MINIO_ROOT_PASSWORD": "minio123",
+    "DEPICTIO_MINIO_ENDPOINT_URL": "http://minio:9000",
+    "DEPICTIO_LOGGING_VERBOSITY_LEVEL": "DEBUG",
+    "DEV_MODE": "true",
+    "DEPICTIO_MONGODB_WIPE": "false"
   },
 	"features": {
 		"ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
