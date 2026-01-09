@@ -10,9 +10,14 @@ RUN if [ "$USER_GID" != "1000" ] || [ "$USER_UID" != "1000" ]; then \
     usermod --uid $USER_UID --gid $USER_GID vscode; \
     fi
 
-# Install git, git-lfs, and curl
+# Install git, git-lfs, curl, and development tools
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends&& \
+    apt-get install -y --no-install-recommends \
+        curl \
+        wget \
+        vim \
+        netcat-openbsd \
+        build-essential && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy install script
