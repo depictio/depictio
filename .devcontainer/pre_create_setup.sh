@@ -47,6 +47,26 @@ cat .env.instance >> .env
 
 echo "✓ Environment configuration ready"
 
+# Create worktree-specific docker-compose override if needed
+if [ -f .git ] && grep -q "gitdir:" .git; then
+    echo ""
+    echo "📦 Worktree detected - creating git mount configuration..."
+
+    # Find the main repo's .git directory
+    MAIN_GIT_PATH=$(grep 'gitdir:' .git | cut -d' ' -f2 | sed 's|/worktrees/.*||')
+
+    if [ -d "$MAIN_GIT_PATH" ]; then
+        cat > .devcontainer/docker-compose.git-mount.yaml <<EOF
+# Auto-generated for worktree git support
+services:
+  app:
+    volumes:
+      - ${MAIN_GIT_PATH}:/workspace-root/.git:rw
+EOF
+        echo "✓ Git mount configuration created (mounting to /workspace-root/.git)"
+    fi
+fi
+
 # Display summary
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
