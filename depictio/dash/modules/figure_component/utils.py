@@ -2185,12 +2185,23 @@ def design_figure(
                         build_figure_frame(
                             index=actual_index,
                             children=[
-                                # Preview graph - uses different ID than view mode to avoid callback conflicts
-                                dcc.Graph(
-                                    id={"type": "figure-design-preview", "index": actual_index},
-                                    figure={},  # Empty - populated by render callback
-                                    config={"displayModeBar": "hover", "responsive": True},
-                                    style={"height": "100%", "width": "100%"},
+                                # Loading indicator wrapping the preview graph
+                                dcc.Loading(
+                                    id={"type": "figure-preview-loading", "index": actual_index},
+                                    type="default",  # Options: "default", "circle", "dot", "cube"
+                                    color="var(--mantine-primary-color-filled)",
+                                    children=[
+                                        # Preview graph - uses different ID than view mode to avoid callback conflicts
+                                        dcc.Graph(
+                                            id={
+                                                "type": "figure-design-preview",
+                                                "index": actual_index,
+                                            },
+                                            figure={},  # Empty - populated by render callback
+                                            config={"displayModeBar": "hover", "responsive": True},
+                                            style={"height": "100%", "width": "100%"},
+                                        )
+                                    ],
                                 )
                             ],
                         )
@@ -2330,6 +2341,12 @@ def design_figure(
         dcc.Store(
             id={"type": "dict_kwargs", "index": actual_index},
             data={},
+            storage_type="memory",
+        ),
+        # Parameter trigger store - updated when any parameter changes
+        dcc.Store(
+            id={"type": "param-trigger", "index": actual_index},
+            data={"timestamp": 0},
             storage_type="memory",
         ),
         dcc.Store(

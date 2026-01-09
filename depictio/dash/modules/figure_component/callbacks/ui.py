@@ -5,9 +5,11 @@ This module contains callbacks for building the parameter UI interface.
 Restored from frontend_legacy.py as part of Phase 2A implementation.
 """
 
+from datetime import datetime
+
 import dash
 import dash_mantine_components as dmc
-from dash import MATCH, Input, Output, State, html
+from dash import ALL, MATCH, Input, Output, State, html
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.utils import get_columns_from_data_collection
@@ -156,65 +158,171 @@ def register_ui_callbacks(app):
                 ]
             )
 
-    # Callback to update dict_kwargs when parameter values change
+    # Callback to capture parameter changes dynamically
     @app.callback(
-        Output({"type": "dict_kwargs", "index": MATCH}, "data"),
+        Output({"type": "param-trigger", "index": MATCH}, "data"),
         [
-            Input({"type": "param-x", "index": MATCH}, "value"),
-            Input({"type": "param-y", "index": MATCH}, "value"),
-            Input({"type": "param-color", "index": MATCH}, "value"),
-            Input({"type": "param-size", "index": MATCH}, "value"),
-            Input({"type": "param-title", "index": MATCH}, "value"),
-            Input({"type": "param-opacity", "index": MATCH}, "value"),
-            Input({"type": "param-hover_name", "index": MATCH}, "value"),
-            Input({"type": "param-hover_data", "index": MATCH}, "value"),
-            Input({"type": "param-labels", "index": MATCH}, "value"),
+            Input({"type": ALL, "index": MATCH}, "value"),
+            Input({"type": ALL, "index": MATCH}, "checked"),  # For DMC Switch components
         ],
         [
-            State({"type": "dict_kwargs", "index": MATCH}, "data"),
-            State({"type": "param-x", "index": MATCH}, "id"),
+            State({"type": "param-trigger", "index": MATCH}, "id"),
         ],
         prevent_initial_call=True,
     )
-    def update_dict_kwargs(
-        x, y, color, size, title, opacity, hover_name, hover_data, labels, current_kwargs, param_id
+    def update_param_trigger_and_state(*args):
+        """
+        Dynamically capture parameter changes using callback context.
+
+        This callback uses ctx.inputs_list to dynamically iterate over
+        whatever parameter inputs exist for the current visualization type,
+        avoiding hardcoded parameter lists.
+        """
+        import json
+        import time
+
+        from ..state_manager import state_manager
+
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            raise dash.exceptions.PreventUpdate
+
+        # Get component index from state
+        trigger_id = args[-1]  # Last arg is the State
+        component_index = trigger_id["index"]
+
+        # Check if any param-* input triggered this
+        triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
+        try:
+            triggered_id_dict = json.loads(triggered_id)
+        except (json.JSONDecodeError, TypeError):
+            raise dash.exceptions.PreventUpdate
+
+        # Only process if it's a parameter input
+        if not (
+            isinstance(triggered_id_dict, dict)
+            and triggered_id_dict.get("type", "").startswith("param-")
+        ):
+            raise dash.exceptions.PreventUpdate
+
+        logger.info(f"📝 PARAMETER CHANGED for component {component_index}")
+        logger.info(f"   Triggered by: {triggered_id_dict}")
+
+        # Get state from state manager
+        state = state_manager.get_state(component_index)
+        if not state:
+            logger.warning(
+                f"No state found for component {component_index}, cannot update parameters"
+            )
+            return dash.no_update
+
+        # Extract all parameter values from ctx.inputs_list
+        for input_dict in ctx.inputs_list:
+            for input_item in input_dict:
+                input_id = input_item.get("id", {})
+                if isinstance(input_id, dict) and input_id.get("type", "").startswith("param-"):
+                    param_name = input_id["type"].replace("param-", "")
+
+                    # Get value from input - try both 'value' and 'checked'
+                    value = input_item.get("value")
+                    checked = input_item.get("checked")
+
+                    # Use checked for Switch components, value for others
+                    actual_value = checked if checked is not None else value
+
+                    # Update state with non-empty values
+                    if actual_value is not None and actual_value != "" and actual_value != []:
+                        state.set_parameter_value(param_name, actual_value)
+                        logger.info(f"   {param_name}: {actual_value}")
+                    elif isinstance(actual_value, bool):
+                        # Include boolean False
+                        state.set_parameter_value(param_name, actual_value)
+                        logger.info(f"   {param_name}: {actual_value}")
+
+        # Return updated trigger with timestamp
+        return {"timestamp": time.time()}
+
+    # Callback to collect parameter changes and update dict_kwargs
+    # Uses ALLSMALLER pattern to handle any parameters that exist for the current viz type
+    @app.callback(
+        Output({"type": "dict_kwargs", "index": MATCH}, "data"),
+        [
+            Input({"type": "param-trigger", "index": MATCH}, "data"),
+        ],
+        [
+            State({"type": "dict_kwargs", "index": MATCH}, "data"),
+            State({"type": "collapse", "index": MATCH}, "children"),
+            State({"type": "param-trigger", "index": MATCH}, "id"),
+        ],
+        prevent_initial_call=True,
+    )
+    def update_dict_kwargs_from_state_manager(
+        trigger_data, current_kwargs, collapse_children, trigger_id
     ):
         """
-        Update dict_kwargs store when parameter values change.
+        Update dict_kwargs using state manager to avoid missing parameter issues.
 
-        This callback fires when any parameter input changes and updates
-        the dict_kwargs store, which then triggers the figure preview to update.
+        This callback is triggered by state_manager changes and extracts
+        parameter values safely without depending on specific parameter inputs.
         """
-        # Get the component index from the ID
-        component_index = param_id["index"]
+        from ..state_manager import state_manager
 
-        logger.info(f"📝 PARAMS CHANGED for component {component_index}")
+        component_index = trigger_id["index"]
+        logger.info(f"📝 UPDATING dict_kwargs for component {component_index}")
 
-        # Build updated dict_kwargs
-        updated_kwargs = current_kwargs or {}
+        # Get state from state manager
+        state = state_manager.get_state(component_index)
+        if not state:
+            logger.warning(f"No state found for component {component_index}")
+            return current_kwargs or {}
 
-        # Update parameters (only include non-None values)
-        params = {
-            "x": x,
-            "y": y,
-            "color": color,
-            "size": size,
-            "title": title,
-            "opacity": opacity,
-            "hover_name": hover_name,
-            "hover_data": hover_data,
-            "labels": labels,
-        }
+        # Get all parameter values from state.parameters dictionary
+        updated_kwargs = dict(state.parameters)  # Make a copy
 
-        for key, value in params.items():
-            if value is not None:
-                updated_kwargs[key] = value
-            elif key in updated_kwargs:
-                # Remove key if value is None and key exists
-                del updated_kwargs[key]
-
-        logger.info(f"📝 Updated dict_kwargs: {updated_kwargs}")
+        logger.info(f"📝 Updated dict_kwargs from state: {updated_kwargs}")
 
         return updated_kwargs
 
-    logger.info("✅ Figure UI callbacks registered (parameter interface + dict_kwargs updater)")
+    # Callback to sync dict_kwargs into stored-metadata-component for saving
+    @app.callback(
+        Output({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        [
+            Input({"type": "dict_kwargs", "index": MATCH}, "data"),
+            Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
+        ],
+        [
+            State({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def sync_dict_kwargs_to_metadata(dict_kwargs, visu_type, current_metadata):
+        """
+        Sync dict_kwargs and visu_type to stored-metadata-component for saving.
+
+        This ensures that when the component is saved to the dashboard,
+        it includes the current parameter values selected by the user.
+        """
+        if not current_metadata:
+            raise dash.exceptions.PreventUpdate
+
+        logger.info(
+            f"🔄 Syncing dict_kwargs to stored-metadata for component {current_metadata.get('index')}"
+        )
+        logger.info(f"   dict_kwargs: {dict_kwargs}")
+        logger.info(f"   visu_type: {visu_type}")
+
+        # Update the metadata with current values
+        updated_metadata = current_metadata.copy()
+        updated_metadata["dict_kwargs"] = dict_kwargs or {}
+        updated_metadata["visu_type"] = (
+            visu_type if visu_type else updated_metadata.get("visu_type", "scatter")
+        )
+        updated_metadata["last_updated"] = datetime.now().isoformat()
+
+        logger.info(f"✅ Metadata updated: {updated_metadata}")
+
+        return updated_metadata
+
+    logger.info(
+        "✅ Figure UI callbacks registered (parameter interface + state-based dict_kwargs updater + metadata sync)"
+    )

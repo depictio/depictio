@@ -285,6 +285,10 @@ def register_core_callbacks(app):
                 visu_type = trigger_data.get("visu_type", "scatter")
                 dict_kwargs = trigger_data.get("dict_kwargs", {})
 
+                logger.debug(
+                    f"[{task_id}] Figure params: visu_type={visu_type}, dict_kwargs={dict_kwargs}"
+                )
+
                 # Get cached data
                 load_key = figure_to_load_key.get(i)
                 if not load_key or load_key not in dc_cache:

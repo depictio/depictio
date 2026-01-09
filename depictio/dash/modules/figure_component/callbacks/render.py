@@ -9,10 +9,20 @@ import dash
 from dash import MATCH, Input, Output, State
 
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.background_callback_helpers import (
+    log_background_callback_status,
+    should_use_background_for_component,
+)
+
+# Use centralized background callback configuration
+USE_BACKGROUND_CALLBACKS = should_use_background_for_component("figure")
 
 
 def register_render_callbacks(app):
     """Register figure rendering callbacks for preview mode."""
+
+    # Log background callback status
+    log_background_callback_status("figure", "render_figure_preview")
 
     @app.callback(
         Output({"type": "figure-design-preview", "index": MATCH}, "figure"),
@@ -26,8 +36,10 @@ def register_render_callbacks(app):
             State({"type": "stored-metadata-component", "index": MATCH}, "data"),
             State({"type": "figure-design-preview", "index": MATCH}, "id"),
             State("local-store", "data"),
+            State("theme-store", "data"),
         ],
         prevent_initial_call=True,
+        background=USE_BACKGROUND_CALLBACKS,
     )
     def render_figure_preview(
         dict_kwargs,
@@ -37,6 +49,7 @@ def register_render_callbacks(app):
         metadata,
         graph_id,
         local_data,
+        theme_data,
     ):
         """
         Render figure preview when parameters change.
@@ -90,13 +103,21 @@ def register_render_callbacks(app):
 
             logger.info(f"✓ Loaded {df.height} rows × {len(df.columns)} columns")
 
+            # Extract theme from theme_data
+            current_theme = "light"  # Default
+            if theme_data and isinstance(theme_data, dict):
+                current_theme = theme_data.get("theme", "light")
+            elif isinstance(theme_data, str):
+                current_theme = theme_data
+            logger.info(f"🎨 Using theme: {current_theme}")
+
             # Render figure
             logger.info(f"🎨 Rendering {visu_type} visualization")
             figure, trace_metadata = render_figure(
                 dict_kwargs=dict_kwargs or {},
                 visu_type=visu_type,
                 df=df,
-                theme="light",  # TODO: Get theme from store
+                theme=current_theme,
             )
 
             logger.info("✅ RENDER: Figure generated successfully")
