@@ -24,10 +24,12 @@
       }
     }
   },
-  // "initializeCommand": "init", // script to run before the containers are started
-  "initializeCommand": ".devcontainer/pre_create_setup.sh",
+  // Skip initializeCommand for Codespaces - it runs on host and causes issues
+  // "initializeCommand": ".devcontainer/pre_create_setup.sh",
+  "onCreateCommand": "bash /workspace/.devcontainer/pre_create_setup.sh",
   "postStartCommand": "bash /workspace/.devcontainer/fix_git_worktree.sh",
-  "postCreateCommand": "post_create_setup.sh" // script to run after the containers are started
+  "postCreateCommand": "bash /workspace/.devcontainer/post_create_setup.sh",
+  "waitFor": "onCreateCommand" // Don't wait for postCreate to avoid long delays
   // Note: Ports are dynamically allocated per branch (see .env.instance)
   // VS Code will auto-detect and forward published ports from Docker Compose
   "forwardPorts": [],
