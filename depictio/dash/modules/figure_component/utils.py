@@ -11,6 +11,7 @@ from dash import dcc, html
 from dash_iconify import DashIconify
 
 # PERFORMANCE OPTIMIZATION: Use centralized config
+from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 
 from .clustering import get_clustering_function
@@ -2043,6 +2044,54 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
             "display": "flex",
             "flexDirection": "column",
         },
+    )
+
+
+def design_figure(index, workflow_id=None, data_collection_id=None, local_data=None) -> html.Div:
+    """Design figure component for stepper workflow (Phase 2A - simple UI, no custom JS).
+
+    This function is called from the stepper (part_three.py) to render the design UI
+    for creating new figure components. It loads column metadata and calls
+    build_figure_design_ui() to render the parameter input form.
+
+    Args:
+        index: Component index/ID
+        workflow_id: Workflow ID
+        data_collection_id: Data collection ID
+        local_data: Local storage data with access token
+
+    Returns:
+        HTML div with figure design UI
+    """
+    # Load column metadata for data collection
+    columns = []
+    if workflow_id and data_collection_id and local_data:
+        try:
+            TOKEN = local_data.get("access_token")
+            # Fetch DC metadata to get columns
+            import httpx
+
+            response = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/datacollections/{data_collection_id}",
+                headers={"Authorization": f"Bearer {TOKEN}"},
+                timeout=30.0,
+            )
+            if response.status_code == 200:
+                dc_data = response.json()
+                # Extract column names from DC schema
+                columns = list(dc_data.get("table_schema", {}).keys())
+                logger.info(f"Loaded {len(columns)} columns for figure design UI")
+        except Exception as e:
+            logger.error(f"Failed to load columns for figure design: {e}")
+
+    # Call the actual design UI builder
+    return build_figure_design_ui(
+        index=index,
+        visu_type="scatter",  # Default to scatter
+        dict_kwargs={},  # Empty parameters for new figure
+        wf_id=workflow_id,
+        dc_id=data_collection_id,
+        columns=columns,
     )
 
 
