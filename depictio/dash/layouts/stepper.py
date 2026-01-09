@@ -856,7 +856,8 @@ def register_callbacks_stepper(app):
 
 
 def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
-    # logger.info(f"Component data: {component_data}")
+    logger.info(f"🔍 CREATE_STEPPER_OUTPUT_EDIT - Component data: {component_data}")
+    logger.info(f"🔍 n={n}, parent_id={parent_id}, active={active}")
     id = {"type": f"{component_data['component_type']}-component", "index": n}
 
     # wf_tag = return_wf_tag_from_id(component_data["wf_id"], TOKEN=TOKEN)
@@ -906,6 +907,7 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
     # Defensive handling for missing wf_id/dc_id
     wf_id = component_data.get("wf_id")
     dc_id = component_data.get("dc_id")
+    logger.info(f"🔍 Extracted wf_id={wf_id}, dc_id={dc_id} from component_data")
 
     if wf_id and dc_id:
         df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
@@ -921,6 +923,9 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
         if component_selected == "Figure":
             # Pass workflow_id, data_collection_id, and local_data for column loading
             local_data = {"access_token": TOKEN}
+            logger.info(
+                f"🔍 Calling design_figure with id={id}, wf_id={wf_id}, dc_id={dc_id}, TOKEN present={TOKEN is not None}"
+            )
             return design_figure(
                 id, workflow_id=wf_id, data_collection_id=dc_id, local_data=local_data
             )
