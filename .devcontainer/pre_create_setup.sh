@@ -1,5 +1,4 @@
 #!/bin/bash
-set -e
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🚀 Depictio DevContainer Pre-Create Setup"
@@ -8,7 +7,14 @@ echo ""
 
 # Source port allocation script to set up instance configuration
 echo "🔧 Configuring instance..."
-source .devcontainer/scripts/allocate-ports.sh
+if [ -f .devcontainer/scripts/allocate-ports.sh ]; then
+    source .devcontainer/scripts/allocate-ports.sh
+else
+    echo "⚠️  Port allocation script not found, using defaults..."
+    export COMPOSE_PROJECT_NAME="depictio"
+    export BRANCH_NAME="${GITHUB_REF##*/}"
+    export DATA_DIR="data/depictio"
+fi
 
 # Ensure docker-compose/.env exists (create default if missing for Codespaces)
 if [ ! -f docker-compose/.env ]; then
@@ -36,17 +42,19 @@ echo ""
 echo "📁 Creating instance-specific data directories..."
 DATA_BASE_DIR="data/${COMPOSE_PROJECT_NAME}"
 
-mkdir -p "${DATA_BASE_DIR}"/{depictioDB,minio_data,redis,cache,prof_files}
-chmod -R 775 "${DATA_BASE_DIR}"
+mkdir -p "${DATA_BASE_DIR}"/{depictioDB,minio_data,redis,cache,prof_files} || {
+    echo "⚠️  Failed to create some data directories (may already exist)"
+}
+chmod -R 775 "${DATA_BASE_DIR}" 2>/dev/null || echo "⚠️  Could not set permissions (may be running in Codespaces)"
 
 echo "   Created: ${DATA_BASE_DIR}"
 
 # Create shared directories (not instance-specific)
 echo ""
 echo "📁 Creating shared directories..."
-mkdir -p depictio-example-data && chmod -R 777 depictio-example-data
-mkdir -p depictio/keys && chmod -R 775 depictio/keys
-mkdir -p depictio/.depictio && chmod -R 775 depictio/.depictio
+mkdir -p depictio-example-data && chmod -R 777 depictio-example-data 2>/dev/null || echo "⚠️  depictio-example-data: permission warning (non-critical)"
+mkdir -p depictio/keys && chmod -R 775 depictio/keys 2>/dev/null || echo "⚠️  depictio/keys: permission warning (non-critical)"
+mkdir -p depictio/.depictio && chmod -R 775 depictio/.depictio 2>/dev/null || echo "⚠️  depictio/.depictio: permission warning (non-critical)"
 
 # Create a .env file in root that sources the instance config for docker compose
 echo ""
@@ -59,14 +67,14 @@ cat .env.instance >> .env
 echo "✓ Environment configuration ready"
 
 # Create worktree-specific docker-compose override if needed
-if [ -f .git ] && grep -q "gitdir:" .git; then
+if [ -f .git ] && grep -q "gitdir:" .git 2>/dev/null; then
     echo ""
     echo "📦 Worktree detected - creating git mount configuration..."
 
     # Find the main repo's .git directory
-    MAIN_GIT_PATH=$(grep 'gitdir:' .git | cut -d' ' -f2 | sed 's|/worktrees/.*||')
+    MAIN_GIT_PATH=$(grep 'gitdir:' .git 2>/dev/null | cut -d' ' -f2 | sed 's|/worktrees/.*||')
 
-    if [ -d "$MAIN_GIT_PATH" ]; then
+    if [ -n "$MAIN_GIT_PATH" ] && [ -d "$MAIN_GIT_PATH" ]; then
         cat > .devcontainer/docker-compose.git-mount.yaml <<EOF
 # Auto-generated for worktree git support
 services:
@@ -75,7 +83,11 @@ services:
       - ${MAIN_GIT_PATH}:/workspaces/depictio/.git:rw
 EOF
         echo "✓ Git mount configuration created"
+    else
+        echo "⚠️  Could not find main git directory, skipping git mount"
     fi
+else
+    echo "✓ Not a worktree (Codespaces or main repo), skipping git mount configuration"
 fi
 
 # Display summary

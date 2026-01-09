@@ -1,13 +1,25 @@
 #!/bin/bash
-set -e
 
 # Port allocation script for git worktree-based multi-instance setup
 # Uses branch naming convention to assign deterministic port offsets
 
 echo "🔍 Detecting instance configuration..."
 
-# Get current git branch
-BRANCH_NAME=$(git branch --show-current 2>/dev/null || echo "unknown")
+# Try to get current git branch from multiple sources
+# Priority: 1) GITHUB_REF env var (Codespaces), 2) git command, 3) fallback to "codespace"
+if [ -n "$GITHUB_REF" ]; then
+    # In Codespaces, GITHUB_REF is set (e.g., refs/heads/feat/my-branch)
+    BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+    echo "📍 Detected from GITHUB_REF: $BRANCH_NAME"
+elif [ -n "$CODESPACE_NAME" ]; then
+    # Running in Codespaces but no GITHUB_REF - use git with fallback
+    BRANCH_NAME=$(git branch --show-current 2>/dev/null || git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "codespace")
+    echo "📍 Detected from git: $BRANCH_NAME"
+else
+    # Local development
+    BRANCH_NAME=$(git branch --show-current 2>/dev/null || echo "unknown")
+    echo "📍 Detected from git: $BRANCH_NAME"
+fi
 
 # Sanitize branch name for use in container/project names
 # Replace / with - and remove other special characters
