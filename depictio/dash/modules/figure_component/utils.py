@@ -2053,12 +2053,13 @@ def design_figure(
 
     This is the complete working implementation with proper layout, mode toggle, and all features.
     """
-    # Get all available visualizations
-    all_vizs = get_available_visualizations()
-
-    # Group visualizations by their group
+    # Get all available visualizations - import from definitions to get VisualizationDefinition objects
+    from .definitions import get_available_visualizations as get_viz_definitions
     from .models import VisualizationGroup
 
+    all_vizs = get_viz_definitions()
+
+    # Group visualizations by their group
     grouped_vizs = {}
     for viz in all_vizs:
         group = viz.group
