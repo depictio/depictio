@@ -2046,6 +2046,183 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     )
 
 
+def build_figure_design_ui(**kwargs) -> html.Div:
+    """Build figure design UI for add/edit mode (simplified, no custom JS).
+
+    This creates a simple parameter input form for creating or editing figures.
+    Used in the stepper or edit page to provide a UI for configuring figure parameters.
+
+    Args:
+        **kwargs: Configuration parameters
+            - index: Component index (required)
+            - visu_type: Current visualization type (default: "scatter")
+            - dict_kwargs: Current parameters (default: {})
+            - wf_id: Workflow ID
+            - dc_id: Data collection ID
+            - columns: Available columns (required for parameter inputs)
+
+    Returns:
+        HTML div with design UI (viz selector + parameter inputs + preview + save button)
+    """
+    from depictio.dash.modules.figure_component.definitions import get_visualization_registry
+
+    index = kwargs.get("index")
+    visu_type = kwargs.get("visu_type", "scatter")
+    dict_kwargs = kwargs.get("dict_kwargs", {})
+    columns = kwargs.get("columns", [])
+
+    logger.info(f"Building design UI for figure {index} (visu_type: {visu_type})")
+
+    if not columns:
+        logger.warning(f"No columns provided for figure {index} design UI")
+        return html.Div(
+            dmc.Alert(
+                "No columns available. Please select a data collection first.",
+                title="Missing Data",
+                color="red",
+            )
+        )
+
+    # Build visualization type selector (simple, no custom JS)
+    viz_defs = get_visualization_registry()
+    viz_options = [{"label": viz_def.label, "value": key} for key, viz_def in viz_defs.items()]
+
+    viz_selector = dmc.Stack(
+        [
+            dmc.Text("Visualization Type", size="sm", fw="bold"),
+            dmc.Select(
+                id={"type": "figure-visu-type-selector", "index": index},
+                data=viz_options,
+                value=visu_type,
+                placeholder="Choose visualization type...",
+                clearable=False,
+                searchable=True,
+                size="md",
+                style={"width": "100%"},
+            ),
+        ],
+        gap="xs",
+    )
+
+    # Get parameters for current visu type
+    viz_def = viz_defs.get(visu_type, viz_defs["scatter"])
+    # Extract parameter names from ParameterDefinition objects
+    params = [p.name for p in viz_def.parameters]
+
+    # Map param names to inputs (simplified - just common params for now)
+    param_inputs = []
+
+    common_params = {
+        "x": {"label": "X Axis", "type": "column"},
+        "y": {"label": "Y Axis", "type": "column"},
+        "color": {"label": "Color", "type": "column"},
+        "size": {"label": "Size", "type": "column"},
+        "title": {"label": "Title", "type": "text"},
+        "opacity": {"label": "Opacity", "type": "number"},
+        "hover_name": {"label": "Hover Name", "type": "column"},
+        "hover_data": {"label": "Hover Data", "type": "multiselect"},
+        "labels": {"label": "Labels (JSON)", "type": "text"},
+    }
+
+    for param_name in params:
+        if param_name in common_params:
+            param_info = common_params[param_name]
+            current_value = dict_kwargs.get(param_name)
+
+            # Build appropriate input based on type
+            if param_info["type"] == "column":
+                input_component = dmc.Select(
+                    id={"type": f"param-{param_name}", "index": index},
+                    data=[{"label": col, "value": col} for col in columns],
+                    value=current_value,
+                    placeholder=f"Select {param_info['label'].lower()}...",
+                    clearable=True,
+                    searchable=True,
+                    size="sm",
+                )
+            elif param_info["type"] == "multiselect":
+                input_component = dmc.MultiSelect(
+                    id={"type": f"param-{param_name}", "index": index},
+                    data=[{"label": col, "value": col} for col in columns],
+                    value=current_value or [],
+                    placeholder=f"Select {param_info['label'].lower()}...",
+                    clearable=True,
+                    searchable=True,
+                    size="sm",
+                )
+            elif param_info["type"] == "text":
+                input_component = dmc.TextInput(
+                    id={"type": f"param-{param_name}", "index": index},
+                    value=current_value or "",
+                    placeholder=f"Enter {param_info['label'].lower()}...",
+                    size="sm",
+                )
+            elif param_info["type"] == "number":
+                input_component = dmc.NumberInput(
+                    id={"type": f"param-{param_name}", "index": index},
+                    value=current_value,
+                    placeholder="0.0 - 1.0",
+                    min=0,
+                    max=1,
+                    step=0.1,
+                    size="sm",
+                )
+            else:
+                continue
+
+            param_inputs.append(
+                dmc.Stack(
+                    [dmc.Text(param_info["label"], size="sm", fw="normal"), input_component],
+                    gap="xs",
+                )
+            )
+
+    # Parameters section
+    params_section = dmc.Stack(
+        [dmc.Text("Parameters", size="sm", fw="bold")] + param_inputs, gap="sm"
+    )
+
+    # Preview section (will be populated by callback)
+    preview_section = dmc.Stack(
+        [
+            dmc.Text("Preview", size="sm", fw="bold"),
+            dmc.Paper(
+                id={"type": "figure-design-preview", "index": index},
+                children=[
+                    html.Div(
+                        dmc.Text("Configure parameters to see preview", c="gray", ta="center"),
+                        style={"padding": "40px"},
+                    )
+                ],
+                withBorder=True,
+                radius="md",
+                style={"minHeight": "300px"},
+            ),
+        ],
+        gap="xs",
+    )
+
+    # Save button
+    save_button = dmc.Button(
+        "Save Figure",
+        id={"type": "btn-save-edit-figure", "index": index},
+        color="blue",
+        size="md",
+        fullWidth=True,
+        leftSection=DashIconify(icon="mdi:content-save", width=20),
+    )
+
+    # Complete design UI
+    return html.Div(
+        dmc.Stack(
+            [viz_selector, params_section, preview_section, save_button],
+            gap="md",
+            style={"padding": "20px"},
+        ),
+        id={"type": "figure-design-container", "index": index},
+    )
+
+
 def _create_info_badges(
     index: str, df: pl.DataFrame, visu_type: str, filter_applied: bool, build_frame: bool
 ) -> html.Div:
