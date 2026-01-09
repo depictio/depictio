@@ -275,6 +275,7 @@ cache/
 .env
 data/depictio-*/
 .devcontainer/docker-compose.git-mount.yaml
+.devcontainer/*.log
 
 # Old data directories (kept for backward compatibility reference)
 # depictioDB/
