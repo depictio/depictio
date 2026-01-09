@@ -2082,15 +2082,19 @@ def design_figure(index, workflow_id=None, data_collection_id=None, local_data=N
             import httpx
 
             response = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/datacollections/{data_collection_id}",
+                f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
                 headers={"Authorization": f"Bearer {TOKEN}"},
                 timeout=30.0,
             )
             if response.status_code == 200:
                 dc_data = response.json()
-                # Extract column names from DC schema
-                columns = list(dc_data.get("table_schema", {}).keys())
-                logger.info(f"Loaded {len(columns)} columns for figure design UI")
+                # Extract column names from DC schema/config
+                table_schema = dc_data.get("table_schema", {})
+                if not table_schema:
+                    # Try config.columns as fallback
+                    table_schema = dc_data.get("config", {}).get("columns", {})
+                columns = list(table_schema.keys())
+                logger.info(f"✅ Loaded {len(columns)} columns for figure design UI: {columns}")
         except Exception as e:
             logger.error(f"Failed to load columns for figure design: {e}")
     else:
