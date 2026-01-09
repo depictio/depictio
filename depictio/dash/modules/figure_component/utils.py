@@ -2179,9 +2179,22 @@ def design_figure(
         html.Div(
             id={"type": "main-content-area", "index": actual_index},
             children=[
-                # Left side - Shared figure container
+                # Left side - Figure preview container with graph
                 html.Div(
-                    build_figure_frame(index=actual_index),
+                    [
+                        build_figure_frame(
+                            index=actual_index,
+                            children=[
+                                # Preview graph - uses different ID than view mode to avoid callback conflicts
+                                dcc.Graph(
+                                    id={"type": "figure-design-preview", "index": actual_index},
+                                    figure={},  # Empty - populated by render callback
+                                    config={"displayModeBar": "hover", "responsive": True},
+                                    style={"height": "100%", "width": "100%"},
+                                )
+                            ],
+                        )
+                    ],
                     id={
                         "type": "component-container",
                         "index": actual_index,

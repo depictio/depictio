@@ -1,17 +1,17 @@
 services:
   minio:
-    container_name: minio-${COMPOSE_PROJECT_NAME:-depictio}
+    container_name: minio
     image: minio/minio:latest
     user: "${UID:-1000}:${GID:-1000}"
     volumes:
-      - ./${DATA_DIR:-minio_data}/minio_data:/data
+      - ./minio_data:/data
     environment:
       MINIO_ROOT_USER: ${DEPICTIO_MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${DEPICTIO_MINIO_ROOT_PASSWORD}
     command: server /data --console-address :9001
     ports:
-      - "${MINIO_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "9000:9000"
+      - "9001:9001"
 
   depictio-frontend:
     depends_on:

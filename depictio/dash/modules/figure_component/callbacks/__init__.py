@@ -52,9 +52,13 @@ def load_design_callbacks(app):
 
     from .design import register_design_callbacks
     from .edit import register_figure_edit_callback
+    from .render import register_render_callbacks
+    from .ui import register_ui_callbacks
 
     register_design_callbacks(app)
     register_figure_edit_callback(app)
+    register_ui_callbacks(app)
+    register_render_callbacks(app)
     _design_callbacks_loaded = True
 
     return True
