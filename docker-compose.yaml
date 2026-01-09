@@ -54,6 +54,26 @@ services:
       - mongo
       - redis
 
+  depictio-celery-worker:
+    container_name: depictio-celery-worker
+    # Automatically starts but exits gracefully if background callbacks disabled
+    # Controlled by DEPICTIO_USE_BACKGROUND_CALLBACKS in .env
+    # Script checks env var and exits with code 0 if disabled
+    image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-latest}
+    volumes:
+      - ./depictio:/app/depictio
+    env_file:
+      - .env
+    environment:
+        DEPICTIO_CONTEXT: "server"
+    command: ["/app/run_celery_worker.sh"]
+    user: "${UID:-1000}:${GID:-1000}"
+    restart: "no"  # Don't restart if exits with code 0 (graceful shutdown when disabled)
+    depends_on:
+      - mongo
+      - redis
+      - depictio-backend
+
 volumes:
   redis_data:
     driver: local
