@@ -2243,9 +2243,10 @@ def design_figure(
                                                                 "width": "100%",
                                                                 "fontSize": "14px",
                                                             },
-                                                            renderOption={
-                                                                "function": "renderVisualizationOption"
-                                                            },
+                                                            # TEMPORARILY REMOVED: renderOption will be added back in step 3
+                                                            # renderOption={
+                                                            #     "function": "renderVisualizationOption"
+                                                            # },
                                                         ),
                                                     ],
                                                     style={
