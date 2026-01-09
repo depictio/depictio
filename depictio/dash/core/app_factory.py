@@ -33,14 +33,26 @@ def create_dash_app():
     # assets_folder = os.path.join(dash_root_path, "assets/debug")
     assets_folder = os.path.join(dash_root_path, "assets")
 
-    # # Setup Celery background callback manager
-    logger.info("🔧 DASH: Setting up Celery background callback manager...")
+    # Check if background callbacks are enabled
+    use_background = os.getenv("DEPICTIO_USE_BACKGROUND_CALLBACKS", "false").lower() == "true"
 
-    # Import the Dash-side Celery app
-    from depictio.dash.celery_app import celery_app
+    # Conditionally setup Celery background callback manager
+    background_callback_manager = None
+    if use_background:
+        logger.info("🔧 DASH: Background callbacks ENABLED - Setting up Celery manager...")
+        try:
+            # Import the Dash-side Celery app
+            from depictio.dash.celery_app import celery_app
 
-    background_callback_manager = dash.CeleryManager(celery_app)
-    logger.info("✅ DASH: Celery background callback manager configured")
+            background_callback_manager = dash.CeleryManager(celery_app)
+            logger.info("✅ DASH: Celery background callback manager configured")
+        except Exception as e:
+            logger.error(f"❌ DASH: Failed to setup Celery manager: {e}")
+            logger.warning("⚠️  DASH: Falling back to synchronous callbacks")
+            background_callback_manager = None
+    else:
+        logger.info("🚫 DASH: Background callbacks DISABLED - Using synchronous mode")
+        logger.info("   Set DEPICTIO_USE_BACKGROUND_CALLBACKS=true to enable")
 
     # import diskcache
 
@@ -50,9 +62,7 @@ def create_dash_app():
     #     f"Diskcache background callback manager configured with cache path: {cache.directory}"
     # )
 
-    # logger.info("✅ DASH: Background callback manager configured")
-
-    # Start the app with background callback manager
+    # Start the app with optional background callback manager
     app = dash.Dash(
         __name__,  # Use the current module name
         requests_pathname_prefix="/",
@@ -67,7 +77,7 @@ def create_dash_app():
         include_assets_files=True,
         assets_folder=assets_folder,
         assets_url_path="/assets",  # Explicitly set the assets URL path
-        background_callback_manager=background_callback_manager,  # Enable background callbacks
+        background_callback_manager=background_callback_manager,  # Only set if enabled
         # show_undo_redo=False,
     )
 

@@ -11,23 +11,27 @@ Callbacks:
 - patch_card_with_filters: Update card value when filters change
 """
 
-import os
-
 import dash
 from dash import ALL, MATCH, Input, Output, State
 
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.background_callback_helpers import (
+    log_background_callback_status,
+    should_use_background_for_component,
+)
 from depictio.dash.modules.card_component.utils import agg_functions
 from depictio.dash.utils import get_columns_from_data_collection, get_component_data
 
-# Toggle for background callback mode (experimental performance optimization)
-# TEMPORARILY DISABLED: Debugging dual-panel rendering issue
-USE_BACKGROUND_CALLBACKS = os.getenv("DEPICTIO_USE_BACKGROUND_CALLBACKS", "false").lower() == "true"
-logger.info(f"Card callbacks background mode: {USE_BACKGROUND_CALLBACKS}")
+# Use centralized background callback configuration
+USE_BACKGROUND_CALLBACKS = should_use_background_for_component("card")
 
 
 def register_core_callbacks(app):
     """Register core rendering callbacks for card component."""
+
+    # Log background callback status for card component
+    log_background_callback_status("card", "render_card_value_background")
+    log_background_callback_status("card", "patch_card_with_filters_batch")
 
     # SIMPLE NOTIFICATION: Show notification when filters change (same pattern as save button)
     @app.callback(
@@ -259,27 +263,31 @@ def register_core_callbacks(app):
             logger.info("No triggers ready yet")
             return [no_update] * len(trigger_data_list), [no_update] * len(trigger_data_list)
 
-        if not project_metadata or not isinstance(project_metadata, dict):
-            logger.info("Waiting for project metadata")
-            return [no_update] * len(trigger_data_list), [no_update] * len(trigger_data_list)
-
         # Extract auth token
         access_token = local_data.get("access_token") if local_data else None
         if not access_token:
             logger.error("No access token")
             return ["Auth Error"] * len(trigger_data_list), [{}] * len(trigger_data_list)
 
-        # Extract delta_locations from project metadata (shared by all cards)
+        # Extract delta_locations from project metadata (if available)
+        # Background callbacks: project_metadata might not serialize, so use empty dict as fallback
+        # load_deltatable_lite will fetch locations internally if not provided
         delta_locations = {}
-        project_data = project_metadata.get("project", {})
-        for wf in project_data.get("workflows", []):
-            for dc in wf.get("data_collections", []):
-                dc_id = str(dc.get("_id"))
-                if dc.get("delta_location"):
-                    delta_locations[dc_id] = {
-                        "delta_location": dc["delta_location"],
-                        "size_bytes": -1,
-                    }
+        if project_metadata and isinstance(project_metadata, dict):
+            project_data = project_metadata.get("project", {})
+            for wf in project_data.get("workflows", []):
+                for dc in wf.get("data_collections", []):
+                    dc_id = str(dc.get("_id"))
+                    if dc.get("delta_location"):
+                        delta_locations[dc_id] = {
+                            "delta_location": dc["delta_location"],
+                            "size_bytes": -1,
+                        }
+            logger.debug(f"Using {len(delta_locations)} delta locations from project metadata")
+        else:
+            logger.debug(
+                "No project metadata available - load_deltatable_lite will fetch locations"
+            )
 
         # Process all cards
         all_values = []
@@ -493,7 +501,7 @@ def register_core_callbacks(app):
         State("dashboard-init-data", "data"),  # REFACTORING: Access centralized dc_configs
         State("local-store", "data"),  # SECURITY: Access token from centralized store
         prevent_initial_call=True,
-        background=False,  # DISABLED: Batch processing faster than Celery overhead
+        background=USE_BACKGROUND_CALLBACKS,  # Use centralized background callback config
     )
     def patch_card_with_filters_batch(
         filters_data,
