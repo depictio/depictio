@@ -23,9 +23,8 @@ from depictio.dash.layouts.stepper_parts.part_three import register_callbacks_st
 from depictio.dash.layouts.stepper_parts.part_two import register_callbacks_stepper_part_two
 from depictio.dash.modules.card_component.frontend import design_card
 
-# DEPRECATED: Figure component stepper integration - Phase 1 uses view mode only
-# Phase 2 will implement new design UI for figures
-from depictio.dash.modules.figure_component.frontend_legacy import design_figure
+# Figure component stepper integration - Phase 2A with simplified design UI
+from depictio.dash.modules.figure_component.utils import design_figure
 from depictio.dash.modules.interactive_component.frontend import design_interactive
 from depictio.models.models.projects import ProjectResponse
 
@@ -920,7 +919,11 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
 
     def return_design_component(component_selected, id, df):
         if component_selected == "Figure":
-            return design_figure(id, component_data=component_data)
+            # Pass workflow_id, data_collection_id, and local_data for column loading
+            local_data = {"access_token": TOKEN}
+            return design_figure(
+                id, workflow_id=wf_id, data_collection_id=dc_id, local_data=local_data
+            )
         elif component_selected == "Card":
             return design_card(id, df)
         elif component_selected == "Interactive":
