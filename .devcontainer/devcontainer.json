@@ -39,6 +39,8 @@
   "forwardPorts": [],
   "remoteUser": "vscode", // user that must be in devcontainer
   "remoteEnv": {
+    "PATH": "/home/vscode/.local/bin:${containerEnv:PATH}",
+    "CLAUDE_CONFIG_DIR": "/home/vscode/.claude",
     "DEPICTIO_CONTEXT": "server",
     "MINIO_ROOT_USER": "minio",
     "MINIO_ROOT_PASSWORD": "minio123",
@@ -53,6 +55,7 @@
   "containerEnv": {
     "TC_HOST": "host.docker.internal",
     "DOCKER_HOST": "unix:///var/run/docker.sock",
+    "CLAUDE_CONFIG_DIR": "/home/vscode/.claude",
     "DEPICTIO_CONTEXT": "server",
     "MINIO_ROOT_USER": "minio",
     "MINIO_ROOT_PASSWORD": "minio123",
@@ -81,8 +84,7 @@
 			"shellautocompletion": true,
 			"version": "latest"
 		},
-    "ghcr.io/devcontainers/features/git:1": {},
-    "ghcr.io/devcontainers/features/git-lfs:1": {}
+    "ghcr.io/devcontainers/features/git:1": {}
 
 
 	}

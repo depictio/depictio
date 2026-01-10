@@ -7,6 +7,11 @@ services:
     volumes:
       - .:/workspace:cached
       - /var/run/docker.sock:/var/run/docker.sock
+      # Gemini and Qwen: direct bind mounts (working)
+      - ~/.gemini:/home/vscode/.gemini
+      - ~/.qwen:/home/vscode/.qwen
+      # Claude Code: Docker volume (Mac/Linux credential incompatibility)
+      - claude-code-config:/home/vscode/.claude
     command: sleep infinity
     user: vscode
     depends_on:
@@ -27,3 +32,7 @@ services:
       - DEPICTIO_MINIO_ROOT_USER=minio
       - DEPICTIO_MINIO_ROOT_PASSWORD=minio123
       - DEPICTIO_MINIO_ENDPOINT_URL=http://minio:9000
+      - CLAUDE_CONFIG_DIR=/home/vscode/.claude
+
+volumes:
+  claude-code-config:

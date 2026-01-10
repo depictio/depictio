@@ -17,14 +17,34 @@ RUN apt-get update && \
         wget \
         vim \
         netcat-openbsd \
-        build-essential && \
+        build-essential \
+        git-lfs && \
     rm -rf /var/lib/apt/lists/*
+
 
 # Copy install script
 COPY .devcontainer/post_create_setup.sh /bin
 
-# Switch to vscode user and install pipenv package manager for creating venvs
+# Install Node.js directly in the container
+RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+# Switch to vscode user and configure npm for user installation
 USER vscode
+RUN npm config set prefix ~/.local && \
+    npm config set cache ~/.npm && \
+    npm config set init-module ~/.npm-init.js
+
+# Install AI tools directly in the container image to ensure they're Linux-compatible
+RUN npm install -g @google/gemini-cli @anthropic-ai/claude-code @qwen-code/qwen-code@latest
+
+# Add npm global bin to PATH
+ENV PATH="/home/vscode/.local/bin:${PATH}"
+
+# Configure shell to include npm global bin in PATH
+RUN echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && \
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 
 # Install uv
 # RUN curl -LsSf https://astral.sh/uv/install.sh | sh

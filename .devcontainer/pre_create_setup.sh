@@ -6,8 +6,51 @@ echo "🚀 Depictio DevContainer Pre-Create Setup"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
+# Verify AI tool credentials exist
+echo "🔐 Checking AI tool credentials..."
+
+# Check Claude Code credentials
+CLAUDE_CREDS=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null || echo "")
+if [ -n "$CLAUDE_CREDS" ]; then
+    # Extract access token and save to .env.claude for docker-compose
+    ACCESS_TOKEN=$(echo "$CLAUDE_CREDS" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
+
+    if [ -n "$ACCESS_TOKEN" ]; then
+        # Create .env.claude with the token
+        echo "ANTHROPIC_API_KEY=${ACCESS_TOKEN}" > .devcontainer/.env.claude
+        chmod 600 .devcontainer/.env.claude
+        echo "   ✓ Claude Code credentials extracted"
+    fi
+
+    # Also save full credentials to ~/.claude/.credentials.json (will be mounted)
+    mkdir -p ~/.claude
+    echo "$CLAUDE_CREDS" > ~/.claude/.credentials.json
+    chmod 600 ~/.claude/.credentials.json
+else
+    echo "   ⚠️  No Claude Code credentials in keychain"
+    echo "      Run 'claude' on your host to authenticate first"
+    # Create empty .env.claude to avoid docker-compose errors
+    touch .devcontainer/.env.claude
+    chmod 600 .devcontainer/.env.claude
+fi
+
+# Check Gemini credentials
+if [ -f ~/.gemini/oauth_creds.json ]; then
+    echo "   ✓ Gemini credentials found"
+else
+    echo "   ⚠️  No Gemini credentials found (run 'gemini' to authenticate)"
+fi
+
+# Check Qwen credentials
+if [ -f ~/.qwen/oauth_creds.json ]; then
+    echo "   ✓ Qwen credentials found"
+else
+    echo "   ⚠️  No Qwen credentials found (run 'qwen' to authenticate)"
+fi
+
 # Source port allocation script to set up instance configuration
 echo "🔧 Configuring instance..."
+# shellcheck disable=SC1091
 source .devcontainer/scripts/allocate-ports.sh
 
 # Ensure docker-compose/.env exists
