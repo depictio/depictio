@@ -6,46 +6,53 @@ echo "🚀 Depictio DevContainer Pre-Create Setup"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# Verify AI tool credentials exist
-echo "🔐 Checking AI tool credentials..."
+# Detect if running in GitHub Codespaces
+if [ -n "$CODESPACES" ]; then
+    echo "🌐 GitHub Codespaces detected"
+    echo "   Skipping credential extraction (not available in Codespaces)"
+    echo "   AI tools will use Docker volumes - authenticate once in the container"
+    echo ""
+    # Skip credential checks and jump to port allocation
+else
+    # Local development - extract credentials from host
+    echo "💻 Local development detected"
+    echo ""
 
-# Check Claude Code credentials
-CLAUDE_CREDS=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null || echo "")
-if [ -n "$CLAUDE_CREDS" ]; then
-    # Extract access token and save to .env.claude for docker-compose
-    ACCESS_TOKEN=$(echo "$CLAUDE_CREDS" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
+    # Verify AI tool credentials exist
+    echo "🔐 Checking AI tool credentials..."
 
-    if [ -n "$ACCESS_TOKEN" ]; then
-        # Create .env.claude with the token
-        echo "ANTHROPIC_API_KEY=${ACCESS_TOKEN}" > .devcontainer/.env.claude
-        chmod 600 .devcontainer/.env.claude
-        echo "   ✓ Claude Code credentials extracted"
+    # Check if security command exists (macOS only)
+    if command -v security &> /dev/null; then
+        # Check Claude Code credentials
+        CLAUDE_CREDS=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null || echo "")
+        if [ -n "$CLAUDE_CREDS" ]; then
+            # Save full credentials to ~/.claude/.credentials.json (will be mounted)
+            mkdir -p ~/.claude
+            echo "$CLAUDE_CREDS" > ~/.claude/.credentials.json
+            chmod 600 ~/.claude/.credentials.json
+            echo "   ✓ Claude Code credentials extracted from Keychain"
+        else
+            echo "   ⚠️  No Claude Code credentials in keychain"
+            echo "      Run 'claude' on your host to authenticate first"
+        fi
+    else
+        echo "   ⚠️  macOS Keychain not available (not on macOS)"
+        echo "      Claude Code will use Docker volume - authenticate in container"
     fi
 
-    # Also save full credentials to ~/.claude/.credentials.json (will be mounted)
-    mkdir -p ~/.claude
-    echo "$CLAUDE_CREDS" > ~/.claude/.credentials.json
-    chmod 600 ~/.claude/.credentials.json
-else
-    echo "   ⚠️  No Claude Code credentials in keychain"
-    echo "      Run 'claude' on your host to authenticate first"
-    # Create empty .env.claude to avoid docker-compose errors
-    touch .devcontainer/.env.claude
-    chmod 600 .devcontainer/.env.claude
-fi
+    # Check Gemini credentials
+    if [ -f ~/.gemini/oauth_creds.json ]; then
+        echo "   ✓ Gemini credentials found"
+    else
+        echo "   ⚠️  No Gemini credentials found (run 'gemini' to authenticate)"
+    fi
 
-# Check Gemini credentials
-if [ -f ~/.gemini/oauth_creds.json ]; then
-    echo "   ✓ Gemini credentials found"
-else
-    echo "   ⚠️  No Gemini credentials found (run 'gemini' to authenticate)"
-fi
-
-# Check Qwen credentials
-if [ -f ~/.qwen/oauth_creds.json ]; then
-    echo "   ✓ Qwen credentials found"
-else
-    echo "   ⚠️  No Qwen credentials found (run 'qwen' to authenticate)"
+    # Check Qwen credentials
+    if [ -f ~/.qwen/oauth_creds.json ]; then
+        echo "   ✓ Qwen credentials found"
+    else
+        echo "   ⚠️  No Qwen credentials found (run 'qwen' to authenticate)"
+    fi
 fi
 
 # Source port allocation script to set up instance configuration
@@ -108,6 +115,15 @@ services:
 EOF
         echo "✓ Git mount configuration created (mounting to /workspace-root/.git)"
     fi
+else
+    # Not a worktree - create empty override to prevent docker-compose errors
+    cat > .devcontainer/docker-compose.git-mount.yaml <<'EOF'
+# Auto-generated: No worktree detected
+# This file intentionally left empty but must exist for docker-compose
+services:
+  app: {}
+EOF
+    echo "✓ Git mount configuration created (no worktree, empty file)"
 fi
 
 # Display summary

@@ -1,0 +1,85 @@
+{
+  "name": "depictio devcontainer (GitHub Codespaces)",
+  "dockerComposeFile": [
+    "docker-compose.dev.yaml",
+    "docker-compose/docker-compose.minio.yaml",
+    ".devcontainer/docker-compose.devcontainer.yaml",
+    ".devcontainer/docker-compose.codespaces.yaml",
+    ".devcontainer/docker-compose.git-mount.yaml"
+  ],
+  "service": "app",
+  "workspaceFolder": "/workspace/",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-azuretools.vscode-docker",
+        "GitHub.copilot",
+        "saoudrizwan.claude-dev"
+      ],
+      "settings": {
+        "terminal.integrated.shell.linux": "/bin/zsh"
+      }
+    }
+  },
+  "initializeCommand": ".devcontainer/pre_create_setup.sh",
+  "postStartCommand": "bash /workspace/.devcontainer/fix_git_worktree.sh",
+  "postCreateCommand": "post_create_setup.sh",
+  "portsAttributes": {
+    "5080": {"label": "Dash (internal)", "onAutoForward": "ignore"},
+    "8058": {"label": "FastAPI (internal)", "onAutoForward": "ignore"},
+    "27018": {"label": "MongoDB (internal)", "onAutoForward": "ignore"},
+    "6379": {"label": "Redis (internal)", "onAutoForward": "ignore"},
+    "9000": {"label": "MinIO (internal)", "onAutoForward": "ignore"},
+    "9001": {"label": "MinIO Console (internal)", "onAutoForward": "ignore"}
+  },
+  "forwardPorts": [],
+  "remoteUser": "vscode",
+  "remoteEnv": {
+    "PATH": "/home/vscode/.local/bin:${containerEnv:PATH}",
+    "CLAUDE_CONFIG_DIR": "/home/vscode/.claude",
+    "DEPICTIO_CONTEXT": "server",
+    "MINIO_ROOT_USER": "minio",
+    "MINIO_ROOT_PASSWORD": "minio123",
+    "DEPICTIO_BACKEND_DATA_VOLUME_HOST": "/workspace/depictio-data",
+    "DEPICTIO_MINIO_ROOT_USER": "minio",
+    "DEPICTIO_MINIO_ROOT_PASSWORD": "minio123",
+    "DEPICTIO_MINIO_ENDPOINT_URL": "http://minio:9000",
+    "DEPICTIO_LOGGING_VERBOSITY_LEVEL": "DEBUG",
+    "DEV_MODE": "true",
+    "DEPICTIO_MONGODB_WIPE": "false"
+  },
+  "containerEnv": {
+    "TC_HOST": "host.docker.internal",
+    "DOCKER_HOST": "unix:///var/run/docker.sock",
+    "CLAUDE_CONFIG_DIR": "/home/vscode/.claude",
+    "DEPICTIO_CONTEXT": "server",
+    "MINIO_ROOT_USER": "minio",
+    "MINIO_ROOT_PASSWORD": "minio123",
+    "DEPICTIO_BACKEND_DATA_VOLUME_HOST": "/workspace/depictio-data",
+    "DEPICTIO_MINIO_ROOT_USER": "minio",
+    "DEPICTIO_MINIO_ROOT_PASSWORD": "minio123",
+    "DEPICTIO_MINIO_ENDPOINT_URL": "http://minio:9000",
+    "DEPICTIO_LOGGING_VERBOSITY_LEVEL": "DEBUG",
+    "DEV_MODE": "true",
+    "DEPICTIO_MONGODB_WIPE": "false"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+      "moby": true,
+      "installDockerBuildx": true,
+      "installDockerComposeSwitch": true,
+      "version": "latest",
+      "dockerDashComposeVersion": "none"
+    },
+    "ghcr.io/dhoeric/features/act:1": {},
+    "ghcr.io/hspaans/devcontainer-features/pytest:1": {
+      "version": "latest"
+    },
+    "ghcr.io/va-h/devcontainers-features/uv:1": {
+      "shellautocompletion": true,
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/git:1": {}
+  }
+}

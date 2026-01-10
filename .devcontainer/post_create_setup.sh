@@ -39,17 +39,43 @@ if [ -d /home/vscode/.claude ]; then
     echo "   ✓ Claude Code directory ready"
 fi
 
-# Verify other configs
-if [ -f /home/vscode/.gemini/oauth_creds.json ]; then
-    echo "   ✓ Gemini config mounted"
-else
-    echo "   ⚠️  Gemini config not found (run 'gemini' on host to authenticate)"
+# Fix Gemini permissions (if using Docker volume in Codespaces)
+if [ -d /home/vscode/.gemini ]; then
+    sudo chown -R vscode:vscode /home/vscode/.gemini
 fi
 
-if [ -f /home/vscode/.qwen/oauth_creds.json ]; then
-    echo "   ✓ Qwen config mounted"
+# Fix Qwen permissions (if using Docker volume in Codespaces)
+if [ -d /home/vscode/.qwen ]; then
+    sudo chown -R vscode:vscode /home/vscode/.qwen
+fi
+
+# Detect if running in GitHub Codespaces
+if [ -n "$CODESPACES" ]; then
+    echo ""
+    echo "🌐 GitHub Codespaces detected!"
+    echo ""
+    echo "   📝 IMPORTANT: First-time setup required"
+    echo "   You need to authenticate AI tools once (credentials will persist):"
+    echo ""
+    echo "   1. Claude Code:  run 'claude' and follow OAuth flow"
+    echo "   2. Gemini CLI:   run 'gemini' and follow OAuth flow"
+    echo "   3. Qwen Code:    run 'qwen' and follow OAuth flow"
+    echo ""
+    echo "   See .devcontainer/CODESPACES.md for detailed instructions"
+    echo ""
 else
-    echo "   ⚠️  Qwen config not found (run 'qwen' on host to authenticate)"
+    # Verify configs for local development
+    if [ -f /home/vscode/.gemini/oauth_creds.json ]; then
+        echo "   ✓ Gemini config mounted"
+    else
+        echo "   ⚠️  Gemini config not found (run 'gemini' on host to authenticate)"
+    fi
+
+    if [ -f /home/vscode/.qwen/oauth_creds.json ]; then
+        echo "   ✓ Qwen config mounted"
+    else
+        echo "   ⚠️  Qwen config not found (run 'qwen' on host to authenticate)"
+    fi
 fi
 
 echo "Waiting for services to become ready..."

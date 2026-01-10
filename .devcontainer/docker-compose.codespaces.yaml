@@ -1,0 +1,21 @@
+# Docker Compose override for GitHub Codespaces
+# This file replaces bind mounts with Docker volumes since Codespaces
+# doesn't have access to the local host filesystem
+
+services:
+  app:
+    volumes:
+      # Workspace mount (same as local)
+      - .:/workspace:cached
+      - /var/run/docker.sock:/var/run/docker.sock
+
+      # AI tools: Use Docker volumes instead of bind mounts
+      # Users need to authenticate once in the Codespace
+      - gemini-config:/home/vscode/.gemini
+      - qwen-config:/home/vscode/.qwen
+      - claude-code-config:/home/vscode/.claude
+
+volumes:
+  gemini-config:
+  qwen-config:
+  claude-code-config:
