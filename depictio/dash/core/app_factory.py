@@ -24,7 +24,7 @@ def create_dash_app():
         dash.Dash: Configured Dash application instance
     """
     # Check if in development mode
-    dev_mode = os.environ.get("DEV_MODE", "false").lower() == "true"
+    dev_mode = os.environ.get("DEPICTIO_DEV_MODE", "false").lower() == "true"
 
     # Get the root path of the depictio.dash package
     dash_root_path = os.path.dirname(os.path.dirname(__file__))

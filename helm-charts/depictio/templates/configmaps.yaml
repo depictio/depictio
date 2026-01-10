@@ -5,7 +5,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
 data:
   DEPICTIO_CONTEXT: {{ .Values.backend.env.DEPICTIO_CONTEXT | quote }}
-  DEV_MODE: {{ .Values.backend.env.DEV_MODE | quote }}
+  DEPICTIO_DEV_MODE: {{ .Values.backend.env.DEPICTIO_DEV_MODE | quote }}
   DEPICTIO_LOGGING_VERBOSITY_LEVEL: {{ .Values.backend.env.DEPICTIO_LOGGING_VERBOSITY_LEVEL | quote }}
   DEPICTIO_FASTAPI_SERVICE_NAME: {{ printf "%s-depictio-backend" .Release.Name | quote }}
   DEPICTIO_FASTAPI_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_FASTAPI_SERVICE_PORT | quote }}
@@ -88,7 +88,7 @@ metadata:
   name: {{ .Release.Name }}-frontend-config
   namespace: {{ .Release.Namespace }}
 data:
-  DEV_MODE: {{ .Values.frontend.env.DEV_MODE | quote }}
+  DEPICTIO_DEV_MODE: {{ .Values.frontend.env.DEPICTIO_DEV_MODE | quote }}
   DEPICTIO_LOGGING_VERBOSITY_LEVEL: {{ .Values.backend.env.DEPICTIO_LOGGING_VERBOSITY_LEVEL | quote }}
   DEPICTIO_FASTAPI_SERVICE_NAME: {{ printf "%s-depictio-backend" .Release.Name | quote }}
   DEPICTIO_FASTAPI_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_FASTAPI_SERVICE_PORT | quote }}
