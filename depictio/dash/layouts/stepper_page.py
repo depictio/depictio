@@ -32,58 +32,68 @@ def create_minimal_header(
     Returns:
         DMC AppShell header with back button and title
     """
-    # If no title provided, use a placeholder
+    # If no title provided, use a generic placeholder
     if not dashboard_title:
-        dashboard_title = f"Dashboard {dashboard_id[:8]}..."
+        dashboard_title = "Dashboard"
 
     # Determine back URL based on edit mode
     back_url = f"/dashboard-edit/{dashboard_id}" if is_edit_mode else f"/dashboard/{dashboard_id}"
 
-    header_content = dmc.Group(
+    header_content = html.Div(
         [
-            # Back button - navigates to dashboard
-            dmc.ActionIcon(
-                DashIconify(icon="mdi:arrow-left", width=24),
-                id="stepper-back-button",
-                variant="subtle",
-                size="lg",
-                color="gray",
-            ),
-            dcc.Link(
-                dmc.Text(
-                    f"← Back to {dashboard_title}",
-                    size="lg",
-                    fw="normal",
-                    c="gray",
+            # Back button - positioned on left
+            html.Div(
+                dcc.Link(
+                    dmc.Group(
+                        [
+                            dmc.ActionIcon(
+                                DashIconify(icon="mdi:arrow-left", width=24),
+                                variant="subtle",
+                                size="lg",
+                                color="gray",
+                            ),
+                            dmc.Text(
+                                f"Back to {dashboard_title}",
+                                size="lg",
+                                fw="normal",
+                                c="gray",
+                            ),
+                        ],
+                        gap="xs",
+                    ),
+                    href=back_url,
+                    style={"textDecoration": "none"},
                 ),
-                href=back_url,
-                style={"textDecoration": "none"},
+                style={"position": "absolute", "left": "2rem"},
             ),
-            # Spacer
-            html.Div(style={"flex": 1}),
-            # Logo/Title
-            dmc.Group(
-                [
-                    html.Img(
-                        src="/assets/images/icons/favicon.ico",
-                        style={"height": "32px", "width": "32px"},
-                    ),
-                    dmc.Text(
-                        "Component Designer",
-                        size="xl",
-                        fw="bold",
-                    ),
-                ],
-                gap="sm",
+            # Logo/Title - absolutely centered
+            html.Div(
+                dmc.Group(
+                    [
+                        html.Img(
+                            src="/assets/images/icons/favicon.ico",
+                            style={"height": "32px", "width": "32px"},
+                        ),
+                        dmc.Text(
+                            "Component Designer",
+                            size="xl",
+                            fw="bold",
+                        ),
+                    ],
+                    gap="sm",
+                ),
+                style={
+                    "position": "absolute",
+                    "left": "50%",
+                    "transform": "translateX(-50%)",
+                },
             ),
-            # Spacer
-            html.Div(style={"flex": 1}),
         ],
-        justify="space-between",
-        align="center",
         style={
+            "position": "relative",
             "height": "100%",
-            "padding": "0 2rem",
+            "display": "flex",
+            "alignItems": "center",
         },
     )
 

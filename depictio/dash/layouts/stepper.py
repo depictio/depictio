@@ -1124,6 +1124,7 @@ def create_stepper_output(n, active):
             html.Div(id={"type": "stepper-data-preview", "index": n}),
         ],
         gap="lg",
+        style={"marginTop": "2rem"},  # Add gap between stepper and content
     )
 
     buttons_list = html.Div(
@@ -1164,6 +1165,7 @@ def create_stepper_output(n, active):
                 "type": "output-stepper-step-3",
                 "index": n,
             },
+            style={"marginTop": "2rem"},  # Add gap between stepper and content
         ),
         id={"type": "stepper-step-3", "index": n},
     )
@@ -1434,6 +1436,7 @@ def create_stepper_content(n, active):
             html.Div(id={"type": "stepper-data-preview", "index": n}),
         ],
         gap="lg",
+        style={"marginTop": "2rem"},  # Add gap between stepper and content
     )
 
     # Component Type Selection (Step 1)
@@ -1451,7 +1454,8 @@ def create_stepper_content(n, active):
                     "index": n,
                 }
             ),
-        ]
+        ],
+        style={"marginTop": "2rem"},  # Add gap between stepper and content
     )
 
     # Define stepper steps
@@ -1477,6 +1481,7 @@ def create_stepper_content(n, active):
                 "type": "output-stepper-step-3",
                 "index": n,
             },
+            style={"marginTop": "2rem"},  # Add gap between stepper and content
         ),
         id={"type": "stepper-step-3", "index": n},
     )
