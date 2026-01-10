@@ -1,0 +1,44 @@
+{
+  "$schema": "https://github.com/anthropics/claude-code/blob/main/schemas/mcp.schema.json",
+  "mcpServers": {
+    "mongodb": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@anthropic/mcp-server-mongodb",
+        "--uri",
+        "mongodb://localhost:27018",
+        "--database",
+        "depictioDB"
+      ],
+      "description": "MongoDB access for depictio database operations"
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@anthropic/mcp-server-filesystem",
+        "--allowed-paths",
+        "/home/user/depictio",
+        "/workspace"
+      ],
+      "description": "File system access for depictio codebase"
+    },
+    "fetch": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@anthropic/mcp-server-fetch"
+      ],
+      "description": "HTTP fetch capabilities for API testing"
+    },
+    "memory": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@anthropic/mcp-server-memory"
+      ],
+      "description": "Persistent memory for session context"
+    }
+  }
+}
