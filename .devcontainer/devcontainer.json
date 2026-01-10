@@ -1,5 +1,6 @@
 {
   "name": "depictio devcontainer (multi-instance)",
+  // Compatible with: Local Dev (worktrees + main repo) & GitHub Codespaces
   "dockerComposeFile": [
     "${localWorkspaceFolder}/docker-compose.dev.yaml",
     "${localWorkspaceFolder}/docker-compose/docker-compose.minio.yaml",
