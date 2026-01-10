@@ -205,8 +205,11 @@ def register_ui_callbacks(app):
         ):
             raise dash.exceptions.PreventUpdate
 
+        # Get the parameter name that was actually changed
+        triggered_param = triggered_id_dict.get("type", "").replace("param-", "")
+
         logger.info(f"📝 PARAMETER CHANGED for component {component_index}")
-        logger.info(f"   Triggered by: {triggered_id_dict}")
+        logger.info(f"   Parameter: {triggered_param}")
 
         # Get state from state manager
         state = state_manager.get_state(component_index)
@@ -217,11 +220,21 @@ def register_ui_callbacks(app):
             return dash.no_update
 
         # Extract all parameter values from ctx.inputs_list
+        # Update all parameters, but specifically handle the triggered one for clearing
+        # Track processed parameters to avoid duplicates
+        processed_params = set()
+
         for input_dict in ctx.inputs_list:
             for input_item in input_dict:
                 input_id = input_item.get("id", {})
                 if isinstance(input_id, dict) and input_id.get("type", "").startswith("param-"):
                     param_name = input_id["type"].replace("param-", "")
+
+                    # Skip if we've already processed this parameter
+                    if param_name in processed_params:
+                        continue
+
+                    processed_params.add(param_name)
 
                     # Get value from input - try both 'value' and 'checked'
                     value = input_item.get("value")
@@ -230,14 +243,25 @@ def register_ui_callbacks(app):
                     # Use checked for Switch components, value for others
                     actual_value = checked if checked is not None else value
 
-                    # Update state with non-empty values
-                    if actual_value is not None and actual_value != "" and actual_value != []:
+                    # Update state - handle both setting and clearing
+                    if isinstance(actual_value, bool):
+                        # Boolean False is a valid value - always set it
                         state.set_parameter_value(param_name, actual_value)
-                        logger.info(f"   {param_name}: {actual_value}")
-                    elif isinstance(actual_value, bool):
-                        # Include boolean False
+                        if param_name == triggered_param:
+                            logger.info(f"   {param_name}: {actual_value}")
+                    elif actual_value is not None and actual_value != "" and actual_value != []:
+                        # Non-empty value - set it
                         state.set_parameter_value(param_name, actual_value)
-                        logger.info(f"   {param_name}: {actual_value}")
+                        if param_name == triggered_param:
+                            logger.info(f"   {param_name}: {actual_value}")
+                    else:
+                        # Parameter is empty/cleared
+                        # Only set to None if this is the parameter that was actually cleared
+                        # (to avoid clearing other parameters that happen to be None in current inputs)
+                        if param_name == triggered_param:
+                            state.set_parameter_value(param_name, None)
+                            logger.info(f"   {param_name}: CLEARED (set to None)")
+                        # Otherwise, don't update it - keep existing value in state
 
         # Return updated trigger with timestamp
         return {"timestamp": time.time()}
@@ -277,9 +301,18 @@ def register_ui_callbacks(app):
             return current_kwargs or {}
 
         # Get all parameter values from state.parameters dictionary
-        updated_kwargs = dict(state.parameters)  # Make a copy
+        # Filter out None/empty values - only include meaningful parameters
+        # Keep boolean False (it's a valid value)
+        updated_kwargs = {}
+        for param_name, param_value in state.parameters.items():
+            if isinstance(param_value, bool):
+                # Always include boolean values (including False)
+                updated_kwargs[param_name] = param_value
+            elif param_value is not None and param_value != "" and param_value != []:
+                # Include non-empty values
+                updated_kwargs[param_name] = param_value
 
-        logger.info(f"📝 Updated dict_kwargs from state: {updated_kwargs}")
+        logger.info(f"📝 Updated dict_kwargs from state (filtered): {updated_kwargs}")
 
         return updated_kwargs
 
