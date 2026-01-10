@@ -86,14 +86,74 @@ Runs when session ends:
 - Reports pending lint issues
 - Reminds about uncommitted changes
 
+## Official Plugins
+
+The configuration enables these Anthropic official plugins:
+
+| Plugin | Commands | Purpose |
+|--------|----------|---------|
+| **code-review** | `/code-review` | Automated PR review with 5 specialized agents |
+| **commit-commands** | `/commit`, `/commit-push-pr` | Streamlined git workflow |
+| **frontend-design** | `frontend-design` skill | Production-grade UI design guidance |
+| **feature-dev** | `/feature-dev` | 7-phase feature development workflow |
+| **security-guidance** | (automatic) | Security pattern monitoring |
+| **hookify** | `/hookify`, `/hookify:list` | Create custom prevention hooks |
+
+### Installing More Plugins
+
+```bash
+# Interactive plugin browser
+/plugin
+
+# Install from official marketplace
+/plugin install plugin-name@anthropics/claude-plugins-official
+
+# List installed plugins
+/plugin list
+```
+
+### Available Official Plugins
+
+| Plugin | Description |
+|--------|-------------|
+| `pr-review-toolkit` | 6 specialized PR review agents |
+| `agent-sdk-dev` | Claude Agent SDK development kit |
+| `plugin-dev` | Create your own Claude Code plugins |
+| `explanatory-output-style` | Educational implementation insights |
+| `learning-output-style` | Interactive learning mode |
+| `ralph-wiggum` | Iterative development loops |
+
 ## MCP Servers
 
-| Server | Purpose |
-|--------|---------|
-| mongodb | Direct MongoDB access for depictioDB |
-| filesystem | File system access for codebase |
-| fetch | HTTP fetch for API testing |
-| memory | Persistent memory for session context |
+| Server | Purpose | Status |
+|--------|---------|--------|
+| **github** | PRs, issues, repository operations | Requires `GITHUB_TOKEN` |
+| **mongodb** | Direct access to depictioDB | Active |
+| **filesystem** | Codebase file operations | Active |
+| **fetch** | HTTP requests for API testing | Active |
+| **memory** | Persistent session context | Active |
+| **sequential-thinking** | Enhanced reasoning | Active |
+| **slack** | Team notifications | Disabled (set tokens) |
+| **sentry** | Error tracking | Disabled (set token) |
+
+### Enabling MCP Servers
+
+Set environment variables before starting Claude Code:
+
+```bash
+# GitHub integration
+export GITHUB_TOKEN="ghp_your_token_here"
+
+# Slack integration (optional)
+export SLACK_BOT_TOKEN="xoxb-your-token"
+export SLACK_TEAM_ID="T0123456789"
+
+# Sentry integration (optional)
+export SENTRY_AUTH_TOKEN="your_sentry_token"
+
+# Start Claude Code
+claude
+```
 
 ## Specialized Agents
 

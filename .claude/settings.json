@@ -42,7 +42,10 @@
       "WebFetch",
       "WebSearch",
       "Task",
-      "NotebookEdit"
+      "NotebookEdit",
+      "Skill",
+      "SlashCommand:*",
+      "Plugin:*"
     ],
     "deny": [
       "Bash(rm -rf /)",
@@ -61,6 +64,19 @@
     "DEPICTIO_CONTEXT": "server",
     "DEPICTIO_LOGGING_VERBOSITY_LEVEL": "DEBUG",
     "PYTHONPATH": "${workspaceFolder}"
+  },
+  "plugins": {
+    "enabled": [
+      "code-review",
+      "commit-commands",
+      "frontend-design",
+      "feature-dev",
+      "security-guidance",
+      "hookify"
+    ],
+    "marketplaces": [
+      "anthropics/claude-plugins-official"
+    ]
   },
   "hooks": {
     "PostToolUse": [
