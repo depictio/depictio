@@ -33,16 +33,16 @@ def create_dash_app():
     # assets_folder = os.path.join(dash_root_path, "assets/debug")
     assets_folder = os.path.join(dash_root_path, "assets")
 
-    # Check if background callbacks are enabled
-    use_background = os.getenv("DEPICTIO_USE_BACKGROUND_CALLBACKS", "false").lower() == "true"
+    # Check if Celery is enabled
+    use_celery = os.getenv("DEPICTIO_CELERY_ENABLED", "false").lower() == "true"
 
     # Setup background callback manager
     # Priority: Celery (if env enabled) → Diskcache (fallback)
     background_callback_manager = None
 
-    if use_background:
+    if use_celery:
         # Try Celery first when explicitly enabled
-        logger.info("🔧 DASH: Background callbacks ENABLED - Setting up Celery manager...")
+        logger.info("🔧 DASH: Celery ENABLED - Setting up Celery manager...")
         try:
             from depictio.dash.celery_app import celery_app
 

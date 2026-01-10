@@ -56,9 +56,11 @@ services:
 
   depictio-celery-worker:
     container_name: depictio-celery-worker
-    # Automatically starts but exits gracefully if background callbacks disabled
-    # Controlled by DEPICTIO_USE_BACKGROUND_CALLBACKS in .env
-    # Script checks env var and exits with code 0 if disabled
+    # Only starts when using --profile celery
+    # Set DEPICTIO_CELERY_ENABLED=true in .env to enable Celery mode
+    # Script checks env var and exits with code 0 if disabled (safety check)
+    profiles:
+      - celery
     image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-latest}
     volumes:
       - ./depictio:/app/depictio

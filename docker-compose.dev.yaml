@@ -81,9 +81,11 @@ services:
 
   depictio-celery-worker:
     container_name: depictio-celery-worker
-    # Automatically starts but exits gracefully if background callbacks disabled
-    # Controlled by DEPICTIO_USE_BACKGROUND_CALLBACKS in docker-compose/.env
-    # Script checks env var and exits with code 0 if disabled
+    # Only starts when using --profile celery
+    # Set DEPICTIO_CELERY_ENABLED=true in docker-compose/.env to enable Celery mode
+    # Script checks env var and exits with code 0 if disabled (safety check)
+    profiles:
+      - celery
     image: ${DEPICTIO_VERSION:-depictio:dev}
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile

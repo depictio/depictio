@@ -10,9 +10,7 @@ import os
 from depictio.api.v1.configs.logging_init import logger
 
 # Read the environment variable once at module load
-_USE_BACKGROUND_CALLBACKS = (
-    os.getenv("DEPICTIO_USE_BACKGROUND_CALLBACKS", "false").lower() == "true"
-)
+_USE_BACKGROUND_CALLBACKS = os.getenv("DEPICTIO_CELERY_ENABLED", "false").lower() == "true"
 
 
 def use_background_callbacks() -> bool:
@@ -20,7 +18,7 @@ def use_background_callbacks() -> bool:
     Check if background callbacks are enabled via environment variable.
 
     Returns:
-        bool: True if DEPICTIO_USE_BACKGROUND_CALLBACKS=true, False otherwise
+        bool: True if DEPICTIO_CELERY_ENABLED=true, False otherwise
 
     Example:
         >>> from depictio.dash.background_callback_helpers import use_background_callbacks
@@ -72,8 +70,8 @@ def log_background_callback_status(component_type: str, callback_name: str):
 
 # Log overall background callback status at module load
 if _USE_BACKGROUND_CALLBACKS:
-    logger.info("✅ BACKGROUND CALLBACKS: ENABLED (DEPICTIO_USE_BACKGROUND_CALLBACKS=true)")
+    logger.info("✅ BACKGROUND CALLBACKS: ENABLED (DEPICTIO_CELERY_ENABLED=true)")
     logger.info("   Components using background: card, figure, table")
 else:
-    logger.info("🚫 BACKGROUND CALLBACKS: DISABLED (DEPICTIO_USE_BACKGROUND_CALLBACKS=false)")
+    logger.info("🚫 BACKGROUND CALLBACKS: DISABLED (DEPICTIO_CELERY_ENABLED=false)")
     logger.info("   All callbacks will run synchronously")

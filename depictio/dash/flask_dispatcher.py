@@ -42,12 +42,43 @@ def create_shared_dash_config():
     # Get the assets folder path
     assets_folder = os.path.join(dash_root_path, "assets")
 
-    # Setup Celery background callback manager
-    logger.info("🔧 FLASK DISPATCHER: Setting up Celery background callback manager...")
-    from depictio.dash.celery_app import celery_app
+    # Check if Celery is enabled
+    use_celery = os.getenv("DEPICTIO_CELERY_ENABLED", "false").lower() == "true"
 
-    background_callback_manager = dash.CeleryManager(celery_app)
-    logger.info("✅ FLASK DISPATCHER: Celery background callback manager configured")
+    # Setup background callback manager
+    # Priority: Celery (if env enabled) → Diskcache (fallback)
+    background_callback_manager = None
+
+    if use_celery:
+        # Try Celery first when explicitly enabled
+        logger.info("🔧 FLASK DISPATCHER: Celery ENABLED - Setting up Celery manager...")
+        try:
+            from depictio.dash.celery_app import celery_app
+
+            background_callback_manager = dash.CeleryManager(celery_app)
+            logger.info("✅ FLASK DISPATCHER: Celery background callback manager configured")
+        except Exception as e:
+            logger.error(f"❌ FLASK DISPATCHER: Failed to setup Celery manager: {e}")
+            logger.warning("⚠️  FLASK DISPATCHER: Falling back to diskcache...")
+            background_callback_manager = None
+
+    # Fallback to diskcache if Celery not available or not enabled
+    if background_callback_manager is None:
+        logger.info("🔧 FLASK DISPATCHER: Setting up diskcache background callback manager...")
+        try:
+            import diskcache
+
+            cache = diskcache.Cache("/app/cache")
+            background_callback_manager = dash.DiskcacheManager(cache)
+            logger.info(
+                f"✅ FLASK DISPATCHER: Diskcache background callback manager configured (cache: {cache.directory})"
+            )
+        except Exception as e:
+            logger.error(f"❌ FLASK DISPATCHER: Failed to setup diskcache manager: {e}")
+            logger.warning(
+                "⚠️  FLASK DISPATCHER: No background callback manager available - callbacks will fail!"
+            )
+            background_callback_manager = None
 
     return assets_folder, background_callback_manager, dev_mode
 
