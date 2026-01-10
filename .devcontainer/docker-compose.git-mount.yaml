@@ -1,0 +1,5 @@
+# Auto-generated for worktree git support
+services:
+  app:
+    volumes:
+      - /Users/tweber/Gits/workspaces/depictio-workspace/depictio/.git:/workspace-root/.git:rw

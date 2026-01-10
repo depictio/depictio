@@ -27,12 +27,21 @@
   // "initializeCommand": "init", // script to run before the containers are started
   "initializeCommand": ".devcontainer/pre_create_setup.sh",
   "postStartCommand": "bash /workspace/.devcontainer/fix_git_worktree.sh",
-  "postCreateCommand": "post_create_setup.sh" // script to run after the containers are started
-  // Note: Ports are dynamically allocated per branch (see .env.instance)
-  // VS Code will auto-detect and forward published ports from Docker Compose
+  "postCreateCommand": "post_create_setup.sh", // script to run after the containers are started
+  // Disable auto port forwarding - we'll manually specify the offset ports
+  "portsAttributes": {
+    "5080": {"label": "Dash (internal)", "onAutoForward": "ignore"},
+    "8058": {"label": "FastAPI (internal)", "onAutoForward": "ignore"},
+    "27018": {"label": "MongoDB (internal)", "onAutoForward": "ignore"},
+    "6379": {"label": "Redis (internal)", "onAutoForward": "ignore"},
+    "9000": {"label": "MinIO (internal)", "onAutoForward": "ignore"},
+    "9001": {"label": "MinIO Console (internal)", "onAutoForward": "ignore"}
+  },
   "forwardPorts": [],
   "remoteUser": "vscode", // user that must be in devcontainer
   "remoteEnv": {
+    "PATH": "/home/vscode/.local/bin:${containerEnv:PATH}",
+    "CLAUDE_CONFIG_DIR": "/home/vscode/.claude",
     "DEPICTIO_CONTEXT": "server",
     "MINIO_ROOT_USER": "minio",
     "MINIO_ROOT_PASSWORD": "minio123",
@@ -47,6 +56,7 @@
   "containerEnv": {
     "TC_HOST": "host.docker.internal",
     "DOCKER_HOST": "unix:///var/run/docker.sock",
+    "CLAUDE_CONFIG_DIR": "/home/vscode/.claude",
     "DEPICTIO_CONTEXT": "server",
     "MINIO_ROOT_USER": "minio",
     "MINIO_ROOT_PASSWORD": "minio123",
@@ -75,8 +85,7 @@
 			"shellautocompletion": true,
 			"version": "latest"
 		},
-    "ghcr.io/devcontainers/features/git:1": {},
-    "ghcr.io/devcontainers/features/git-lfs:1": {}
+    "ghcr.io/devcontainers/features/git:1": {}
 
 
 	}
