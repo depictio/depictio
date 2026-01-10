@@ -40,8 +40,8 @@ def validate_oauth_state(state: str) -> bool:
     from depictio.api.v1.configs.logging_init import logger
 
     # In development mode, skip state validation due to multi-worker issues
-    if os.getenv("DEV_MODE", "false").lower() == "true":
-        logger.debug(f"DEV_MODE: Skipping OAuth state validation for: {state}")
+    if os.getenv("DEPICTIO_DEV_MODE", "false").lower() == "true":
+        logger.debug(f"DEPICTIO_DEV_MODE: Skipping OAuth state validation for: {state}")
         return True
 
     logger.debug(f"Validating OAuth state: {state}")

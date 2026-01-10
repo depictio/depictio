@@ -10,9 +10,9 @@ echo "🚀 Starting FastAPI backend..."
 # echo "ℹ️  Note: Celery worker now runs in separate container (depictio-celery-worker)"
 
 # Start FastAPI server (this will block and keep the container running)
-if [ "$DEV_MODE" = "true" ]; then
+if [ "$DEPICTIO_DEV_MODE" = "true" ]; then
     # Development mode with reload
-    export DEV_MODE=true
+    export DEPICTIO_DEV_MODE=true
     echo "🛠️ Running FastAPI in development mode on $FASTAPI_HOST:$FASTAPI_PORT with $FASTAPI_WORKERS workers"
     python depictio/api/run.py
     # uvicorn depictio.api.main:app \
@@ -26,7 +26,7 @@ if [ "$DEV_MODE" = "true" ]; then
     #     --use-colors
 else
     # Production mode with workers
-    export DEV_MODE=false
+    export DEPICTIO_DEV_MODE=false
     echo "🚀 Running FastAPI in production mode on $FASTAPI_HOST:$FASTAPI_PORT with $FASTAPI_WORKERS workers"
     uvicorn \
         depictio.api.main:app \

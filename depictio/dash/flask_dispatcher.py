@@ -34,7 +34,7 @@ def create_shared_dash_config():
         tuple: (assets_folder, background_callback_manager, dev_mode)
     """
     # Check if in development mode
-    dev_mode = os.environ.get("DEV_MODE", "false").lower() == "true"
+    dev_mode = os.environ.get("DEPICTIO_DEV_MODE", "false").lower() == "true"
 
     # Get the root path of the depictio.dash package
     dash_root_path = os.path.dirname(os.path.dirname(__file__))

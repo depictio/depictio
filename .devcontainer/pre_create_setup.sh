@@ -53,15 +53,26 @@ echo "🔧 Configuring instance..."
 # shellcheck disable=SC1091
 source .devcontainer/scripts/allocate-ports.sh
 
-# Ensure docker-compose/.env exists
+# Ensure docker-compose/.env exists (create default if missing for Codespaces)
 if [ ! -f docker-compose/.env ]; then
     echo ""
-    echo "❌ ERROR: docker-compose/.env not found!"
-    echo "Please create it with required environment variables."
-    exit 1
+    echo "⚠️  docker-compose/.env not found - creating default configuration..."
+    mkdir -p docker-compose
+    cat > docker-compose/.env <<'ENVEOF'
+# Auto-generated default configuration for Codespaces/new setups
+DEPICTIO_CONTEXT=server
+DEPICTIO_LOGGING_VERBOSITY_LEVEL=DEBUG
+DEPICTIO_MINIO_ROOT_USER=minio
+DEPICTIO_MINIO_ROOT_PASSWORD=minio123
+DEPICTIO_MONGODB_WIPE=false
+DEV_MODE=true
+DEPICTIO_PLAYWRIGHT_DEV_MODE=false
+DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED=false
+ENVEOF
+    echo "✅ Created default docker-compose/.env"
+else
+    echo "✓ Environment file found"
 fi
-
-echo "✓ Environment file found"
 echo ""
 
 # Create instance-specific data directory structure

@@ -20,7 +20,7 @@ services:
       - ./docker-images/run_dash.sh:/app/run_dash.sh
       - ./pyproject.toml:/app/pyproject.toml
     environment:
-        DEV_MODE: "${DEV_MODE:-false}"
+        DEPICTIO_DEV_MODE: "${DEPICTIO_DEV_MODE:-false}"
         DEPICTIO_LOGGING_VERBOSITY_LEVEL: "DEBUG"
         DISPLAY: ":99"
     command: ["python", "/app/depictio/dash/app.py"]
@@ -43,7 +43,7 @@ services:
       - ./docker-images/run_fastapi.sh:/app/run_fastapi.sh
       - ./docker-images/start_with_display.sh:/app/start_with_display.sh
     environment:
-        DEV_MODE: "${DEV_MODE:-false}"
+        DEPICTIO_DEV_MODE: "${DEPICTIO_DEV_MODE:-false}"
         DEPICTIO_LOGGING_VERBOSITY_LEVEL: "DEBUG"
         FORCE_COLOR: "1"
         TERM: "xterm-256color"

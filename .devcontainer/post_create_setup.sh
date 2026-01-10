@@ -84,9 +84,14 @@ wait_for_service depictio-frontend 5080 "Dash frontend"
 
 echo "All services are ready! Setting up development environment..."
 
-# Install depictio in development mode
+# Install depictio in development mode with dev dependencies
 cd /workspace || exit
-uv sync
+echo "📦 Installing depictio with dev dependencies..."
+uv sync --extra dev
+
+# Note: polars-lts-cpu should be automatically installed via pyproject.toml
+# If you encounter polars conflicts, the CI workflow shows how to force-reinstall
+echo "✅ Dependencies installed (including dev extras: pytest, mongomock-motor, etc.)"
 
 # Install depictio-cli from GitHub
 uv venv depictio-cli-venv
