@@ -1315,6 +1315,7 @@ def design_draggable(
         dual_panel_layout = dmc.Grid(
             columns=12,
             gutter="sm",
+            style={"height": "100%", "overflow": "hidden"},  # Prevent Grid-level scrolling
             children=[
                 # Left panel: Interactive components (wider - 3 out of 12 = 25%)
                 dmc.GridCol(
@@ -1324,8 +1325,8 @@ def design_draggable(
                         # "backgroundColor": "var(--app-surface-color, #f8f9fa)",
                         "borderRight": "1px solid var(--app-border-color, #ddd)",
                         "padding": "12px",
-                        "minHeight": "100vh",
-                        "overflowY": "auto",
+                        "height": "calc(100vh - 65px)",  # Full viewport height minus header
+                        "overflowY": "auto",  # Individual panel scrollbar
                         "minWidth": "300px",  # Ensure minimum width
                     },
                 ),
@@ -1336,21 +1337,29 @@ def design_draggable(
                     style={
                         # "backgroundColor": "var(--app-bg-color, #ffffff)",
                         "padding": "12px",
-                        "minHeight": "100vh",
-                        "overflowY": "auto",
+                        "height": "calc(100vh - 65px)",  # Full viewport height minus header
+                        "overflowY": "auto",  # Individual panel scrollbar
                     },
                 ),
             ],
             id="draggable",  # Keep ID for callback compatibility
-            style={"width": "100%", "margin": 0},
         )
 
         core = html.Div(
             html.Div(
                 dual_panel_layout,
                 id="draggable-wrapper",
-                style={"flexGrow": 1, "width": "100%", "height": "auto"},
-            )
+                style={
+                    "width": "100%",
+                    "height": "100%",  # Full height of parent container
+                    "overflow": "hidden",  # Prevent scrolling at wrapper level
+                },
+            ),
+            style={
+                "width": "100%",
+                "height": "100%",  # Full height to enable panel scrolling
+                "overflow": "hidden",  # Prevent scrolling at container level
+            },
         )
 
         logger.info("🎨 DUAL-PANEL: Returning two-panel layout with grids")
