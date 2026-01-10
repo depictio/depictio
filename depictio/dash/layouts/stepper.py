@@ -1604,8 +1604,6 @@ def create_stepper_content(n, active):
                 style={
                     "position": "sticky",
                     "bottom": 0,
-                    "backgroundColor": "var(--app-surface-color, #ffffff)",
-                    "borderTop": "1px solid var(--app-border-color, #e9ecef)",
                     "zIndex": 100,
                     "flexShrink": 0,
                 },

@@ -81,11 +81,8 @@ services:
 
   depictio-celery-worker:
     container_name: depictio-celery-worker
-    # Only starts when using --profile celery
-    # Set DEPICTIO_CELERY_ENABLED=true in docker-compose/.env to enable Celery mode
-    # Script checks env var and exits with code 0 if disabled (safety check)
-    profiles:
-      - celery
+    # Always enabled - required for design mode (stepper) to work
+    # Dashboard editor will fail without Celery worker running
     image: ${DEPICTIO_VERSION:-depictio:dev}
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
@@ -103,7 +100,6 @@ services:
         DEPICTIO_CONTEXT: "server"
     command: ["/app/run_celery_worker.sh"]
     user: "${UID:-1000}:${GID:-1000}"
-    restart: "no"  # Don't restart if exits with code 0 (graceful shutdown when disabled)
     depends_on:
       - mongo
       - redis

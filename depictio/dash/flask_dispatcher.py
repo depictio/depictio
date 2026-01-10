@@ -30,6 +30,12 @@ def create_shared_dash_config():
     """
     Create shared configuration for all Dash apps.
 
+    Background Callbacks Strategy:
+    - Editor app: Always configures Celery manager (required for design mode)
+    - Design mode: Always uses background=True (requires Celery worker running)
+    - View mode: Conditional via DEPICTIO_CELERY_ENABLED env var
+    - Celery worker: Started conditionally via Docker Compose --profile celery
+
     Returns:
         tuple: (assets_folder, background_callback_manager, dev_mode)
     """
@@ -42,43 +48,22 @@ def create_shared_dash_config():
     # Get the assets folder path
     assets_folder = os.path.join(dash_root_path, "assets")
 
-    # Check if Celery is enabled
-    use_celery = os.getenv("DEPICTIO_CELERY_ENABLED", "false").lower() == "true"
-
-    # Setup background callback manager
-    # Priority: Celery (if env enabled) → Diskcache (fallback)
+    # Setup background callback manager - Always configure Celery for Editor app
+    # The Celery worker container is started conditionally via Docker Compose profile
+    logger.info("🔧 FLASK DISPATCHER: Setting up Celery manager for Editor app...")
     background_callback_manager = None
 
-    if use_celery:
-        # Try Celery first when explicitly enabled
-        logger.info("🔧 FLASK DISPATCHER: Celery ENABLED - Setting up Celery manager...")
-        try:
-            from depictio.dash.celery_app import celery_app
+    try:
+        from depictio.dash.celery_app import celery_app
 
-            background_callback_manager = dash.CeleryManager(celery_app)
-            logger.info("✅ FLASK DISPATCHER: Celery background callback manager configured")
-        except Exception as e:
-            logger.error(f"❌ FLASK DISPATCHER: Failed to setup Celery manager: {e}")
-            logger.warning("⚠️  FLASK DISPATCHER: Falling back to diskcache...")
-            background_callback_manager = None
-
-    # Fallback to diskcache if Celery not available or not enabled
-    if background_callback_manager is None:
-        logger.info("🔧 FLASK DISPATCHER: Setting up diskcache background callback manager...")
-        try:
-            import diskcache
-
-            cache = diskcache.Cache("/app/cache")
-            background_callback_manager = dash.DiskcacheManager(cache)
-            logger.info(
-                f"✅ FLASK DISPATCHER: Diskcache background callback manager configured (cache: {cache.directory})"
-            )
-        except Exception as e:
-            logger.error(f"❌ FLASK DISPATCHER: Failed to setup diskcache manager: {e}")
-            logger.warning(
-                "⚠️  FLASK DISPATCHER: No background callback manager available - callbacks will fail!"
-            )
-            background_callback_manager = None
+        background_callback_manager = dash.CeleryManager(celery_app)
+        logger.info("✅ FLASK DISPATCHER: Celery background callback manager configured")
+        logger.info("   Note: Celery worker must be running for design mode to work")
+        logger.info("   Start worker with: docker compose --profile celery up")
+    except Exception as e:
+        logger.error(f"❌ FLASK DISPATCHER: Failed to setup Celery manager: {e}")
+        logger.warning("⚠️  FLASK DISPATCHER: Design mode will not work without Celery!")
+        background_callback_manager = None
 
     return assets_folder, background_callback_manager, dev_mode
 
@@ -138,12 +123,13 @@ def create_management_app(
     Args:
         server: Flask server instance
         assets_folder: Path to assets folder
-        background_callback_manager: Celery background callback manager
+        background_callback_manager: Celery background callback manager (unused - no background callbacks)
         dev_mode: Whether in development mode
 
     Returns:
         dash.Dash: Management app instance
     """
+    # Management app doesn't use background callbacks - pass None
     app_management = dash.Dash(
         __name__,
         server=server,
@@ -164,7 +150,7 @@ def create_management_app(
         # Assets served by Flask at /assets/ (shared across all apps)
         # When False, CSS and favicon must be manually specified
         include_assets_files=False,
-        background_callback_manager=background_callback_manager,
+        background_callback_manager=None,  # No background callbacks in management app
     )
 
     # Manually add favicon link since include_assets_files=False
@@ -215,12 +201,14 @@ def create_viewer_app(
     Args:
         server: Flask server instance
         assets_folder: Path to assets folder
-        background_callback_manager: Celery background callback manager
+        background_callback_manager: Celery background callback manager (or None)
         dev_mode: Whether in development mode
 
     Returns:
         dash.Dash: Viewer app instance
     """
+    # Viewer uses background callbacks only when Celery enabled (via use_background_callbacks())
+    # If Celery not available, callbacks run synchronously
     app_viewer = dash.Dash(
         __name__,
         server=server,
@@ -291,12 +279,14 @@ def create_editor_app(
     Args:
         server: Flask server instance
         assets_folder: Path to assets folder
-        background_callback_manager: Celery background callback manager
+        background_callback_manager: Celery background callback manager (or None)
         dev_mode: Whether in development mode
 
     Returns:
         dash.Dash: Editor app instance
     """
+    # CRITICAL: Editor app needs background callbacks for figure design mode (stepper)
+    # Uses Celery manager (must be enabled via DEPICTIO_CELERY_ENABLED=true)
     app_editor = dash.Dash(
         __name__,
         server=server,
@@ -454,9 +444,6 @@ logger.info("==" * 40)
 application = server
 
 if __name__ == "__main__":
-    # Use run_simple for WSGI application support (DispatcherMiddleware is WSGI, not Flask)
-    from werkzeug.serving import run_simple
-
     print("=" * 80)
     print(f"📊 Management:  http://{settings.dash.host}:{settings.dash.external_port}/")
     print(
@@ -467,12 +454,11 @@ if __name__ == "__main__":
     )
     print("=" * 80)
 
-    # Use run_simple with Flask server application
-    run_simple(
-        settings.dash.host,
-        settings.dash.external_port,
-        server,  # Flask application with all Dash apps mounted
-        use_debugger=dev_mode,
+    # Use Flask's native run() for dev mode
+    server.run(
+        host=settings.dash.host,
+        port=settings.dash.external_port,
+        debug=dev_mode,
         use_reloader=dev_mode,
-        threaded=not settings.profiling.enabled,
+        threaded=True,
     )

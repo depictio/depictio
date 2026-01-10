@@ -33,43 +33,22 @@ def create_dash_app():
     # assets_folder = os.path.join(dash_root_path, "assets/debug")
     assets_folder = os.path.join(dash_root_path, "assets")
 
-    # Check if Celery is enabled
-    use_celery = os.getenv("DEPICTIO_CELERY_ENABLED", "false").lower() == "true"
-
-    # Setup background callback manager
-    # Priority: Celery (if env enabled) → Diskcache (fallback)
+    # Setup background callback manager - Always configure Celery
+    # The Celery worker container is started conditionally via Docker Compose profile
+    logger.info("🔧 DASH: Setting up Celery manager...")
     background_callback_manager = None
 
-    if use_celery:
-        # Try Celery first when explicitly enabled
-        logger.info("🔧 DASH: Celery ENABLED - Setting up Celery manager...")
-        try:
-            from depictio.dash.celery_app import celery_app
+    try:
+        from depictio.dash.celery_app import celery_app
 
-            background_callback_manager = dash.CeleryManager(celery_app)
-            logger.info("✅ DASH: Celery background callback manager configured")
-        except Exception as e:
-            logger.error(f"❌ DASH: Failed to setup Celery manager: {e}")
-            logger.warning("⚠️  DASH: Falling back to diskcache...")
-            background_callback_manager = None
-
-    # Fallback to diskcache if Celery not available or not enabled
-    if background_callback_manager is None:
-        logger.info("🔧 DASH: Setting up diskcache background callback manager...")
-        try:
-            import diskcache
-
-            cache = diskcache.Cache("/app/cache")
-            background_callback_manager = dash.DiskcacheManager(cache)
-            logger.info(
-                f"✅ DASH: Diskcache background callback manager configured (cache: {cache.directory})"
-            )
-        except Exception as e:
-            logger.error(f"❌ DASH: Failed to setup diskcache manager: {e}")
-            logger.warning(
-                "⚠️  DASH: No background callback manager available - callbacks will fail!"
-            )
-            background_callback_manager = None
+        background_callback_manager = dash.CeleryManager(celery_app)
+        logger.info("✅ DASH: Celery background callback manager configured")
+        logger.info("   Note: Celery worker must be running for design mode to work")
+        logger.info("   Start worker with: docker compose --profile celery up")
+    except Exception as e:
+        logger.error(f"❌ DASH: Failed to setup Celery manager: {e}")
+        logger.warning("⚠️  DASH: Design mode will not work without Celery!")
+        background_callback_manager = None
 
     # Start the app with optional background callback manager
     app = dash.Dash(

@@ -29,7 +29,7 @@ def register_render_callbacks(app):
             State("theme-store", "data"),
         ],
         prevent_initial_call=True,
-        background=True,  # Always use background - Dash auto-selects Celery vs diskcache
+        background=True,  # CRITICAL: Must use background to prevent UI blocking during render
     )
     def render_figure_preview(
         dict_kwargs,
@@ -49,8 +49,9 @@ def register_render_callbacks(app):
         2. Visualization type changes
 
         It loads the data and generates a Plotly figure for preview.
-        """
 
+        NOTE: Runs in background via Celery, so all imports must be inside function.
+        """
         if not local_data:
             raise dash.exceptions.PreventUpdate
 
@@ -103,15 +104,19 @@ def register_render_callbacks(app):
 
             # Render figure
             logger.info(f"🎨 Rendering {visu_type} visualization")
-            figure, trace_metadata = render_figure(
-                dict_kwargs=dict_kwargs or {},
-                visu_type=visu_type,
-                df=df,
-                theme=current_theme,
-            )
-
-            logger.info("✅ RENDER: Figure generated successfully")
-            return figure
+            try:
+                figure, trace_metadata = render_figure(
+                    dict_kwargs=dict_kwargs or {},
+                    visu_type=visu_type,
+                    df=df,
+                    theme=current_theme,
+                )
+                logger.info("✅ RENDER: Figure generated successfully")
+                logger.info("✅ RENDER: Returning figure to callback output")
+                return figure
+            except Exception as render_error:
+                logger.error(f"❌ RENDER: render_figure failed: {render_error}")
+                raise  # Re-raise to outer exception handler
 
         except Exception as e:
             logger.error(f"❌ RENDER ERROR: {e}")
