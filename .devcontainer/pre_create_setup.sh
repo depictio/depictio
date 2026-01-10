@@ -6,19 +6,73 @@ echo "🚀 Depictio DevContainer Pre-Create Setup"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# Source port allocation script to set up instance configuration
-echo "🔧 Configuring instance..."
-source .devcontainer/scripts/allocate-ports.sh
+# Verify AI tool credentials exist
+echo "🔐 Checking AI tool credentials..."
 
-# Ensure docker-compose/.env exists
-if [ ! -f docker-compose/.env ]; then
-    echo ""
-    echo "❌ ERROR: docker-compose/.env not found!"
-    echo "Please create it with required environment variables."
-    exit 1
+# Check Claude Code credentials
+CLAUDE_CREDS=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null || echo "")
+if [ -n "$CLAUDE_CREDS" ]; then
+    # Extract access token and save to .env.claude for docker-compose
+    ACCESS_TOKEN=$(echo "$CLAUDE_CREDS" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
+
+    if [ -n "$ACCESS_TOKEN" ]; then
+        # Create .env.claude with the token
+        echo "ANTHROPIC_API_KEY=${ACCESS_TOKEN}" > .devcontainer/.env.claude
+        chmod 600 .devcontainer/.env.claude
+        echo "   ✓ Claude Code credentials extracted"
+    fi
+
+    # Also save full credentials to ~/.claude/.credentials.json (will be mounted)
+    mkdir -p ~/.claude
+    echo "$CLAUDE_CREDS" > ~/.claude/.credentials.json
+    chmod 600 ~/.claude/.credentials.json
+else
+    echo "   ⚠️  No Claude Code credentials in keychain"
+    echo "      Run 'claude' on your host to authenticate first"
+    # Create empty .env.claude to avoid docker-compose errors
+    touch .devcontainer/.env.claude
+    chmod 600 .devcontainer/.env.claude
 fi
 
-echo "✓ Environment file found"
+# Check Gemini credentials
+if [ -f ~/.gemini/oauth_creds.json ]; then
+    echo "   ✓ Gemini credentials found"
+else
+    echo "   ⚠️  No Gemini credentials found (run 'gemini' to authenticate)"
+fi
+
+# Check Qwen credentials
+if [ -f ~/.qwen/oauth_creds.json ]; then
+    echo "   ✓ Qwen credentials found"
+else
+    echo "   ⚠️  No Qwen credentials found (run 'qwen' to authenticate)"
+fi
+
+# Source port allocation script to set up instance configuration
+echo "🔧 Configuring instance..."
+# shellcheck disable=SC1091
+source .devcontainer/scripts/allocate-ports.sh
+
+# Ensure docker-compose/.env exists (create default if missing for Codespaces)
+if [ ! -f docker-compose/.env ]; then
+    echo ""
+    echo "⚠️  docker-compose/.env not found - creating default configuration..."
+    mkdir -p docker-compose
+    cat > docker-compose/.env <<'ENVEOF'
+# Auto-generated default configuration for Codespaces/new setups
+DEPICTIO_CONTEXT=server
+DEPICTIO_LOGGING_VERBOSITY_LEVEL=DEBUG
+DEPICTIO_MINIO_ROOT_USER=minio
+DEPICTIO_MINIO_ROOT_PASSWORD=minio123
+DEPICTIO_MONGODB_WIPE=false
+DEV_MODE=true
+DEPICTIO_PLAYWRIGHT_DEV_MODE=false
+DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED=false
+ENVEOF
+    echo "✅ Created default docker-compose/.env"
+else
+    echo "✓ Environment file found"
+fi
 echo ""
 
 # Create instance-specific data directory structure
@@ -61,9 +115,9 @@ if [ -f .git ] && grep -q "gitdir:" .git; then
 services:
   app:
     volumes:
-      - ${MAIN_GIT_PATH}:/workspaces/depictio/.git:ro
+      - ${MAIN_GIT_PATH}:/workspace-root/.git:rw
 EOF
-        echo "✓ Git mount configuration created"
+        echo "✓ Git mount configuration created (mounting to /workspace-root/.git)"
     fi
 fi
 

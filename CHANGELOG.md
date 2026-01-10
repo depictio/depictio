@@ -6,27 +6,52 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.6.0-b1</summary>
+<summary>Click to expand the changelog for 0.6.0-b2</summary>
 
 ### Changes 📜
 
 #### New Features ✨
 
-* feat: Skip card loading overlay on initial page load [e8519307]
-* feat: Re-enable duplicate and remove component buttons with DashGridLayout [b6ebee62]
-* feat: Fix dashboard layout save/restore for dual-panel grid system [65360c85]
-* feat: Add design and edit mode callbacks for interactive components with save utilities [822f0800]
-* feat: Simplify filter handling in add_filter function and enhance logging for runtime filters [9369e7d2]
-* feat: Add save utilities for card components to handle metadata saving and updating in dashboards [e65ff10e]
-* feat: Enhance project data handling in register_callbacks_stepper to support nested API responses [9c97ae31]
-* feat: Implement save callback for editing card components with metadata persistence [29410d7d]
-* feat: Update interactive component loading approach to eliminate visual flicker and improve user experience [7457dde1]
-* feat: Enhance design and edit callback registration for interactive components with optimization checks [55e13884]
-* feat: Add permissive response models for DataCollection and Workflow to handle extra fields in API responses [96481f47]
-* feat: Enhance autofill ID sanitizer and console warning filter [ad94b6f9]
-* feat: Remove server-status-cache output from routing callback, now handled by clientside [ba2f8663]
-* feat: Add support for including child tabs in dashboard loading and listing functions [926f87a9]
-* feat: Optimize rendering callbacks to enhance data handling and reduce unnecessary re-renders [9d3ff4cd]
+* feat: implement smart caching for quality job to skip when no code changes [043dcda1]
+
+#### Bug Fixes 🐛
+
+* fix: only hash existing files in quality cache check [e7738369]
+* fix: add missing __init__.py for figure_component.callbacks module [f0819cf7]
+* fix: create missing directories in all CI jobs for frontend container startup [8777ae51]
+* fix: create missing prof_files and cache directories for depictio-frontend container startup [0a8316f8]
+
+#### Chores 🧹
+
+* chore: remove backup files from git tracking [aa26887a]
+* chore: add backup files and cache to gitignore [96bf9d42]
+
+#### Other Changes 📝
+
+* Bump version: 0.6.0-b1 → 0.6.0-b2 [60cf2cbf]
+* debug: add multiple frontend logs checkpoints and container status [6dd741c4]
+* debug: add comprehensive frontend startup script debugging [2e447f52]
+* debug: add detailed frontend application startup diagnostics [5e59281f]
+* debug: add Docker networking diagnostics to CI [e54fa6bf]
+* debug: add comprehensive frontend container debugging to CI [5629ed46]
+* chore(docker): add performance testing volumes and optional Celery [1b231e7f]
+* perf(api): add local filesystem caching for Delta tables [1631ef2f]
+* chore(dash): enable client-side performance monitoring [5beea74c]
+* feat(dash): convert interactive component rendering to ALL pattern [85e81702]
+* fix(dash): suppress third-party console warnings and fix favicon [39103115]
+* feat(dash): convert card rendering to ALL pattern and add filter notification [e98e429a]
+* feat(dash): add unsaved changes indicator for dashboard layout [402f48f6]
+* Update CHANGELOG.md for v0.6.0-b1 [3bffaedd]
+* Bump version: 0.5.3 → 0.6.0-b1 [0419184b]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+ecessary re-renders [9d3ff4cd]
 * feat: Enhance async rendering callback to allow Stage 2 re-renders based on delta location availability [9b04027b]
 * feat: Implement dashboard editing functionality [ac19120d]
 * feat: Enhance dashboard deletion process to remove child tabs and improve error handling; add standardized sidebar footer component [7ee8256e]

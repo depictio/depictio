@@ -331,7 +331,7 @@ class CustomJSONResponse(JSONResponse):
 
 
 # Check if in development mode
-dev_mode = os.environ.get("DEV_MODE", "false").lower() == "true"
+dev_mode = os.environ.get("DEPICTIO_DEV_MODE", "false").lower() == "true"
 
 
 app = FastAPI(

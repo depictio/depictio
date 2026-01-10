@@ -1,22 +1,23 @@
 services:
   mongo:
     image: mongo:8.0
-    container_name: mongo
+    container_name: mongo-${COMPOSE_PROJECT_NAME:-depictio}
     command: mongod --dbpath /data/depictioDB --port 27018 --logpath /dev/null
     user: "${UID:-1000}:${GID:-1000}"
     ports:
-      - 27018:27018
+      - ${MONGO_PORT:-27018}:27018
     volumes:
-      - ./depictioDB:/data/depictioDB
+      - ./${DATA_DIR}/depictioDB:/data/depictioDB
 
   redis:
     image: redis:8.2.1
-    container_name: redis
+    container_name: redis-${COMPOSE_PROJECT_NAME:-depictio}
     ports:
-      - 6379:6379
+      - ${REDIS_PORT:-6379}:6379
     volumes:
-      - redis_data:/data
-    command: redis-server
+      - ./${DATA_DIR}/redis:/data
+    command: redis-server --dir /data --save 60 1
+    user: "${UID:-1000}:${GID:-1000}"
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
       interval: 30s
@@ -24,26 +25,26 @@ services:
       retries: 5
 
   depictio-frontend:
-    container_name: depictio-frontend
+    container_name: depictio-frontend-${COMPOSE_PROJECT_NAME:-depictio}
     # Use prebuilt image if DEPICTIO_VERSION is set, otherwise build locally
     image: ${DEPICTIO_VERSION:-depictio:dev}
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
       context: .
     ports:
-      - 5080:5080
+      - ${DASH_PORT:-5080}:5080
     volumes:
       - ./depictio:/app/depictio
       - ./docker-images/run_dash.sh:/app/run_dash.sh
       - ./pyproject.toml:/app/pyproject.toml
       - ./VERSION:/app/VERSION
-      - ./prof_files:/app/prof_files
-      - ./cache:/app/cache
-      - ./minio_data:/app/minio_data
+      - ./${DATA_DIR}/prof_files:/app/prof_files
+      - ./${DATA_DIR}/cache:/app/cache
+      - ./${DATA_DIR}/minio_data:/app/minio_data
     env_file:
       - docker-compose/.env
     environment:
-        DEV_MODE: "${DEV_MODE:-false}"
+        DEPICTIO_DEV_MODE: "${DEPICTIO_DEV_MODE:-false}"
         DEPICTIO_LOGGING_VERBOSITY_LEVEL: "${DEPICTIO_LOGGING_VERBOSITY_LEVEL:-DEBUG}"
     command: ["/app/run_dash.sh"]
     user: "${UID:-1000}:${GID:-1000}"
@@ -53,25 +54,25 @@ services:
       - depictio-backend
 
   depictio-backend:
-    container_name: depictio-backend
+    container_name: depictio-backend-${COMPOSE_PROJECT_NAME:-depictio}
     # Use prebuilt image if DEPICTIO_VERSION is set, otherwise build locally
     image: ${DEPICTIO_VERSION:-depictio:dev}
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
       context: .
     ports:
-      - 8058:8058
+      - ${FASTAPI_PORT:-8058}:8058
     volumes:
       - ./depictio:/app/depictio
       - ./pyproject.toml:/app/pyproject.toml
       - ./VERSION:/app/VERSION
       - ./docker-images/run_fastapi.sh:/app/run_fastapi.sh
-      - ./prof_files:/app/prof_files
-      - ./minio_data:/app/minio_data
+      - ./${DATA_DIR}/prof_files:/app/prof_files
+      - ./${DATA_DIR}/minio_data:/app/minio_data
     env_file:
       - docker-compose/.env
     environment:
-        DEV_MODE: "${DEV_MODE:-false}"
+        DEPICTIO_DEV_MODE: "${DEPICTIO_DEV_MODE:-false}"
         DEPICTIO_LOGGING_VERBOSITY_LEVEL: "${DEPICTIO_LOGGING_VERBOSITY_LEVEL:-DEBUG}"
     command: ["/app/run_fastapi.sh"]
     user: "${UID:-1000}:${GID:-1000}"
@@ -80,10 +81,10 @@ services:
       - redis
 
   depictio-celery-worker:
-    container_name: depictio-celery-worker
-    # Automatically starts but exits gracefully if background callbacks disabled
-    # Controlled by DEPICTIO_USE_BACKGROUND_CALLBACKS in docker-compose/.env
-    # Script checks env var and exits with code 0 if disabled
+    container_name: depictio-celery-worker-${COMPOSE_PROJECT_NAME:-depictio}
+    profiles:
+      - async  # Only start with --profile async (for background callbacks)
+    # Use the same image as backend
     image: ${DEPICTIO_VERSION:-depictio:dev}
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
@@ -92,11 +93,11 @@ services:
       - ./depictio:/app/depictio
       - ./pyproject.toml:/app/pyproject.toml
       - ./docker-images/run_celery_worker.sh:/app/run_celery_worker.sh
-      - ./prof_files:/app/prof_files
+      - ./${DATA_DIR}/prof_files:/app/prof_files
     env_file:
       - docker-compose/.env
     environment:
-        DEV_MODE: "${DEV_MODE:-false}"
+        DEPICTIO_DEV_MODE: "${DEPICTIO_DEV_MODE:-false}"
         DEPICTIO_LOGGING_VERBOSITY_LEVEL: "${DEPICTIO_LOGGING_VERBOSITY_LEVEL:-DEBUG}"
         DEPICTIO_CONTEXT: "server"
     command: ["/app/run_celery_worker.sh"]
@@ -106,7 +107,3 @@ services:
       - mongo
       - redis
       - depictio-backend
-
-volumes:
-  redis_data:
-    driver: local
