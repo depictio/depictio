@@ -9,20 +9,10 @@ import dash
 from dash import MATCH, Input, Output, State
 
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.background_callback_helpers import (
-    log_background_callback_status,
-    should_use_background_for_component,
-)
-
-# Use centralized background callback configuration
-USE_BACKGROUND_CALLBACKS = should_use_background_for_component("figure")
 
 
 def register_render_callbacks(app):
     """Register figure rendering callbacks for preview mode."""
-
-    # Log background callback status
-    log_background_callback_status("figure", "render_figure_preview")
 
     @app.callback(
         Output({"type": "figure-design-preview", "index": MATCH}, "figure"),
@@ -39,7 +29,7 @@ def register_render_callbacks(app):
             State("theme-store", "data"),
         ],
         prevent_initial_call=True,
-        background=USE_BACKGROUND_CALLBACKS,
+        background=True,  # Always use background - Dash auto-selects Celery vs diskcache
     )
     def render_figure_preview(
         dict_kwargs,

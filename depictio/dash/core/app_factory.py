@@ -36,31 +36,40 @@ def create_dash_app():
     # Check if background callbacks are enabled
     use_background = os.getenv("DEPICTIO_USE_BACKGROUND_CALLBACKS", "false").lower() == "true"
 
-    # Conditionally setup Celery background callback manager
+    # Setup background callback manager
+    # Priority: Celery (if env enabled) → Diskcache (fallback)
     background_callback_manager = None
+
     if use_background:
+        # Try Celery first when explicitly enabled
         logger.info("🔧 DASH: Background callbacks ENABLED - Setting up Celery manager...")
         try:
-            # Import the Dash-side Celery app
             from depictio.dash.celery_app import celery_app
 
             background_callback_manager = dash.CeleryManager(celery_app)
             logger.info("✅ DASH: Celery background callback manager configured")
         except Exception as e:
             logger.error(f"❌ DASH: Failed to setup Celery manager: {e}")
-            logger.warning("⚠️  DASH: Falling back to synchronous callbacks")
+            logger.warning("⚠️  DASH: Falling back to diskcache...")
             background_callback_manager = None
-    else:
-        logger.info("🚫 DASH: Background callbacks DISABLED - Using synchronous mode")
-        logger.info("   Set DEPICTIO_USE_BACKGROUND_CALLBACKS=true to enable")
 
-    # import diskcache
+    # Fallback to diskcache if Celery not available or not enabled
+    if background_callback_manager is None:
+        logger.info("🔧 DASH: Setting up diskcache background callback manager...")
+        try:
+            import diskcache
 
-    # cache = diskcache.Cache("/app/cache")
-    # background_callback_manager = dash.DiskcacheManager(cache)
-    # logger.info(
-    #     f"Diskcache background callback manager configured with cache path: {cache.directory}"
-    # )
+            cache = diskcache.Cache("/app/cache")
+            background_callback_manager = dash.DiskcacheManager(cache)
+            logger.info(
+                f"✅ DASH: Diskcache background callback manager configured (cache: {cache.directory})"
+            )
+        except Exception as e:
+            logger.error(f"❌ DASH: Failed to setup diskcache manager: {e}")
+            logger.warning(
+                "⚠️  DASH: No background callback manager available - callbacks will fail!"
+            )
+            background_callback_manager = None
 
     # Start the app with optional background callback manager
     app = dash.Dash(
