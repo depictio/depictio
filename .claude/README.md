@@ -2,16 +2,27 @@
 
 This directory contains Claude Code configuration for developing depictio. It includes settings, hooks, custom skills, MCP servers, and workflow templates.
 
+> **New to Claude Code?** Read the **[Getting Started Guide](GETTING-STARTED.md)** for a comprehensive introduction to all concepts.
+
 ## Quick Start
 
-1. **Install Claude Code**: Follow instructions at [code.claude.com](https://code.claude.com)
-2. **Open in Claude Code**: `claude` from the depictio directory
-3. **Use skills**: Type `/quality`, `/test`, `/review`, etc.
+```bash
+# 1. Start Claude Code
+cd /path/to/depictio && claude
+
+# 2. Try essential commands
+/quality              # Run code quality checks
+/test                 # Run tests
+/arch                 # Explore architecture
+/commit               # AI-assisted commit
+/code-review          # Full code review
+```
 
 ## Directory Structure
 
 ```
 .claude/
+├── GETTING-STARTED.md    # Comprehensive guide (start here!)
 ├── settings.json          # Claude Code settings and permissions
 ├── mcp.json              # MCP server configurations
 ├── hooks/                # Automation hooks
