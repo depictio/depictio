@@ -142,6 +142,37 @@ Start by exploring the codebase.
 
 Add these to the prompt based on your stack:
 
+### Snakemake Workflow Projects
+```
+Additional Snakemake-specific requirements:
+- Skills for:
+  - snakemake --lint (workflow linting)
+  - snakemake -n --dry-run (dry run validation)
+  - snakemake --dag | dot (DAG visualization)
+  - snakemake --report (generate reports)
+  - snakemake --list-rules (list available rules)
+  - snakemake --summary (show output file status)
+- Agent expertise:
+  - Snakemake rule syntax and best practices
+  - Conda/mamba environment management
+  - Cluster/cloud execution (SLURM, LSF, AWS, GCP)
+  - Workflow modularization (rules/, scripts/, envs/)
+  - Config file management (config.yaml, profiles/)
+  - Wildcards, expand(), input functions
+  - Checkpoint rules for dynamic DAGs
+  - Resource management (threads, mem_mb, runtime)
+- Workflows:
+  - New rule development workflow
+  - Pipeline debugging workflow
+  - Performance optimization workflow
+- Hooks:
+  - Snakemake lint after .smk file edits
+  - Config validation after config.yaml changes
+- MCP servers:
+  - File system for large data directories
+  - Cluster job monitoring (if applicable)
+```
+
 ### Python Projects
 ```
 Additional Python-specific requirements:
@@ -188,6 +219,112 @@ Additional DevOps-specific requirements:
 - Skills for: Docker, Kubernetes, Terraform, Ansible
 - Agent expertise: CI/CD pipelines, infrastructure as code
 - Workflow: Infrastructure change with plan/apply pattern
+```
+
+---
+
+## Complete Snakemake Project Prompt
+
+For Snakemake/bioinformatics workflow projects, use this complete prompt:
+
+```
+Analyze my Snakemake workflow project and create a comprehensive Claude Code
+development toolkit in `.claude/`.
+
+## My Project Type
+This is a Snakemake bioinformatics/data science workflow project.
+
+## Generate These Components
+
+### 1. Settings (`.claude/settings.json`)
+Permissions for:
+- snakemake commands (lint, dry-run, run, report, dag)
+- conda/mamba commands
+- cluster submission tools (if applicable: sbatch, bsub, qsub)
+- Python scripts execution
+- pytest for testing
+- ruff/black for Python formatting
+- git operations
+
+### 2. Hooks (`.claude/hooks/`)
+- `post-file-change.sh`:
+  - Run snakemake --lint after .smk file edits
+  - Run ruff check after .py script edits
+  - Validate config.yaml syntax after config changes
+- `pre-bash-check.sh`: Block dangerous rm commands on data directories
+- `on-stop-summary.sh`: Show workflow status and pending jobs
+
+### 3. Skills (`.claude/commands/`)
+Create skills for:
+- `/lint` - Run snakemake --lint on workflow
+- `/dry-run` or `/validate` - Run snakemake -n to validate DAG
+- `/dag` - Generate and display workflow DAG
+- `/run` - Execute workflow with common options
+- `/status` - Show job status and output file summary
+- `/report` - Generate snakemake HTML report
+- `/rules` - List and explain available rules
+- `/test` - Run pytest on workflow tests
+- `/quality` - Run all quality checks (lint, ruff, tests)
+- `/new-rule` - Create a new rule following my patterns
+- `/debug` - Debug a failing rule
+- `/profile` - Analyze workflow performance
+
+### 4. MCP Servers (`.claude/mcp.json`)
+- GitHub for repository operations
+- Filesystem for data directory access
+- Fetch for downloading reference data
+
+### 5. Agents (`.claude/agents/`)
+- **Snakemake Agent**: Rule syntax, wildcards, expand(), input functions,
+  checkpoints, resource management, cluster config
+- **Bioinformatics Agent**: Tool expertise (samtools, bwa, STAR, etc.),
+  file formats (BAM, VCF, FASTQ), best practices
+- **Conda Agent**: Environment management, dependency resolution,
+  reproducibility
+- **Cluster Agent**: SLURM/LSF/PBS configuration, job optimization,
+  resource allocation
+- **Testing Agent**: Workflow testing strategies, test data management
+- **Performance Agent**: Benchmarking, bottleneck identification,
+  parallelization optimization
+
+### 6. Workflows (`.claude/workflows/`)
+- **new-rule.md**: Adding a new rule to the workflow
+- **debug-rule.md**: Debugging a failing rule
+- **optimize-workflow.md**: Performance optimization
+- **add-tool.md**: Integrating a new bioinformatics tool
+- **cluster-setup.md**: Configuring cluster execution
+
+### 7. Documentation
+- README.md with all configurations
+- GETTING-STARTED.md with Snakemake-specific examples
+
+## Analysis Steps
+
+1. **Explore my workflow structure**:
+   - Main Snakefile location
+   - Rules organization (rules/*.smk)
+   - Config files (config/*.yaml)
+   - Conda environments (envs/*.yaml)
+   - Scripts directory (scripts/*.py, scripts/*.R)
+   - Cluster profiles (profiles/*)
+
+2. **Identify my patterns**:
+   - Rule naming conventions
+   - Wildcard patterns
+   - Resource specifications
+   - Log file organization
+   - Benchmark tracking
+
+3. **Generate configurations** that match MY:
+   - Directory structure
+   - Naming conventions
+   - Cluster/execution environment
+   - Tool versions and environments
+
+## After Generation
+Commit all files and push to my branch.
+
+Start by exploring my Snakemake workflow structure.
 ```
 
 ---
