@@ -1,22 +1,24 @@
 #!/bin/bash
 set -e
 
-# Check if Celery is enabled
-USE_CELERY=$(echo "${DEPICTIO_CELERY_ENABLED:-false}" | tr '[:upper:]' '[:lower:]')
-
-if [ "$USE_CELERY" != "true" ]; then
-    echo "🚫 CELERY WORKER: Celery DISABLED (DEPICTIO_CELERY_ENABLED=$DEPICTIO_CELERY_ENABLED)"
-    echo "🚫 CELERY WORKER: Exiting gracefully - Celery worker not needed"
-    echo "   Set DEPICTIO_CELERY_ENABLED=true in docker-compose/.env and use --profile celery to enable"
-    exit 0
-fi
+# IMPORTANT: Celery worker ALWAYS runs - it's required for:
+# - Component design mode (figure preview, interactive editing)
+# - Stepper component creation
+# - Component editing
+#
+# The DEPICTIO_CELERY_ENABLED parameter only controls whether DASHBOARD VIEW/EDIT MODE
+# uses background callbacks. Design mode always uses background callbacks regardless.
 
 # Set default values if environment variables are not set
 CELERY_WORKERS=${DEPICTIO_CELERY_WORKERS:-2}
 
-echo "✅ CELERY WORKER: Celery ENABLED"
-echo "🔧 CELERY WORKER: Starting dedicated Celery worker..."
+echo "✅ CELERY WORKER: Starting Celery worker (required for design mode)"
 echo "🔧 CELERY WORKER: Workers = $CELERY_WORKERS"
+if [ "${DEPICTIO_CELERY_ENABLED:-false}" = "true" ]; then
+    echo "🔧 CELERY WORKER: Dashboard view mode will use background callbacks"
+else
+    echo "🔧 CELERY WORKER: Dashboard view mode will use synchronous callbacks"
+fi
 
 # Start Celery worker - pointing to celery_worker module (imports flask_dispatcher for task discovery)
 exec celery -A depictio.dash.celery_worker:celery_app worker \

@@ -2,7 +2,11 @@
 Centralized helper utilities for background callback configuration.
 
 This module provides a consistent way to check whether background callbacks
-are enabled and should be used across different component types.
+are enabled for DASHBOARD VIEW/EDIT MODE callbacks.
+
+IMPORTANT: This only applies to dashboard view/edit mode (core.py callbacks).
+Component design/editing mode (render.py callbacks) ALWAYS uses background callbacks
+and is not controlled by this configuration.
 """
 
 import os
@@ -15,13 +19,17 @@ _USE_BACKGROUND_CALLBACKS = os.getenv("DEPICTIO_CELERY_ENABLED", "false").lower(
 
 def use_background_callbacks() -> bool:
     """
-    Check if background callbacks are enabled via environment variable.
+    Check if background callbacks are enabled for dashboard view/edit mode.
+
+    NOTE: This only affects dashboard view/edit mode callbacks (core.py).
+    Design mode callbacks (render.py) always use background=True regardless.
 
     Returns:
         bool: True if DEPICTIO_CELERY_ENABLED=true, False otherwise
 
     Example:
         >>> from depictio.dash.background_callback_helpers import use_background_callbacks
+        >>> # For dashboard view/edit mode callbacks only:
         >>> @app.callback(..., background=use_background_callbacks())
     """
     return _USE_BACKGROUND_CALLBACKS
@@ -70,8 +78,14 @@ def log_background_callback_status(component_type: str, callback_name: str):
 
 # Log overall background callback status at module load
 if _USE_BACKGROUND_CALLBACKS:
-    logger.info("✅ BACKGROUND CALLBACKS: ENABLED (DEPICTIO_CELERY_ENABLED=true)")
-    logger.info("   Components using background: card, figure, table")
+    logger.info(
+        "✅ DASHBOARD VIEW MODE: Background callbacks ENABLED (DEPICTIO_CELERY_ENABLED=true)"
+    )
+    logger.info("   Dashboard view/edit will use background callbacks for: card, figure, table")
+    logger.info("   Design mode ALWAYS uses background callbacks (not affected by this setting)")
 else:
-    logger.info("🚫 BACKGROUND CALLBACKS: DISABLED (DEPICTIO_CELERY_ENABLED=false)")
-    logger.info("   All callbacks will run synchronously")
+    logger.info(
+        "🚫 DASHBOARD VIEW MODE: Background callbacks DISABLED (DEPICTIO_CELERY_ENABLED=false)"
+    )
+    logger.info("   Dashboard view/edit will run callbacks synchronously")
+    logger.info("   Design mode ALWAYS uses background callbacks (not affected by this setting)")

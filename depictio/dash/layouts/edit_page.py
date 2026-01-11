@@ -143,11 +143,59 @@ def create_edit_page(
             if isinstance(design_interface_raw, list)
             else design_interface_raw
         )
+    elif component_type == "figure":
+        logger.info("🎯 EDIT PAGE - Creating design interface for FIGURE component")
+        logger.info(f"   component_id: {component_id}")
+        logger.info(f"   wf_id: {wf_id}")
+        logger.info(f"   dc_id: {dc_id}")
+        logger.info(f"   df shape: {df.shape if hasattr(df, 'shape') else 'N/A'}")
+
+        # Import existing design_figure from utils - it has complete UI already
+        from depictio.dash.modules.figure_component.utils import design_figure
+
+        # CRITICAL: Use actual component_id, NOT tmp suffix
+        # Call with all available parameters - existing function handles everything
+        design_interface_raw = design_figure(
+            id={"type": "figure-component", "index": component_id},
+            component_data=component_data,  # For pre-population
+            workflow_id=wf_id,
+            data_collection_id=dc_id,
+            local_data=df,  # DataFrame for column selection
+        )
+
+        logger.info(f"   design_interface_raw type: {type(design_interface_raw)}")
+        logger.info(f"   design_interface_raw is list: {isinstance(design_interface_raw, list)}")
+        if isinstance(design_interface_raw, list):
+            logger.info(f"   design_interface_raw length: {len(design_interface_raw)}")
+
+        # Handle different component return patterns
+        # - Card/Interactive: Single-element list with wrapped content → extract [0]
+        # - Figure: Multi-element list (11 elements) → wrap all in container
+        if isinstance(design_interface_raw, list):
+            if len(design_interface_raw) > 1:
+                # Multi-element list: wrap all elements in flex container
+                design_interface = html.Div(
+                    design_interface_raw,
+                    style={
+                        "width": "100%",
+                        "display": "flex",
+                        "flexDirection": "column",
+                        "gap": "0px",  # Elements manage their own spacing
+                    },
+                )
+            else:
+                # Single-element list: extract the element
+                design_interface = design_interface_raw[0]
+        else:
+            design_interface = design_interface_raw
+
+        logger.info(f"   design_interface type: {type(design_interface)}")
+        logger.info("✅ EDIT PAGE - Figure design interface created")
     else:
         # Other component types not yet implemented for editing
         design_interface = html.Div(
             dmc.Alert(
-                f"Edit interface for {component_type} components is not yet implemented. Only Card and Interactive components are currently editable.",
+                f"Edit interface for {component_type} components is not yet implemented. Only Card, Interactive, and Figure components are currently editable.",
                 title="Not Implemented",
                 color="yellow",
                 icon=DashIconify(icon="mdi:alert", width=24),
