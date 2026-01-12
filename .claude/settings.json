@@ -1,0 +1,116 @@
+{
+  "$schema": "https://github.com/anthropics/claude-code/blob/main/schemas/settings.schema.json",
+  "permissions": {
+    "allow": [
+      "Bash(pytest:*)",
+      "Bash(ruff:*)",
+      "Bash(ty:*)",
+      "Bash(pre-commit:*)",
+      "Bash(uv:*)",
+      "Bash(pip:*)",
+      "Bash(git:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker compose logs:*)",
+      "Bash(curl:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(tree:*)",
+      "Bash(wc:*)",
+      "Bash(sort:*)",
+      "Bash(uniq:*)",
+      "Bash(which:*)",
+      "Bash(gh:*)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(helm lint:*)",
+      "Bash(helm template:*)",
+      "Bash(shellcheck:*)",
+      "Bash(mongosh:*)",
+      "Bash(python -c:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(python -m ruff:*)",
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep",
+      "WebFetch",
+      "WebSearch",
+      "Task",
+      "NotebookEdit",
+      "Skill",
+      "SlashCommand:*",
+      "Plugin:*"
+    ],
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(docker rm:*)",
+      "Bash(docker rmi:*)",
+      "Bash(docker volume rm:*)",
+      "Bash(docker system prune:*)",
+      "Bash(docker compose down:*)",
+      "Bash(docker compose up:*)",
+      "Bash(docker compose restart:*)",
+      "Bash(docker exec:*)",
+      "Bash(sudo:*)"
+    ]
+  },
+  "env": {
+    "DEPICTIO_CONTEXT": "server",
+    "DEPICTIO_LOGGING_VERBOSITY_LEVEL": "DEBUG",
+    "PYTHONPATH": "${workspaceFolder}"
+  },
+  "plugins": {
+    "enabled": [
+      "code-review",
+      "commit-commands",
+      "frontend-design",
+      "feature-dev",
+      "security-guidance",
+      "hookify"
+    ],
+    "marketplaces": [
+      "anthropics/claude-plugins-official"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/post-file-change.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/pre-bash-check.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/on-stop-summary.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

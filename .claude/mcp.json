@@ -1,0 +1,66 @@
+{
+  "$schema": "https://github.com/anthropics/claude-code/blob/main/schemas/mcp.schema.json",
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      },
+      "description": "GitHub integration for PRs, issues, and repository operations"
+    },
+    "mongodb": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-mongodb",
+        "mongodb://localhost:27018/depictioDB"
+      ],
+      "description": "MongoDB access for depictio database operations"
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/home/user/depictio",
+        "/workspace"
+      ],
+      "description": "File system access for depictio codebase"
+    },
+    "fetch": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-fetch"],
+      "description": "HTTP fetch for API testing and web requests"
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "description": "Persistent memory for session context and knowledge graphs"
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "description": "Enhanced reasoning for complex problem solving"
+    },
+    "slack": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-slack"],
+      "env": {
+        "SLACK_BOT_TOKEN": "${SLACK_BOT_TOKEN}",
+        "SLACK_TEAM_ID": "${SLACK_TEAM_ID}"
+      },
+      "disabled": true,
+      "description": "Slack integration (set tokens to enable)"
+    },
+    "sentry": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sentry"],
+      "env": {
+        "SENTRY_AUTH_TOKEN": "${SENTRY_AUTH_TOKEN}"
+      },
+      "disabled": true,
+      "description": "Sentry error tracking integration (set token to enable)"
+    }
+  }
+}
