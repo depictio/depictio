@@ -794,7 +794,7 @@ def design_header(data, local_store, edit_mode: bool = False):
         variant="filled",
         disabled=disabled,  # Disable for non-owners
         style={"display": "block" if edit_mode else "none"},  # Only show in edit mode
-        n_clicks=0,  # Required for callback to trigger properly
+        # n_clicks not set - Dash preserves count across re-renders
     )
 
     # Create "Save Dashboard" button for edit mode

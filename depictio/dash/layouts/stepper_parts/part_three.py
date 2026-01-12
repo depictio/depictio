@@ -10,8 +10,8 @@ from depictio.api.v1.deltatables_utils import load_deltatable_lite
 # Depictio components imports - design step
 from depictio.dash.modules.card_component.frontend import design_card
 
-# DEPRECATED: Figure component stepper integration - Phase 1 uses view mode only
-from depictio.dash.modules.figure_component.frontend_legacy import design_figure
+# Figure component stepper integration - Phase 2A with simplified design UI
+from depictio.dash.modules.figure_component.utils import design_figure
 from depictio.dash.modules.interactive_component.frontend import design_interactive
 from depictio.dash.modules.multiqc_component.frontend import design_multiqc
 
@@ -22,6 +22,13 @@ from depictio.dash.modules.table_component.frontend import design_table
 def return_design_component(
     component_selected, id, df, btn_component, wf_id=None, dc_id=None, local_data=None
 ):
+    logger.info("🔍 return_design_component called:")
+    logger.info(f"   component_selected={component_selected}")
+    logger.info(f"   id={id}")
+    logger.info(f"   wf_id={wf_id}")
+    logger.info(f"   dc_id={dc_id}")
+    logger.info(f"   local_data present={local_data is not None}")
+
     # Check if DC is MultiQC type and override component selection
     # MultiQC data collections should use standalone MultiQC component, not Figure
     if component_selected == "Figure" and dc_id and local_data:
@@ -229,7 +236,7 @@ def register_callbacks_stepper_part_three(app):
                     try:
                         # Get data collection info to check type
                         response = httpx.get(
-                            f"{API_BASE_URL}/depictio/api/v1/datacollections/{dc_id}",
+                            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_id}",
                             headers={"Authorization": f"Bearer {TOKEN}"},
                         )
 

@@ -33,26 +33,24 @@ def create_dash_app():
     # assets_folder = os.path.join(dash_root_path, "assets/debug")
     assets_folder = os.path.join(dash_root_path, "assets")
 
-    # # Setup Celery background callback manager
-    logger.info("🔧 DASH: Setting up Celery background callback manager...")
+    # Setup background callback manager - Always configure Celery
+    # The Celery worker container is started conditionally via Docker Compose profile
+    logger.info("🔧 DASH: Setting up Celery manager...")
+    background_callback_manager = None
 
-    # Import the Dash-side Celery app
-    from depictio.dash.celery_app import celery_app
+    try:
+        from depictio.dash.celery_app import celery_app
 
-    background_callback_manager = dash.CeleryManager(celery_app)
-    logger.info("✅ DASH: Celery background callback manager configured")
+        background_callback_manager = dash.CeleryManager(celery_app)
+        logger.info("✅ DASH: Celery background callback manager configured")
+        logger.info("   Note: Celery worker must be running for design mode to work")
+        logger.info("   Start worker with: docker compose --profile celery up")
+    except Exception as e:
+        logger.error(f"❌ DASH: Failed to setup Celery manager: {e}")
+        logger.warning("⚠️  DASH: Design mode will not work without Celery!")
+        background_callback_manager = None
 
-    # import diskcache
-
-    # cache = diskcache.Cache("/app/cache")
-    # background_callback_manager = dash.DiskcacheManager(cache)
-    # logger.info(
-    #     f"Diskcache background callback manager configured with cache path: {cache.directory}"
-    # )
-
-    # logger.info("✅ DASH: Background callback manager configured")
-
-    # Start the app with background callback manager
+    # Start the app with optional background callback manager
     app = dash.Dash(
         __name__,  # Use the current module name
         requests_pathname_prefix="/",
@@ -67,7 +65,7 @@ def create_dash_app():
         include_assets_files=True,
         assets_folder=assets_folder,
         assets_url_path="/assets",  # Explicitly set the assets URL path
-        background_callback_manager=background_callback_manager,  # Enable background callbacks
+        background_callback_manager=background_callback_manager,  # Only set if enabled
         # show_undo_redo=False,
     )
 

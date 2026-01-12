@@ -2029,17 +2029,12 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
                 id={"type": "stored-metadata-component", "index": index},
                 data=store_component_data,
             ),
-            # Loading overlay + Graph (populated by callback)
-            dcc.Loading(
-                id={"type": "figure-loading", "index": index},
-                type="dot",  # dot, default, circle, cube, or graph
-                color="#6495ED",  # Blue color for figure loading indicator
-                children=dcc.Graph(
-                    id={"type": "figure-graph", "index": index},
-                    figure={},  # Empty - populated by batch rendering callback
-                    config={"displayModeBar": True, "responsive": True},
-                    style={"height": "100%", "width": "100%"},
-                ),
+            # Graph (populated by callback) - No Loading wrapper to allow dynamic updates
+            dcc.Graph(
+                id={"type": "figure-graph", "index": index},
+                figure={},  # Empty - populated by batch rendering callback
+                config={"displayModeBar": "hover", "responsive": True},
+                style={"height": "100%", "width": "100%"},
             ),
         ],
         style={
@@ -2048,6 +2043,536 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
             "display": "flex",
             "flexDirection": "column",
         },
+    )
+
+
+def design_figure(
+    id, component_data=None, workflow_id=None, data_collection_id=None, local_data=None
+):
+    """Design figure component - RESTORED from frontend_legacy.py.
+
+    This is the complete working implementation with proper layout, mode toggle, and all features.
+    """
+    # Get all available visualizations - import from definitions to get VisualizationDefinition objects
+    from .definitions import get_available_visualizations as get_viz_definitions
+    from .models import VisualizationGroup
+
+    all_vizs = get_viz_definitions()
+
+    # Group visualizations by their group
+    grouped_vizs = {}
+    for viz in all_vizs:
+        group = viz.group
+        if group not in grouped_vizs:
+            grouped_vizs[group] = []
+        grouped_vizs[group].append(viz)
+
+    # Define group order and labels (Geographic and Specialized hidden from dropdown display)
+    group_info = {
+        VisualizationGroup.CORE: {"label": "Core", "order": 1},
+        VisualizationGroup.ADVANCED: {"label": "Advanced", "order": 2},
+        VisualizationGroup.THREE_D: {"label": "3D", "order": 3},
+        VisualizationGroup.CLUSTERING: {"label": "Clustering", "order": 4},
+    }
+
+    # Create flat options ordered by group (DMC Select doesn't support true groups)
+    viz_options = []
+    for group in sorted(grouped_vizs.keys(), key=lambda g: group_info.get(g, {}).get("order", 99)):
+        if group in grouped_vizs and grouped_vizs[group] and group in group_info:
+            # Add group header as disabled option
+            group_label = group_info.get(group, {"label": group.title()})["label"]
+            viz_options.append(
+                {
+                    "label": f"─── {group_label} ───",
+                    "value": f"__group__{group}",
+                    "disabled": True,
+                }
+            )
+
+            # Add visualizations in this group
+            for viz in sorted(grouped_vizs[group], key=lambda x: x.label):
+                viz_options.append({"label": f"  {viz.label}", "value": viz.name.lower()})
+
+            # Add separator except for last group
+            if (
+                group
+                != list(
+                    sorted(
+                        grouped_vizs.keys(), key=lambda g: group_info.get(g, {}).get("order", 99)
+                    )
+                )[-1]
+            ):
+                viz_options.append(
+                    {"label": "", "value": f"__separator__{group}", "disabled": True}
+                )
+
+    # Default to scatter if no component data
+    default_value = "scatter"
+    if component_data and "visu_type" in component_data:
+        default_value = component_data["visu_type"].lower()
+
+    # Set initial mode based on component_data mode field only
+    initial_mode = "ui"  # Default to UI mode
+    if component_data and component_data.get("mode") == "code":
+        initial_mode = "code"
+        logger.info(
+            f"🔧 Setting initial mode to CODE for component {id['index']} based on stored metadata"
+        )
+    else:
+        logger.info(f"🔧 Setting initial mode to UI for component {id['index']}")
+
+    logger.info(f"🔧 FINAL INITIAL MODE: {initial_mode}")
+
+    # Extract index handling dict pattern-matching IDs
+    if isinstance(id, dict):
+        actual_index = id.get("index", id)
+    else:
+        actual_index = id
+
+    # Create layout optimized for fullscreen modal
+    figure_row = [
+        # Mode toggle (central and prominent) - UI and Code modes only
+        dmc.Center(
+            [
+                dmc.SegmentedControl(
+                    id={"type": "figure-mode-toggle", "index": actual_index},
+                    data=[
+                        {
+                            "value": "ui",
+                            "label": dmc.Center(
+                                [
+                                    DashIconify(icon="tabler:eye", width=16),
+                                    html.Span("UI Mode"),
+                                ],
+                                style={
+                                    "gap": 10,
+                                    "width": "250px",
+                                },
+                            ),
+                        },
+                        {
+                            "value": "code",
+                            "label": dmc.Center(
+                                [
+                                    DashIconify(icon="tabler:code", width=16),
+                                    html.Span("Code Mode (Beta)"),
+                                ],
+                                style={
+                                    "gap": 10,
+                                    "width": "250px",
+                                },
+                            ),
+                        },
+                    ],
+                    value=initial_mode,
+                    size="lg",
+                    style={"marginBottom": "15px"},
+                )
+            ]
+        ),
+        # UI mode header - now empty since controls moved to right column
+        html.Div(
+            id={"type": "ui-mode-header", "index": actual_index},
+            style={"display": "block", "height": "0px"},
+        ),
+        # Main content area - side-by-side layout
+        html.Div(
+            id={"type": "main-content-area", "index": actual_index},
+            children=[
+                # Left side - Figure preview container with graph
+                html.Div(
+                    [
+                        build_figure_frame(
+                            index=actual_index,
+                            children=[
+                                # Loading indicator wrapping the preview graph
+                                dcc.Loading(
+                                    id={"type": "figure-preview-loading", "index": actual_index},
+                                    type="default",  # Options: "default", "circle", "dot", "cube"
+                                    color="var(--mantine-primary-color-filled)",
+                                    children=[
+                                        # Preview graph - uses different ID than view mode to avoid callback conflicts
+                                        dcc.Graph(
+                                            id={
+                                                "type": "figure-design-preview",
+                                                "index": actual_index,
+                                            },
+                                            figure={},  # Empty - populated by render callback
+                                            config={"displayModeBar": "hover", "responsive": True},
+                                            style={"height": "100%", "width": "100%"},
+                                        )
+                                    ],
+                                )
+                            ],
+                        )
+                    ],
+                    id={
+                        "type": "component-container",
+                        "index": actual_index,
+                    },
+                    style={
+                        "width": "60%",
+                        "height": "100%",
+                        "display": "inline-block",
+                        "verticalAlign": "top",
+                        "marginRight": "2%",
+                        "minHeight": "400px",
+                        "border": "1px solid #eee",
+                    },
+                ),
+                # Right side - Mode-specific controls
+                html.Div(
+                    children=[
+                        # UI Mode Layout (default) - simple controls
+                        html.Div(
+                            [
+                                html.Div(
+                                    [
+                                        # Visualization and Edit button row
+                                        html.Div(
+                                            [
+                                                # Visualization section (full width)
+                                                html.Div(
+                                                    [
+                                                        dmc.Group(
+                                                            [
+                                                                DashIconify(
+                                                                    icon="mdi:chart-line",
+                                                                    width=18,
+                                                                    height=18,
+                                                                ),
+                                                                dmc.Text(
+                                                                    "Visualization Type:",
+                                                                    fw="bold",
+                                                                    size="md",
+                                                                    style={"fontSize": "16px"},
+                                                                ),
+                                                            ],
+                                                            gap="xs",
+                                                            align="center",
+                                                            style={"marginBottom": "10px"},
+                                                        ),
+                                                        dmc.Select(
+                                                            data=viz_options,
+                                                            value=default_value,
+                                                            id={
+                                                                "type": "segmented-control-visu-graph",
+                                                                "index": actual_index,
+                                                            },
+                                                            placeholder="Choose visualization type...",
+                                                            clearable=False,
+                                                            searchable=True,
+                                                            size="md",
+                                                            style={
+                                                                "width": "100%",
+                                                                "fontSize": "14px",
+                                                            },
+                                                            # TEMPORARILY REMOVED: renderOption will be added back in step 3
+                                                            # renderOption={
+                                                            #     "function": "renderVisualizationOption"
+                                                            # },
+                                                        ),
+                                                    ],
+                                                    style={
+                                                        "width": "100%",
+                                                    },
+                                                ),
+                                            ],
+                                            style={"marginBottom": "20px"},
+                                        ),
+                                        # Hidden edit button for callback compatibility
+                                        html.Div(
+                                            dmc.Button(
+                                                "Edit",
+                                                id={
+                                                    "type": "edit-button",
+                                                    "index": actual_index,
+                                                },
+                                                n_clicks=1,  # Start clicked to show parameters
+                                                style={"display": "none"},
+                                            )
+                                        ),
+                                        # Edit panel (always open)
+                                        dmc.Collapse(
+                                            id={
+                                                "type": "collapse",
+                                                "index": actual_index,
+                                            },
+                                            opened=True,
+                                            style={
+                                                "overflowY": "auto",
+                                            },
+                                        ),
+                                    ],
+                                    style={"padding": "20px"},
+                                ),
+                            ],
+                            id={"type": "ui-mode-content", "index": actual_index},
+                            style={"display": "block"},
+                        ),
+                        # Code Mode Layout (hidden by default)
+                        html.Div(
+                            [
+                                html.Div(
+                                    id={"type": "code-mode-interface", "index": actual_index},
+                                    style={
+                                        "width": "100%",
+                                        "height": "100%",
+                                        "minHeight": "400px",
+                                    },
+                                ),
+                            ],
+                            id={"type": "code-mode-content", "index": actual_index},
+                            style={"display": "none"},
+                        ),
+                    ],
+                    style={
+                        "width": "38%",
+                        "display": "inline-block",
+                        "verticalAlign": "top",
+                        "height": "100%",
+                        "minHeight": "400px",
+                    },
+                ),
+            ],
+            style={"width": "100%", "marginTop": "10px"},
+        ),
+        # Store components
+        dcc.Store(
+            id={"type": "dict_kwargs", "index": actual_index},
+            data={},
+            storage_type="memory",
+        ),
+        # Parameter trigger store - updated when any parameter changes
+        dcc.Store(
+            id={"type": "param-trigger", "index": actual_index},
+            data={"timestamp": 0},
+            storage_type="memory",
+        ),
+        dcc.Store(
+            id={"type": "stored-metadata-component", "index": actual_index},
+            data={
+                "index": actual_index.replace("-tmp", ""),
+                "component_type": "figure",
+                "dict_kwargs": component_data.get("dict_kwargs", {}) if component_data else {},
+                "visu_type": component_data.get("visu_type", "scatter")
+                if component_data
+                else "scatter",
+                "wf_id": component_data.get("wf_id") if component_data else workflow_id,
+                "dc_id": component_data.get("dc_id") if component_data else data_collection_id,
+                "mode": component_data.get("mode", "ui") if component_data else "ui",
+                "code_content": component_data.get("code_content", "") if component_data else "",
+                "last_updated": component_data.get("last_updated") if component_data else None,
+                "parent_index": component_data.get("parent_index") if component_data else None,
+            },
+            storage_type="memory",
+        ),
+        # Mode management stores
+        dcc.Store(
+            id={"type": "figure-mode-store", "index": actual_index},
+            data=initial_mode,
+            storage_type="memory",
+        ),
+        dcc.Store(
+            id={"type": "code-content-store", "index": actual_index},
+            data=component_data.get("code_content", "") if component_data else "",
+            storage_type="memory",
+        ),
+        dcc.Store(
+            id={"type": "code-generated-figure", "index": actual_index},
+            data=None,
+            storage_type="memory",
+        ),
+        # Hidden stores for scroll position preservation
+        dcc.Store(
+            id={"type": "scroll-store", "index": actual_index},
+            data={},
+            storage_type="memory",
+        ),
+        dcc.Store(
+            id={"type": "scroll-restore", "index": actual_index},
+            data={},
+            storage_type="memory",
+        ),
+    ]
+
+    return figure_row
+
+
+def build_figure_design_ui(**kwargs) -> html.Div:
+    """Build figure design UI for add/edit mode (simplified, no custom JS).
+
+    This creates a simple parameter input form for creating or editing figures.
+    Used in the stepper or edit page to provide a UI for configuring figure parameters.
+
+    Args:
+        **kwargs: Configuration parameters
+            - index: Component index (required)
+            - visu_type: Current visualization type (default: "scatter")
+            - dict_kwargs: Current parameters (default: {})
+            - wf_id: Workflow ID
+            - dc_id: Data collection ID
+            - columns: Available columns (required for parameter inputs)
+
+    Returns:
+        HTML div with design UI (viz selector + parameter inputs + preview + save button)
+    """
+    from depictio.dash.modules.figure_component.definitions import get_visualization_registry
+
+    index = kwargs.get("index")
+    visu_type = kwargs.get("visu_type", "scatter")
+    dict_kwargs = kwargs.get("dict_kwargs", {})
+    columns = kwargs.get("columns", [])
+
+    logger.info(f"Building design UI for figure {index} (visu_type: {visu_type})")
+
+    if not columns:
+        logger.warning(f"No columns provided for figure {index} design UI")
+        return html.Div(
+            dmc.Alert(
+                "No columns available. Please select a data collection first.",
+                title="Missing Data",
+                color="red",
+            )
+        )
+
+    # Build visualization type selector (simple, no custom JS)
+    viz_defs = get_visualization_registry()
+    viz_options = [{"label": viz_def.label, "value": key} for key, viz_def in viz_defs.items()]
+
+    viz_selector = dmc.Stack(
+        [
+            dmc.Text("Visualization Type", size="sm", fw="bold"),
+            dmc.Select(
+                id={"type": "figure-visu-type-selector", "index": index},
+                data=viz_options,
+                value=visu_type,
+                placeholder="Choose visualization type...",
+                clearable=False,
+                searchable=True,
+                size="md",
+                style={"width": "100%"},
+            ),
+        ],
+        gap="xs",
+    )
+
+    # Get parameters for current visu type
+    viz_def = viz_defs.get(visu_type, viz_defs["scatter"])
+    # Extract parameter names from ParameterDefinition objects
+    params = [p.name for p in viz_def.parameters]
+
+    # Map param names to inputs (simplified - just common params for now)
+    param_inputs = []
+
+    common_params = {
+        "x": {"label": "X Axis", "type": "column"},
+        "y": {"label": "Y Axis", "type": "column"},
+        "color": {"label": "Color", "type": "column"},
+        "size": {"label": "Size", "type": "column"},
+        "title": {"label": "Title", "type": "text"},
+        "opacity": {"label": "Opacity", "type": "number"},
+        "hover_name": {"label": "Hover Name", "type": "column"},
+        "hover_data": {"label": "Hover Data", "type": "multiselect"},
+        "labels": {"label": "Labels (JSON)", "type": "text"},
+    }
+
+    for param_name in params:
+        if param_name in common_params:
+            param_info = common_params[param_name]
+            current_value = dict_kwargs.get(param_name)
+
+            # Build appropriate input based on type
+            if param_info["type"] == "column":
+                input_component = dmc.Select(
+                    id={"type": f"param-{param_name}", "index": index},
+                    data=[{"label": col, "value": col} for col in columns],
+                    value=current_value,
+                    placeholder=f"Select {param_info['label'].lower()}...",
+                    clearable=True,
+                    searchable=True,
+                    size="sm",
+                )
+            elif param_info["type"] == "multiselect":
+                input_component = dmc.MultiSelect(
+                    id={"type": f"param-{param_name}", "index": index},
+                    data=[{"label": col, "value": col} for col in columns],
+                    value=current_value or [],
+                    placeholder=f"Select {param_info['label'].lower()}...",
+                    clearable=True,
+                    searchable=True,
+                    size="sm",
+                )
+            elif param_info["type"] == "text":
+                input_component = dmc.TextInput(
+                    id={"type": f"param-{param_name}", "index": index},
+                    value=current_value or "",
+                    placeholder=f"Enter {param_info['label'].lower()}...",
+                    size="sm",
+                )
+            elif param_info["type"] == "number":
+                input_component = dmc.NumberInput(
+                    id={"type": f"param-{param_name}", "index": index},
+                    value=current_value,
+                    placeholder="0.0 - 1.0",
+                    min=0,
+                    max=1,
+                    step=0.1,
+                    size="sm",
+                )
+            else:
+                continue
+
+            param_inputs.append(
+                dmc.Stack(
+                    [dmc.Text(param_info["label"], size="sm", fw="normal"), input_component],
+                    gap="xs",
+                )
+            )
+
+    # Parameters section
+    params_section = dmc.Stack(
+        [dmc.Text("Parameters", size="sm", fw="bold")] + param_inputs, gap="sm"
+    )
+
+    # Preview section (will be populated by callback)
+    preview_section = dmc.Stack(
+        [
+            dmc.Text("Preview", size="sm", fw="bold"),
+            dmc.Paper(
+                id={"type": "figure-design-preview", "index": index},
+                children=[
+                    html.Div(
+                        dmc.Text("Configure parameters to see preview", c="gray", ta="center"),
+                        style={"padding": "40px"},
+                    )
+                ],
+                withBorder=True,
+                radius="md",
+                style={"minHeight": "300px"},
+            ),
+        ],
+        gap="xs",
+    )
+
+    # Save button
+    save_button = dmc.Button(
+        "Save Figure",
+        id={"type": "btn-save-edit-figure", "index": index},
+        color="blue",
+        size="md",
+        fullWidth=True,
+        leftSection=DashIconify(icon="mdi:content-save", width=20),
+    )
+
+    # Complete design UI
+    return html.Div(
+        dmc.Stack(
+            [viz_selector, params_section, preview_section, save_button],
+            gap="md",
+            style={"padding": "20px"},
+        ),
+        id={"type": "figure-design-container", "index": index},
     )
 
 

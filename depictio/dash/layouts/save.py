@@ -137,7 +137,10 @@ def register_callbacks_save_lite(app):
         # DEBUG: Log what's in each metadata source
         logger.info("📊 STORED METADATA (from stored-metadata-component):")
         for idx, meta in enumerate(stored_metadata):
-            logger.info(f"  [{idx}] index={meta.get('index')}, type={meta.get('component_type')}")
+            logger.info(
+                f"  [{idx}] index={meta.get('index')}, type={meta.get('component_type')}, "
+                f"has_wf_id={bool(meta.get('wf_id'))}, has_dc_id={bool(meta.get('dc_id'))}"
+            )
 
         logger.info("📊 INTERACTIVE METADATA (from interactive-stored-metadata):")
         for idx, meta in enumerate(interactive_metadata):

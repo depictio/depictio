@@ -54,6 +54,24 @@ services:
       - mongo
       - redis
 
+  depictio-celery-worker:
+    container_name: depictio-celery-worker
+    # Always enabled - required for design mode (stepper) to work
+    # Dashboard editor will fail without Celery worker running
+    image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-latest}
+    volumes:
+      - ./depictio:/app/depictio
+    env_file:
+      - .env
+    environment:
+        DEPICTIO_CONTEXT: "server"
+    command: ["/app/run_celery_worker.sh"]
+    user: "${UID:-1000}:${GID:-1000}"
+    depends_on:
+      - mongo
+      - redis
+      - depictio-backend
+
 volumes:
   redis_data:
     driver: local

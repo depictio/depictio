@@ -274,9 +274,11 @@ def create_minimal_app_shell(
             "collapsed": {"mobile": True, "desktop": False},
         },
         header={"height": 65, "padding": "0"} if show_header else None,
+        styles={
+            "root": {"overflow": "hidden"},  # Prevent AppShell root scrolling
+        },
         style={
             "height": "100vh",
-            "overflow": "auto",
         },
         children=[
             navbar,

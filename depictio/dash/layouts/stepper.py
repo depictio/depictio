@@ -23,9 +23,8 @@ from depictio.dash.layouts.stepper_parts.part_three import register_callbacks_st
 from depictio.dash.layouts.stepper_parts.part_two import register_callbacks_stepper_part_two
 from depictio.dash.modules.card_component.frontend import design_card
 
-# DEPRECATED: Figure component stepper integration - Phase 1 uses view mode only
-# Phase 2 will implement new design UI for figures
-from depictio.dash.modules.figure_component.frontend_legacy import design_figure
+# Figure component stepper integration - Phase 2A with simplified design UI
+from depictio.dash.modules.figure_component.utils import design_figure
 from depictio.dash.modules.interactive_component.frontend import design_interactive
 from depictio.models.models.projects import ProjectResponse
 
@@ -857,7 +856,8 @@ def register_callbacks_stepper(app):
 
 
 def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
-    # logger.info(f"Component data: {component_data}")
+    logger.info(f"🔍 CREATE_STEPPER_OUTPUT_EDIT - Component data: {component_data}")
+    logger.info(f"🔍 n={n}, parent_id={parent_id}, active={active}")
     id = {"type": f"{component_data['component_type']}-component", "index": n}
 
     # wf_tag = return_wf_tag_from_id(component_data["wf_id"], TOKEN=TOKEN)
@@ -907,6 +907,7 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
     # Defensive handling for missing wf_id/dc_id
     wf_id = component_data.get("wf_id")
     dc_id = component_data.get("dc_id")
+    logger.info(f"🔍 Extracted wf_id={wf_id}, dc_id={dc_id} from component_data")
 
     if wf_id and dc_id:
         df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
@@ -920,7 +921,14 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
 
     def return_design_component(component_selected, id, df):
         if component_selected == "Figure":
-            return design_figure(id, component_data=component_data)
+            # Pass workflow_id, data_collection_id, and local_data for column loading
+            local_data = {"access_token": TOKEN}
+            logger.info(
+                f"🔍 Calling design_figure with id={id}, wf_id={wf_id}, dc_id={dc_id}, TOKEN present={TOKEN is not None}"
+            )
+            return design_figure(
+                id, workflow_id=wf_id, data_collection_id=dc_id, local_data=local_data
+            )
         elif component_selected == "Card":
             return design_card(id, df)
         elif component_selected == "Interactive":
@@ -1116,6 +1124,7 @@ def create_stepper_output(n, active):
             html.Div(id={"type": "stepper-data-preview", "index": n}),
         ],
         gap="lg",
+        style={"marginTop": "2rem"},  # Add gap between stepper and content
     )
 
     buttons_list = html.Div(
@@ -1156,6 +1165,7 @@ def create_stepper_output(n, active):
                 "type": "output-stepper-step-3",
                 "index": n,
             },
+            style={"marginTop": "2rem"},  # Add gap between stepper and content
         ),
         id={"type": "stepper-step-3", "index": n},
     )
@@ -1426,6 +1436,7 @@ def create_stepper_content(n, active):
             html.Div(id={"type": "stepper-data-preview", "index": n}),
         ],
         gap="lg",
+        style={"marginTop": "2rem"},  # Add gap between stepper and content
     )
 
     # Component Type Selection (Step 1)
@@ -1443,7 +1454,8 @@ def create_stepper_content(n, active):
                     "index": n,
                 }
             ),
-        ]
+        ],
+        style={"marginTop": "2rem"},  # Add gap between stepper and content
     )
 
     # Define stepper steps
@@ -1469,6 +1481,7 @@ def create_stepper_content(n, active):
                 "type": "output-stepper-step-3",
                 "index": n,
             },
+            style={"marginTop": "2rem"},  # Add gap between stepper and content
         ),
         id={"type": "stepper-step-3", "index": n},
     )
@@ -1596,8 +1609,6 @@ def create_stepper_content(n, active):
                 style={
                     "position": "sticky",
                     "bottom": 0,
-                    "backgroundColor": "var(--app-surface-color, #ffffff)",
-                    "borderTop": "1px solid var(--app-border-color, #e9ecef)",
                     "zIndex": 100,
                     "flexShrink": 0,
                 },

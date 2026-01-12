@@ -39,30 +39,29 @@ def load_design_callbacks(app):
     It loads the design UI creation functions and registers design-related callbacks
     as well as the edit save callback.
 
-    Phase 2 implementation - currently returns False (not yet implemented).
-
     Args:
         app: Dash application instance
 
     Returns:
-        bool: True if callbacks were loaded, False if already loaded or not implemented
+        bool: True if callbacks were loaded, False if already loaded
     """
     global _design_callbacks_loaded
 
     if _design_callbacks_loaded:
         return False
 
-    # Phase 2: Implement design/edit callbacks
-    # from .design import register_design_callbacks
-    # from .edit import register_figure_edit_callback
-    #
-    # register_design_callbacks(app)
-    # register_figure_edit_callback(app)
-    # _design_callbacks_loaded = True
-    # return True
+    from .design import register_design_callbacks
+    from .edit import register_figure_edit_callback
+    from .render import register_render_callbacks
+    from .ui import register_ui_callbacks
 
-    # Phase 1: Not yet implemented
-    return False
+    register_design_callbacks(app)
+    register_figure_edit_callback(app)
+    register_ui_callbacks(app)
+    register_render_callbacks(app)
+    _design_callbacks_loaded = True
+
+    return True
 
 
 __all__ = ["register_callbacks_figure_component", "load_design_callbacks"]

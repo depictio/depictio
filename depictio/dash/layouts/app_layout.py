@@ -699,6 +699,7 @@ def create_dashboard_layout(
                     # Draggable layout
                     core,
                 ],
+                style={"height": "100%", "overflow": "hidden"},  # Prevent wrapper scrolling
             ),
             # Notes footer - positioned as overlay
             # create_notes_footer(dashboard_data=depictio_dash_data),
@@ -718,6 +719,7 @@ def create_dashboard_layout(
             "flexDirection": "column",
             "height": "100%",
             "position": "relative",  # Allow positioned children
+            "overflow": "hidden",  # Prevent Container-level scrolling
         },
     )
 
@@ -837,9 +839,11 @@ def create_app_layout():
                     "height": 65,  # Default to 65px for non-dashboard pages, overridden to 45px for dashboards
                     "padding": "0",  # Override Mantine's default padding to enforce exact height
                 },
+                styles={
+                    "root": {"overflow": "hidden"},  # Prevent AppShell root scrolling
+                },
                 style={
                     "height": "100vh",
-                    "overflow": "auto",  # ✅ Allow scrolling
                 },
                 children=[
                     dmc.AppShellNavbar(  # type: ignore[unresolved-attribute]
@@ -855,10 +859,11 @@ def create_app_layout():
                             id="page-content",
                             style={
                                 "padding": "0.25rem 0",  # Only top/bottom padding, no left/right
-                                "minHeight": "calc(100vh - 65px)",  # Ensure minimum height for short content (default header height)
-                                "overflowY": "auto",  # Allow vertical scrolling
+                                "height": "calc(100vh - 65px)",  # Full viewport height minus header
+                                "overflow": "hidden",  # Prevent scrolling at page-content level - let individual panels handle it
                             },
                         ),
+                        style={"overflow": "hidden"},  # Prevent AppShellMain scrolling
                     ),
                 ],
             ),
