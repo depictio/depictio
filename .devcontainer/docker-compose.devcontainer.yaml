@@ -12,6 +12,8 @@ services:
       - ~/.qwen:/home/vscode/.qwen
       # Claude Code: Docker volume (Mac/Linux credential incompatibility)
       - claude-code-config:/home/vscode/.claude
+      # uv cache: Docker volume for fast package installation
+      - uv-cache:/home/vscode/.cache/uv
     command: sleep infinity
     user: vscode
     depends_on:
@@ -38,3 +40,4 @@ services:
 
 volumes:
   claude-code-config:
+  uv-cache:
