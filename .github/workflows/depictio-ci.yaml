@@ -301,6 +301,7 @@ jobs:
 
   docker-system-init:
     needs: docker-build
+    if: needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -611,6 +612,7 @@ jobs:
 
   cli-iris-single-file-test:
     needs: [docker-build]
+    if: needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -713,6 +715,7 @@ jobs:
 
   cli-penguin-multi-file-test:
     needs: [docker-build]
+    if: needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -823,6 +826,7 @@ jobs:
 
   backup-s3-strategies-comprehensive-tests:
     needs: [docker-build]
+    if: needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -1450,6 +1454,7 @@ jobs:
 
   e2e-tests:
     needs: [docker-build]
+    if: needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -1530,6 +1535,7 @@ jobs:
 
   e2e-tests-unauthenticated:
     needs: [docker-build]
+    if: needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
     permissions:
       contents: read
