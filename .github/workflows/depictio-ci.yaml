@@ -288,7 +288,13 @@ jobs:
           rm -rf /tmp/buildx-cache
           mv /tmp/buildx-cache-new /tmp/buildx-cache || true
 
-      - name: Pull image (GitHub Actions only)
+      - name: Pull image if it exists in registry (GitHub Actions only)
+        if: env.ACT != 'true' && steps.check-rebuild.outputs.rebuild == 'false'
+        run: |
+          echo "📥 Image already exists in registry, pulling..."
+          docker pull "${{ steps.image-info.outputs.full-image }}"
+
+      - name: Pull newly built image (GitHub Actions only)
         if: env.ACT != 'true' && steps.check-rebuild.outputs.rebuild == 'true'
         run: docker pull "${{ steps.image-info.outputs.full-image }}"
 
@@ -301,7 +307,7 @@ jobs:
 
   docker-system-init:
     needs: docker-build
-    if: needs.docker-build.result == 'success'
+    if: always() && needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -612,7 +618,7 @@ jobs:
 
   cli-iris-single-file-test:
     needs: [docker-build]
-    if: needs.docker-build.result == 'success'
+    if: always() && needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -715,7 +721,7 @@ jobs:
 
   cli-penguin-multi-file-test:
     needs: [docker-build]
-    if: needs.docker-build.result == 'success'
+    if: always() && needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -826,7 +832,7 @@ jobs:
 
   backup-s3-strategies-comprehensive-tests:
     needs: [docker-build]
-    if: needs.docker-build.result == 'success'
+    if: always() && needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -1454,7 +1460,7 @@ jobs:
 
   e2e-tests:
     needs: [docker-build]
-    if: needs.docker-build.result == 'success'
+    if: always() && needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -1535,7 +1541,7 @@ jobs:
 
   e2e-tests-unauthenticated:
     needs: [docker-build]
-    if: needs.docker-build.result == 'success'
+    if: always() && needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
     permissions:
       contents: read
