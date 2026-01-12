@@ -25,6 +25,8 @@ services:
         condition: service_started
       depictio-frontend:
         condition: service_started
+      depictio-celery-worker:
+        condition: service_started
     environment:
       - DEPICTIO_CONTEXT=server
       - DEPICTIO_MONGODB_SERVICE_NAME=mongo
