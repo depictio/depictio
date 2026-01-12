@@ -2395,6 +2395,7 @@ def design_figure(
             storage_type="memory",
         ),
     ]
+
     return figure_row
 
 

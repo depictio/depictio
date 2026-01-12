@@ -57,16 +57,12 @@ def register_ui_callbacks(app):
         It builds the parameter input UI (x, y, color, size dropdowns, etc.)
         based on the selected visualization type and available columns.
         """
-
         if not local_data:
             raise dash.exceptions.PreventUpdate
 
         # Don't build UI parameter interface if in code mode
         if current_mode == "code":
-            logger.info("🚫 SKIPPING UI PARAMETER INTERFACE - Component is in code mode")
             return html.Div()  # Return empty div for code mode
-
-        logger.info("=== BUILDING PARAMETER INTERFACE ===")
         logger.info(f"Visualization type: {visu_type}")
         logger.info(f"Component ID: {edit_button_id.get('index') if edit_button_id else 'unknown'}")
 

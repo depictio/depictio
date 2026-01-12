@@ -26,7 +26,8 @@ def register_figure_edit_callback(app):
         State("local-store", "data"),
         State("url", "pathname"),
         # Figure-specific States
-        State({"type": "figure-visu-type-selector", "index": ALL}, "value"),
+        # NOTE: design_figure() uses "segmented-control-visu-graph" not "figure-visu-type-selector"
+        State({"type": "segmented-control-visu-graph", "index": ALL}, "value"),
         # Parameter States (pattern-matched by parameter name)
         # These will capture all parameter inputs dynamically
         State({"type": "param-x", "index": ALL}, "value"),
