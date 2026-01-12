@@ -24,6 +24,14 @@ if [ -f .pre-commit-config.yaml ]; then
 
     # Install the git hook scripts
     pre-commit install
+
+    # Apply environment-agnostic hook (supports Mac, devcontainer, fresh uv install)
+    if [ -f .devcontainer/hooks/pre-commit ]; then
+        cp .devcontainer/hooks/pre-commit .git/hooks/pre-commit
+        chmod +x .git/hooks/pre-commit
+        echo "   ✓ Applied environment-agnostic pre-commit hook"
+    fi
+
     echo "   ✓ Pre-commit hooks installed"
 else
     echo "   ⚠️  No .pre-commit-config.yaml found, skipping pre-commit setup"
