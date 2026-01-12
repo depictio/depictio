@@ -1,6 +1,6 @@
 services:
   minio:
-    container_name: minio-${COMPOSE_PROJECT_NAME:-depictio}
+    container_name: minio
     image: minio/minio:latest
     user: "${UID:-1000}:${GID:-1000}"
     volumes:

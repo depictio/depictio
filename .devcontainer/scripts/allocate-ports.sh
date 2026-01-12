@@ -118,6 +118,36 @@ EOF
 echo "✅ Configuration saved to .env.instance"
 echo ""
 
+# Generate docker-compose.override.yaml for multi-instance container naming
+cat > docker-compose.override.yaml <<EOF
+# Auto-generated override for multi-instance devcontainer
+# Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+# Branch: ${BRANCH_NAME}
+# Project: ${COMPOSE_PROJECT_NAME}
+
+services:
+  mongo:
+    container_name: ${COMPOSE_PROJECT_NAME}-mongo
+
+  redis:
+    container_name: ${COMPOSE_PROJECT_NAME}-redis
+
+  minio:
+    container_name: ${COMPOSE_PROJECT_NAME}-minio
+
+  depictio-frontend:
+    container_name: ${COMPOSE_PROJECT_NAME}-depictio-frontend
+
+  depictio-backend:
+    container_name: ${COMPOSE_PROJECT_NAME}-depictio-backend
+
+  depictio-celery-worker:
+    container_name: ${COMPOSE_PROJECT_NAME}-depictio-celery-worker
+EOF
+
+echo "✅ Generated docker-compose.override.yaml for multi-instance setup"
+echo ""
+
 # Export variables for immediate use in current shell
 export COMPOSE_PROJECT_NAME
 export INSTANCE_ID

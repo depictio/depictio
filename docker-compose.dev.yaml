@@ -1,7 +1,7 @@
 services:
   mongo:
     image: mongo:8.0
-    container_name: mongo-${COMPOSE_PROJECT_NAME:-depictio}
+    container_name: mongo
     command: mongod --dbpath /data/depictioDB --port 27018 --logpath /dev/null
     user: "${UID:-1000}:${GID:-1000}"
     ports:
@@ -11,7 +11,7 @@ services:
 
   redis:
     image: redis:8.2.1
-    container_name: redis-${COMPOSE_PROJECT_NAME:-depictio}
+    container_name: redis
     ports:
       - ${REDIS_PORT:-6379}:6379
     volumes:
@@ -25,7 +25,7 @@ services:
       retries: 5
 
   depictio-frontend:
-    container_name: depictio-frontend-${COMPOSE_PROJECT_NAME:-depictio}
+    container_name: depictio-frontend
     # Use prebuilt image if DEPICTIO_VERSION is set, otherwise build locally
     image: ${DEPICTIO_VERSION:-depictio:dev}
     build:
@@ -54,7 +54,7 @@ services:
       - depictio-backend
 
   depictio-backend:
-    container_name: depictio-backend-${COMPOSE_PROJECT_NAME:-depictio}
+    container_name: depictio-backend
     # Use prebuilt image if DEPICTIO_VERSION is set, otherwise build locally
     image: ${DEPICTIO_VERSION:-depictio:dev}
     build:
@@ -81,7 +81,7 @@ services:
       - redis
 
   depictio-celery-worker:
-    container_name: depictio-celery-worker-${COMPOSE_PROJECT_NAME:-depictio}
+    container_name: depictio-celery-worker
     # Use the same image as backend
     image: ${DEPICTIO_VERSION:-depictio:dev}
     build:
