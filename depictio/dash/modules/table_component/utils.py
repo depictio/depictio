@@ -302,6 +302,13 @@ def build_table(**kwargs):
 
     # Create the card body - default title is the aggregation value on the selected column
 
+    # Create export components
+    download_component = dcc.Download(id={"type": "download-table-csv", "index": str(index)})
+
+    export_notification_container = html.Div(
+        id={"type": "export-notification-container", "index": str(index)}
+    )
+
     # Create the card body with proper height constraint
     # CRITICAL: Use flexbox to make AG Grid respect container height
     # AG Grid with domLayout="normal" requires explicit height constraint
@@ -319,6 +326,14 @@ def build_table(**kwargs):
             ),
             html.Div(
                 store_component,
+                style={"position": "absolute", "visibility": "hidden"},
+            ),
+            html.Div(
+                download_component,
+                style={"position": "absolute", "visibility": "hidden"},
+            ),
+            html.Div(
+                export_notification_container,
                 style={"position": "absolute", "visibility": "hidden"},
             ),
         ],
