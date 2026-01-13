@@ -619,10 +619,14 @@ def register_component_callbacks(app):
     register_callbacks_interactive_component(app)
     load_interactive_design(app)  # Load design callbacks immediately
 
-    # Register table component view mode callbacks
+    # Register table component callbacks (core + design for editor app)
+    from depictio.dash.modules.table_component.callbacks import (
+        load_design_callbacks as load_table_design,
+    )
     from depictio.dash.modules.table_component.callbacks import register_callbacks_table_component
 
     register_callbacks_table_component(app)
+    load_table_design(app)  # Load design callbacks immediately (editor app always in edit mode)
 
     logger.info("  ✅ Component rendering callbacks registered")
 

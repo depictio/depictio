@@ -52,12 +52,11 @@ def load_design_callbacks(app):
     if _design_callbacks_loaded:
         return False
 
-    # TODO: Implement in future PR (edit mode restoration)
-    # from .design import register_design_callbacks
-    # from .edit import register_table_edit_callback
-    #
-    # register_design_callbacks(app)
-    # register_table_edit_callback(app)
+    from .design import register_design_callbacks
+    from .edit import register_table_edit_callback
+
+    register_design_callbacks(app)
+    register_table_edit_callback(app)
 
     _design_callbacks_loaded = True
 

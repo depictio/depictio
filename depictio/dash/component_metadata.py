@@ -82,9 +82,9 @@ COMPONENT_METADATA = {
         "display_name": "Table",
         "description": "Data tables and grids",
         "color": colors["yellow"],
-        "supports_edit": False,  # Tables don't have edit functionality
+        "supports_edit": False,  # Table edit/design functionality restored
         "supports_reset": False,
-        "enabled": False,  # DISABLED: Focus on Card & Interactive only
+        "enabled": True,  # ENABLED: Table component with design/edit support
         "build_function": build_table,
         "default_dimensions": {
             "w": 24,

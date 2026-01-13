@@ -197,6 +197,13 @@ def create_stepper_page(
             storage_type="memory",
             data=None,  # Will be populated by save_stepper_component callback
         ),
+        # Interactive values store required by table component infinite scroll callback
+        # Empty in stepper mode (no interactive components), prevents callback errors
+        dcc.Store(
+            id="interactive-values-store",
+            storage_type="session",
+            data={},  # Empty dict - no interactive components in stepper
+        ),
     ]
 
     # Create main layout with AppShell

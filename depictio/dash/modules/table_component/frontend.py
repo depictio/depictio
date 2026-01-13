@@ -134,65 +134,27 @@ def apply_ag_grid_sorting(df: pl.DataFrame, sort_model: list) -> pl.DataFrame:
 
 
 def design_table(id):
-    row = [
-        dmc.Center(
-            dmc.Button(
-                "Display Table",
-                id={"type": "btn-table", "index": id["index"]},
-                n_clicks=1,
-                style=UNSELECTED_STYLE,
-                size="xl",
-                color="green",
-                leftSection=DashIconify(
-                    icon="material-symbols:table-rows-narrow-rounded", color="white"
-                ),
-            )
-        ),
+    """
+    Create table design UI (stepper step 3).
+
+    Tables have minimal design options - just display the table preview directly
+    based on WF/DC selection from step 2. No button needed.
+
+    Args:
+        id: Component ID dict with 'index' key
+
+    Returns:
+        html.Div: Container with table preview area
+    """
+    return html.Div(
         html.Div(
-            html.Div(
-                build_table_frame(index=id["index"]),
-                # dbc.CardBody(
-                #     html.Div(id={"type": "table-grid", "index": id["index"]}),
-                #     id={
-                #         "type": "card-body",
-                #         "index": id["index"],
-                #     },
-                # ),
-                id={
-                    "type": "component-container",
-                    "index": id["index"],
-                },
-            ),
-            # dbc.Card(
-            #     dbc.CardBody(
-            #         html.Div(id={"type": "table-grid", "index": id["index"]}),
-            #         id={
-            #             "type": "card-body",
-            #             "index": id["index"],
-            #         },
-            #     ),
-            #     id={
-            #         "type": "component-container",
-            #         "index": id["index"],
-            #     },
-            # )
+            build_table_frame(index=id["index"]),
+            id={
+                "type": "component-container",
+                "index": id["index"],
+            },
         ),
-    ]
-    return row
-    # return html.Div(
-    #             build_table_frame(index=id["index"]),
-    #             # dbc.CardBody(
-    #             #     html.Div(id={"type": "table-grid", "index": id["index"]}),
-    #             #     id={
-    #             #         "type": "card-body",
-    #             #         "index": id["index"],
-    #             #     },
-    #             # ),
-    #             id={
-    #                 "type": "component-container",
-    #                 "index": id["index"],
-    #             },
-    #         )
+    )
 
 
 def create_stepper_table_button(n, disabled=None):
