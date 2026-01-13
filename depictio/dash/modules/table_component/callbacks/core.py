@@ -147,13 +147,15 @@ def register_core_callbacks(app):
         interactive_metadata_ids,
     ):
         """
-        INFINITE SCROLL CALLBACK WITH INTERACTIVE COMPONENT SUPPORT
+        INFINITE SCROLL + PAGINATION CALLBACK WITH INTERACTIVE COMPONENT SUPPORT
 
-        This callback handles ALL tables using infinite row model and includes:
+        This callback handles ALL tables using infinite row model with pagination and includes:
         - Interactive component filtering via iterative_join
         - AG Grid server-side filtering and sorting
-        - Efficient pagination for all dataset sizes
+        - Pagination with configurable page sizes (50, 100, 200, 500 rows)
         - Cache invalidation when interactive values change
+
+        Note: Dash AG Grid uses "infinite" rowModelType for server-side data loading with pagination
         """
         from bson import ObjectId
 
@@ -163,7 +165,7 @@ def register_core_callbacks(app):
             return_joins_dict,
         )
 
-        logger.info("🚀 TABLE INFINITE SCROLL CALLBACK FIRED!")
+        logger.info("🚀 TABLE INFINITE SCROLL + PAGINATION CALLBACK FIRED!")
 
         # CACHE INVALIDATION: Detect if triggered by interactive component changes
         triggered_by_interactive = ctx.triggered and any(
@@ -179,7 +181,7 @@ def register_core_callbacks(app):
         else:
             logger.debug("🎯 Table: No interactive values")
 
-        # LOGGING: Track infinite scroll requests and trigger source
+        # LOGGING: Track pagination requests and trigger source
         logger.debug(f"📊 Request: {request}")
         logger.debug(f"🎯 Triggered by: {ctx.triggered_id if ctx.triggered else 'Unknown'}")
 
@@ -222,6 +224,10 @@ def register_core_callbacks(app):
         requested_rows = end_row - start_row
         filter_model = request.get("filterModel", {})
         sort_model = request.get("sortModel", [])
+
+        # Detect page size from request
+        page_size = end_row - start_row
+        logger.info(f"📄 Page size: {page_size} rows (user selected or default)")
 
         logger.info(
             f"📈 Table {table_index}: Loading rows {start_row}-{end_row} ({requested_rows} rows)"
@@ -765,7 +771,7 @@ def register_core_callbacks(app):
                 f"🚀 INFINITE SCROLL + PAGINATION RESPONSE SENT - {actual_rows_returned}/{total_rows} rows"
             )
 
-            # HYBRID SUCCESS: Log successful integration of interactive + infinite scroll
+            # HYBRID SUCCESS: Log successful integration of interactive + pagination
             if interactive_components_dict:
                 # Check if filtering actually reduced the dataset
                 active_filters = [
@@ -774,7 +780,7 @@ def register_core_callbacks(app):
                     if v.get("value") is not None
                 ]
                 logger.info(
-                    f"🎯 HYBRID SUCCESS: Interactive + infinite scroll delivered {actual_rows_returned}/{total_rows} rows"
+                    f"🎯 HYBRID SUCCESS: Interactive + pagination delivered {actual_rows_returned}/{total_rows} rows"
                 )
                 logger.info(f"🎛️ Active interactive filters: {active_filters}")
                 logger.info(
@@ -791,7 +797,7 @@ def register_core_callbacks(app):
                     )
             else:
                 logger.info(
-                    f"📊 INFINITE SCROLL: Standard pagination delivered {actual_rows_returned}/{total_rows} rows"
+                    f"📊 INFINITE SCROLL + PAGINATION: Standard pagination delivered {actual_rows_returned}/{total_rows} rows"
                 )
 
             return response
@@ -805,3 +811,7 @@ def register_core_callbacks(app):
 
             # Return empty response on error
             return {"rowData": [], "rowCount": 0}
+
+    core_logger.info(
+        "✅ Table component core callbacks registered (theme + infinite scroll + pagination)"
+    )

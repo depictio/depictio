@@ -54,12 +54,12 @@ def build_table_frame(index, children=None):
             p="xs",
             w="100%",
             h="100%",
-            # style={
-            #     "display": "flex",
-            #     "flexDirection": "column",
-            #     "minHeight": "0",
-            #     "overflow": "hidden",  # Prevent content from overflowing
-            # },
+            style={
+                "display": "flex",
+                "flexDirection": "column",
+                "overflow": "hidden",  # Prevent content overflow
+                "paddingBottom": "12px",  # Extra padding for pagination controls
+            },
         )
 
 
@@ -206,23 +206,26 @@ def build_table(**kwargs):
             )
     logger.debug(f"Columns definitions for table {index}: {columnDefs}")
 
-    # INFINITE ROW MODEL: Always use infinite scroll with interactive component support
+    # INFINITE ROW MODEL WITH PAGINATION: Use infinite model with pagination controls
+    # CRITICAL: Dash AG Grid uses "infinite" rowModelType for server-side data loading
+    # Pagination IS supported with infinite model when cacheBlockSize >= paginationPageSize
     # The infinite scroll callback handles:
     # - Interactive component filtering via iterative_join
     # - AG Grid server-side filtering and sorting
-    # - Efficient pagination for all table sizes
+    # - Pagination with configurable page sizes (50, 100, 200, 500 rows)
 
-    logger.debug(f"📊 Table {index}: Using INFINITE row model with interactive component support")
+    logger.debug(f"📊 Table {index}: Using INFINITE row model with pagination support")
     logger.debug("🔄 Interactive filters and pagination handled by infinite scroll callback")
 
     logger.debug(f"Using theme: {theme} for AG Grid template")
     aggrid_theme = _get_theme_template(theme)  # Get the appropriate theme template
 
-    # Always use infinite scroll configuration
+    # Infinite row model with pagination
     table_aggrid = dag.AgGrid(
         id={"type": value_div_type, "index": str(index)},
         # CRITICAL: Don't set rowData for infinite model - data comes from getRowsResponse
-        rowModelType="infinite",
+        # CRITICAL: Dash AG Grid uses "infinite" for server-side data loading (not "serverSide")
+        rowModelType="infinite",  # Required for Dash AG Grid server-side datasource
         columnDefs=columnDefs,
         dashGridOptions={
             "tooltipShowDelay": 500,
@@ -232,6 +235,11 @@ def build_table(**kwargs):
             "cacheBlockSize": 100,  # Each block contains 100 rows
             "cacheOverflowSize": 2,  # Allow 2 extra blocks beyond maxBlocksInCache
             "infiniteInitialRowCount": 1000,  # Initial estimate
+            # PAGINATION SETTINGS (supported with infinite model!)
+            # CRITICAL: cacheBlockSize (100) >= paginationPageSize (100) - required constraint
+            "pagination": True,  # Enable pagination controls (footer with page navigation)
+            "paginationPageSize": 100,  # Default: 100 rows per page (matches cacheBlockSize)
+            "paginationPageSizeSelector": [50, 100, 200, 500],  # User can choose page size
             # OTHER OPTIONS
             "rowSelection": "multiple",
             "enableCellTextSelection": True,
@@ -245,8 +253,6 @@ def build_table(**kwargs):
                     {"statusPanel": "agSelectedRowCountComponent"},
                 ]
             },
-            # CRITICAL: Do NOT enable pagination with infinite row model - they conflict!
-            # "pagination": True,  # REMOVED - breaks infinite scroll datasource
             # CRITICAL: Cache management for interactive components
             "purgeClosedRowNodes": True,  # Clean up when filters change
             "resetRowDataOnUpdate": True,  # Force refresh when interactive values change
@@ -267,7 +273,7 @@ def build_table(**kwargs):
         className=aggrid_theme,
     )
 
-    logger.debug(f"✅ Table {index}: Infinite row model configured with interactive support")
+    logger.debug(f"✅ Table {index}: Infinite row model with pagination configured")
 
     # Metadata management - Create a store component to store the metadata of the card
     # CRITICAL: The stored-metadata-component index must match the table component index
@@ -305,9 +311,10 @@ def build_table(**kwargs):
                 table_aggrid,
                 style={
                     "width": "100%",
-                    "height": "100%",
+                    "height": "calc(100% - 4px)",  # Slight reduction to show pagination
                     "minHeight": "0",  # Critical for flex child to shrink
                     "position": "relative",
+                    "overflow": "auto",  # Allow scrolling if needed
                 },
             ),
             html.Div(
@@ -323,6 +330,7 @@ def build_table(**kwargs):
             "flexDirection": "column",
             "minHeight": "0",  # Allow flex container to shrink
             "position": "relative",
+            "paddingBottom": "8px",  # Extra padding for pagination footer
         },
     )
     if not build_frame:
