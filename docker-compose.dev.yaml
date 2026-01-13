@@ -29,7 +29,9 @@ services:
     # Use prebuilt image if DEPICTIO_VERSION is set, otherwise build locally
     image: ${DEPICTIO_VERSION:-depictio:dev}
     build:
-      dockerfile: docker-images/Dockerfile_depictio.dockerfile
+      # Use simplified uv-based Dockerfile (faster builds, pure Python)
+      # Falls back to conda-based Dockerfile_depictio.dockerfile if needed
+      dockerfile: docker-images/Dockerfile_depictio_uv.dockerfile
       context: .
     ports:
       - ${DASH_PORT:-5080}:5080
@@ -58,7 +60,7 @@ services:
     # Use prebuilt image if DEPICTIO_VERSION is set, otherwise build locally
     image: ${DEPICTIO_VERSION:-depictio:dev}
     build:
-      dockerfile: docker-images/Dockerfile_depictio.dockerfile
+      dockerfile: docker-images/Dockerfile_depictio_uv.dockerfile
       context: .
     ports:
       - ${FASTAPI_PORT:-8058}:8058
@@ -85,7 +87,7 @@ services:
     # Use the same image as backend
     image: ${DEPICTIO_VERSION:-depictio:dev}
     build:
-      dockerfile: docker-images/Dockerfile_depictio.dockerfile
+      dockerfile: docker-images/Dockerfile_depictio_uv.dockerfile
       context: .
     volumes:
       - ./depictio:/app/depictio
