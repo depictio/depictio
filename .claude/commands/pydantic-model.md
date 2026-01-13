@@ -59,6 +59,6 @@ class MyModelBeanie(Document, MyModel):
 
 ## Usage
 
-`/model <name> <description>` - Create or update model
+`/pydantic-model <name> <description>` - Create or update model
 
 $ARGUMENTS

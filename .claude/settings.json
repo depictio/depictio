@@ -1,5 +1,5 @@
 {
-  "$schema": "https://github.com/anthropics/claude-code/blob/main/schemas/settings.schema.json",
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
     "allow": [
       "Bash(pytest:*)",
