@@ -165,6 +165,15 @@ echo "If CLI tools are not available as commands, you can use the libraries prog
 # Set up credentials for AI tools
 bash /workspace/.devcontainer/setup_credentials.sh
 
+# Configure VSCode settings
+echo "⚙️  Configuring VSCode settings..."
+
+# Set random dark theme for this devcontainer instance
+bash /workspace/.devcontainer/scripts/set-random-theme.sh
+
+# Configure database extensions with allocated ports
+bash /workspace/.devcontainer/scripts/configure-db-extensions.sh
+
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "✨ Devcontainer setup complete!"

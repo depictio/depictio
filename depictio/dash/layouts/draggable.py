@@ -387,17 +387,20 @@ def calculate_left_panel_positions(components, saved_layout_data=None):
 
         # Check if we have saved position for this component
         if component_id in saved_positions:
-            # Use saved POSITION (x, y) but enforce correct SIZE (w, h) for LEFT panel
+            # Use saved position (x, y) and saved height (h)
+            # Width (w) is always enforced to 1 for single-column layout
             saved_pos = saved_positions[component_id]
             x = saved_pos.get("x", 0)
             y = saved_pos.get("y", current_y)
-            # LEFT panel: Use centralized dimensions from component_metadata
+
+            # CRITICAL FIX: Preserve user-resized height for interactive components
+            # Width is always 1 (single-column layout), but height can be customized
             dims = get_dual_panel_dimensions("interactive")
-            w = dims["w"]  # Always 1 for single-column grid
-            h = dims["h"]  # Standard height from centralized config
+            w = dims["w"]  # Always 1 for single-column grid (enforced)
+            h = saved_pos.get("h", dims["h"])  # Preserve user-resized height
             logger.info(
                 f"📐 LEFT: Using saved position for component {index} ({interactive_type}): "
-                f"x={x}, y={y} (from saved), w={w}, h={h} (enforced)"
+                f"x={x}, y={y}, h={h} (from saved), w={w} (enforced)"
             )
         else:
             # Auto-position: full width (1 column), stack vertically
@@ -553,17 +556,20 @@ def calculate_right_panel_positions(components, saved_layout_data=None):
 
         # Check if we have saved position for this component
         if component_id in saved_positions:
-            # Use saved position but enforce standard dimensions
+            # Use saved position AND size (figures and tables are resizable)
             saved_pos = saved_positions[component_id]
             x = saved_pos.get("x", 0)
             y = saved_pos.get("y", card_y)  # Default below cards if no saved y
-            # Use centralized dimensions from component_metadata
+
+            # CRITICAL FIX: Use saved dimensions if available (user may have resized)
+            # Fall back to standard dimensions only if not saved
             dims = get_dual_panel_dimensions(component_type)
-            w = dims["w"]
-            h = dims["h"]
+            w = saved_pos.get("w", dims["w"])  # Preserve user-resized width
+            h = saved_pos.get("h", dims["h"])  # Preserve user-resized height
+
             logger.info(
                 f"📐 RIGHT: Using saved position for {component_type} {index}: x={x}, y={y}, "
-                f"w={w}, h={h}"
+                f"w={w}, h={h} {'(saved)' if 'w' in saved_pos else '(default)'}"
             )
         else:
             # Auto-position: figures take 50% width (w=4 in 8-column grid)

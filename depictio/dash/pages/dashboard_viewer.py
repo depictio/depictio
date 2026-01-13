@@ -419,9 +419,10 @@ def register_component_callbacks(app):
 
     register_callbacks_interactive_component(app)
 
-    # TODO: Register other component callbacks as needed
-    # from depictio.dash.modules.table_component.frontend import register_callbacks_table_component
-    # register_callbacks_table_component(app)
+    # Register table component view mode callbacks
+    from depictio.dash.modules.table_component.callbacks import register_callbacks_table_component
+
+    register_callbacks_table_component(app)
 
     logger.info("  ✅ Component rendering callbacks registered")
 

@@ -2,7 +2,7 @@ import dash_ag_grid as dag
 import dash_mantine_components as dmc
 import polars as pl
 from bson import ObjectId
-from dash import dcc
+from dash import dcc, html
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -44,17 +44,7 @@ def build_table_frame(index, children=None):
         )
     else:
         return dmc.Paper(
-            children=[
-                dmc.Stack(
-                    children=children,
-                    id={
-                        "type": "table-body",
-                        "index": index,
-                    },
-                    gap="xs",
-                    h="100%",
-                )
-            ],
+            children=children,
             id={
                 "type": "table-component",
                 "index": index,
@@ -64,6 +54,12 @@ def build_table_frame(index, children=None):
             p="xs",
             w="100%",
             h="100%",
+            style={
+                "display": "flex",
+                "flexDirection": "column",
+                "overflow": "hidden",  # Prevent content overflow
+                "paddingBottom": "12px",  # Extra padding for pagination controls
+            },
         )
 
 
@@ -80,13 +76,13 @@ def _get_theme_template(theme: str) -> str:
     if not theme or theme == {} or theme == "{}":
         theme = "light"
 
-    logger.info(f"TABLE COMPONENT - Using theme: {theme} for Plotly template")
+    logger.debug(f"TABLE COMPONENT - Using theme: {theme} for Plotly template")
     # Use actual available Plotly templates
     return "ag-theme-alpine-dark" if theme == "dark" else "ag-theme-alpine"
 
 
 def build_table(**kwargs):
-    logger.info("build_table")
+    logger.debug("build_table")
     # def build_card(index, title, wf_id, dc_id, dc_config, column_name, column_type, aggregation, v, build_frame=False):
     index = kwargs.get("index")
     wf_id = kwargs.get("wf_id")
@@ -110,7 +106,7 @@ def build_table(**kwargs):
     if df.is_empty():
         # Check if we're in a refresh context where we should load new data
         if kwargs.get("refresh", True):
-            logger.info(
+            logger.debug(
                 f"Table component {index}: Loading delta table for {wf_id}:{dc_id} (no pre-loaded df)"
             )
             # Validate that we have valid IDs before calling load_deltatable_lite
@@ -137,9 +133,7 @@ def build_table(**kwargs):
     # Add dash aggrid filters to the columns with enhanced filter configuration
     if cols:
         for c in cols:
-            logger.debug(f"Configuring column {c} with type {cols[c]['type']}")
             if c in cols and "type" in cols[c]:
-                logger.debug(f"Configuring column {c} with type {cols[c]['type']}")
                 if cols[c]["type"] == "object":
                     cols[c]["filter"] = "agTextColumnFilter"
                     # Enable floating filters for better UX
@@ -189,15 +183,10 @@ def build_table(**kwargs):
 
             # Handle field names with dots - replace dots with underscores
             if "." in c:
-                logger.debug(
-                    f"🔍 DEBUG: Found column with dot: '{c}', replacing dots with underscores"
-                )
                 # Create a safe field name by replacing dots with underscores
                 safe_field_name = c.replace(".", "_")
                 column_def["field"] = safe_field_name
-                logger.debug(f"🔍 DEBUG: Column def for '{c}': field='{safe_field_name}'")
             else:
-                logger.debug(f"🔍 DEBUG: Regular column: '{c}', using field")
                 column_def["field"] = c  # Use field for simple names
 
             data_columns.append(column_def)
@@ -215,25 +204,28 @@ def build_table(**kwargs):
             col["headerTooltip"] = (
                 f"{col['headerTooltip']} | Description: {cols[col['field']]['description']}"
             )
-    logger.info(f"Columns definitions for table {index}: {columnDefs}")
+    logger.debug(f"Columns definitions for table {index}: {columnDefs}")
 
-    # INFINITE ROW MODEL: Always use infinite scroll with interactive component support
+    # INFINITE ROW MODEL WITH PAGINATION: Use infinite model with pagination controls
+    # CRITICAL: Dash AG Grid uses "infinite" rowModelType for server-side data loading
+    # Pagination IS supported with infinite model when cacheBlockSize >= paginationPageSize
     # The infinite scroll callback handles:
     # - Interactive component filtering via iterative_join
     # - AG Grid server-side filtering and sorting
-    # - Efficient pagination for all table sizes
+    # - Pagination with configurable page sizes (50, 100, 200, 500 rows)
 
-    logger.info(f"📊 Table {index}: Using INFINITE row model with interactive component support")
-    logger.info("🔄 Interactive filters and pagination handled by infinite scroll callback")
+    logger.debug(f"📊 Table {index}: Using INFINITE row model with pagination support")
+    logger.debug("🔄 Interactive filters and pagination handled by infinite scroll callback")
 
-    logger.info(f"Using theme: {theme} for AG Grid template")
+    logger.debug(f"Using theme: {theme} for AG Grid template")
     aggrid_theme = _get_theme_template(theme)  # Get the appropriate theme template
 
-    # Always use infinite scroll configuration
+    # Infinite row model with pagination
     table_aggrid = dag.AgGrid(
         id={"type": value_div_type, "index": str(index)},
         # CRITICAL: Don't set rowData for infinite model - data comes from getRowsResponse
-        rowModelType="infinite",
+        # CRITICAL: Dash AG Grid uses "infinite" for server-side data loading (not "serverSide")
+        rowModelType="infinite",  # Required for Dash AG Grid server-side datasource
         columnDefs=columnDefs,
         dashGridOptions={
             "tooltipShowDelay": 500,
@@ -243,11 +235,24 @@ def build_table(**kwargs):
             "cacheBlockSize": 100,  # Each block contains 100 rows
             "cacheOverflowSize": 2,  # Allow 2 extra blocks beyond maxBlocksInCache
             "infiniteInitialRowCount": 1000,  # Initial estimate
+            # PAGINATION SETTINGS (supported with infinite model!)
+            # CRITICAL: cacheBlockSize (100) >= paginationPageSize (100) - required constraint
+            "pagination": True,  # Enable pagination controls (footer with page navigation)
+            "paginationPageSize": 100,  # Default: 100 rows per page (matches cacheBlockSize)
+            "paginationPageSizeSelector": [50, 100, 200, 500],  # User can choose page size
             # OTHER OPTIONS
             "rowSelection": "multiple",
             "enableCellTextSelection": True,
             "ensureDomOrder": True,
-            "pagination": True,
+            "domLayout": "normal",  # CRITICAL: Use normal layout to respect height constraints
+            # STATUS BAR: Show row counts and selection info at bottom
+            "statusBar": {
+                "statusPanels": [
+                    {"statusPanel": "agTotalRowCountComponent", "align": "left"},
+                    {"statusPanel": "agFilteredRowCountComponent"},
+                    {"statusPanel": "agSelectedRowCountComponent"},
+                ]
+            },
             # CRITICAL: Cache management for interactive components
             "purgeClosedRowNodes": True,  # Clean up when filters change
             "resetRowDataOnUpdate": True,  # Force refresh when interactive values change
@@ -264,11 +269,11 @@ def build_table(**kwargs):
             "floatingFilter": True,
             "filter": True,
         },
-        style={"width": "100%"},
+        # style={"width": "100%", "height": "100%"},
         className=aggrid_theme,
     )
 
-    logger.info(f"✅ Table {index}: Infinite row model configured with interactive support")
+    logger.debug(f"✅ Table {index}: Infinite row model with pagination configured")
 
     # Metadata management - Create a store component to store the metadata of the card
     # CRITICAL: The stored-metadata-component index must match the table component index
@@ -297,17 +302,51 @@ def build_table(**kwargs):
 
     # Create the card body - default title is the aggregation value on the selected column
 
-    # Create the card body - simple structure using DMC
-    new_card_body = dmc.Stack(
+    # Create export components
+    download_component = dcc.Download(id={"type": "download-table-csv", "index": str(index)})
+
+    export_notification_container = html.Div(
+        id={"type": "export-notification-container", "index": str(index)}
+    )
+
+    # Create the card body with proper height constraint
+    # CRITICAL: Use flexbox to make AG Grid respect container height
+    # AG Grid with domLayout="normal" requires explicit height constraint
+    new_card_body = html.Div(
         [
-            # infinite_scroll_badge,  # Removed as requested
-            table_aggrid,
-            store_component,
+            html.Div(
+                table_aggrid,
+                style={
+                    "width": "100%",
+                    "height": "calc(100% - 4px)",  # Slight reduction to show pagination
+                    "minHeight": "0",  # Critical for flex child to shrink
+                    "position": "relative",
+                    "overflow": "auto",  # Allow scrolling if needed
+                },
+            ),
+            html.Div(
+                store_component,
+                style={"position": "absolute", "visibility": "hidden"},
+            ),
+            html.Div(
+                download_component,
+                style={"position": "absolute", "visibility": "hidden"},
+            ),
+            html.Div(
+                export_notification_container,
+                style={"position": "absolute", "visibility": "hidden"},
+            ),
         ],
         id={"type": "table-content", "index": index},
-        w="100%",
-        h="100%",
-        gap="xs",
+        style={
+            "width": "100%",
+            "height": "100%",
+            "display": "flex",
+            "flexDirection": "column",
+            "minHeight": "0",  # Allow flex container to shrink
+            "position": "relative",
+            "paddingBottom": "8px",  # Extra padding for pagination footer
+        },
     )
     if not build_frame:
         return new_card_body

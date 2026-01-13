@@ -12,6 +12,8 @@ services:
       - ~/.qwen:/home/vscode/.qwen
       # Claude Code: Docker volume (Mac/Linux credential incompatibility)
       - claude-code-config:/home/vscode/.claude
+      # uv cache: Docker volume for fast package installation
+      - uv-cache:/home/vscode/.cache/uv
     command: sleep infinity
     user: vscode
     depends_on:
@@ -25,6 +27,8 @@ services:
         condition: service_started
       depictio-frontend:
         condition: service_started
+      depictio-celery-worker:
+        condition: service_started
     environment:
       - DEPICTIO_CONTEXT=server
       - DEPICTIO_MONGODB_SERVICE_NAME=mongo
@@ -36,3 +40,4 @@ services:
 
 volumes:
   claude-code-config:
+  uv-cache:

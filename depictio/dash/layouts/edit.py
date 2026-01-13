@@ -196,6 +196,7 @@ def _create_component_buttons(
     create_edit_button,
     create_duplicate_button,
     create_reset_button,
+    create_export_button,
     create_alignment_button=None,
     create_metadata_button=None,
     create_partial_data_warning_button=None,
@@ -233,7 +234,7 @@ def _create_component_buttons(
         "table": {
             "orientation": "horizontal",
             "edit_only": ["drag", "remove"],
-            "view_accessible": ["metadata"],
+            "view_accessible": ["metadata", "export"],
         },
         "jbrowse": {
             "orientation": "horizontal",
@@ -280,6 +281,7 @@ def _create_component_buttons(
         "edit": create_edit_button,
         "duplicate": create_duplicate_button,
         "reset": create_reset_button,
+        "export": create_export_button,
     }
 
     # Add alignment button only if the function is provided
@@ -468,6 +470,18 @@ def enable_box_edit_mode(
             size="sm",
             radius=0,  # Remove border radius
             children=DashIconify(icon="bx:reset", width=16, color="white"),
+        )
+
+    def create_export_button():
+        """Create CSV export button for table component."""
+        return dmc.ActionIcon(
+            id={"type": "export-table-button", "index": f"{btn_index}"},
+            color="green",
+            variant="filled",
+            size="sm",
+            radius=0,  # Remove border radius
+            children=DashIconify(icon="mdi:download", width=16, color="white"),
+            n_clicks=0,  # Required for callback to trigger properly
         )
 
     def create_alignment_button():
@@ -775,6 +789,7 @@ def enable_box_edit_mode(
         create_edit_button,
         create_duplicate_button,
         create_reset_button,
+        create_export_button,
         create_alignment_button,
         create_metadata_button,
         partial_data_button_func,
@@ -838,6 +853,7 @@ def enable_box_edit_mode(
                 "background": "transparent",
                 "borderRadius": "6px",
                 "padding": "4px",
+                "zIndex": "1000",  # High z-index to appear above AG Grid column resizers
             },
         )
         content_children.append(button_container)
