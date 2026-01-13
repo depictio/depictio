@@ -48,4 +48,4 @@ Depictio is a modern, interactive platform that enables dashboards creation from
 
 **Homepage**: [depictio.github.io](https://depictio.github.io/depictio-docs/latest/)
 
-Copyright(c) 2023-2025 Thomas Weber <thomas.weber@embl.de> (see LICENSE)
+Copyright(c) 2023-2026 Thomas Weber <thomas.weber@embl.de> (see LICENSE)
