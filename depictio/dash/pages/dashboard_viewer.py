@@ -424,6 +424,13 @@ def register_component_callbacks(app):
 
     register_callbacks_table_component(app)
 
+    # Register MultiQC component view mode callbacks
+    from depictio.dash.modules.multiqc_component.callbacks import (
+        register_callbacks_multiqc_component,
+    )
+
+    register_callbacks_multiqc_component(app)
+
     logger.info("  ✅ Component rendering callbacks registered")
 
 
