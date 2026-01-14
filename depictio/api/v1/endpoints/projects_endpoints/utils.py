@@ -324,9 +324,11 @@ async def get_project_with_delta_locations(project_id: PyObjectId, current_user:
                 "project_doc": {"$first": "$project_doc"},
                 "workflows": {
                     "$push": {
-                        "_id": "$_id.workflow_id",
-                        "workflow_tag": "$project_doc.workflows.workflow_tag",
-                        "data_collections": "$data_collections",
+                        # Preserve ALL workflow fields, not just _id and workflow_tag
+                        "$mergeObjects": [
+                            "$project_doc.workflows",  # Get all original workflow fields
+                            {"data_collections": "$data_collections"},  # Override with enriched DCs
+                        ]
                     }
                 },
             }

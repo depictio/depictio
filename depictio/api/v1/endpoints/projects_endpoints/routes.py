@@ -14,7 +14,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, ge
 from depictio.models.models.base import PyObjectId
 
 ## depictio-models imports
-from depictio.models.models.projects import Project, ProjectPermissionRequest
+from depictio.models.models.projects import Project, ProjectPermissionRequest, ProjectResponse
 from depictio.models.models.users import User
 
 # Define the router
@@ -209,7 +209,9 @@ async def update_project(project: Project, current_user: User = Depends(get_curr
     except HTTPException as e:
         raise e
 
-    existing_project = Project.from_mongo(existing_project)
+    # Use ProjectResponse to handle extra fields (delta_location, last_aggregation)
+    # added by get_project_from_id's aggregation pipeline
+    existing_project = ProjectResponse.from_mongo(existing_project)
     logger.info(f"Existing project: {existing_project}")
 
     # Validate workflow uniqueness within the project
@@ -229,8 +231,9 @@ async def delete_project(project_id: PyObjectId, current_user: User = Depends(ge
     # Find the project
     project_dict = await get_project_from_id(project_id, current_user)
 
-    # Convert dict to Project object
-    project = Project.from_mongo(project_dict)
+    # Use ProjectResponse to handle extra fields (delta_location, last_aggregation)
+    # added by get_project_from_id's aggregation pipeline
+    project = ProjectResponse.from_mongo(project_dict)
 
     # Ensure the current_user is an owner
     if (
