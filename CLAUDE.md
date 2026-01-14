@@ -116,10 +116,32 @@ act --workflows .github/workflows/depictio-ci.yaml --list
 
 ### Running the Application
 
-#### Option 1: Local Development (without Docker)
+#### Option 1: Fully Local Development (no Docker at all)
 
 ```bash
-# Using pixi (recommended for local dev)
+# Install pixi and all dependencies (includes MongoDB, Redis, MinIO)
+pixi install
+
+# Start infrastructure services (MongoDB, Redis, MinIO)
+pixi run start-infra
+
+# Check infrastructure status
+pixi run status-infra
+
+# Run the application services (in separate terminals)
+pixi run api      # FastAPI backend on port 8058
+pixi run dash     # Dash frontend on port 5080
+pixi run celery   # Celery worker for background tasks
+
+# Stop infrastructure when done
+pixi run stop-infra
+```
+
+Data is stored in `.pixi-data/` directory (MongoDB, Redis, MinIO data).
+
+#### Option 2: Local Development (Docker for infrastructure only)
+
+```bash
 # Start infrastructure services (MongoDB, Redis, MinIO) with Docker
 docker compose -f docker-compose.dev.yaml up -d mongo redis
 docker compose -f docker-compose/docker-compose.minio.yaml up -d minio
@@ -133,7 +155,7 @@ pixi run dash     # Dash frontend on port 5080
 pixi run celery   # Celery worker for background tasks
 ```
 
-#### Option 2: Docker Compose (full containerized)
+#### Option 3: Docker Compose (full containerized)
 
 ```bash
 # Start all services in development mode (uses uv-based Dockerfile)

@@ -12,17 +12,56 @@ channels = ["conda-forge"]
 platforms = ["linux-64", "osx-arm64", "osx-64"]
 
 [tasks]
-# Development tasks
+# =============================================================================
+# Infrastructure services (MongoDB, Redis, MinIO)
+# =============================================================================
+# Initialize data directories
+init-data-dirs = "mkdir -p .pixi-data/mongodb .pixi-data/redis .pixi-data/minio"
+
+# Start MongoDB on port 27018 (matching docker-compose config)
+start-mongo = { cmd = "mongod --dbpath .pixi-data/mongodb --port 27018 --bind_ip 127.0.0.1 --logpath .pixi-data/mongodb/mongod.log --fork", depends-on = ["init-data-dirs"] }
+stop-mongo = "mongosh --port 27018 --eval 'db.adminCommand({shutdown: 1})' || true"
+
+# Start Redis on port 6379
+start-redis = { cmd = "redis-server --daemonize yes --port 6379 --dir .pixi-data/redis --logfile redis.log", depends-on = ["init-data-dirs"] }
+stop-redis = "redis-cli -p 6379 shutdown || true"
+
+# Start MinIO on port 9000 (API) and 9001 (Console)
+start-minio = { cmd = "minio server .pixi-data/minio --address :9000 --console-address :9001 > .pixi-data/minio/minio.log 2>&1 &", depends-on = ["init-data-dirs"] }
+stop-minio = "pkill -f 'minio server' || true"
+
+# Start all infrastructure services
+start-infra = { depends-on = ["start-mongo", "start-redis", "start-minio"] }
+stop-infra = { depends-on = ["stop-mongo", "stop-redis", "stop-minio"] }
+
+# Check infrastructure status
+status-infra = """
+echo "=== Infrastructure Status ===" && \
+echo -n "MongoDB (27018): " && (mongosh --port 27018 --eval 'db.runCommand({ping:1})' --quiet 2>/dev/null && echo "running" || echo "stopped") && \
+echo -n "Redis (6379): " && (redis-cli -p 6379 ping 2>/dev/null || echo "stopped") && \
+echo -n "MinIO (9000): " && (curl -s http://localhost:9000/minio/health/live && echo " running" || echo "stopped")
+"""
+
+# =============================================================================
+# Application services
+# =============================================================================
 install-browsers = "playwright install chromium"
 api = { cmd = "python depictio/api/run.py", depends-on = ["install-browsers"] }
 dash = "python depictio/dash/flask_dispatcher.py"
 celery = "celery -A depictio.api.celery_app worker --loglevel=info"
 
+# Start everything (infrastructure + app)
+start-all = { cmd = "echo 'Starting API...' && python depictio/api/run.py", depends-on = ["start-infra", "install-browsers"] }
+
+# =============================================================================
 # Testing tasks
+# =============================================================================
 test = "pytest depictio/tests/ -xvs"
 test-fast = "pytest depictio/tests/ -x --ignore=depictio/tests/e2e-tests"
 
+# =============================================================================
 # Code quality tasks
+# =============================================================================
 lint = "ruff check depictio/"
 format = "ruff format depictio/"
 typecheck = "ty check depictio/"
@@ -32,8 +71,12 @@ pre-commit = "pre-commit run --all-files"
 # Python version constraint
 python = ">=3.11,<3.13"
 
+# Infrastructure services (installed via conda-forge)
+mongodb = ">=7.0"
+redis-server = ">=7.0"
+minio = ">=2024"
+
 # System dependencies for playwright/headless browser
-# These are the minimal system deps needed for playwright on Linux
 xvfb-run = { version = "*", platforms = ["linux-64"] }
 
 [pypi-dependencies]
