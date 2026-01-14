@@ -214,6 +214,7 @@ def build_multiqc(**kwargs: Any):
                 "position": "relative",
                 "height": "100%",
                 "width": "100%",
+                "flex": "1",  # CRITICAL: Grow to take all space in flex parent
                 "display": "flex",
                 "flexDirection": "column",
             },
@@ -229,7 +230,12 @@ def build_multiqc(**kwargs: Any):
                             "yaxis": {"visible": False},
                         },
                     },
-                    style={"flex": "1", "minHeight": "0"},
+                    style={
+                        "width": "100%",
+                        "height": "100%",
+                        "flex": "1",  # CRITICAL: Grow within flex parent
+                        "minHeight": "300px",  # Ensure minimum height
+                    },
                     config={"displayModeBar": "hover", "responsive": True},
                 ),
                 # MultiQC logo overlay - CSS positioned for consistent size across all plots
@@ -264,7 +270,27 @@ def build_multiqc(**kwargs: Any):
 
     # Return container with plot, stores, and trace metadata (following card pattern)
     # CRITICAL: Add the component ID so enable_box_edit_mode can extract it properly
-    return html.Div([plot_component, store_component, trace_metadata_store], id=component_id)
+    # CRITICAL: Add flexbox-compatible styling so component is visible in edit mode
+    logger.error(
+        f"🔨 MULTIQC BUILD RETURNING - Component ID: {component_id}, "
+        f"Plot wrapper type: {type(plot_component).__name__}, "
+        f"Has stores: store={store_component is not None}, trace={trace_metadata_store is not None}"
+    )
+
+    return html.Div(
+        [plot_component, store_component, trace_metadata_store],
+        id=component_id,
+        style={
+            "width": "100%",
+            "height": "100%",
+            "flex": "1",  # CRITICAL: Grow within flex parent
+            "display": "flex",
+            "flexDirection": "column",
+            "overflow": "hidden",
+            "minHeight": "300px",  # Ensure minimum height
+            "backgroundColor": "rgba(255, 0, 0, 0.1)",  # DEBUG: Red tint to see if visible
+        },
+    )
 
 
 def get_multiqc_reports_for_data_collection(data_collection_id: str, token: str) -> list:
