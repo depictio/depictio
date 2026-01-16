@@ -13,7 +13,9 @@ services:
     init: true
     volumes:
       - .:/workspace:cached
-      - /var/run/docker.sock:/var/run/docker.sock
+      # Docker socket - use environment variable for Codespaces compatibility
+      # In Codespaces, docker-outside-of-docker feature handles this automatically
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
       # Gemini and Qwen: direct bind mounts (working)
       - ~/.gemini:/home/vscode/.gemini
       - ~/.qwen:/home/vscode/.qwen

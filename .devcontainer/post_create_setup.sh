@@ -14,6 +14,20 @@ fi
 # Ensure cache directory exists with correct permissions
 mkdir -p /home/vscode/.cache/uv 2>/dev/null || true
 
+# Fix Docker socket permissions (for Codespaces and local dev)
+echo "🐳 Configuring Docker access..."
+if [ -S /var/run/docker.sock ]; then
+    # Add vscode user to docker group if it exists
+    if getent group docker > /dev/null 2>&1; then
+        sudo usermod -aG docker vscode 2>/dev/null || true
+    fi
+    # Fix socket permissions
+    sudo chmod 666 /var/run/docker.sock 2>/dev/null || true
+    echo "   ✓ Docker socket configured"
+else
+    echo "   ⚠️  Docker socket not found (may be handled by devcontainer feature)"
+fi
+
 # Initialize Git LFS
 echo "🔧 Initializing Git LFS..."
 git lfs install
