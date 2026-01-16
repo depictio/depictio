@@ -72,9 +72,11 @@ pre-commit = "pre-commit run --all-files"
 python = ">=3.11,<3.13"
 
 # Infrastructure services (installed via conda-forge)
-mongodb = ">=7.0"
+# Note: conda-forge mongodb is at 6.0.x, not 7.x
+mongodb = ">=6.0"
 redis-server = ">=7.0"
-minio = ">=2024"
+# minio-server is the server binary (not minio which is the Python SDK)
+minio-server = "*"
 
 # System dependencies for playwright/headless browser
 xvfb-run = { version = "*", platforms = ["linux-64"] }

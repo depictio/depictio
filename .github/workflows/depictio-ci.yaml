@@ -188,11 +188,23 @@ jobs:
           locked: false
           # Use temp location for pixi binary to avoid cleanup issues
           pixi-bin-path: ${{ runner.temp }}/bin/pixi
+          # Enable verbose logging to debug installation issues
+          log-level: vv
 
       - name: Install dependencies with pixi
         run: |
           echo "📦 Installing dependencies with pixi..."
-          pixi install
+          echo "🔍 Pixi version: $(pixi --version)"
+          echo "🔍 Running pixi install with verbose output..."
+          pixi install -v 2>&1 || {
+            echo "❌ pixi install failed, showing debug info..."
+            echo "📋 pixi.toml contents:"
+            cat pixi.toml
+            echo ""
+            echo "📋 pyproject.toml dependencies section:"
+            grep -A 100 '\[project.dependencies\]' pyproject.toml | head -50 || true
+            exit 1
+          }
           echo "✅ Pixi installation successful"
 
       - name: Verify pixi environment
