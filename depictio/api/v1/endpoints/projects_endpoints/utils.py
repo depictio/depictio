@@ -271,6 +271,19 @@ async def get_project_with_delta_locations(project_id: PyObjectId, current_user:
                 "preserveNullAndEmptyArrays": True,
             }
         },
+        # 3.5. Filter out incomplete data collections (ID-only references)
+        # This handles cases where workflows have data_collections as just {'id': ObjectId(...)}
+        # We only include DCs that have the required fields (data_collection_tag and config)
+        {
+            "$match": {
+                "$or": [
+                    # Include if data_collections is null (for workflows without DCs)
+                    {"workflows.data_collections": None},
+                    # Include if data_collection_tag exists (complete DC object)
+                    {"workflows.data_collections.data_collection_tag": {"$exists": True}},
+                ]
+            }
+        },
         # 4. Lookup DeltaTableAggregated for each DC
         {
             "$lookup": {
