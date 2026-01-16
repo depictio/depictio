@@ -78,11 +78,9 @@ redis-server = ">=7.0"
 # minio-server is the server binary (not minio which is the Python SDK)
 minio-server = "*"
 
-# Platform-specific dependencies are defined in [target.<platform>.dependencies] below
-
-[target.linux-64.dependencies]
-# System dependencies for playwright/headless browser (Linux only)
-xvfb-run = "*"
+# Note: xvfb for headless browser testing should be installed via apt on Linux:
+#   sudo apt-get install xvfb
+# Or use the xvfbwrapper Python package if needed.
 
 [pypi-dependencies]
 # All Python dependencies are managed via pypi for simplicity
