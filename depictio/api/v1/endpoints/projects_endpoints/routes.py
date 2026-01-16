@@ -6,6 +6,7 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection, deltatables_collection, projects_collection
 from depictio.api.v1.endpoints.projects_endpoints.utils import (
     _async_get_all_projects,
+    _async_get_project_from_id,
     _async_get_project_from_name,
     get_project_with_delta_locations,
     validate_workflow_uniqueness_in_project,
@@ -203,15 +204,17 @@ async def update_project(project: Project, current_user: User = Depends(get_curr
         )
 
     try:
-        existing_project = await get_project_from_id(project.id, current_user)
-        if not existing_project:
+        # Use simple query (no aggregation pipeline) for update validation
+        existing_project_dict = _async_get_project_from_id(
+            project.id, current_user, projects_collection
+        )
+        if not existing_project_dict:
             raise HTTPException(status_code=404, detail="Project not found.")
     except HTTPException as e:
         raise e
 
-    # Use ProjectResponse to handle extra fields (delta_location, last_aggregation)
-    # added by get_project_from_id's aggregation pipeline
-    existing_project = ProjectResponse.from_mongo(existing_project)
+    # Convert ObjectIds to strings
+    existing_project = ProjectResponse.from_mongo(existing_project_dict)
     logger.info(f"Existing project: {existing_project}")
 
     # Validate workflow uniqueness within the project
@@ -228,11 +231,11 @@ async def update_project(project: Project, current_user: User = Depends(get_curr
 
 @projects_endpoint_router.delete("/delete")
 async def delete_project(project_id: PyObjectId, current_user: User = Depends(get_current_user)):
-    # Find the project
-    project_dict = await get_project_from_id(project_id, current_user)
+    # Find the project using simple query (no aggregation pipeline)
+    # We don't need delta_location enrichment for deletion
+    project_dict = _async_get_project_from_id(project_id, current_user, projects_collection)
 
-    # Use ProjectResponse to handle extra fields (delta_location, last_aggregation)
-    # added by get_project_from_id's aggregation pipeline
+    # Convert ObjectIds to strings
     project = ProjectResponse.from_mongo(project_dict)
 
     # Ensure the current_user is an owner
@@ -262,8 +265,11 @@ async def add_or_update_permission(
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
 
-    # Find the project
-    project = await get_project_from_id(permission_request.project_id, current_user)
+    # Find the project using simple query (no aggregation pipeline)
+    # We don't need delta_location enrichment for permission updates
+    project = _async_get_project_from_id(
+        PyObjectId(permission_request.project_id), current_user, projects_collection
+    )
     logger.info(f"Project: {project}")
     logger.info(f"Owners ids : {[owner['_id'] for owner in project['permissions']['owners']]}")
     logger.info(f"Current user id: {current_user.id}")
@@ -313,8 +319,9 @@ async def toggle_public_private(
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
 
-    # Find the project
-    project = await get_project_from_id(project_id, current_user)
+    # Find the project using simple query (no aggregation pipeline)
+    # We don't need delta_location enrichment for visibility toggle
+    project = _async_get_project_from_id(PyObjectId(project_id), current_user, projects_collection)
 
     # Ensure the current_user is an owner
     if (
