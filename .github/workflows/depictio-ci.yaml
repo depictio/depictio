@@ -182,7 +182,6 @@ jobs:
         with:
           pixi-version: v0.39.5
           # Disable cache until pixi.lock is committed to the repo
-          # Enable cache: true after running `pixi install` locally and committing pixi.lock
           cache: false
           # Allow pixi to generate lockfile
           locked: false
@@ -190,19 +189,29 @@ jobs:
           pixi-bin-path: ${{ runner.temp }}/bin/pixi
           # Enable verbose logging to debug installation issues
           log-level: vv
+          # Disable automatic install so we can run it manually with better error capture
+          run-install: false
 
       - name: Install dependencies with pixi
         run: |
           echo "📦 Installing dependencies with pixi..."
           echo "🔍 Pixi version: $(pixi --version)"
+          echo "🔍 Platform: $(uname -a)"
+          echo ""
+          echo "📋 pixi.toml contents:"
+          cat pixi.toml
+          echo ""
           echo "🔍 Running pixi install with verbose output..."
-          pixi install -v 2>&1 || {
-            echo "❌ pixi install failed, showing debug info..."
-            echo "📋 pixi.toml contents:"
-            cat pixi.toml
+          # Run with maximum verbosity to see solver errors
+          pixi install -vvv 2>&1 | tee /tmp/pixi-install.log || {
+            echo ""
+            echo "❌ pixi install failed!"
+            echo ""
+            echo "📋 Full pixi install log:"
+            cat /tmp/pixi-install.log
             echo ""
             echo "📋 pyproject.toml dependencies section:"
-            grep -A 100 '\[project.dependencies\]' pyproject.toml | head -50 || true
+            grep -A 100 '\[project.dependencies\]' pyproject.toml | head -80 || true
             exit 1
           }
           echo "✅ Pixi installation successful"
