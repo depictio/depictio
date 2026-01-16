@@ -6,15 +6,66 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Environment Setup
 
+The project supports multiple installation methods for flexibility:
+
+#### Option 1: uv (Recommended for pure Python development)
+
 ```bash
-# Install dependencies with uv (recommended) - Python 3.12
+# Install dependencies with uv - Python 3.11+
 uv sync
 
-# Or with pip
-pip install -e .
-pip install -e ".[dev]"
+# Install with dev dependencies
+uv sync --all-extras
+
+# Install playwright browsers (required for screenshots)
+uv run playwright install chromium
 
 # Note: The project uses Python 3.12 in CI to ensure consistent type checking behavior
+```
+
+#### Option 2: pixi (Recommended for local development without Docker)
+
+```bash
+# Install pixi: https://pixi.sh
+curl -fsSL https://pixi.sh/install.sh | bash
+
+# Install all dependencies
+pixi install
+
+# Install playwright browsers
+pixi run install-browsers
+
+# Run API server
+pixi run api
+
+# Run Dash frontend
+pixi run dash
+
+# Run tests
+pixi run test
+```
+
+#### Option 3: pip (Traditional)
+
+```bash
+pip install -e .
+pip install -e ".[dev]"
+playwright install chromium
+```
+
+### Playwright Browser Installation
+
+The project uses Playwright for dashboard screenshots. Playwright is a pure Python package that manages its own browser binaries:
+
+```bash
+# Install chromium browser (required for screenshot functionality)
+playwright install chromium
+
+# Or with uv
+uv run playwright install chromium
+
+# Or with pixi
+pixi run install-browsers
 ```
 
 ### Python Environment
@@ -65,12 +116,62 @@ act --workflows .github/workflows/depictio-ci.yaml --list
 
 ### Running the Application
 
-#### Development Mode (Docker compose)
+#### Option 1: Fully Local Development (no Docker at all)
 
 ```bash
-# Start all services in development mode
-docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml --env-file docker-compose/.env up
+# Install pixi and all dependencies (includes MongoDB, Redis, MinIO)
+pixi install
+
+# Start infrastructure services (MongoDB, Redis, MinIO)
+pixi run start-infra
+
+# Check infrastructure status
+pixi run status-infra
+
+# Run the application services (in separate terminals)
+pixi run api      # FastAPI backend on port 8058
+pixi run dash     # Dash frontend on port 5080
+pixi run celery   # Celery worker for background tasks
+
+# Stop infrastructure when done
+pixi run stop-infra
 ```
+
+Data is stored in `.pixi-data/` directory (MongoDB, Redis, MinIO data).
+
+#### Option 2: Local Development (Docker for infrastructure only)
+
+```bash
+# Start infrastructure services (MongoDB, Redis, MinIO) with Docker
+docker compose -f docker-compose.dev.yaml up -d mongo redis
+docker compose -f docker-compose/docker-compose.minio.yaml up -d minio
+
+# Or start all infrastructure together
+docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d mongo redis minio
+
+# Then run the application services locally
+pixi run api      # FastAPI backend on port 8058
+pixi run dash     # Dash frontend on port 5080
+pixi run celery   # Celery worker for background tasks
+```
+
+#### Option 3: Docker Compose (full containerized)
+
+```bash
+# Start all services in development mode (uses uv-based Dockerfile)
+docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml --env-file docker-compose/.env up
+
+# Build with the simplified uv-based Dockerfile
+docker compose -f docker-compose.dev.yaml build
+```
+
+#### Docker Image Options
+
+The project provides multiple Dockerfile variants:
+
+- **`Dockerfile_depictio_uv.dockerfile`** (Recommended): Fast builds using uv, pure Python dependencies
+- **`Dockerfile_depictio_prod.dockerfile`**: Multi-stage production build with smaller image size
+- **`Dockerfile_depictio.dockerfile`**: Legacy conda/mamba-based (for compatibility)
 
 ## Architecture Overview
 
@@ -194,7 +295,10 @@ The codebase uses Astral's `ty` type checker for static type analysis and mainta
 ## Configuration Files
 
 - `pyproject.toml`: Python packaging, dependencies, and tool configuration
+- `pixi.toml`: Pixi configuration for local development without Docker
+- `uv.lock`: Lockfile for reproducible uv installs
 - `docker-compose.yaml`: Local development environment
+- `docker-compose.dev.yaml`: Development compose file (uses uv-based Dockerfile)
 - `helm-charts/depictio/`: Kubernetes deployment manifests
 - `.env`: Environment variables (create from examples in dev/)
 

@@ -1108,6 +1108,8 @@ dependencies = [
     { name = "fastapi" },
     { name = "fastparquet" },
     { name = "flask-caching" },
+    { name = "fsspec" },
+    { name = "gunicorn" },
     { name = "httpx" },
     { name = "motor" },
     { name = "multiqc" },
@@ -1138,6 +1140,10 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+cli = [
+    { name = "rich" },
+    { name = "typer" },
+]
 dev = [
     { name = "bandit" },
     { name = "black" },
@@ -1187,6 +1193,8 @@ requires-dist = [
     { name = "fastapi", specifier = "==0.115.8" },
     { name = "fastparquet" },
     { name = "flask-caching" },
+    { name = "fsspec" },
+    { name = "gunicorn", specifier = ">=23.0.0" },
     { name = "httpx", specifier = "==0.28.1" },
     { name = "mongomock", marker = "extra == 'dev'", specifier = "==4.3.0" },
     { name = "mongomock-motor", marker = "extra == 'dev'", specifier = "==0.0.36" },
@@ -1216,6 +1224,7 @@ requires-dist = [
     { name = "pyyaml" },
     { name = "redis", specifier = "==5.2.1" },
     { name = "restrictedpython", specifier = ">=8.0" },
+    { name = "rich", marker = "extra == 'cli'" },
     { name = "rich", marker = "extra == 'dev'" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.12.1" },
     { name = "s3fs" },
@@ -1223,6 +1232,7 @@ requires-dist = [
     { name = "textual", marker = "extra == 'dev'", specifier = ">=5.2.0" },
     { name = "tomli" },
     { name = "ty", marker = "extra == 'dev'", specifier = "==0.0.1a12" },
+    { name = "typer", marker = "extra == 'cli'" },
     { name = "typer", marker = "extra == 'dev'" },
     { name = "types-bleach", marker = "extra == 'dev'" },
     { name = "types-boto3", marker = "extra == 'dev'" },
@@ -1230,7 +1240,7 @@ requires-dist = [
     { name = "umap-learn" },
     { name = "uvicorn", specifier = "==0.34.0" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["dev", "cli"]
 
 [[package]]
 name = "devtools"
@@ -1708,6 +1718,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/cd/41/96ba2bf948f67b245784cd294b84e3d17933597dffd3acdb367a210d1949/greenlet-3.2.2-cp313-cp313t-musllinux_1_1_aarch64.whl", hash = "sha256:b50a8c5c162469c3209e5ec92ee4f95c8231b11db6a04db09bbe338176723bb8", size = 1105752, upload-time = "2025-05-09T15:27:08.217Z" },
     { url = "https://files.pythonhosted.org/packages/68/3b/3b97f9d33c1f2eb081759da62bd6162159db260f602f048bc2f36b4c453e/greenlet-3.2.2-cp313-cp313t-musllinux_1_1_x86_64.whl", hash = "sha256:45f9f4853fb4cc46783085261c9ec4706628f3b57de3e68bae03e8f8b3c0de51", size = 1125170, upload-time = "2025-05-09T14:54:04.082Z" },
     { url = "https://files.pythonhosted.org/packages/31/df/b7d17d66c8d0f578d2885a3d8f565e9e4725eacc9d3fdc946d0031c055c4/greenlet-3.2.2-cp314-cp314-macosx_11_0_universal2.whl", hash = "sha256:9ea5231428af34226c05f927e16fc7f6fa5e39e3ad3cd24ffa48ba53a47f4240", size = 269899, upload-time = "2025-05-09T14:54:01.581Z" },
+]
+
+[[package]]
+name = "gunicorn"
+version = "23.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/34/72/9614c465dc206155d93eff0ca20d42e1e35afc533971379482de953521a4/gunicorn-23.0.0.tar.gz", hash = "sha256:f014447a0101dc57e294f6c18ca6b40227a4c90e9bdb586042628030cba004ec", size = 375031, upload-time = "2024-08-10T20:25:27.378Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cb/7d/6dac2a6e1eba33ee43f318edbed4ff29151a49b5d37f080aad1e6469bca4/gunicorn-23.0.0-py3-none-any.whl", hash = "sha256:ec400d38950de4dfd418cff8328b2c8faed0edb0d517d3394e457c317908ca4d", size = 85029, upload-time = "2024-08-10T20:25:24.996Z" },
 ]
 
 [[package]]
