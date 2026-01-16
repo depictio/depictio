@@ -288,7 +288,7 @@ def process_permission_users(users: List[Dict], token: str, permission_type: str
     processed_users = []
 
     for user in users:
-        logger.debug(f"Processing user: {user} with ID {user['id']}")
+        logger.debug(f"Processing user: {user} with ID {user.get('id', user.get('_id'))}")
 
         # Use the user data that's already available in the project permissions
         # This avoids the need for additional API calls that might fail due to permission restrictions
