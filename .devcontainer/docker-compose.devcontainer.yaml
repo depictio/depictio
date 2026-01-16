@@ -46,6 +46,8 @@ services:
       - DEPICTIO_MINIO_ROOT_PASSWORD=minio123
       - DEPICTIO_MINIO_ENDPOINT_URL=http://minio:9000
       - CLAUDE_CONFIG_DIR=/home/vscode/.claude
+      # Fix Docker API version mismatch in Codespaces
+      - DOCKER_API_VERSION=1.43
 
 volumes:
   claude-code-config:
