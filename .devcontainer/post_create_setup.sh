@@ -6,6 +6,14 @@ if [ -f .env.instance ]; then
     source .env.instance
 fi
 
+# Fix UV cache permissions (Docker volume may have root ownership)
+echo "🔧 Fixing cache permissions..."
+if [ -d /home/vscode/.cache/uv ]; then
+    sudo chown -R vscode:vscode /home/vscode/.cache/uv 2>/dev/null || true
+fi
+# Ensure cache directory exists with correct permissions
+mkdir -p /home/vscode/.cache/uv 2>/dev/null || true
+
 # Initialize Git LFS
 echo "🔧 Initializing Git LFS..."
 git lfs install
@@ -15,15 +23,22 @@ echo "   ✓ Git LFS configured"
 echo "🪝 Setting up pre-commit hooks..."
 cd /workspace || exit
 if [ -f .pre-commit-config.yaml ]; then
-    # Install pre-commit using uv (if uv is available) or pip
+    # Install pre-commit using pip (more reliable than uv tool in devcontainer)
     if command -v uv &> /dev/null; then
-        uv tool install pre-commit || uv pip install pre-commit
+        # Use uv pip install which installs to the current environment
+        uv pip install pre-commit --quiet 2>/dev/null || pip install pre-commit --quiet
     else
-        pip install pre-commit
+        pip install pre-commit --quiet
     fi
 
-    # Install the git hook scripts
-    pre-commit install
+    # Install the git hook scripts (use full path if needed)
+    if command -v pre-commit &> /dev/null; then
+        pre-commit install
+    elif [ -f /home/vscode/.local/bin/pre-commit ]; then
+        /home/vscode/.local/bin/pre-commit install
+    else
+        echo "   ⚠️  pre-commit not found in PATH, skipping hook installation"
+    fi
 
     # Apply environment-agnostic hook (supports Mac, devcontainer, fresh uv install)
     if [ -f .devcontainer/hooks/pre-commit ]; then
