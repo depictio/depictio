@@ -324,6 +324,7 @@ async def get_project_with_delta_locations(project_id: PyObjectId, current_user:
         # 6. Remove temporary delta_info field
         {"$project": {"delta_info": 0}},
         # 7. Group back to reconstruct data_collections array per workflow
+        # Use $push with $cond to filter out null/incomplete data collections
         {
             "$group": {
                 "_id": {
@@ -332,7 +333,27 @@ async def get_project_with_delta_locations(project_id: PyObjectId, current_user:
                     "workflow_id": "$workflows._id",
                 },
                 "project_doc": {"$first": "$$ROOT"},
-                "data_collections": {"$push": "$workflows.data_collections"},
+                "data_collections": {
+                    "$push": {
+                        "$cond": {
+                            # Only push if data_collection is not null and has required fields
+                            "if": {
+                                "$and": [
+                                    {"$ne": ["$workflows.data_collections", None]},
+                                    {
+                                        "$ne": [
+                                            "$workflows.data_collections.data_collection_tag",
+                                            None,
+                                        ]
+                                    },
+                                    {"$ne": ["$workflows.data_collections.config", None]},
+                                ]
+                            },
+                            "then": "$workflows.data_collections",
+                            "else": "$$REMOVE",  # Remove from array instead of pushing null
+                        }
+                    }
+                },
             }
         },
         # 8. Group back to reconstruct workflows array per project
