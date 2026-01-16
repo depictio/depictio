@@ -67,6 +67,9 @@ dependencies = [
   # Storage
   "s3fs",
   "fsspec",
+  # CLI utilities (required by API code that imports CLI helpers)
+  "typer",
+  "rich",
 ]
 authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
 urls = { Homepage = "http://github.com/depictio/depictio" }
