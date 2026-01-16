@@ -1,4 +1,5 @@
-from typing import Optional
+from pathlib import Path
+from typing import Any, Optional
 
 from pydantic import ConfigDict, field_serializer
 
@@ -68,3 +69,83 @@ class DashboardData(MongoModel):
     def serialize_stored_metadata(self, stored_metadata: list) -> list:
         # Convert any ObjectIds in the stored_metadata list to strings
         return convert_objectid_to_str(stored_metadata)
+
+    def to_yaml(self, include_metadata: bool = True) -> str:
+        """
+        Export this dashboard to a YAML string.
+
+        Args:
+            include_metadata: Whether to include export metadata (timestamp, version)
+
+        Returns:
+            YAML string representation of the dashboard
+        """
+        from depictio.models.yaml_serialization import dashboard_to_yaml
+
+        return dashboard_to_yaml(self.model_dump(), include_metadata=include_metadata)
+
+    def to_yaml_file(self, filepath: str | Path) -> Path:
+        """
+        Export this dashboard to a YAML file.
+
+        Args:
+            filepath: Destination file path
+
+        Returns:
+            Path to the written file
+        """
+        from depictio.models.yaml_serialization import export_dashboard_to_file
+
+        return export_dashboard_to_file(self.model_dump(), filepath)
+
+    @classmethod
+    def from_yaml(cls, yaml_content: str) -> "DashboardData":
+        """
+        Create a DashboardData instance from YAML string.
+
+        Args:
+            yaml_content: YAML string content
+
+        Returns:
+            DashboardData instance
+
+        Raises:
+            ValueError: If YAML is invalid or doesn't match schema
+        """
+        from depictio.models.yaml_serialization import yaml_to_dashboard_dict
+
+        data = yaml_to_dashboard_dict(yaml_content)
+        return cls(**data)
+
+    @classmethod
+    def from_yaml_file(cls, filepath: str | Path) -> "DashboardData":
+        """
+        Create a DashboardData instance from a YAML file.
+
+        Args:
+            filepath: Source YAML file path
+
+        Returns:
+            DashboardData instance
+
+        Raises:
+            FileNotFoundError: If file doesn't exist
+            ValueError: If file content is invalid
+        """
+        from depictio.models.yaml_serialization import import_dashboard_from_file
+
+        data = import_dashboard_from_file(filepath)
+        return cls(**data)
+
+    def to_dict_yaml_safe(self) -> dict[str, Any]:
+        """
+        Convert to a dictionary suitable for YAML serialization.
+
+        All ObjectIds and datetime objects are converted to strings.
+
+        Returns:
+            Dictionary with JSON/YAML serializable values
+        """
+        from depictio.models.yaml_serialization import convert_for_yaml
+
+        return convert_for_yaml(self.model_dump())
