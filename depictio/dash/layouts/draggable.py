@@ -1221,12 +1221,12 @@ def design_draggable(
         )
 
         # Calculate positions for both panels (with saved layout data)
-        logger.info(
-            f"📐 Calculating positions for {len(interactive_metadata)} interactive components"
-        )
-        logger.info(
-            f"📐 Interactive metadata sample: {interactive_metadata[:2] if interactive_metadata else []}"
-        )
+        # logger.info(
+        #     f"📐 Calculating positions for {len(interactive_metadata)} interactive components"
+        # )
+        # logger.info(
+        #     f"📐 Interactive metadata sample: {interactive_metadata[:2] if interactive_metadata else []}"
+        # )
         left_layout = calculate_left_panel_positions(interactive_metadata, left_panel_saved_layout)
         logger.info(f"📐 Left layout calculated: {len(left_layout)} items")
         logger.info(f"📐 Left layout sample: {left_layout[:2] if left_layout else []}")
