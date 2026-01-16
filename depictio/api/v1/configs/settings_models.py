@@ -581,6 +581,55 @@ class ProfilingConfig(BaseSettings):
         return Path(self.profile_dir).resolve()
 
 
+class DashboardYAMLConfig(BaseSettings):
+    """Configuration for YAML-based dashboard management.
+
+    Enables file-based dashboard editing where users can read/write YAML files
+    directly from a designated directory for version control and IaC workflows.
+    """
+
+    # Enable/disable YAML dashboard sync feature
+    enabled: bool = Field(default=True, description="Enable YAML-based dashboard management")
+
+    # Base directory for YAML dashboard files
+    base_dir: Path = Field(
+        default_factory=lambda: Path(__file__).parent.parent.parent.parent / "dashboards_yaml",
+        description="Base directory for dashboard YAML files",
+    )
+
+    # Organization structure
+    organize_by_project: bool = Field(
+        default=True,
+        description="Organize YAML files in subdirectories by project name",
+    )
+
+    # File naming
+    use_dashboard_title: bool = Field(
+        default=True,
+        description="Use dashboard title in filename (vs just ID)",
+    )
+
+    # Include export metadata in files
+    include_export_metadata: bool = Field(
+        default=True,
+        description="Include export timestamp and version in YAML files",
+    )
+
+    # Auto-sync settings (for future watch mode)
+    auto_export_on_save: bool = Field(
+        default=False,
+        description="Automatically export to YAML when dashboard is saved",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_DASHBOARD_YAML_")
+
+    @computed_field
+    @property
+    def yaml_dir_path(self) -> str:
+        """Get absolute YAML directory path."""
+        return str(self.base_dir.resolve())
+
+
 class Settings(BaseSettings):
     context: str = Field(default="server")
     fastapi: FastAPIConfig = Field(default_factory=FastAPIConfig)
@@ -598,5 +647,6 @@ class Settings(BaseSettings):
     analytics: AnalyticsConfig = Field(default_factory=AnalyticsConfig)
     google_analytics: GoogleAnalyticsConfig = Field(default_factory=GoogleAnalyticsConfig)
     profiling: ProfilingConfig = Field(default_factory=ProfilingConfig)
+    dashboard_yaml: DashboardYAMLConfig = Field(default_factory=DashboardYAMLConfig)
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_")
