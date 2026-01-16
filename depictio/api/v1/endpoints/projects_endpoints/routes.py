@@ -287,7 +287,7 @@ async def add_or_update_permission(
     logger.info(f"Before update: {project['permissions']}")
     project["permissions"] = permission_request.permissions
     logger.info(f"Updated project permissions: {project['permissions']}")
-    project = Project.from_mongo(project)
+    project = ProjectResponse.from_mongo(project)
     logger.info(f"Project: {project}")
     project = project.mongo()
     logger.info(f"Project: {project}")
