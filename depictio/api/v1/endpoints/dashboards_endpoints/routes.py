@@ -549,10 +549,37 @@ async def save_dashboard(
         )
         logger.info(message)
 
+        # Auto-export to YAML if enabled
+        yaml_export_path = None
+        try:
+            if settings.dashboard_yaml.enabled and settings.dashboard_yaml.auto_export_on_save:
+                # Get project name for organization
+                project_id = result.get("project_id")
+                project = (
+                    projects_collection.find_one({"_id": ObjectId(project_id)})
+                    if project_id
+                    else None
+                )
+                project_name = project.get("name", "unknown") if project else "unknown"
+
+                # Export to YAML directory
+                yaml_export_path = export_dashboard_to_yaml_dir(
+                    dashboard_data=data.model_dump(),
+                    project_name=project_name,
+                )
+                logger.info(f"Auto-exported dashboard {dashboard_id} to {yaml_export_path}")
+        except Exception as e:
+            logger.warning(f"Auto-export to YAML failed: {e}")
+            # Don't fail the save operation if YAML export fails
+
         # Convert dashboard_id to string to ensure proper JSON serialization
         dashboard_id_str = str(dashboard_id)
 
-        return {"message": message, "dashboard_id": dashboard_id_str}
+        response = {"message": message, "dashboard_id": dashboard_id_str}
+        if yaml_export_path:
+            response["yaml_export_path"] = str(yaml_export_path)
+
+        return response
     else:
         logger.error("Failed to insert or update dashboard data.")
         # It's unlikely to reach this point due to upsert=True, but included for completeness
@@ -1834,4 +1861,182 @@ async def get_yaml_directory_config(
         "use_dashboard_title": yaml_config.use_dashboard_title,
         "include_export_metadata": yaml_config.include_export_metadata,
         "auto_export_on_save": yaml_config.auto_export_on_save,
+        "auto_import_on_change": yaml_config.auto_import_on_change,
+        "watcher_debounce_seconds": yaml_config.watcher_debounce_seconds,
+        "watcher_auto_start": yaml_config.watcher_auto_start,
+    }
+
+
+# ============================================================================
+# YAML Watcher Endpoints (Auto-sync)
+# ============================================================================
+
+
+@dashboards_endpoint_router.post("/yaml-dir/watcher/start")
+async def start_yaml_watcher_endpoint(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Start the YAML file watcher for auto-sync.
+
+    When running, the watcher monitors the YAML directory for changes
+    and automatically syncs modified files to MongoDB.
+
+    Args:
+        current_user: The authenticated user (must be admin)
+
+    Returns:
+        Watcher start status
+    """
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Only administrators can control the YAML watcher.",
+        )
+
+    from depictio.api.v1.services.yaml_watcher import get_watcher_status, start_yaml_watcher
+
+    if not settings.dashboard_yaml.enabled:
+        raise HTTPException(
+            status_code=400,
+            detail="YAML directory management is not enabled",
+        )
+
+    started = start_yaml_watcher()
+
+    status = get_watcher_status()
+
+    if started:
+        return {
+            "success": True,
+            "message": "YAML watcher started successfully",
+            **status,
+        }
+    else:
+        return {
+            "success": False,
+            "message": "YAML watcher already running or could not be started",
+            **status,
+        }
+
+
+@dashboards_endpoint_router.post("/yaml-dir/watcher/stop")
+async def stop_yaml_watcher_endpoint(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Stop the YAML file watcher.
+
+    Args:
+        current_user: The authenticated user (must be admin)
+
+    Returns:
+        Watcher stop status
+    """
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Only administrators can control the YAML watcher.",
+        )
+
+    from depictio.api.v1.services.yaml_watcher import get_watcher_status, stop_yaml_watcher
+
+    stopped = stop_yaml_watcher()
+
+    status = get_watcher_status()
+
+    if stopped:
+        return {
+            "success": True,
+            "message": "YAML watcher stopped successfully",
+            **status,
+        }
+    else:
+        return {
+            "success": False,
+            "message": "YAML watcher was not running",
+            **status,
+        }
+
+
+@dashboards_endpoint_router.get("/yaml-dir/watcher/status")
+async def get_yaml_watcher_status_endpoint(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get the current status of the YAML file watcher.
+
+    Args:
+        current_user: The authenticated user
+
+    Returns:
+        Watcher status information
+    """
+    from depictio.api.v1.services.yaml_watcher import get_watcher_status
+
+    status = get_watcher_status()
+
+    return {
+        "success": True,
+        **status,
+    }
+
+
+@dashboards_endpoint_router.post("/yaml-dir/sync-all")
+async def sync_all_yaml_to_mongodb(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Manually sync all YAML files to MongoDB.
+
+    This is a one-time sync operation that imports all YAML files
+    in the directory to update existing dashboards in MongoDB.
+
+    Args:
+        current_user: The authenticated user (must be admin)
+
+    Returns:
+        Sync results summary
+    """
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Only administrators can perform bulk sync operations.",
+        )
+
+    from depictio.api.v1.services.yaml_watcher import sync_yaml_to_mongodb
+
+    if not settings.dashboard_yaml.enabled:
+        raise HTTPException(
+            status_code=400,
+            detail="YAML directory management is not enabled",
+        )
+
+    # Get all YAML files
+    yaml_files = list_yaml_dashboards()
+
+    results = {
+        "total": len(yaml_files),
+        "synced": 0,
+        "skipped": 0,
+        "failed": 0,
+        "details": [],
+    }
+
+    for yaml_info in yaml_files:
+        sync_result = sync_yaml_to_mongodb(yaml_info["path"], "modified")
+        results["details"].append(sync_result)
+
+        if sync_result["success"]:
+            if sync_result["action"] in ("updated", "created"):
+                results["synced"] += 1
+            else:
+                results["skipped"] += 1
+        else:
+            results["failed"] += 1
+
+    return {
+        "success": True,
+        "message": f"Synced {results['synced']} dashboards, skipped {results['skipped']}, failed {results['failed']}",
+        **results,
     }
