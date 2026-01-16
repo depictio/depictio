@@ -383,7 +383,46 @@ async def get_project_with_delta_locations(project_id: PyObjectId, current_user:
                 }
             }
         },
-        # 10. Remove the redundant workflows field from nested structure
+        # 10. Final cleanup: Filter out incomplete data collections from workflows array
+        # This is a safety net to remove any ID-only references that slipped through
+        {
+            "$addFields": {
+                "workflows": {
+                    "$map": {
+                        "input": "$workflows",
+                        "as": "workflow",
+                        "in": {
+                            "$mergeObjects": [
+                                "$$workflow",
+                                {
+                                    "data_collections": {
+                                        "$filter": {
+                                            "input": {
+                                                "$ifNull": ["$$workflow.data_collections", []]
+                                            },
+                                            "as": "dc",
+                                            "cond": {
+                                                # Only include DCs that have BOTH required fields
+                                                "$and": [
+                                                    {
+                                                        "$ne": [
+                                                            {"$type": "$$dc.data_collection_tag"},
+                                                            "missing",
+                                                        ]
+                                                    },
+                                                    {"$ne": [{"$type": "$$dc.config"}, "missing"]},
+                                                ]
+                                            },
+                                        }
+                                    }
+                                },
+                            ]
+                        },
+                    }
+                }
+            }
+        },
+        # 11. Remove the redundant workflows field from nested structure
         {"$project": {"project_doc": 0}},
     ]
 
