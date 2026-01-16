@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import projects_collection
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
-from depictio.models.models.projects import Project
+from depictio.models.models.projects import Project, ProjectResponse
 from depictio.models.models.users import User
 
 # Define the router
@@ -30,7 +30,7 @@ def _async_get_all_projects(current_user: User, projects_collection) -> list[Pro
 
     projects = list(projects_collection.find(query))
     if projects:
-        projects = [Project.from_mongo(project) for project in projects]
+        projects = [ProjectResponse.from_mongo(project) for project in projects]
         return projects
     else:
         return []
@@ -83,7 +83,7 @@ def _async_get_project_from_name(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found.")
 
-    project = convert_objectid_to_str(Project.from_mongo(project).model_dump())
+    project = convert_objectid_to_str(ProjectResponse.from_mongo(project).model_dump())
     return project
 
 
