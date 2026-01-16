@@ -615,10 +615,25 @@ class DashboardYAMLConfig(BaseSettings):
         description="Include export timestamp and version in YAML files",
     )
 
-    # Auto-sync settings (for future watch mode)
+    # Auto-sync settings
     auto_export_on_save: bool = Field(
         default=False,
         description="Automatically export to YAML when dashboard is saved",
+    )
+
+    auto_import_on_change: bool = Field(
+        default=False,
+        description="Automatically import from YAML when files change (requires watcher)",
+    )
+
+    watcher_debounce_seconds: float = Field(
+        default=2.0,
+        description="Seconds to wait after file change before syncing",
+    )
+
+    watcher_auto_start: bool = Field(
+        default=False,
+        description="Automatically start the file watcher on API startup",
     )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_DASHBOARD_YAML_")
