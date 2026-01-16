@@ -12,7 +12,7 @@ from depictio.api.v1.endpoints.projects_endpoints.utils import (
     validate_workflow_uniqueness_in_project,
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
-from depictio.models.models.base import PyObjectId
+from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 
 ## depictio-models imports
 from depictio.models.models.projects import Project, ProjectPermissionRequest, ProjectResponse
@@ -39,25 +39,34 @@ async def get_all_projects(current_user: User = Depends(get_current_user)) -> li
 @projects_endpoint_router.get("/get/from_id")
 async def get_project_from_id(
     project_id: PyObjectId = Query(default="646b0f3c1e4a2d7f8e5b8c9a"),
+    skip_enrichment: bool = Query(default=False),
     current_user: User = Depends(get_user_or_anonymous),
 ):
-    """Get a project by ID with delta_locations joined via MongoDB aggregation.
+    """Get a project by ID, optionally with delta_locations joined via MongoDB aggregation.
 
-    This endpoint retrieves a project from the database using its ID and joins
+    This endpoint retrieves a project from the database using its ID. By default, it joins
     delta_table_location data from the DeltaTableAggregated collection at query time.
-    This ensures always-fresh delta_locations without needing to cache them in dashboard metadata.
+    Set skip_enrichment=true for simple queries without delta_location joins (faster, safer).
 
     Args:
         project_id (PyObjectId, optional): The project ID to retrieve.
+        skip_enrichment (bool, optional): Skip delta_location aggregation pipeline (default: False).
+                                          Use True for project updates to get complete workflow objects.
         current_user (User, optional): The authenticated user. Defaults to Depends(get_user_or_anonymous).
 
     Returns:
-        dict: Project document with delta_locations nested in data_collections.
-              Each data collection includes:
-              - delta_location: S3/MinIO path to delta table
+        dict: Project document. If skip_enrichment=False (default), includes:
+              - delta_location: S3/MinIO path to delta table (per data collection)
               - last_aggregation: Most recent aggregation metadata with column specs
+              If skip_enrichment=True, returns basic project structure without enrichment.
     """
-    return await get_project_with_delta_locations(project_id, current_user)
+    if skip_enrichment:
+        # Use simple query without aggregation pipeline
+        project_dict = _async_get_project_from_id(project_id, current_user, projects_collection)
+        return convert_objectid_to_str(project_dict)
+    else:
+        # Use aggregation pipeline with delta_location enrichment
+        return await get_project_with_delta_locations(project_id, current_user)
 
 
 @projects_endpoint_router.get("/get/from_name/{project_name}", response_model=Project)
