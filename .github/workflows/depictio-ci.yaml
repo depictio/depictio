@@ -220,7 +220,7 @@ jobs:
         run: |
           echo "🔍 Verifying pixi environment..."
           pixi run python --version
-          pixi run python -c "import depictio; print(f'depictio package loaded successfully')"
+          pixi run python -c 'import depictio; print("depictio package loaded successfully")'
 
       - name: Run quick tests (no infrastructure)
         run: |
