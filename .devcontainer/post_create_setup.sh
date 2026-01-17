@@ -130,20 +130,13 @@ uv sync --extra dev
 # If you encounter polars conflicts, the CI workflow shows how to force-reinstall
 echo "✅ Dependencies installed (including dev extras: pytest, mongomock-motor, etc.)"
 
-# Install depictio-cli from GitHub (optional - non-fatal if it fails)
-# Note: depictio-cli uses the main depictio package for models (depictio-models is deprecated)
-echo "📦 Installing depictio-cli..."
-if uv venv depictio-cli-venv 2>/dev/null; then
-    # shellcheck disable=SC1091
-    source depictio-cli-venv/bin/activate
-    # Install depictio (for models) and depictio-cli
-    uv pip install -e /workspace git+https://github.com/depictio/depictio-cli.git 2>/dev/null && \
-        depictio-cli --help && \
-        echo "   ✓ depictio-cli installed" || \
-        echo "   ⚠️  depictio-cli installation failed (non-fatal)"
-    deactivate
+# The CLI is part of the main depictio package at depictio/cli/
+# It's already installed via uv sync above, just verify it works
+echo "📦 Verifying depictio CLI..."
+if python -c "from depictio.cli import depictio_cli" 2>/dev/null; then
+    echo "   ✓ depictio CLI available (depictio/cli/)"
 else
-    echo "   ⚠️  Could not create depictio-cli venv (non-fatal)"
+    echo "   ⚠️  depictio CLI not found (may need to check depictio/cli/)"
 fi
 
 # Verify that packages were installed in the container image and check what binaries are available
@@ -248,3 +241,8 @@ echo ""
 
 # Create a convenient alias for showing ports
 echo "alias ports='bash /workspace/.devcontainer/scripts/print-ports.sh'" >> ~/.bashrc 2>/dev/null || true
+
+# Start port forwarding so VS Code can detect the ports
+echo ""
+echo "🔌 Starting port forwarding for VS Code..."
+bash /workspace/.devcontainer/scripts/forward-ports.sh 2>/dev/null || echo "   ⚠️  Port forwarding setup skipped"
