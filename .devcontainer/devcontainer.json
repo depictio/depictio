@@ -31,16 +31,16 @@
   "initializeCommand": ".devcontainer/pre_create_setup.sh",
   "postStartCommand": "bash /workspace/.devcontainer/fix_git_worktree.sh",
   "postCreateCommand": "post_create_setup.sh", // script to run after the containers are started
-  // Disable auto port forwarding - we'll manually specify the offset ports
+  // Auto-forward main application ports
   "portsAttributes": {
-    "5080": {"label": "Dash (internal)", "onAutoForward": "ignore"},
-    "8058": {"label": "FastAPI (internal)", "onAutoForward": "ignore"},
-    "27018": {"label": "MongoDB (internal)", "onAutoForward": "ignore"},
-    "6379": {"label": "Redis (internal)", "onAutoForward": "ignore"},
-    "9000": {"label": "MinIO (internal)", "onAutoForward": "ignore"},
-    "9001": {"label": "MinIO Console (internal)", "onAutoForward": "ignore"}
+    "5080": {"label": "Dash Frontend", "onAutoForward": "notify"},
+    "8058": {"label": "FastAPI Backend", "onAutoForward": "notify"},
+    "9001": {"label": "MinIO Console", "onAutoForward": "silent"},
+    "27018": {"label": "MongoDB", "onAutoForward": "silent"},
+    "6379": {"label": "Redis", "onAutoForward": "silent"},
+    "9000": {"label": "MinIO API", "onAutoForward": "silent"}
   },
-  "forwardPorts": [],
+  "forwardPorts": [5080, 8058, 9001],
   "remoteUser": "vscode", // user that must be in devcontainer
   "remoteEnv": {
     "PATH": "/home/vscode/.local/bin:${containerEnv:PATH}",
