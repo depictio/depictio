@@ -9,29 +9,46 @@ echo ""
 # Verify AI tool credentials exist
 echo "🔐 Checking AI tool credentials..."
 
-# Check Claude Code credentials
-CLAUDE_CREDS=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null || echo "")
-if [ -n "$CLAUDE_CREDS" ]; then
-    # Extract access token and save to .env.claude for docker-compose
-    ACCESS_TOKEN=$(echo "$CLAUDE_CREDS" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
+# Check Claude Code credentials (platform-aware)
+# macOS uses security keychain, Linux/Codespaces uses file-based credentials
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS: Try to get credentials from keychain
+    CLAUDE_CREDS=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null || echo "")
+    if [ -n "$CLAUDE_CREDS" ]; then
+        # Extract access token and save to .env.claude for docker-compose
+        ACCESS_TOKEN=$(echo "$CLAUDE_CREDS" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
 
-    if [ -n "$ACCESS_TOKEN" ]; then
-        # Create .env.claude with the token
-        echo "ANTHROPIC_API_KEY=${ACCESS_TOKEN}" > .devcontainer/.env.claude
+        if [ -n "$ACCESS_TOKEN" ]; then
+            # Create .env.claude with the token
+            echo "ANTHROPIC_API_KEY=${ACCESS_TOKEN}" > .devcontainer/.env.claude
+            chmod 600 .devcontainer/.env.claude
+            echo "   ✓ Claude Code credentials extracted from keychain"
+        fi
+
+        # Also save full credentials to ~/.claude/.credentials.json (will be mounted)
+        mkdir -p ~/.claude
+        echo "$CLAUDE_CREDS" > ~/.claude/.credentials.json
+        chmod 600 ~/.claude/.credentials.json
+    else
+        echo "   ⚠️  No Claude Code credentials in keychain"
+        echo "      Run 'claude' on your host to authenticate first"
+        touch .devcontainer/.env.claude
         chmod 600 .devcontainer/.env.claude
-        echo "   ✓ Claude Code credentials extracted"
     fi
-
-    # Also save full credentials to ~/.claude/.credentials.json (will be mounted)
-    mkdir -p ~/.claude
-    echo "$CLAUDE_CREDS" > ~/.claude/.credentials.json
-    chmod 600 ~/.claude/.credentials.json
 else
-    echo "   ⚠️  No Claude Code credentials in keychain"
-    echo "      Run 'claude' on your host to authenticate first"
-    # Create empty .env.claude to avoid docker-compose errors
-    touch .devcontainer/.env.claude
-    chmod 600 .devcontainer/.env.claude
+    # Linux/Codespaces: Check for file-based credentials or environment variable
+    if [ -f ~/.claude/.credentials.json ]; then
+        echo "   ✓ Claude Code credentials found in ~/.claude/"
+    elif [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+        echo "   ✓ Claude Code API key available via ANTHROPIC_API_KEY"
+        echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" > .devcontainer/.env.claude
+        chmod 600 .devcontainer/.env.claude
+    else
+        echo "   ⚠️  No Claude Code credentials found"
+        echo "      Set ANTHROPIC_API_KEY or run 'claude auth login' in the container"
+        touch .devcontainer/.env.claude
+        chmod 600 .devcontainer/.env.claude
+    fi
 fi
 
 # Check Gemini credentials

@@ -6,6 +6,28 @@ if [ -f .env.instance ]; then
     source .env.instance
 fi
 
+# Fix UV cache permissions (Docker volume may have root ownership)
+echo "🔧 Fixing cache permissions..."
+if [ -d /home/vscode/.cache/uv ]; then
+    sudo chown -R vscode:vscode /home/vscode/.cache/uv 2>/dev/null || true
+fi
+# Ensure cache directory exists with correct permissions
+mkdir -p /home/vscode/.cache/uv 2>/dev/null || true
+
+# Fix Docker socket permissions (for Codespaces and local dev)
+echo "🐳 Configuring Docker access..."
+if [ -S /var/run/docker.sock ]; then
+    # Add vscode user to docker group if it exists
+    if getent group docker > /dev/null 2>&1; then
+        sudo usermod -aG docker vscode 2>/dev/null || true
+    fi
+    # Fix socket permissions
+    sudo chmod 666 /var/run/docker.sock 2>/dev/null || true
+    echo "   ✓ Docker socket configured"
+else
+    echo "   ⚠️  Docker socket not found (may be handled by devcontainer feature)"
+fi
+
 # Initialize Git LFS
 echo "🔧 Initializing Git LFS..."
 git lfs install
@@ -15,15 +37,22 @@ echo "   ✓ Git LFS configured"
 echo "🪝 Setting up pre-commit hooks..."
 cd /workspace || exit
 if [ -f .pre-commit-config.yaml ]; then
-    # Install pre-commit using uv (if uv is available) or pip
+    # Install pre-commit using pip (more reliable than uv tool in devcontainer)
     if command -v uv &> /dev/null; then
-        uv tool install pre-commit || uv pip install pre-commit
+        # Use uv pip install which installs to the current environment
+        uv pip install pre-commit --quiet 2>/dev/null || pip install pre-commit --quiet
     else
-        pip install pre-commit
+        pip install pre-commit --quiet
     fi
 
-    # Install the git hook scripts
-    pre-commit install
+    # Install the git hook scripts (use full path if needed)
+    if command -v pre-commit &> /dev/null; then
+        pre-commit install
+    elif [ -f /home/vscode/.local/bin/pre-commit ]; then
+        /home/vscode/.local/bin/pre-commit install
+    else
+        echo "   ⚠️  pre-commit not found in PATH, skipping hook installation"
+    fi
 
     # Apply environment-agnostic hook (supports Mac, devcontainer, fresh uv install)
     if [ -f .devcontainer/hooks/pre-commit ]; then
@@ -101,13 +130,14 @@ uv sync --extra dev
 # If you encounter polars conflicts, the CI workflow shows how to force-reinstall
 echo "✅ Dependencies installed (including dev extras: pytest, mongomock-motor, etc.)"
 
-# Install depictio-cli from GitHub
-uv venv depictio-cli-venv
-# shellcheck disable=SC1091
-source depictio-cli-venv/bin/activate
-uv pip install git+https://github.com/depictio/depictio-models.git git+https://github.com/depictio/depictio-cli.git
-depictio-cli --help
-deactivate
+# The CLI is part of the main depictio package at depictio/cli/
+# It's already installed via uv sync above, just verify it works
+echo "📦 Verifying depictio CLI..."
+if python -c "from depictio.cli import depictio_cli" 2>/dev/null; then
+    echo "   ✓ depictio CLI available (depictio/cli/)"
+else
+    echo "   ⚠️  depictio CLI not found (may need to check depictio/cli/)"
+fi
 
 # Verify that packages were installed in the container image and check what binaries are available
 echo "Verifying installed packages in container..."
@@ -191,10 +221,26 @@ echo "   MinIO:        minio:9000"
 echo "   FastAPI:      depictio-backend:8058"
 echo "   Dash:         depictio-frontend:5080"
 echo ""
-echo "🌐 External Access (from host machine):"
-echo "   FastAPI:      http://localhost:${FASTAPI_PORT:-8058}"
-echo "   Dash:         http://localhost:${DASH_PORT:-5080}"
-echo "   MinIO Console: http://localhost:${MINIO_CONSOLE_PORT:-9001}"
+echo "🌐 External Access:"
 echo ""
-echo "💡 Tip: Each worktree/branch gets its own ports and database!"
+echo "   ┌─────────────────────────────────────────────────────────┐"
+echo "   │  SERVICE          PORT    ADD TO VS CODE PORTS PANEL    │"
+echo "   ├─────────────────────────────────────────────────────────┤"
+echo "   │  Dash Frontend    ${DASH_PORT:-5080}                                     │"
+echo "   │  FastAPI Backend  ${FASTAPI_PORT:-8058}                                     │"
+echo "   │  MinIO Console    ${MINIO_CONSOLE_PORT:-9001}                                     │"
+echo "   └─────────────────────────────────────────────────────────┘"
 echo ""
+echo "   📋 In Codespaces: Add ports above to the PORTS panel,"
+echo "      then click 🌐 to open in browser."
+echo ""
+echo "   💡 Tip: Run 'ports' anytime to see your ports again."
+echo ""
+echo "💡 Each worktree/branch gets its own ports and database!"
+echo ""
+
+# Create a convenient alias for showing ports
+echo "alias ports='bash /workspace/.devcontainer/scripts/print-ports.sh'" >> ~/.bashrc 2>/dev/null || true
+
+# Port forwarding is handled by postStartCommand in devcontainer.json
+# This ensures socat processes persist after container start
