@@ -131,12 +131,13 @@ uv sync --extra dev
 echo "✅ Dependencies installed (including dev extras: pytest, mongomock-motor, etc.)"
 
 # Install depictio-cli from GitHub (optional - non-fatal if it fails)
+# Note: depictio-cli uses the main depictio package for models (depictio-models is deprecated)
 echo "📦 Installing depictio-cli..."
 if uv venv depictio-cli-venv 2>/dev/null; then
     # shellcheck disable=SC1091
     source depictio-cli-venv/bin/activate
-    # Install beanie first (required by depictio-models), then the CLI packages
-    uv pip install beanie git+https://github.com/depictio/depictio-models.git git+https://github.com/depictio/depictio-cli.git 2>/dev/null && \
+    # Install depictio (for models) and depictio-cli
+    uv pip install -e /workspace git+https://github.com/depictio/depictio-cli.git 2>/dev/null && \
         depictio-cli --help && \
         echo "   ✓ depictio-cli installed" || \
         echo "   ⚠️  depictio-cli installation failed (non-fatal)"
