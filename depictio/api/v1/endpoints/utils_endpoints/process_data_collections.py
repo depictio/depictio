@@ -11,7 +11,7 @@ from depictio.cli.cli.utils.helpers import process_data_collection_helper
 
 # from depictio.models.models.s3 import S3DepictioCLIConfig
 from depictio.models.models.cli import CLIConfig, UserBaseCLIConfig
-from depictio.models.models.projects import Project
+from depictio.models.models.projects import ProjectResponse
 from depictio.models.utils import get_config
 
 
@@ -112,7 +112,7 @@ def sync_process_initial_data_collections() -> dict[str, Any]:
     # FIXME: not so clean, should rely on a endpoint
     # Get the first project
     project = projects_collection.find_one({"_id": ObjectId(project_config_id)})
-    project = Project.from_mongo(project)  # type: ignore[invalid-argument-type]
+    project = ProjectResponse.from_mongo(project)  # type: ignore[invalid-argument-type]
 
     logger.debug(f"Project: {project}")
     if not project:

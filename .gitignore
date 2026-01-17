@@ -48,6 +48,11 @@ depictio-venv/
 .pdm.toml
 #pdm.lock
 
+### pixi
+.pixi/
+.pixi-data/
+# pixi.lock is committed for reproducible builds
+
 ### pip
 pip-log.txt
 pip-delete-this-directory.txt

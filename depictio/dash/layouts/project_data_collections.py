@@ -41,7 +41,7 @@ from depictio.dash.layouts.layouts_toolbox import (
     create_data_collection_modal,
     create_data_collection_overwrite_modal,
 )
-from depictio.models.models.projects import Project
+from depictio.models.models.projects import ProjectResponse
 
 
 def calculate_total_storage_size(data_collections):
@@ -1706,7 +1706,7 @@ def register_project_data_collections_callbacks(app):
                 if not project_data:
                     return dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
-                project = Project.model_validate(project_data)
+                project = ProjectResponse.model_validate(project_data)
 
                 # Update the stored project data with fresh data
                 if project.project_type == "basic":
@@ -1782,7 +1782,7 @@ def register_project_data_collections_callbacks(app):
             if not project_data:
                 logger.error(f"Failed to fetch project data for {project_id}")
                 return dash.no_update, dash.no_update, dash.no_update
-            project = Project.model_validate(project_data)
+            project = ProjectResponse.model_validate(project_data)
 
             # Debug project information
             logger.debug(f"Project loaded: {project.name}, type: {project.project_type}")

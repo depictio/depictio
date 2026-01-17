@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import projects_collection
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
-from depictio.models.models.projects import Project
+from depictio.models.models.projects import Project, ProjectResponse
 from depictio.models.models.users import User
 
 # Define the router
@@ -30,7 +30,7 @@ def _async_get_all_projects(current_user: User, projects_collection) -> list[Pro
 
     projects = list(projects_collection.find(query))
     if projects:
-        projects = [Project.from_mongo(project) for project in projects]
+        projects = [ProjectResponse.from_mongo(project) for project in projects]
         return projects
     else:
         return []
@@ -83,7 +83,7 @@ def _async_get_project_from_name(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found.")
 
-    project = convert_objectid_to_str(Project.from_mongo(project).model_dump())
+    project = convert_objectid_to_str(ProjectResponse.from_mongo(project).model_dump())
     return project
 
 
@@ -271,6 +271,24 @@ async def get_project_with_delta_locations(project_id: PyObjectId, current_user:
                 "preserveNullAndEmptyArrays": True,
             }
         },
+        # 3.5. Filter out incomplete data collections (ID-only references)
+        # This handles cases where workflows have data_collections as just {'id': ObjectId(...)} or {'_id': ObjectId(...)}
+        # We only include DCs that have the required fields (data_collection_tag and config)
+        {
+            "$match": {
+                "$or": [
+                    # Include if data_collections is null (for workflows without DCs)
+                    {"workflows.data_collections": None},
+                    # Include only if BOTH required fields exist (excludes ID-only references)
+                    {
+                        "$and": [
+                            {"workflows.data_collections.data_collection_tag": {"$exists": True}},
+                            {"workflows.data_collections.config": {"$exists": True}},
+                        ]
+                    },
+                ]
+            }
+        },
         # 4. Lookup DeltaTableAggregated for each DC
         {
             "$lookup": {
@@ -306,6 +324,7 @@ async def get_project_with_delta_locations(project_id: PyObjectId, current_user:
         # 6. Remove temporary delta_info field
         {"$project": {"delta_info": 0}},
         # 7. Group back to reconstruct data_collections array per workflow
+        # Use $push with $cond to filter out null/incomplete data collections
         {
             "$group": {
                 "_id": {
@@ -314,7 +333,27 @@ async def get_project_with_delta_locations(project_id: PyObjectId, current_user:
                     "workflow_id": "$workflows._id",
                 },
                 "project_doc": {"$first": "$$ROOT"},
-                "data_collections": {"$push": "$workflows.data_collections"},
+                "data_collections": {
+                    "$push": {
+                        "$cond": {
+                            # Only push if data_collection is not null and has required fields
+                            "if": {
+                                "$and": [
+                                    {"$ne": ["$workflows.data_collections", None]},
+                                    {
+                                        "$ne": [
+                                            "$workflows.data_collections.data_collection_tag",
+                                            None,
+                                        ]
+                                    },
+                                    {"$ne": ["$workflows.data_collections.config", None]},
+                                ]
+                            },
+                            "then": "$workflows.data_collections",
+                            "else": "$$REMOVE",  # Remove from array instead of pushing null
+                        }
+                    }
+                },
             }
         },
         # 8. Group back to reconstruct workflows array per project
@@ -324,9 +363,11 @@ async def get_project_with_delta_locations(project_id: PyObjectId, current_user:
                 "project_doc": {"$first": "$project_doc"},
                 "workflows": {
                     "$push": {
-                        "_id": "$_id.workflow_id",
-                        "workflow_tag": "$project_doc.workflows.workflow_tag",
-                        "data_collections": "$data_collections",
+                        # Preserve ALL workflow fields, not just _id and workflow_tag
+                        "$mergeObjects": [
+                            "$project_doc.workflows",  # Get all original workflow fields
+                            {"data_collections": "$data_collections"},  # Override with enriched DCs
+                        ]
                     }
                 },
             }
@@ -342,7 +383,46 @@ async def get_project_with_delta_locations(project_id: PyObjectId, current_user:
                 }
             }
         },
-        # 10. Remove the redundant workflows field from nested structure
+        # 10. Final cleanup: Filter out incomplete data collections from workflows array
+        # This is a safety net to remove any ID-only references that slipped through
+        {
+            "$addFields": {
+                "workflows": {
+                    "$map": {
+                        "input": "$workflows",
+                        "as": "workflow",
+                        "in": {
+                            "$mergeObjects": [
+                                "$$workflow",
+                                {
+                                    "data_collections": {
+                                        "$filter": {
+                                            "input": {
+                                                "$ifNull": ["$$workflow.data_collections", []]
+                                            },
+                                            "as": "dc",
+                                            "cond": {
+                                                # Only include DCs that have BOTH required fields
+                                                "$and": [
+                                                    {
+                                                        "$ne": [
+                                                            {"$type": "$$dc.data_collection_tag"},
+                                                            "missing",
+                                                        ]
+                                                    },
+                                                    {"$ne": [{"$type": "$$dc.config"}, "missing"]},
+                                                ]
+                                            },
+                                        }
+                                    }
+                                },
+                            ]
+                        },
+                    }
+                }
+            }
+        },
+        # 11. Remove the redundant workflows field from nested structure
         {"$project": {"project_doc": 0}},
     ]
 

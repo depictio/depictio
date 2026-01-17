@@ -124,9 +124,9 @@ COMPONENT_METADATA = {
         "display_name": "MultiQC",
         "description": "MultiQC quality control reports and visualizations",
         "color": colors["orange"],
-        "supports_edit": False,  # MultiQC is read-only visualization
+        "supports_edit": True,  # MultiQC supports edit mode (module/plot/dataset selection)
         "supports_reset": False,
-        "enabled": False,  # DISABLED: Focus on Card & Interactive only
+        "enabled": True,  # ENABLED: Phase 1 with view mode callbacks
         "build_function": build_multiqc,
         "default_dimensions": {
             "w": 24,

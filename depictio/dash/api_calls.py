@@ -865,24 +865,27 @@ def api_call_handle_google_oauth_callback(code: str, state: str) -> dict[str, An
 
 
 @validate_call(validate_return=True)
-def api_call_fetch_project_by_id(project_id: str, token: str) -> dict[str, Any] | None:
+def api_call_fetch_project_by_id(
+    project_id: str, token: str, skip_enrichment: bool = False
+) -> dict[str, Any] | None:
     """
     Fetch a specific project by ID.
 
     Args:
         project_id: Project ID to fetch
         token: Authentication token
+        skip_enrichment: Skip delta_location aggregation pipeline (faster, safer for updates)
 
     Returns:
         Project data dictionary or None if not found
     """
     try:
-        logger.debug(f"Fetching project by ID: {project_id}")
+        logger.debug(f"Fetching project by ID: {project_id} (skip_enrichment={skip_enrichment})")
 
         response = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id",
             headers={"Authorization": f"Bearer {token}"},
-            params={"project_id": project_id},
+            params={"project_id": project_id, "skip_enrichment": skip_enrichment},
             timeout=settings.performance.api_request_timeout,
         )
 
@@ -1177,7 +1180,8 @@ def api_call_create_data_collection(
             }
 
         # Fetch current project (now that we have a valid token)
-        project = api_call_fetch_project_by_id(project_id, token)
+        # Use skip_enrichment=True to get complete workflow objects without aggregation pipeline
+        project = api_call_fetch_project_by_id(project_id, token, skip_enrichment=True)
         if not project:
             return {
                 "success": False,

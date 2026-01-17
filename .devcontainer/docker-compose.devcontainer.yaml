@@ -1,12 +1,21 @@
 services:
   app:
+    # Use pre-built image from GHCR if available, fallback to local build
+    # To use cached image: set DEVCONTAINER_IMAGE=ghcr.io/depictio/depictio-devcontainer:latest
+    image: ${DEVCONTAINER_IMAGE:-}
     build:
       context: .
       dockerfile: .devcontainer/Dockerfile
+      # Enable BuildKit cache
+      cache_from:
+        - ghcr.io/depictio/depictio-devcontainer:latest
+        - ghcr.io/depictio/depictio-devcontainer:main
     init: true
     volumes:
       - .:/workspace:cached
-      - /var/run/docker.sock:/var/run/docker.sock
+      # Docker socket - use environment variable for Codespaces compatibility
+      # In Codespaces, docker-outside-of-docker feature handles this automatically
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
       # Gemini and Qwen: direct bind mounts (working)
       - ~/.gemini:/home/vscode/.gemini
       - ~/.qwen:/home/vscode/.qwen
@@ -37,6 +46,8 @@ services:
       - DEPICTIO_MINIO_ROOT_PASSWORD=minio123
       - DEPICTIO_MINIO_ENDPOINT_URL=http://minio:9000
       - CLAUDE_CONFIG_DIR=/home/vscode/.claude
+      # Fix Docker API version mismatch in Codespaces
+      - DOCKER_API_VERSION=1.43
 
 volumes:
   claude-code-config:

@@ -401,6 +401,8 @@ def register_feature_callbacks(app):
     - Profile management (settings, tokens)
     - Admin panel (users, groups, analytics)
     - Tokens management (CLI configs)
+    - Project data collections management (workflows, data collections, joins)
+    - Project permissions management (user roles, public/private toggle)
 
     Args:
         app: Dash app instance
@@ -448,5 +450,21 @@ def register_feature_callbacks(app):
     from depictio.dash.layouts.tokens_management import register_tokens_management_callbacks
 
     register_tokens_management_callbacks(app)
+
+    # Project data collections callbacks
+    logger.info("    📊 Registering project data collections callbacks")
+    from depictio.dash.layouts.project_data_collections import (
+        register_project_data_collections_callbacks,
+    )
+
+    register_project_data_collections_callbacks(app)
+
+    # Project permissions callbacks
+    logger.info("    🔒 Registering project permissions callbacks")
+    from depictio.dash.layouts.projectwise_user_management import (
+        register_projectwise_user_management_callbacks,
+    )
+
+    register_projectwise_user_management_callbacks(app)
 
     logger.info("  ✅ All feature callbacks registered")

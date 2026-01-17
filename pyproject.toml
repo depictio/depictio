@@ -6,15 +6,15 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
+  # Core dependencies
   "bcrypt==4.2.1",
   "bleach",
   "beanie>=2.0.0",
   "boto3==1.36.21",
   "celery==5.5.3",
-  # "bson==0.5.10",
   "cryptography",
   "colorlog",
-  # "curl",
+  # Dash and visualization
   "dash-ace==0.2.1",
   "dash-bootstrap-components==1.7.1",
   "dash-cytoscape==1.0.2",
@@ -22,48 +22,54 @@ dependencies = [
   "dash-iconify==0.1.2",
   "dash-mantine-components==2.1.0",
   "dash[async]==3.2.0",
+  "dash-ag-grid==31.3.1",
+  "dash-dynamic-grid-layout",
+  "dash-dock>=0.0.1",
+  "plotly_express",
+  # Data processing
   "deltalake==0.24.0",
-  "devtools",
-  "diskcache",
-  "fastapi==0.115.8",
   "fastparquet",
-  "flask-caching",
-  "httpx==0.28.1",
-  "motor",
-  "multiqc==1.31.0",
-  "mypy-boto3-s3",
   "numpy==2.2.3",
   "orjson",
   "pandas==2.2.3",
-  # "playwright==1.50.1",
-  "plotly_express",
-  # "plotly_express==0.4.1",
   "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.19.0",
+  # API and web
+  "devtools",
+  "diskcache",
+  "fastapi==0.115.8",
+  "flask-caching",
+  "gunicorn>=23.0.0",
+  "httpx==0.28.1",
+  "uvicorn==0.34.0",
+  # Database
+  "motor",
+  "pymongo",
+  # Authentication and security
   "pydantic[email]==2.10.6",
   "pydantic-settings==2.7.1",
   "pyjwt==2.10.1",
-  "pymongo",
-  # "pymongo==4.11",
-  "psutil",
-  "pytest-playwright",
-  # "pytest-playwright==0.7.0",
-  # "python==3.12.9",
-  "python-dotenv",
   "python-jose==3.3.0",
   "python-multipart",
+  "restrictedpython>=8.0",
+  # Playwright for screenshots (pure Python - installs its own browsers)
+  "playwright>=1.52.0",
+  "pytest-playwright",
+  # Utilities
+  "multiqc==1.31.0",
+  "mypy-boto3-s3",
+  "psutil",
+  "python-dotenv",
   "pyyaml",
   "redis==5.2.1",
-  "uvicorn==0.34.0",
-  # "dash-draggable==0.1.2",
-  "dash-ag-grid==31.3.1",
   "tomli",
   "types-requests",
   "umap-learn",
-  "dash-dynamic-grid-layout",
-  "playwright>=1.52.0",
-  "restrictedpython>=8.0",
-  "dash-dock>=0.0.1",
-  "s3fs"
+  # Storage
+  "s3fs",
+  "fsspec",
+  # CLI utilities (required by API code that imports CLI helpers)
+  "typer",
+  "rich",
 ]
 authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
 urls = { Homepage = "http://github.com/depictio/depictio" }
@@ -78,7 +84,6 @@ dev = [
   "black==25.1.0",
   "ruff==0.12.1",
   "ty==0.0.1-alpha.12",
-  # "pandera[pandas,polars]",
   "pre-commit",
   "pytest==8.4.1",
   "pytest-asyncio==1.0.0",
@@ -93,6 +98,11 @@ dev = [
   "types-bleach",
   "types-boto3",
   "textual>=5.2.0",
+]
+# CLI-specific dependencies
+cli = [
+  "typer",
+  "rich",
 ]
 
 
