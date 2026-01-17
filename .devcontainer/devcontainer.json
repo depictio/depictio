@@ -31,16 +31,17 @@
   "initializeCommand": ".devcontainer/pre_create_setup.sh",
   "postStartCommand": "bash /workspace/.devcontainer/fix_git_worktree.sh",
   "postCreateCommand": "post_create_setup.sh", // script to run after the containers are started
-  // Auto-forward main application ports
+  // Port forwarding - ports are dynamically assigned based on branch name
+  // VS Code will auto-detect listening ports and prompt to forward them
   "portsAttributes": {
-    "5080": {"label": "Dash Frontend", "onAutoForward": "notify"},
-    "8058": {"label": "FastAPI Backend", "onAutoForward": "notify"},
-    "9001": {"label": "MinIO Console", "onAutoForward": "silent"},
-    "27018": {"label": "MongoDB", "onAutoForward": "silent"},
-    "6379": {"label": "Redis", "onAutoForward": "silent"},
-    "9000": {"label": "MinIO API", "onAutoForward": "silent"}
+    "5000-5200": {"label": "Dash Frontend", "onAutoForward": "notify"},
+    "8000-8200": {"label": "FastAPI Backend", "onAutoForward": "notify"},
+    "9000-9200": {"label": "MinIO", "onAutoForward": "silent"},
+    "27000-27200": {"label": "MongoDB", "onAutoForward": "silent"},
+    "6000-6200": {"label": "Redis", "onAutoForward": "silent"}
   },
-  "forwardPorts": [5080, 8058, 9001],
+  // Don't hardcode ports - they're dynamic based on branch
+  "forwardPorts": [],
   "remoteUser": "vscode", // user that must be in devcontainer
   "remoteEnv": {
     "PATH": "/home/vscode/.local/bin:${containerEnv:PATH}",
