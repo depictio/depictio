@@ -419,9 +419,10 @@ def _apply_highlight_to_traces(
             )
 
         # Create color and size arrays for all points
-        current_marker = trace.marker or {}
-        current_color = current_marker.get("color")
-        current_size = current_marker.get("size", 8)
+        # Handle Plotly's marker object (not a dict)
+        current_marker = trace.marker
+        current_color = current_marker.color if current_marker else None
+        current_size = current_marker.size if current_marker and current_marker.size else 8
 
         # Build new arrays
         colors: List[Optional[str]] = []
@@ -479,12 +480,18 @@ def _apply_highlight_to_traces(
             marker_update["symbol"] = symbols
 
         if style.marker_line_color is not None:
+            # Use transparent for non-highlighted points instead of None
             line_colors = [
-                style.marker_line_color if i in highlight_indices else None for i in range(n_points)
+                style.marker_line_color if i in highlight_indices else "rgba(0,0,0,0)"
+                for i in range(n_points)
+            ]
+            line_widths = [
+                style.marker_line_width or 1 if i in highlight_indices else 0
+                for i in range(n_points)
             ]
             marker_update["line"] = {
                 "color": line_colors,
-                "width": style.marker_line_width or 1,
+                "width": line_widths,
             }
 
         trace.update(marker=marker_update)
