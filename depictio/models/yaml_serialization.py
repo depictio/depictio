@@ -245,6 +245,129 @@ def create_dashboard_yaml_template() -> str:
     )
 
 
+def create_figure_component_yaml_template(with_customizations: bool = True) -> str:
+    """
+    Generate a template YAML for a figure component with customizations.
+
+    This shows all available customization options for Plotly figures.
+
+    Args:
+        with_customizations: Include full customization examples
+
+    Returns:
+        YAML string template with documented figure component fields
+    """
+    template: dict[str, Any] = {
+        "_comment": "Figure component template with Plotly customizations",
+        "index": "fig-001",
+        "component_type": "figure",
+        "title": "My Figure",
+        "visu_type": "scatter",
+        "dict_kwargs": {
+            "_comment": "Plotly Express parameters",
+            "x": "x_column",
+            "y": "y_column",
+            "color": "category_column",
+            "title": "Figure Title",
+            "template": "mantine_light",
+            "opacity": 0.8,
+        },
+    }
+
+    if with_customizations:
+        template["customizations"] = {
+            "_comment": "Post-rendering customizations applied to the Plotly figure",
+            "axes": {
+                "x": {
+                    "scale": "linear",
+                    "title": "X Axis Title",
+                    "range": [0, 100],
+                    "gridlines": True,
+                    "zeroline": True,
+                },
+                "y": {
+                    "scale": "log",
+                    "title": "Y Axis Title (Log Scale)",
+                },
+            },
+            "reference_lines": [
+                {
+                    "type": "hline",
+                    "y": 0.05,
+                    "line_color": "red",
+                    "line_dash": "dash",
+                    "line_width": 1,
+                    "opacity": 0.7,
+                    "annotation_text": "p = 0.05 threshold",
+                    "annotation_position": "top right",
+                },
+                {
+                    "type": "vline",
+                    "x": 0,
+                    "line_color": "gray",
+                    "line_dash": "solid",
+                },
+            ],
+            "highlights": [
+                {
+                    "conditions": [
+                        {
+                            "column": "significant",
+                            "operator": "eq",
+                            "value": True,
+                        }
+                    ],
+                    "logic": "and",
+                    "style": {
+                        "marker_color": "red",
+                        "marker_size": 10,
+                        "dim_opacity": 0.3,
+                    },
+                    "label": "Significant",
+                    "show_labels": False,
+                }
+            ],
+            "annotations": [
+                {
+                    "text": "Important point",
+                    "x": 50,
+                    "y": 50,
+                    "showarrow": True,
+                    "arrowhead": 2,
+                }
+            ],
+            "shapes": [
+                {
+                    "type": "rect",
+                    "x0": 10,
+                    "y0": 10,
+                    "x1": 20,
+                    "y1": 20,
+                    "fillcolor": "rgba(255,0,0,0.1)",
+                    "line_color": "red",
+                    "layer": "below",
+                }
+            ],
+            "legend": {
+                "show": True,
+                "orientation": "v",
+                "x": 1.02,
+                "y": 1,
+            },
+            "hover": {
+                "mode": "closest",
+            },
+        }
+
+    return yaml.dump(
+        template,
+        Dumper=DashboardYAMLDumper,
+        default_flow_style=False,
+        allow_unicode=True,
+        sort_keys=False,
+    )
+
+
 def validate_dashboard_yaml(yaml_content: str) -> tuple[bool, list[str]]:
     """
     Validate dashboard YAML content against expected schema.
