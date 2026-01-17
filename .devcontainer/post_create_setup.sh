@@ -130,13 +130,20 @@ uv sync --extra dev
 # If you encounter polars conflicts, the CI workflow shows how to force-reinstall
 echo "✅ Dependencies installed (including dev extras: pytest, mongomock-motor, etc.)"
 
-# Install depictio-cli from GitHub
-uv venv depictio-cli-venv
-# shellcheck disable=SC1091
-source depictio-cli-venv/bin/activate
-uv pip install git+https://github.com/depictio/depictio-models.git git+https://github.com/depictio/depictio-cli.git
-depictio-cli --help
-deactivate
+# Install depictio-cli from GitHub (optional - non-fatal if it fails)
+echo "📦 Installing depictio-cli..."
+if uv venv depictio-cli-venv 2>/dev/null; then
+    # shellcheck disable=SC1091
+    source depictio-cli-venv/bin/activate
+    # Install beanie first (required by depictio-models), then the CLI packages
+    uv pip install beanie git+https://github.com/depictio/depictio-models.git git+https://github.com/depictio/depictio-cli.git 2>/dev/null && \
+        depictio-cli --help && \
+        echo "   ✓ depictio-cli installed" || \
+        echo "   ⚠️  depictio-cli installation failed (non-fatal)"
+    deactivate
+else
+    echo "   ⚠️  Could not create depictio-cli venv (non-fatal)"
+fi
 
 # Verify that packages were installed in the container image and check what binaries are available
 echo "Verifying installed packages in container..."
@@ -220,10 +227,23 @@ echo "   MinIO:        minio:9000"
 echo "   FastAPI:      depictio-backend:8058"
 echo "   Dash:         depictio-frontend:5080"
 echo ""
-echo "🌐 External Access (from host machine):"
-echo "   FastAPI:      http://localhost:${FASTAPI_PORT:-8058}"
-echo "   Dash:         http://localhost:${DASH_PORT:-5080}"
-echo "   MinIO Console: http://localhost:${MINIO_CONSOLE_PORT:-9001}"
+echo "🌐 External Access:"
 echo ""
-echo "💡 Tip: Each worktree/branch gets its own ports and database!"
+echo "   ┌─────────────────────────────────────────────────────────┐"
+echo "   │  SERVICE          PORT    ADD TO VS CODE PORTS PANEL    │"
+echo "   ├─────────────────────────────────────────────────────────┤"
+echo "   │  Dash Frontend    ${DASH_PORT:-5080}                                     │"
+echo "   │  FastAPI Backend  ${FASTAPI_PORT:-8058}                                     │"
+echo "   │  MinIO Console    ${MINIO_CONSOLE_PORT:-9001}                                     │"
+echo "   └─────────────────────────────────────────────────────────┘"
 echo ""
+echo "   📋 In Codespaces: Add ports above to the PORTS panel,"
+echo "      then click 🌐 to open in browser."
+echo ""
+echo "   💡 Tip: Run 'ports' anytime to see your ports again."
+echo ""
+echo "💡 Each worktree/branch gets its own ports and database!"
+echo ""
+
+# Create a convenient alias for showing ports
+echo "alias ports='bash /workspace/.devcontainer/scripts/print-ports.sh'" >> ~/.bashrc 2>/dev/null || true
