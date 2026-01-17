@@ -29,7 +29,7 @@
   },
   // "initializeCommand": "init", // script to run before the containers are started
   "initializeCommand": ".devcontainer/pre_create_setup.sh",
-  "postStartCommand": "bash /workspace/.devcontainer/fix_git_worktree.sh",
+  "postStartCommand": "bash /workspace/.devcontainer/fix_git_worktree.sh && bash /workspace/.devcontainer/scripts/forward-ports.sh",
   "postCreateCommand": "post_create_setup.sh", // script to run after the containers are started
   // Port forwarding - ports are dynamically assigned based on branch name
   // VS Code will auto-detect listening ports and prompt to forward them

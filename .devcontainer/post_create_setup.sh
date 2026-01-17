@@ -242,7 +242,5 @@ echo ""
 # Create a convenient alias for showing ports
 echo "alias ports='bash /workspace/.devcontainer/scripts/print-ports.sh'" >> ~/.bashrc 2>/dev/null || true
 
-# Start port forwarding so VS Code can detect the ports
-echo ""
-echo "🔌 Starting port forwarding for VS Code..."
-bash /workspace/.devcontainer/scripts/forward-ports.sh 2>/dev/null || echo "   ⚠️  Port forwarding setup skipped"
+# Port forwarding is handled by postStartCommand in devcontainer.json
+# This ensures socat processes persist after container start
