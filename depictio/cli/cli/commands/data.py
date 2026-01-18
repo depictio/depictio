@@ -210,3 +210,150 @@ def process(
                 rich_print_checked_statement(
                     "Local and remote project configurations do not match.", "error"
                 )
+
+
+@app.command()
+def join(
+    CLI_config_path: Annotated[
+        str,
+        typer.Option("--CLI-config-path", help="Path to the CLI configuration file"),
+    ] = "~/.depictio/CLI.yaml",
+    project_config_path: Annotated[
+        str,
+        typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
+    ] = "",
+    join_name: Annotated[
+        str | None,
+        typer.Option(
+            "--join-name",
+            "-j",
+            help="Name of a specific join to process (processes all if not specified)",
+        ),
+    ] = None,
+    preview: bool = typer.Option(
+        False, "--preview", "-p", help="Preview join results without persisting"
+    ),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite existing joined tables"),
+    no_auto_process: bool = typer.Option(
+        False, "--no-auto-process", help="Don't auto-process missing source data collections"
+    ),
+    rich_tables: bool = typer.Option(
+        False, "--rich-tables", help="Display rich tables in the output"
+    ),
+):
+    """
+    Execute table joins defined in the project configuration.
+
+    This command processes the top-level 'joins' configuration in your project YAML,
+    joining data collections on the client side and optionally persisting the results
+    as Delta tables.
+
+    Examples:
+        # Preview all joins without persisting
+        depictio data join --project-config-path project.yaml --preview
+
+        # Execute a specific join
+        depictio data join --project-config-path project.yaml --join-name my_join
+
+        # Execute all joins and overwrite existing
+        depictio data join --project-config-path project.yaml --overwrite
+    """
+    from depictio.cli.cli.utils.joins import process_project_joins
+
+    rich_print_command_usage("join")
+
+    # Validate configurations and prepare headers
+    CLI_config, response = validate_project_config_and_check_S3_storage(
+        CLI_config_path=CLI_config_path, project_config_path=project_config_path
+    )
+
+    if not response["success"]:
+        rich_print_checked_statement("Depictio Project configuration validation failed", "error")
+        raise typer.Exit(code=1)
+
+    rich_print_checked_statement("Depictio Project configuration validated", "success")
+
+    # Get the validated project configuration
+    project_config = response["project_config"]
+
+    # Check if project has any joins defined
+    if not project_config.joins:
+        rich_print_checked_statement(
+            "No joins defined in project configuration. Add a 'joins:' section to your YAML.",
+            "warning",
+        )
+        raise typer.Exit(code=0)
+
+    # Get remote project configuration
+    remote_project_config = api_get_project_from_name(str(project_config.name), CLI_config)
+
+    if remote_project_config.status_code != 200:
+        rich_print_checked_statement(
+            "Error fetching remote project configuration. Please create the project first.",
+            "error",
+        )
+        raise typer.Exit(code=1)
+
+    logger.info("Remote project configuration fetched successfully.")
+    rich_print_checked_statement("Remote project configuration fetched successfully.", "success")
+
+    # Compare hashes
+    local_hash = project_config.hash
+    remote_hash = remote_project_config.json().get("hash", None)
+    logger.info(f"Local & Remote hashes: {local_hash} & {remote_hash}")
+
+    if local_hash != remote_hash:
+        rich_print_checked_statement(
+            "Local and remote project configurations do not match. "
+            "Please sync your project configuration first.",
+            "error",
+        )
+        raise typer.Exit(code=1)
+
+    rich_print_checked_statement("Local and remote project configurations match.", "success")
+
+    rich_print_section_separator("Processing Table Joins")
+
+    # List available joins
+    from depictio.cli.cli.utils.rich_utils import console
+
+    console.print("\n[bold]Available joins in project:[/bold]")
+    for j in project_config.joins:
+        persist_status = "[green]persist[/green]" if j.persist else "[dim]preview only[/dim]"
+        console.print(f"  - {j.name}: {j.left_dc} + {j.right_dc} ({persist_status})")
+
+    # Process joins
+    result = process_project_joins(
+        project=project_config,
+        CLI_config=CLI_config,
+        join_name=join_name,
+        preview_only=preview,
+        overwrite=overwrite,
+        auto_process_dependencies=not no_auto_process,
+    )
+
+    # Print summary
+    rich_print_section_separator("Join Processing Summary")
+
+    if result.get("processed"):
+        console.print(
+            f"\n[green]Successfully processed: {len(result['processed'])} join(s)[/green]"
+        )
+        for item in result["processed"]:
+            mode = item.get("mode", "unknown")
+            rows = item.get("rows", 0)
+            console.print(f"  - {item['join']}: {rows} rows ({mode})")
+
+    if result.get("skipped"):
+        console.print(f"\n[yellow]Skipped: {len(result['skipped'])} join(s)[/yellow]")
+        for item in result["skipped"]:
+            console.print(f"  - {item['join']}: {item.get('reason', 'unknown')}")
+
+    if result.get("errors"):
+        console.print(f"\n[red]Errors: {len(result['errors'])} join(s)[/red]")
+        for item in result["errors"]:
+            for error in item.get("errors", []):
+                console.print(f"  - {item['join']}: {error}")
+        raise typer.Exit(code=1)
+
+    rich_print_checked_statement("Join processing complete", "success")
