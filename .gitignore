@@ -133,6 +133,7 @@ docs/_build/
 
 # Databases
 /depictioDB/*
+depictioDB/
 depictioDB_bak/
 depictioDB_dev/
 depictioDB_K8S/
