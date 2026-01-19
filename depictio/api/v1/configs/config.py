@@ -1,6 +1,11 @@
 from depictio.api.v1.configs.logging_init import initialize_loggers, logger
 from depictio.api.v1.configs.settings_models import Settings
-from depictio.api.v1.key_utils import generate_keys, load_private_key, load_public_key
+from depictio.api.v1.key_utils import (
+    check_and_generate_keys,
+    generate_keys,
+    load_private_key,
+    load_public_key,
+)
 
 # Explicitly load environment variables
 # load_dotenv(BASE_PATH.parent / ".env", override=False)
@@ -30,13 +35,25 @@ _KEYS_DIR = settings.auth.keys_dir
 DEFAULT_PRIVATE_KEY_PATH = None
 DEFAULT_PUBLIC_KEY_PATH = None
 
-generate_keys(
-    private_key_path=DEFAULT_PRIVATE_KEY_PATH,
-    public_key_path=DEFAULT_PUBLIC_KEY_PATH,
-    keys_dir=_KEYS_DIR,
-    algorithm=ALGORITHM,
-    wipe=bool(settings.mongodb.wipe),
-)
+# Use check_and_generate_keys to avoid race conditions between workers
+# Only use generate_keys with wipe when explicitly requested
+if bool(settings.mongodb.wipe):
+    # When wiping, we need to regenerate keys
+    generate_keys(
+        private_key_path=DEFAULT_PRIVATE_KEY_PATH,
+        public_key_path=DEFAULT_PUBLIC_KEY_PATH,
+        keys_dir=_KEYS_DIR,
+        algorithm=ALGORITHM,
+        wipe=True,
+    )
+else:
+    # Normal case: only generate if keys don't exist (prevents race condition)
+    check_and_generate_keys(
+        private_key_path=DEFAULT_PRIVATE_KEY_PATH,
+        public_key_path=DEFAULT_PUBLIC_KEY_PATH,
+        keys_dir=_KEYS_DIR,
+        algorithm=ALGORITHM,
+    )
 
 PRIVATE_KEY = load_private_key(
     settings.auth.keys_dir / "private_key.pem"

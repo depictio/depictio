@@ -615,14 +615,36 @@ class DashboardYAMLConfig(BaseSettings):
         description="Include export timestamp and version in YAML files",
     )
 
+    # Compact mode settings (new - 75-80% size reduction)
+    compact_mode: bool = Field(
+        default=True,
+        description="Use compact YAML format with references (75-80% smaller files)",
+    )
+
+    # MVP mode settings (new - 60-80 line minimal format for IaC)
+    mvp_mode: bool = Field(
+        default=True,  # Default to MVP for IaC-friendly dashboards
+        description="Use MVP minimal YAML format (60-80 lines, human-readable IDs, no layout)",
+    )
+
+    regenerate_stats: bool = Field(
+        default=True,
+        description="Regenerate column statistics on import instead of storing in YAML",
+    )
+
+    auto_layout: bool = Field(
+        default=False,
+        description="Auto-generate component layout on import if missing",
+    )
+
     # Auto-sync settings
     auto_export_on_save: bool = Field(
-        default=False,
+        default=True,
         description="Automatically export to YAML when dashboard is saved",
     )
 
     auto_import_on_change: bool = Field(
-        default=False,
+        default=True,
         description="Automatically import from YAML when files change (requires watcher)",
     )
 
@@ -632,11 +654,16 @@ class DashboardYAMLConfig(BaseSettings):
     )
 
     watcher_auto_start: bool = Field(
-        default=False,
+        default=True,
         description="Automatically start the file watcher on API startup",
     )
 
-    model_config = SettingsConfigDict(env_prefix="DEPICTIO_DASHBOARD_YAML_")
+    model_config = SettingsConfigDict(
+        env_prefix="DEPICTIO_DASHBOARD_YAML_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     @computed_field
     @property
@@ -664,4 +691,10 @@ class Settings(BaseSettings):
     profiling: ProfilingConfig = Field(default_factory=ProfilingConfig)
     dashboard_yaml: DashboardYAMLConfig = Field(default_factory=DashboardYAMLConfig)
 
-    model_config = SettingsConfigDict(env_prefix="DEPICTIO_")
+    model_config = SettingsConfigDict(
+        env_prefix="DEPICTIO_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",  # Ignore extra fields in .env that aren't in the model
+    )
