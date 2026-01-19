@@ -34,95 +34,97 @@ def symmetrize_join_details(join_details_map: dict[str, list[dict]]):
                     join_details_map[related_dc_id].append(symmetric_join)
 
 
-def generate_join_dict(workflow: dict) -> dict[str, dict[str, dict]]:
-    # logger.info(f"Workflow: {workflow}")
+def generate_join_dict(workflow: dict, project: dict | None = None) -> dict[str, dict[str, dict]]:
+    """
+    Generate join dictionary from project-level joins (new approach).
 
-    join_dict = {}
+    Args:
+        workflow: Workflow dict with data_collections
+        project: Project dict with joins[] array (optional for backward compatibility)
 
-    wf_id = str(workflow["_id"])
-    logger.info(f"Workflow ID: {wf_id}")
-    join_dict[wf_id] = {}
+    Returns:
+        {
+            "workflow_id": {
+                "result_dc_id": {
+                    "how": "inner",
+                    "on_columns": ["col1", "col2"],
+                    "dc_tags": ["left_dc_tag", "right_dc_tag"],
+                    "join_name": "penguins_complete",
+                    "description": "Complete penguin dataset"
+                }
+            }
+        }
+    """
+    workflow_id = str(workflow.get("_id", workflow.get("id", "")))
+    join_details_map: dict[str, dict[str, dict]] = {workflow_id: {}}
 
-    # Start with all table-type data collections (they can have join configurations)
-    dc_ids = {
-        str(dc["_id"]): dc
-        for dc in workflow["data_collections"]
-        if dc["config"]["type"].lower() == "table"
-    }
+    # If no project provided or no joins defined, return empty
+    if not project or "joins" not in project:
+        logger.debug(f"No project or joins found for workflow {workflow_id}")
+        return join_details_map
 
-    # Add data collections that are referenced in join configurations
-    # ONLY include table-type data collections (skip multiqc, jbrowse, etc.)
-    all_dc_lookup = {dc["data_collection_tag"]: dc for dc in workflow["data_collections"]}
+    # Build DC tag to ID lookup for this workflow
+    dc_tag_to_id: dict[str, str] = {}
+    dc_id_to_tag: dict[str, str] = {}
+    for dc in workflow.get("data_collections", []):
+        dc_id = str(dc.get("_id", dc.get("id", "")))
+        dc_tag = dc.get("data_collection_tag", "")
+        if dc_tag:
+            dc_tag_to_id[dc_tag] = dc_id
+            dc_id_to_tag[dc_id] = dc_tag
 
-    for dc in workflow["data_collections"]:
-        if dc["config"]["type"].lower() == "table" and "join" in dc["config"]:
-            join_info = dc["config"]["join"]
-            if join_info and "with_dc" in join_info:
-                for related_dc_tag in join_info["with_dc"]:
-                    if related_dc_tag in all_dc_lookup:
-                        related_dc = all_dc_lookup[related_dc_tag]
-                        related_dc_id = str(related_dc["_id"])
-                        related_dc_type = related_dc["config"]["type"].lower()
+    # Process project-level joins
+    workflow_name = workflow.get("name", "")
+    logger.info(
+        f"Processing {len(project.get('joins', []))} joins from project for workflow '{workflow_name}'"
+    )
 
-                        if related_dc_id not in dc_ids:
-                            # Only add table-type data collections to joins
-                            if related_dc_type == "table":
-                                dc_ids[related_dc_id] = related_dc
-                                logger.debug(
-                                    f"Added related table DC to joins: {related_dc_tag} ({related_dc_id})"
-                                )
-                            else:
-                                logger.debug(
-                                    f"Skipping non-table DC from joins: {related_dc_tag} ({related_dc_id}) - type: {related_dc_type}"
-                                )
-    logger.debug(f"Data collections: {dc_ids}")
-    visited = set()
+    for join_def in project.get("joins", []):
+        join_name = join_def.get("name", "unnamed")
+        logger.debug(f"Checking join: {join_name}")
+        logger.debug(f"  - result_dc_id: {join_def.get('result_dc_id')}")
+        logger.debug(
+            f"  - workflow_name: {join_def.get('workflow_name')} (current: {workflow_name})"
+        )
+        logger.debug(
+            f"  - left_dc: {join_def.get('left_dc')}, right_dc: {join_def.get('right_dc')}"
+        )
 
-    def find_joins(dc_id, join_configs):
-        # logger.debug(f"Data collection: {dc_id}")
-        # logger.debug(f"Visited: {visited}")
-        # logger.debug(f"Join configs: {join_configs}")
+        # Skip if join is for a different workflow
+        join_workflow_name = join_def.get("workflow_name", "")
+        if join_workflow_name and join_workflow_name != workflow_name:
+            logger.debug("  → Skipped: workflow mismatch")
+            continue
 
-        if dc_id in visited:
-            return
-        visited.add(dc_id)
+        # Skip if join hasn't been executed yet (no result_dc_id)
+        if not join_def.get("result_dc_id"):
+            logger.warning("  → Skipped: no result_dc_id (join not executed)")
+            continue
 
-        # Skip if this DC is not in dc_ids (filtered out non-table type)
-        if dc_id not in dc_ids:
-            return
+        logger.info(f"  → Added join '{join_name}' to result dict")
 
-        if "join" in dc_ids[dc_id]["config"]:
-            join_info = dc_ids[dc_id]["config"]["join"]
-            # logger.info(f"Join info: {join_info}")
-            if join_info:
-                for related_dc_tag in join_info.get("with_dc", []):
-                    related_dc_id = next(
-                        (
-                            str(dc["_id"])
-                            for dc in workflow["data_collections"]
-                            if dc["data_collection_tag"] == related_dc_tag
-                        ),
-                        None,
-                    )
-                    # Only create join if both DCs are in dc_ids (both are table types)
-                    if related_dc_id and related_dc_id in dc_ids:
-                        join_configs[f"{dc_id}--{related_dc_id}"] = {
-                            "how": join_info["how"],
-                            "on_columns": join_info["on_columns"],
-                            "dc_tags": [
-                                dc_ids[dc_id]["data_collection_tag"],
-                                dc_ids[related_dc_id]["data_collection_tag"],
-                            ],
-                        }
-                        find_joins(related_dc_id, join_configs)
+        # Get join metadata
+        result_dc_id = str(join_def["result_dc_id"])
+        left_dc_tag = join_def.get("left_dc", "")
+        right_dc_tag = join_def.get("right_dc", "")
 
-    for dc_id in dc_ids:
-        if dc_id not in visited:
-            join_configs = {}
-            find_joins(dc_id, join_configs)
-            join_dict[wf_id].update(join_configs)
+        # Create join entry with result_dc_id as the key
+        # This allows dashboard to reference the joined table directly
+        join_details_map[workflow_id][result_dc_id] = {
+            "how": join_def.get("how", "inner"),
+            "on_columns": join_def.get("on_columns", []),
+            "dc_tags": [left_dc_tag, right_dc_tag],
+            "join_name": join_def.get("name", ""),
+            "description": join_def.get("description", ""),
+        }
+        logger.debug(
+            f"Added join {join_def.get('name')} with result_dc_id {result_dc_id} for workflow {workflow_name}"
+        )
 
-    return join_dict
+    logger.info(
+        f"Generated join dict with {len(join_details_map[workflow_id])} joins for workflow {workflow_id}"
+    )
+    return join_details_map
 
 
 def normalize_join_details(join_details):

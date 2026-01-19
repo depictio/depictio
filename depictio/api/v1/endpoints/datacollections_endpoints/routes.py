@@ -125,15 +125,44 @@ async def get_join_tables(
 @datacollections_endpoint_router.get("/get_dc_joined/{workflow_id}")
 async def get_dc_joined(workflow_id: str, current_user: str = Depends(get_user_or_anonymous)):
     """
-    Retrieve join details for the data collections in a workflow.
-    """
+    Retrieve join details for data collections in a workflow.
 
+    Now reads from project-level joins (project.joins[]) instead of
+    DC-level join configs (dc.config.join).
+    """
     logger.debug(f"Workflow ID: {workflow_id}")
 
     # Retrieve workflow
     workflow = await get_workflow_from_id(workflow_id, current_user=current_user)
 
-    join_details_map = generate_join_dict(workflow)
+    # Get project containing this workflow
+    project = None
+    if workflow:
+        project_id = workflow.get("project_id")
+        if project_id:
+            try:
+                from depictio.api.v1.endpoints.projects_endpoints.routes import get_project_from_id
+
+                # Use skip_enrichment=True for faster query (we only need joins[])
+                project_response = await get_project_from_id(
+                    project_id=str(project_id),
+                    skip_enrichment=True,
+                    current_user=current_user,
+                )
+                # Handle both dict and object responses
+                project = (
+                    project_response
+                    if isinstance(project_response, dict)
+                    else project_response.model_dump()
+                )
+                logger.debug(
+                    f"Retrieved project {project_id} with {len(project.get('joins', []))} joins"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to fetch project for workflow {workflow_id}: {e}")
+
+    # Generate join dict from project-level joins
+    join_details_map = generate_join_dict(workflow, project=project)
 
     logger.debug(f"Join details: {join_details_map}")
 
