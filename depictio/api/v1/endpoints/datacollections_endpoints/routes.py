@@ -68,6 +68,14 @@ async def delete_datacollection(
     return {"message": "Data collection deleted successfully."}
 
 
+# =============================================================================
+# DEPRECATED ENDPOINT - NO LONGER USED - PENDING DELETION
+# =============================================================================
+# Migration Status: Dashboard now uses /get_dc_joined/ for pre-computed joins
+# This endpoint fetched DC-level join configs for live join execution.
+# Replaced by: /get_dc_joined/ endpoint that returns result_dc_id
+# TODO: Delete in cleanup PR after migration verification completes
+# =============================================================================
 @datacollections_endpoint_router.get("/get_join_tables/{workflow_id}/{data_collection_id}")
 async def get_join_tables(
     workflow_id: str,

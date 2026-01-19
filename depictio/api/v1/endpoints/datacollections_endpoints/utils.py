@@ -7,6 +7,13 @@ from depictio.api.v1.db import projects_collection
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 
 
+# =============================================================================
+# DEPRECATED UTILITY - NO LONGER USED - PENDING DELETION
+# =============================================================================
+# Migration Status: Dashboard now uses pre-computed joins from CLI
+# This function supported live join execution during dashboard rendering.
+# TODO: Delete in cleanup PR after migration verification completes
+# =============================================================================
 def symmetrize_join_details(join_details_map: dict[str, list[dict]]):
     """Ensure symmetric join details across all related data collections."""
     # Create a list of items to iterate over, so the original dict can be modified
@@ -99,6 +106,13 @@ def generate_join_dict(workflow: dict, project: dict | None = None) -> dict[str,
     return join_details_map
 
 
+# =============================================================================
+# DEPRECATED UTILITY - NO LONGER USED - PENDING DELETION
+# =============================================================================
+# Migration Status: Dashboard now uses pre-computed joins from CLI
+# This function supported live join execution during dashboard rendering.
+# TODO: Delete in cleanup PR after migration verification completes
+# =============================================================================
 def normalize_join_details(join_details):
     normalized_details = {}
 
