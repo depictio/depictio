@@ -24,7 +24,7 @@ from depictio.cli.cli.utils.rich_utils import (
 )
 from depictio.cli.cli_logging import logger
 from depictio.models.models.cli import CLIConfig
-from depictio.models.models.data_collections import DataCollection
+from depictio.models.models.data_collections import DataCollection, DataCollectionSource
 from depictio.models.models.joins import (
     AggregationFunction,
     GranularityConfig,
@@ -37,35 +37,71 @@ from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
 
 
 def find_data_collection_by_tag(
-    project: Project, dc_tag: str, workflow_name: str | None = None
+    project: Project,
+    dc_ref: str,
+    default_workflow: str | None = None,
 ) -> tuple[DataCollection | None, str | None]:
     """
-    Find a data collection by its tag within a project.
+    Find a data collection by tag, supporting workflow-scoped references.
 
     Args:
-        project: The project to search in
-        dc_tag: The data collection tag to find
-        workflow_name: Optional workflow name to scope the search
+        project: Project containing workflows and data collections
+        dc_ref: DC reference - either "tag" or "workflow.tag"
+        default_workflow: Default workflow name for unscoped tags
 
     Returns:
-        Tuple of (DataCollection, workflow_id) or (None, None) if not found
+        Tuple of (DataCollection, workflow_name) or (None, None)
+
+    Examples:
+        find_data_collection_by_tag(proj, "physical_features", "penguin_workflow")
+        find_data_collection_by_tag(proj, "workflow_a.sample_metadata", None)
     """
-    # Search in workflows
-    for workflow in project.workflows:
-        if workflow_name and workflow.name != workflow_name:
-            continue
+    # Check if dc_ref uses workflow-scoped syntax
+    if "." in dc_ref:
+        workflow_name, dc_tag = dc_ref.split(".", 1)
+        logger.debug(f"Resolving scoped reference: {workflow_name}.{dc_tag}")
 
-        if hasattr(workflow, "config") and workflow.config:
-            for dc in workflow.config.data_collections:
+        # Search only in specified workflow
+        for workflow in project.workflows:
+            if workflow.name == workflow_name:
+                for dc in workflow.data_collections:
+                    if dc.data_collection_tag == dc_tag:
+                        logger.info(f"Found DC '{dc_tag}' in workflow '{workflow_name}'")
+                        return dc, workflow_name
+
+        logger.warning(f"DC not found: {dc_ref}")
+        return None, None
+
+    else:
+        # Original logic: search within default_workflow or all workflows
+        dc_tag = dc_ref
+
+        # If default_workflow provided, search there first
+        if default_workflow:
+            for workflow in project.workflows:
+                if workflow.name == default_workflow:
+                    for dc in workflow.data_collections:
+                        if dc.data_collection_tag == dc_tag:
+                            logger.info(
+                                f"Found DC '{dc_tag}' in default workflow '{default_workflow}'"
+                            )
+                            return dc, default_workflow
+
+        # Fall back to searching all workflows
+        for workflow in project.workflows:
+            for dc in workflow.data_collections:
                 if dc.data_collection_tag == dc_tag:
-                    return dc, str(workflow.id) if workflow.id else None
+                    logger.info(f"Found DC '{dc_tag}' in workflow '{workflow.name}'")
+                    return dc, workflow.name
 
-    # Search in direct data collections (basic projects)
-    for dc in project.data_collections:
-        if dc.data_collection_tag == dc_tag:
-            return dc, None
+        # Check project-level data collections
+        for dc in project.data_collections:
+            if dc.data_collection_tag == dc_tag:
+                logger.info(f"Found DC '{dc_tag}' at project level")
+                return dc, None
 
-    return None, None
+        logger.warning(f"DC not found: {dc_tag}")
+        return None, None
 
 
 def validate_join_definition(
@@ -224,23 +260,23 @@ def apply_aggregation(
     return aggregated_df
 
 
-def _build_agg_expression(col: str, agg_func: AggregationFunction) -> pl.Expr | None:
+def _build_agg_expression(col: str, agg_func: str) -> pl.Expr | None:
     """Build a Polars aggregation expression for a column."""
-    if agg_func == AggregationFunction.MEAN:
+    if agg_func == "mean":
         return pl.col(col).mean().alias(col)
-    elif agg_func == AggregationFunction.SUM:
+    elif agg_func == "sum":
         return pl.col(col).sum().alias(col)
-    elif agg_func == AggregationFunction.MIN:
+    elif agg_func == "min":
         return pl.col(col).min().alias(col)
-    elif agg_func == AggregationFunction.MAX:
+    elif agg_func == "max":
         return pl.col(col).max().alias(col)
-    elif agg_func == AggregationFunction.FIRST:
+    elif agg_func == "first":
         return pl.col(col).first().alias(col)
-    elif agg_func == AggregationFunction.LAST:
+    elif agg_func == "last":
         return pl.col(col).last().alias(col)
-    elif agg_func == AggregationFunction.COUNT:
+    elif agg_func == "count":
         return pl.col(col).count().alias(col)
-    elif agg_func == AggregationFunction.MEDIAN:
+    elif agg_func == "median":
         return pl.col(col).median().alias(col)
     else:
         logger.warning(f"Unknown aggregation function: {agg_func}")
@@ -333,6 +369,15 @@ def execute_join(
     logger.info(f"Left DataFrame shape: {left_df.shape}")
     logger.info(f"Right DataFrame shape: {right_df.shape}")
 
+    # Auto-add depictio_run_id if present in both DataFrames
+    join_columns = join_def.on_columns.copy()
+
+    if "depictio_run_id" in left_df.columns and "depictio_run_id" in right_df.columns:
+        if "depictio_run_id" not in join_columns:
+            join_columns.append("depictio_run_id")
+            console.print("  [cyan]ℹ Auto-added depictio_run_id to join keys[/cyan]")
+            logger.info("Auto-added depictio_run_id to join columns")
+
     # Build metadata
     metadata = {
         "left_dc_id": str(left_dc.id),
@@ -341,8 +386,8 @@ def execute_join(
         "right_dc_tag": join_def.right_dc,
         "left_rows": left_df.shape[0],
         "right_rows": right_df.shape[0],
-        "join_columns": join_def.on_columns,
-        "join_type": join_def.how.value,
+        "join_columns": join_columns,  # Use updated join_columns
+        "join_type": join_def.how,  # Already a string with use_enum_values=True
         "aggregation_applied": False,
     }
 
@@ -350,8 +395,8 @@ def execute_join(
     if apply_granularity and join_def.granularity:
         # Determine which DataFrame needs aggregation
         # The DataFrame with finer granularity (more rows per key) should be aggregated
-        left_key_counts = left_df.group_by(join_def.on_columns).len()
-        right_key_counts = right_df.group_by(join_def.on_columns).len()
+        left_key_counts = left_df.group_by(join_columns).len()
+        right_key_counts = right_df.group_by(join_columns).len()
 
         left_avg_per_key = left_key_counts["len"].mean() if left_key_counts.height > 0 else 1
         right_avg_per_key = right_key_counts["len"].mean() if right_key_counts.height > 0 else 1
@@ -362,31 +407,31 @@ def execute_join(
         if right_avg_per_key is not None and left_avg_per_key is not None:
             if right_avg_per_key > left_avg_per_key:
                 logger.info("Aggregating right DataFrame to match left granularity")
-                right_df = apply_aggregation(right_df, join_def.on_columns, join_def.granularity)
+                right_df = apply_aggregation(right_df, join_columns, join_def.granularity)
                 metadata["aggregation_applied"] = True
                 metadata["aggregated_side"] = "right"
             elif left_avg_per_key > right_avg_per_key:
                 logger.info("Aggregating left DataFrame to match right granularity")
-                left_df = apply_aggregation(left_df, join_def.on_columns, join_def.granularity)
+                left_df = apply_aggregation(left_df, join_columns, join_def.granularity)
                 metadata["aggregation_applied"] = True
                 metadata["aggregated_side"] = "left"
 
     # Normalize join column types
-    left_df, right_df = normalize_join_column_types(left_df, right_df, join_def.on_columns)
+    left_df, right_df = normalize_join_column_types(left_df, right_df, join_columns)
 
     # Remove duplicated columns (except join columns) from right DataFrame
     # to avoid suffix issues
     right_cols_to_keep = [
-        col for col in right_df.columns if col not in left_df.columns or col in join_def.on_columns
+        col for col in right_df.columns if col not in left_df.columns or col in join_columns
     ]
     right_df = right_df.select(right_cols_to_keep)
 
     # Execute the join
-    logger.info(f"Executing {join_def.how.value} join on columns: {join_def.on_columns}")
+    logger.info(f"Executing {join_def.how} join on columns: {join_columns}")
     joined_df = left_df.join(
         right_df,
-        on=join_def.on_columns,
-        how=join_def.how.value,
+        on=join_columns,
+        how=join_def.how,  # Already a string with use_enum_values=True
     )
 
     logger.info(f"Joined DataFrame shape: {joined_df.shape}")
@@ -499,10 +544,17 @@ def persist_joined_table(
     overwrite: bool = False,
 ) -> dict:
     """
-    Persist a joined DataFrame as a Delta table.
+    Persist a joined DataFrame as a Delta table and update join definition with results.
+
+    This function:
+    1. Generates a DataCollection ID for the joined table
+    2. Writes the Delta table to S3
+    3. Updates the join_def with result metadata
+    4. Syncs the updated project to MongoDB
+    5. Registers the Delta table location in MongoDB
 
     Args:
-        join_def: The join definition
+        join_def: The join definition (modified in-place with results)
         joined_df: The joined DataFrame to persist
         project: The project configuration
         CLI_config: CLI configuration
@@ -512,15 +564,25 @@ def persist_joined_table(
     Returns:
         Result dict with success/error status
     """
+    from depictio.cli.cli.utils.api_calls import (
+        api_sync_project_config_to_server,
+        api_upsert_deltatable,
+    )
+    from depictio.models.models.base import PyObjectId
+    from depictio.models.utils import convert_model_to_dict
+
     storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
 
-    # Generate destination path using join name
-    # Format: s3://bucket/joined_<join_name>_<left_dc_id>_<right_dc_id>
-    destination_prefix = f"s3://{CLI_config.s3_storage.bucket}/joined_{join_def.name}"
+    # Step 1: Generate ID and S3 path for joined table
+    dc_id = PyObjectId()
+    dc_tag = f"joined_{join_def.name}"
+    destination_prefix = f"s3://{CLI_config.s3_storage.bucket}/{str(dc_id)}"
 
+    logger.info(f"Generated ID for join '{join_def.name}': {dc_id}")
     logger.info(f"Persisting joined table to: {destination_prefix}")
+    console.print(f"  [cyan]→ Generated DataCollection ID: {dc_id}[/cyan]")
 
-    # Check if exists
+    # Step 2: Check if exists
     existing_result = read_delta_table(destination_prefix, storage_options)
     if existing_result["result"] == "success" and not overwrite:
         return {
@@ -528,15 +590,15 @@ def persist_joined_table(
             "message": f"Joined table already exists at {destination_prefix}. Use --overwrite to replace.",
         }
 
-    # Add join timestamp
-    joined_df = joined_df.with_columns(
-        pl.lit(datetime.now().strftime("%Y-%m-%d %H:%M:%S")).alias("join_timestamp")
-    )
+    # Step 3: Add join timestamp
+    execution_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    joined_df = joined_df.with_columns(pl.lit(execution_timestamp).alias("join_timestamp"))
 
-    # Calculate size
+    # Step 4: Calculate size
     size_bytes = calculate_dataframe_size_bytes(joined_df)
 
-    # Write Delta table
+    # Step 5: Write Delta table to ID-based path
+    console.print(f"  [cyan]→ Writing Delta table to: {destination_prefix}[/cyan]")
     write_result = write_delta_table(
         aggregated_df=joined_df,
         destination_file=destination_prefix,
@@ -548,6 +610,94 @@ def persist_joined_table(
 
     logger.info(f"Successfully persisted joined table with {joined_df.height} rows")
 
+    # Step 6: Update join_def with result metadata
+    join_def.result_dc_id = dc_id
+    join_def.result_dc_tag = dc_tag
+    join_def.delta_location = destination_prefix
+    join_def.executed_at = execution_timestamp
+    join_def.row_count = joined_df.height
+    join_def.column_count = len(joined_df.columns)
+    join_def.size_bytes = size_bytes
+
+    console.print("  [green]✓ Updated join definition with execution results[/green]")
+    logger.info(f"Updated join '{join_def.name}' with result metadata")
+
+    # Step 6b: Also add a minimal DataCollection entry for UI compatibility
+    # This allows the dashboard DC picker to show joins as available data sources
+    from depictio.models.models.data_collections import (
+        DataCollection,
+        DataCollectionConfig,
+        DCTableConfig,
+    )
+
+    # Check if DC already exists in workflow
+    target_workflow = None
+    dc_already_exists = False
+
+    for workflow in project.workflows:
+        if join_def.workflow_name and workflow.name == join_def.workflow_name:
+            target_workflow = workflow
+            # Check if DC with this ID already exists
+            for dc in workflow.data_collections:
+                if str(dc.id) == str(dc_id):
+                    dc_already_exists = True
+                    break
+            break
+
+    if target_workflow and not dc_already_exists:
+        # Create minimal DataCollection entry (no scan needed since it's a derived table)
+        joined_dc = DataCollection(
+            data_collection_tag=dc_tag,
+            config=DataCollectionConfig(
+                type="table",
+                source=DataCollectionSource.JOINED,  # Mark as joined/derived, allows scan=None
+                metatype="Aggregate",
+                scan=None,  # No scan - this is a derived/joined table
+                dc_specific_properties=DCTableConfig(
+                    format="parquet",  # Delta tables use Parquet format
+                    polars_kwargs={},
+                    columns_description={
+                        col: f"From join: {join_def.name}" for col in joined_df.columns
+                    },
+                ),
+            ),
+            description=join_def.description or f"Joined: {join_def.left_dc} + {join_def.right_dc}",
+        )
+        joined_dc.id = dc_id
+
+        target_workflow.data_collections.append(joined_dc)
+        console.print("  [green]✓ Added DataCollection entry for dashboard UI[/green]")
+        logger.info(f"Added DC entry '{dc_tag}' to workflow for UI compatibility")
+
+    # Step 7: Sync updated project to MongoDB (with updated join_def)
+    try:
+        console.print("  [cyan]→ Syncing project with updated join results to MongoDB[/cyan]")
+        project_dict = convert_model_to_dict(project)
+        api_sync_project_config_to_server(
+            CLI_config=CLI_config, ProjectConfig=project_dict, update=True
+        )
+        console.print("  [green]✓ Project updated in MongoDB with join results[/green]")
+        logger.info(f"Successfully synced project with updated join '{join_def.name}'")
+    except Exception as e:
+        logger.warning(f"Failed to sync project to MongoDB: {e}")
+        console.print(f"  [yellow]⚠ Project sync failed: {e}[/yellow]")
+
+    # Step 8: Register Delta location in MongoDB
+    try:
+        console.print("  [cyan]→ Registering Delta table location in MongoDB[/cyan]")
+        api_upsert_deltatable(
+            data_collection_id=str(dc_id),
+            delta_table_location=destination_prefix,
+            CLI_config=CLI_config,
+            update=True,
+            deltatable_size_bytes=size_bytes,
+        )
+        console.print("  [green]✓ Delta table location registered in MongoDB[/green]")
+        logger.info(f"Successfully registered Delta location for join '{join_def.name}'")
+    except Exception as e:
+        logger.warning(f"Failed to register Delta location in MongoDB: {e}")
+        console.print(f"  [yellow]⚠ Delta location registration failed: {e}[/yellow]")
+
     return {
         "result": "success",
         "message": f"Joined table persisted to {destination_prefix}",
@@ -555,6 +705,8 @@ def persist_joined_table(
         "rows": joined_df.height,
         "columns": len(joined_df.columns),
         "size_bytes": size_bytes,
+        "dc_tag": dc_tag,
+        "dc_id": str(dc_id),
     }
 
 
@@ -793,19 +945,13 @@ def display_join_preview(join_name: str, preview: JoinPreviewResult) -> None:
     if preview.sample_rows:
         sample_table = Table(title="Sample Rows", show_header=True, show_lines=True)
 
-        # Add columns (limit to first 8 for readability)
-        display_cols = preview.joined_columns[:8]
-        for col in display_cols:
-            sample_table.add_column(col, overflow="fold")
-
-        if len(preview.joined_columns) > 8:
-            sample_table.add_column(f"... +{len(preview.joined_columns) - 8} more")
+        # Add all columns
+        for col in preview.joined_columns:
+            sample_table.add_column(col, overflow="fold", max_width=30)
 
         # Add rows
         for row in preview.sample_rows[:5]:
-            values = [str(row.get(col, ""))[:30] for col in display_cols]
-            if len(preview.joined_columns) > 8:
-                values.append("...")
+            values = [str(row.get(col, "")) for col in preview.joined_columns]
             sample_table.add_row(*values)
 
         console.print(sample_table)
