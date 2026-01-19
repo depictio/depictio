@@ -262,25 +262,23 @@ def apply_aggregation(
 
 def _build_agg_expression(col: str, agg_func: str) -> pl.Expr | None:
     """Build a Polars aggregation expression for a column."""
-    if agg_func == "mean":
-        return pl.col(col).mean().alias(col)
-    elif agg_func == "sum":
-        return pl.col(col).sum().alias(col)
-    elif agg_func == "min":
-        return pl.col(col).min().alias(col)
-    elif agg_func == "max":
-        return pl.col(col).max().alias(col)
-    elif agg_func == "first":
-        return pl.col(col).first().alias(col)
-    elif agg_func == "last":
-        return pl.col(col).last().alias(col)
-    elif agg_func == "count":
-        return pl.col(col).count().alias(col)
-    elif agg_func == "median":
-        return pl.col(col).median().alias(col)
-    else:
+    agg_methods = {
+        "mean": pl.Expr.mean,
+        "sum": pl.Expr.sum,
+        "min": pl.Expr.min,
+        "max": pl.Expr.max,
+        "first": pl.Expr.first,
+        "last": pl.Expr.last,
+        "count": pl.Expr.count,
+        "median": pl.Expr.median,
+    }
+
+    method = agg_methods.get(agg_func)
+    if method is None:
         logger.warning(f"Unknown aggregation function: {agg_func}")
         return None
+
+    return method(pl.col(col)).alias(col)
 
 
 def normalize_join_column_types(

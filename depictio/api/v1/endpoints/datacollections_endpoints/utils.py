@@ -56,6 +56,7 @@ def generate_join_dict(workflow: dict, project: dict | None = None) -> dict[str,
         }
     """
     workflow_id = str(workflow.get("_id", workflow.get("id", "")))
+    workflow_name = workflow.get("name", "")
     join_details_map: dict[str, dict[str, dict]] = {workflow_id: {}}
 
     # If no project provided or no joins defined, return empty
@@ -63,63 +64,34 @@ def generate_join_dict(workflow: dict, project: dict | None = None) -> dict[str,
         logger.debug(f"No project or joins found for workflow {workflow_id}")
         return join_details_map
 
-    # Build DC tag to ID lookup for this workflow
-    dc_tag_to_id: dict[str, str] = {}
-    dc_id_to_tag: dict[str, str] = {}
-    for dc in workflow.get("data_collections", []):
-        dc_id = str(dc.get("_id", dc.get("id", "")))
-        dc_tag = dc.get("data_collection_tag", "")
-        if dc_tag:
-            dc_tag_to_id[dc_tag] = dc_id
-            dc_id_to_tag[dc_id] = dc_tag
-
-    # Process project-level joins
-    workflow_name = workflow.get("name", "")
+    project_joins = project.get("joins", [])
     logger.info(
-        f"Processing {len(project.get('joins', []))} joins from project for workflow '{workflow_name}'"
+        f"Processing {len(project_joins)} joins from project for workflow '{workflow_name}'"
     )
 
-    for join_def in project.get("joins", []):
+    for join_def in project_joins:
         join_name = join_def.get("name", "unnamed")
-        logger.debug(f"Checking join: {join_name}")
-        logger.debug(f"  - result_dc_id: {join_def.get('result_dc_id')}")
-        logger.debug(
-            f"  - workflow_name: {join_def.get('workflow_name')} (current: {workflow_name})"
-        )
-        logger.debug(
-            f"  - left_dc: {join_def.get('left_dc')}, right_dc: {join_def.get('right_dc')}"
-        )
+        join_workflow_name = join_def.get("workflow_name", "")
+        result_dc_id = join_def.get("result_dc_id")
 
         # Skip if join is for a different workflow
-        join_workflow_name = join_def.get("workflow_name", "")
         if join_workflow_name and join_workflow_name != workflow_name:
-            logger.debug("  → Skipped: workflow mismatch")
             continue
 
         # Skip if join hasn't been executed yet (no result_dc_id)
-        if not join_def.get("result_dc_id"):
-            logger.warning("  → Skipped: no result_dc_id (join not executed)")
+        if not result_dc_id:
+            logger.warning(f"Join '{join_name}' skipped: no result_dc_id (join not executed)")
             continue
 
-        logger.info(f"  → Added join '{join_name}' to result dict")
-
-        # Get join metadata
-        result_dc_id = str(join_def["result_dc_id"])
-        left_dc_tag = join_def.get("left_dc", "")
-        right_dc_tag = join_def.get("right_dc", "")
-
         # Create join entry with result_dc_id as the key
-        # This allows dashboard to reference the joined table directly
-        join_details_map[workflow_id][result_dc_id] = {
+        join_details_map[workflow_id][str(result_dc_id)] = {
             "how": join_def.get("how", "inner"),
             "on_columns": join_def.get("on_columns", []),
-            "dc_tags": [left_dc_tag, right_dc_tag],
-            "join_name": join_def.get("name", ""),
+            "dc_tags": [join_def.get("left_dc", ""), join_def.get("right_dc", "")],
+            "join_name": join_name,
             "description": join_def.get("description", ""),
         }
-        logger.debug(
-            f"Added join {join_def.get('name')} with result_dc_id {result_dc_id} for workflow {workflow_name}"
-        )
+        logger.info(f"Added join '{join_name}' to result dict")
 
     logger.info(
         f"Generated join dict with {len(join_details_map[workflow_id])} joins for workflow {workflow_id}"

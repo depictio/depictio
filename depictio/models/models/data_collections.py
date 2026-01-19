@@ -172,25 +172,23 @@ class DataCollectionConfig(MongoModel):
             return DataCollectionSource.NATIVE
 
         # String conversion
-        if isinstance(v, str):
-            # Handle enum name strings ("DataCollectionSource.NATIVE")
-            if v.startswith("DataCollectionSource."):
-                enum_member_name = v.split(".")[-1]
-                try:
-                    return DataCollectionSource[enum_member_name]
-                except KeyError:
-                    raise ValueError(f"Invalid DataCollectionSource member: {enum_member_name}")
+        if not isinstance(v, str):
+            raise ValueError(f"Invalid type for source field: {type(v)}")
 
-            # Handle enum value strings ("native", "joined", "aggregated")
+        # Handle enum name strings ("DataCollectionSource.NATIVE")
+        if v.startswith("DataCollectionSource."):
+            enum_member_name = v.split(".")[-1]
             try:
-                return DataCollectionSource(v)
-            except ValueError:
-                raise ValueError(
-                    f"Invalid source value: {v}. Must be one of: "
-                    f"{', '.join([e.value for e in DataCollectionSource])}"
-                )
+                return DataCollectionSource[enum_member_name]
+            except KeyError:
+                raise ValueError(f"Invalid DataCollectionSource member: {enum_member_name}")
 
-        raise ValueError(f"Invalid type for source field: {type(v)}")
+        # Handle enum value strings ("native", "joined", "aggregated")
+        try:
+            return DataCollectionSource(v)
+        except ValueError:
+            valid_values = ", ".join(e.value for e in DataCollectionSource)
+            raise ValueError(f"Invalid source value: {v}. Must be one of: {valid_values}")
 
     @field_validator("type", mode="before")
     def validate_type(cls, v):

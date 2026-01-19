@@ -42,12 +42,10 @@ def _get_ag_grid_theme_class(theme: str) -> str:
     Returns:
         AG Grid CSS theme class name
     """
-    # Handle case where theme is empty dict, None, or other falsy value
-    if not theme or theme == {} or theme == "{}":
-        theme = "light"
-
-    logger.debug(f"STEPPER - Using theme: {theme} for AG Grid")
-    return "ag-theme-alpine-dark" if theme == "dark" else "ag-theme-alpine"
+    # Normalize falsy values (None, empty dict, empty string) to "light"
+    effective_theme = theme if theme and theme not in ({}, "{}") else "light"
+    logger.debug(f"STEPPER - Using theme: {effective_theme} for AG Grid")
+    return "ag-theme-alpine-dark" if effective_theme == "dark" else "ag-theme-alpine"
 
 
 def register_callbacks_stepper(app):
@@ -515,20 +513,20 @@ def register_callbacks_stepper(app):
 
         logger.info(f"Component selected: {component_selected}")
 
+        # Build lookup dicts for data collections
+        data_collections = selected_wf_data["data_collections"]
+        dc_tag_to_id = {dc["data_collection_tag"]: dc["id"] for dc in data_collections}
+        dc_id_to_type = {dc["id"]: dc["config"]["type"] for dc in data_collections}
+
         # Get regular data collections (exclude joined DCs - they'll be added separately)
         valid_dcs = [
-            {
-                "label": dc["data_collection_tag"],
-                "value": dc["id"],
-            }
-            for dc in selected_wf_data["data_collections"]
+            {"label": dc["data_collection_tag"], "value": dc["id"]}
+            for dc in data_collections
             if component_selected in mapping_component_data_collection[dc["config"]["type"]]
-            and dc.get("config", {}).get("source")
-            != "joined"  # Exclude joined DCs to avoid duplicates
+            and dc.get("config", {}).get("source") != "joined"
         ]
 
         # Add joined data collection options only for Figure and Table components
-        # Exclude Card and Interactive components from having access to joined data collections
         allowed_components_for_joined = ["Figure", "Table"]
         if component_selected in allowed_components_for_joined:
             try:
@@ -541,81 +539,47 @@ def register_callbacks_stepper(app):
                 if joins_response.status_code == 200:
                     joins_data = joins_response.json()
                     workflow_joins = joins_data.get(selected_workflow, {})
-
-                    logger.info(f"Received joins data: {joins_data}")
-                    logger.info(f"Workflow joins for {selected_workflow}: {workflow_joins}")
-                    logger.info(f"Number of joins: {len(workflow_joins)}")
-
-                    # Create a mapping from DC ID to DC type for filtering
-                    dc_id_to_type = {
-                        dc["id"]: dc["config"]["type"]
-                        for dc in selected_wf_data["data_collections"]
-                    }
+                    logger.info(
+                        f"Processing {len(workflow_joins)} joins for workflow {selected_workflow}"
+                    )
 
                     # Add joined DC options
                     for join_key, join_config in workflow_joins.items():
-                        # New format: join_key is result_dc_id (single ID)
-                        # join_config contains dc_tags: [left_dc_tag, right_dc_tag]
                         dc_tags = join_config.get("dc_tags", [])
-                        if len(dc_tags) == 2:
-                            left_dc_tag, right_dc_tag = dc_tags
+                        if len(dc_tags) != 2:
+                            continue
 
-                            # Get the actual DC IDs from tags for type checking
-                            left_dc_id = next(
-                                (
-                                    dc["id"]
-                                    for dc in selected_wf_data["data_collections"]
-                                    if dc["data_collection_tag"] == left_dc_tag
-                                ),
-                                None,
+                        left_dc_tag, right_dc_tag = dc_tags
+
+                        # Get DC IDs from tags using lookup dict
+                        left_dc_id = dc_tag_to_id.get(left_dc_tag)
+                        right_dc_id = dc_tag_to_id.get(right_dc_tag)
+
+                        # Skip joins involving multiqc data collections
+                        if left_dc_id and right_dc_id:
+                            left_dc_type = dc_id_to_type.get(left_dc_id, "")
+                            right_dc_type = dc_id_to_type.get(right_dc_id, "")
+                            if left_dc_type == "multiqc" or right_dc_type == "multiqc":
+                                logger.debug(f"Skipping join {join_key} involving multiqc DC")
+                                continue
+
+                        # Build join label
+                        join_name = join_config.get("join_name", "")
+                        is_cross_workflow = "." in left_dc_tag or "." in right_dc_tag
+
+                        if join_name:
+                            suffix = (
+                                f"(cross-workflow: {left_dc_tag} + {right_dc_tag})"
+                                if is_cross_workflow
+                                else f"({left_dc_tag} + {right_dc_tag})"
                             )
-                            right_dc_id = next(
-                                (
-                                    dc["id"]
-                                    for dc in selected_wf_data["data_collections"]
-                                    if dc["data_collection_tag"] == right_dc_tag
-                                ),
-                                None,
-                            )
+                            joined_label = f"🔗 {join_name} {suffix}"
+                        elif is_cross_workflow:
+                            joined_label = f"🔗 Cross-workflow: {left_dc_tag} + {right_dc_tag}"
+                        else:
+                            joined_label = f"🔗 Joined: {left_dc_tag} + {right_dc_tag}"
 
-                            # Skip joins involving multiqc data collections
-                            # MultiQC data should only be accessible via MultiQC component
-                            if left_dc_id and right_dc_id:
-                                left_dc_type = dc_id_to_type.get(left_dc_id, "")
-                                right_dc_type = dc_id_to_type.get(right_dc_id, "")
-                                if left_dc_type == "multiqc" or right_dc_type == "multiqc":
-                                    logger.debug(
-                                        f"Skipping join {join_key} involving multiqc data collection"
-                                    )
-                                    continue
-
-                            # Create display name for joined DC
-                            join_name = join_config.get("join_name", "")
-
-                            # Check if this is a cross-workflow join by looking for "." in dc_tags
-                            is_cross_workflow = "." in left_dc_tag or "." in right_dc_tag
-
-                            if join_name:
-                                if is_cross_workflow:
-                                    joined_label = f"🔗 {join_name} (cross-workflow: {left_dc_tag} + {right_dc_tag})"
-                                else:
-                                    joined_label = (
-                                        f"🔗 {join_name} ({left_dc_tag} + {right_dc_tag})"
-                                    )
-                            else:
-                                if is_cross_workflow:
-                                    joined_label = (
-                                        f"🔗 Cross-workflow: {left_dc_tag} + {right_dc_tag}"
-                                    )
-                                else:
-                                    joined_label = f"🔗 Joined: {left_dc_tag} + {right_dc_tag}"
-
-                            valid_dcs.append(
-                                {
-                                    "label": joined_label,
-                                    "value": join_key,  # Use result_dc_id as value
-                                }
-                            )
+                        valid_dcs.append({"label": joined_label, "value": join_key})
 
                     logger.info(f"Added {len(workflow_joins)} joined data collection options")
                 else:
