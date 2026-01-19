@@ -14,11 +14,9 @@ import httpx
 from dash import MATCH, Input, Output, State, html
 from dash_iconify import DashIconify
 
-from depictio.api.v1.configs.config import settings
+from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.utils import get_columns_from_data_collection
-
-API_BASE_URL = settings.api_base_url
 
 
 def register_interactive_design_callbacks(app):
