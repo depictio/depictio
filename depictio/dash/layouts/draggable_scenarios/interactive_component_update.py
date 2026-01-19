@@ -6,16 +6,13 @@ import pandas as pd
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.deltatables_utils import (
-    iterative_join,
-    join_deltatables_dev,
-    return_joins_dict,
-)
+from depictio.api.v1.deltatables_utils import join_deltatables_dev, load_deltatable_lite
 from depictio.dash.component_metadata import get_build_functions
 from depictio.dash.layouts.edit import enable_box_edit_mode
 from depictio.dash.modules.jbrowse_component.utils import (
     build_jbrowse_df_mapping_dict,
 )
+from depictio.dash.utils import get_result_dc_for_workflow
 
 
 def apply_dropdowns(df, n_dict):
@@ -412,38 +409,34 @@ def update_interactive_component_sync(
                     dc_type_mapping[dc_id] = "table"
                     logger.debug(f"Mapped {dc_id} -> table (from component type)")
 
-        logger.info(f"DC type mapping (before joins): {dc_type_mapping}")
+        logger.info(f"DC type mapping (before loading pre-computed join): {dc_type_mapping}")
 
-        # Now call return_joins_dict with complete dc_type_mapping available
-        joins_dict = return_joins_dict(
-            wf, stored_metadata, TOKEN, extra_dc=None, dc_type_mapping=dc_type_mapping
-        )
+        # MIGRATED: Load pre-computed join result DC
+        result_dc_id = get_result_dc_for_workflow(wf, TOKEN)
 
-        logger.info(f"Updated joins_dict - {joins_dict}")
+        if result_dc_id:
+            logger.info(f"Loading pre-computed join for workflow {wf}: {result_dc_id}")
 
-        # OPTIMIZATION: Perform joins all at once instead of individual calls
-        if joins_dict:
-            # Single call to iterative_join with ALL joins for this workflow
-            logger.info(
-                f"Performing batch join for workflow {wf} with {len(joins_dict)} join combinations"
+            # Convert interactive_components_dict to metadata list for filtering
+            metadata_list = (
+                list(interactive_components_dict.values()) if interactive_components_dict else []
             )
 
-            # logger.info(f"Interactive components dict: {interactive_components_dict}")
-            merged_df = iterative_join(
-                wf, joins_dict, interactive_components_dict, TOKEN, dc_type_mapping
+            # Load pre-computed result DC with interactive filters
+            from bson import ObjectId
+
+            merged_df = load_deltatable_lite(
+                ObjectId(wf), ObjectId(result_dc_id), metadata=metadata_list, TOKEN=TOKEN
             )
 
-            logger.info(f"Batch join completed for workflow {wf} (shape: {merged_df.shape})")
+            logger.info(f"Loaded pre-computed join for workflow {wf} (shape: {merged_df.shape})")
 
-            # Store the same merged dataframe for all join combinations
-            # since iterative_join already handles all the joins internally
-            for join_key_tuple in joins_dict.keys():
-                df_dict_processed[wf][join_key_tuple] = merged_df
-                logger.debug(
-                    f"Stored merged df for join key: {join_key_tuple} (shape: {merged_df.shape})"
-                )
+            # Store the merged dataframe
+            # For compatibility, store it with a simple key
+            df_dict_processed[wf]["precomputed_join"] = merged_df
+            logger.debug(f"Stored pre-computed join df (shape: {merged_df.shape})")
         else:
-            logger.info(f"No joins found for workflow {wf}")
+            logger.info(f"No pre-computed joins for workflow {wf}")
 
         for e in stored_metadata:
             if e["component_type"] == "jbrowse":

@@ -8,12 +8,11 @@ from dash import MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.deltatables_utils import return_joins_dict
 from depictio.dash.component_metadata import get_component_color, get_dmc_button_color, is_enabled
 from depictio.dash.modules.figure_component.multiqc_vis import create_multiqc_plot
 from depictio.dash.modules.multiqc_component.models import MultiQCDashboardComponent
 from depictio.dash.modules.multiqc_component.utils import get_multiqc_reports_for_data_collection
-from depictio.dash.utils import UNSELECTED_STYLE
+from depictio.dash.utils import UNSELECTED_STYLE, get_result_dc_for_workflow
 
 
 def create_stepper_multiqc_button(n, disabled=None):
@@ -1411,15 +1410,13 @@ def register_callbacks_multiqc_component(app):
             f"(MultiQC dc_id: {multiqc_dc_id})"
         )
 
-        # Use extra_dc to include MultiQC DC since it's excluded from dc_ids_all_components
-        joins_dict = return_joins_dict(
-            workflow_id, stored_metadata_for_joins, token, extra_dc=multiqc_dc_id
-        )
-        if not joins_dict:
-            logger.info(f"No joins configured for workflow {workflow_id} - skipping patching")
+        # MIGRATED: Check if pre-computed join exists
+        result_dc_id = get_result_dc_for_workflow(workflow_id, token)
+        if not result_dc_id:
+            logger.info(f"No pre-computed joins for workflow {workflow_id} - skipping patching")
             return dash.no_update
 
-        logger.info(f"Joins detected for workflow {workflow_id}: {joins_dict}")
+        logger.info(f"Pre-computed join detected for workflow {workflow_id}: {result_dc_id}")
 
         # Build interactive_components_dict in the format expected by iterative_join
         # Structure: {component_index: {"index": ..., "value": [...], "metadata": {...}}}
@@ -1499,56 +1496,33 @@ def register_callbacks_multiqc_component(app):
             logger.info("🔄 RESET MODE: Clearing filters - restoring original unfiltered data")
 
         try:
-            # Extract metadata DC ID and join column from joins_dict
+            # MIGRATED: Extract metadata DC ID from interactive components
+            # (no longer need joins_dict since we use pre-computed joins)
             metadata_dc_id = None
-            join_column = None
+            join_column = "sample"  # Default join column
 
-            for join_key, join_configs in joins_dict.items():
-                if multiqc_dc_id in join_key:
-                    # Get the other DC (metadata table) from the join key
-                    other_dcs = [dc for dc in join_key if dc != multiqc_dc_id]
-
-                    if other_dcs:
-                        # Standard case: join_key contains both MultiQC and metadata DC
-                        metadata_dc_id = other_dcs[0]
-                    else:
-                        # Fallback: join_key only contains MultiQC DC
-                        # Extract metadata DC from interactive components
-                        logger.debug(
-                            f"Join key {join_key} only contains MultiQC DC, "
-                            "extracting metadata DC from interactive components"
-                        )
-                        for comp_data in interactive_components_dict.values():
-                            comp_dc_id = comp_data.get("metadata", {}).get("dc_id")
-                            if comp_dc_id and comp_dc_id != multiqc_dc_id:
-                                metadata_dc_id = comp_dc_id
-                                logger.info(
-                                    f"Found metadata DC from interactive component: {metadata_dc_id}"
-                                )
-                                break
-
-                    # Get join column from config (if available)
-                    for join_config_dict in join_configs:
-                        for join_info in join_config_dict.values():
-                            join_column = join_info.get("on_columns", [None])[0]
-                            break
-
-                    # Fallback: If join_column not found in joins_dict, use default 'sample'
-                    if not join_column:
-                        logger.warning(
-                            "Join column not found in joins_dict, using default 'sample'"
-                        )
-                        join_column = "sample"
-
+            # Extract metadata DC from interactive components
+            logger.debug(
+                "Extracting metadata DC from interactive components (pre-computed join migration)"
+            )
+            for comp_data in interactive_components_dict.values():
+                comp_dc_id = comp_data.get("metadata", {}).get("dc_id")
+                if comp_dc_id and comp_dc_id != multiqc_dc_id:
+                    metadata_dc_id = comp_dc_id
+                    logger.info(f"Found metadata DC from interactive component: {metadata_dc_id}")
                     break
 
-            if not metadata_dc_id or not join_column:
+            if not metadata_dc_id:
                 logger.error(
-                    f"Could not find metadata DC or join column. "
-                    f"metadata_dc_id={metadata_dc_id}, join_column={join_column}, "
-                    f"joins_dict={joins_dict}"
+                    f"Could not find metadata DC from interactive components. "
+                    f"multiqc_dc_id={multiqc_dc_id}"
                 )
                 return dash.no_update
+
+            logger.info(
+                f"Using metadata_dc_id={metadata_dc_id}, join_column={join_column} "
+                "for MultiQC patching"
+            )
 
             # RESET HANDLING: Load ALL samples when filters are cleared
             if not has_active_filters and figure_was_patched:
