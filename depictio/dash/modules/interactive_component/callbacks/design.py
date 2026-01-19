@@ -10,11 +10,9 @@ Callbacks:
 - toggle_slider_controls_visibility: Show/hide slider controls based on method selection
 """
 
-import httpx
 from dash import MATCH, Input, Output, State, html
 from dash_iconify import DashIconify
 
-from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.utils import get_columns_from_data_collection
 
@@ -458,37 +456,113 @@ def register_interactive_design_callbacks(app):
             logger.error(f"Error creating columns description table: {e}")
             columns_description_df = html.Div("Error creating columns description table")
 
-        # Fetch data collection specs
-        headers = {"Authorization": f"Bearer {TOKEN}"}
-        dc_specs = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
-            headers=headers,
-        ).json()
+        # Build simplified preview component (no stores to avoid triggering batch callbacks)
+        # Get unique values for categorical components
+        from bson import ObjectId
 
-        # Build the interactive component
-        from depictio.dash.modules.interactive_component.utils import build_interactive
+        from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
-        interactive_kwargs = {
-            "index": id["index"],
-            "title": input_value,
-            "wf_id": workflow_id,
-            "dc_id": data_collection_id,
-            "dc_config": dc_specs["config"],
-            "column_name": column_value,
-            "column_type": column_type,
-            "interactive_component_type": aggregation_value,
-            "cols_json": cols_json,
-            "access_token": TOKEN,
-            "stepper": True,
-            "build_frame": False,  # Don't build frame - return just the content
-            "scale": scale_value,
-            "color": color_value,
-            "icon_name": icon_name,
-            "title_size": title_size,
-            "marks_number": marks_number,
-        }
+        try:
+            df = load_deltatable_lite(
+                ObjectId(workflow_id),
+                ObjectId(data_collection_id),
+                TOKEN=TOKEN,
+            )
 
-        new_interactive_component = build_interactive(**interactive_kwargs)
+            # Create preview based on component type
+            if aggregation_value in ["Select", "MultiSelect", "SegmentedControl"]:
+                # Get unique values
+                unique_vals = df[column_value].unique()
+                if hasattr(unique_vals, "to_list"):
+                    unique_vals_list = unique_vals.to_list()
+                elif hasattr(unique_vals, "tolist"):
+                    unique_vals_list = unique_vals.tolist()
+                else:
+                    unique_vals_list = list(unique_vals)
+
+                options = [str(val) for val in unique_vals_list if val is not None][:20]
+
+                if aggregation_value == "Select":
+                    preview_component = dmc.Select(
+                        data=[{"label": opt, "value": opt} for opt in options],
+                        placeholder=f"Select {column_value}",
+                        disabled=True,
+                        style={"width": "100%"},
+                    )
+                elif aggregation_value == "MultiSelect":
+                    preview_component = dmc.MultiSelect(
+                        data=[{"label": opt, "value": opt} for opt in options],
+                        placeholder=f"Select {column_value} (multiple)",
+                        disabled=True,
+                        style={"width": "100%"},
+                    )
+                else:  # SegmentedControl
+                    preview_component = dmc.SegmentedControl(
+                        data=options[:5],  # Limit to 5 for segmented control
+                        disabled=True,
+                        fullWidth=True,
+                    )
+
+            elif aggregation_value in ["Slider", "RangeSlider"]:
+                # Get min/max values
+                col_min = float(df[column_value].min())
+                col_max = float(df[column_value].max())
+
+                if aggregation_value == "Slider":
+                    preview_component = dmc.Slider(
+                        min=col_min,
+                        max=col_max,
+                        value=col_min,
+                        disabled=True,
+                        style={"width": "100%"},
+                    )
+                else:  # RangeSlider
+                    preview_component = dmc.RangeSlider(
+                        min=col_min,
+                        max=col_max,
+                        value=(col_min, col_max),
+                        disabled=True,
+                        style={"width": "100%"},
+                    )
+
+            elif aggregation_value == "DateRangePicker":
+                preview_component = dmc.DatePickerInput(
+                    type="range",
+                    placeholder="Select date range",
+                    disabled=True,
+                    style={"width": "100%"},
+                )
+
+            else:
+                preview_component = dmc.Text(f"Preview for {aggregation_value}", c="gray")
+
+            # Wrap with title
+            new_interactive_component = dmc.Stack(
+                [
+                    dmc.Group(
+                        [
+                            DashIconify(
+                                icon=icon_name or "bx:slider-alt",
+                                width=24,
+                                color=color_value if color_value else None,
+                            ),
+                            dmc.Text(input_value or column_value, size=title_size, fw="bold"),
+                        ],
+                        gap="xs",
+                    ),
+                    preview_component,
+                    dmc.Badge("Preview Mode - Component disabled", color="gray", size="sm"),
+                ],
+                gap="sm",
+            )
+
+        except Exception as e:
+            logger.error(f"Error building preview: {e}")
+            new_interactive_component = dmc.Alert(
+                title="Preview Error",
+                children=f"Could not generate preview: {str(e)}",
+                color="red",
+            )
 
         logger.info("=== PREVIEW COMPONENT BUILT SUCCESSFULLY ===")
 
