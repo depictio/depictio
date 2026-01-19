@@ -414,6 +414,11 @@ def register_component_callbacks(app):
 
     register_callbacks_multiqc_component(app)
 
+    # Register fullscreen callbacks for figure components
+    from depictio.dash.modules.fullscreen import register_fullscreen_callbacks
+
+    register_fullscreen_callbacks(app)
+
 
 def register_header_callbacks(app):
     """
