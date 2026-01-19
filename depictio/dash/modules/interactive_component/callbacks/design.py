@@ -486,20 +486,17 @@ def register_interactive_design_callbacks(app):
                     preview_component = dmc.Select(
                         data=[{"label": opt, "value": opt} for opt in options],
                         placeholder=f"Select {column_value}",
-                        disabled=True,
                         style={"width": "100%"},
                     )
                 elif aggregation_value == "MultiSelect":
                     preview_component = dmc.MultiSelect(
                         data=[{"label": opt, "value": opt} for opt in options],
                         placeholder=f"Select {column_value} (multiple)",
-                        disabled=True,
                         style={"width": "100%"},
                     )
                 else:  # SegmentedControl
                     preview_component = dmc.SegmentedControl(
                         data=options[:5],  # Limit to 5 for segmented control
-                        disabled=True,
                         fullWidth=True,
                     )
 
@@ -513,7 +510,6 @@ def register_interactive_design_callbacks(app):
                         min=col_min,
                         max=col_max,
                         value=col_min,
-                        disabled=True,
                         style={"width": "100%"},
                     )
                 else:  # RangeSlider
@@ -521,7 +517,6 @@ def register_interactive_design_callbacks(app):
                         min=col_min,
                         max=col_max,
                         value=(col_min, col_max),
-                        disabled=True,
                         style={"width": "100%"},
                     )
 
@@ -529,7 +524,6 @@ def register_interactive_design_callbacks(app):
                 preview_component = dmc.DatePickerInput(
                     type="range",
                     placeholder="Select date range",
-                    disabled=True,
                     style={"width": "100%"},
                 )
 
@@ -551,7 +545,6 @@ def register_interactive_design_callbacks(app):
                         gap="xs",
                     ),
                     preview_component,
-                    dmc.Badge("Preview Mode - Component disabled", color="gray", size="sm"),
                 ],
                 gap="sm",
             )
