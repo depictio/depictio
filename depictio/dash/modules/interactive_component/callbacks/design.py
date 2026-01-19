@@ -13,7 +13,7 @@ Callbacks:
 from dash import MATCH, Input, Output, State
 
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.utils import get_columns_from_data_collection, get_component_data
+from depictio.dash.utils import get_columns_from_data_collection
 
 
 def register_interactive_design_callbacks(app):
@@ -112,30 +112,29 @@ def register_interactive_design_callbacks(app):
             Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
             Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
             Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            Input("edit-page-context", "data"),
             State({"type": "input-dropdown-method", "index": MATCH}, "id"),
-            State("current-edit-parent-index", "data"),
             State("local-store", "data"),
-            State("url", "pathname"),
         ],
         prevent_initial_call=False,
     )
     def update_aggregation_options(
-        column_value, workflow_id, data_collection_id, id, parent_index, local_data, pathname
+        column_value, workflow_id, data_collection_id, edit_context, id, local_data
     ):
         """
         Populate method dropdown based on selected column type.
 
-        Restored from legacy code (commit 852b230e~1) - was commented out during multi-app refactor.
+        Restored from legacy code (commit 852b230e~1) - adapted for multi-app architecture.
+        Uses edit-page-context for edit mode, stepper selections for add mode.
         """
 
         logger.info("=== UPDATE AGGREGATION OPTIONS CALLBACK START ===")
         logger.info(f"column_value: {column_value}")
         logger.info(f"workflow_id: {workflow_id}")
         logger.info(f"data_collection_id: {data_collection_id}")
+        logger.info(f"edit_context: {edit_context is not None}")
         logger.info(f"id: {id}")
-        logger.info(f"parent_index: {parent_index}")
         logger.info(f"local_data available: {local_data is not None}")
-        logger.info(f"pathname: {pathname}")
 
         if not local_data:
             logger.error("No local_data available!")
@@ -143,20 +142,15 @@ def register_interactive_design_callbacks(app):
 
         TOKEN = local_data["access_token"]
 
-        # In edit mode, we might need to get workflow/dc IDs from component data
-        if parent_index is not None and (not workflow_id or not data_collection_id):
-            logger.info(
-                f"Edit mode detected - fetching component data for parent_index: {parent_index}"
-            )
-            dashboard_id = pathname.split("/")[-1]
-            component_data = get_component_data(
-                input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN
-            )
+        # In edit mode, get workflow/dc IDs from edit context
+        if edit_context and (not workflow_id or not data_collection_id):
+            logger.info("Edit mode detected - using edit-page-context")
+            component_data = edit_context.get("component_data", {})
             if component_data:
                 workflow_id = component_data.get("wf_id")
                 data_collection_id = component_data.get("dc_id")
                 logger.info(
-                    f"Retrieved from component_data - workflow_id: {workflow_id}, data_collection_id: {data_collection_id}"
+                    f"Retrieved from edit context - workflow_id: {workflow_id}, data_collection_id: {data_collection_id}"
                 )
 
         # If any essential parameters are None, return empty list but allow case where column_value is None
