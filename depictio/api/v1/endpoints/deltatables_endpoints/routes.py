@@ -401,6 +401,84 @@ async def specs(
     return column_specs
 
 
+@deltatables_endpoint_router.get("/shape/{data_collection_id}")
+async def get_shape(
+    data_collection_id: PyObjectId,
+    current_user: str = Depends(get_user_or_anonymous),
+):
+    """
+    Get shape information (number of rows and columns) for a data collection.
+    Returns: {"num_rows": int, "num_columns": int}
+    """
+
+    # First check if user has permission to access the data collection via project permissions
+    pipeline = [
+        # Match projects containing this data collection and with appropriate permissions
+        {
+            "$match": {
+                "workflows.data_collections._id": ObjectId(data_collection_id),
+                "$or": [
+                    {"permissions.owners._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
+                    {"permissions.viewers._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
+                    {"permissions.viewers": "*"},
+                    {"is_public": True},
+                ],
+            }
+        },
+        # Unwind the workflows array
+        {"$unwind": "$workflows"},
+        # Unwind the data_collections array
+        {"$unwind": "$workflows.data_collections"},
+        # Match the specific data collection ID
+        {"$match": {"workflows.data_collections._id": ObjectId(data_collection_id)}},
+        # Return only the data collection
+        {"$replaceRoot": {"newRoot": "$workflows.data_collections"}},
+    ]
+
+    project_result = list(projects_collection.aggregate(pipeline))
+    if not project_result:
+        raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
+
+    # Query to find deltatable associated with the data collection
+    query = {"data_collection_id": data_collection_id}
+    deltatable_cursor = deltatables_collection.find(query)
+    deltatables_list = list(deltatable_cursor)
+
+    if not deltatables_list:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No DeltaTable found for Data Collection ID {data_collection_id}.",
+        )
+
+    deltatables = deltatables_list[-1]  # Get the most recent deltatable
+
+    # Get delta table location
+    delta_table_location = deltatables.get("delta_table_location")
+    if not delta_table_location:
+        raise HTTPException(
+            status_code=404, detail="Delta table location not found in deltatable document."
+        )
+
+    # Import polars
+    import polars as pl
+
+    try:
+        # Use lazy scan to avoid loading all data
+        # polars_s3_config is already imported at module level from depictio.api.v1.s3
+        df_lazy = pl.scan_delta(delta_table_location, storage_options=polars_s3_config)
+
+        # Get shape information
+        # collect() is needed to get the actual row count
+        df = df_lazy.collect()
+        num_rows, num_columns = df.shape
+
+        return {"num_rows": num_rows, "num_columns": num_columns}
+
+    except Exception as e:
+        logger.error(f"Error reading delta table shape: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to read delta table shape: {str(e)}")
+
+
 @deltatables_endpoint_router.delete("/delete/{deltatable_id}")
 async def delete_deltatable(
     deltatable_id: str,
