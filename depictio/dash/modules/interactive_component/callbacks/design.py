@@ -10,10 +10,15 @@ Callbacks:
 - toggle_slider_controls_visibility: Show/hide slider controls based on method selection
 """
 
-from dash import MATCH, Input, Output, State
+import httpx
+from dash import MATCH, Input, Output, State, html
+from dash_iconify import DashIconify
 
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.utils import get_columns_from_data_collection
+
+API_BASE_URL = settings.api_base_url
 
 
 def register_interactive_design_callbacks(app):
@@ -231,5 +236,268 @@ def register_interactive_design_callbacks(app):
             return {"display": "block"}, {"display": "block"}
         else:
             return {"display": "none"}, {"display": "none"}
+
+    # Update preview component based on form inputs
+    @app.callback(
+        Output({"type": "input-body", "index": MATCH}, "children"),
+        Output({"type": "interactive-description", "index": MATCH}, "children"),
+        Output({"type": "interactive-columns-description", "index": MATCH}, "children"),
+        [
+            Input({"type": "input-title", "index": MATCH}, "value"),
+            Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
+            Input({"type": "input-dropdown-method", "index": MATCH}, "value"),
+            Input({"type": "input-dropdown-scale", "index": MATCH}, "value"),
+            Input({"type": "input-color-picker", "index": MATCH}, "value"),
+            Input({"type": "input-icon-selector", "index": MATCH}, "value"),
+            Input({"type": "input-title-size", "index": MATCH}, "value"),
+            Input({"type": "input-number-marks", "index": MATCH}, "value"),
+            Input("edit-page-context", "data"),
+            State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State({"type": "input-dropdown-method", "index": MATCH}, "id"),
+            State("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def update_preview_component(
+        input_value,
+        column_value,
+        aggregation_value,
+        scale_value,
+        color_value,
+        icon_name,
+        title_size,
+        marks_number,
+        edit_context,
+        workflow_id,
+        data_collection_id,
+        id,
+        local_data,
+    ):
+        """
+        Update interactive component preview based on form inputs.
+
+        Restored from legacy code (commit 852b230e~1) - adapted for multi-app architecture.
+        """
+        import dash_mantine_components as dmc
+
+        logger.info("=== UPDATE PREVIEW COMPONENT CALLBACK START ===")
+
+        # Initialize columns_description_df
+        columns_description_df = None
+
+        if not local_data:
+            logger.error("No local_data available!")
+            return [], None, columns_description_df
+
+        TOKEN = local_data["access_token"]
+
+        # In edit mode, get workflow/dc IDs and pre-populated values from edit context
+        if edit_context:
+            logger.info("Edit mode detected - using edit-page-context")
+            component_data = edit_context.get("component_data", {})
+            if component_data:
+                # Use stepper values if available, otherwise fall back to component data
+                if not workflow_id:
+                    workflow_id = component_data.get("wf_id")
+                if not data_collection_id:
+                    data_collection_id = component_data.get("dc_id")
+
+                # Pre-populate form values from component data if not set
+                if column_value is None:
+                    column_value = component_data.get("column_name")
+                if aggregation_value is None:
+                    aggregation_value = component_data.get("interactive_component_type")
+                if not input_value:
+                    input_value = component_data.get("title", "")
+                if scale_value is None:
+                    scale_value = component_data.get("scale", "linear")
+                if marks_number is None:
+                    marks_number = component_data.get("marks_number", 2)
+                if not color_value:
+                    color_value = component_data.get("custom_color", "")
+                if not title_size:
+                    title_size = component_data.get("title_size", "md")
+                if not icon_name:
+                    icon_name = component_data.get("icon_name", "bx:slider-alt")
+
+        # Check for missing essential values
+        if not workflow_id or not data_collection_id:
+            logger.error(
+                f"Missing workflow/dc - workflow_id: {workflow_id}, data_collection_id: {data_collection_id}"
+            )
+            return [], None, columns_description_df
+
+        if column_value is None or aggregation_value is None:
+            logger.info(
+                f"Missing column or method - column: {column_value}, method: {aggregation_value}"
+            )
+            return [], None, columns_description_df
+
+        # Fetch column metadata
+        cols_json = get_columns_from_data_collection(workflow_id, data_collection_id, TOKEN)
+
+        if not cols_json or column_value not in cols_json:
+            logger.error(f"Column '{column_value}' not found in cols_json")
+            return [], None, columns_description_df
+
+        # Get column type
+        column_type = cols_json[column_value]["type"]
+        logger.info(f"Column '{column_value}' has type '{column_type}'")
+
+        # Validate aggregation_value is compatible with column type
+        from depictio.dash.modules.interactive_component.utils import agg_functions
+
+        available_methods = list(
+            agg_functions.get(str(column_type), {}).get("input_methods", {}).keys()
+        )
+
+        if aggregation_value not in available_methods:
+            logger.warning(
+                f"Invalid combination - {aggregation_value} not available for {column_type}"
+            )
+            return [], None, columns_description_df
+
+        # Get component description
+        try:
+            description_text = agg_functions[str(column_type)]["input_methods"][aggregation_value][
+                "description"
+            ]
+        except KeyError:
+            description_text = (
+                f"Description not available for {aggregation_value} on {column_type} data"
+            )
+
+        interactive_description = html.Div(
+            children=[
+                html.Hr(),
+                dmc.Tooltip(
+                    children=dmc.Stack(
+                        [
+                            dmc.Badge(
+                                children="Interactive component description",
+                                leftSection=DashIconify(
+                                    icon="mdi:information", color="white", width=20
+                                ),
+                                color="gray",
+                                radius="lg",
+                            ),
+                        ]
+                    ),
+                    label=description_text,
+                    multiline=True,
+                    w=300,
+                    withinPortal=False,
+                ),
+            ]
+        )
+
+        # Create columns description table
+        try:
+            data_columns_df = [
+                {"column": c, "description": cols_json[c]["description"]}
+                for c in cols_json
+                if cols_json[c]["description"] is not None
+            ]
+
+            table_rows = []
+            for row in data_columns_df:
+                table_rows.append(
+                    dmc.TableTr(
+                        [
+                            dmc.TableTd(
+                                row["column"],
+                                style={
+                                    "textAlign": "center",
+                                    "fontSize": "11px",
+                                    "maxWidth": "150px",
+                                },
+                            ),
+                            dmc.TableTd(
+                                row["description"],
+                                style={
+                                    "textAlign": "center",
+                                    "fontSize": "11px",
+                                    "maxWidth": "150px",
+                                },
+                            ),
+                        ]
+                    )
+                )
+
+            columns_description_df = dmc.Table(
+                [
+                    dmc.TableThead(
+                        [
+                            dmc.TableTr(
+                                [
+                                    dmc.TableTh(
+                                        "Column",
+                                        style={
+                                            "textAlign": "center",
+                                            "fontSize": "11px",
+                                            "fontWeight": "bold",
+                                        },
+                                    ),
+                                    dmc.TableTh(
+                                        "Description",
+                                        style={
+                                            "textAlign": "center",
+                                            "fontSize": "11px",
+                                            "fontWeight": "bold",
+                                        },
+                                    ),
+                                ]
+                            )
+                        ]
+                    ),
+                    dmc.TableTbody(table_rows),
+                ],
+                striped="odd",
+                withTableBorder=True,
+            )
+        except Exception as e:
+            logger.error(f"Error creating columns description table: {e}")
+            columns_description_df = html.Div("Error creating columns description table")
+
+        # Fetch data collection specs
+        headers = {"Authorization": f"Bearer {TOKEN}"}
+        dc_specs = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
+            headers=headers,
+        ).json()
+
+        # Build the interactive component
+        from depictio.dash.modules.interactive_component.utils import build_interactive
+
+        interactive_kwargs = {
+            "index": id["index"],
+            "title": input_value,
+            "wf_id": workflow_id,
+            "dc_id": data_collection_id,
+            "dc_config": dc_specs["config"],
+            "column_name": column_value,
+            "column_type": column_type,
+            "interactive_component_type": aggregation_value,
+            "cols_json": cols_json,
+            "access_token": TOKEN,
+            "stepper": True,
+            "build_frame": False,  # Don't build frame - return just the content
+            "scale": scale_value,
+            "color": color_value,
+            "icon_name": icon_name,
+            "title_size": title_size,
+            "marks_number": marks_number,
+        }
+
+        new_interactive_component = build_interactive(**interactive_kwargs)
+
+        logger.info("=== PREVIEW COMPONENT BUILT SUCCESSFULLY ===")
+
+        return (
+            new_interactive_component,
+            interactive_description,
+            columns_description_df,
+        )
 
     logger.info("✅ Interactive design callbacks registered")
