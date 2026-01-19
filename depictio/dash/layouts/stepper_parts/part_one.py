@@ -144,14 +144,26 @@ def register_callbacks_stepper_part_one(app):
                     "Authorization": f"Bearer {TOKEN}",
                 },
             ).json()
-        # dc_specs = {
-        #     "config": {
-        #         "type": "Table",
-        #     },
-        #     "data_collection_tag": "test",
-        #     "description": "test",
-        #     "_id": "test",
-        # }
+
+        # Fetch shape information (rows and columns count)
+        try:
+            shape_response = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/deltatables/shape/{data_collection_id}",
+                headers={
+                    "Authorization": f"Bearer {TOKEN}",
+                },
+            )
+            if shape_response.status_code == 200:
+                shape_info = shape_response.json()
+                num_rows = shape_info.get("num_rows", "N/A")
+                num_columns = shape_info.get("num_columns", "N/A")
+            else:
+                num_rows = "N/A"
+                num_columns = "N/A"
+        except Exception as e:
+            logger.warning(f"Failed to fetch shape information: {e}")
+            num_rows = "N/A"
+            num_columns = "N/A"
 
         if workflow_id is not None and data_collection_id is not None:
             # component_selected = html.Div(f"{component_selected}")
@@ -325,6 +337,46 @@ def register_callbacks_stepper_part_one(app):
                                 },
                             ),
                             html.Td("v1", style={"text-align": "left"}),
+                        ]
+                    ),
+                    html.Tr(
+                        [
+                            html.Td(
+                                "Rows:",
+                                style={
+                                    "font-weight": "bold",
+                                    "text-align": "left",
+                                    "width": "25%",
+                                },
+                            ),
+                            html.Td(
+                                f"{num_rows:,}" if isinstance(num_rows, int) else num_rows,
+                                style={
+                                    "text-align": "left",
+                                    "font-family": "monospace",
+                                    "font-size": "0.9em",
+                                },
+                            ),
+                        ]
+                    ),
+                    html.Tr(
+                        [
+                            html.Td(
+                                "Columns:",
+                                style={
+                                    "font-weight": "bold",
+                                    "text-align": "left",
+                                    "width": "25%",
+                                },
+                            ),
+                            html.Td(
+                                f"{num_columns:,}" if isinstance(num_columns, int) else num_columns,
+                                style={
+                                    "text-align": "left",
+                                    "font-family": "monospace",
+                                    "font-size": "0.9em",
+                                },
+                            ),
                         ]
                     ),
                 ],

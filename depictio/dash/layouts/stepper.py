@@ -515,7 +515,7 @@ def register_callbacks_stepper(app):
 
         logger.info(f"Component selected: {component_selected}")
 
-        # Get regular data collections
+        # Get regular data collections (exclude joined DCs - they'll be added separately)
         valid_dcs = [
             {
                 "label": dc["data_collection_tag"],
@@ -523,6 +523,8 @@ def register_callbacks_stepper(app):
             }
             for dc in selected_wf_data["data_collections"]
             if component_selected in mapping_component_data_collection[dc["config"]["type"]]
+            and dc.get("config", {}).get("source")
+            != "joined"  # Exclude joined DCs to avoid duplicates
         ]
 
         # Add joined data collection options only for Figure and Table components
@@ -540,11 +542,9 @@ def register_callbacks_stepper(app):
                     joins_data = joins_response.json()
                     workflow_joins = joins_data.get(selected_workflow, {})
 
-                    # Create a mapping from DC ID to DC tag for display names
-                    dc_id_to_tag = {
-                        dc["id"]: dc["data_collection_tag"]
-                        for dc in selected_wf_data["data_collections"]
-                    }
+                    logger.info(f"Received joins data: {joins_data}")
+                    logger.info(f"Workflow joins for {selected_workflow}: {workflow_joins}")
+                    logger.info(f"Number of joins: {len(workflow_joins)}")
 
                     # Create a mapping from DC ID to DC type for filtering
                     dc_id_to_type = {
@@ -554,31 +554,66 @@ def register_callbacks_stepper(app):
 
                     # Add joined DC options
                     for join_key, join_config in workflow_joins.items():
-                        # Extract DC IDs from join key (format: "dc_id1--dc_id2")
-                        dc_ids = join_key.split("--")
-                        if len(dc_ids) == 2:
-                            dc1_id, dc2_id = dc_ids
+                        # New format: join_key is result_dc_id (single ID)
+                        # join_config contains dc_tags: [left_dc_tag, right_dc_tag]
+                        dc_tags = join_config.get("dc_tags", [])
+                        if len(dc_tags) == 2:
+                            left_dc_tag, right_dc_tag = dc_tags
+
+                            # Get the actual DC IDs from tags for type checking
+                            left_dc_id = next(
+                                (
+                                    dc["id"]
+                                    for dc in selected_wf_data["data_collections"]
+                                    if dc["data_collection_tag"] == left_dc_tag
+                                ),
+                                None,
+                            )
+                            right_dc_id = next(
+                                (
+                                    dc["id"]
+                                    for dc in selected_wf_data["data_collections"]
+                                    if dc["data_collection_tag"] == right_dc_tag
+                                ),
+                                None,
+                            )
 
                             # Skip joins involving multiqc data collections
                             # MultiQC data should only be accessible via MultiQC component
-                            dc1_type = dc_id_to_type.get(dc1_id, "")
-                            dc2_type = dc_id_to_type.get(dc2_id, "")
-                            if dc1_type == "multiqc" or dc2_type == "multiqc":
-                                logger.debug(
-                                    f"Skipping join {join_key} involving multiqc data collection"
-                                )
-                                continue
-
-                            dc1_tag = dc_id_to_tag.get(dc1_id, dc1_id)
-                            dc2_tag = dc_id_to_tag.get(dc2_id, dc2_id)
+                            if left_dc_id and right_dc_id:
+                                left_dc_type = dc_id_to_type.get(left_dc_id, "")
+                                right_dc_type = dc_id_to_type.get(right_dc_id, "")
+                                if left_dc_type == "multiqc" or right_dc_type == "multiqc":
+                                    logger.debug(
+                                        f"Skipping join {join_key} involving multiqc data collection"
+                                    )
+                                    continue
 
                             # Create display name for joined DC
-                            joined_label = f"🔗 Joined: {dc1_tag} + {dc2_tag}"
+                            join_name = join_config.get("join_name", "")
+
+                            # Check if this is a cross-workflow join by looking for "." in dc_tags
+                            is_cross_workflow = "." in left_dc_tag or "." in right_dc_tag
+
+                            if join_name:
+                                if is_cross_workflow:
+                                    joined_label = f"🔗 {join_name} (cross-workflow: {left_dc_tag} + {right_dc_tag})"
+                                else:
+                                    joined_label = (
+                                        f"🔗 {join_name} ({left_dc_tag} + {right_dc_tag})"
+                                    )
+                            else:
+                                if is_cross_workflow:
+                                    joined_label = (
+                                        f"🔗 Cross-workflow: {left_dc_tag} + {right_dc_tag}"
+                                    )
+                                else:
+                                    joined_label = f"🔗 Joined: {left_dc_tag} + {right_dc_tag}"
 
                             valid_dcs.append(
                                 {
                                     "label": joined_label,
-                                    "value": join_key,  # Use join key as value (e.g., "dc_id1--dc_id2")
+                                    "value": join_key,  # Use result_dc_id as value
                                 }
                             )
 
