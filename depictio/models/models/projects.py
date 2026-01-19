@@ -4,9 +4,10 @@ from datetime import datetime
 from typing import Literal
 
 from beanie import Document
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from depictio.models.config import DEPICTIO_CONTEXT
+from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel
 from depictio.models.models.data_collections import DataCollection, DataCollectionResponse
 from depictio.models.models.joins import JoinDefinition
@@ -90,6 +91,37 @@ class Project(MongoModel):
         if not re.match(r"https?://", v):
             raise ValueError("Invalid URL")
         return v
+
+    @model_validator(mode="after")
+    def validate_data_collection_tag_uniqueness(self) -> "Project":
+        """
+        Warn if data collection tags are not unique across workflows.
+
+        This helps prevent ambiguity when using unscoped tags in joins.
+        """
+        all_tags: dict[str, list[str]] = {}  # tag -> list of workflows using it
+
+        for workflow in self.workflows:
+            for dc in workflow.data_collections:
+                tag = dc.data_collection_tag
+                if tag not in all_tags:
+                    all_tags[tag] = []
+                all_tags[tag].append(workflow.name)
+
+        # Check for duplicates
+        duplicates = {tag: workflows for tag, workflows in all_tags.items() if len(workflows) > 1}
+
+        if duplicates:
+            duplicate_info = ", ".join(
+                [f"'{tag}' in {workflows}" for tag, workflows in duplicates.items()]
+            )
+            logger.warning(
+                f"⚠️  Duplicate DC tags found across workflows: {duplicate_info}. "
+                "Consider using workflow-scoped references (e.g., 'workflow.tag') in joins "
+                "to avoid ambiguity."
+            )
+
+        return self
 
 
 class ProjectResponse(Project):

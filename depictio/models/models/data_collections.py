@@ -1,4 +1,5 @@
 import re
+from enum import Enum
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
@@ -9,6 +10,14 @@ from depictio.models.models.base import MongoModel
 from depictio.models.models.data_collections_types.jbrowse import DCJBrowse2Config
 from depictio.models.models.data_collections_types.multiqc import DCMultiQC
 from depictio.models.models.data_collections_types.table import DCTableConfig
+
+
+class DataCollectionSource(str, Enum):
+    """Origin/source type of a data collection."""
+
+    NATIVE = "native"  # Ingested from external files/sources (requires scan)
+    JOINED = "joined"  # Derived from joining other DCs (no scan needed)
+    AGGREGATED = "aggregated"  # Future: aggregations, transformations, etc.
 
 
 class WildcardRegexBase(BaseModel):
@@ -142,10 +151,46 @@ class TableJoinConfig(BaseModel):
 
 class DataCollectionConfig(MongoModel):
     type: str
+    source: DataCollectionSource = DataCollectionSource.NATIVE
     metatype: str | None = None
     scan: Scan | None = None
     dc_specific_properties: DCTableConfig | DCJBrowse2Config | DCMultiQC
     join: TableJoinConfig | None = None
+
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
+
+    @field_validator("source", mode="before")
+    @classmethod
+    def validate_source(cls, v):
+        """Handle string-to-enum conversion for source field."""
+        # Already an enum - return as-is
+        if isinstance(v, DataCollectionSource):
+            return v
+
+        # None or missing - use default
+        if v is None:
+            return DataCollectionSource.NATIVE
+
+        # String conversion
+        if isinstance(v, str):
+            # Handle enum name strings ("DataCollectionSource.NATIVE")
+            if v.startswith("DataCollectionSource."):
+                enum_member_name = v.split(".")[-1]
+                try:
+                    return DataCollectionSource[enum_member_name]
+                except KeyError:
+                    raise ValueError(f"Invalid DataCollectionSource member: {enum_member_name}")
+
+            # Handle enum value strings ("native", "joined", "aggregated")
+            try:
+                return DataCollectionSource(v)
+            except ValueError:
+                raise ValueError(
+                    f"Invalid source value: {v}. Must be one of: "
+                    f"{', '.join([e.value for e in DataCollectionSource])}"
+                )
+
+        raise ValueError(f"Invalid type for source field: {type(v)}")
 
     @field_validator("type", mode="before")
     def validate_type(cls, v):
@@ -187,9 +232,22 @@ class DataCollectionConfig(MongoModel):
                     # Initialize with empty DCMultiQC if not provided
                     values["dc_specific_properties"] = DCMultiQC()
 
-        # Validate that scan is provided for non-MultiQC types
-        if type_value != "multiqc" and not values.get("scan"):
-            raise ValueError("scan field is required for non-MultiQC data collection types")
+        # Validate that scan is provided for non-MultiQC types and native sources
+        source = values.get("source", "native")  # Default to string value
+
+        # With use_enum_values=True, source is stored as string, so compare with string
+        is_native_source = (
+            source == "native"
+            or source == DataCollectionSource.NATIVE
+            or (isinstance(source, str) and source.endswith(".NATIVE"))
+        )
+
+        if type_value != "multiqc" and is_native_source and not values.get("scan"):
+            raise ValueError(
+                "scan field is required for native data collections "
+                "(ingested from external sources). For joined/derived data collections, "
+                "set source='joined' to skip scan validation."
+            )
 
         return values
 

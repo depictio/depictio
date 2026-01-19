@@ -46,7 +46,7 @@ class ColumnAggregation(BaseModel):
     column: str = Field(..., description="Column name to apply aggregation to")
     function: AggregationFunction = Field(..., description="Aggregation function to apply")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
 
 
 class GranularityConfig(BaseModel):
@@ -89,7 +89,7 @@ class GranularityConfig(BaseModel):
         description="Custom aggregation functions for specific columns",
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
 
 
 class JoinDefinition(BaseModel):
@@ -99,7 +99,12 @@ class JoinDefinition(BaseModel):
     This is the primary configuration for specifying how tables should be joined.
     Defined at the project level in the YAML configuration.
 
-    Example YAML:
+    DC References Support:
+    - Simple tag: "physical_features" (searches within workflow_name)
+    - Scoped tag: "workflow_a.physical_features" (explicit workflow reference)
+    - Cross-workflow: Use scoped tags when joining DCs from different workflows
+
+    Example YAML (same-workflow join):
         joins:
           - name: "gene_expression_with_metadata"
             left_dc: "gene_tpm"
@@ -107,7 +112,18 @@ class JoinDefinition(BaseModel):
             on_columns:
               - "sample"
             how: "inner"
+            workflow_name: "genomics_workflow"
             description: "Join gene TPM with sample metadata"
+
+    Example YAML (cross-workflow join):
+        joins:
+          - name: "multi_workflow_analysis"
+            left_dc: "workflow_a.sample_metadata"
+            right_dc: "workflow_b.results"
+            on_columns:
+              - "sample_id"
+            how: "inner"
+            description: "Join sample data from workflow A with results from workflow B"
     """
 
     # Human-readable name for the join (used as identifier)
@@ -164,7 +180,37 @@ class JoinDefinition(BaseModel):
         description="Workflow name to scope this join to (optional)",
     )
 
-    model_config = ConfigDict(extra="forbid")
+    # ===== Join Execution Results (populated after join is executed) =====
+    result_dc_id: PyObjectId | None = Field(
+        default=None,
+        description="DataCollection ID for the joined table (used in S3 path)",
+    )
+    result_dc_tag: str | None = Field(
+        default=None,
+        description="DataCollection tag for the joined table (e.g., 'joined_penguins_complete')",
+    )
+    delta_location: str | None = Field(
+        default=None,
+        description="S3 path to the persisted Delta table",
+    )
+    executed_at: str | None = Field(
+        default=None,
+        description="Timestamp when the join was last executed",
+    )
+    row_count: int | None = Field(
+        default=None,
+        description="Number of rows in the joined table",
+    )
+    column_count: int | None = Field(
+        default=None,
+        description="Number of columns in the joined table",
+    )
+    size_bytes: int | None = Field(
+        default=None,
+        description="Size of the Delta table in bytes",
+    )
+
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
 
     @field_validator("name")
     @classmethod
