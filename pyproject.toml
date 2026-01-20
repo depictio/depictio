@@ -1,6 +1,6 @@
 [project]
 name = "depictio"
-version = "0.6.0-b2"
+version = "0.6.0-b3"
 description = "Depictio API & Frontend"
 readme = "README.md"
 requires-python = ">=3.11"
