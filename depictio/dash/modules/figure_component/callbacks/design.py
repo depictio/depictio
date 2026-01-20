@@ -366,8 +366,7 @@ def register_design_callbacks(app):
             Output({"type": "code-status", "index": MATCH}, "title"),
             Output({"type": "code-status", "index": MATCH}, "children"),
             Output({"type": "code-status", "index": MATCH}, "color"),
-            Output({"type": "code-preview-graph", "index": MATCH}, "figure"),
-            Output({"type": "code-preview-collapse", "index": MATCH}, "opened"),
+            Output({"type": "figure-design-preview", "index": MATCH}, "figure"),
         ],
         Input({"type": "code-execute-btn", "index": MATCH}, "n_clicks"),
         [
@@ -379,7 +378,7 @@ def register_design_callbacks(app):
         prevent_initial_call=True,
     )
     def execute_code_preview(n_clicks, code_content, workflow_id, data_collection_id, local_data):
-        """Execute code and show preview/validation results."""
+        """Execute code and show preview in the existing design preview graph."""
         from bson import ObjectId
 
         from depictio.api.v1.deltatables_utils import load_deltatable_lite
@@ -388,7 +387,7 @@ def register_design_callbacks(app):
         )
 
         if not n_clicks or not code_content:
-            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         logger.info("=== EXECUTE CODE PREVIEW ===")
         logger.info(f"Code length: {len(code_content)} characters")
@@ -400,11 +399,10 @@ def register_design_callbacks(app):
                 "Please ensure workflow and data collection are selected.",
                 "red",
                 {},
-                False,
             )
 
         if not local_data:
-            return "Error", "Authentication required.", "red", {}, False
+            return "Error", "Authentication required.", "red", {}
 
         try:
             # Load data
@@ -419,7 +417,6 @@ def register_design_callbacks(app):
                     "No data available in the selected data collection.",
                     "red",
                     {},
-                    False,
                 )
 
             # Execute code
@@ -432,7 +429,9 @@ def register_design_callbacks(app):
                     "Success",
                     dmc.Stack(
                         [
-                            dmc.Text("✅ Code executed successfully!", size="sm"),
+                            dmc.Text(
+                                "✅ Code executed successfully! Preview shown on right →", size="sm"
+                            ),
                             dmc.Text(
                                 f"Figure type: {fig.data[0].type if fig.data else 'unknown'}",
                                 size="xs",
@@ -447,8 +446,7 @@ def register_design_callbacks(app):
                         gap="xs",
                     ),
                     "green",
-                    fig,  # Show the figure in preview
-                    True,  # Open the collapse to show preview
+                    fig,  # Show the figure in the existing design preview
                 )
             else:
                 logger.error(f"Code execution failed: {message}")
@@ -463,7 +461,6 @@ def register_design_callbacks(app):
                     ),
                     "red",
                     {},  # Empty figure
-                    False,  # Close preview on error
                 )
 
         except Exception as e:
@@ -479,7 +476,6 @@ def register_design_callbacks(app):
                 ),
                 "red",
                 {},  # Empty figure
-                False,  # Close preview on error
             )
 
     logger.info(

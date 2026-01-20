@@ -7,7 +7,7 @@ from typing import Any, Dict
 import dash_ace
 import dash_mantine_components as dmc
 import polars as pl
-from dash import dcc, html
+from dash import html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
@@ -201,41 +201,13 @@ def create_code_mode_interface(component_index: str) -> html.Div:
                         id={"type": "code-status", "index": component_index},
                         title="Ready",
                         color="blue",
-                        children="Enter code and click 'Execute Code' to generate a figure.",
+                        children="Enter code and click 'Execute Code' to generate a preview on the right.",
                         withCloseButton=False,
                         icon=DashIconify(
                             icon="mdi:check-circle",
                             width=16,
                             style={"color": "var(--mantine-color-blue-6, #1e88e5)"},
                         ),
-                    ),
-                    # Preview graph (shows result of Execute Code)
-                    dmc.Collapse(
-                        id={"type": "code-preview-collapse", "index": component_index},
-                        opened=False,
-                        children=[
-                            dmc.Paper(
-                                [
-                                    dcc.Graph(
-                                        id={"type": "code-preview-graph", "index": component_index},
-                                        config={
-                                            "displayModeBar": True,
-                                            "displaylogo": False,
-                                            "modeBarButtonsToRemove": [
-                                                "pan2d",
-                                                "lasso2d",
-                                                "select2d",
-                                            ],
-                                        },
-                                        style={"height": "400px"},
-                                    )
-                                ],
-                                withBorder=True,
-                                radius="md",
-                                p="sm",
-                                style={"backgroundColor": "var(--app-surface-color, #ffffff)"},
-                            )
-                        ],
                     ),
                     # Data info (show basic info about the loaded dataframe)
                     dmc.Alert(
