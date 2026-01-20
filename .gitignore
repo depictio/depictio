@@ -229,6 +229,13 @@ target/
 ldap_config/
 ldap_db/
 
+## Dashboard YAML directories
+### Local dashboards (instance-specific, not version controlled)
+dashboards/local/
+
+### Templates are version controlled, so keep them
+# dashboards/templates/
+
 # Development Tools
 .aider*
 
