@@ -567,7 +567,7 @@ def register_interactive_design_callbacks(app):
 
     # Update stored metadata when workflow/DC are selected (for save functionality)
     @app.callback(
-        Output({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        Output({"type": "stored-metadata-component", "index": MATCH}, "data", allow_duplicate=True),
         [
             Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
             Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
