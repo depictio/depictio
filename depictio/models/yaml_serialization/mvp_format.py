@@ -185,7 +185,12 @@ def _get_mvp_workflow_tag(comp: dict) -> str | None:
     except Exception as e:
         logger.debug(f"Failed to lookup workflow for {wf_id}: {e}")
 
-    return f"wf_{str(wf_id)[:8]}"
+    # CRITICAL: Don't generate invalid tag references - log error and use placeholder
+    logger.error(
+        f"Missing workflow tag for wf_id={wf_id}. "
+        f"YAML export will be INVALID. Please add 'wf_tag' field or ensure workflow exists in project."
+    )
+    return f"MISSING_TAG_wf_{str(wf_id)[:8]}"
 
 
 def _get_mvp_data_collection_tag(comp: dict) -> str | None:
@@ -200,6 +205,20 @@ def _get_mvp_data_collection_tag(comp: dict) -> str | None:
             mongo_result = get_db_connection_for_enrichment()
             if mongo_result:
                 db, dc_collection_name, wf_collection_name = mongo_result
+                from depictio.api.v1.configs.config import settings
+
+                # Try nested search in projects first (data collections nested in workflows)
+                projects_collection = db[settings.mongodb.collections.projects_collection]
+                for project in projects_collection.find():
+                    if "workflows" in project:
+                        for wf in project["workflows"]:
+                            if "data_collections" in wf:
+                                for dc in wf["data_collections"]:
+                                    if str(dc.get("_id")) == str(dc_id):
+                                        if dc.get("data_collection_tag"):
+                                            return dc["data_collection_tag"]
+
+                # Fallback: try standalone data_collections collection (legacy)
                 dc_collection = db[dc_collection_name]
                 dc_doc = dc_collection.find_one({"_id": ObjectId(str(dc_id))})
                 if dc_doc and dc_doc.get("data_collection_tag"):
@@ -207,7 +226,12 @@ def _get_mvp_data_collection_tag(comp: dict) -> str | None:
         except Exception as e:
             logger.debug(f"Failed to lookup data collection tag for {dc_id}: {e}")
 
-        return f"dc_{str(dc_id)[:8]}"
+        # CRITICAL: Don't generate invalid tag references - log error and use placeholder
+        logger.error(
+            f"Missing data_collection_tag for dc_id={dc_id}. "
+            f"YAML export will be INVALID. Please add 'data_collection_tag' field to data collection in MongoDB."
+        )
+        return f"MISSING_TAG_dc_{str(dc_id)[:8]}"
 
     return None
 

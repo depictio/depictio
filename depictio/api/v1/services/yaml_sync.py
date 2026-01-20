@@ -12,31 +12,25 @@ from depictio.api.v1.configs.logging_init import logger
 WORKER_ID = os.getpid()
 
 
+def _log(level: str, message: str) -> None:
+    """Log a message with worker ID prefix."""
+    getattr(logger, level)(f"Worker {WORKER_ID}: {message}")
+
+
 def initialize_yaml_directory() -> None:
     """Create the YAML dashboards directories if they don't exist."""
     from depictio.api.v1.configs.config import settings
 
-    # Create local dashboards directory
-    local_dir = Path(settings.dashboard_yaml.yaml_dir_path)
-    # Only create if parent exists (avoid creating mount point)
-    if local_dir.parent.exists():
-        local_dir.mkdir(exist_ok=True)
-        logger.info(f"Worker {WORKER_ID}: Local dashboards directory initialized at {local_dir}")
-    elif local_dir.exists():
-        logger.info(f"Worker {WORKER_ID}: Local dashboards directory exists at {local_dir}")
-    else:
-        logger.warning(f"Worker {WORKER_ID}: Parent directory {local_dir.parent} does not exist, skipping local dir creation")
-
-    # Create templates directory
-    templates_dir = Path(settings.dashboard_yaml.templates_path)
-    # Only create if parent exists (avoid creating mount point)
-    if templates_dir.parent.exists():
-        templates_dir.mkdir(exist_ok=True)
-        logger.info(f"Worker {WORKER_ID}: Templates directory initialized at {templates_dir}")
-    elif templates_dir.exists():
-        logger.info(f"Worker {WORKER_ID}: Templates directory exists at {templates_dir}")
-    else:
-        logger.warning(f"Worker {WORKER_ID}: Parent directory {templates_dir.parent} does not exist, skipping templates dir creation")
+    for name, path in [
+        ("Local dashboards", settings.dashboard_yaml.yaml_dir_path),
+        ("Templates", settings.dashboard_yaml.templates_path),
+    ]:
+        directory = Path(path)
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+            _log("info", f"{name} directory initialized at {directory}")
+        except OSError as e:
+            _log("error", f"Failed to create {name.lower()} directory {directory}: {e}")
 
 
 def run_initial_yaml_sync() -> None:
@@ -49,7 +43,7 @@ def run_initial_yaml_sync() -> None:
     from depictio.models.models.dashboards import DashboardData
     from depictio.models.yaml_serialization import export_dashboard_to_yaml_dir
 
-    logger.info(f"Worker {WORKER_ID}: Running initial MongoDB to YAML sync...")
+    _log("info", "Running initial MongoDB to YAML sync...")
 
     try:
         dashboards = list(dashboards_collection.find({}))
@@ -58,7 +52,6 @@ def run_initial_yaml_sync() -> None:
 
         for dash_data in dashboards:
             try:
-                # Get project name for directory organization
                 proj_id = dash_data.get("project_id")
                 project = projects_collection.find_one({"_id": proj_id})
                 project_name = project.get("name", "unknown") if project else "unknown"
@@ -72,15 +65,16 @@ def run_initial_yaml_sync() -> None:
 
             except Exception as e:
                 dashboard_id = dash_data.get("dashboard_id")
-                logger.error(f"Worker {WORKER_ID}: Failed to export dashboard {dashboard_id}: {e}")
+                _log("error", f"Failed to export dashboard {dashboard_id}: {e}")
                 failed_count += 1
 
-        logger.info(
-            f"Worker {WORKER_ID}: Initial sync complete - exported {exported_count} dashboards, {failed_count} failed"
+        _log(
+            "info",
+            f"Initial sync complete - exported {exported_count} dashboards, {failed_count} failed",
         )
 
     except Exception as e:
-        logger.error(f"Worker {WORKER_ID}: Initial YAML sync failed: {e}")
+        _log("error", f"Initial YAML sync failed: {e}")
 
 
 def start_yaml_sync_services() -> None:
@@ -91,12 +85,15 @@ def start_yaml_sync_services() -> None:
     """
     from depictio.api.v1.services.yaml_watcher import start_yaml_watcher
 
+    _log("info", "Starting YAML sync services...")
+
     run_initial_yaml_sync()
+    _log("info", "Initial YAML sync complete")
 
     if start_yaml_watcher():
-        logger.info(f"Worker {WORKER_ID}: YAML watcher started successfully")
+        _log("info", "YAML watcher started successfully")
     else:
-        logger.warning(f"Worker {WORKER_ID}: YAML watcher not started")
+        _log("warning", "YAML watcher not started")
 
 
 def stop_yaml_sync_services() -> None:
@@ -108,6 +105,6 @@ def stop_yaml_sync_services() -> None:
     from depictio.api.v1.services.yaml_watcher import stop_yaml_watcher
 
     if stop_yaml_watcher():
-        logger.info(f"Worker {WORKER_ID}: YAML watcher stopped successfully")
+        _log("info", "YAML watcher stopped successfully")
     else:
-        logger.info(f"Worker {WORKER_ID}: YAML watcher was not running")
+        _log("info", "YAML watcher was not running")

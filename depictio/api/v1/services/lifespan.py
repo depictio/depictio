@@ -114,6 +114,23 @@ def start_background_services(should_initialize: bool):
     return background_task
 
 
+def _cleanup_yaml_watcher_lock() -> bool:
+    """
+    Clean up the YAML watcher lock from MongoDB.
+
+    Returns:
+        True if a lock was removed, False otherwise
+    """
+    from depictio.api.v1.db import initialization_collection
+
+    try:
+        result = initialization_collection.delete_one({"_id": "yaml_watcher_lock"})
+        return result.deleted_count > 0
+    except Exception as e:
+        logger.warning(f"Worker {WORKER_ID}: Failed to clean up YAML watcher lock: {e}")
+        return False
+
+
 def start_yaml_services(should_initialize: bool) -> None:
     """
     Initialize and start YAML dashboard services if enabled.
@@ -127,21 +144,27 @@ def start_yaml_services(should_initialize: bool) -> None:
     # All workers can initialize the directory
     initialize_yaml_directory()
 
-    #Only ONE worker runs sync and starts the watcher
-    # Use atomic check to ensure exactly one worker starts it
     from depictio.api.v1.db import initialization_collection
 
+    # Clean up stale locks from previous runs (important for reload mode)
+    if _cleanup_yaml_watcher_lock():
+        logger.info(f"Worker {WORKER_ID}: Cleaned up stale YAML watcher lock from previous run")
+
+    # Only ONE worker runs sync and starts the watcher via atomic lock acquisition
     try:
-        # Try to acquire watcher start lock atomically
-        initialization_collection.insert_one({
-            "_id": "yaml_watcher_lock",
-            "worker_id": WORKER_ID,
-            "started_at": datetime.now(timezone.utc),
-        })
+        initialization_collection.insert_one(
+            {
+                "_id": "yaml_watcher_lock",
+                "worker_id": WORKER_ID,
+                "started_at": datetime.now(timezone.utc),
+            }
+        )
         logger.info(f"Worker {WORKER_ID}: Acquired YAML watcher start lock")
         start_yaml_sync_services()
     except pymongo.errors.DuplicateKeyError:  # type: ignore[unresolved-attribute]
         logger.info(f"Worker {WORKER_ID}: Another worker is starting YAML watcher")
+    except Exception as e:
+        logger.error(f"Worker {WORKER_ID}: Failed to start YAML sync services: {e}", exc_info=True)
 
 
 def stop_background_services(background_task, should_initialize: bool) -> None:
@@ -158,6 +181,8 @@ def stop_background_services(background_task, should_initialize: bool) -> None:
 
     if settings.dashboard_yaml.enabled and should_initialize:
         stop_yaml_sync_services()
+        if _cleanup_yaml_watcher_lock():
+            logger.info(f"Worker {WORKER_ID}: Cleaned up YAML watcher lock on shutdown")
 
 
 @asynccontextmanager
