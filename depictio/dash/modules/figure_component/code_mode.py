@@ -419,26 +419,80 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
             "error_message": "Empty code",
         }
 
-    lines = [
-        line.strip()
-        for line in code.split("\n")
-        if line.strip() and not line.strip().startswith("#")
-    ]
+    # Split into lines, preserving structure for multi-line statements
+    all_lines = code.split("\n")
+
+    # Remove comments and empty lines while keeping track of original structure
+    lines = []
+    for line in all_lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            lines.append(stripped)
 
     preprocessing_lines = []
     figure_line = None
     uses_modified_df = False
 
+    # Track multi-line statements
+    in_figure_statement = False
+    in_preprocessing_statement = False
+    figure_parts = []
+    preprocessing_parts = []
+    figure_open_parens = 0
+    preprocessing_open_parens = 0
+
     for line in lines:
-        # Collect all lines that define df_modified or intermediate variables
+        # Check if this line starts a figure assignment
         if line.startswith("fig =") or line.startswith("fig="):
-            figure_line = line
-            uses_modified_df = "df_modified" in line
-            logger.debug(f"Found figure line: {line[:80]}... uses_modified_df={uses_modified_df}")
+            in_figure_statement = True
+            figure_parts = [line]
+            figure_open_parens = line.count("(") - line.count(")")
+
+            # Check if it's a complete single-line statement
+            if figure_open_parens == 0:
+                figure_line = line
+                uses_modified_df = "df_modified" in line
+                in_figure_statement = False
+                logger.debug(f"Found single-line figure: {line[:80]}...")
+        elif in_figure_statement:
+            # Continue collecting figure statement lines
+            figure_parts.append(line)
+            figure_open_parens += line.count("(") - line.count(")")
+
+            # Check if statement is complete
+            if figure_open_parens == 0:
+                # Join with newlines to preserve Python syntax for multi-line statements
+                figure_line = "\n".join(figure_parts)
+                uses_modified_df = "df_modified" in figure_line
+                in_figure_statement = False
+                logger.debug(
+                    f"Found multi-line figure: {figure_line[:80]}... ({len(figure_parts)} lines)"
+                )
         elif "df_modified" in line or line.startswith("df_"):
-            # Include lines that define df_modified or intermediate df_ variables
-            preprocessing_lines.append(line)
-            logger.debug(f"Found preprocessing line: {line[:80]}...")
+            # Start of preprocessing statement
+            if not in_preprocessing_statement:
+                in_preprocessing_statement = True
+                preprocessing_parts = [line]
+                preprocessing_open_parens = line.count("(") - line.count(")")
+
+                # Check if it's complete single-line
+                if preprocessing_open_parens == 0:
+                    preprocessing_lines.append(line)
+                    in_preprocessing_statement = False
+                    logger.debug(f"Found single-line preprocessing: {line[:80]}...")
+            else:
+                # Shouldn't happen, but handle gracefully
+                preprocessing_lines.append(line)
+        elif in_preprocessing_statement:
+            # Continue collecting preprocessing statement
+            preprocessing_parts.append(line)
+            preprocessing_open_parens += line.count("(") - line.count(")")
+
+            # Check if statement is complete
+            if preprocessing_open_parens == 0:
+                preprocessing_lines.append("\n".join(preprocessing_parts))
+                in_preprocessing_statement = False
+                logger.debug(f"Found multi-line preprocessing: {len(preprocessing_parts)} lines")
 
     # Validation
     if not figure_line:
