@@ -215,23 +215,23 @@ def register_interactive_design_callbacks(app):
         logger.info("=== UPDATE AGGREGATION OPTIONS CALLBACK END ===")
         return options
 
-    # Show/hide slider controls based on method selection
-    @app.callback(
-        Output({"type": "input-dropdown-scale", "index": MATCH}, "style"),
-        Output({"type": "input-number-marks", "index": MATCH}, "style"),
-        Input({"type": "input-dropdown-method", "index": MATCH}, "value"),
-        prevent_initial_call=True,
-    )
-    def toggle_slider_controls_visibility(method_value):
-        """
-        Show the scale selector and marks number input only for Slider and RangeSlider components.
-
-        Restored from legacy code (commit 852b230e~1) - was commented out during multi-app refactor.
-        """
-        if method_value in ["Slider", "RangeSlider"]:
-            return {"display": "block"}, {"display": "block"}
-        else:
-            return {"display": "none"}, {"display": "none"}
+    # COMMENTED OUT: Show/hide slider controls (scale type & marks inputs disabled for now)
+    # @app.callback(
+    #     Output({"type": "input-dropdown-scale", "index": MATCH}, "style"),
+    #     Output({"type": "input-number-marks", "index": MATCH}, "style"),
+    #     Input({"type": "input-dropdown-method", "index": MATCH}, "value"),
+    #     prevent_initial_call=True,
+    # )
+    # def toggle_slider_controls_visibility(method_value):
+    #     """
+    #     Show the scale selector and marks number input only for Slider and RangeSlider components.
+    #
+    #     Restored from legacy code (commit 852b230e~1) - was commented out during multi-app refactor.
+    #     """
+    #     if method_value in ["Slider", "RangeSlider"]:
+    #         return {"display": "block"}, {"display": "block"}
+    #     else:
+    #         return {"display": "none"}, {"display": "none"}
 
     # Update preview component based on form inputs
     @app.callback(
