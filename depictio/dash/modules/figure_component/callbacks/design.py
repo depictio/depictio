@@ -347,18 +347,13 @@ def register_design_callbacks(app):
     # Update Ace editor theme based on app theme
     @app.callback(
         Output({"type": "code-editor", "index": MATCH}, "theme"),
-        Input("local-store", "data"),
+        Input("theme-store", "data"),
         prevent_initial_call=False,
     )
-    def update_code_editor_theme(local_data):
+    def update_code_editor_theme(theme_data):
         """Update Ace editor theme to match app theme (light/dark)."""
-        if not local_data:
-            return "github"  # Default light theme
-
-        # Extract theme from local_data
-        theme = "light"
-        if isinstance(local_data, dict):
-            theme = local_data.get("colorScheme", "light")
+        # theme-store contains just a string: "light" or "dark"
+        theme = theme_data if theme_data else "light"
 
         # Map app theme to Ace editor themes
         ace_theme = "monokai" if theme == "dark" else "github"

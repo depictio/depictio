@@ -154,7 +154,7 @@ class SimpleCodeExecutor:
 
             # Handle preprocessing if needed
             if analysis["has_preprocessing"]:
-                logger.info("🔄 Executing preprocessing step with df_modified")
+                logger.info("🔄 Executing preprocessing step")
 
                 # Compile and execute preprocessing code
                 preprocessing_code = analysis["preprocessing_code"]
@@ -172,15 +172,16 @@ class SimpleCodeExecutor:
                 # Execute preprocessing
                 exec(preprocessing_bytecode, execution_globals, execution_locals)
 
-                # Verify df_modified was created
-                if "df_modified" not in execution_locals:
+                # Verify some preprocessing variable was created
+                preprocessing_vars = [k for k in execution_locals.keys() if k.startswith("df")]
+                if not preprocessing_vars:
                     return (
                         False,
                         None,
-                        "❌ Preprocessing failed: 'df_modified' variable not created",
+                        "❌ Preprocessing failed: No dataframe variables created",
                     )
 
-                logger.info("✅ Preprocessing successful: df_modified created")
+                logger.info(f"✅ Preprocessing successful: Created {', '.join(preprocessing_vars)}")
 
             # Execute figure generation code
             logger.info("🎨 Executing figure generation code")

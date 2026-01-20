@@ -446,16 +446,42 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
             "error_message": 'Code must contain a line starting with "fig = px.function(...)"',
         }
 
-    # Check for invalid patterns
+    # Check for invalid patterns - relaxed validation
+    # Allow using df directly OR any preprocessing variable (df_modified, df_temp, etc.)
+    # Only fail if preprocessing creates variables but figure doesn't use any of them
     if preprocessing_lines and not uses_modified_df:
-        return {
-            "has_preprocessing": True,
-            "preprocessing_code": "\n".join(preprocessing_lines),
-            "figure_code": figure_line,
-            "uses_modified_df": uses_modified_df,
-            "is_valid": False,
-            "error_message": "If df_modified is created, it must be used in the fig = px.function() call",
-        }
+        # Check if figure line uses ANY df variable (df, df_temp, df_filtered, etc.)
+        # This is more permissive - allow intermediate variable names
+        uses_any_df_var = "df" in figure_line or any(
+            f"df_{var}" in figure_line
+            for var in [
+                "modified",
+                "filtered",
+                "clean",
+                "temp",
+                "processed",
+                "grouped",
+                "sorted",
+            ]
+        )
+
+        # If preprocessing exists but figure doesn't use any dataframe, that's an error
+        if not uses_any_df_var:
+            return {
+                "has_preprocessing": True,
+                "preprocessing_code": "\n".join(preprocessing_lines),
+                "figure_code": figure_line,
+                "uses_modified_df": uses_modified_df,
+                "is_valid": False,
+                "error_message": "Preprocessing creates variables, but fig line doesn't use any dataframe (df, df_modified, etc.)",
+            }
+
+        # Otherwise allow it - user can use df_modified or other intermediate vars
+        # Just log a warning if not using df_modified (best practice)
+        if "df_modified" not in "\n".join(preprocessing_lines):
+            logger.warning(
+                "⚠️ Preprocessing doesn't create 'df_modified' variable. Consider using df_modified as final variable name for clarity."
+            )
 
     if uses_modified_df and not preprocessing_lines:
         return {
