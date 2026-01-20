@@ -2199,7 +2199,7 @@ def design_figure(
                                     type="default",  # Options: "default", "circle", "dot", "cube"
                                     color="var(--mantine-primary-color-filled)",
                                     children=[
-                                        # Preview graph - uses different ID than view mode to avoid callback conflicts
+                                        # UI Mode Preview graph - populated by render callback
                                         dcc.Graph(
                                             id={
                                                 "type": "figure-design-preview",
@@ -2208,7 +2208,21 @@ def design_figure(
                                             figure={},  # Empty - populated by render callback
                                             config={"displayModeBar": "hover", "responsive": True},
                                             style={"height": "100%", "width": "100%"},
-                                        )
+                                        ),
+                                        # Code Mode Preview graph - populated by execute callback
+                                        dcc.Graph(
+                                            id={
+                                                "type": "code-mode-preview-graph",
+                                                "index": actual_index,
+                                            },
+                                            figure={},  # Empty - populated by execute callback
+                                            config={"displayModeBar": "hover", "responsive": True},
+                                            style={
+                                                "height": "100%",
+                                                "width": "100%",
+                                                "display": "none",
+                                            },
+                                        ),
                                     ],
                                 )
                             ],

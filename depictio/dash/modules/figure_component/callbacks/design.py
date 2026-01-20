@@ -31,6 +31,12 @@ def register_design_callbacks(app):
             Output({"type": "code-mode-content", "index": MATCH}, "style"),
             Output({"type": "code-mode-interface", "index": MATCH}, "children"),
             Output({"type": "figure-mode-store", "index": MATCH}, "data"),
+            Output(
+                {"type": "figure-design-preview", "index": MATCH}, "style", allow_duplicate=True
+            ),
+            Output(
+                {"type": "code-mode-preview-graph", "index": MATCH}, "style", allow_duplicate=True
+            ),
         ],
         [
             Input({"type": "figure-mode-toggle", "index": MATCH}, "value"),
@@ -48,7 +54,14 @@ def register_design_callbacks(app):
         # Guard: Return no_update if mode is None (component not ready)
         if mode is None:
             logger.debug("Mode is None - component not ready yet")
-            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            return (
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+            )
 
         logger.info(f"🔄 MODE TOGGLE: {current_mode} -> {mode}")
 
@@ -78,6 +91,9 @@ def register_design_callbacks(app):
             # Switch to code mode interface
             code_content_style = {"display": "block"}
             code_interface_children = create_code_mode_interface(component_index)
+            # Show code mode preview (will be empty until Execute is clicked)
+            ui_preview_style = {"display": "none"}
+            code_preview_style = {"height": "100%", "width": "100%"}
             logger.info(f"Switched to CODE MODE for {component_index}")
         else:
             # Switch to UI mode interface (default)
@@ -92,6 +108,9 @@ def register_design_callbacks(app):
                     style={"display": "none"},  # Hidden in UI mode
                 )
             ]
+            # Show UI mode preview, hide code mode preview
+            ui_preview_style = {"height": "100%", "width": "100%"}
+            code_preview_style = {"display": "none"}
             logger.info(f"Switched to UI MODE for {component_index}")
 
         return (
@@ -99,6 +118,8 @@ def register_design_callbacks(app):
             code_content_style,
             code_interface_children,
             mode,
+            ui_preview_style,
+            code_preview_style,
         )
 
     # Store generated code when switching to code mode
@@ -366,7 +387,9 @@ def register_design_callbacks(app):
             Output({"type": "code-status", "index": MATCH}, "title"),
             Output({"type": "code-status", "index": MATCH}, "children"),
             Output({"type": "code-status", "index": MATCH}, "color"),
-            Output({"type": "figure-design-preview", "index": MATCH}, "figure"),
+            Output({"type": "code-mode-preview-graph", "index": MATCH}, "figure"),
+            Output({"type": "code-mode-preview-graph", "index": MATCH}, "style"),
+            Output({"type": "figure-design-preview", "index": MATCH}, "style"),
         ],
         Input({"type": "code-execute-btn", "index": MATCH}, "n_clicks"),
         [
@@ -378,7 +401,7 @@ def register_design_callbacks(app):
         prevent_initial_call=True,
     )
     def execute_code_preview(n_clicks, code_content, workflow_id, data_collection_id, local_data):
-        """Execute code and show preview in the existing design preview graph."""
+        """Execute code and show preview in left panel (code mode graph), hide UI mode graph."""
         from bson import ObjectId
 
         from depictio.api.v1.deltatables_utils import load_deltatable_lite
@@ -387,7 +410,14 @@ def register_design_callbacks(app):
         )
 
         if not n_clicks or not code_content:
-            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            return (
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+            )
 
         logger.info("=== EXECUTE CODE PREVIEW ===")
         logger.info(f"Code length: {len(code_content)} characters")
@@ -399,10 +429,19 @@ def register_design_callbacks(app):
                 "Please ensure workflow and data collection are selected.",
                 "red",
                 {},
+                {"display": "none"},  # Hide code mode graph
+                {"height": "100%", "width": "100%"},  # Show UI mode graph
             )
 
         if not local_data:
-            return "Error", "Authentication required.", "red", {}
+            return (
+                "Error",
+                "Authentication required.",
+                "red",
+                {},
+                {"display": "none"},  # Hide code mode graph
+                {"height": "100%", "width": "100%"},  # Show UI mode graph
+            )
 
         try:
             # Load data
@@ -417,6 +456,8 @@ def register_design_callbacks(app):
                     "No data available in the selected data collection.",
                     "red",
                     {},
+                    {"display": "none"},  # Hide code mode graph
+                    {"height": "100%", "width": "100%"},  # Show UI mode graph
                 )
 
             # Execute code
@@ -430,7 +471,8 @@ def register_design_callbacks(app):
                     dmc.Stack(
                         [
                             dmc.Text(
-                                "✅ Code executed successfully! Preview shown on right →", size="sm"
+                                "✅ Code executed successfully! Preview shown on the left →",
+                                size="sm",
                             ),
                             dmc.Text(
                                 f"Figure type: {fig.data[0].type if fig.data else 'unknown'}",
@@ -446,7 +488,9 @@ def register_design_callbacks(app):
                         gap="xs",
                     ),
                     "green",
-                    fig,  # Show the figure in the existing design preview
+                    fig,  # Show the figure
+                    {"height": "100%", "width": "100%"},  # Show code mode graph
+                    {"display": "none"},  # Hide UI mode graph
                 )
             else:
                 logger.error(f"Code execution failed: {message}")
@@ -461,6 +505,8 @@ def register_design_callbacks(app):
                     ),
                     "red",
                     {},  # Empty figure
+                    {"display": "none"},  # Hide code mode graph
+                    {"height": "100%", "width": "100%"},  # Show UI mode graph
                 )
 
         except Exception as e:
@@ -476,6 +522,8 @@ def register_design_callbacks(app):
                 ),
                 "red",
                 {},  # Empty figure
+                {"display": "none"},  # Hide code mode graph
+                {"height": "100%", "width": "100%"},  # Show UI mode graph
             )
 
     logger.info(

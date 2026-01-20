@@ -201,7 +201,7 @@ def create_code_mode_interface(component_index: str) -> html.Div:
                         id={"type": "code-status", "index": component_index},
                         title="Ready",
                         color="blue",
-                        children="Enter code and click 'Execute Code' to generate a preview on the right.",
+                        children="Enter code and click 'Execute Code' to see preview on the left.",
                         withCloseButton=False,
                         icon=DashIconify(
                             icon="mdi:check-circle",
