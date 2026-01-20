@@ -95,6 +95,14 @@ def render_dashboard(
         # Get component type
         component_type = child_metadata.get("component_type")
 
+        # Log metadata for interactive components
+        if component_type == "interactive":
+            logger.debug(
+                f"Interactive component: index={child_metadata.get('index')}, "
+                f"column={child_metadata.get('column_name')}, "
+                f"type={child_metadata.get('interactive_component_type')}"
+            )
+
         # Handle legacy type conversion
         if component_type not in build_functions and component_type in DISPLAY_NAME_TO_TYPE_MAPPING:
             component_type = DISPLAY_NAME_TO_TYPE_MAPPING[component_type]

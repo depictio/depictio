@@ -442,6 +442,56 @@ def _fetch_dc_tag_with_lru_cache(data_collection_id_str: str, TOKEN: str, token_
         return None
 
 
+def get_result_dc_for_workflow(workflow_id: str, TOKEN: str | None) -> str | None:
+    """
+    Get pre-computed join result DC for a workflow.
+
+    This helper function fetches the result_dc_id for a workflow that has pre-computed joins.
+    The join execution happens during CLI batch processing, and this function retrieves
+    the stored result DC ID.
+
+    Args:
+        workflow_id: Workflow ID (string or ObjectId)
+        TOKEN: Authorization token (optional)
+
+    Returns:
+        result_dc_id (str) if join exists, None otherwise
+
+    Example:
+        >>> result_dc_id = get_result_dc_for_workflow(workflow_id, TOKEN)
+        >>> if result_dc_id:
+        >>>     df = load_deltatable_lite(workflow_id, ObjectId(result_dc_id), metadata, TOKEN)
+    """
+    if not TOKEN:
+        logger.warning("No TOKEN provided - cannot fetch pre-computed join")
+        return None
+
+    try:
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/datacollections/get_dc_joined/{workflow_id}",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+            timeout=5.0,
+        )
+        if response.status_code == 200:
+            workflow_joins = response.json().get(str(workflow_id), {})
+            if workflow_joins:
+                # Return first result DC (extend for multiple joins if needed)
+                result_dc_id = next(iter(workflow_joins.keys()))
+                logger.info(f"✅ Found pre-computed join result DC: {result_dc_id}")
+                return result_dc_id
+            else:
+                logger.debug(f"No pre-computed joins found for workflow {workflow_id}")
+                return None
+        else:
+            logger.warning(
+                f"Failed to fetch join DC for workflow {workflow_id}: {response.status_code}"
+            )
+            return None
+    except Exception as e:
+        logger.warning(f"Failed to fetch join DC for workflow {workflow_id}: {e}")
+        return None
+
+
 def return_mongoid(
     workflow_tag: str | None = None,
     workflow_id: ObjectId | None = None,

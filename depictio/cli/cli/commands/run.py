@@ -51,6 +51,7 @@ def register_run_command(app: typer.Typer):
         skip_process: bool = typer.Option(
             False, "--skip-process", help="Skip data processing step"
         ),
+        skip_join: bool = typer.Option(False, "--skip-join", help="Skip join execution step"),
         # Sync options
         update_config: bool = typer.Option(
             False, "--update-config", help="Update the project configuration on the server"
@@ -80,7 +81,7 @@ def register_run_command(app: typer.Typer):
         ),
     ):
         """
-        Run the complete Depictio workflow: validate, sync, scan, and process.
+        Run the complete Depictio workflow: validate, sync, scan, process, and join.
 
         This command executes the full depictio-cli pipeline:
 
@@ -95,6 +96,8 @@ def register_run_command(app: typer.Typer):
         5. Scan data files
 
         6. Process data collections
+
+        7. Execute table joins (if defined in project config)
         """
         rich_print_command_usage("run")
 
@@ -107,11 +110,11 @@ def register_run_command(app: typer.Typer):
             rescan_folders = True
 
         success_count = 0
-        total_steps = 6
+        total_steps = 7
 
         # Step 1: Check server accessibility
         if not skip_server_check:
-            rich_print_section_separator("Step 1/6: Checking server accessibility")
+            rich_print_section_separator("Step 1/7: Checking server accessibility")
             try:
                 if not dry_run:
                     api_login(CLI_config_path)
@@ -127,7 +130,7 @@ def register_run_command(app: typer.Typer):
 
         # Step 2: Check S3 storage
         if not skip_s3_check:
-            rich_print_section_separator("Step 2/6: Checking S3 storage configuration")
+            rich_print_section_separator("Step 2/7: Checking S3 storage configuration")
             try:
                 if not dry_run:
                     CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
@@ -143,7 +146,7 @@ def register_run_command(app: typer.Typer):
             success_count += 1
 
         # Step 3: Validate project configuration
-        rich_print_section_separator("Step 3/6: Validating project configuration")
+        rich_print_section_separator("Step 3/7: Validating project configuration")
         try:
             if not dry_run:
                 CLI_config, validation_response = validate_project_config_and_check_S3_storage(
@@ -161,7 +164,7 @@ def register_run_command(app: typer.Typer):
 
         # Step 4: Sync project configuration to server
         if not skip_sync:
-            rich_print_section_separator("Step 4/6: Syncing project configuration to server")
+            rich_print_section_separator("Step 4/7: Syncing project configuration to server")
             try:
                 if not dry_run:
                     project_config_dict = convert_model_to_dict(project_config)
@@ -182,7 +185,7 @@ def register_run_command(app: typer.Typer):
 
         # Step 5: Scan data files
         if not skip_scan:
-            rich_print_section_separator("Step 5/6: Scanning data files")
+            rich_print_section_separator("Step 5/7: Scanning data files")
             try:
                 if not dry_run:
                     # Get remote project configuration to compare hashes
@@ -232,7 +235,7 @@ def register_run_command(app: typer.Typer):
 
         # Step 6: Process data collections
         if not skip_process:
-            rich_print_section_separator("Step 6/6: Processing data collections")
+            rich_print_section_separator("Step 6/7: Processing data collections")
             try:
                 if not dry_run:
                     # Get remote project configuration again for processing
@@ -270,6 +273,54 @@ def register_run_command(app: typer.Typer):
                     return
         else:
             rich_print_checked_statement("Skipping data processing", "info")
+            success_count += 1
+
+        # Step 7: Execute table joins
+        if not skip_join:
+            rich_print_section_separator("Step 7/7: Executing table joins")
+            try:
+                if not dry_run:
+                    # Check if project has joins defined
+                    if hasattr(project_config, "joins") and project_config.joins:
+                        from depictio.cli.cli.utils.joins import process_project_joins
+
+                        command_parameters = {
+                            "overwrite": overwrite,
+                            "rich_tables": rich_tables,
+                        }
+
+                        join_result = process_project_joins(
+                            project=project_config,
+                            CLI_config=CLI_config,
+                            join_name=None,  # Process all joins
+                            preview_only=False,
+                            overwrite=overwrite,
+                            auto_process_dependencies=True,
+                        )
+
+                        if join_result.get("result") not in ["success", "partial"]:
+                            raise Exception("Join execution failed")
+
+                        # Show summary
+                        if join_result.get("processed"):
+                            rich_print_checked_statement(
+                                f"Processed {len(join_result['processed'])} join(s)", "success"
+                            )
+                        if join_result.get("errors"):
+                            rich_print_checked_statement(
+                                f"Failed {len(join_result['errors'])} join(s)", "warning"
+                            )
+                    else:
+                        rich_print_checked_statement("No joins defined in project config", "info")
+
+                rich_print_checked_statement("Join execution completed", "success")
+                success_count += 1
+            except Exception as e:
+                rich_print_checked_statement(f"Join execution failed: {e}", "error")
+                if not continue_on_error:
+                    return
+        else:
+            rich_print_checked_statement("Skipping join execution", "info")
             success_count += 1
 
         # Final summary

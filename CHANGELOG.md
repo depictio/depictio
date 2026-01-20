@@ -6,112 +6,99 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.6.0-b2</summary>
+<summary>Click to expand the changelog for 0.6.0-b3</summary>
 
 ### Changes 📜
 
 #### New Features ✨
 
-* feat: implement smart caching for quality job to skip when no code changes [043dcda1]
+* feat: add docker-compose.override.yaml for multi-instance setup and simplify container names in existing compose files [67ac3a1b]
+* feat: add official plugins and enhanced MCP server configuration [b6170c6e]
+* feat: add Claude Code development toolkit for depictio [864c6799]
+* feat: enable Celery by default for design mode + fix stepper footer theme [2a238581]
+* feat: always enable background callbacks for figure design mode [5c148a96]
+* feat: add AI tools support with setup scripts and configuration for Claude, Gemini, and Qwen [f76a3ca6]
+* feat: add loading indicator for figure preview rendering [32ca3332]
+* feat: complete figure component preview rendering [e4f5b6f7]
+* feat: enable edit mode support for figure component [fa5264a7]
+* feat: add design_figure() function for stepper integration [c1984031]
+* feat: implement figure component edit mode - Phase 2A (pre-populate) [c1c6f144]
+* feat: add auto-start celery worker to production docker compose [0015512b]
+* feat: auto-start celery worker based on DEPICTIO_USE_BACKGROUND_CALLBACKS [fe2f88db]
+* feat: make devcontainer compatible with local dev + Codespaces [60688370]
+* feat: centralize background callback config + fix card background mode [385e363f]
+* feat: enable figure component filter interactivity with unified callback [2b13edb5]
+* feat: implement multi-instance devcontainer support with git worktrees [5581972f]
+* feat: re-integrate figure component with batch rendering (Phase 1) [ffee7c92]
 
 #### Bug Fixes 🐛
 
-* fix: only hash existing files in quality cache check [e7738369]
-* fix: add missing __init__.py for figure_component.callbacks module [f0819cf7]
-* fix: create missing directories in all CI jobs for frontend container startup [8777ae51]
-* fix: create missing prof_files and cache directories for depictio-frontend container startup [0a8316f8]
-
-#### Chores 🧹
-
-* chore: remove backup files from git tracking [aa26887a]
-* chore: add backup files and cache to gitignore [96bf9d42]
-
-#### Other Changes 📝
-
-* Bump version: 0.6.0-b1 → 0.6.0-b2 [60cf2cbf]
-* debug: add multiple frontend logs checkpoints and container status [6dd741c4]
-* debug: add comprehensive frontend startup script debugging [2e447f52]
-* debug: add detailed frontend application startup diagnostics [5e59281f]
-* debug: add Docker networking diagnostics to CI [e54fa6bf]
-* debug: add comprehensive frontend container debugging to CI [5629ed46]
-* chore(docker): add performance testing volumes and optional Celery [1b231e7f]
-* perf(api): add local filesystem caching for Delta tables [1631ef2f]
-* chore(dash): enable client-side performance monitoring [5beea74c]
-* feat(dash): convert interactive component rendering to ALL pattern [85e81702]
-* fix(dash): suppress third-party console warnings and fix favicon [39103115]
-* feat(dash): convert card rendering to ALL pattern and add filter notification [e98e429a]
-* feat(dash): add unsaved changes indicator for dashboard layout [402f48f6]
-* Update CHANGELOG.md for v0.6.0-b1 [3bffaedd]
-* Bump version: 0.5.3 → 0.6.0-b1 [0419184b]
-
-
-</details>
-
-### Documentation 📖
-
-For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
-
-ecessary re-renders [9d3ff4cd]
-* feat: Enhance async rendering callback to allow Stage 2 re-renders based on delta location availability [9b04027b]
-* feat: Implement dashboard editing functionality [ac19120d]
-* feat: Enhance dashboard deletion process to remove child tabs and improve error handling; add standardized sidebar footer component [7ee8256e]
-* feat: Enhance dashboard tab management with new modal and callbacks for dynamic tab creation [ba586d1a]
-* feat: Implement API caching layer to reduce redundant calls and improve performance [22831526]
-* feat: Update Celery worker script to point to celery_worker module and adjust development mode script to use flask_dispatcher [52847444]
-* feat: Set default edit mode ON for dashboard owners in buttons_data [ccf0d1e0]
-* feat: Add dynamic callback handling for multi-page Dash application [de2c5bc8]
-* feat: Implement multi-app architecture for Depictio with separate management, viewer, and editor apps [852b230e]
-* feat: Enhance Celery integration by importing Dash app for background callbacks and configuring the callback manager [f5d4e2cb]
-* feat: Convert callbacks to clientside for improved performance and add auto-open functionality for auth modal [b3c11919]
-* feat: Implement core Claude agent for Vizro with dashboard creation, debugging, optimization, and teaching capabilities [ab8fb950]
-* feat: Add diagnostic scripts for Dash component and interactive filter analysis [63f261b8]
-* feat: Restore and configure depictio-celery-worker service in docker-compose [b6c613cb]
-* feat: Implement position optimization with CSS order support for draggable grid items [cae5d654]
-* feat: Update _create_action_icon to conditionally include n_clicks parameter [4c1afe03]
-* feat: Implement orjson for faster JSON serialization in Flask [1f85ce55]
-* feat: Add periodic token purge task to improve performance by offloading cleanup from frontend [29a645bf]
-* feat: Update dashboard components to ensure static dc_id consistency and improve logging [ccbdcade]
-* feat: Enhance dashboard creation to verify and update static dc_ids for existing dashboards [70ad4df5]
-* feat: Add verification for deltatable and dashboard dc_id references in multi-instance K8s deployments [5b93e482]
-* feat: Force static data collection ID in dashboard components for K8s consistency [6169d17d]
-
-#### Bug Fixes 🐛
-
-* fix: clear LRU cache between test_utils tests [d8b1a87a]
-* fix: remove obsolete cache clear in test_utils [73bb3496]
-* fix: force nf-core/{name} format for nf-core workflows [1a2d68a1]
-* fix: Initialize n_clicks for remove and duplicate buttons [249e4139]
-* fix: Add separate card-metadata-initial store for render callback [b8200316]
-* fix: Disable all at defaults optimizations blocking reset functionality [6b5d3d38]
-* fix: Correct dash_dir path in CallbackRegistryBuilder initialization fix: Update DASHBOARD_URL to point to the correct large dashboard for performance monitoring [1efb4865]
+* fix: resolve CI container naming and downstream job triggering issues [4bf00070]
+* fix: remove unused DATA_DIR variable from .env.example and improve CI job conditions for better reliability [a37ac66b]
+* fix: prevent downstream CI jobs from being skipped when quality cache hits [40f71e2b]
+* fix: add .gitkeep to ensure keys directory exists in CI and fix .env syntax [af208d14]
+* fix: add DATA_DIR configuration to .env.example [c24a0e99]
+* fix: correct figure component selector ID and MinIO data path [6e4fa65b]
+* fix: restore figure edit UI visibility and ensure Celery always runs for design mode [6ca2f01e]
+* fix: eliminate multiple scrollbars in dashboard edit mode [a5b5f2d4]
+* fix: improve stepper UX - center header and increase spacing [e2d30841]
+* fix: prevent cleared optional parameters from persisting in dict_kwargs [2e2454af]
+* fix: disable auto-forwarding of internal ports + restore git mount to /workspace-root [65c04e8b]
+* fix: import get_available_visualizations from definitions module [7910b4e5]
+* fix: add edit-page-context store to stepper layout [1bc37e6d]
+* fix: use correct API endpoint for column specs [7591d1ea]
+* fix: correct API endpoint for column loading in design_figure [9f80521e]
+* fix: handle dictionary ID in design_figure() function [a9ea1479]
+* fix: update stepper.py to use new design_figure() function [33b3b8ac]
+* fix: build_figure_design_ui() - correct model attributes and type safety [b10a69fe]
+* fix: set Plotly toolbar to show only on hover [24b9975e]
+* fix: mount main repo git as read-write for Git LFS support [eff81f34]
+* fix: revert select_columns optimization - causes ThreadPoolExecutor hang [2c8c35b7]
+* fix: robust git worktree detection with proper error handling [192c14e8]
+* fix: make devcontainer work in both main repo and worktrees [af546f45]
+* fix: enable git in devcontainer for worktrees (shareable) [fc53233d]
+* fix: add MinIO endpoint URL and credentials to instance config [7e7d412b]
+* fix: replace netcat with bash built-in TCP connections [47d89d33]
+* fix: use workspace root as docker-compose context [7484b875]
+* fix: use PWD variable for docker-compose build context [bb62baad]
+* fix: use explicit workspace folder variable in dockerComposeFile paths [beb120b9]
+* fix: enable figure-filter interactivity with two-callback pattern [d230e3fd]
+* fix: disable background callbacks for card rendering [27eac194]
+* fix: handle empty panel grids in dual-panel layout callback [dfdf8035]
+* fix: add notification container to dashboard viewer app [c822f0a4]
 
 #### Improvements 🚀
 
-* refactor: Centralize version management in VERSION file [5354d54c]
-* refactor: Improve imports and documentation in layout files [41d9977b]
-* refactor: Simplify card component callbacks and enhance edit mode handling [ccb62def]
-* refactor: Implement component editing navigation and standalone edit page [5db01c77]
-* refactor: Optimize component rendering and state management in dashboard layouts [5f8c4e4f]
-* refactor: Refactor code structure for layout & routing [762337fb]
-* refactor: Simplify print statements for dc_id verification in Helm chart workflow [eb1f0218]
+* refactor: rename DEPICTIO_USE_BACKGROUND_CALLBACKS to DEPICTIO_CELERY_ENABLED and add docker-compose profiles [05c0ccf2]
+* perf: re-enable select_columns optimization for figure data loading [6ff66cc5]
+* refactor: standardize DEV_MODE to DEPICTIO_DEV_MODE in config files [e9f2f8d4]
+* refactor: standardize DEV_MODE to DEPICTIO_DEV_MODE [422d89fd]
+* perf: add parallel DC loading with ThreadPoolExecutor (300-500ms savings) [7fa57c86]
+* perf: optimize card rendering with Polars native + pre-computed stats [5b4f498c]
 
 #### Chores 🧹
 
-* chore: Add documentation for removed CLEARME functionalities and future restoration plans [b39e1e2f]
+* chore: simplify .env configuration files [f2775a91]
+
+#### Documentation Updates 📚
+
+* docs: add Snakemake-specific configuration generator prompt [86cb63b2]
+* docs: add reusable Claude Code configuration generator prompt [7352f6c3]
+* docs: add full-stack feature development workflow [b55ce41c]
+* docs: add standard feature development workflow guide [786c264b]
+* docs: add comprehensive Getting Started guide for Claude Code [bb20c924]
 
 #### Other Changes 📝
 
-* Bump version: 0.5.3 → 0.6.0-b1 [887e03eb]
-* debug: Temporarily disable remove component callback [f1a799a7]
-* Refactor dashboard tab creation and editing functionality [39fc0684]
-* Add tutorial for building a Vizro Expert Claude Agent [3074812d]
-* Add Vizro integration examples and standalone app [e4df8dcd]
-* Add performance analysis scripts and JSON report for card component optimization [029d1c0d]
-* Add performance analysis tools for Dash applications [340d3069]
-* Enhance performance and logging in dashboard rendering and user management [9f703cf8]
-* Refactor callbacks to client-side for performance optimization [09399098]
-* Update CHANGELOG.md for v0.5.3 [cbe3b9ea]
-* Bump version: 0.5.2 → 0.5.3 [73c34236]
+* Bump version: 0.6.0-b2 → 0.6.0-b3 [08fea6bd]
+* temp: disable custom renderOption to test basic layout [5d195818]
+* step 1: restore complete design_figure function from frontend_legacy [dbcc8bbb]
+* debug: add logging to return_design_component in part_three.py [8019eb38]
+* debug: add logging to track parameter flow in stepper [44243d60]
+* debug: add detailed logging for figure component layout save [841a19a8]
+* debug: add detailed computation timing logs for performance analysis [49dc0250]
+* Update CHANGELOG.md for v0.6.0-b2 [04d3f334]
+* Bump version: 0.6.0-b1 → 0.6.0-b2 [b172dc98]
 
 
 </details>
@@ -120,37 +107,7 @@ ecessary re-renders [9d3ff4cd]
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-er join [198b71fc]
-* fix: Simplify color parameter in error messages for better readability [5432da64]
-* fix: Update FastQC parquet file path and comment out test code for clarity [facc22ba]
-* fix: Clean index in MultiQCDashboardComponent metadata for btn-done matching [e0586e5c]
-* fix: Add Redis service with healthcheck and volume configuration to docker-compose [fe9a68a3]
-* fix: Enhance CI workflow by adding uv installation and Python setup with caching [b9ee1e64]
-* fix: Comment out unused add_filter function and pandera import in test_deltatables_utils [8e2503fa]
-* fix: Comment out pandera dependency for pandas and polars in dev requirements [2e2ea4a9]
-* fix: Update CI workflow to clean up conflicting polars packages and ensure correct installation of polars-lts-cpu [1d107e60]
-* fix: Update polars installation and modify pandera dependency for dev requirements [aeb5a018]
-* fix: Comment out pandera dependency for pandas to simplify dev requirements [25cd788c]
-* fix: Simplify dependency installation process and verify polars installation [7d5b3215]
-* fix: Update ensure_owners_and_viewers_are_unique method to use instance variables [82598dea]
-* fix: Add MultiQC to quality check dependencies in CI workflow [00e8b341]
-* fix: Update mock path handling in MultiQC processor tests to improve directory iteration [96420245]
-* fix: Update patch targets in MultiQC processor tests for correct module referencing [d3c18728]
-* fix: Pin MultiQC version to 1.31.0 and update polars-lts-cpu dependency to include extra features [50719203]
-* fix: Update layout IDs to match component index to prevent layout destruction on dashboard reload [dc6df42e]
-* fix: Adjust dashboard and draggable grid styles for improved layout and spacing [6e049466]
-* fix: Update default dimensions for components to fit 48-column grid layout [bdf5b47c]
-* fix: Retrieve the last DeltaTableAggregated entry instead of the first in get_deltatable endpoint [f45839e9]
-* fix: Adjust button height in selected and unselected styles for consistency [9bb6dfc4]
-* fix: Refactor project data update logic in consolidated API callbacks [b00ff3cb]
-* fix: Increase height of notes footer content for better visibility [3a7417ec]
-* fix: Reduce interval for SVG trigger to improve loading responsiveness [624786ac]
-* fix: Update Celery worker command to correctly point to celery_app module [ef68e1a5]
-* fix: Update live interactivity handling and adjust button visibility in header component [a4ed8ff2]
-* fix: Update polars dependency to polars-lts-cpu==1.19.0 in pyproject.toml [f251415c]
-* fix: Increase default worker count to 4 for FastAPI and Dash configurations [870ab823]
-* fix: Update polars dependency to polars-lts-cpu==1.19.0 in conda and pyproject configurations [7bbe4520]
-* fix: Update sample identifier in metadata CSV and adjust MultiQC configuration for inner join [bf516261]
+er join [bf516261]
 * fix: Simplify color parameter in error messages for better readability [81679a6e]
 * fix: Update FastQC parquet file path and comment out test code for clarity [27123ada]
 * fix: Clean index in MultiQCDashboardComponent metadata for btn-done matching [a5bad2be]
