@@ -1,9 +1,9 @@
 dashboard: 6824cb3b89d2b72169309737
-title: Iris Dashboard demo
+title: Iris Dashboard - MVP Components Fixed
 components:
 -   id: box-variety-sepal-length
     type: figure
-    workflow: iris_analysis
+    workflow: iris_workflow
     data_collection: iris_table
     visualization:
         chart: box
@@ -16,7 +16,7 @@ components:
             notched: true
 -   id: scatter-sepal-length-sepal-width
     type: figure
-    workflow: iris_analysis
+    workflow: iris_workflow
     data_collection: iris_table
     visualization:
         chart: scatter
@@ -32,7 +32,7 @@ components:
             trendline: lowess
 -   id: sepal-length-average
     type: card
-    workflow: iris_analysis
+    workflow: iris_workflow
     data_collection: iris_table
     aggregation:
         column: sepal.length
@@ -40,7 +40,7 @@ components:
         column_type: float64
 -   id: sepal-width-median
     type: card
-    workflow: iris_analysis
+    workflow: iris_workflow
     data_collection: iris_table
     aggregation:
         column: sepal.width
@@ -48,7 +48,7 @@ components:
         column_type: float64
 -   id: variety-nunique
     type: card
-    workflow: iris_analysis
+    workflow: iris_workflow
     data_collection: iris_table
     aggregation:
         column: variety
@@ -56,32 +56,15 @@ components:
         column_type: object
 -   id: variety-count
     type: card
-    workflow: iris_analysis
+    workflow: iris_workflow
     data_collection: iris_table
     aggregation:
         column: variety
         function: count
         column_type: object
--   id: data-table
-    type: table
-    workflow: iris_analysis
-    data_collection: iris_table
--   id: histogram-sepal-length
-    type: figure
-    workflow: iris_analysis
-    data_collection: iris_table
-    visualization:
-        chart: histogram
-        x: sepal.length
-        color: variety
-        style:
-            map: '{"Setosa": "#1f77b4", "Versicolor": "#ff7f0e", "Virginica": "#2ca02c"}'
-            nbins: 0
-            barmode: relative
-            cumulative: true
 -   id: sepal-length-filter
     type: interactive
-    workflow: iris_analysis
+    workflow: iris_workflow
     data_collection: iris_table
     filter:
         column: sepal.length
@@ -92,9 +75,12 @@ components:
         default:
         - 4.3
         - 7.9
+        value:
+        - 4.3
+        - 7.9
 -   id: petal-length-filter
     type: interactive
-    workflow: iris_analysis
+    workflow: iris_workflow
     data_collection: iris_table
     filter:
         column: petal.length
@@ -105,15 +91,39 @@ components:
         default:
         - 1
         - 6.9
+        value:
+        - 1
+        - 4.72
 -   id: variety-filter
     type: interactive
-    workflow: iris_analysis
+    workflow: iris_workflow
     data_collection: iris_table
     filter:
         column: variety
         type: MultiSelect
         column_type: object
         options:
+        - Virginica
         - Versicolor
         - Setosa
-        - Virginica
+        value:
+        - Setosa
+        - Versicolor
+-   id: data-table
+    type: table
+    workflow: iris_workflow
+    data_collection: iris_table
+-   id: histogram-sepal-length
+    type: figure
+    workflow: iris_workflow
+    data_collection: iris_table
+    visualization:
+        chart: histogram
+        x: sepal.length
+        color: variety
+        style:
+            map: '{"Setosa": "#1f77b4", "Versicolor": "#ff7f0e", "Virginica": "#2ca02c"}'
+            nbins: 0
+            barmode: relative
+            cumulative: true
+
