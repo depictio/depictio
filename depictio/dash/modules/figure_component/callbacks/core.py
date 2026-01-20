@@ -355,11 +355,13 @@ def register_core_callbacks(app):
                     continue
 
                 # Extract figure parameters
+                mode = trigger_data.get("mode", "ui")
                 visu_type = trigger_data.get("visu_type", "scatter")
                 dict_kwargs = trigger_data.get("dict_kwargs", {})
+                code_content = trigger_data.get("code_content", "")
 
                 logger.debug(
-                    f"[{task_id}] Figure params: visu_type={visu_type}, dict_kwargs={dict_kwargs}"
+                    f"[{task_id}] Figure params: mode={mode}, visu_type={visu_type}, dict_kwargs={dict_kwargs}"
                 )
 
                 # Get cached data
@@ -372,13 +374,56 @@ def register_core_callbacks(app):
 
                 df = dc_cache[load_key]
 
-                # Create figure from data
-                fig = _create_figure_from_data(
-                    df=df,
-                    visu_type=visu_type,
-                    dict_kwargs=dict_kwargs,
-                    theme=current_theme,
-                )
+                # Create figure - branch on mode
+                if mode == "code":
+                    # CODE MODE: Execute user code
+                    if not code_content:
+                        logger.error(f"[{task_id}] Code mode but no code_content")
+                        all_figures.append(
+                            _create_error_figure("No code content provided", current_theme)
+                        )
+                        all_metadata.append({})
+                        continue
+
+                    from depictio.dash.modules.figure_component.code_mode import (
+                        extract_visualization_type_from_code,
+                    )
+                    from depictio.dash.modules.figure_component.simple_code_executor import (
+                        SimpleCodeExecutor,
+                    )
+
+                    executor = SimpleCodeExecutor()
+                    success, fig, message = executor.execute_code(code_content, df)
+
+                    if success:
+                        # Extract visu_type dynamically from code
+                        detected_visu_type = extract_visualization_type_from_code(code_content)
+                        if detected_visu_type:
+                            visu_type = detected_visu_type
+
+                        # Apply theme template if not in code
+                        if "template=" not in code_content:
+                            theme_template = f"mantine_{current_theme}"
+                            fig.update_layout(template=theme_template)
+
+                        logger.debug(
+                            f"[{task_id}] ✅ Code execution successful (visu_type: {visu_type})"
+                        )
+                    else:
+                        logger.error(f"[{task_id}] Code execution failed: {message}")
+                        all_figures.append(
+                            _create_error_figure(f"Code execution error: {message}", current_theme)
+                        )
+                        all_metadata.append({})
+                        continue
+                else:
+                    # UI MODE: Existing logic
+                    fig = _create_figure_from_data(
+                        df=df,
+                        visu_type=visu_type,
+                        dict_kwargs=dict_kwargs,
+                        theme=current_theme,
+                    )
 
                 figure_duration = (time.time() - figure_start_time) * 1000
                 logger.debug(f"[{task_id}] ✅ Figure rendered in {figure_duration:.1f}ms")

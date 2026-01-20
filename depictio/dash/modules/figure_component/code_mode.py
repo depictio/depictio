@@ -392,8 +392,13 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
     Analyze code with df_modified constraint.
 
     Expects code format:
-    - Optional: df_modified = df.some_processing_chain()
+    - Optional: Multiple lines defining df_modified (multi-line preprocessing support)
     - Required: fig = px.function(df or df_modified, ...)
+
+    Multi-line preprocessing example:
+        df_temp = df.filter(pl.col('x') > 0)
+        df_modified = df_temp.group_by('y').agg(pl.mean('z'))
+        fig = px.bar(df_modified, x='y', y='z')
 
     Args:
         code: Python code string
@@ -417,22 +422,24 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
         if line.strip() and not line.strip().startswith("#")
     ]
 
-    preprocessing_line = None
+    preprocessing_lines = []
     figure_line = None
     uses_modified_df = False
 
     for line in lines:
-        if line.startswith("df_modified =") or line.startswith("df_modified="):
-            preprocessing_line = line
-        elif line.startswith("fig =") or line.startswith("fig="):
+        # Collect all lines that define df_modified or intermediate variables
+        if line.startswith("fig =") or line.startswith("fig="):
             figure_line = line
             uses_modified_df = "df_modified" in line
+        elif "df_modified" in line or line.startswith("df_"):
+            # Include lines that define df_modified or intermediate df_ variables
+            preprocessing_lines.append(line)
 
     # Validation
     if not figure_line:
         return {
-            "has_preprocessing": preprocessing_line is not None,
-            "preprocessing_code": preprocessing_line,
+            "has_preprocessing": len(preprocessing_lines) > 0,
+            "preprocessing_code": "\n".join(preprocessing_lines) if preprocessing_lines else None,
             "figure_code": figure_line,
             "uses_modified_df": uses_modified_df,
             "is_valid": False,
@@ -440,20 +447,20 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
         }
 
     # Check for invalid patterns
-    if preprocessing_line and not uses_modified_df:
+    if preprocessing_lines and not uses_modified_df:
         return {
             "has_preprocessing": True,
-            "preprocessing_code": preprocessing_line,
+            "preprocessing_code": "\n".join(preprocessing_lines),
             "figure_code": figure_line,
             "uses_modified_df": uses_modified_df,
             "is_valid": False,
             "error_message": "If df_modified is created, it must be used in the fig = px.function() call",
         }
 
-    if uses_modified_df and not preprocessing_line:
+    if uses_modified_df and not preprocessing_lines:
         return {
             "has_preprocessing": False,
-            "preprocessing_code": preprocessing_line,
+            "preprocessing_code": None,
             "figure_code": figure_line,
             "uses_modified_df": uses_modified_df,
             "is_valid": False,
@@ -461,8 +468,8 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
         }
 
     return {
-        "has_preprocessing": preprocessing_line is not None,
-        "preprocessing_code": preprocessing_line,
+        "has_preprocessing": len(preprocessing_lines) > 0,
+        "preprocessing_code": "\n".join(preprocessing_lines) if preprocessing_lines else None,
         "figure_code": figure_line,
         "uses_modified_df": uses_modified_df,
         "is_valid": True,

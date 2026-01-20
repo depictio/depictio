@@ -123,6 +123,13 @@ def register_interactive_design_callbacks(app):
         Restored from legacy code (commit 852b230e~1) - adapted for multi-app architecture.
         Uses edit-page-context for edit mode, stepper selections for add mode.
         """
+        import dash
+
+        # Guard: Skip if inputs are None during component initialization/DC switch
+        # This prevents errors when switching data collections in stepper
+        if column_value is None and workflow_id is None and data_collection_id is None:
+            logger.debug("update_aggregation_options: All inputs None - components not ready yet")
+            return dash.no_update
 
         logger.info("=== UPDATE AGGREGATION OPTIONS CALLBACK START ===")
         logger.info(f"column_value: {column_value}")

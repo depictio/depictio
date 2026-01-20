@@ -1970,6 +1970,8 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
             - wf_id: Workflow ID
             - dc_id: Data collection ID
             - theme: Theme (default: "light")
+            - mode: Figure mode - "ui" or "code" (default: "ui")
+            - code_content: Python code for code mode figures (default: "")
 
     Returns:
         Figure component as HTML div with skeleton loader
@@ -1981,6 +1983,8 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     wf_id = kwargs.get("wf_id")
     dc_id = kwargs.get("dc_id")
     theme = kwargs.get("theme", "light")
+    mode = kwargs.get("mode", "ui")
+    code_content = kwargs.get("code_content", "")
 
     # Defensive handling: ensure dict_kwargs is always a dict
     if not isinstance(dict_kwargs, dict):
@@ -2000,6 +2004,8 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         "dict_kwargs": dict_kwargs,
         "wf_id": wf_id,
         "dc_id": dc_id,
+        "mode": mode,
+        "code_content": code_content,
         "last_updated": datetime.now().isoformat(),
     }
 
@@ -2017,6 +2023,8 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
                     "dc_id": dc_id,
                     "visu_type": visu_type,
                     "dict_kwargs": dict_kwargs,
+                    "mode": mode,
+                    "code_content": code_content,
                 },
             ),
             # Metadata store - for callback results
