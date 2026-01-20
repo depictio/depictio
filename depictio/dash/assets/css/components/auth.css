@@ -31,12 +31,14 @@
     border-top: none !important;
 }
 
-/* Manual theme overrides for modal content */
+/* Theme-aware background colors - uses Mantine color scheme attributes */
+[data-mantine-color-scheme="light"] .auth-modal-content,
 body.theme-manual-light .auth-modal-content {
     background: rgba(255, 255, 255, 0.95) !important;
     color: var(--depictio-text-light) !important;
 }
 
+[data-mantine-color-scheme="dark"] .auth-modal-content,
 body.theme-manual-dark .auth-modal-content {
     background: rgba(37, 38, 43, 0.95) !important;
     color: var(--depictio-text-dark) !important;
@@ -95,87 +97,35 @@ body.auth-page .mantine-AppShell-header {
     position: absolute;
     width: 100%;
     height: 100%;
-    /* Enable hardware acceleration */
     transform: translateZ(0);
     will-change: transform;
-    /* Add subtle background drift */
     animation: backgroundDrift 60s infinite ease-in-out;
 }
 
-/* Base triangle particle styles */
-.triangle-particle {
-    position: absolute;
-    /* Enable hardware acceleration for smooth animations */
-    transform: translateZ(0);
-    will-change: transform, opacity;
-    /* Smooth transitions */
-    transition: none;
-    /* Base opacity */
-    opacity: 0.3;
-    background-size: contain;
-    background-repeat: no-repeat;
-    animation-timing-function: ease-in-out;
-    animation-iteration-count: infinite;
-    animation-fill-mode: both;
-}
-
-/* Small triangles - 12x12px */
-.triangle-small {
-    width: 12px;
-    height: 12px;
-}
-
-/* Medium triangles - 18x18px */
-.triangle-medium {
-    width: 18px;
-    height: 18px;
-}
-
-/* Large triangles - 24x24px */
-.triangle-large {
-    width: 24px;
-    height: 24px;
-}
-
-/* Extra large triangles - 32x32px */
-.triangle-xlarge {
-    width: 32px;
-    height: 32px;
-    opacity: 0.25; /* Slightly more transparent for larger triangles */
-}
-
-/* Apply animations to different triangle types with smoother timing */
+/* Auth-specific triangle animation classes
+   Base .triangle-particle styles and size classes are defined in animations.css */
 .triangle-anim-1 {
-    animation: triangleFloat 8s infinite linear;
+    animation: triangleFloat 8s infinite linear !important;
 }
 
 .triangle-anim-2 {
-    animation: triangleDrift 9s infinite linear;
+    animation: triangleDrift 9s infinite linear !important;
 }
 
 .triangle-anim-3 {
-    animation: trianglePulse 7s infinite linear;
+    animation: trianglePulse 7s infinite linear !important;
 }
 
 .triangle-anim-4 {
-    animation: triangleRotate 10s infinite linear;
+    animation: triangleRotate 10s infinite linear !important;
 }
 
 .triangle-anim-5 {
-    animation: triangleOrbit 8.5s infinite linear;
+    animation: triangleOrbit 8.5s infinite linear !important;
 }
 
 .triangle-anim-6 {
-    animation: triangleWave 9.5s infinite linear;
-}
-
-/* Triangle particles container - used by auth page */
-.triangle-particles-container {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    transform: translateZ(0);
-    will-change: transform;
+    animation: triangleWave 9.5s infinite linear !important;
 }
 
 /* =============================================================================

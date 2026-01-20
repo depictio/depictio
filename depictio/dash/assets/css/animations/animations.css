@@ -226,6 +226,90 @@
     100% { transform: translate(0, 0) rotate(-240deg); }
 }
 
+/* Triangle particle base styles for dashboard backgrounds */
+.triangle-particle {
+    position: absolute;
+    transform: translateZ(0);
+    will-change: transform, opacity;
+    transition: none;
+    opacity: 0.3;
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+
+/* Triangle size classes */
+.triangle-small {
+    width: 12px;
+    height: 12px;
+}
+
+.triangle-medium {
+    width: 18px;
+    height: 18px;
+}
+
+.triangle-large {
+    width: 24px;
+    height: 24px;
+}
+
+.triangle-xlarge {
+    width: 32px;
+    height: 32px;
+    opacity: 0.25;
+}
+
+/* Apply dashboard triangle animations to generated classes
+   Duration set here with default, can be overridden by inline styles or performance CSS
+   Delay is set via inline styles in background_effects.py */
+.dashboard-triangle-anim-0 {
+    animation-name: dashboardTriangleAnim0;
+    animation-duration: 15s;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+    animation-fill-mode: both;
+}
+
+.dashboard-triangle-anim-1 {
+    animation-name: dashboardTriangleAnim1;
+    animation-duration: 15s;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+    animation-fill-mode: both;
+}
+
+.dashboard-triangle-anim-2 {
+    animation-name: dashboardTriangleAnim2;
+    animation-duration: 15s;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+    animation-fill-mode: both;
+}
+
+.dashboard-triangle-anim-3 {
+    animation-name: dashboardTriangleAnim3;
+    animation-duration: 15s;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+    animation-fill-mode: both;
+}
+
+.dashboard-triangle-anim-4 {
+    animation-name: dashboardTriangleAnim4;
+    animation-duration: 15s;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+    animation-fill-mode: both;
+}
+
+.dashboard-triangle-anim-5 {
+    animation-name: dashboardTriangleAnim5;
+    animation-duration: 15s;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+    animation-fill-mode: both;
+}
+
 /* =============================================================================
    SAVE BUTTON UNSAVED STATE ANIMATION
    Modern pulsing glow effect to draw attention to unsaved changes
