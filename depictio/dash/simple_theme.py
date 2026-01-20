@@ -233,37 +233,32 @@ def register_simple_theme_system(app):
     #     prevent_initial_call=True,
     # )
 
-    # Update navbar logo based on theme - CLIENTSIDE for instant response
-    app.clientside_callback(
-        """
+    # Theme-aware logo callback - shared logic for all logos
+    # Uses a single JavaScript function to update multiple logo elements
+    logo_callback_js = """
         function(theme_data) {
             const theme = theme_data || 'light';
-            console.log('🖼️ CLIENTSIDE NAVBAR LOGO: theme=' + theme);
             return theme === 'dark'
                 ? '/assets/images/logos/logo_white.svg'
                 : '/assets/images/logos/logo_black.svg';
         }
-        """,
-        Output("navbar-logo-content", "src"),
-        Input("theme-store", "data"),
-        prevent_initial_call=False,
-    )
+    """
 
-    # Update header "Powered by" logo based on theme - CLIENTSIDE for instant response
-    app.clientside_callback(
-        """
-        function(theme_data) {
-            const theme = theme_data || 'light';
-            console.log('🖼️ CLIENTSIDE HEADER LOGO: theme=' + theme);
-            return theme === 'dark'
-                ? '/assets/images/logos/logo_white.svg'
-                : '/assets/images/logos/logo_black.svg';
-        }
-        """,
-        Output("header-powered-by-logo", "src"),
-        Input("theme-store", "data"),
-        prevent_initial_call=False,
-    )
+    # Register logo callbacks for each logo element
+    logo_outputs = [
+        "navbar-logo-content",
+        "header-powered-by-logo",
+        "auth-modal-logo-login",
+        "auth-modal-logo-register",
+    ]
+
+    for logo_id in logo_outputs:
+        app.clientside_callback(
+            logo_callback_js,
+            Output(logo_id, "src"),
+            Input("theme-store", "data"),
+            prevent_initial_call=False,
+        )
 
     # Disable theme switch on dashboard pages only
     # @app.callback(
