@@ -10,6 +10,34 @@ from depictio.models.utils import convert_model_to_dict
 # Get build functions from centralized metadata
 build_functions = get_build_functions()
 
+
+def _fetch_table_columns(child_metadata: dict, token: str) -> dict:
+    """Fetch column definitions for a table component from data collection.
+
+    Args:
+        child_metadata: Component metadata containing wf_id and dc_id
+        token: Access token for API authentication
+
+    Returns:
+        Column definitions dict, empty dict on failure
+    """
+    wf_id = child_metadata.get("wf_id")
+    dc_id = child_metadata.get("dc_id")
+
+    if not wf_id or not dc_id:
+        return {}
+
+    from depictio.dash.utils import get_columns_from_data_collection
+
+    try:
+        cols_json = get_columns_from_data_collection(wf_id, dc_id, token)
+        logger.info(f"Fetched {len(cols_json)} columns for table component")
+        return cols_json
+    except Exception as e:
+        logger.error(f"Failed to fetch cols_json for table: {e}")
+        return {}
+
+
 # DEBUGGING: Test flag to use simple DMC layout instead of draggable grid
 # Set to True to test if component disappearance is related to grid layout system
 # NOTE: "Simple layout" = NEW dual-panel DashGridLayout system with saved positions
@@ -232,6 +260,10 @@ def render_dashboard_original(
         # Add theme to child metadata for figure generation
         child_metadata["theme"] = theme
         logger.info(f"Using theme: {theme} for component {component_type}")
+
+        # Fetch cols_json for table components if empty
+        if component_type == "table" and not child_metadata.get("cols_json"):
+            child_metadata["cols_json"] = _fetch_table_columns(child_metadata, TOKEN)
 
         # Build component using the appropriate function and kwargs
         build_function = build_functions[component_type]
