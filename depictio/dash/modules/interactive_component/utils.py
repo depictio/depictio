@@ -690,6 +690,13 @@ def build_interactive(**kwargs):
             },
         )
 
+        # DEBUG: Log trigger store data for troubleshooting
+        logger.info(
+            f"🔍 TRIGGER STORE CREATED - Index: {index}, "
+            f"wf_id={wf_id}, dc_id={dc_id}, column_name={column_name}, "
+            f"type={interactive_component_type}, build_frame={build_frame}"
+        )
+
         # Create metadata store for reference values (like cards)
         metadata_store = dcc.Store(
             id={"type": "interactive-metadata", "index": str(index)}, data={}
