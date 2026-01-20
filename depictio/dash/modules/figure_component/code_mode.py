@@ -134,6 +134,9 @@ def create_code_mode_interface(component_index: str) -> html.Div:
                                             "fontFamily": "Fira Code, JetBrains Mono, Monaco, Consolas, Courier New, monospace",
                                             "printMargin": 55,  # Set print margin at ~55 characters
                                             "enableResize": True,  # Enable the resize handle
+                                            # Fix copy-paste indentation issues
+                                            "autoIndent": False,  # Disable auto-indent
+                                            "behavioursEnabled": False,  # Disable auto-pairing/behaviors
                                         },
                                         style={
                                             "width": "100%",
@@ -431,9 +434,11 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
         if line.startswith("fig =") or line.startswith("fig="):
             figure_line = line
             uses_modified_df = "df_modified" in line
+            logger.debug(f"Found figure line: {line[:80]}... uses_modified_df={uses_modified_df}")
         elif "df_modified" in line or line.startswith("df_"):
             # Include lines that define df_modified or intermediate df_ variables
             preprocessing_lines.append(line)
+            logger.debug(f"Found preprocessing line: {line[:80]}...")
 
     # Validation
     if not figure_line:
@@ -450,23 +455,27 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
     # Allow using df directly OR any preprocessing variable (df_modified, df_temp, etc.)
     # Only fail if preprocessing creates variables but figure doesn't use any of them
     if preprocessing_lines and not uses_modified_df:
+        logger.debug(
+            f"Validating: preprocessing_lines={len(preprocessing_lines)}, uses_modified_df={uses_modified_df}"
+        )
+        logger.debug(f"Figure line for validation: {figure_line}")
+
         # Check if figure line uses ANY df variable (df, df_temp, df_filtered, etc.)
         # This is more permissive - allow intermediate variable names
-        uses_any_df_var = "df" in figure_line or any(
-            f"df_{var}" in figure_line
-            for var in [
-                "modified",
-                "filtered",
-                "clean",
-                "temp",
-                "processed",
-                "grouped",
-                "sorted",
-            ]
-        )
+        # Use more precise checks to avoid false matches (e.g., "pdf", "undefined")
+        # Match df as a word boundary or followed by . or _ or inside parentheses
+        import re
+
+        df_pattern = r"\bdf[\.\(,\)]|df_\w+"
+        uses_any_df_var = bool(re.search(df_pattern, figure_line))
+
+        logger.debug(f"uses_any_df_var check result: {uses_any_df_var}")
 
         # If preprocessing exists but figure doesn't use any dataframe, that's an error
         if not uses_any_df_var:
+            logger.error(
+                f"Validation failed: preprocessing exists but figure doesn't use df. Figure: {figure_line}"
+            )
             return {
                 "has_preprocessing": True,
                 "preprocessing_code": "\n".join(preprocessing_lines),
