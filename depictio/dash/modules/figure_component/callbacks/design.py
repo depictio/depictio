@@ -344,8 +344,135 @@ def register_design_callbacks(app):
             logger.error(f"Error loading column information: {e}", exc_info=True)
             return f"Error loading column information: {str(e)}"
 
+    # Update Ace editor theme based on app theme
+    @app.callback(
+        Output({"type": "code-editor", "index": MATCH}, "theme"),
+        Input("local-store", "data"),
+        prevent_initial_call=False,
+    )
+    def update_code_editor_theme(local_data):
+        """Update Ace editor theme to match app theme (light/dark)."""
+        if not local_data:
+            return "github"  # Default light theme
+
+        # Extract theme from local_data
+        theme = "light"
+        if isinstance(local_data, dict):
+            theme = local_data.get("colorScheme", "light")
+
+        # Map app theme to Ace editor themes
+        ace_theme = "monokai" if theme == "dark" else "github"
+        logger.debug(f"Setting Ace editor theme to: {ace_theme} (app theme: {theme})")
+        return ace_theme
+
+    # Execute code button - live preview
+    @app.callback(
+        [
+            Output({"type": "code-status", "index": MATCH}, "title"),
+            Output({"type": "code-status", "index": MATCH}, "children"),
+            Output({"type": "code-status", "index": MATCH}, "color"),
+        ],
+        Input({"type": "code-execute-btn", "index": MATCH}, "n_clicks"),
+        [
+            State({"type": "code-editor", "index": MATCH}, "value"),
+            State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def execute_code_preview(n_clicks, code_content, workflow_id, data_collection_id, local_data):
+        """Execute code and show preview/validation results."""
+        from bson import ObjectId
+
+        from depictio.api.v1.deltatables_utils import load_deltatable_lite
+        from depictio.dash.modules.figure_component.simple_code_executor import (
+            SimpleCodeExecutor,
+        )
+
+        if not n_clicks or not code_content:
+            return dash.no_update, dash.no_update, dash.no_update
+
+        logger.info("=== EXECUTE CODE PREVIEW ===")
+        logger.info(f"Code length: {len(code_content)} characters")
+
+        # Validate workflow and data collection
+        if not workflow_id or not data_collection_id:
+            return (
+                "Error",
+                "Please ensure workflow and data collection are selected.",
+                "red",
+            )
+
+        if not local_data:
+            return "Error", "Authentication required.", "red"
+
+        try:
+            # Load data
+            TOKEN = local_data["access_token"]
+            df = load_deltatable_lite(
+                ObjectId(workflow_id), ObjectId(data_collection_id), TOKEN=TOKEN
+            )
+
+            if df.height == 0:
+                return "Error", "No data available in the selected data collection.", "red"
+
+            # Execute code
+            executor = SimpleCodeExecutor()
+            success, fig, message = executor.execute_code(code_content, df)
+
+            if success:
+                logger.info("✅ Code execution successful")
+                return (
+                    "Success",
+                    dmc.Stack(
+                        [
+                            dmc.Text("✅ Code executed successfully!", size="sm"),
+                            dmc.Text(
+                                f"Figure type: {fig.data[0].type if fig.data else 'unknown'}",
+                                size="xs",
+                                c="gray",
+                            ),
+                            dmc.Text(
+                                f"Data points: {len(fig.data[0].x) if fig.data and hasattr(fig.data[0], 'x') else 'N/A'}",
+                                size="xs",
+                                c="gray",
+                            ),
+                        ],
+                        gap="xs",
+                    ),
+                    "green",
+                )
+            else:
+                logger.error(f"Code execution failed: {message}")
+                return (
+                    "Execution Error",
+                    dmc.Stack(
+                        [
+                            dmc.Text("❌ Code execution failed", size="sm"),
+                            dmc.Code(message, block=True, style={"fontSize": "11px"}),
+                        ],
+                        gap="xs",
+                    ),
+                    "red",
+                )
+
+        except Exception as e:
+            logger.error(f"Error during code execution: {e}", exc_info=True)
+            return (
+                "Error",
+                dmc.Stack(
+                    [
+                        dmc.Text("❌ Unexpected error", size="sm"),
+                        dmc.Code(str(e), block=True, style={"fontSize": "11px"}),
+                    ],
+                    gap="xs",
+                ),
+                "red",
+            )
+
     logger.info(
-        "✅ Figure design callbacks registered (mode toggle + code generation + code examples + columns info)"
+        "✅ Figure design callbacks registered (mode toggle + code generation + code examples + columns info + theme + execute)"
     )
 
 
