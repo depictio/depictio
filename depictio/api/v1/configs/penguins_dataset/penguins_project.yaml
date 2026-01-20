@@ -35,12 +35,6 @@ workflows:
               bill_depth_mm: "Bill depth in millimeters"
               flipper_length_mm: "Flipper length in millimeters"
               body_mass_g: "Body mass in grams"
-          join:
-            on_columns:
-              - individual_id
-            how: "inner"
-            with_dc:
-              - "demographic_data"
 
       # Demographic data
       - data_collection_tag: "demographic_data"
@@ -63,3 +57,22 @@ workflows:
               sex: "Penguin sex"
               year: "Observation year"
               species: "Species name"
+
+# ============================================================================
+# TABLE JOINS CONFIGURATION
+# ============================================================================
+# Client-side joins executed locally with `depictio data join`
+# ============================================================================
+
+joins:
+  # Join physical features with demographic data
+  - name: "penguins_complete"
+    description: "Complete penguin dataset with physical features and demographics"
+    left_dc: "physical_features"
+    right_dc: "demographic_data"
+    on_columns:
+      - "individual_id"
+      # depictio_run_id will be auto-added if present in both tables
+    how: "inner"
+    persist: true
+    workflow_name: "penguin_species_analysis"

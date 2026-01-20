@@ -88,16 +88,6 @@ workflows:
               gene_id: "Ensembl Gene ID"
               gene_name: "Gene Symbol"
 
-          join:
-            # Join gene expression data with sample metadata
-              on_columns:
-                - "sample"
-              how: "inner"
-              with_dc:
-              - sample_metadata
-
-
-
         # Transcript Expression TPM
         - data_collection_tag: "transcript_tpm"
           description: "TPM normalized transcript expression values"
@@ -197,3 +187,61 @@ workflows:
                 filename: "pipeline_info/software_versions.yml"
             dc_specific_properties:
               format: "Custom"  # YAML format
+
+# ============================================================================
+# TABLE JOINS CONFIGURATION
+# ============================================================================
+# Define joins at the project level for client-side table joining.
+# These joins are executed locally on the client machine using `depictio data join`
+# and can optionally persist results as Delta tables.
+#
+# Run joins with:
+#   depictio data join --project-config-path depictio_project.yaml
+#
+# Preview joins without persisting:
+#   depictio data join --project-config-path depictio_project.yaml --preview
+# ============================================================================
+
+joins:
+  # Join gene expression TPM data with sample metadata
+  - name: "gene_tpm_with_metadata"
+    description: "Combine gene TPM values with sample experimental metadata"
+    left_dc: "gene_tpm"
+    right_dc: "sample_metadata"
+    on_columns:
+      - "sample"
+    how: "inner"
+    persist: true  # Store the joined result as a Delta table
+    workflow_name: "nf-core-rnaseq"  # Optional: scope to specific workflow
+
+  # Join gene counts with sample metadata
+  - name: "gene_counts_with_metadata"
+    description: "Combine raw gene counts with sample experimental metadata"
+    left_dc: "gene_counts"
+    right_dc: "sample_metadata"
+    on_columns:
+      - "sample"
+    how: "inner"
+    persist: true
+    workflow_name: "nf-core-rnaseq"
+
+  # Example: Join with granularity handling (when one DC has finer granularity)
+  # Uncomment if you have cell-level data within samples
+  # - name: "sample_quant_aggregated"
+  #   description: "Aggregate per-sample quantification data"
+  #   left_dc: "sample_quant"
+  #   right_dc: "sample_metadata"
+  #   on_columns:
+  #     - "sample"
+  #   how: "left"
+  #   persist: true
+  #   workflow_name: "nf-core-rnaseq"
+  #   # Granularity configuration for handling row count mismatches
+  #   granularity:
+  #     aggregate_to: "sample"  # Target granularity level
+  #     numeric_default: "mean"  # Average numeric columns (TPM, counts)
+  #     categorical_default: "first"  # Take first value for strings
+  #     # Optional: override aggregation for specific columns
+  #     column_overrides:
+  #       - column: "NumReads"
+  #         function: "sum"  # Sum read counts instead of averaging

@@ -314,6 +314,15 @@ def convert_filter_model_to_metadata(filter_model):
     return metadata
 
 
+# =============================================================================
+# DEPRECATED FUNCTION - NO LONGER USED - PENDING DELETION
+# =============================================================================
+# Migration Status: Dashboard components now use pre-computed joins from CLI
+# This function performed live join execution during dashboard rendering.
+# Replaced by: get_result_dc_for_workflow() -> load_deltatable_lite(result_dc_id)
+# Location: depictio/dash/utils.py::get_result_dc_for_workflow()
+# TODO: Delete in cleanup PR after migration verification completes
+# =============================================================================
 def _load_joined_deltatable(
     workflow_id: ObjectId,
     joined_data_collection_id: str,
@@ -1165,6 +1174,15 @@ def load_deltatable_lite(
     return df
 
 
+# =============================================================================
+# DEPRECATED FUNCTION - NO LONGER USED - PENDING DELETION
+# =============================================================================
+# Migration Status: Dashboard components now use pre-computed joins from CLI
+# This function performed live join execution during dashboard rendering.
+# Replaced by: get_result_dc_for_workflow() -> load_deltatable_lite(result_dc_id)
+# Location: depictio/dash/utils.py::get_result_dc_for_workflow()
+# TODO: Delete in cleanup PR after migration verification completes
+# =============================================================================
 def merge_multiple_dataframes(
     dataframes: dict[str, pl.DataFrame],
     join_instructions: list[dict],
@@ -1821,6 +1839,15 @@ def clear_memory_cache():
     logger.info("Cleared all cached DataFrames from memory")
 
 
+# =============================================================================
+# DEPRECATED FUNCTION - NO LONGER USED - PENDING DELETION
+# =============================================================================
+# Migration Status: Dashboard components now use pre-computed joins from CLI
+# This function performed live join execution during dashboard rendering.
+# Replaced by: get_result_dc_for_workflow() -> load_deltatable_lite(result_dc_id)
+# Location: depictio/dash/utils.py::get_result_dc_for_workflow()
+# TODO: Delete in cleanup PR after migration verification completes
+# =============================================================================
 def iterative_join(
     workflow_id: ObjectId,
     joins_dict: dict,
@@ -2258,6 +2285,15 @@ class UnionFind:
 _join_tables_cache = {}
 
 
+# =============================================================================
+# DEPRECATED FUNCTION - NO LONGER USED - PENDING DELETION
+# =============================================================================
+# Migration Status: Dashboard components now use pre-computed joins from CLI
+# This function performed live join execution during dashboard rendering.
+# Replaced by: get_result_dc_for_workflow() -> load_deltatable_lite(result_dc_id)
+# Location: depictio/dash/utils.py::get_result_dc_for_workflow()
+# TODO: Delete in cleanup PR after migration verification completes
+# =============================================================================
 def get_join_tables(wf, TOKEN):
     """
     Get join tables with caching to improve performance.
@@ -2282,6 +2318,15 @@ def get_join_tables(wf, TOKEN):
     return {}
 
 
+# =============================================================================
+# DEPRECATED FUNCTION - NO LONGER USED - PENDING DELETION
+# =============================================================================
+# Migration Status: Dashboard components now use pre-computed joins from CLI
+# This function performed live join execution during dashboard rendering.
+# Replaced by: get_result_dc_for_workflow() -> load_deltatable_lite(result_dc_id)
+# Location: depictio/dash/utils.py::get_result_dc_for_workflow()
+# TODO: Delete in cleanup PR after migration verification completes
+# =============================================================================
 def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None, dc_type_mapping=None):
     # logger.info(f"wf - {wf}")
     # logger.info(f"return_joins_dict - stored_metadata - {stored_metadata}")

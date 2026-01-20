@@ -192,7 +192,13 @@ async def get_workflow_from_id(
         {"$unwind": "$workflows"},
         # Match the specific workflow ID
         {"$match": {"workflows._id": workflow_oid}},
-        # Return only the workflow
+        # Add project_id to workflow before returning
+        {
+            "$addFields": {
+                "workflows.project_id": "$_id"  # Add parent project ID to workflow
+            }
+        },
+        # Return only the workflow (now with project_id)
         {"$replaceRoot": {"newRoot": "$workflows"}},
     ]
 
