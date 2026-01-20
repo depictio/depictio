@@ -7,8 +7,10 @@ background processing, and cleanup.
 
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import cast
 
+import pymongo
 from beanie import init_beanie
 from fastapi import FastAPI
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -125,9 +127,21 @@ def start_yaml_services(should_initialize: bool) -> None:
     # All workers can initialize the directory
     initialize_yaml_directory()
 
-    # Only the initializing worker runs sync and starts the watcher
-    if should_initialize:
+    #Only ONE worker runs sync and starts the watcher
+    # Use atomic check to ensure exactly one worker starts it
+    from depictio.api.v1.db import initialization_collection
+
+    try:
+        # Try to acquire watcher start lock atomically
+        initialization_collection.insert_one({
+            "_id": "yaml_watcher_lock",
+            "worker_id": WORKER_ID,
+            "started_at": datetime.now(timezone.utc),
+        })
+        logger.info(f"Worker {WORKER_ID}: Acquired YAML watcher start lock")
         start_yaml_sync_services()
+    except pymongo.errors.DuplicateKeyError:  # type: ignore[unresolved-attribute]
+        logger.info(f"Worker {WORKER_ID}: Another worker is starting YAML watcher")
 
 
 def stop_background_services(background_task, should_initialize: bool) -> None:

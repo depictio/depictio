@@ -15,9 +15,9 @@ from typing import Any, Callable
 from depictio.api.v1.configs.logging_init import logger
 
 # Track watcher state
-_watcher_thread: threading.Thread | None = None
-_watcher_running = False
-_watcher_stop_event: threading.Event | None = None
+_watcher_threads: dict[str, threading.Thread] = {}
+_watcher_running: dict[str, bool] = {}
+_watcher_stop_events: dict[str, threading.Event] = {}
 
 
 class YAMLFileHandler:
@@ -287,84 +287,117 @@ def sync_yaml_to_mongodb(filepath: str, event_type: str) -> dict[str, Any]:
 
 def start_yaml_watcher() -> bool:
     """
-    Start the YAML directory watcher in a background thread.
+    Start the YAML directory watchers in background threads.
+
+    Starts watchers for:
+    - Local dashboards directory (if watch_local_dir=True)
+    - Templates directory (if watch_templates_dir=True)
 
     Returns:
-        True if watcher was started, False if already running or disabled
+        True if at least one watcher was started, False if all disabled or already running
     """
-    global _watcher_thread, _watcher_running, _watcher_stop_event
+    global _watcher_threads, _watcher_running, _watcher_stop_events
 
     from depictio.api.v1.configs.config import settings
-    from depictio.models.yaml_serialization import ensure_yaml_directory
 
     # Check if enabled
     if not settings.dashboard_yaml.enabled:
         logger.info("YAML watcher not started: dashboard_yaml is disabled")
         return False
 
-    # Check if already running
-    if _watcher_running:
-        logger.info("YAML watcher already running")
+    started_any = False
+
+    # Determine which directories to watch
+    watch_configs = []
+    if settings.dashboard_yaml.watch_local_dir:
+        watch_configs.append(("local", Path(settings.dashboard_yaml.yaml_dir_path)))
+    if settings.dashboard_yaml.watch_templates_dir:
+        watch_configs.append(("templates", Path(settings.dashboard_yaml.templates_path)))
+
+    if not watch_configs:
+        logger.info("YAML watcher not started: no directories configured to watch")
         return False
 
-    # Ensure directory exists
-    watch_dir = ensure_yaml_directory()
+    # Start watcher for each configured directory
+    for watch_name, watch_dir in watch_configs:
+        # Check if already running
+        if _watcher_running.get(watch_name, False):
+            logger.info(f"YAML watcher already running for {watch_name}")
+            continue
 
-    # Create handler with sync callback
-    handler = YAMLFileHandler(
-        on_change_callback=sync_yaml_to_mongodb,
-        debounce_seconds=2.0,  # Wait 2 seconds after last change
-    )
+        # Ensure directory exists
+        watch_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create stop event
-    _watcher_stop_event = threading.Event()
+        # Create handler with sync callback
+        handler = YAMLFileHandler(
+            on_change_callback=sync_yaml_to_mongodb,
+            debounce_seconds=settings.dashboard_yaml.watcher_debounce_seconds,
+        )
 
-    # Start watcher thread
-    def run_watcher():
-        global _watcher_running
-        _watcher_running = True
-        try:
-            _watchdog_watcher_loop(watch_dir, handler, _watcher_stop_event)
-        finally:
-            _watcher_running = False
+        # Create stop event
+        _watcher_stop_events[watch_name] = threading.Event()
 
-    _watcher_thread = threading.Thread(target=run_watcher, daemon=True)
-    _watcher_thread.start()
+        # Start watcher thread
+        def run_watcher(name=watch_name, directory=watch_dir, stop_event=_watcher_stop_events[watch_name]):
+            _watcher_running[name] = True
+            try:
+                _watchdog_watcher_loop(directory, handler, stop_event)
+            finally:
+                _watcher_running[name] = False
 
-    logger.info(f"YAML watcher thread started for: {watch_dir}")
-    return True
+        _watcher_threads[watch_name] = threading.Thread(target=run_watcher, daemon=True)
+        _watcher_threads[watch_name].start()
+
+        logger.info(f"YAML watcher thread started for {watch_name}: {watch_dir}")
+        started_any = True
+
+    return started_any
 
 
 def stop_yaml_watcher() -> bool:
     """
-    Stop the YAML directory watcher.
+    Stop all YAML directory watchers.
 
     Returns:
-        True if watcher was stopped, False if not running
+        True if at least one watcher was stopped, False if none were running
     """
-    global _watcher_thread, _watcher_running, _watcher_stop_event
+    global _watcher_threads, _watcher_running, _watcher_stop_events
 
-    if not _watcher_running or _watcher_stop_event is None:
+    if not _watcher_running:
         logger.info("YAML watcher not running")
         return False
 
-    # Signal stop
-    _watcher_stop_event.set()
+    stopped_any = False
 
-    # Wait for thread to finish
-    if _watcher_thread and _watcher_thread.is_alive():
-        _watcher_thread.join(timeout=5.0)
+    # Stop all running watchers
+    for watch_name in list(_watcher_running.keys()):
+        if not _watcher_running.get(watch_name, False):
+            continue
 
-    _watcher_thread = None
-    _watcher_stop_event = None
+        # Signal stop
+        stop_event = _watcher_stop_events.get(watch_name)
+        if stop_event:
+            stop_event.set()
 
-    logger.info("YAML watcher stopped")
-    return True
+        # Wait for thread to finish
+        thread = _watcher_threads.get(watch_name)
+        if thread and thread.is_alive():
+            thread.join(timeout=5.0)
+
+        # Clean up
+        _watcher_threads.pop(watch_name, None)
+        _watcher_stop_events.pop(watch_name, None)
+        _watcher_running.pop(watch_name, None)
+
+        logger.info(f"YAML watcher stopped for {watch_name}")
+        stopped_any = True
+
+    return stopped_any
 
 
 def get_watcher_status() -> dict[str, Any]:
     """
-    Get the current status of the YAML watcher.
+    Get the current status of all YAML watchers.
 
     Returns:
         Dict with watcher status information
@@ -373,8 +406,18 @@ def get_watcher_status() -> dict[str, Any]:
 
     return {
         "enabled": settings.dashboard_yaml.enabled,
-        "running": _watcher_running,
-        "yaml_directory": settings.dashboard_yaml.yaml_dir_path,
+        "watchers": {
+            "local": {
+                "running": _watcher_running.get("local", False),
+                "directory": settings.dashboard_yaml.yaml_dir_path,
+                "watch_enabled": settings.dashboard_yaml.watch_local_dir,
+            },
+            "templates": {
+                "running": _watcher_running.get("templates", False),
+                "directory": settings.dashboard_yaml.templates_path,
+                "watch_enabled": settings.dashboard_yaml.watch_templates_dir,
+            },
+        },
         "auto_export_on_save": settings.dashboard_yaml.auto_export_on_save,
     }
 

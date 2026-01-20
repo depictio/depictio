@@ -13,12 +13,30 @@ WORKER_ID = os.getpid()
 
 
 def initialize_yaml_directory() -> None:
-    """Create the YAML dashboards directory if it doesn't exist."""
+    """Create the YAML dashboards directories if they don't exist."""
     from depictio.api.v1.configs.config import settings
 
-    yaml_dir = Path(settings.dashboard_yaml.yaml_dir_path)
-    yaml_dir.mkdir(parents=True, exist_ok=True)
-    logger.info(f"Worker {WORKER_ID}: Dashboard YAML directory initialized at {yaml_dir}")
+    # Create local dashboards directory
+    local_dir = Path(settings.dashboard_yaml.yaml_dir_path)
+    # Only create if parent exists (avoid creating mount point)
+    if local_dir.parent.exists():
+        local_dir.mkdir(exist_ok=True)
+        logger.info(f"Worker {WORKER_ID}: Local dashboards directory initialized at {local_dir}")
+    elif local_dir.exists():
+        logger.info(f"Worker {WORKER_ID}: Local dashboards directory exists at {local_dir}")
+    else:
+        logger.warning(f"Worker {WORKER_ID}: Parent directory {local_dir.parent} does not exist, skipping local dir creation")
+
+    # Create templates directory
+    templates_dir = Path(settings.dashboard_yaml.templates_path)
+    # Only create if parent exists (avoid creating mount point)
+    if templates_dir.parent.exists():
+        templates_dir.mkdir(exist_ok=True)
+        logger.info(f"Worker {WORKER_ID}: Templates directory initialized at {templates_dir}")
+    elif templates_dir.exists():
+        logger.info(f"Worker {WORKER_ID}: Templates directory exists at {templates_dir}")
+    else:
+        logger.warning(f"Worker {WORKER_ID}: Parent directory {templates_dir.parent} does not exist, skipping templates dir creation")
 
 
 def run_initial_yaml_sync() -> None:

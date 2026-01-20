@@ -591,10 +591,22 @@ class DashboardYAMLConfig(BaseSettings):
     # Enable/disable YAML dashboard sync feature
     enabled: bool = Field(default=True, description="Enable YAML-based dashboard management")
 
-    # Base directory for YAML dashboard files
-    base_dir: Path = Field(
-        default_factory=lambda: Path(__file__).parent.parent.parent.parent / "dashboards_yaml",
-        description="Base directory for dashboard YAML files",
+    # Local dashboards directory (instance-specific, git-ignored, auto-synced)
+    local_dir: Path = Field(
+        default_factory=lambda: Path(__file__).parent.parent.parent.parent.parent / "dashboards" / "local",
+        description="Directory for instance-specific dashboard YAML files (auto-synced)",
+    )
+
+    # Templates directory (version-controlled, not auto-synced by default)
+    templates_dir: Path = Field(
+        default_factory=lambda: Path(__file__).parent.parent.parent.parent.parent / "dashboards" / "templates",
+        description="Directory for template dashboard YAML files (version control)",
+    )
+
+    # Base directory for YAML dashboard files (backward compatibility - points to local_dir)
+    base_dir: Path | None = Field(
+        default=None,
+        description="DEPRECATED: Use local_dir instead. Base directory for dashboard YAML files",
     )
 
     # Organization structure
@@ -658,6 +670,16 @@ class DashboardYAMLConfig(BaseSettings):
         description="Automatically start the file watcher on API startup",
     )
 
+    watch_local_dir: bool = Field(
+        default=True,
+        description="Watch and auto-sync local dashboards directory",
+    )
+
+    watch_templates_dir: bool = Field(
+        default=False,
+        description="Watch and auto-sync templates directory (useful for template development)",
+    )
+
     model_config = SettingsConfigDict(
         env_prefix="DEPICTIO_DASHBOARD_YAML_",
         env_file=".env",
@@ -668,8 +690,17 @@ class DashboardYAMLConfig(BaseSettings):
     @computed_field
     @property
     def yaml_dir_path(self) -> str:
-        """Get absolute YAML directory path."""
-        return str(self.base_dir.resolve())
+        """Get absolute YAML directory path (defaults to local_dir)."""
+        # Use base_dir if explicitly set (backward compatibility)
+        if self.base_dir is not None:
+            return str(self.base_dir.resolve())
+        return str(self.local_dir.resolve())
+
+    @computed_field
+    @property
+    def templates_path(self) -> str:
+        """Get absolute templates directory path."""
+        return str(self.templates_dir.resolve())
 
 
 class Settings(BaseSettings):
