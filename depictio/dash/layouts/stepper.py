@@ -184,7 +184,10 @@ def register_callbacks_stepper(app):
 
         logger.info(
             f"💾 STEPPER SAVE - Component metadata: type={new_component_metadata.get('component_type')}, "
-            f"title={new_component_metadata.get('title')}"
+            f"title={new_component_metadata.get('title')}, "
+            f"wf_id={new_component_metadata.get('wf_id')}, "
+            f"dc_id={new_component_metadata.get('dc_id')}, "
+            f"column={new_component_metadata.get('column_name')}"
         )
 
         # Get existing metadata and layout

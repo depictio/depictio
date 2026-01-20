@@ -583,6 +583,9 @@ def build_interactive(**kwargs):
     logger.info(
         f"🔍 BUILD INTERACTIVE CALLED - Index: {kwargs.get('index', 'UNKNOWN')}, Stepper: {kwargs.get('stepper', False)}"
     )
+    logger.info(
+        f"🔍 BUILD INTERACTIVE KWARGS: wf_id={kwargs.get('wf_id')}, dc_id={kwargs.get('dc_id')}, column={kwargs.get('column_name')}, type={kwargs.get('interactive_component_type')}"
+    )
 
     index = kwargs.get("index")
     title = kwargs.get("title")  # Example of default parameter
