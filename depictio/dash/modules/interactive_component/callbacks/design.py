@@ -25,11 +25,12 @@ def register_interactive_design_callbacks(app):
         Output({"type": "input-title", "index": MATCH}, "value"),
         Output({"type": "input-dropdown-column", "index": MATCH}, "value"),
         Output({"type": "input-dropdown-method", "index": MATCH}, "value"),
-        Output({"type": "input-dropdown-scale", "index": MATCH}, "value"),
+        # COMMENTED OUT: Scale and marks outputs (UI elements removed)
+        # Output({"type": "input-dropdown-scale", "index": MATCH}, "value"),
         Output({"type": "input-color-picker", "index": MATCH}, "value"),
         Output({"type": "input-icon-selector", "index": MATCH}, "value"),
         Output({"type": "input-title-size", "index": MATCH}, "value"),
-        Output({"type": "input-number-marks", "index": MATCH}, "value"),
+        # Output({"type": "input-number-marks", "index": MATCH}, "value"),
         Input("edit-page-context", "data"),
         State({"type": "input-title", "index": MATCH}, "id"),
         prevent_initial_call="initial_duplicate",
@@ -58,15 +59,11 @@ def register_interactive_design_callbacks(app):
                 dash.no_update,
                 dash.no_update,
                 dash.no_update,
-                dash.no_update,
-                dash.no_update,
             )
 
         component_data = edit_context.get("component_data")
         if not component_data or component_data.get("component_type") != "interactive":
             return (
-                dash.no_update,
-                dash.no_update,
                 dash.no_update,
                 dash.no_update,
                 dash.no_update,
@@ -84,26 +81,24 @@ def register_interactive_design_callbacks(app):
                 dash.no_update,
                 dash.no_update,
                 dash.no_update,
-                dash.no_update,
-                dash.no_update,
             )
 
         logger.info(f"🎨 PRE-POPULATING interactive settings for component {input_id['index']}")
         logger.info(f"   Title: {component_data.get('title')}")
         logger.info(f"   Column: {component_data.get('column_name')}")
         logger.info(f"   Method: {component_data.get('interactive_component_type')}")
-        logger.info(f"   Scale: {component_data.get('scale')}")
 
         # Ensure ColorInput components get empty string instead of None to avoid trim() errors
         return (
             component_data.get("title") or "",  # TextInput needs string
             component_data.get("column_name"),  # Select accepts None
             component_data.get("interactive_component_type"),  # Select accepts None
-            component_data.get("scale") or "linear",  # Select needs value
+            # COMMENTED OUT: Scale and marks (UI elements removed)
+            # component_data.get("scale") or "linear",  # Select needs value
             component_data.get("custom_color") or "",  # ColorInput needs empty string, not None
             component_data.get("icon_name") or "bx:slider-alt",  # Select needs value
             component_data.get("title_size") or "md",  # Select needs value
-            component_data.get("marks_number") or 2,  # NumberInput needs value
+            # component_data.get("marks_number") or 2,  # NumberInput needs value
         )
 
     # Populate method dropdown based on column selection
@@ -242,11 +237,12 @@ def register_interactive_design_callbacks(app):
             Input({"type": "input-title", "index": MATCH}, "value"),
             Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
             Input({"type": "input-dropdown-method", "index": MATCH}, "value"),
-            Input({"type": "input-dropdown-scale", "index": MATCH}, "value"),
+            # COMMENTED OUT: Scale and marks inputs (UI elements removed)
+            # Input({"type": "input-dropdown-scale", "index": MATCH}, "value"),
             Input({"type": "input-color-picker", "index": MATCH}, "value"),
             Input({"type": "input-icon-selector", "index": MATCH}, "value"),
             Input({"type": "input-title-size", "index": MATCH}, "value"),
-            Input({"type": "input-number-marks", "index": MATCH}, "value"),
+            # Input({"type": "input-number-marks", "index": MATCH}, "value"),
             Input("edit-page-context", "data"),
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
@@ -259,11 +255,11 @@ def register_interactive_design_callbacks(app):
         input_value,
         column_value,
         aggregation_value,
-        scale_value,
+        # scale_value,  # Removed
         color_value,
         icon_name,
         title_size,
-        marks_number,
+        # marks_number,  # Removed
         edit_context,
         workflow_id,
         data_collection_id,
@@ -306,10 +302,11 @@ def register_interactive_design_callbacks(app):
                     aggregation_value = component_data.get("interactive_component_type")
                 if not input_value:
                     input_value = component_data.get("title", "")
-                if scale_value is None:
-                    scale_value = component_data.get("scale", "linear")
-                if marks_number is None:
-                    marks_number = component_data.get("marks_number", 2)
+                # COMMENTED OUT: Scale and marks (UI elements removed)
+                # if scale_value is None:
+                #     scale_value = component_data.get("scale", "linear")
+                # if marks_number is None:
+                #     marks_number = component_data.get("marks_number", 2)
                 if not color_value:
                     color_value = component_data.get("custom_color", "")
                 if not title_size:
