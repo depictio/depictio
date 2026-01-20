@@ -589,15 +589,16 @@ def register_interactive_design_callbacks(app):
             current_metadata = {}
 
         # Update with latest selections
+        # IMPORTANT: Use field names expected by batch callback in core_async.py
         current_metadata.update(
             {
-                "workflow_id": workflow_id,
-                "data_collection_id": dc_id,
-                "column": column,
-                "method": method,
+                "wf_id": workflow_id,  # Batch callback expects wf_id, not workflow_id
+                "dc_id": dc_id,  # Batch callback expects dc_id, not data_collection_id
+                "column_name": column,  # Batch callback expects column_name, not column
+                "interactive_component_type": method,  # Batch callback expects this, not method
                 "title": title or column,
-                "color": color,
-                "icon": icon,
+                "custom_color": color,
+                "icon_name": icon,
                 "title_size": title_size,
             }
         )

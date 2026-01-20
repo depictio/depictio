@@ -296,13 +296,14 @@ def design_interactive(id, df):
 
     # CRITICAL: Add stored-metadata-component Store for save functionality
     # This Store will be populated by callback when user selects workflow/DC
+    # Field names must match what batch callback expects (core_async.py)
     metadata_store = dcc.Store(
         id={"type": "stored-metadata-component", "index": id["index"]},
         data={
             "index": id["index"].replace("-tmp", "") if id["index"] else "unknown",
             "component_type": "interactive",
-            "workflow_id": None,  # Will be populated by callback
-            "data_collection_id": None,  # Will be populated by callback
+            "wf_id": None,  # Will be populated by callback
+            "dc_id": None,  # Will be populated by callback
         },
     )
 
