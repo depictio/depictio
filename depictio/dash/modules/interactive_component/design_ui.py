@@ -294,11 +294,24 @@ def design_interactive(id, df):
         style={"marginTop": "2rem"},
     )
 
+    # CRITICAL: Add stored-metadata-component Store for save functionality
+    # This Store will be populated by callback when user selects workflow/DC
+    metadata_store = dcc.Store(
+        id={"type": "stored-metadata-component", "index": id["index"]},
+        data={
+            "index": id["index"].replace("-tmp", "") if id["index"] else "unknown",
+            "component_type": "interactive",
+            "workflow_id": None,  # Will be populated by callback
+            "data_collection_id": None,  # Will be populated by callback
+        },
+    )
+
     interactive_row = [
         dmc.Stack(
             [main_layout, html.Hr(), bottom_section],
             gap="lg",
         ),
+        metadata_store,  # Add Store to layout
     ]
     return interactive_row
 

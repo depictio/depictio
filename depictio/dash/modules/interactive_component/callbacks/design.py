@@ -565,4 +565,47 @@ def register_interactive_design_callbacks(app):
             columns_description_df,
         )
 
+    # Update stored metadata when workflow/DC are selected (for save functionality)
+    @app.callback(
+        Output({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        [
+            Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
+            Input({"type": "input-dropdown-method", "index": MATCH}, "value"),
+            Input({"type": "input-title", "index": MATCH}, "value"),
+            Input({"type": "input-color-picker", "index": MATCH}, "value"),
+            Input({"type": "input-icon-selector", "index": MATCH}, "value"),
+            Input({"type": "input-title-size", "index": MATCH}, "value"),
+        ],
+        State({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        prevent_initial_call=True,
+    )
+    def update_stored_metadata(
+        workflow_id, dc_id, column, method, title, color, icon, title_size, current_metadata
+    ):
+        """
+        Update the stored-metadata-component Store as user configures the interactive component.
+        This metadata is used by save_stepper_component callback to persist the component.
+        """
+        if not current_metadata:
+            current_metadata = {}
+
+        # Update with latest selections
+        current_metadata.update(
+            {
+                "workflow_id": workflow_id,
+                "data_collection_id": dc_id,
+                "column": column,
+                "method": method,
+                "title": title or column,
+                "color": color,
+                "icon": icon,
+                "title_size": title_size,
+            }
+        )
+
+        logger.info(f"📝 Updated stored metadata: {current_metadata}")
+        return current_metadata
+
     logger.info("✅ Interactive design callbacks registered")
