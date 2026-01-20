@@ -25,7 +25,7 @@ class YAMLFileHandler:
 
     def __init__(
         self,
-        on_change_callback: Callable[[str, str], None],
+        on_change_callback: Callable[[str, str], Any],
         debounce_seconds: float = 2.0,
     ):
         """
@@ -82,6 +82,18 @@ class YAMLFileHandler:
         return processed
 
 
+YAML_EXTENSIONS = ("**/*.yaml", "**/*.yml")
+
+
+def _scan_yaml_files(watch_dir: Path) -> dict[str, float]:
+    """Scan directory for YAML files and return their modification times."""
+    file_mtimes: dict[str, float] = {}
+    for pattern in YAML_EXTENSIONS:
+        for yaml_file in watch_dir.glob(pattern):
+            file_mtimes[str(yaml_file)] = yaml_file.stat().st_mtime
+    return file_mtimes
+
+
 def _simple_watcher_loop(
     watch_dir: Path,
     handler: YAMLFileHandler,
@@ -99,55 +111,36 @@ def _simple_watcher_loop(
         stop_event: Event to signal stop
         poll_interval: Seconds between polls
     """
-    # Track file modification times
-    file_mtimes: dict[str, float] = {}
-
-    # Initial scan
-    for yaml_file in watch_dir.glob("**/*.yaml"):
-        file_mtimes[str(yaml_file)] = yaml_file.stat().st_mtime
-    for yaml_file in watch_dir.glob("**/*.yml"):
-        file_mtimes[str(yaml_file)] = yaml_file.stat().st_mtime
+    file_mtimes = _scan_yaml_files(watch_dir)
 
     logger.info(f"YAML watcher started (polling mode) for {watch_dir}")
     logger.info(f"Watching {len(file_mtimes)} YAML files")
 
     while not stop_event.is_set():
         try:
-            # Check for changes
-            current_files: dict[str, float] = {}
+            current_files = _scan_yaml_files(watch_dir)
 
-            for yaml_file in watch_dir.glob("**/*.yaml"):
-                current_files[str(yaml_file)] = yaml_file.stat().st_mtime
-            for yaml_file in watch_dir.glob("**/*.yml"):
-                current_files[str(yaml_file)] = yaml_file.stat().st_mtime
-
-            # Detect changes
+            # Detect new and modified files
             for filepath, mtime in current_files.items():
                 if filepath not in file_mtimes:
-                    # New file
                     handler.on_file_changed(filepath, "created")
                     logger.debug(f"YAML file created: {filepath}")
                 elif mtime > file_mtimes[filepath]:
-                    # Modified file
                     handler.on_file_changed(filepath, "modified")
                     logger.debug(f"YAML file modified: {filepath}")
 
             # Detect deletions
-            for filepath in list(file_mtimes.keys()):
+            for filepath in file_mtimes:
                 if filepath not in current_files:
                     handler.on_file_changed(filepath, "deleted")
                     logger.debug(f"YAML file deleted: {filepath}")
 
-            # Update tracked files
             file_mtimes = current_files
-
-            # Process pending changes
             handler.process_pending_changes()
 
         except Exception as e:
             logger.error(f"Error in YAML watcher loop: {e}")
 
-        # Wait for next poll
         stop_event.wait(poll_interval)
 
     logger.info("YAML watcher stopped")
@@ -203,6 +196,36 @@ def _watchdog_watcher_loop(
         _simple_watcher_loop(watch_dir, handler, stop_event)
 
 
+def _validate_yaml_for_sync(filepath: str) -> tuple[bool, str | None]:
+    """
+    Validate a YAML file before syncing.
+
+    Returns:
+        Tuple of (should_continue, error_message)
+        - should_continue: True if sync should proceed
+        - error_message: Error message if validation failed and blocking is enabled
+    """
+    from depictio.api.v1.configs.config import settings
+    from depictio.models.yaml_serialization.validation import validate_yaml_file
+
+    if not settings.dashboard_yaml.enable_validation:
+        return True, None
+
+    validation_result = validate_yaml_file(filepath)
+    if validation_result["valid"]:
+        return True, None
+
+    error_messages = [e["message"] for e in validation_result["errors"]]
+    error_summary = "; ".join(error_messages)
+
+    if settings.dashboard_yaml.block_on_validation_errors:
+        return False, f"Validation failed: {error_summary}"
+
+    logger.warning(f"Validation failed for {filepath}: {error_summary}")
+    logger.warning("Continuing with sync (block_on_validation_errors=False)")
+    return True, None
+
+
 def sync_yaml_to_mongodb(filepath: str, event_type: str) -> dict[str, Any]:
     """
     Sync a YAML file change to MongoDB.
@@ -224,21 +247,32 @@ def sync_yaml_to_mongodb(filepath: str, event_type: str) -> dict[str, Any]:
         "filepath": filepath,
         "event_type": event_type,
         "success": False,
+        "validation_passed": False,
         "action": None,
         "dashboard_id": None,
         "error": None,
     }
 
     try:
+        # Handle file deletions (skip MongoDB deletion for safety)
         if event_type == "deleted":
-            # For deleted files, we don't auto-delete from MongoDB
-            # This is a safety measure - YAML deletion shouldn't remove DB data
             result["action"] = "skipped"
             result["success"] = True
+            result["validation_passed"] = True
             logger.info(f"YAML file deleted, skipping MongoDB deletion: {filepath}")
             return result
 
-        # Read and parse the YAML file
+        # Validate YAML before syncing
+        should_continue, error = _validate_yaml_for_sync(filepath)
+        result["validation_passed"] = should_continue and error is None
+
+        if not should_continue:
+            result["action"] = "blocked_invalid_yaml"
+            result["error"] = error
+            logger.error(f"Blocked sync for {filepath}: {error}")
+            return result
+
+        # Parse and sync the YAML file
         dashboard_dict = import_dashboard_from_file(filepath)
         dashboard_id = dashboard_dict.get("dashboard_id")
 
@@ -247,36 +281,33 @@ def sync_yaml_to_mongodb(filepath: str, event_type: str) -> dict[str, Any]:
             logger.warning(f"Skipping YAML without dashboard_id: {filepath}")
             return result
 
-        # Check if dashboard exists in MongoDB
         existing = dashboards_collection.find_one({"dashboard_id": ObjectId(dashboard_id)})
 
-        if existing:
-            # Update existing dashboard
-            # Preserve critical fields from existing record
-            dashboard_dict["project_id"] = existing["project_id"]
-            dashboard_dict["permissions"] = existing.get("permissions", {})
-            dashboard_dict["is_public"] = existing.get("is_public", False)
-            dashboard_dict["version"] = existing.get("version", 0) + 1
-            dashboard_dict["last_saved_ts"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-            dashboard = DashboardData.from_mongo(dashboard_dict)
-
-            dashboards_collection.find_one_and_update(
-                {"dashboard_id": ObjectId(dashboard_id)},
-                {"$set": dashboard.mongo()},
-            )
-
-            result["success"] = True
-            result["action"] = "updated"
-            result["dashboard_id"] = str(dashboard_id)
-            logger.info(f"Auto-synced YAML to MongoDB (updated): {filepath}")
-        else:
-            # New dashboard - skip auto-creation for safety
-            # User should use import endpoint for new dashboards
+        if not existing:
+            # Skip auto-creation for safety - user should use import endpoint
             result["action"] = "skipped_new"
             result["success"] = True
             result["dashboard_id"] = str(dashboard_id)
             logger.info(f"Skipping new dashboard (use import endpoint): {filepath}")
+            return result
+
+        # Update existing dashboard, preserving critical fields
+        dashboard_dict["project_id"] = existing["project_id"]
+        dashboard_dict["permissions"] = existing.get("permissions", {})
+        dashboard_dict["is_public"] = existing.get("is_public", False)
+        dashboard_dict["version"] = existing.get("version", 0) + 1
+        dashboard_dict["last_saved_ts"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        dashboard = DashboardData.from_mongo(dashboard_dict)
+        dashboards_collection.find_one_and_update(
+            {"dashboard_id": ObjectId(dashboard_id)},
+            {"$set": dashboard.mongo()},
+        )
+
+        result["success"] = True
+        result["action"] = "updated"
+        result["dashboard_id"] = str(dashboard_id)
+        logger.info(f"Auto-synced YAML to MongoDB (updated): {filepath}")
 
     except Exception as e:
         result["error"] = str(e)
@@ -338,7 +369,9 @@ def start_yaml_watcher() -> bool:
         _watcher_stop_events[watch_name] = threading.Event()
 
         # Start watcher thread
-        def run_watcher(name=watch_name, directory=watch_dir, stop_event=_watcher_stop_events[watch_name]):
+        def run_watcher(
+            name=watch_name, directory=watch_dir, stop_event=_watcher_stop_events[watch_name]
+        ):
             _watcher_running[name] = True
             try:
                 _watchdog_watcher_loop(directory, handler, stop_event)
@@ -425,11 +458,9 @@ def get_watcher_status() -> dict[str, Any]:
 # Async wrappers for FastAPI endpoints
 async def async_start_watcher() -> bool:
     """Async wrapper for start_yaml_watcher."""
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, start_yaml_watcher)
+    return await asyncio.to_thread(start_yaml_watcher)
 
 
 async def async_stop_watcher() -> bool:
     """Async wrapper for stop_yaml_watcher."""
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, stop_yaml_watcher)
+    return await asyncio.to_thread(stop_yaml_watcher)

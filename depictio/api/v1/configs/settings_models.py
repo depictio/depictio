@@ -593,13 +593,17 @@ class DashboardYAMLConfig(BaseSettings):
 
     # Local dashboards directory (instance-specific, git-ignored, auto-synced)
     local_dir: Path = Field(
-        default_factory=lambda: Path(__file__).parent.parent.parent.parent.parent / "dashboards" / "local",
+        default_factory=lambda: Path(__file__).parent.parent.parent.parent.parent
+        / "dashboards"
+        / "local",
         description="Directory for instance-specific dashboard YAML files (auto-synced)",
     )
 
     # Templates directory (version-controlled, not auto-synced by default)
     templates_dir: Path = Field(
-        default_factory=lambda: Path(__file__).parent.parent.parent.parent.parent / "dashboards" / "templates",
+        default_factory=lambda: Path(__file__).parent.parent.parent.parent.parent
+        / "dashboards"
+        / "templates",
         description="Directory for template dashboard YAML files (version control)",
     )
 
@@ -678,6 +682,17 @@ class DashboardYAMLConfig(BaseSettings):
     watch_templates_dir: bool = Field(
         default=False,
         description="Watch and auto-sync templates directory (useful for template development)",
+    )
+
+    # Validation settings
+    enable_validation: bool = Field(
+        default=True,
+        description="Enable validation gate before syncing YAML to MongoDB",
+    )
+
+    block_on_validation_errors: bool = Field(
+        default=True,
+        description="Block sync if validation fails (set False to only warn)",
     )
 
     model_config = SettingsConfigDict(
