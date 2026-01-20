@@ -39,6 +39,69 @@ from depictio.dash.modules.figure_component.utils import _get_theme_template
 USE_BACKGROUND_CALLBACKS = should_use_background_for_component("figure")
 
 
+def _extend_filters_for_joined_dc(
+    relevant_filters: list,
+    card_dc_str: str,
+    filters_by_dc: dict,
+    project_metadata: dict | None,
+    batch_task_id: str,
+) -> list:
+    """
+    Extend filters to include source DC filters when figure uses a joined DC.
+
+    For joined data collections, filters from the source DCs (left and right)
+    should also apply to the joined result.
+
+    Args:
+        relevant_filters: Initial list of filters for the figure's DC
+        card_dc_str: The figure's data collection ID as string
+        filters_by_dc: Dictionary mapping DC IDs to their filters
+        project_metadata: Project metadata containing join definitions
+        batch_task_id: Task ID for logging
+
+    Returns:
+        Extended list of filters including source DC filters
+    """
+    if not project_metadata:
+        return relevant_filters
+
+    project_data = project_metadata.get("project", {})
+    project_joins = project_data.get("joins", [])
+
+    for join_def in project_joins:
+        result_dc_id = join_def.get("result_dc_id")
+        if str(result_dc_id) != card_dc_str:
+            continue
+
+        # This figure uses a joined DC - include filters from source DCs
+        source_dc_tags = [join_def.get("left_dc", ""), join_def.get("right_dc", "")]
+        logger.info(
+            f"[{batch_task_id}] Figure uses joined DC {card_dc_str[:8]}, "
+            f"including filters from source DCs: {source_dc_tags}"
+        )
+
+        for dc_tag in source_dc_tags:
+            if not dc_tag:
+                continue
+
+            # Find DC IDs matching this tag and include their filters
+            for wf in project_data.get("workflows", []):
+                for dc in wf.get("data_collections", []):
+                    if dc.get("data_collection_tag") == dc_tag:
+                        source_dc_id = str(dc.get("_id", ""))
+                        source_filters = filters_by_dc.get(source_dc_id, [])
+                        if source_filters:
+                            logger.info(
+                                f"[{batch_task_id}] Including {len(source_filters)} "
+                                f"filters from source DC {dc_tag} ({source_dc_id[:8]})"
+                            )
+                            relevant_filters.extend(source_filters)
+
+        break  # Found the join definition
+
+    return relevant_filters
+
+
 def register_core_callbacks(app):
     """Register core rendering callbacks for figure component."""
 
@@ -187,43 +250,14 @@ def register_core_callbacks(app):
                 # Get relevant filters for this figure's DC
                 relevant_filters = filters_by_dc.get(card_dc_str, [])
 
-                # 🔧 JOINED DC FILTERING: Check if figure uses a joined DC
-                # If so, also include filters from interactive components that match source DC tags
-                if project_metadata:
-                    project_data = project_metadata.get("project", {})
-                    project_joins = project_data.get("joins", [])
-
-                    # Check if this figure's DC is a joined DC (result_dc_id)
-                    for join_def in project_joins:
-                        result_dc_id = join_def.get("result_dc_id")
-                        if str(result_dc_id) == card_dc_str:
-                            # This is a joined DC! Get source DC tags
-                            source_dc_tags = [
-                                join_def.get("left_dc", ""),
-                                join_def.get("right_dc", ""),
-                            ]
-                            logger.info(
-                                f"[{batch_task_id}] 🔗 Figure uses joined DC {card_dc_str[:8]}, "
-                                f"checking filters for source DCs: {source_dc_tags}"
-                            )
-
-                            # For each source DC tag, find matching DC IDs and include their filters
-                            for dc_tag in source_dc_tags:
-                                if not dc_tag:
-                                    continue
-
-                                # Find DC ID(s) with this tag
-                                for wf in project_data.get("workflows", []):
-                                    for dc in wf.get("data_collections", []):
-                                        if dc.get("data_collection_tag") == dc_tag:
-                                            source_dc_id = str(dc.get("_id", ""))
-                                            if source_dc_id in filters_by_dc:
-                                                logger.info(
-                                                    f"[{batch_task_id}] 🔗 Including {len(filters_by_dc[source_dc_id])} "
-                                                    f"filters from source DC {dc_tag} ({source_dc_id[:8]})"
-                                                )
-                                                relevant_filters.extend(filters_by_dc[source_dc_id])
-                            break  # Found the join, no need to check other joins
+                # Include filters from source DCs if this figure uses a joined DC
+                relevant_filters = _extend_filters_for_joined_dc(
+                    relevant_filters,
+                    card_dc_str,
+                    filters_by_dc,
+                    project_metadata,
+                    batch_task_id,
+                )
 
                 active_filters = [
                     c for c in relevant_filters if c.get("value") not in [None, [], "", False]

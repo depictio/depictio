@@ -67,14 +67,11 @@ def render_dashboard(
         # Get component type
         component_type = child_metadata.get("component_type")
 
-        # DEBUG: Log metadata for interactive components
+        # Log metadata for interactive components
         if component_type == "interactive":
-            logger.info(
-                f"🔍 RENDER DASHBOARD - Interactive metadata from MongoDB: "
-                f"index={child_metadata.get('index')}, "
-                f"wf_id={child_metadata.get('wf_id')}, "
-                f"dc_id={child_metadata.get('dc_id')}, "
-                f"column_name={child_metadata.get('column_name')}, "
+            logger.debug(
+                f"Interactive component: index={child_metadata.get('index')}, "
+                f"column={child_metadata.get('column_name')}, "
                 f"type={child_metadata.get('interactive_component_type')}"
             )
 

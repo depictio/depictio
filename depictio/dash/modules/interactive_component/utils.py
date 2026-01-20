@@ -579,16 +579,9 @@ def apply_log_transformation(series, shift=1e-6):
 
 
 def build_interactive(**kwargs):
-    # DUPLICATION TRACKING: Log interactive component builds
-    logger.info(
-        f"🔍 BUILD INTERACTIVE CALLED - Index: {kwargs.get('index', 'UNKNOWN')}, Stepper: {kwargs.get('stepper', False)}"
-    )
-    logger.info(
-        f"🔍 BUILD INTERACTIVE KWARGS: wf_id={kwargs.get('wf_id')}, dc_id={kwargs.get('dc_id')}, column={kwargs.get('column_name')}, type={kwargs.get('interactive_component_type')}"
-    )
-
+    """Build an interactive component (filter) for the dashboard."""
     index = kwargs.get("index")
-    title = kwargs.get("title")  # Example of default parameter
+    title = kwargs.get("title")
     wf_id = kwargs.get("wf_id")
     dc_id = kwargs.get("dc_id")
     column_name = kwargs.get("column_name")
@@ -645,11 +638,10 @@ def build_interactive(**kwargs):
     else:
         value_div_type = "interactive-component-value"
 
-    # COMPONENT-AT-BUILD-TIME APPROACH: Create actual component immediately (like cards)
-    # Component exists in DOM with disabled state, callback enables and populates it
-    # This eliminates race conditions with dash.ALL callbacks
+    # Build frame mode: create placeholder component with loader
+    # Callback will populate the actual interactive component
     if build_frame:
-        logger.info(f"📦 BUILD_FRAME MODE: Creating disabled component for interactive {index}")
+        logger.debug(f"Build frame mode: creating placeholder for interactive {index}")
 
         # Show only a loader until callback renders final component
         # This avoids the "Loading..." -> component transition (eliminates visual flicker)
@@ -690,11 +682,8 @@ def build_interactive(**kwargs):
             },
         )
 
-        # DEBUG: Log trigger store data for troubleshooting
-        logger.info(
-            f"🔍 TRIGGER STORE CREATED - Index: {index}, "
-            f"wf_id={wf_id}, dc_id={dc_id}, column_name={column_name}, "
-            f"type={interactive_component_type}, build_frame={build_frame}"
+        logger.debug(
+            f"Trigger store created: index={index}, column={column_name}, type={interactive_component_type}"
         )
 
         # Create metadata store for reference values (like cards)
@@ -736,18 +725,9 @@ def build_interactive(**kwargs):
 
         return frame_with_component
 
-    # Log optimization info
-    if init_data:
-        logger.info(
-            f"📡 INTERACTIVE OPTIMIZATION: Using init_data with {len(init_data)} DC entries"
-        )
-
-    # logger.info(f"Interactive - kwargs: {kwargs}")
-    logger.info(
-        f"BUILD_INTERACTIVE: column_type={column_type}, interactive_component_type={interactive_component_type}"
-    )
-    logger.info(
-        f"BUILD_INTERACTIVE: Available input_methods for {column_type}: {list(agg_functions[column_type].get('input_methods', {}).keys())}"
+    logger.debug(
+        f"Building {interactive_component_type} for column_type={column_type}, "
+        f"init_data={'available' if init_data else 'not available'}"
     )
 
     if stepper:
@@ -879,13 +859,10 @@ def build_interactive(**kwargs):
 
     # If the aggregation value is Select, MultiSelect or SegmentedControl
     if interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
-        # LOG SCHEMA DEBUG INFO FOR SELECT COMPONENTS
-        logger.info("🔍 SELECT COMPONENT SCHEMA DEBUG:")
-        logger.info(f"  - Component type: {interactive_component_type}")
-        logger.info(f"  - Component expects column: '{column_name}'")
-        logger.info(f"  - DataFrame shape: {df.shape}")
-        logger.info(f"  - Available columns: {df.columns}")
-        logger.info(f"  - Column '{column_name}' present: {column_name in df.columns}")
+        logger.debug(
+            f"Select component: column={column_name}, df.shape={df.shape}, "
+            f"column_present={column_name in df.columns}"
+        )
 
         # Check if column exists before processing
         if column_name not in df.columns:
@@ -1222,14 +1199,10 @@ def build_interactive(**kwargs):
 
         # Convert Polars DataFrame to Pandas for processing
         df_pandas = df.to_pandas()
-        # logger.info(f"df['{column_name}']: {df_pandas[column_name]}")
-
-        # LOG SCHEMA DEBUG INFO
-        logger.info("🔍 INTERACTIVE COMPONENT SCHEMA DEBUG:")
-        logger.info(f"  - Component expects column: '{column_name}'")
-        logger.info(f"  - DataFrame shape: {df_pandas.shape}")
-        logger.info(f"  - Available columns: {list(df_pandas.columns)}")
-        logger.info(f"  - Column '{column_name}' present: {column_name in df_pandas.columns}")
+        logger.debug(
+            f"Slider component: column={column_name}, df.shape={df_pandas.shape}, "
+            f"column_present={column_name in df_pandas.columns}"
+        )
 
         # Check if column exists before processing
         if column_name not in df_pandas.columns:
@@ -1437,19 +1410,10 @@ def build_interactive(**kwargs):
         else:
             logger.warning("No marks generated from mark generation function")
 
-        logger.info("DMC Slider: Final kwargs before component creation:")
-        logger.info(
-            f"  min: {kwargs_component.get('min')} (type: {type(kwargs_component.get('min'))})"
+        logger.debug(
+            f"DMC Slider params: min={kwargs_component.get('min')}, max={kwargs_component.get('max')}, "
+            f"value={kwargs_component.get('value')}, marks={len(kwargs_component.get('marks', []))}"
         )
-        logger.info(
-            f"  max: {kwargs_component.get('max')} (type: {type(kwargs_component.get('max'))})"
-        )
-        logger.info(
-            f"  value: {kwargs_component.get('value')} (type: {type(kwargs_component.get('value'))})"
-        )
-        logger.info(f"  marks: {len(kwargs_component.get('marks', []))} marks")
-        if kwargs_component.get("marks"):
-            logger.info(f"  marks detail: {kwargs_component.get('marks')}")
 
         interactive_component = func_name(**kwargs_component)
 
@@ -1473,13 +1437,10 @@ def build_interactive(**kwargs):
 
         # Convert Polars DataFrame to Pandas for processing
         df_pandas = df.to_pandas()
-
-        # LOG SCHEMA DEBUG INFO
-        logger.info("🔍 DATE RANGE PICKER SCHEMA DEBUG:")
-        logger.info(f"  - Component expects column: '{column_name}'")
-        logger.info(f"  - DataFrame shape: {df_pandas.shape}")
-        logger.info(f"  - Available columns: {list(df_pandas.columns)}")
-        logger.info(f"  - Column '{column_name}' present: {column_name in df_pandas.columns}")
+        logger.debug(
+            f"DateRangePicker: column={column_name}, df.shape={df_pandas.shape}, "
+            f"column_present={column_name in df_pandas.columns}"
+        )
 
         # Check if column exists before processing
         if column_name not in df_pandas.columns:
