@@ -186,6 +186,45 @@ def register_core_callbacks(app):
 
                 # Get relevant filters for this figure's DC
                 relevant_filters = filters_by_dc.get(card_dc_str, [])
+
+                # 🔧 JOINED DC FILTERING: Check if figure uses a joined DC
+                # If so, also include filters from interactive components that match source DC tags
+                if project_metadata:
+                    project_data = project_metadata.get("project", {})
+                    project_joins = project_data.get("joins", [])
+
+                    # Check if this figure's DC is a joined DC (result_dc_id)
+                    for join_def in project_joins:
+                        result_dc_id = join_def.get("result_dc_id")
+                        if str(result_dc_id) == card_dc_str:
+                            # This is a joined DC! Get source DC tags
+                            source_dc_tags = [
+                                join_def.get("left_dc", ""),
+                                join_def.get("right_dc", ""),
+                            ]
+                            logger.info(
+                                f"[{batch_task_id}] 🔗 Figure uses joined DC {card_dc_str[:8]}, "
+                                f"checking filters for source DCs: {source_dc_tags}"
+                            )
+
+                            # For each source DC tag, find matching DC IDs and include their filters
+                            for dc_tag in source_dc_tags:
+                                if not dc_tag:
+                                    continue
+
+                                # Find DC ID(s) with this tag
+                                for wf in project_data.get("workflows", []):
+                                    for dc in wf.get("data_collections", []):
+                                        if dc.get("data_collection_tag") == dc_tag:
+                                            source_dc_id = str(dc.get("_id", ""))
+                                            if source_dc_id in filters_by_dc:
+                                                logger.info(
+                                                    f"[{batch_task_id}] 🔗 Including {len(filters_by_dc[source_dc_id])} "
+                                                    f"filters from source DC {dc_tag} ({source_dc_id[:8]})"
+                                                )
+                                                relevant_filters.extend(filters_by_dc[source_dc_id])
+                            break  # Found the join, no need to check other joins
+
                 active_filters = [
                     c for c in relevant_filters if c.get("value") not in [None, [], "", False]
                 ]
