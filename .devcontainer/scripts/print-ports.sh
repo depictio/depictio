@@ -2,6 +2,7 @@
 # Print the dynamically allocated ports for this instance
 
 if [ -f /workspace/.env.instance ]; then
+    # shellcheck source=/dev/null
     source /workspace/.env.instance
 fi
 

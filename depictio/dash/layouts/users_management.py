@@ -17,9 +17,38 @@ from depictio.dash.api_calls import (
     api_call_get_google_oauth_login_url,
     api_call_register_user,
 )
-from depictio.dash.colors import colors  # Import Depictio color palette
+from depictio.dash.colors import colors
 
-event = {"event": "keydown", "props": ["key"]}
+EVENT_KEYDOWN = {"event": "keydown", "props": ["key"]}
+
+# Triangle configuration constants
+TRIANGLE_COLORS = [
+    "#8B5CF6",  # purple
+    "#A855F7",  # violet
+    "#3B82F6",  # blue
+    "#14B8A6",  # teal
+    "#10B981",  # green
+    "#F59E0B",  # yellow
+    "#F97316",  # orange
+    "#EC4899",  # pink
+    "#EF4444",  # red
+]
+
+TRIANGLE_SIZES = {
+    "small": {"width": 12, "height": 12, "weight": 0.35},
+    "medium": {"width": 18, "height": 18, "weight": 0.30},
+    "large": {"width": 24, "height": 24, "weight": 0.25},
+    "xlarge": {"width": 32, "height": 32, "weight": 0.10},
+}
+
+ANIMATION_CLASSES = [
+    "triangle-anim-1",
+    "triangle-anim-2",
+    "triangle-anim-3",
+    "triangle-anim-4",
+    "triangle-anim-5",
+    "triangle-anim-6",
+]
 
 
 def render_login_form():
@@ -360,127 +389,78 @@ def handle_registration(register_email, register_password, register_confirm_pass
     return "Registration successful! Please login.", False
 
 
-def create_triangle_background():
-    """
-    Create GPU-optimized triangle particle background for Depictio
-    Reduced particles and efficient animations for better performance
-    """
+def _create_triangle_svg(size_key: str, color_hex: str) -> str:
+    """Generate an SVG data URL for a triangle with the Depictio style."""
+    size_info = TRIANGLE_SIZES[size_key]
+    w, h = size_info["width"], size_info["height"]
 
-    # Depictio brand colors
-    colors = {
-        "purple": "#8B5CF6",
-        "violet": "#A855F7",
-        "blue": "#3B82F6",
-        "teal": "#14B8A6",
-        "green": "#10B981",
-        "yellow": "#F59E0B",
-        "orange": "#F97316",
-        "pink": "#EC4899",
-        "red": "#EF4444",
-    }
+    # Isosceles triangle with curved base for organic Depictio feel
+    svg_path = f"M{w / 2} {h * 0.05} L{w * 0.8} {h * 0.9} Q{w / 2} {h * 0.95} {w * 0.2} {h * 0.9} Z"
+    encoded_color = color_hex.replace("#", "%23")
 
-    # Triangle sizes - 2:1 ratio (equal sides : short side)
-    sizes = {
-        "small": {"width": 12, "height": 12, "weight": 0.35},  # 35% small
-        "medium": {"width": 18, "height": 18, "weight": 0.3},  # 30% medium
-        "large": {"width": 24, "height": 24, "weight": 0.25},  # 25% large
-        "xlarge": {"width": 32, "height": 32, "weight": 0.1},  # 10% xlarge
-    }
+    return f"url(\"data:image/svg+xml,%3Csvg width='{w}' height='{h}' viewBox='0 0 {w} {h}' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='{svg_path}' fill='{encoded_color}' /%3E%3C/svg%3E\")"
 
-    # Animation types
-    animations = [
-        "triangle-anim-1",
-        "triangle-anim-2",
-        "triangle-anim-3",
-        "triangle-anim-4",
-        "triangle-anim-5",
-        "triangle-anim-6",
-    ]
 
-    # Generate SVG triangles for each size with 2:1 ratio (equal sides : short side)
-    def create_triangle_svg(size_key, color_hex):
-        size_info = sizes[size_key]
-        w, h = size_info["width"], size_info["height"]
+def _select_triangle_size(index: int) -> str:
+    """Select a triangle size based on weighted distribution."""
+    rand_val = (index * 0.37) % 1
+    cumulative_weight = 0.0
 
-        # Depictio-style triangle with 2:1 ratio
-        # Equal sides are ~2x the short side (base)
-        # Make triangle taller and more pointed for proper ratio
+    for size_key, size_info in TRIANGLE_SIZES.items():
+        cumulative_weight += size_info["weight"]
+        if rand_val <= cumulative_weight:
+            return size_key
 
-        # Create isosceles triangle with curved base for organic Depictio feel
-        svg_path = (
-            f"M{w / 2} {h * 0.05} L{w * 0.8} {h * 0.9} Q{w / 2} {h * 0.95} {w * 0.2} {h * 0.9} Z"
-        )
+    return "small"
 
-        return f"""url("data:image/svg+xml,%3Csvg width='{w}' height='{h}' viewBox='0 0 {w} {h}' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='{svg_path}' fill='{color_hex.replace("#", "%23")}' /%3E%3C/svg%3E")"""
 
-    # Generate particles with better distribution across full background
+def _calculate_particle_position(index: int, grid_cols: int, grid_rows: int) -> tuple[float, float]:
+    """Calculate particle position using grid-based distribution with pseudo-random offset."""
+    cell_width = 85 / grid_cols
+    cell_height = 70 / grid_rows
+
+    cell_x = index % grid_cols
+    cell_y = (index // grid_cols) % grid_rows
+
+    base_x = cell_x * cell_width + cell_width / 2
+    base_y = cell_y * cell_height + cell_height / 2
+
+    # Deterministic pseudo-random offset within cell
+    offset_x = ((index * 37 + index * index * 13) % 100 - 50) / 100 * cell_width * 0.8
+    offset_y = ((index * 41 + index * index * 19) % 100 - 50) / 100 * cell_height * 0.8
+
+    x = max(5.0, min(90.0, base_x + offset_x + 7.5))
+    y = max(10.0, min(80.0, base_y + offset_y + 15))
+
+    return x, y
+
+
+def create_triangle_background() -> html.Div:
+    """Create GPU-optimized triangle particle background for the auth page."""
+    num_particles = 40
+    grid_cols = 8
+    grid_rows = 5
+
     triangle_particles = []
-    num_particles = 40  # Increased to 40 triangles as requested
-
-    # Use a combination of grid-based and pseudo-random distribution for even coverage
-    grid_cols = 8  # 8 columns
-    grid_rows = 5  # 5 rows
 
     for i in range(num_particles):
-        # Choose size based on weights
-        cumulative_weight = 0
-        rand_val = (i * 0.37) % 1  # Deterministic "random" for consistent results
+        size_key = _select_triangle_size(i)
+        color_hex = TRIANGLE_COLORS[i % len(TRIANGLE_COLORS)]
+        animation_class = ANIMATION_CLASSES[i % len(ANIMATION_CLASSES)]
+        x, y = _calculate_particle_position(i, grid_cols, grid_rows)
 
-        chosen_size = "small"
-        for size_key, size_info in sizes.items():
-            cumulative_weight += size_info["weight"]
-            if rand_val <= cumulative_weight:
-                chosen_size = size_key
-                break
-
-        # Choose color
-        color_keys = list(colors.keys())
-        color_key = color_keys[i % len(color_keys)]
-        color_hex = colors[color_key]
-
-        # Better distribution using grid + randomization
-        # Divide screen into grid cells, place particles with random offset
-        cell_width = 85 / grid_cols  # 85% width divided by columns
-        cell_height = 70 / grid_rows  # 70% height divided by rows
-
-        # Calculate which cell this particle belongs to
-        cell_x = i % grid_cols
-        cell_y = (i // grid_cols) % grid_rows
-
-        # Base position in cell center
-        base_x = cell_x * cell_width + cell_width / 2
-        base_y = cell_y * cell_height + cell_height / 2
-
-        # Add pseudo-random offset within cell (deterministic but varied)
-        offset_x = ((i * 37 + i * i * 13) % 100 - 50) / 100 * cell_width * 0.8
-        offset_y = ((i * 41 + i * i * 19) % 100 - 50) / 100 * cell_height * 0.8
-
-        # Final positions with bounds checking
-        x = max(5, min(90, base_x + offset_x + 7.5))
-        y = max(10, min(80, base_y + offset_y + 15))
-
-        # Choose animation
-        animation_class = animations[i % len(animations)]
-
-        # Create triangle element
         triangle = html.Div(
-            className=f"triangle-particle triangle-{chosen_size} {animation_class}",
+            className=f"triangle-particle triangle-{size_key} {animation_class}",
             style={
                 "left": f"{x}%",
                 "top": f"{y}%",
-                "background": create_triangle_svg(chosen_size, color_hex),
-                # Set initial rotation as CSS custom property
+                "background": _create_triangle_svg(size_key, color_hex),
                 "--initial-rotation": f"{(i * 73) % 360}deg",
-                # Initial transform with random rotation
-                "transform": f"rotate({(i * 73) % 360}deg) translateZ(0)",
-                # Staggered animation delays for dynamic feel
-                "animationDelay": f"{(i * 0.2) % 3}s",
+                "animation-delay": f"{(i * 0.2) % 3}s",
             },
         )
-
         triangle_particles.append(triangle)
 
-    # Return the complete background structure
     return html.Div(
         id="auth-background",
         style={
@@ -508,62 +488,7 @@ def create_triangle_background():
 
 layout = html.Div(
     [
-        # Triangle particles background - white with colored triangles
         create_triangle_background(),
-        # html.Div(
-        #     id="auth-background",
-        #     style={
-        #         "position": "fixed",
-        #         "top": "0",
-        #         "left": "0",
-        #         "width": "100vw",
-        #         "height": "100vh",
-        #         "zIndex": "9998",
-        #         "overflow": "hidden",
-        #     },
-        #     children=[
-        #         # Triangle particles container
-        #         html.Div(
-        #             id="triangle-particles",
-        #             style={
-        #                 "position": "absolute",
-        #                 "width": "100%",
-        #                 "height": "100%",
-        #             },
-        #             children=[
-        #                 # Create multiple triangle particles with random distribution and Depictio-style shape
-        #                 html.Div(
-        #                     className="triangle-particle",
-        #                     style={
-        #                         "position": "absolute",
-        #                         "width": "18px",
-        #                         "height": "18px",
-        #                         # Improved random distribution to prevent clustering
-        #                         "left": f"{((i * 37 + i * i * 13 + i * i * i * 5) % 90) + 5}%",
-        #                         "top": f"{((i * 41 + i * i * 19 + i * i * i * 7) % 85) + 7}%",
-        #                         # Depictio-style triangle: 2:1 ratio (equal sides : short side)
-        #                         # Short side = 8 units (from x=4 to x=12), Equal sides ≈ 16 units each
-        #                         "background": f"""
-        #                             url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 2 L16 18 Q10 19 4 18 Z' fill='{[colors["purple"], colors["violet"], colors["blue"], colors["teal"], colors["green"], colors["yellow"], colors["orange"], colors["pink"], colors["red"]][i % 9].replace("#", "%23")}' /%3E%3C/svg%3E")
-        #                         """,
-        #                         "backgroundSize": "contain",
-        #                         "backgroundRepeat": "no-repeat",
-        #                         "opacity": "0.4",
-        #                         # Random initial rotation (0-360 degrees) so triangles start in different directions
-        #                         "transform": f"rotate({(i * 73) % 360}deg)",
-        #                         # Use CSS animations from assets/app.css
-        #                         "animationName": f"triangleParticle{i % 6}",
-        #                         "animationDuration": f"{10 + (i * 3) % 30}s",
-        #                         "animationIterationCount": "infinite",
-        #                         "animationTimingFunction": "ease-in-out",
-        #                         "animationDelay": f"{(i * 0.7) % 15}s",
-        #                     },
-        #                 )
-        #                 for i in range(50)  # Increased to 50 triangle particles
-        #             ],
-        #         ),
-        #     ],
-        # ),
         dcc.Store(
             id="modal-state-store", data="login"
         ),  # Store to control modal content state (login or register)
@@ -577,17 +502,13 @@ layout = html.Div(
                     dmc.Paper(
                         id="modal-content",
                         className="auth-modal-content",
-                        # shadow="xl",
-                        # radius="lg",
-                        # p="xl",
                         style={
                             "position": "relative",
                             "zIndex": "10001",
-                            # "backdropFilter": "blur(10px)",
                         },
                     )
                 ],
-                events=[event],
+                events=[EVENT_KEYDOWN],
                 logging=True,
                 id="auth-modal-listener",
             ),

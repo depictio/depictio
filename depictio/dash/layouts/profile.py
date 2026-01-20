@@ -58,8 +58,6 @@ layout = dmc.Container(
                             p="xl",
                             shadow=CARD_SHADOW,
                             style={
-                                "backgroundColor": colors["purple"]
-                                + "10",  # Light purple background
                                 "display": "flex",
                                 "alignItems": "center",
                                 "justifyContent": "center",
@@ -78,7 +76,6 @@ layout = dmc.Container(
                                         dmc.Title(
                                             "User Profile",
                                             order=2,
-                                            c=colors["black"],
                                             style={"fontWeight": 600},
                                         ),
                                         DashIconify(
@@ -564,7 +561,7 @@ def register_profile_callbacks(app):
             "Admin": "Yes" if user.get("is_admin", False) else "No",
         }
 
-        # Create more modern user info display with branded colors
+        # Create more modern user info display with theme-aware colors
         info_items = []
         for key, value in user_metadata.items():
             info_items.append(
@@ -575,12 +572,10 @@ def register_profile_callbacks(app):
                                 dmc.Text(
                                     key,
                                     fw="bold",
-                                    c=colors["black"],
                                     size="sm",
                                 ),
                                 dmc.Text(
                                     str(value),
-                                    c=colors["black"],
                                     fw="normal",
                                     size="sm",
                                 ),
@@ -591,7 +586,6 @@ def register_profile_callbacks(app):
                     p="sm",
                     radius="md",
                     withBorder=True,
-                    # style={"borderColor": colors["teal"] + "50"}
                 )
             )
 

@@ -16,7 +16,6 @@ for dir in "$PLAYWRIGHT_BROWSERS_PATH"/chromium-*; do
         break
     fi
 done
-
 if [ "$chromium_found" = false ]; then
     echo "Note: Playwright browsers not installed. Run 'pixi run install-browsers' to install."
 fi
