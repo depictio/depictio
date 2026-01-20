@@ -619,6 +619,7 @@ def register_header_callbacks(app):
     - Share modal
     - Theme switching
     - Navigation
+    - Dashboard export
 
     Args:
         app: Dash app instance
@@ -633,6 +634,12 @@ def register_header_callbacks(app):
     from depictio.dash.layouts.sidebar import register_sidebar_callbacks
 
     register_sidebar_callbacks(app)
+
+    # Register dashboard export callbacks
+    from depictio.dash.layouts.dashboard_export import register_export_callbacks
+
+    logger.info("  📤 Registering dashboard export callbacks")
+    register_export_callbacks(app)
 
     # Add clientside callback for theme-aware body class
     app.clientside_callback(
