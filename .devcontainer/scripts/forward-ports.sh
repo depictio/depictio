@@ -3,6 +3,7 @@
 # This makes them visible to VS Code's port auto-detection
 
 if [ -f /workspace/.env.instance ]; then
+    # shellcheck source=/dev/null
     source /workspace/.env.instance
 fi
 
@@ -25,9 +26,9 @@ fi
 pkill -f "socat.*TCP-LISTEN" 2>/dev/null || true
 
 # Start port forwarding in background
-socat TCP-LISTEN:$DASH_PORT,fork,reuseaddr TCP:depictio-frontend:5080 &
-socat TCP-LISTEN:$FASTAPI_PORT,fork,reuseaddr TCP:depictio-backend:8058 &
-socat TCP-LISTEN:$MINIO_CONSOLE_PORT,fork,reuseaddr TCP:minio:9001 &
+socat TCP-LISTEN:"$DASH_PORT",fork,reuseaddr TCP:depictio-frontend:5080 &
+socat TCP-LISTEN:"$FASTAPI_PORT",fork,reuseaddr TCP:depictio-backend:8058 &
+socat TCP-LISTEN:"$MINIO_CONSOLE_PORT",fork,reuseaddr TCP:minio:9001 &
 
 echo "✅ Port forwarding started!"
 echo ""
