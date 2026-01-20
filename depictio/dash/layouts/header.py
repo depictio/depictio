@@ -1136,6 +1136,7 @@ def _create_header_right_section(
     exit_edit: dmc.Button,
     add_component: dmc.Button,
     save_dashboard: dmc.Button,
+    export_dashboard: dmc.Tooltip,
 ) -> dmc.Group:
     """Create the right section of the header with action buttons.
 
@@ -1146,6 +1147,7 @@ def _create_header_right_section(
         exit_edit: Exit edit mode button.
         add_component: Add component button.
         save_dashboard: Save dashboard button.
+        export_dashboard: Export dashboard button with tooltip.
 
     Returns:
         Group component for right header section.
@@ -1159,6 +1161,7 @@ def _create_header_right_section(
             edit_dashboard,
             add_component,
             save_dashboard,
+            export_dashboard,  # Export dashboard as HTML
             reset_filters,
             settings,
         ],
@@ -1252,14 +1255,46 @@ def design_header(
     # Create stores
     stores = _create_header_stores(data, owner, viewer)
 
+    # Create export dashboard button - always visible for all users
+    export_dashboard_button = dmc.Tooltip(
+        label="Export dashboard as HTML",
+        position="bottom",
+        withArrow=True,
+        children=[
+            dmc.Button(
+                "Export",
+                id={
+                    "type": "export-dashboard-button",
+                    "dashboard_id": str(data.get("dashboard_id", "")),
+                },
+                leftSection=DashIconify(icon="mdi:download", width=16, color="white"),
+                size="sm",
+                color="violet",
+                variant="filled",
+                n_clicks=0,
+            ),
+        ],
+    )
+
     # Create header sections
     left_section = _create_header_left_section(data)
     right_section = _create_header_right_section(
-        reset_filters, settings, edit_dashboard, exit_edit, add_component, save_dashboard
+        reset_filters,
+        settings,
+        edit_dashboard,
+        exit_edit,
+        add_component,
+        save_dashboard,
+        export_dashboard_button,
     )
 
     # Assemble header content
     header_content = _assemble_header_content(left_section, right_section)
+
+    # Download component for HTML export
+    dashboard_export_download = dcc.Download(
+        id={"type": "dashboard-export-download", "dashboard_id": str(data.get("dashboard_id", ""))}
+    )
 
     # Create backend components
     backend_components = _create_backend_components()
@@ -1270,6 +1305,7 @@ def design_header(
             backend_components,
             settings_drawer,
             dmc.Stack(children=stores, gap=0),
+            dashboard_export_download,  # Download component for HTML export
         ],
         gap=0,
     )
