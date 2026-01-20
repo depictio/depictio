@@ -211,6 +211,15 @@ class SimpleCodeExecutor:
             logger.info(f"✅ Code executed successfully using RestrictedPython{preprocessing_msg}")
             return True, fig, f"✅ Code executed successfully{preprocessing_msg}!"
 
+        except SyntaxError as e:
+            # Handle syntax errors separately with clearer messaging
+            error_msg = f"❌ Python Syntax Error: {e.msg}"
+            if hasattr(e, "text") and e.text:
+                error_msg += f"\nProblem line: {e.text.strip()}"
+            if hasattr(e, "offset") and e.offset:
+                error_msg += f"\n{' ' * (e.offset - 1)}^"
+            logger.warning(f"Code syntax error: {error_msg}")
+            return False, None, error_msg
         except Exception as e:
             error_msg = f"Execution error: {str(e)}"
             logger.warning(f"Code execution failed: {error_msg}")
