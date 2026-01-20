@@ -62,21 +62,22 @@ def design_interactive(id, df):
                                     },
                                     value=None,
                                 ),
-                                dmc.Select(
-                                    label="Scale type (for numerical sliders)",
-                                    description="Choose between linear or logarithmic scale for slider components",
-                                    id={
-                                        "type": "input-dropdown-scale",
-                                        "index": id["index"],
-                                    },
-                                    data=[
-                                        {"label": "Linear", "value": "linear"},
-                                        {"label": "Logarithmic (Log10)", "value": "log10"},
-                                    ],
-                                    value="linear",
-                                    clearable=False,
-                                    style={"display": "none"},  # Initially hidden
-                                ),
+                                # COMMENTED OUT: Scale type selector (too complex to debug for now)
+                                # dmc.Select(
+                                #     label="Scale type (for numerical sliders)",
+                                #     description="Choose between linear or logarithmic scale for slider components",
+                                #     id={
+                                #         "type": "input-dropdown-scale",
+                                #         "index": id["index"],
+                                #     },
+                                #     data=[
+                                #         {"label": "Linear", "value": "linear"},
+                                #         {"label": "Logarithmic (Log10)", "value": "log10"},
+                                #     ],
+                                #     value="linear",
+                                #     clearable=False,
+                                #     style={"display": "none"},  # Initially hidden
+                                # ),
                                 dmc.ColorInput(
                                     label="Color",
                                     description="Component color (leave empty for auto theme)",
@@ -173,19 +174,20 @@ def design_interactive(id, df):
                                     value="md",
                                     clearable=False,
                                 ),
-                                dmc.NumberInput(
-                                    label="Number of marks (for sliders)",
-                                    description="Choose how many marks to display on the slider",
-                                    id={
-                                        "type": "input-number-marks",
-                                        "index": id["index"],
-                                    },
-                                    value=2,
-                                    min=2,
-                                    max=10,
-                                    step=1,
-                                    style={"display": "none"},  # Initially hidden
-                                ),
+                                # COMMENTED OUT: Number of marks for sliders (too complex to debug for now)
+                                # dmc.NumberInput(
+                                #     label="Number of marks (for sliders)",
+                                #     description="Choose how many marks to display on the slider",
+                                #     id={
+                                #         "type": "input-number-marks",
+                                #         "index": id["index"],
+                                #     },
+                                #     value=2,
+                                #     min=2,
+                                #     max=10,
+                                #     step=1,
+                                #     style={"display": "none"},  # Initially hidden
+                                # ),
                                 html.Div(
                                     id={
                                         "type": "interactive-description",
@@ -292,11 +294,25 @@ def design_interactive(id, df):
         style={"marginTop": "2rem"},
     )
 
+    # CRITICAL: Add stored-metadata-component Store for save functionality
+    # This Store will be populated by callback when user selects workflow/DC
+    # Field names must match what batch callback expects (core_async.py)
+    metadata_store = dcc.Store(
+        id={"type": "stored-metadata-component", "index": id["index"]},
+        data={
+            "index": id["index"].replace("-tmp", "") if id["index"] else "unknown",
+            "component_type": "interactive",
+            "wf_id": None,  # Will be populated by callback
+            "dc_id": None,  # Will be populated by callback
+        },
+    )
+
     interactive_row = [
         dmc.Stack(
             [main_layout, html.Hr(), bottom_section],
             gap="lg",
         ),
+        metadata_store,  # Add Store to layout
     ]
     return interactive_row
 

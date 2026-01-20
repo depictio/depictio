@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/tweber/Gits/workspaces/depictio-workspace/depictio/depictio/api/**)",
+      "Read(//Users/tweber/Gits/workspaces/depictio-workspace/depictio/depictio/api/v1/**)",
+      "Read(//Users/tweber/Gits/workspaces/depictio-workspace/depictio/depictio/api/v1/endpoints/utils_endpoints/**)",
+      "Read(//Users/tweber/Gits/workspaces/depictio-workspace/depictio/depictio/cli/**)",
+      "Read(//Users/tweber/Gits/workspaces/depictio-workspace/depictio/depictio/models/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

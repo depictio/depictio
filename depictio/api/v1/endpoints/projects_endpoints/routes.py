@@ -106,7 +106,7 @@ async def get_project_from_dashboard_id(
     # - User in project owners/editors/viewers
     # - Project is_public = True
     # - User is admin
-    project = await get_project_from_id(str(project_id), current_user)
+    project = await get_project_with_delta_locations(PyObjectId(project_id), current_user)
 
     # NEW: Fetch delta table locations for all data collections in the project
     dc_ids = []

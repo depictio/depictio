@@ -137,11 +137,8 @@ def load_table_data_with_filters(
     """
     from bson import ObjectId
 
-    from depictio.api.v1.deltatables_utils import (
-        iterative_join,
-        load_deltatable_lite,
-        return_joins_dict,
-    )
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+    from depictio.dash.utils import get_result_dc_for_workflow
 
     logger.info("🔄 load_table_data_with_filters: Loading table data")
 
@@ -243,117 +240,50 @@ def load_table_data_with_filters(
             logger.info(f"📋 Table DC: {table_dc_id}")
             logger.info(f"📋 Interactive DCs: {interactive_dc_ids}")
 
-            # Check for joins
-            joins_dict = return_joins_dict(workflow_id, stored_metadata_for_join, TOKEN)
+            # MIGRATED: Check for pre-computed joins
+            result_dc_id = get_result_dc_for_workflow(workflow_id, TOKEN)
 
             # Check DC compatibility
             if table_dc_ids & interactive_dc_ids:
                 logger.info("✅ DC COMPATIBLE: Interactive filters target same DC as table")
 
-                # Determine join mode
-                if joins_dict and len(joins_dict) > 1:
-                    # SEMI-JOIN MODE
-                    logger.info(
-                        "🔍 SEMI-JOIN MODE: Using semi-join filtering to avoid Cartesian products"
+                # MIGRATED: With pre-computed joins, we no longer need semi-join optimization
+                # Just load the result DC (or single DC if no joins) with interactive filters
+                try:
+                    if result_dc_id:
+                        # Load pre-computed join result DC with interactive filters
+                        logger.info("🔗 Loading pre-computed joined table with interactive filters")
+                        df = load_deltatable_lite(
+                            ObjectId(workflow_id),
+                            ObjectId(result_dc_id),
+                            metadata=list(interactive_components_dict.values()),
+                            TOKEN=TOKEN,
+                        )
+                        logger.info(
+                            f"✅ Successfully loaded FILTERED data from result DC (shape: {df.shape})"
+                        )
+                    else:
+                        # No join - load single DC with interactive filters
+                        logger.info("📊 No joins - loading single DC with interactive filters")
+                        df = load_deltatable_lite(
+                            ObjectId(workflow_id),
+                            ObjectId(data_collection_id),
+                            metadata=list(interactive_components_dict.values()),
+                            TOKEN=TOKEN,
+                        )
+                        logger.info(
+                            f"✅ Successfully loaded FILTERED single DC (shape: {df.shape})"
+                        )
+                except Exception as interactive_error:
+                    logger.error(f"❌ Loading data failed: {str(interactive_error)}")
+                    # Fallback to unfiltered data
+                    df = load_deltatable_lite(
+                        ObjectId(workflow_id),
+                        ObjectId(data_collection_id),
+                        metadata=None,
+                        TOKEN=TOKEN,
                     )
-
-                    try:
-                        # Find join configuration
-                        join_config = None
-                        for join_key_tuple, join_details_list in joins_dict.items():
-                            join_dc_set = set(join_key_tuple)
-                            if table_dc_ids & join_dc_set and interactive_dc_ids & join_dc_set:
-                                join_config = join_details_list[0]
-                                join_columns = list(join_config.values())[0]["on_columns"]
-                                logger.info(f"🔗 Join columns: {join_columns}")
-                                break
-
-                        if not join_config:
-                            raise ValueError(
-                                f"No join configuration found between {table_dc_ids} and {interactive_dc_ids}"
-                            )
-
-                        # Load interactive DC with filters
-                        interactive_dc_id = list(interactive_dc_ids)[0]
-                        interactive_metadata = [
-                            comp_data
-                            for comp_data in interactive_components_dict.values()
-                            if comp_data.get("metadata", {}).get("dc_id") == interactive_dc_id
-                        ]
-
-                        interactive_df = load_deltatable_lite(
-                            ObjectId(workflow_id),
-                            ObjectId(interactive_dc_id),
-                            metadata=interactive_metadata,
-                            TOKEN=TOKEN,
-                        )
-                        logger.info(
-                            f"📊 Interactive DC loaded: {interactive_df.shape[0]} filtered rows"
-                        )
-
-                        # Extract join values
-                        join_column = join_columns[0]
-                        if join_column not in interactive_df.columns:
-                            raise ValueError(
-                                f"Join column '{join_column}' not found in interactive DC columns"
-                            )
-
-                        filtered_join_values = interactive_df[join_column].unique().to_list()
-                        logger.info(
-                            f"🔍 Extracted {len(filtered_join_values)} unique values from join column '{join_column}'"
-                        )
-
-                        # Load table DC
-                        table_df = load_deltatable_lite(
-                            ObjectId(workflow_id),
-                            ObjectId(table_dc_id),
-                            metadata=None,
-                            TOKEN=TOKEN,
-                        )
-                        logger.info(f"📊 Table DC loaded: {table_df.shape[0]} rows")
-
-                        # Apply semi-join filter
-                        if join_column not in table_df.columns:
-                            raise ValueError(
-                                f"Join column '{join_column}' not found in table DC columns"
-                            )
-
-                        df = table_df.filter(pl.col(join_column).is_in(filtered_join_values))
-                        logger.info(
-                            f"✅ SEMI-JOIN SUCCESS: Filtered table from {table_df.shape[0]} → {df.shape[0]} rows"
-                        )
-
-                    except Exception as semi_join_error:
-                        logger.error(f"❌ Semi-join filtering failed: {str(semi_join_error)}")
-                        # Fallback
-                        df = load_deltatable_lite(
-                            ObjectId(workflow_id),
-                            ObjectId(data_collection_id),
-                            metadata=None,
-                            TOKEN=TOKEN,
-                        )
-                        logger.info("✅ Fallback: Loaded unfiltered table data")
-                else:
-                    # FULL JOIN MODE
-                    logger.info("🔗 FULL JOIN MODE: Using iterative_join for joined table data")
-
-                    try:
-                        df = iterative_join(
-                            ObjectId(workflow_id), joins_dict, interactive_components_dict, TOKEN
-                        )
-                        logger.info(
-                            f"✅ Successfully loaded FILTERED data via iterative_join (shape: {df.shape})"
-                        )
-                    except Exception as interactive_error:
-                        logger.error(f"❌ Interactive filtering failed: {str(interactive_error)}")
-                        # Fallback
-                        df = load_deltatable_lite(
-                            ObjectId(workflow_id),
-                            ObjectId(data_collection_id),
-                            metadata=None,
-                            TOKEN=TOKEN,
-                        )
-                        logger.info("✅ Fallback: Loaded unfiltered data")
+                    logger.info("✅ Fallback: Loaded unfiltered data")
             else:
                 # DC INCOMPATIBLE
                 logger.warning(
@@ -384,16 +314,18 @@ def load_table_data_with_filters(
         )
 
         try:
-            joins_dict = return_joins_dict(workflow_id, stored_metadata_for_join, TOKEN)
-            logger.info(f"🔗 Table joins result: {joins_dict}")
+            # MIGRATED: Load pre-computed join or single DC
+            result_dc_id = get_result_dc_for_workflow(workflow_id, TOKEN)
 
-            if joins_dict:
-                # Table requires joins
-                logger.info("🔗 Table requires joins - using iterative_join")
-                df = iterative_join(ObjectId(workflow_id), joins_dict, {}, TOKEN)
+            if result_dc_id:
+                # Table has pre-computed join - load result DC
+                logger.info("🔗 Table has pre-computed join - loading result DC")
+                df = load_deltatable_lite(
+                    ObjectId(workflow_id), ObjectId(result_dc_id), metadata=None, TOKEN=TOKEN
+                )
                 logger.info(f"✅ Successfully loaded joined table data (shape: {df.shape})")
             else:
-                # No joins needed
+                # No joins needed - load single DC
                 df = load_deltatable_lite(
                     ObjectId(workflow_id),
                     ObjectId(data_collection_id),

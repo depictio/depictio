@@ -973,9 +973,6 @@ def register_core_callbacks(app):
                 card_dc_str = str(dc_id)
                 has_filters_for_card_dc = card_dc_str in filters_by_dc
 
-                # Get join config to check DC relationships
-                join_config = dc_config.get("join", {})
-
                 # Determine if we need to perform a join
                 needs_join = False
                 if not has_filters_for_card_dc and len(filters_by_dc) > 0:
@@ -988,50 +985,16 @@ def register_core_callbacks(app):
                 logger.info(f"🔍 Needs join: {needs_join}")
                 logger.info(f"🔍 Filters on {len(filters_by_dc)} DC(s)")
 
-                from depictio.api.v1.deltatables_utils import get_join_tables, load_deltatable_lite
+                from depictio.api.v1.deltatables_utils import load_deltatable_lite
+                from depictio.dash.utils import get_result_dc_for_workflow
 
-                # If no explicit join config but join is needed, query workflow join tables
-                if needs_join and (not join_config or not join_config.get("on_columns")):
-                    logger.info("🔍 No explicit join config in DC - querying workflow join tables")
-                    workflow_join_tables = get_join_tables(wf_id, access_token)
-
-                    if workflow_join_tables and wf_id in workflow_join_tables:
-                        wf_joins = workflow_join_tables[wf_id]
-                        logger.debug(f"🔍 Workflow join tables: {list(wf_joins.keys())}")
-
-                        # Search for join between card DC and any filter DC
-                        # Join keys are formatted as "dc1--dc2"
-                        for filter_dc in filters_by_dc.keys():
-                            # Try both directions: card--filter and filter--card
-                            join_key_1 = f"{card_dc_str}--{filter_dc}"
-                            join_key_2 = f"{filter_dc}--{card_dc_str}"
-
-                            if join_key_1 in wf_joins:
-                                join_config = wf_joins[join_key_1]
-                                logger.info(
-                                    f"✅ Found join config in workflow tables: {join_key_1}"
-                                )
-                                logger.debug(f"   Join config: {join_config}")
-                                break
-                            elif join_key_2 in wf_joins:
-                                join_config = wf_joins[join_key_2]
-                                logger.info(
-                                    f"✅ Found join config in workflow tables: {join_key_2}"
-                                )
-                                logger.debug(f"   Join config: {join_config}")
-                                break
-
-                        if not join_config or not join_config.get("on_columns"):
-                            logger.warning(
-                                "⚠️ No join config found in workflow tables for card DC and filter DCs"
-                            )
-                    else:
-                        logger.warning(f"⚠️ No workflow join tables found for workflow {wf_id}")
+                # MIGRATED: Check for pre-computed join result DC
+                result_dc_id = get_result_dc_for_workflow(wf_id, access_token)
 
                 # Determine the filtering path
-                # JOINED-DC: Filters on different DCs + join config available
-                # SAME-DC: Filters on card DC only, or multiple DCs but no join config
-                use_joined_path = needs_join and join_config and join_config.get("on_columns")
+                # JOINED-DC: Pre-computed join result exists
+                # SAME-DC: No pre-computed join - use card DC only
+                use_joined_path = needs_join and result_dc_id is not None
 
                 # If filters on multiple DCs but no join config, fall back to SAME-DC
                 if len(filters_by_dc) > 1 and not use_joined_path:
@@ -1046,89 +1009,38 @@ def register_core_callbacks(app):
                         filters_by_dc = {}
 
                 if use_joined_path:
-                    # JOINED-DC PATH: Manual loading + merge_multiple_dataframes
+                    # MIGRATED: JOINED-DC PATH - Load pre-computed join result DC
                     logger.info(
-                        f"🔗 JOINED-DC FILTERING: Loading and joining DCs "
-                        f"(card DC + {len(filters_by_dc)} filter DC(s))"
+                        f"🔗 JOINED-DC FILTERING: Loading pre-computed join result DC "
+                        f"with filters from {len(filters_by_dc)} DC(s)"
                     )
 
-                    from depictio.api.v1.deltatables_utils import merge_multiple_dataframes
-
-                    # Include card's DC in the join if it's not already in filters_by_dc
-                    if card_dc_str not in filters_by_dc:
-                        logger.info(f"📂 Adding card DC {card_dc_str} to join (no filters)")
-                        filters_by_dc[card_dc_str] = []
-
-                    # Extract DC metatypes from component metadata (already cached in Store)
-                    dc_metatypes = {}
-                    for dc_key, dc_filters in filters_by_dc.items():
-                        if dc_filters:
-                            component_dc_config = (
-                                dc_filters[0].get("metadata", {}).get("dc_config", {})
-                            )
-                            metatype = component_dc_config.get("metatype")
-                            if metatype:
-                                dc_metatypes[dc_key] = metatype
-                                logger.debug(
-                                    f"📋 DC {dc_key} metatype: {metatype} (from cached metadata)"
-                                )
-
-                    # If card DC not in dc_metatypes, get from trigger_data
-                    if card_dc_str not in dc_metatypes:
-                        card_metatype = dc_config.get("metatype")
-                        if card_metatype:
-                            dc_metatypes[card_dc_str] = card_metatype
-                            logger.debug(f"📋 Card DC {card_dc_str} metatype: {card_metatype}")
-
-                    # Load each DC with all columns (rely on cache for performance)
-                    dataframes = {}
+                    # Combine all filters from all DCs into a single metadata list
+                    combined_metadata = []
                     for dc_key, dc_filters in filters_by_dc.items():
                         if has_active_filters:
                             # Filter out components with empty values
                             active_filters = [
                                 c for c in dc_filters if c.get("value") not in [None, [], "", False]
                             ]
-                            logger.info(
-                                f"📂 Loading DC {dc_key} with {len(active_filters)} active filters"
-                            )
-                            metadata_to_pass = active_filters
+                            logger.info(f"📂 DC {dc_key}: {len(active_filters)} active filters")
+                            combined_metadata.extend(active_filters)
                         else:
-                            # Clearing filters - load ALL unfiltered data
-                            logger.info(f"📂 Loading DC {dc_key} with NO filters (clearing)")
-                            metadata_to_pass = []
+                            logger.info(f"📂 DC {dc_key}: No filters (clearing)")
 
-                        dc_df = load_deltatable_lite(
-                            ObjectId(wf_id),
-                            ObjectId(dc_key),
-                            metadata=metadata_to_pass,
-                            TOKEN=access_token,
-                            select_columns=None,  # Load all columns, rely on cache
-                        )
-                        dataframes[dc_key] = dc_df
-                        logger.info(f"   Loaded {dc_df.height:,} rows × {dc_df.width} columns")
-
-                    # Build join instructions for merge_multiple_dataframes
-                    dc_ids = sorted(filters_by_dc.keys())
-                    join_instructions = [
-                        {
-                            "left": dc_ids[0],
-                            "right": dc_ids[1],
-                            "how": join_config.get("how", "inner"),
-                            "on": join_config.get("on_columns", []),
-                        }
-                    ]
-
-                    logger.info(f"🔗 Joining DCs: {join_instructions}")
-                    logger.info(f"📋 DC metatypes for join: {dc_metatypes}")
-
-                    # Merge DataFrames with table type awareness
-                    data = merge_multiple_dataframes(
-                        dataframes=dataframes,
-                        join_instructions=join_instructions,
-                        dc_metatypes=dc_metatypes,
+                    # Load pre-computed result DC with combined filters
+                    logger.info(
+                        f"🔗 Loading result DC {result_dc_id} with {len(combined_metadata)} filters"
+                    )
+                    data = load_deltatable_lite(
+                        ObjectId(wf_id),
+                        ObjectId(result_dc_id),
+                        metadata=combined_metadata if combined_metadata else None,
+                        TOKEN=access_token,
+                        select_columns=None,  # Load all columns
                     )
 
-                    logger.info(f"📊 Joined result: {data.height:,} rows × {data.width} columns")
+                    logger.info(f"📊 Loaded result DC: {data.height:,} rows × {data.width} columns")
 
                 else:
                     # SAME-DC PATH: Card's DC has filters, apply them directly

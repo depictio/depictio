@@ -198,7 +198,6 @@ def _filter_relevant_dcs(filters_by_dc, figure_dc_id, workflow_id, token):
     Returns:
         dict: Filtered filters_by_dc with only relevant DCs
     """
-    from depictio.api.v1.deltatables_utils import get_join_tables
 
     figure_dc_str = str(figure_dc_id)
 
@@ -213,9 +212,8 @@ def _filter_relevant_dcs(filters_by_dc, figure_dc_id, workflow_id, token):
         constituent_dcs,
     )
 
-    # Fetch join tables to validate DC relationships
-    join_tables_for_wf = get_join_tables(str(workflow_id), token)
-    workflow_joins = join_tables_for_wf.get(str(workflow_id), {})
+    # With pre-computed joins, all filters are relevant (no need to filter by join relationships)
+    workflow_joins = {}
 
     # Keep only filter DCs that have a join relationship with figure DC
     relevant_filters_by_dc = {}
@@ -2598,99 +2596,42 @@ def register_callbacks_figure_component(app):
         """
         from bson import ObjectId
 
-        from depictio.api.v1.deltatables_utils import (
-            load_deltatable_lite,
-            merge_multiple_dataframes,
+        from depictio.api.v1.deltatables_utils import load_deltatable_lite
+        from depictio.dash.utils import get_result_dc_for_workflow
+
+        logger.debug(
+            "Multi-DC filtering: loading pre-computed join with %d DC filters", len(filters_by_dc)
         )
 
-        logger.debug("Multi-DC filtering: joining %d DCs", len(filters_by_dc))
+        # MIGRATED: Load pre-computed join result DC
+        result_dc_id = get_result_dc_for_workflow(wf_id, token)
 
-        # Determine join config
-        if is_joined_dc:
-            join_config_to_use = {
-                "on_columns": ["sample_id"],
-                "how": "inner",
-            }
-            logger.debug("Using inferred join config for joined DC")
+        if not result_dc_id:
+            raise Exception("No pre-computed join found - run CLI workflow first")
 
-            # Ensure all constituent DCs are in filters_by_dc (even if no filters)
-            for constituent_dc in constituent_dc_ids:
-                if constituent_dc not in filters_by_dc:
-                    filters_by_dc[constituent_dc] = []
-                    logger.debug("Adding constituent DC %s to join (no filters)", constituent_dc)
-        else:
-            if not join_config or not join_config.get("on_columns"):
-                raise Exception("Join required but no join config found")
-            join_config_to_use = join_config
-
-            # Include figure's DC in the join if it's not already in filters_by_dc
-            if figure_dc_str not in filters_by_dc:
-                logger.debug("Adding figure DC %s to join (no filters)", figure_dc_str)
-                filters_by_dc[figure_dc_str] = []
-
-        # Extract DC metatypes from component metadata
-        dc_metatypes = {}
-        for dc_key, dc_filters in filters_by_dc.items():
-            if dc_filters:
-                component_dc_config = dc_filters[0].get("metadata", {}).get("dc_config", {})
-                metatype = component_dc_config.get("metatype")
-                if metatype:
-                    dc_metatypes[dc_key] = metatype
-                    logger.debug("DC %s metatype: %s", dc_key, metatype)
-
-        # If figure DC not in filters_by_dc, get its metatype from metadata State
-        if figure_dc_str not in dc_metatypes and metadata:
-            figure_dc_config = metadata.get("dc_config", {})
-            figure_metatype = figure_dc_config.get("metatype")
-            if figure_metatype:
-                dc_metatypes[figure_dc_str] = figure_metatype
-                logger.debug("Figure DC %s metatype: %s", figure_dc_str, figure_metatype)
-
-        # Load each DC
-        dataframes = {}
+        # Combine all filters from all DCs into a single metadata list
+        combined_metadata = []
         for dc_key, dc_filters in filters_by_dc.items():
             if has_active_filters:
                 active_filters = [
                     c for c in dc_filters if c.get("value") not in [None, [], "", False]
                 ]
-                logger.debug("Loading DC %s with %d active filters", dc_key, len(active_filters))
-                metadata_to_pass = active_filters
+                logger.debug("DC %s: %d active filters", dc_key, len(active_filters))
+                combined_metadata.extend(active_filters)
             else:
-                logger.debug("Loading DC %s with NO filters (clearing)", dc_key)
-                metadata_to_pass = []
+                logger.debug("DC %s: No filters (clearing)", dc_key)
 
-            dc_df = load_deltatable_lite(
-                ObjectId(wf_id),
-                ObjectId(dc_key),
-                metadata=metadata_to_pass,
-                TOKEN=token,
-                select_columns=None,
-            )
-            dataframes[dc_key] = dc_df
-            logger.debug("Loaded DC %s: %d rows × %d cols", dc_key, dc_df.height, dc_df.width)
-
-        # Build join instructions
-        dc_ids = sorted(filters_by_dc.keys())
-        join_instructions = [
-            {
-                "left": dc_ids[0],
-                "right": dc_ids[1],
-                "how": join_config_to_use.get("how", "inner"),
-                "on": join_config_to_use.get("on_columns", []),
-            }
-        ]
-
-        logger.debug("Join instructions: %s", join_instructions)
-        logger.debug("DC metatypes: %s", dc_metatypes)
-
-        # Merge DataFrames
-        df = merge_multiple_dataframes(
-            dataframes=dataframes,
-            join_instructions=join_instructions,
-            dc_metatypes=dc_metatypes,
+        # Load pre-computed result DC with combined filters
+        logger.debug("Loading result DC %s with %d filters", result_dc_id, len(combined_metadata))
+        df = load_deltatable_lite(
+            ObjectId(wf_id),
+            ObjectId(result_dc_id),
+            metadata=combined_metadata if combined_metadata else None,
+            TOKEN=token,
+            select_columns=None,
         )
 
-        logger.debug("Joined result: %d rows × %d cols", df.height, df.width)
+        logger.debug("Loaded result DC: %d rows × %d cols", df.height, df.width)
         return df
 
     def _load_single_dc(

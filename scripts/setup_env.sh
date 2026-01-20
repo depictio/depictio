@@ -9,7 +9,15 @@ export PYTHONPATH="${PIXI_PROJECT_ROOT:-$(pwd)}:${PYTHONPATH}"
 export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}"
 
 # Check if playwright browsers are installed
-if [ ! -d "$PLAYWRIGHT_BROWSERS_PATH/chromium-"* ] 2>/dev/null; then
+chromium_found=false
+for dir in "$PLAYWRIGHT_BROWSERS_PATH"/chromium-*; do
+    if [ -d "$dir" ]; then
+        chromium_found=true
+        break
+    fi
+done
+
+if [ "$chromium_found" = false ]; then
     echo "Note: Playwright browsers not installed. Run 'pixi run install-browsers' to install."
 fi
 
