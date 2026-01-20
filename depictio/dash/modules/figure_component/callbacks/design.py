@@ -366,6 +366,8 @@ def register_design_callbacks(app):
             Output({"type": "code-status", "index": MATCH}, "title"),
             Output({"type": "code-status", "index": MATCH}, "children"),
             Output({"type": "code-status", "index": MATCH}, "color"),
+            Output({"type": "code-preview-graph", "index": MATCH}, "figure"),
+            Output({"type": "code-preview-collapse", "index": MATCH}, "opened"),
         ],
         Input({"type": "code-execute-btn", "index": MATCH}, "n_clicks"),
         [
@@ -386,7 +388,7 @@ def register_design_callbacks(app):
         )
 
         if not n_clicks or not code_content:
-            return dash.no_update, dash.no_update, dash.no_update
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         logger.info("=== EXECUTE CODE PREVIEW ===")
         logger.info(f"Code length: {len(code_content)} characters")
@@ -397,10 +399,12 @@ def register_design_callbacks(app):
                 "Error",
                 "Please ensure workflow and data collection are selected.",
                 "red",
+                {},
+                False,
             )
 
         if not local_data:
-            return "Error", "Authentication required.", "red"
+            return "Error", "Authentication required.", "red", {}, False
 
         try:
             # Load data
@@ -410,7 +414,13 @@ def register_design_callbacks(app):
             )
 
             if df.height == 0:
-                return "Error", "No data available in the selected data collection.", "red"
+                return (
+                    "Error",
+                    "No data available in the selected data collection.",
+                    "red",
+                    {},
+                    False,
+                )
 
             # Execute code
             executor = SimpleCodeExecutor()
@@ -437,6 +447,8 @@ def register_design_callbacks(app):
                         gap="xs",
                     ),
                     "green",
+                    fig,  # Show the figure in preview
+                    True,  # Open the collapse to show preview
                 )
             else:
                 logger.error(f"Code execution failed: {message}")
@@ -450,6 +462,8 @@ def register_design_callbacks(app):
                         gap="xs",
                     ),
                     "red",
+                    {},  # Empty figure
+                    False,  # Close preview on error
                 )
 
         except Exception as e:
@@ -464,6 +478,8 @@ def register_design_callbacks(app):
                     gap="xs",
                 ),
                 "red",
+                {},  # Empty figure
+                False,  # Close preview on error
             )
 
     logger.info(
