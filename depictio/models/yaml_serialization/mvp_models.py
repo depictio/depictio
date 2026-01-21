@@ -1,6 +1,6 @@
 """Pydantic models for MVP YAML dashboard format validation."""
 
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -10,15 +10,34 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class VisualizationConfig(BaseModel):
-    """Visualization configuration for figure components."""
+    """Visualization configuration for figure components.
+
+    All visualization parameters are at the same level (flattened structure).
+    Parameters are dynamically validated based on the chart type using the
+    figure component registry in depictio/dash/modules/figure_component/.
+
+    Common parameters:
+    - chart: Chart type (scatter, line, bar, box, histogram)
+    - x, y: Axis columns
+    - color: Color encoding column
+    - size: Size encoding column
+    - title: Figure title
+    - template: Plotly template
+    - opacity: Marker opacity
+    - marginal_x, marginal_y: Marginal distribution plots
+    - trendline: Trendline type
+    - log_x, log_y: Logarithmic scales
+    - And many more depending on chart type...
+    """
 
     chart: str = Field(..., description="Chart type (scatter, box, histogram, etc.)")
     x: str | None = None
     y: str | None = None
     color: str | None = None
     size: str | None = None
-    style: dict[str, Any] | None = None
 
+    # Allow all other parameters dynamically based on chart type
+    # The validation system will check against the figure component registry
     model_config = {"extra": "allow"}  # Allow additional fields
 
 
