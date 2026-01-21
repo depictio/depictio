@@ -695,6 +695,11 @@ class DashboardYAMLConfig(BaseSettings):
         description="Block sync if validation fails (set False to only warn)",
     )
 
+    validate_column_names: bool = Field(
+        default=True,
+        description="Validate that column names exist in data collection schema",
+    )
+
     model_config = SettingsConfigDict(
         env_prefix="DEPICTIO_DASHBOARD_YAML_",
         env_file=".env",

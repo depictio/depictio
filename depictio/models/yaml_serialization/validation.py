@@ -31,12 +31,186 @@ class ValidationResult(TypedDict):
     warnings: list[ValidationError]
 
 
-def validate_yaml_file(yaml_path: str) -> ValidationResult:
+def _get_data_collection_columns(
+    workflow_tag: str,
+    data_collection_tag: str,
+) -> tuple[list[str], str | None]:
+    """
+    Get available column names for a data collection.
+
+    Supports both data models:
+    - Standalone collections (workflows_collection, data_collections_collection)
+    - Hierarchical projects collection (projects.workflows.data_collections)
+
+    Args:
+        workflow_tag: Workflow tag name (e.g., 'iris_workflow' or 'python/iris_workflow')
+        data_collection_tag: Data collection tag name (e.g., 'iris_table')
+
+    Returns:
+        Tuple of (column_names, error_message)
+        - column_names: List of available column names (empty if error)
+        - error_message: Error message if lookup failed, None if successful
+    """
+    from depictio.api.v1.db import (
+        data_collections_collection,
+        deltatables_collection,
+        projects_collection,
+        workflows_collection,
+    )
+
+    # Normalize workflow tag (strip prefix like "python/" if present)
+    # This matches the behavior of the MVP format converter
+    normalized_workflow_tag = workflow_tag.split("/")[-1] if "/" in workflow_tag else workflow_tag
+
+    dc_id = None
+
+    # Try Method 1: Standalone collections (legacy/flat structure)
+    # Try both normalized and original tags
+    workflow = workflows_collection.find_one(
+        {"workflow_tag": {"$in": [workflow_tag, normalized_workflow_tag]}}
+    )
+    if workflow:
+        workflow_id = workflow["_id"]
+        dc_query = {
+            "workflow_id": workflow_id,
+            "data_collection_tag": data_collection_tag,
+        }
+        data_collection = data_collections_collection.find_one(dc_query)
+        if data_collection:
+            dc_id = data_collection["_id"]
+
+    # Try Method 2: Projects collection (hierarchical structure)
+    if dc_id is None:
+        # Search for both normalized and original workflow tags
+        project = projects_collection.find_one(
+            {"workflows.workflow_tag": {"$in": [workflow_tag, normalized_workflow_tag]}}
+        )
+        if project:
+            # Find the workflow in the project (match either tag)
+            workflows = project.get("workflows", [])
+            for wf in workflows:
+                wf_tag = wf.get("workflow_tag", "")
+                # Match if tag equals either original or normalized version
+                if wf_tag == workflow_tag or wf_tag == normalized_workflow_tag:
+                    # Find the data collection in the workflow
+                    data_collections = wf.get("data_collections", [])
+                    for dc in data_collections:
+                        if dc.get("data_collection_tag") == data_collection_tag:
+                            dc_id = dc.get("_id")
+                            break
+                    break
+
+    # If still not found, return error
+    if dc_id is None:
+        return (
+            [],
+            f"Data collection '{data_collection_tag}' not found in workflow '{workflow_tag}'",
+        )
+
+    # Fetch column specs from deltatable
+    deltatable_query = {"data_collection_id": dc_id}
+    deltatable = deltatables_collection.find_one(deltatable_query)
+    if not deltatable:
+        return [], f"No deltatable found for data collection '{data_collection_tag}'"
+
+    # Get latest aggregation's column specs
+    aggregations = deltatable.get("aggregation", [])
+    if not aggregations:
+        return [], f"No aggregations found for data collection '{data_collection_tag}'"
+
+    latest_agg = aggregations[-1]
+    column_specs = latest_agg.get("aggregation_columns_specs", [])
+
+    # Extract column names
+    column_names = [col["name"] for col in column_specs]
+
+    return column_names, None
+
+
+def _find_similar_columns(target: str, available: list[str]) -> list[str]:
+    """
+    Find similar column names using fuzzy matching.
+
+    Args:
+        target: The column name that wasn't found
+        available: List of available column names
+
+    Returns:
+        List of similar column names, sorted by similarity
+    """
+    from difflib import get_close_matches
+
+    return get_close_matches(target, available, n=3, cutoff=0.6)
+
+
+def _validate_component_columns(
+    component: dict,
+    available_columns: list[str],
+    component_id: str,
+) -> list[ValidationError]:
+    """
+    Validate that all column references in a component exist in the data collection.
+
+    Args:
+        component: Component dictionary from YAML
+        available_columns: List of available column names
+        component_id: Component ID for error messages
+
+    Returns:
+        List of validation errors (empty if all columns valid)
+    """
+    errors: list[ValidationError] = []
+    component_type = component.get("type")
+
+    # Helper to check a single column reference
+    def check_column(field_path: str, column_name: str | None) -> None:
+        if column_name and column_name not in available_columns:
+            # Find similar column names for suggestions
+            suggestions = _find_similar_columns(column_name, available_columns)
+            error_msg = f"Column '{column_name}' not found in data collection"
+            if suggestions:
+                error_msg += f". Did you mean: {', '.join(suggestions[:3])}?"
+
+            errors.append(
+                cast(
+                    ValidationError,
+                    {
+                        "severity": "error",
+                        "message": error_msg,
+                        "field": field_path,
+                        "component_id": component_id,
+                    },
+                )
+            )
+
+    # Validate based on component type
+    if component_type == "figure":
+        viz = component.get("visualization", {})
+        check_column("visualization.x", viz.get("x"))
+        check_column("visualization.y", viz.get("y"))
+        check_column("visualization.color", viz.get("color"))
+        check_column("visualization.size", viz.get("size"))
+
+    elif component_type == "card":
+        agg = component.get("aggregation", {})
+        check_column("aggregation.column", agg.get("column"))
+
+    elif component_type == "interactive":
+        filt = component.get("filter", {})
+        check_column("filter.column", filt.get("column"))
+
+    # Table components don't reference specific columns
+
+    return errors
+
+
+def validate_yaml_file(yaml_path: str, check_column_names: bool = True) -> ValidationResult:
     """
     Validate a YAML dashboard file using Pydantic models.
 
     Args:
         yaml_path: Path to the YAML file to validate
+        check_column_names: Whether to validate column names against data collection schema
 
     Returns:
         ValidationResult with valid flag and any errors/warnings
@@ -125,6 +299,65 @@ def validate_yaml_file(yaml_path: str) -> ValidationResult:
                 }
             )
 
+    # Column name validation (if enabled and basic validation passed)
+    if check_column_names and result["valid"]:
+        try:
+            # Check if MongoDB is available
+            try:
+                from depictio.api.v1.db import workflows_collection  # noqa: F401
+            except Exception:
+                result["warnings"].append(
+                    {
+                        "severity": "warning",
+                        "message": "MongoDB not available, skipping column validation",
+                        "field": None,
+                        "component_id": None,
+                    }
+                )
+            else:
+                # Validate columns for each component
+                for comp in dashboard.components:
+                    comp_dict = comp.model_dump()
+
+                    # Get available columns for this component's data collection
+                    columns, error = _get_data_collection_columns(
+                        workflow_tag=comp.workflow,
+                        data_collection_tag=comp.data_collection,
+                    )
+
+                    if error:
+                        # Data collection or workflow not found - warning, not error
+                        result["warnings"].append(
+                            {
+                                "severity": "warning",
+                                "message": f"Cannot validate columns: {error}",
+                                "field": None,
+                                "component_id": comp.id,
+                            }
+                        )
+                        continue
+
+                    # Validate column references
+                    column_errors = _validate_component_columns(
+                        component=comp_dict,
+                        available_columns=columns,
+                        component_id=comp.id,
+                    )
+
+                    result["errors"].extend(column_errors)
+
+        except Exception as e:
+            # Column validation failure shouldn't break the whole validation
+            result["warnings"].append(
+                {
+                    "severity": "warning",
+                    "message": f"Column validation failed: {e}",
+                    "field": None,
+                    "component_id": None,
+                }
+            )
+
+    result["valid"] = len(result["errors"]) == 0
     return result
 
 

@@ -211,7 +211,9 @@ def _validate_yaml_for_sync(filepath: str) -> tuple[bool, str | None]:
     if not settings.dashboard_yaml.enable_validation:
         return True, None
 
-    validation_result = validate_yaml_file(filepath)
+    validation_result = validate_yaml_file(
+        filepath, check_column_names=settings.dashboard_yaml.validate_column_names
+    )
     if validation_result["valid"]:
         return True, None
 

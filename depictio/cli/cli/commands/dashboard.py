@@ -19,6 +19,7 @@ console = Console()
 def validate(
     yaml_file: Annotated[Path, typer.Argument(help="Path to YAML dashboard file")],
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
+    check_columns: Annotated[bool, typer.Option("--check-columns/--no-check-columns")] = True,
 ) -> None:
     """Validate a dashboard YAML file."""
     from depictio.models.yaml_serialization.validation import validate_yaml_file
@@ -28,8 +29,10 @@ def validate(
         raise typer.Exit(1)
 
     console.print(f"Validating: {yaml_file}")
+    if check_columns:
+        console.print("  [dim]Including column name validation[/dim]")
 
-    result = validate_yaml_file(str(yaml_file))
+    result = validate_yaml_file(str(yaml_file), check_column_names=check_columns)
 
     if result["valid"]:
         console.print("[green]✓ Validation passed[/green]")
@@ -68,10 +71,9 @@ def validate(
 
 @app.command()
 def validate_dir(
-    directory: Annotated[
-        Path, typer.Argument(help="Directory to validate")
-    ] = Path("."),
+    directory: Annotated[Path, typer.Argument(help="Directory to validate")] = Path("."),
     recursive: Annotated[bool, typer.Option("--recursive", "-r")] = True,
+    check_columns: Annotated[bool, typer.Option("--check-columns/--no-check-columns")] = True,
 ) -> None:
     """Validate all YAML files in a directory."""
     from depictio.models.yaml_serialization.validation import validate_yaml_file
@@ -83,7 +85,11 @@ def validate_dir(
         console.print(f"[yellow]No YAML files found in {directory}[/yellow]")
         raise typer.Exit(0)
 
-    console.print(f"Found {len(yaml_files)} YAML files\n")
+    console.print(f"Found {len(yaml_files)} YAML files")
+    if check_columns:
+        console.print("  [dim]Including column name validation[/dim]\n")
+    else:
+        console.print("  [dim]Skipping column name validation[/dim]\n")
 
     valid_count = 0
     invalid_count = 0
@@ -94,7 +100,7 @@ def validate_dir(
     table.add_column("Errors", style="red")
 
     for yaml_file in yaml_files:
-        result = validate_yaml_file(str(yaml_file))
+        result = validate_yaml_file(str(yaml_file), check_column_names=check_columns)
 
         if result["valid"]:
             valid_count += 1
