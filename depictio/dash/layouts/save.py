@@ -137,10 +137,23 @@ def register_callbacks_save_lite(app):
         # DEBUG: Log what's in each metadata source
         logger.info("📊 STORED METADATA (from stored-metadata-component):")
         for idx, meta in enumerate(stored_metadata):
+            mode_info = (
+                f"mode={meta.get('mode', 'N/A')}" if meta.get("component_type") == "figure" else ""
+            )
+            code_info = (
+                f"code_len={len(meta.get('code_content', ''))}"
+                if meta.get("component_type") == "figure" and meta.get("mode") == "code"
+                else ""
+            )
             logger.info(
                 f"  [{idx}] index={meta.get('index')}, type={meta.get('component_type')}, "
-                f"has_wf_id={bool(meta.get('wf_id'))}, has_dc_id={bool(meta.get('dc_id'))}"
+                f"has_wf_id={bool(meta.get('wf_id'))}, has_dc_id={bool(meta.get('dc_id'))}, "
+                f"{mode_info} {code_info}"
             )
+
+            # CRITICAL DEBUG: Log full metadata for code mode figures
+            if meta.get("component_type") == "figure" and meta.get("mode") == "code":
+                logger.info(f"  🔍 FULL CODE MODE METADATA: {meta}")
 
         logger.info("📊 INTERACTIVE METADATA (from interactive-stored-metadata):")
         for idx, meta in enumerate(interactive_metadata):

@@ -364,6 +364,16 @@ def register_core_callbacks(app):
                     f"[{task_id}] Figure params: mode={mode}, visu_type={visu_type}, dict_kwargs={dict_kwargs}"
                 )
 
+                # CRITICAL DEBUG: Log full trigger_data for code mode figures
+                if mode == "code":
+                    logger.info(f"🔍 RENDER: Code mode figure {component_id}")
+                    logger.info(f"   code_content length: {len(code_content)}")
+                    logger.info(
+                        f"   code_content present in trigger_data: {'code_content' in trigger_data}"
+                    )
+                    logger.info(f"   Full trigger_data keys: {trigger_data.keys()}")
+                    logger.info(f"   Full trigger_data: {trigger_data}")
+
                 # Get cached data
                 load_key = figure_to_load_key.get(i)
                 if not load_key or load_key not in dc_cache:

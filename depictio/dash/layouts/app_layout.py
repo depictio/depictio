@@ -762,6 +762,13 @@ def create_app_layout():
                 id="edit-mode-navigation-dummy",
                 storage_type="memory",
             ),
+            # Edit page context store (empty by default, populated on edit pages)
+            # Needed by figure edit callback to avoid registration errors
+            dcc.Store(
+                id="edit-page-context",
+                storage_type="memory",
+                data=None,  # Populated only on edit pages
+            ),
             # ✅ MIGRATED TO SHARED STORES: All cache stores now in shared_app_shell.py
             # - server-status-cache (session storage, was memory)
             # - project-metadata-store (session storage, renamed from project-cache)

@@ -45,7 +45,7 @@ def create_minimal_edit_header(
         [
             dcc.Link(
                 dmc.Button(
-                    "← Back to Dashboard",
+                    "Back to Dashboard",
                     variant="subtle",
                     leftSection=DashIconify(icon="mdi:arrow-left", width=20),
                 ),

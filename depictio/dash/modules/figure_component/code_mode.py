@@ -2,7 +2,7 @@
 Code mode component for figure creation using Python/Plotly code
 """
 
-from typing import Any, Dict
+from typing import Any, Dict, Literal
 
 import dash_ace
 import dash_mantine_components as dmc
@@ -15,296 +15,20 @@ from depictio.api.v1.configs.logging_init import logger
 from .simple_code_executor import get_code_examples
 
 
-def create_code_mode_interface(component_index: str) -> html.Div:
-    """Create the code mode interface for figure creation"""
+def create_code_mode_interface(component_index: str, initial_code: str = "") -> html.Div:
+    """Create the code mode interface for figure creation.
 
-    from depictio.api.v1.configs.logging_init import logger
-
+    Args:
+        component_index: Component identifier
+        initial_code: Initial code to populate the editor (for edit mode)
+    """
     logger.info(f"🔧 CREATING CODE MODE INTERFACE for component: {component_index}")
+    logger.info(f"   Initial code length: {len(initial_code) if initial_code else 0}")
 
     interface = html.Div(
         [
-            # Code editor area - flexible height container
-            dmc.Stack(
-                [
-                    # Header with controls
-                    dmc.Group(
-                        [
-                            dmc.Text("Python Code:", fw="bold", size="sm", c="gray"),
-                            dmc.Group(
-                                [
-                                    dmc.Button(
-                                        "Execute Code",
-                                        id={"type": "code-execute-btn", "index": component_index},
-                                        size="xs",
-                                        leftSection=DashIconify(icon="mdi:play", width=14),
-                                        color="green",
-                                        variant="filled",
-                                    ),
-                                    dmc.Button(
-                                        "Clear",
-                                        id={"type": "code-clear-btn", "index": component_index},
-                                        size="xs",
-                                        leftSection=DashIconify(icon="mdi:broom", width=14),
-                                        color="gray",
-                                        variant="outline",
-                                    ),
-                                ],
-                                gap="xs",
-                            ),
-                        ],
-                        justify="space-between",
-                        align="center",
-                    ),
-                    # Enhanced Code Editor with dash-ace - flexible height
-                    dmc.Paper(
-                        [
-                            # Code editor header bar (like in prototype)
-                            dmc.Group(
-                                [
-                                    dmc.Group(
-                                        [
-                                            dmc.Box(
-                                                style={
-                                                    "width": "12px",
-                                                    "height": "12px",
-                                                    "borderRadius": "50%",
-                                                    "backgroundColor": "#ff5f57",
-                                                }
-                                            ),
-                                            dmc.Box(
-                                                style={
-                                                    "width": "12px",
-                                                    "height": "12px",
-                                                    "borderRadius": "50%",
-                                                    "backgroundColor": "#ffbd2e",
-                                                }
-                                            ),
-                                            dmc.Box(
-                                                style={
-                                                    "width": "12px",
-                                                    "height": "12px",
-                                                    "borderRadius": "50%",
-                                                    "backgroundColor": "#28ca42",
-                                                }
-                                            ),
-                                        ],
-                                        gap="xs",
-                                    ),
-                                    dmc.Text(
-                                        "main.py",
-                                        size="sm",
-                                        c="gray",
-                                        style={"fontFamily": "monospace"},
-                                    ),
-                                    dmc.Group(
-                                        [
-                                            dmc.Text("Python", size="xs", c="gray"),
-                                            dmc.Text("UTF-8", size="xs", c="gray"),
-                                        ],
-                                        gap="md",
-                                    ),
-                                ],
-                                justify="space-between",
-                                p="sm",
-                                style={
-                                    "backgroundColor": "var(--mantine-color-gray-1, #f8f9fa)",
-                                    "borderBottom": "1px solid var(--mantine-color-gray-3, #dee2e6)",
-                                },
-                            ),
-                            # Code input area with enhanced editor - flexible height
-                            dmc.Box(
-                                [
-                                    dash_ace.DashAceEditor(
-                                        id={"type": "code-editor", "index": component_index},
-                                        value="",
-                                        theme="github",
-                                        mode="python",
-                                        fontSize=15,
-                                        showGutter=True,
-                                        showPrintMargin=False,
-                                        highlightActiveLine=True,
-                                        setOptions={
-                                            "enableBasicAutocompletion": True,
-                                            "enableLiveAutocompletion": True,
-                                            "enableSnippets": True,
-                                            "tabSize": 4,
-                                            "useSoftTabs": True,
-                                            "wrap": True,  # Enable word wrapping
-                                            "fontFamily": "Fira Code, JetBrains Mono, Monaco, Consolas, Courier New, monospace",
-                                            "printMargin": 55,  # Set print margin at ~55 characters
-                                            "enableResize": True,  # Enable the resize handle
-                                            # Fix copy-paste indentation issues
-                                            "autoIndent": False,  # Disable auto-indent
-                                            "behavioursEnabled": False,  # Disable auto-pairing/behaviors
-                                        },
-                                        style={
-                                            "width": "100%",
-                                            "height": "100%",
-                                            "minHeight": "200px",
-                                            "borderRadius": "0 0 8px 8px",
-                                        },
-                                        placeholder="# Enter your Python/Plotly code here...\n# Available: df (DataFrame), px (plotly.express), pd (pandas), pl (polars)\n# \n# CONSTRAINT: Use 'df_modified' for data preprocessing (single line):\n# df_modified = df.to_pandas().groupby('column').sum().reset_index()\n# fig = px.pie(df_modified, values='value_col', names='name_col')\n# \n# Simple example (no preprocessing):\n# fig = px.scatter(df, x='your_x_column', y='your_y_column', color='your_color_column')",
-                                    ),
-                                ],
-                                style={
-                                    "width": "100%",
-                                    "flex": "1",  # Take available space
-                                    "minHeight": "200px",
-                                    "maxHeight": "600px",  # Set max height for resize
-                                    "display": "flex",
-                                    "flexDirection": "column",
-                                    "borderRadius": "0 0 8px 8px",
-                                    "resize": "vertical",
-                                    "overflow": "auto",
-                                },
-                            ),
-                        ],
-                        radius="md",
-                        withBorder=True,
-                        style={
-                            "backgroundColor": "transparent",
-                            "overflow": "hidden",
-                            "flex": "1",  # Take available space
-                            "display": "flex",
-                            "flexDirection": "column",
-                        },
-                    ),
-                ],
-                gap="sm",
-                style={
-                    "flex": "1",  # Take available space
-                    "display": "flex",
-                    "flexDirection": "column",
-                },
-            ),
-            # Status and data preview area - fixed height, scrollable
-            # dmc.ScrollArea(
-            #     [
-            dmc.Stack(
-                [
-                    # Available columns information
-                    dmc.Alert(
-                        id={"type": "columns-info", "index": component_index},
-                        title="Available Columns",
-                        color="teal",
-                        children="Loading column information...",
-                        withCloseButton=False,
-                        icon=DashIconify(
-                            icon="mdi:table",
-                            width=16,
-                            style={"color": "var(--mantine-color-teal-6, #1de9b6)"},
-                        ),
-                    ),
-                    # Execution status
-                    dmc.Alert(
-                        id={"type": "code-status", "index": component_index},
-                        title="Ready",
-                        color="blue",
-                        children="Enter code and click 'Execute Code' to see preview on the left.",
-                        withCloseButton=False,
-                        icon=DashIconify(
-                            icon="mdi:check-circle",
-                            width=16,
-                            style={"color": "var(--mantine-color-blue-6, #1e88e5)"},
-                        ),
-                    ),
-                    # Data info (show basic info about the loaded dataframe)
-                    dmc.Alert(
-                        id={"type": "data-info", "index": component_index},
-                        title="Dataset & Figure Usage",
-                        color="blue",
-                        children=[
-                            dmc.Text("Code Constraints and Usage:"),
-                            dmc.List(
-                                [
-                                    dmc.ListItem(
-                                        "df - Your dataset (Polars DataFrame) - READ ONLY"
-                                    ),
-                                    dmc.ListItem(
-                                        "df_modified - Use for preprocessing (single line only)"
-                                    ),
-                                    dmc.ListItem("fig - Your final Plotly figure (required)"),
-                                    dmc.ListItem(
-                                        "✅ Valid: fig = px.scatter(df, ...) or fig = px.pie(df_modified, ...)"
-                                    ),
-                                    dmc.ListItem(
-                                        "❌ Invalid: Multiple preprocessing lines or wrong variable names"
-                                    ),
-                                ],
-                                size="sm",
-                                withPadding=True,
-                                style={"marginTop": "8px"},
-                            ),
-                        ],
-                        withCloseButton=False,
-                        icon=DashIconify(
-                            icon="mdi:database",
-                            width=16,
-                            style={"color": "var(--mantine-color-blue-6, #1e88e5)"},
-                        ),
-                    ),
-                    # Code examples section - separate from dataset info
-                    dmc.Alert(
-                        title="Code Examples (Iris Dataset)",
-                        color="teal",
-                        children=[
-                            dmc.Button(
-                                "Show Code Examples",
-                                id={"type": "toggle-examples-btn", "index": component_index},
-                                variant="subtle",
-                                size="xs",
-                                leftSection=DashIconify(icon="mdi:code-braces", width=14),
-                                color="teal",
-                                style={"marginBottom": "8px"},
-                            ),
-                            dmc.Collapse(
-                                id={"type": "code-examples-collapse", "index": component_index},
-                                opened=False,
-                                children=[
-                                    dmc.Stack(
-                                        [
-                                            *[
-                                                dmc.Stack(
-                                                    [
-                                                        dmc.Text(
-                                                            title, fw="bold", size="sm", c="gray"
-                                                        ),
-                                                        dmc.CodeHighlight(
-                                                            language="python",
-                                                            code=code,
-                                                            withCopyButton=True,
-                                                            style={"fontSize": "12px"},
-                                                        ),
-                                                    ],
-                                                    gap="xs",
-                                                )
-                                                for title, code in get_code_examples().items()
-                                            ],
-                                        ],
-                                        gap="md",
-                                    )
-                                ],
-                            ),
-                        ],
-                        withCloseButton=False,
-                        icon=DashIconify(
-                            icon="mdi:code-tags",
-                            width=16,
-                            style={"color": "var(--mantine-color-teal-6, #1de9b6)"},
-                        ),
-                    ),
-                ],
-                gap="sm",
-            ),
-            # ],
-            #     style={
-            #         # "maxHeight": "200px",
-            #         # "flex": "0 0 auto",  # Don't grow, but take needed space
-            #         "overflowY": "auto",
-            #     },
-            # ),
-            # Note: code-generated-figure store is created in design_figure function
+            _create_editor_section(component_index, initial_code),
+            _create_status_section(component_index),
         ],
         style={
             "height": "100%",
@@ -317,6 +41,309 @@ def create_code_mode_interface(component_index: str) -> html.Div:
 
     logger.info("✅ CODE MODE INTERFACE CREATED - returning interface")
     return interface
+
+
+def _create_traffic_light_dot(color: str) -> dmc.Box:
+    """Create a single traffic light dot for the editor header."""
+    return dmc.Box(
+        style={
+            "width": "12px",
+            "height": "12px",
+            "borderRadius": "50%",
+            "backgroundColor": color,
+        }
+    )
+
+
+def _create_editor_header() -> dmc.Group:
+    """Create the macOS-style editor header bar with traffic lights."""
+    traffic_lights = dmc.Group(
+        [
+            _create_traffic_light_dot("#ff5f57"),
+            _create_traffic_light_dot("#ffbd2e"),
+            _create_traffic_light_dot("#28ca42"),
+        ],
+        gap="xs",
+    )
+
+    filename = dmc.Text(
+        "main.py",
+        size="sm",
+        c="gray",
+        style={"fontFamily": "monospace"},
+    )
+
+    file_info = dmc.Group(
+        [
+            dmc.Text("Python", size="xs", c="gray"),
+            dmc.Text("UTF-8", size="xs", c="gray"),
+        ],
+        gap="md",
+    )
+
+    return dmc.Group(
+        [traffic_lights, filename, file_info],
+        justify="space-between",
+        p="sm",
+        style={
+            "backgroundColor": "var(--mantine-color-gray-1, #f8f9fa)",
+            "borderBottom": "1px solid var(--mantine-color-gray-3, #dee2e6)",
+        },
+    )
+
+
+def _create_ace_editor(component_index: str, initial_code: str) -> dash_ace.DashAceEditor:
+    """Create the Ace code editor component."""
+    placeholder_text = """# Enter your Python/Plotly code here...
+# Available: df (DataFrame), px (plotly.express), pd (pandas), pl (polars)
+#
+# CONSTRAINT: Use 'df_modified' for data preprocessing (single line):
+# df_modified = df.to_pandas().groupby('column').sum().reset_index()
+# fig = px.pie(df_modified, values='value_col', names='name_col')
+#
+# Simple example (no preprocessing):
+# fig = px.scatter(df, x='your_x_column', y='your_y_column', color='your_color_column')"""
+
+    return dash_ace.DashAceEditor(
+        id={"type": "code-editor", "index": component_index},
+        value=initial_code,
+        theme="github",
+        mode="python",
+        fontSize=15,
+        showGutter=True,
+        showPrintMargin=False,
+        highlightActiveLine=True,
+        setOptions={
+            "enableBasicAutocompletion": True,
+            "enableLiveAutocompletion": True,
+            "enableSnippets": True,
+            "tabSize": 4,
+            "useSoftTabs": True,
+            "wrap": True,
+            "fontFamily": "Fira Code, JetBrains Mono, Monaco, Consolas, Courier New, monospace",
+            "printMargin": 55,
+            "enableResize": True,
+            "autoIndent": False,
+            "behavioursEnabled": False,
+        },
+        style={
+            "width": "100%",
+            "height": "100%",
+            "minHeight": "200px",
+            "borderRadius": "0 0 8px 8px",
+        },
+        placeholder=placeholder_text,
+    )
+
+
+def _create_editor_section(component_index: str, initial_code: str) -> dmc.Stack:
+    """Create the code editor section with header and controls."""
+    header_controls = dmc.Group(
+        [
+            dmc.Text("Python Code:", fw="bold", size="sm", c="gray"),
+            dmc.Group(
+                [
+                    dmc.Button(
+                        "Execute Code",
+                        id={"type": "code-execute-btn", "index": component_index},
+                        size="xs",
+                        leftSection=DashIconify(icon="mdi:play", width=14),
+                        color="green",
+                        variant="filled",
+                    ),
+                    dmc.Button(
+                        "Clear",
+                        id={"type": "code-clear-btn", "index": component_index},
+                        size="xs",
+                        leftSection=DashIconify(icon="mdi:broom", width=14),
+                        color="gray",
+                        variant="outline",
+                    ),
+                ],
+                gap="xs",
+            ),
+        ],
+        justify="space-between",
+        align="center",
+    )
+
+    editor_container = dmc.Box(
+        [_create_ace_editor(component_index, initial_code)],
+        style={
+            "width": "100%",
+            "flex": "1",
+            "minHeight": "200px",
+            "maxHeight": "600px",
+            "display": "flex",
+            "flexDirection": "column",
+            "borderRadius": "0 0 8px 8px",
+            "resize": "vertical",
+            "overflow": "auto",
+        },
+    )
+
+    editor_paper = dmc.Paper(
+        [_create_editor_header(), editor_container],
+        radius="md",
+        withBorder=True,
+        style={
+            "backgroundColor": "transparent",
+            "overflow": "hidden",
+            "flex": "1",
+            "display": "flex",
+            "flexDirection": "column",
+        },
+    )
+
+    return dmc.Stack(
+        [header_controls, editor_paper],
+        gap="sm",
+        style={
+            "flex": "1",
+            "display": "flex",
+            "flexDirection": "column",
+        },
+    )
+
+
+AlertColor = Literal[
+    "blue",
+    "cyan",
+    "gray",
+    "green",
+    "indigo",
+    "lime",
+    "orange",
+    "pink",
+    "red",
+    "teal",
+    "violet",
+    "yellow",
+    "dark",
+    "grape",
+]
+
+
+def _create_alert(
+    component_index: str, alert_type: str, title: str, color: AlertColor, icon: str, children
+) -> dmc.Alert:
+    """Create a styled alert component."""
+    color_var = f"var(--mantine-color-{color}-6, #1de9b6)"
+    return dmc.Alert(
+        id={"type": alert_type, "index": component_index},
+        title=title,
+        color=color,
+        children=children,
+        withCloseButton=False,
+        icon=DashIconify(icon=icon, width=16, style={"color": color_var}),
+    )
+
+
+def _create_usage_info() -> list:
+    """Create the dataset and figure usage information content."""
+    return [
+        dmc.Text("Code Constraints and Usage:"),
+        dmc.List(
+            [
+                dmc.ListItem("df - Your dataset (Polars DataFrame) - READ ONLY"),
+                dmc.ListItem("df_modified - Use for preprocessing (single line only)"),
+                dmc.ListItem("fig - Your final Plotly figure (required)"),
+                dmc.ListItem(
+                    "✅ Valid: fig = px.scatter(df, ...) or fig = px.pie(df_modified, ...)"
+                ),
+                dmc.ListItem("❌ Invalid: Multiple preprocessing lines or wrong variable names"),
+            ],
+            size="sm",
+            withPadding=True,
+            style={"marginTop": "8px"},
+        ),
+    ]
+
+
+def _create_code_examples_section(component_index: str) -> dmc.Alert:
+    """Create the collapsible code examples section."""
+    examples_content = dmc.Stack(
+        [
+            dmc.Stack(
+                [
+                    dmc.Text(title, fw="bold", size="sm", c="gray"),
+                    dmc.CodeHighlight(
+                        language="python",
+                        code=code,
+                        withCopyButton=True,
+                        style={"fontSize": "12px"},
+                    ),
+                ],
+                gap="xs",
+            )
+            for title, code in get_code_examples().items()
+        ],
+        gap="md",
+    )
+
+    return dmc.Alert(
+        title="Code Examples (Iris Dataset)",
+        color="teal",
+        children=[
+            dmc.Button(
+                "Show Code Examples",
+                id={"type": "toggle-examples-btn", "index": component_index},
+                variant="subtle",
+                size="xs",
+                leftSection=DashIconify(icon="mdi:code-braces", width=14),
+                color="teal",
+                style={"marginBottom": "8px"},
+            ),
+            dmc.Collapse(
+                id={"type": "code-examples-collapse", "index": component_index},
+                opened=False,
+                children=[examples_content],
+            ),
+        ],
+        withCloseButton=False,
+        icon=DashIconify(
+            icon="mdi:code-tags",
+            width=16,
+            style={"color": "var(--mantine-color-teal-6, #1de9b6)"},
+        ),
+    )
+
+
+def _create_status_section(component_index: str) -> dmc.Stack:
+    """Create the status and information alerts section."""
+    columns_alert = _create_alert(
+        component_index,
+        "columns-info",
+        "Available Columns",
+        "teal",
+        "mdi:table",
+        "Loading column information...",
+    )
+
+    status_alert = _create_alert(
+        component_index,
+        "code-status",
+        "Ready",
+        "blue",
+        "mdi:check-circle",
+        "Enter code and click 'Execute Code' to see preview on the left.",
+    )
+
+    data_info_alert = _create_alert(
+        component_index,
+        "data-info",
+        "Dataset & Figure Usage",
+        "blue",
+        "mdi:database",
+        _create_usage_info(),
+    )
+
+    examples_section = _create_code_examples_section(component_index)
+
+    return dmc.Stack(
+        [columns_alert, status_alert, data_info_alert, examples_section],
+        gap="sm",
+    )
 
 
 def convert_ui_params_to_code(dict_kwargs: Dict[str, Any], visu_type: str) -> str:

@@ -16,6 +16,22 @@ from depictio.api.v1.configs.logging_init import logger
 from .save_utils import save_figure_to_dashboard
 
 
+def _validate_save_preconditions(triggered_id, btn_clicks, edit_context) -> None:
+    """Validate preconditions for save callback.
+
+    Raises:
+        PreventUpdate: If any precondition fails
+    """
+    has_valid_trigger = triggered_id and any(btn_clicks)
+    if not has_valid_trigger:
+        logger.warning("⚠️ FIGURE EDIT SAVE - No trigger or clicks, preventing update")
+        raise PreventUpdate
+
+    if not edit_context:
+        logger.warning("⚠️ FIGURE EDIT SAVE - No edit context (not on edit page), preventing update")
+        raise PreventUpdate
+
+
 def register_figure_edit_callback(app):
     """Register edit mode save callback for figure component."""
 
@@ -80,10 +96,8 @@ def register_figure_edit_callback(app):
         logger.info(f"   ctx.triggered_id: {ctx.triggered_id}")
         logger.info(f"   btn_clicks: {btn_clicks}")
 
-        # GUARD: Validate trigger
-        if not ctx.triggered_id or not any(btn_clicks):
-            logger.warning("⚠️ FIGURE EDIT SAVE - No trigger or clicks, preventing update")
-            raise PreventUpdate
+        # Guard: Validate callback preconditions
+        _validate_save_preconditions(ctx.triggered_id, btn_clicks, edit_context)
 
         # Extract context
         dashboard_id = edit_context["dashboard_id"]
