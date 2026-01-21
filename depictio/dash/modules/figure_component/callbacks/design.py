@@ -429,11 +429,14 @@ def register_design_callbacks(app):
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             State("local-store", "data"),
+            State("theme-store", "data"),
         ],
         prevent_initial_call=True,
         background=True,  # CRITICAL: Prevent UI blocking during data loading and code execution
     )
-    def execute_code_preview(n_clicks, code_content, workflow_id, data_collection_id, local_data):
+    def execute_code_preview(
+        n_clicks, code_content, workflow_id, data_collection_id, local_data, theme_data
+    ):
         """
         Execute code and show preview in left panel (code mode graph), hide UI mode graph.
 
@@ -516,6 +519,13 @@ def register_design_callbacks(app):
             success, fig, message = executor.execute_code(code_content, df)
 
             if success:
+                # Apply theme template if not explicitly specified in code
+                current_theme = theme_data if theme_data else "light"
+                if "template=" not in code_content:
+                    theme_template = f"mantine_{current_theme}"
+                    fig.update_layout(template=theme_template)
+                    logger.info(f"Applied theme template: {theme_template}")
+
                 logger.info("Code execution successful")
                 return success_response(fig)
 

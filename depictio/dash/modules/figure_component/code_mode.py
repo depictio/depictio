@@ -171,9 +171,9 @@ def _create_editor_section(component_index: str, initial_code: str) -> dmc.Stack
         [_create_ace_editor(component_index, initial_code)],
         style={
             "width": "100%",
-            "flex": "1",
+            "height": "400px",  # Initial height (user can resize)
             "minHeight": "200px",
-            "maxHeight": "600px",
+            "maxHeight": "none",  # Allow unlimited vertical growth
             "display": "flex",
             "flexDirection": "column",
             "borderRadius": "0 0 8px 8px",
