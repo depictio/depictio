@@ -47,7 +47,7 @@ def register_design_callbacks(app):
             State({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
             State({"type": "code-content-store", "index": MATCH}, "data"),
         ],
-        prevent_initial_call=False,  # Handle both initial load and user toggles
+        prevent_initial_call="initial_duplicate",  # Allow initial call with duplicate outputs
     )
     def handle_mode_switch(mode, current_mode, dict_kwargs, visu_type_label, current_code):
         """Handle initial setup and user toggling between UI and Code modes."""
