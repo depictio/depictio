@@ -212,7 +212,9 @@ def _validate_yaml_for_sync(filepath: str) -> tuple[bool, str | None]:
         return True, None
 
     validation_result = validate_yaml_file(
-        filepath, check_column_names=settings.dashboard_yaml.validate_column_names
+        filepath,
+        check_column_names=settings.dashboard_yaml.validate_column_names,
+        check_component_types=settings.dashboard_yaml.validate_component_types,
     )
     if validation_result["valid"]:
         return True, None
