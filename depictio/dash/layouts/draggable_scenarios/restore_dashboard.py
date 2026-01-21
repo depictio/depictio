@@ -185,6 +185,20 @@ def render_dashboard_original(
 
     for child_metadata in stored_metadata:
         start_component = time.time()
+
+        # CRITICAL DEBUG: Log metadata from MongoDB for code mode figures
+        if (
+            child_metadata.get("component_type") == "figure"
+            and child_metadata.get("mode") == "code"
+        ):
+            logger.info(
+                f"🔍 RESTORE: Code mode figure from MongoDB: index={child_metadata.get('index')}"
+            )
+            logger.info(
+                f"   mode={child_metadata.get('mode')}, code_len={len(child_metadata.get('code_content', ''))}"
+            )
+            logger.info(f"   Full metadata: {child_metadata}")
+
         child_metadata["build_frame"] = True
         child_metadata["access_token"] = TOKEN
 

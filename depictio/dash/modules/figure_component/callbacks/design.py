@@ -51,53 +51,37 @@ def register_design_callbacks(app):
     )
     def handle_mode_switch(mode, current_mode, dict_kwargs, visu_type_label, current_code):
         """Handle initial setup and user toggling between UI and Code modes."""
+        NO_UPDATE_TUPLE = (dash.no_update,) * 6
+        STYLE_VISIBLE = {"height": "100%", "width": "100%"}
+        STYLE_HIDDEN = {"display": "none"}
+        STYLE_BLOCK = {"display": "block"}
+
         # Guard: Return no_update if mode is None (component not ready)
         if mode is None:
             logger.debug("Mode is None - component not ready yet")
-            return (
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-            )
+            return NO_UPDATE_TUPLE
 
         logger.info(f"🔄 MODE TOGGLE: {current_mode} -> {mode}")
 
         # Get component index for code interface creation
-        ctx = dash.callback_context
-        try:
-            if ctx.outputs_list:
-                component_id = ctx.outputs_list[0]["id"]
-                component_index = (
-                    component_id["index"] if isinstance(component_id, dict) else "unknown"
-                )
-            else:
-                component_index = "unknown"
-        except Exception:
-            component_index = "unknown"
+        component_index = _get_component_index_from_context()
 
-        # Check if this is initial setup (current_mode is None or doesn't match mode)
+        # Log action type for debugging
         is_initial_setup = current_mode is None or current_mode != mode
         action_type = "INITIAL SETUP" if is_initial_setup else "USER TOGGLE"
         logger.info(f"{action_type}: Setting {mode} mode for component {component_index}")
 
-        # Initialize styles - only UI and Code modes supported
-        ui_content_style = {"display": "none"}
-        code_content_style = {"display": "none"}
+        is_code_mode = mode == "code"
 
-        if mode == "code":
-            # Switch to code mode interface
-            code_content_style = {"display": "block"}
-            code_interface_children = create_code_mode_interface(component_index)
-            # Show code mode preview (will be empty until Execute is clicked)
-            ui_preview_style = {"display": "none"}
-            code_preview_style = {"height": "100%", "width": "100%"}
+        if is_code_mode:
+            code_interface_children = create_code_mode_interface(
+                component_index, current_code or ""
+            )
             logger.info(f"Switched to CODE MODE for {component_index}")
+            logger.info(
+                f"   Populated editor with {len(current_code) if current_code else 0} characters"
+            )
         else:
-            # Switch to UI mode interface (default)
-            ui_content_style = {"display": "block"}
             # Create hidden code-status component to ensure callbacks work
             code_interface_children = [
                 dmc.Alert(
@@ -105,22 +89,31 @@ def register_design_callbacks(app):
                     title="UI Mode",
                     color="blue",
                     children="Component in UI mode",
-                    style={"display": "none"},  # Hidden in UI mode
+                    style=STYLE_HIDDEN,
                 )
             ]
-            # Show UI mode preview, hide code mode preview
-            ui_preview_style = {"height": "100%", "width": "100%"}
-            code_preview_style = {"display": "none"}
             logger.info(f"Switched to UI MODE for {component_index}")
 
         return (
-            ui_content_style,
-            code_content_style,
+            STYLE_HIDDEN if is_code_mode else STYLE_BLOCK,  # ui_content_style
+            STYLE_BLOCK if is_code_mode else STYLE_HIDDEN,  # code_content_style
             code_interface_children,
             mode,
-            ui_preview_style,
-            code_preview_style,
+            STYLE_HIDDEN if is_code_mode else STYLE_VISIBLE,  # ui_preview_style
+            STYLE_VISIBLE if is_code_mode else STYLE_HIDDEN,  # code_preview_style
         )
+
+    def _get_component_index_from_context() -> str:
+        """Extract component index from callback context."""
+        ctx = dash.callback_context
+        try:
+            if ctx.outputs_list:
+                component_id = ctx.outputs_list[0]["id"]
+                if isinstance(component_id, dict):
+                    return component_id["index"]
+        except Exception:
+            pass
+        return "unknown"
 
     # Store generated code when switching to code mode
     @app.callback(
@@ -140,48 +133,65 @@ def register_design_callbacks(app):
         mode, dict_kwargs, visu_type_label, current_code_content, stored_metadata
     ):
         """Store generated code when switching to code mode."""
-        # Guard: Return no_update if mode is None (component not ready)
         if mode is None:
             logger.debug("store_generated_code: Mode is None - component not ready yet")
             return dash.no_update
 
+        has_stored_code = stored_metadata and stored_metadata.get("code_content")
         logger.info("=== store_generated_code CALLBACK CALLED ===")
         logger.info(f"Mode: {mode}")
         logger.info(f"Dict kwargs: {dict_kwargs}")
         logger.info(f"Visualization type label: {visu_type_label}")
         logger.info(f"Current code content: {bool(current_code_content)}")
-        logger.info(
-            f"Stored metadata code: {bool(stored_metadata and stored_metadata.get('code_content'))}"
-        )
+        logger.info(f"Stored metadata code: {bool(has_stored_code)}")
 
-        # Priority 1: If we have code content in stored_metadata (loading existing code mode figure)
-        if stored_metadata and stored_metadata.get("mode") == "code":
-            existing_code = stored_metadata.get("code_content")
-            if existing_code:
-                logger.info("✅ Using code from stored_metadata (existing code mode figure)")
-                return existing_code
+        # UI mode - no code update needed
+        if mode != "code":
+            logger.info("UI mode - no code update needed")
+            return dash.no_update
 
-        # Priority 2: If already have code content (user already edited code)
+        # Priority 1: Use code from stored_metadata (loading existing code mode figure)
+        if stored_metadata and stored_metadata.get("mode") == "code" and has_stored_code:
+            logger.info("✅ Using code from stored_metadata (existing code mode figure)")
+            return stored_metadata.get("code_content")
+
+        # Priority 2: Preserve existing code content (user already edited code)
         if current_code_content:
             logger.info("✅ Preserving existing code content")
             return current_code_content
 
         # Priority 3: Generate code from UI parameters (switching from UI to code mode)
-        if mode == "code" and dict_kwargs and visu_type_label:
+        if dict_kwargs and visu_type_label:
             logger.info("🔄 Generating code from UI parameters")
-            # visu_type_label is already the visu_type (e.g., "scatter", "bar", etc.)
             generated_code = convert_ui_params_to_code(dict_kwargs, visu_type_label)
             logger.info("✅ Code generated successfully")
             return generated_code
 
         # Priority 4: Return empty string for code mode without params
-        if mode == "code":
-            logger.info("⚠️ Code mode but no parameters - returning empty code")
-            return ""
+        logger.info("⚠️ Code mode but no parameters - returning empty code")
+        return ""
 
-        # Priority 5: Return dash.no_update for UI mode
-        logger.info("UI mode - no code update needed")
-        return dash.no_update
+    # Callback to sync code editor changes to code-content-store
+    @app.callback(
+        Output({"type": "code-content-store", "index": MATCH}, "data", allow_duplicate=True),
+        [
+            Input({"type": "code-editor", "index": MATCH}, "value"),
+        ],
+        [
+            State({"type": "figure-mode-store", "index": MATCH}, "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def sync_code_editor_to_store(editor_value, current_mode):
+        """Sync code editor changes to code-content-store for dashboard saving."""
+        if current_mode != "code":
+            logger.debug("Not in code mode - skipping code editor sync")
+            return dash.no_update
+
+        logger.info("📝 Syncing code editor to store")
+        logger.info(f"   Code length: {len(editor_value) if editor_value else 0}")
+
+        return editor_value or ""
 
     # TEMPORARILY DISABLED: Pre-populate callback is for edit page, not stepper
     # The stepper uses different component IDs (segmented-control-visu-graph vs figure-visu-type-selector)
@@ -365,6 +375,28 @@ def register_design_callbacks(app):
             logger.error(f"Error loading column information: {e}", exc_info=True)
             return f"Error loading column information: {str(e)}"
 
+    # Auto-execute code when switching to code mode with existing code (edit mode)
+    @app.callback(
+        Output({"type": "code-execute-btn", "index": MATCH}, "n_clicks"),
+        [
+            Input({"type": "figure-mode-store", "index": MATCH}, "data"),
+        ],
+        [
+            State({"type": "code-content-store", "index": MATCH}, "data"),
+            State({"type": "code-execute-btn", "index": MATCH}, "n_clicks"),
+        ],
+        prevent_initial_call=True,
+    )
+    def auto_execute_on_code_mode_load(mode, code_content, current_clicks):
+        """Auto-execute code when loading code mode with existing code (edit mode)."""
+        should_auto_execute = mode == "code" and code_content
+        if not should_auto_execute:
+            return dash.no_update
+
+        logger.info("🔄 AUTO-EXECUTING code on mode load (edit mode)")
+        logger.info(f"   Code length: {len(code_content)}")
+        return (current_clicks or 0) + 1
+
     # Update Ace editor theme based on app theme
     @app.callback(
         Output({"type": "code-editor", "index": MATCH}, "theme"),
@@ -397,11 +429,25 @@ def register_design_callbacks(app):
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             State("local-store", "data"),
+            State("theme-store", "data"),
         ],
         prevent_initial_call=True,
+        background=True,  # CRITICAL: Prevent UI blocking during data loading and code execution
     )
-    def execute_code_preview(n_clicks, code_content, workflow_id, data_collection_id, local_data):
-        """Execute code and show preview in left panel (code mode graph), hide UI mode graph."""
+    def execute_code_preview(
+        n_clicks, code_content, workflow_id, data_collection_id, local_data, theme_data
+    ):
+        """
+        Execute code and show preview in left panel (code mode graph), hide UI mode graph.
+
+        NOTE: Runs in background via Celery to prevent UI blocking during:
+        - Data loading (load_deltatable_lite)
+        - Code execution (SimpleCodeExecutor.execute_code)
+        - Figure generation
+
+        Requires Celery worker to be running (same as figure preview rendering).
+        All imports must be inside function for Celery serialization.
+        """
         from bson import ObjectId
 
         from depictio.api.v1.deltatables_utils import load_deltatable_lite
@@ -409,122 +455,86 @@ def register_design_callbacks(app):
             SimpleCodeExecutor,
         )
 
-        if not n_clicks or not code_content:
-            return (
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
+        # Style constants for graph visibility
+        STYLE_VISIBLE = {"height": "100%", "width": "100%"}
+        STYLE_HIDDEN = {"display": "none"}
+
+        def error_response(title: str, message):
+            """Build error response tuple showing UI mode graph."""
+            return (title, message, "red", {}, STYLE_HIDDEN, STYLE_VISIBLE)
+
+        def success_response(fig):
+            """Build success response tuple showing code mode graph with figure."""
+            figure_type = fig.data[0].type if fig.data else "unknown"
+            data_points = len(fig.data[0].x) if fig.data and hasattr(fig.data[0], "x") else "N/A"
+            message = dmc.Stack(
+                [
+                    dmc.Text("Code executed successfully! Preview shown on the left.", size="sm"),
+                    dmc.Text(f"Figure type: {figure_type}", size="xs", c="gray"),
+                    dmc.Text(f"Data points: {data_points}", size="xs", c="gray"),
+                ],
+                gap="xs",
             )
+            return ("Success", message, "green", fig, STYLE_VISIBLE, STYLE_HIDDEN)
+
+        def error_with_details(title: str, summary: str, details: str):
+            """Build error response with code block showing details."""
+            message = dmc.Stack(
+                [
+                    dmc.Text(summary, size="sm"),
+                    dmc.Code(details, block=True, style={"fontSize": "11px"}),
+                ],
+                gap="xs",
+            )
+            return error_response(title, message)
+
+        # Guard: no action if button not clicked or no code
+        if not n_clicks or not code_content:
+            return (dash.no_update,) * 6
 
         logger.info("=== EXECUTE CODE PREVIEW ===")
         logger.info(f"Code length: {len(code_content)} characters")
 
-        # Validate workflow and data collection
+        # Validate inputs
         if not workflow_id or not data_collection_id:
-            return (
-                "Error",
-                "Please ensure workflow and data collection are selected.",
-                "red",
-                {},
-                {"display": "none"},  # Hide code mode graph
-                {"height": "100%", "width": "100%"},  # Show UI mode graph
+            return error_response(
+                "Error", "Please ensure workflow and data collection are selected."
             )
 
         if not local_data:
-            return (
-                "Error",
-                "Authentication required.",
-                "red",
-                {},
-                {"display": "none"},  # Hide code mode graph
-                {"height": "100%", "width": "100%"},  # Show UI mode graph
-            )
+            return error_response("Error", "Authentication required.")
 
         try:
             # Load data
-            TOKEN = local_data["access_token"]
+            token = local_data["access_token"]
             df = load_deltatable_lite(
-                ObjectId(workflow_id), ObjectId(data_collection_id), TOKEN=TOKEN
+                ObjectId(workflow_id), ObjectId(data_collection_id), TOKEN=token
             )
 
             if df.height == 0:
-                return (
-                    "Error",
-                    "No data available in the selected data collection.",
-                    "red",
-                    {},
-                    {"display": "none"},  # Hide code mode graph
-                    {"height": "100%", "width": "100%"},  # Show UI mode graph
-                )
+                return error_response("Error", "No data available in the selected data collection.")
 
             # Execute code
             executor = SimpleCodeExecutor()
             success, fig, message = executor.execute_code(code_content, df)
 
             if success:
-                logger.info("✅ Code execution successful")
-                return (
-                    "Success",
-                    dmc.Stack(
-                        [
-                            dmc.Text(
-                                "✅ Code executed successfully! Preview shown on the left →",
-                                size="sm",
-                            ),
-                            dmc.Text(
-                                f"Figure type: {fig.data[0].type if fig.data else 'unknown'}",
-                                size="xs",
-                                c="gray",
-                            ),
-                            dmc.Text(
-                                f"Data points: {len(fig.data[0].x) if fig.data and hasattr(fig.data[0], 'x') else 'N/A'}",
-                                size="xs",
-                                c="gray",
-                            ),
-                        ],
-                        gap="xs",
-                    ),
-                    "green",
-                    fig,  # Show the figure
-                    {"height": "100%", "width": "100%"},  # Show code mode graph
-                    {"display": "none"},  # Hide UI mode graph
-                )
-            else:
-                logger.error(f"Code execution failed: {message}")
-                return (
-                    "Execution Error",
-                    dmc.Stack(
-                        [
-                            dmc.Text("❌ Code execution failed", size="sm"),
-                            dmc.Code(message, block=True, style={"fontSize": "11px"}),
-                        ],
-                        gap="xs",
-                    ),
-                    "red",
-                    {},  # Empty figure
-                    {"display": "none"},  # Hide code mode graph
-                    {"height": "100%", "width": "100%"},  # Show UI mode graph
-                )
+                # Apply theme template if not explicitly specified in code
+                current_theme = theme_data if theme_data else "light"
+                if "template=" not in code_content:
+                    theme_template = f"mantine_{current_theme}"
+                    fig.update_layout(template=theme_template)
+                    logger.info(f"Applied theme template: {theme_template}")
+
+                logger.info("Code execution successful")
+                return success_response(fig)
+
+            logger.error(f"Code execution failed: {message}")
+            return error_with_details("Execution Error", "Code execution failed", message)
 
         except Exception as e:
             logger.error(f"Error during code execution: {e}", exc_info=True)
-            return (
-                "Error",
-                dmc.Stack(
-                    [
-                        dmc.Text("❌ Unexpected error", size="sm"),
-                        dmc.Code(str(e), block=True, style={"fontSize": "11px"}),
-                    ],
-                    gap="xs",
-                ),
-                "red",
-                {},  # Empty figure
-                {"display": "none"},  # Hide code mode graph
-                {"height": "100%", "width": "100%"},  # Show UI mode graph
-            )
+            return error_with_details("Error", "Unexpected error", str(e))
 
     logger.info(
         "✅ Figure design callbacks registered (mode toggle + code generation + code examples + columns info + theme + execute)"

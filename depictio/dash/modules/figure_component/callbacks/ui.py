@@ -318,35 +318,46 @@ def register_ui_callbacks(app):
         [
             Input({"type": "dict_kwargs", "index": MATCH}, "data"),
             Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
+            Input({"type": "figure-mode-store", "index": MATCH}, "data"),
+            Input({"type": "code-content-store", "index": MATCH}, "data"),
         ],
         [
             State({"type": "stored-metadata-component", "index": MATCH}, "data"),
         ],
         prevent_initial_call=True,
     )
-    def sync_dict_kwargs_to_metadata(dict_kwargs, visu_type, current_metadata):
-        """
-        Sync dict_kwargs and visu_type to stored-metadata-component for saving.
+    def sync_dict_kwargs_to_metadata(dict_kwargs, visu_type, mode, code_content, current_metadata):
+        """Sync dict_kwargs, visu_type, mode, and code_content to stored-metadata-component for saving."""
+        ctx = dash.callback_context
+        triggered_input = ctx.triggered[0]["prop_id"] if ctx.triggered else "unknown"
 
-        This ensures that when the component is saved to the dashboard,
-        it includes the current parameter values selected by the user.
-        """
+        logger.info("=" * 80)
+        logger.info(f"🔄 SYNC CALLBACK TRIGGERED by: {triggered_input}")
+
         if not current_metadata:
+            logger.warning("⚠️ SYNC: No current_metadata - preventing update")
             raise dash.exceptions.PreventUpdate
 
-        logger.info(
-            f"🔄 Syncing dict_kwargs to stored-metadata for component {current_metadata.get('index')}"
-        )
+        logger.info(f"🔄 Syncing metadata for component {current_metadata.get('index')}")
         logger.info(f"   dict_kwargs: {dict_kwargs}")
         logger.info(f"   visu_type: {visu_type}")
+        logger.info(f"   mode: {mode}")
+        logger.info(f"   code_content length: {len(code_content) if code_content else 0}")
+        logger.info(f"   code_content type: {type(code_content)}")
 
-        # Update the metadata with current values
-        updated_metadata = current_metadata.copy()
-        updated_metadata["dict_kwargs"] = dict_kwargs or {}
-        updated_metadata["visu_type"] = (
-            visu_type if visu_type else updated_metadata.get("visu_type", "scatter")
-        )
-        updated_metadata["last_updated"] = datetime.now().isoformat()
+        # Determine effective mode and code content
+        effective_mode = mode or "ui"
+        effective_code_content = (code_content or "") if effective_mode == "code" else ""
+
+        # Build updated metadata
+        updated_metadata = {
+            **current_metadata,
+            "dict_kwargs": dict_kwargs or {},
+            "visu_type": visu_type or current_metadata.get("visu_type", "scatter"),
+            "last_updated": datetime.now().isoformat(),
+            "mode": effective_mode,
+            "code_content": effective_code_content,
+        }
 
         logger.info(f"✅ Metadata updated: {updated_metadata}")
 

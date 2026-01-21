@@ -1993,6 +1993,13 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
 
     logger.info(f"Building figure component {index} (visu_type: {visu_type}, theme: {theme})")
 
+    # CRITICAL DEBUG: Log kwargs for code mode figures
+    if mode == "code":
+        logger.info(f"🔍 BUILD_FIGURE: Code mode component {index}")
+        logger.info(f"   mode={mode}, code_len={len(code_content)}")
+        logger.info(f"   code_content present in kwargs: {'code_content' in kwargs}")
+        logger.info(f"   Full kwargs keys: {kwargs.keys()}")
+
     # Phase 1: Create simple skeleton structure that will be populated by callback
     # The batch rendering callback in callbacks/core.py handles all data loading and figure generation
 
