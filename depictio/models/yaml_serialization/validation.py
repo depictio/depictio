@@ -6,7 +6,7 @@ before syncing to MongoDB. Validates syntax, schema, and required fields.
 """
 
 from pathlib import Path
-from typing import Literal, TypedDict, cast
+from typing import Literal, TypedDict
 
 import yaml
 from pydantic import ValidationError as PydanticValidationError
@@ -29,6 +29,52 @@ class ValidationResult(TypedDict):
     valid: bool
     errors: list[ValidationError]
     warnings: list[ValidationError]
+
+
+def _create_validation_error(
+    message: str,
+    field: str | None = None,
+    component_id: str | None = None,
+    severity: Literal["error", "warning"] = "error",
+) -> ValidationError:
+    """Create a ValidationError dict with the given parameters."""
+    return ValidationError(
+        severity=severity,
+        message=message,
+        field=field,
+        component_id=component_id,
+    )
+
+
+def _get_non_null_fields(config: dict) -> set[str]:
+    """Get field names that have non-None values from a configuration dict."""
+    return {k for k, v in config.items() if v is not None}
+
+
+def _build_error_message_with_suggestions(
+    base_message: str,
+    target: str,
+    available: list[str],
+    fallback_message: str | None = None,
+) -> str:
+    """
+    Build an error message with suggestions for similar items.
+
+    Args:
+        base_message: The base error message
+        target: The target string to find similar matches for
+        available: List of available options to match against
+        fallback_message: Optional message to append if no suggestions found
+
+    Returns:
+        Complete error message with suggestions if found
+    """
+    suggestions = _find_similar_columns(target, available)
+    if suggestions:
+        return f"{base_message}. Did you mean: {', '.join(suggestions)}?"
+    if fallback_message:
+        return f"{base_message}. {fallback_message}"
+    return base_message
 
 
 def _get_data_collection_columns(
@@ -162,199 +208,414 @@ def _validate_component_columns(
     errors: list[ValidationError] = []
     component_type = component.get("type")
 
-    # Helper to check a single column reference
     def check_column(field_path: str, column_name: str | None) -> None:
         if column_name and column_name not in available_columns:
-            # Find similar column names for suggestions
-            suggestions = _find_similar_columns(column_name, available_columns)
-            error_msg = f"Column '{column_name}' not found in data collection"
-            if suggestions:
-                error_msg += f". Did you mean: {', '.join(suggestions[:3])}?"
-
-            errors.append(
-                cast(
-                    ValidationError,
-                    {
-                        "severity": "error",
-                        "message": error_msg,
-                        "field": field_path,
-                        "component_id": component_id,
-                    },
-                )
+            error_msg = _build_error_message_with_suggestions(
+                f"Column '{column_name}' not found in data collection",
+                column_name,
+                available_columns,
             )
+            errors.append(_create_validation_error(error_msg, field_path, component_id))
 
-    # Validate based on component type
+    # Column fields to check by component type
+    column_checks: dict[str, list[tuple[str, str]]] = {
+        "figure": [
+            ("visualization.x", "x"),
+            ("visualization.y", "y"),
+            ("visualization.color", "color"),
+            ("visualization.size", "size"),
+        ],
+        "card": [("aggregation.column", "column")],
+        "interactive": [("filter.column", "column")],
+    }
+
     if component_type == "figure":
         viz = component.get("visualization", {})
-        check_column("visualization.x", viz.get("x"))
-        check_column("visualization.y", viz.get("y"))
-        check_column("visualization.color", viz.get("color"))
-        check_column("visualization.size", viz.get("size"))
-
+        for field_path, key in column_checks["figure"]:
+            check_column(field_path, viz.get(key))
     elif component_type == "card":
         agg = component.get("aggregation", {})
-        check_column("aggregation.column", agg.get("column"))
-
+        for field_path, key in column_checks["card"]:
+            check_column(field_path, agg.get(key))
     elif component_type == "interactive":
         filt = component.get("filter", {})
-        check_column("filter.column", filt.get("column"))
-
-    # Table components don't reference specific columns
+        for field_path, key in column_checks["interactive"]:
+            check_column(field_path, filt.get(key))
 
     return errors
 
 
-def validate_yaml_file(yaml_path: str, check_column_names: bool = True) -> ValidationResult:
+def _validate_chart_type(
+    component: dict,
+    component_id: str,
+) -> list[ValidationError]:
+    """
+    Validate that the chart type is valid for figure components.
+
+    Args:
+        component: Component dictionary from YAML
+        component_id: Component ID for error messages
+
+    Returns:
+        List of validation errors (empty if valid)
+    """
+    from depictio.models.yaml_serialization.validation_rules import (
+        VALIDATION_RULES,
+        get_allowed_visualization_fields,
+    )
+
+    errors: list[ValidationError] = []
+
+    if component.get("type") != "figure":
+        return errors
+
+    viz = component.get("visualization", {})
+    chart = viz.get("chart")
+
+    if not chart:
+        errors.append(
+            _create_validation_error(
+                "Figure component missing required field: visualization.chart",
+                "visualization.chart",
+                component_id,
+            )
+        )
+        return errors
+
+    if not VALIDATION_RULES.chart_types.is_valid_chart_type(chart):
+        allowed = VALIDATION_RULES.chart_types.get_allowed_types_str()
+        errors.append(
+            _create_validation_error(
+                f"Invalid chart type '{chart}'. Allowed types: {allowed}",
+                "visualization.chart",
+                component_id,
+            )
+        )
+
+    # Check for unknown fields in visualization config
+    allowed_fields = get_allowed_visualization_fields(chart)
+    unknown_fields = _get_non_null_fields(viz) - allowed_fields
+
+    for field in unknown_fields:
+        error_msg = _build_error_message_with_suggestions(
+            f"Unknown field 'visualization.{field}' for chart type '{chart}'",
+            field,
+            list(allowed_fields),
+            f"Allowed fields: {', '.join(sorted(allowed_fields))}",
+        )
+        errors.append(_create_validation_error(error_msg, f"visualization.{field}", component_id))
+
+    return errors
+
+
+def _validate_unknown_fields(
+    config: dict,
+    allowed_fields: set[str],
+    field_prefix: str,
+    component_id: str,
+) -> list[ValidationError]:
+    """
+    Validate that a config dictionary contains no unknown fields.
+
+    Args:
+        config: Configuration dictionary to validate
+        allowed_fields: Set of allowed field names
+        field_prefix: Prefix for field paths in error messages (e.g., "aggregation")
+        component_id: Component ID for error messages
+
+    Returns:
+        List of validation errors for unknown fields
+    """
+    errors: list[ValidationError] = []
+    unknown_fields = _get_non_null_fields(config) - allowed_fields
+
+    for field in unknown_fields:
+        error_msg = _build_error_message_with_suggestions(
+            f"Unknown field '{field_prefix}.{field}'",
+            field,
+            list(allowed_fields),
+        )
+        errors.append(_create_validation_error(error_msg, f"{field_prefix}.{field}", component_id))
+
+    return errors
+
+
+def _validate_column_type_rules(
+    column_type: str,
+    field_prefix: str,
+    component_id: str,
+) -> tuple[object | None, list[ValidationError]]:
+    """
+    Get column type rules, returning an error if the column type is invalid.
+
+    Args:
+        column_type: The column type to validate
+        field_prefix: Prefix for field paths (e.g., "aggregation" or "filter")
+        component_id: Component ID for error messages
+
+    Returns:
+        Tuple of (rules, errors) where rules is None if column type is invalid
+    """
+    from depictio.models.yaml_serialization.validation_rules import VALIDATION_RULES
+
+    rules = VALIDATION_RULES.get_column_type_rules(column_type)
+    if rules:
+        return rules, []
+
+    valid_types = ", ".join(sorted(VALIDATION_RULES.column_type_rules.keys()))
+    error = _create_validation_error(
+        f"Unknown column type '{column_type}'. Valid types: {valid_types}",
+        f"{field_prefix}.column_type",
+        component_id,
+    )
+    return None, [error]
+
+
+def _validate_aggregation_function(
+    component: dict,
+    component_id: str,
+) -> list[ValidationError]:
+    """
+    Validate that aggregation function is valid for the column type.
+
+    Args:
+        component: Component dictionary from YAML
+        component_id: Component ID for error messages
+
+    Returns:
+        List of validation errors (empty if valid)
+    """
+    from depictio.models.yaml_serialization.validation_rules import ALLOWED_AGGREGATION_FIELDS
+
+    if component.get("type") != "card":
+        return []
+
+    agg = component.get("aggregation", {})
+    column_type = agg.get("column_type")
+    function = agg.get("function")
+
+    if not column_type or not function:
+        return []
+
+    errors: list[ValidationError] = []
+
+    rules, type_errors = _validate_column_type_rules(column_type, "aggregation", component_id)
+    if type_errors:
+        return type_errors
+
+    if rules and not rules.is_valid_aggregation(function):
+        allowed = rules.get_allowed_aggregations_str()
+        errors.append(
+            _create_validation_error(
+                f"Invalid aggregation function '{function}' for column type '{column_type}'. "
+                f"Allowed functions: {allowed}",
+                "aggregation.function",
+                component_id,
+            )
+        )
+
+    errors.extend(
+        _validate_unknown_fields(agg, ALLOWED_AGGREGATION_FIELDS, "aggregation", component_id)
+    )
+
+    return errors
+
+
+def _validate_filter_type(
+    component: dict,
+    component_id: str,
+) -> list[ValidationError]:
+    """
+    Validate that filter type is valid for the column type.
+
+    Args:
+        component: Component dictionary from YAML
+        component_id: Component ID for error messages
+
+    Returns:
+        List of validation errors (empty if valid)
+    """
+    from depictio.models.yaml_serialization.validation_rules import ALLOWED_FILTER_FIELDS
+
+    if component.get("type") != "interactive":
+        return []
+
+    filt = component.get("filter", {})
+    column_type = filt.get("column_type")
+    filter_type = filt.get("type")
+
+    if not column_type or not filter_type:
+        return []
+
+    errors: list[ValidationError] = []
+
+    rules, type_errors = _validate_column_type_rules(column_type, "filter", component_id)
+    if type_errors:
+        return type_errors
+
+    if rules:
+        if not rules.allowed_filters:
+            errors.append(
+                _create_validation_error(
+                    f"Column type '{column_type}' does not support any filter types",
+                    "filter.type",
+                    component_id,
+                )
+            )
+            return errors
+
+        if not rules.is_valid_filter(filter_type):
+            allowed = rules.get_allowed_filters_str()
+            errors.append(
+                _create_validation_error(
+                    f"Invalid filter type '{filter_type}' for column type '{column_type}'. "
+                    f"Allowed types: {allowed}",
+                    "filter.type",
+                    component_id,
+                )
+            )
+
+    errors.extend(_validate_unknown_fields(filt, ALLOWED_FILTER_FIELDS, "filter", component_id))
+
+    return errors
+
+
+def _create_result_with_error(message: str) -> ValidationResult:
+    """Create a ValidationResult with a single error."""
+    return ValidationResult(
+        valid=False,
+        errors=[_create_validation_error(message)],
+        warnings=[],
+    )
+
+
+def _create_empty_result() -> ValidationResult:
+    """Create an empty ValidationResult ready to be populated."""
+    return ValidationResult(valid=True, errors=[], warnings=[])
+
+
+def _validate_component_types(
+    dashboard: MVPDashboard,
+    result: ValidationResult,
+) -> None:
+    """Validate component-specific types (chart, aggregation, filter)."""
+    for comp in dashboard.components:
+        comp_dict = comp.model_dump()
+        result["errors"].extend(_validate_chart_type(comp_dict, comp.id))
+        result["errors"].extend(_validate_aggregation_function(comp_dict, comp.id))
+        result["errors"].extend(_validate_filter_type(comp_dict, comp.id))
+
+
+def _validate_component_columns_for_dashboard(
+    dashboard: MVPDashboard,
+    result: ValidationResult,
+) -> None:
+    """Validate column references for all components in the dashboard."""
+    for comp in dashboard.components:
+        comp_dict = comp.model_dump()
+        columns, error = _get_data_collection_columns(
+            workflow_tag=comp.workflow,
+            data_collection_tag=comp.data_collection,
+        )
+
+        if error:
+            result["warnings"].append(
+                _create_validation_error(
+                    f"Cannot validate columns: {error}",
+                    component_id=comp.id,
+                    severity="warning",
+                )
+            )
+            continue
+
+        result["errors"].extend(
+            _validate_component_columns(
+                component=comp_dict,
+                available_columns=columns,
+                component_id=comp.id,
+            )
+        )
+
+
+def validate_yaml_file(
+    yaml_path: str,
+    check_column_names: bool = True,
+    check_component_types: bool = True,
+) -> ValidationResult:
     """
     Validate a YAML dashboard file using Pydantic models.
 
     Args:
         yaml_path: Path to the YAML file to validate
         check_column_names: Whether to validate column names against data collection schema
+        check_component_types: Whether to validate chart types, aggregation functions, and filter types
 
     Returns:
         ValidationResult with valid flag and any errors/warnings
     """
-    result: ValidationResult = cast(
-        ValidationResult,
-        {
-            "valid": True,
-            "errors": [],
-            "warnings": [],
-        },
-    )
-
     yaml_file = Path(yaml_path)
     if not yaml_file.exists():
-        result["valid"] = False
-        result["errors"].append(
-            {
-                "severity": "error",
-                "message": f"File not found: {yaml_path}",
-                "field": None,
-                "component_id": None,
-            }
-        )
-        return result
+        return _create_result_with_error(f"File not found: {yaml_path}")
 
     # Parse YAML
     try:
         yaml_content = yaml_file.read_text()
         data = yaml.safe_load(yaml_content)
     except yaml.YAMLError as e:
-        result["valid"] = False
-        result["errors"].append(
-            {
-                "severity": "error",
-                "message": f"Invalid YAML syntax: {e}",
-                "field": None,
-                "component_id": None,
-            }
-        )
-        return result
+        return _create_result_with_error(f"Invalid YAML syntax: {e}")
     except OSError as e:
-        result["valid"] = False
-        result["errors"].append(
-            {
-                "severity": "error",
-                "message": f"Error reading file: {e}",
-                "field": None,
-                "component_id": None,
-            }
-        )
-        return result
+        return _create_result_with_error(f"Error reading file: {e}")
+
+    result = _create_empty_result()
 
     # Validate using Pydantic model
     try:
         dashboard = MVPDashboard.model_validate(data)
 
-        # Check for empty components (warning, not error)
         if len(dashboard.components) == 0:
             result["warnings"].append(
-                {
-                    "severity": "warning",
-                    "message": "Dashboard has no components",
-                    "field": "components",
-                    "component_id": None,
-                }
+                _create_validation_error(
+                    "Dashboard has no components", "components", severity="warning"
+                )
             )
 
     except PydanticValidationError as e:
         result["valid"] = False
-
-        # Convert Pydantic errors to our ValidationError format
         for error in e.errors():
             loc = error["loc"]
             field_path = ".".join(str(x) for x in loc)
-
-            # Extract component_id if error is in a component
             component_id = _extract_component_id(loc, data)
-
             result["errors"].append(
-                {
-                    "severity": "error",
-                    "message": error["msg"],
-                    "field": field_path,
-                    "component_id": component_id,
-                }
+                _create_validation_error(error["msg"], field_path, component_id)
+            )
+        return result
+
+    # Component type validation
+    if check_component_types and result["valid"]:
+        try:
+            _validate_component_types(dashboard, result)
+        except Exception as e:
+            result["warnings"].append(
+                _create_validation_error(
+                    f"Component type validation failed: {e}", severity="warning"
+                )
             )
 
-    # Column name validation (if enabled and basic validation passed)
+    # Column name validation
     if check_column_names and result["valid"]:
         try:
-            # Check if MongoDB is available
-            try:
-                from depictio.api.v1.db import workflows_collection  # noqa: F401
-            except Exception:
-                result["warnings"].append(
-                    {
-                        "severity": "warning",
-                        "message": "MongoDB not available, skipping column validation",
-                        "field": None,
-                        "component_id": None,
-                    }
-                )
-            else:
-                # Validate columns for each component
-                for comp in dashboard.components:
-                    comp_dict = comp.model_dump()
+            from depictio.api.v1.db import workflows_collection  # noqa: F401
 
-                    # Get available columns for this component's data collection
-                    columns, error = _get_data_collection_columns(
-                        workflow_tag=comp.workflow,
-                        data_collection_tag=comp.data_collection,
-                    )
-
-                    if error:
-                        # Data collection or workflow not found - warning, not error
-                        result["warnings"].append(
-                            {
-                                "severity": "warning",
-                                "message": f"Cannot validate columns: {error}",
-                                "field": None,
-                                "component_id": comp.id,
-                            }
-                        )
-                        continue
-
-                    # Validate column references
-                    column_errors = _validate_component_columns(
-                        component=comp_dict,
-                        available_columns=columns,
-                        component_id=comp.id,
-                    )
-
-                    result["errors"].extend(column_errors)
-
-        except Exception as e:
-            # Column validation failure shouldn't break the whole validation
+            _validate_component_columns_for_dashboard(dashboard, result)
+        except ImportError:
             result["warnings"].append(
-                {
-                    "severity": "warning",
-                    "message": f"Column validation failed: {e}",
-                    "field": None,
-                    "component_id": None,
-                }
+                _create_validation_error(
+                    "MongoDB not available, skipping column validation", severity="warning"
+                )
+            )
+        except Exception as e:
+            result["warnings"].append(
+                _create_validation_error(f"Column validation failed: {e}", severity="warning")
             )
 
     result["valid"] = len(result["errors"]) == 0
