@@ -109,7 +109,7 @@ def _create_ace_editor(component_index: str, initial_code: str) -> dash_ace.Dash
         value=initial_code,
         theme="github",
         mode="python",
-        fontSize=14,
+        fontSize=11,
         showGutter=True,
         showPrintMargin=False,
         highlightActiveLine=True,
@@ -171,9 +171,9 @@ def _create_editor_section(component_index: str, initial_code: str) -> dmc.Stack
         [_create_ace_editor(component_index, initial_code)],
         style={
             "width": "100%",
-            "height": "400px",  # Initial height (user can resize)
+            "height": "200px",  # Initial height (user can resize)
             "minHeight": "200px",
-            "minWidth": "300px",  # Minimum width constraint
+            "minWidth": "200px",  # Minimum width constraint
             "maxHeight": "none",  # Allow unlimited vertical growth
             "maxWidth": "none",  # Allow unlimited horizontal growth
             "display": "flex",
