@@ -700,6 +700,11 @@ class DashboardYAMLConfig(BaseSettings):
         description="Validate that column names exist in data collection schema",
     )
 
+    validate_component_types: bool = Field(
+        default=True,
+        description="Validate chart types, aggregation functions, and filter types",
+    )
+
     model_config = SettingsConfigDict(
         env_prefix="DEPICTIO_DASHBOARD_YAML_",
         env_file=".env",
