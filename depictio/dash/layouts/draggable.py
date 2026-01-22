@@ -1406,7 +1406,7 @@ def _create_no_data_message() -> html.Div:
                             size="xl",
                             fw="bold",
                             ta="center",
-                            c=colors["red"],
+                            c="red",
                             style={"color": f"var(--app-text-color, {colors['red']})"},
                         ),
                         dmc.Text(

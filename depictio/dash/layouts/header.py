@@ -211,7 +211,7 @@ def _create_action_icon(
 
     button = dmc.ActionIcon(
         DashIconify(icon=icon, width=28, color="gray"),
-        **action_icon_params,
+        **action_icon_params,  # type: ignore[arg-type]  # dynamic kwargs
     )
 
     if tooltip:
