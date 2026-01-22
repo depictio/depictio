@@ -595,7 +595,1113 @@ def apply_log_transformation(series, shift=1e-6):
         return transformed_series, 0.0
 
 
-def build_interactive(**kwargs) -> dmc.Paper:
+# -----------------------------------------------------------------------------
+# Component Builder Helper Functions
+# -----------------------------------------------------------------------------
+
+
+def _build_select_component(
+    df,
+    column_name,
+    index,
+    value,
+    value_div_type,
+    interactive_component_type,
+    func_name,
+    color,
+):
+    """
+    Build a Select, MultiSelect, or SegmentedControl component.
+
+    Creates categorical selection components with proper value handling,
+    option generation, and styling.
+
+    Args:
+        df: Polars DataFrame containing the data.
+        column_name: Name of the column to use for options.
+        index: Unique component identifier.
+        value: Initial/current value for the component.
+        value_div_type: Type suffix for component ID.
+        interactive_component_type: One of "Select", "MultiSelect", "SegmentedControl".
+        func_name: DMC component constructor function.
+        color: Custom color for styling (optional).
+
+    Returns:
+        The constructed DMC component (Select, MultiSelect, SegmentedControl, or Text for errors).
+    """
+    logger.debug(
+        f"Select component: column={column_name}, df.shape={df.shape}, "
+        f"column_present={column_name in df.columns}"
+    )
+
+    # Check if column exists before processing
+    if column_name not in df.columns:
+        logger.error(f"SCHEMA MISMATCH: Column '{column_name}' not found in DataFrame")
+        logger.error(f"Available columns: {df.columns}")
+        # Return empty component to prevent crash
+        return dmc.Text(f"Error: Column '{column_name}' not found", c="red")
+
+    data = sorted(df[column_name].drop_nulls().unique())
+
+    # If DataFrame is empty but we have a preserved value, include those values in options
+    if df.height == 0 and value:
+        if interactive_component_type == "MultiSelect" and isinstance(value, list):
+            for val in value:
+                if val not in data:
+                    data.append(val)
+            data = sorted(data)
+            logger.debug(
+                f"MultiSelect {index}: Added preserved values {value} to empty options, final data: {data}"
+            )
+        elif interactive_component_type in ["Select", "SegmentedControl"] and value not in data:
+            data.append(value)
+            data = sorted(data)
+            logger.debug(
+                f"{interactive_component_type} {index}: Added preserved value '{value}' to empty options, final data: {data}"
+            )
+
+    # Prepare kwargs for all component types
+    component_kwargs = {
+        "data": data,
+        "id": {"type": value_div_type, "index": str(index)},
+        "w": "100%",
+        "size": "md",
+        "styles": {
+            "root": {
+                "width": "100%",
+                "minWidth": "50px",
+            },
+        },
+    }
+
+    # Process and validate value based on component type
+    processed_value = _process_select_value(value, data, index, interactive_component_type)
+    if processed_value is not None:
+        component_kwargs["value"] = processed_value
+    elif interactive_component_type == "SegmentedControl":
+        # For SegmentedControl, explicitly set value to None for no selection
+        component_kwargs["value"] = None
+        logger.debug(f"SegmentedControl component {index}: No initial selection (value=None)")
+
+    # Apply custom color styling
+    if color:
+        existing_styles = component_kwargs.get("styles", {})
+        color_styles = {
+            "input": {"borderColor": color},
+            "dropdown": {"borderColor": color},
+            "label": {"color": color},
+        }
+        component_kwargs["styles"] = {**existing_styles, **color_styles}
+
+    interactive_component = func_name(**component_kwargs)
+
+    # Add MultiSelect-specific properties
+    if interactive_component_type == "MultiSelect":
+        multiselect_kwargs = {
+            "searchable": True,
+            "clearable": True,
+            "limit": 100,
+            "persistence_type": "local",
+        }
+        component_kwargs.update(multiselect_kwargs)
+        interactive_component = func_name(**component_kwargs)
+
+    return interactive_component
+
+
+def _process_select_value(value, data: list, index: str, interactive_component_type: str):
+    """
+    Process and validate a value for Select-type components.
+
+    Handles value type conversion, validation against available options,
+    and proper handling for different component types.
+
+    Args:
+        value: The initial value to process.
+        data: List of available options.
+        index: Component index for logging.
+        interactive_component_type: Type of component (Select, MultiSelect, SegmentedControl).
+
+    Returns:
+        The processed value, or None if no valid value.
+    """
+    if value is None:
+        return None
+
+    if interactive_component_type == "Select":
+        return _process_single_select_value(value, data, index, "Select")
+
+    elif interactive_component_type == "SegmentedControl":
+        return _process_single_select_value(value, data, index, "SegmentedControl")
+
+    elif interactive_component_type == "MultiSelect":
+        return _process_multiselect_value(value, data, index)
+
+    return None
+
+
+def _process_single_select_value(value, data: list, index: str, component_type: str):
+    """
+    Process value for single-selection components (Select, SegmentedControl).
+
+    Args:
+        value: The value to process.
+        data: List of available options.
+        index: Component index for logging.
+        component_type: Either "Select" or "SegmentedControl".
+
+    Returns:
+        The validated string value, or None if invalid.
+    """
+    # Convert value to string if needed
+    if not isinstance(value, str):
+        if isinstance(value, (list, tuple)):
+            logger.warning(
+                f"{component_type} component {index}: Ignoring array value {value} from slider"
+            )
+            return None
+        else:
+            value = str(value) if value is not None else None
+            logger.debug(
+                f"{component_type} component {index}: Converted value to string: '{value}'"
+            )
+
+    if value and value in data:
+        logger.debug(
+            f"{component_type} component {index}: Preserved value '{value}' (available in options)"
+        )
+        return value
+    elif value:
+        logger.warning(
+            f"{component_type} component {index}: Value '{value}' no longer available in options {data}"
+        )
+    return None
+
+
+def _process_multiselect_value(value, data: list, index: str) -> list | None:
+    """
+    Process value for MultiSelect component.
+
+    Args:
+        value: The value to process.
+        data: List of available options.
+        index: Component index for logging.
+
+    Returns:
+        The processed list value.
+    """
+    # Ensure value is a list
+    if not isinstance(value, list):
+        if isinstance(value, (tuple, set)):
+            value = list(value)
+            logger.debug(f"MultiSelect component {index}: Converted {type(value).__name__} to list")
+        else:
+            value = [str(value)]
+            logger.debug(f"MultiSelect component {index}: Wrapped single value in list: {value}")
+
+    # Convert all values to strings
+    value = [str(v) for v in value if v is not None]
+    logger.debug(f"MultiSelect component {index}: Converted values to strings: {value}")
+    logger.debug(f"MultiSelect component {index}: Preserved value '{value}'")
+    return value
+
+
+def _build_slider_component(
+    df,
+    column_name,
+    index,
+    value,
+    value_div_type,
+    interactive_component_type,
+    func_name,
+    scale,
+    cols_json,
+    marks_number,
+    title_size,
+    color,
+    store_data,
+):
+    """
+    Build a Slider or RangeSlider component.
+
+    Creates numeric slider components with proper value handling, scale transformation,
+    and mark generation.
+
+    Args:
+        df: Polars DataFrame containing the data.
+        column_name: Name of the column to use for range.
+        index: Unique component identifier.
+        value: Initial/current value for the component.
+        value_div_type: Type suffix for component ID.
+        interactive_component_type: One of "Slider" or "RangeSlider".
+        func_name: DMC component constructor function.
+        scale: Scale type ("linear" or "log10").
+        cols_json: Column specifications with min/max data.
+        marks_number: Number of marks to display on slider.
+        title_size: Size for title and slider.
+        color: Custom color for styling (optional).
+        store_data: Dictionary to update with scale information.
+
+    Returns:
+        The constructed DMC Slider or RangeSlider component.
+    """
+    logger.info(f"Column name: {column_name}")
+    logger.info(f"Scale type: {scale}")
+
+    # Convert Polars DataFrame to Pandas for processing
+    df_pandas = df.to_pandas()
+    logger.debug(
+        f"Slider component: column={column_name}, df.shape={df_pandas.shape}, "
+        f"column_present={column_name in df_pandas.columns}"
+    )
+
+    # Check if column exists before processing
+    if column_name not in df_pandas.columns:
+        logger.error(f"SCHEMA MISMATCH: Column '{column_name}' not found in DataFrame")
+        logger.error(f"Available columns: {list(df_pandas.columns)}")
+        return []
+
+    # Clean data
+    df_pandas = _clean_numeric_column(df_pandas, column_name)
+
+    # Determine scale type
+    use_log_scale = scale is not None and scale == "log10"
+    if use_log_scale:
+        logger.info("User explicitly selected log10 scale")
+    else:
+        logger.info(f"Using linear scale (scale parameter: {scale})")
+
+    # Apply log transformation if needed
+    if use_log_scale:
+        logger.info("Applying log transformation")
+        transformed_series, _ = apply_log_transformation(df_pandas[column_name])
+        df_pandas[f"{column_name}_log10"] = transformed_series
+
+    # Get valid min and max
+    series_name = f"{column_name}_log10" if use_log_scale else column_name
+    min_value, max_value = get_valid_min_max(df_pandas, series_name, cols_json)
+    min_value, max_value = _validate_slider_range(min_value, max_value)
+
+    # Build component kwargs
+    kwargs_component = _build_slider_kwargs(
+        min_value, max_value, index, value_div_type, title_size, interactive_component_type
+    )
+
+    logger.info(f"DMC Slider: Using range {min_value}-{max_value}")
+
+    # Set component value
+    if interactive_component_type == "RangeSlider":
+        _set_range_slider_value(kwargs_component, value, min_value, max_value)
+    else:
+        _set_slider_value(kwargs_component, value, min_value, max_value)
+
+    # Apply custom color
+    if color:
+        kwargs_component["color"] = color
+        logger.info(f"DMC Slider: Applied custom color: {color}")
+
+    # Generate marks
+    _add_slider_marks(
+        kwargs_component, min_value, max_value, marks_number, use_log_scale, df_pandas, column_name
+    )
+
+    logger.debug(
+        f"DMC Slider params: min={kwargs_component.get('min')}, max={kwargs_component.get('max')}, "
+        f"value={kwargs_component.get('value')}, marks={len(kwargs_component.get('marks', []))}"
+    )
+
+    interactive_component = func_name(**kwargs_component)
+
+    # Store scale information
+    store_data["scale"] = "log10" if use_log_scale else "linear"
+    if use_log_scale:
+        if interactive_component_type == "RangeSlider":
+            real_value = [10**val for val in value] if isinstance(value, list) else value
+        else:
+            real_value = 10**value if value is not None else value
+        store_data["original_value"] = real_value
+        logger.info(f"Log scale - stored original value: {real_value}")
+    else:
+        store_data["original_value"] = value
+
+    return interactive_component
+
+
+def _clean_numeric_column(df_pandas: pd.DataFrame, column_name: str) -> pd.DataFrame:
+    """
+    Clean a numeric column by removing invalid values.
+
+    Args:
+        df_pandas: Pandas DataFrame to clean.
+        column_name: Name of the column to clean.
+
+    Returns:
+        Cleaned DataFrame.
+    """
+    df_pandas = df_pandas[~df_pandas[column_name].isin([None, "None", "nan", "NaN"])]
+    df_pandas[column_name] = df_pandas[column_name].replace([np.inf, -np.inf], np.nan)
+    df_pandas[column_name] = df_pandas[column_name].astype(float)
+    df_pandas[column_name] = df_pandas[column_name].apply(
+        lambda x: round(x, 2) if x not in [float("inf"), float("-inf")] else x
+    )
+    df_pandas = df_pandas.dropna(subset=[column_name])
+    return df_pandas
+
+
+def _validate_slider_range(min_value: float, max_value: float) -> tuple[float, float]:
+    """
+    Validate and correct slider min/max range.
+
+    Args:
+        min_value: Minimum value.
+        max_value: Maximum value.
+
+    Returns:
+        Validated (min_value, max_value) tuple.
+    """
+    if min_value is None or math.isnan(min_value) or math.isinf(min_value):
+        min_value = 0.0
+        logger.warning("Invalid min_value detected, setting to 0.0")
+
+    if max_value is None or math.isnan(max_value) or math.isinf(max_value):
+        max_value = 100.0
+        logger.warning("Invalid max_value detected, setting to 100.0")
+
+    if min_value >= max_value:
+        max_value = min_value + 1.0
+        logger.warning(f"min_value >= max_value, adjusted max_value to {max_value}")
+
+    return min_value, max_value
+
+
+def _build_slider_kwargs(
+    min_value: float,
+    max_value: float,
+    index: str,
+    value_div_type: str,
+    title_size: str,
+    interactive_component_type: str,
+) -> dict:
+    """
+    Build base kwargs for slider components.
+
+    Args:
+        min_value: Minimum slider value.
+        max_value: Maximum slider value.
+        index: Component index.
+        value_div_type: Type suffix for component ID.
+        title_size: Size for slider.
+        interactive_component_type: "Slider" or "RangeSlider".
+
+    Returns:
+        Dictionary of kwargs for the slider component.
+    """
+    kwargs_component = {
+        "min": float(min_value),
+        "max": float(max_value),
+        "id": {"type": value_div_type, "index": str(index)},
+        "step": 0.01,
+        "persistence_type": "local",
+        "w": "100%",
+        "size": title_size,
+        "styles": {
+            "root": {
+                "width": "100%",
+                "paddingLeft": "12px",
+                "paddingRight": "12px",
+            },
+            "track": {
+                "minWidth": "50px",
+            },
+        },
+    }
+
+    if interactive_component_type == "RangeSlider":
+        kwargs_component["minRange"] = 0.01
+
+    return kwargs_component
+
+
+def _set_range_slider_value(
+    kwargs_component: dict, value, min_value: float, max_value: float
+) -> None:
+    """
+    Set and validate value for RangeSlider component.
+
+    Args:
+        kwargs_component: Dictionary to update with value.
+        value: Initial value to process.
+        min_value: Minimum allowed value.
+        max_value: Maximum allowed value.
+    """
+    try:
+        if (
+            value is None
+            or value == "null"
+            or value == "None"
+            or not isinstance(value, list)
+            or len(value) != 2
+            or any(v is None or v == "null" or v == "None" for v in value)
+        ):
+            cleaned_value = [min_value, max_value]
+            logger.info(
+                f"DMC RangeSlider: Using default value [{min_value}, {max_value}] (original: {value})"
+            )
+        else:
+            cleaned_value = []
+            for i, v in enumerate(value):
+                try:
+                    if v is None or v == "None":
+                        clean_val = min_value if i == 0 else max_value
+                    else:
+                        decimal_val = float(v)
+                        if not (math.isnan(decimal_val) or math.isinf(decimal_val)):
+                            clean_val = max(min_value, min(max_value, decimal_val))
+                        else:
+                            clean_val = min_value if i == 0 else max_value
+                    cleaned_value.append(clean_val)
+                except (ValueError, TypeError):
+                    fallback_val = min_value if i == 0 else max_value
+                    cleaned_value.append(fallback_val)
+
+            if cleaned_value[0] > cleaned_value[1]:
+                cleaned_value = [cleaned_value[1], cleaned_value[0]]
+
+        kwargs_component["value"] = cleaned_value
+        logger.info(f"DMC RangeSlider: Set value: {cleaned_value}")
+
+    except Exception as e:
+        logger.error(f"DMC RangeSlider: Exception: {e}")
+
+
+def _set_slider_value(kwargs_component: dict, value, min_value: float, max_value: float) -> None:
+    """
+    Set and validate value for Slider component.
+
+    Args:
+        kwargs_component: Dictionary to update with value.
+        value: Initial value to process.
+        min_value: Minimum allowed value.
+        max_value: Maximum allowed value.
+    """
+    try:
+        if (
+            value is None
+            or value == "null"
+            or value == "None"
+            or (isinstance(value, float) and math.isnan(value))
+        ):
+            cleaned_value = (min_value + max_value) / 2
+            logger.info(
+                f"DMC Slider: Using middle of range as default: {cleaned_value} (original: {value})"
+            )
+        else:
+            cleaned_value = float(value)
+            cleaned_value = max(min_value, min(max_value, cleaned_value))
+            logger.info(f"DMC Slider: Cleaned value from {value} to {cleaned_value}")
+
+        kwargs_component["value"] = cleaned_value
+    except (ValueError, TypeError) as e:
+        logger.info(f"DMC Slider: Conversion failed ({e})")
+
+
+def _add_slider_marks(
+    kwargs_component: dict,
+    min_value: float,
+    max_value: float,
+    marks_number: int,
+    use_log_scale: bool,
+    df_pandas: pd.DataFrame,
+    column_name: str,
+) -> None:
+    """
+    Generate and add marks to slider kwargs.
+
+    Args:
+        kwargs_component: Dictionary to update with marks.
+        min_value: Minimum slider value.
+        max_value: Maximum slider value.
+        marks_number: Number of marks to generate.
+        use_log_scale: Whether using logarithmic scale.
+        df_pandas: DataFrame for log scale calculations.
+        column_name: Column name for log scale calculations.
+    """
+    effective_marks_number = marks_number if marks_number and marks_number > 0 else 2
+
+    logger.info(
+        f"Generating {effective_marks_number} marks for DMC slider (requested: {marks_number})"
+    )
+
+    if use_log_scale:
+        marks_dict = generate_log_marks(
+            min_value, max_value, df_pandas[column_name].min(), df_pandas[column_name].max()
+        )
+        logger.info("Using specialized log marks function for better power-of-10 display")
+    else:
+        marks_dict = generate_equally_spaced_marks(
+            min_value, max_value, marks_count=effective_marks_number, use_log_scale=False
+        )
+
+    if marks_dict:
+        dmc_marks = []
+        for mark_value, label in marks_dict.items():
+            try:
+                mark_val = float(mark_value)
+                tolerance = 1e-9
+                if (min_value - tolerance) <= mark_val <= (max_value + tolerance):
+                    dmc_marks.append({"value": mark_val, "label": str(label)})
+                    logger.debug(f"Added DMC mark: {mark_val} -> {label}")
+                else:
+                    logger.debug(f"Mark {mark_val} outside range [{min_value}, {max_value}]")
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Skipping invalid mark: {mark_value} -> {label}, error: {e}")
+
+        if dmc_marks:
+            kwargs_component["marks"] = dmc_marks
+            logger.info(f"DMC marks created: {len(dmc_marks)} marks")
+        else:
+            logger.warning("No valid DMC marks created")
+    else:
+        logger.warning("No marks generated from mark generation function")
+
+
+def _build_date_range_picker_component(
+    df,
+    column_name,
+    index,
+    value,
+    value_div_type,
+    func_name,
+    title_size,
+    color,
+    store_data,
+):
+    """
+    Build a DateRangePicker component.
+
+    Creates a date range picker component with proper date handling and validation.
+
+    Args:
+        df: Polars DataFrame containing the data.
+        column_name: Name of the datetime column.
+        index: Unique component identifier.
+        value: Initial/current value for the component.
+        value_div_type: Type suffix for component ID.
+        func_name: DMC component constructor function.
+        title_size: Size for the component.
+        color: Custom color for styling (optional).
+        store_data: Dictionary to update with date range information.
+
+    Returns:
+        The constructed DMC DatePickerInput component.
+    """
+    logger.info(f"Column name: {column_name}")
+    logger.info("Building DateRangePicker component")
+
+    # Convert Polars DataFrame to Pandas for processing
+    df_pandas = df.to_pandas()
+    logger.debug(
+        f"DateRangePicker: column={column_name}, df.shape={df_pandas.shape}, "
+        f"column_present={column_name in df_pandas.columns}"
+    )
+
+    # Check if column exists before processing
+    if column_name not in df_pandas.columns:
+        logger.error(f"SCHEMA MISMATCH: Column '{column_name}' not found in DataFrame")
+        logger.error(f"Available columns: {list(df_pandas.columns)}")
+        return dmc.Text(f"Error: Column '{column_name}' not found", c="red")
+
+    # Ensure column is datetime type
+    if not pd.api.types.is_datetime64_any_dtype(df_pandas[column_name]):
+        logger.error(
+            f"Column '{column_name}' is not a datetime type: {df_pandas[column_name].dtype}"
+        )
+        return dmc.Text(f"Error: Column '{column_name}' must be datetime type", c="red")
+
+    # Get min and max dates from the column
+    df_pandas[column_name] = pd.to_datetime(df_pandas[column_name], errors="coerce")
+    df_pandas = df_pandas.dropna(subset=[column_name])
+
+    if df_pandas.empty:
+        logger.error(f"No valid datetime values found in column '{column_name}'")
+        return dmc.Text(f"Error: No valid dates in column '{column_name}'", c="red")
+
+    min_date = df_pandas[column_name].min()
+    max_date = df_pandas[column_name].max()
+
+    # Convert to Python date objects (DMC requires date, not datetime)
+    min_date_py = min_date.date()
+    max_date_py = max_date.date()
+
+    logger.info(f"Date range: {min_date_py} to {max_date_py}")
+
+    # Prepare kwargs for DMC DatePickerInput
+    kwargs_component = {
+        "type": "range",
+        "id": {"type": value_div_type, "index": str(index)},
+        "minDate": min_date_py,
+        "maxDate": max_date_py,
+        "persistence_type": "local",
+        "w": "100%",
+        "size": title_size,
+        "clearable": False,
+        "styles": {
+            "root": {
+                "width": "100%",
+            },
+        },
+    }
+
+    # Handle value persistence
+    if value is not None and isinstance(value, list) and len(value) == 2:
+        try:
+            if isinstance(value[0], str):
+                value[0] = datetime.strptime(value[0], "%Y-%m-%d").date()
+            if isinstance(value[1], str):
+                value[1] = datetime.strptime(value[1], "%Y-%m-%d").date()
+
+            value[0] = max(min_date_py, min(max_date_py, value[0]))
+            value[1] = max(min_date_py, min(max_date_py, value[1]))
+
+            kwargs_component["value"] = value
+            logger.info(f"Preserved date range value: {value}")
+        except Exception as e:
+            logger.warning(f"Failed to parse date range value {value}: {e}")
+            kwargs_component["value"] = [min_date_py, max_date_py]
+    else:
+        kwargs_component["value"] = [min_date_py, max_date_py]
+        logger.info(f"Using default date range: [{min_date_py}, {max_date_py}]")
+
+    # Apply custom color if specified
+    if color:
+        existing_styles = kwargs_component.get("styles", {})
+        color_styles = {
+            "input": {"borderColor": color},
+            "label": {"color": color},
+        }
+        kwargs_component["styles"] = {**existing_styles, **color_styles}
+        logger.info(f"Applied custom color: {color}")
+
+    interactive_component = func_name(**kwargs_component)
+
+    # Store date range information
+    store_data["min_date"] = str(min_date_py)
+    store_data["max_date"] = str(max_date_py)
+    store_data["default_state"] = {
+        "type": "date_range",
+        "min_date": str(min_date_py),
+        "max_date": str(max_date_py),
+        "default_range": [str(min_date_py), str(max_date_py)],
+    }
+    logger.info(f"Updated default_state for DateRangePicker: {store_data['default_state']}")
+
+    return interactive_component
+
+
+def _build_boolean_component(
+    index,
+    value,
+    value_div_type,
+    interactive_component_type,
+    func_name,
+    color,
+):
+    """
+    Build a Checkbox or Switch component.
+
+    Creates boolean input components with proper value handling.
+
+    Args:
+        index: Unique component identifier.
+        value: Initial/current value for the component.
+        value_div_type: Type suffix for component ID.
+        interactive_component_type: One of "Checkbox" or "Switch".
+        func_name: DMC component constructor function.
+        color: Custom color for styling (optional).
+
+    Returns:
+        The constructed DMC Checkbox or Switch component.
+    """
+    logger.debug(f"Boolean component: {interactive_component_type}")
+    logger.debug(f"Value: {value}")
+    logger.debug(f"Value type: {type(value)}")
+
+    kwargs = {"persistence_type": "local"}
+
+    if value is None:
+        value = False
+
+    # Convert value to boolean if needed
+    if isinstance(value, str):
+        value = value.lower() in ["true", "1", "yes", "on"]
+    elif not isinstance(value, bool):
+        value = bool(value)
+
+    kwargs["checked"] = value
+
+    if color:
+        kwargs["color"] = color
+
+    return func_name(
+        id={"type": value_div_type, "index": str(index)},
+        **kwargs,
+    )
+
+
+def _build_fallback_component(
+    index,
+    value_div_type,
+    interactive_component_type,
+    column_type,
+    column_name,
+):
+    """
+    Build a fallback component for unsupported types.
+
+    Creates an error message component when the requested component type
+    is not supported for the given column type.
+
+    Args:
+        index: Unique component identifier.
+        value_div_type: Type suffix for component ID.
+        interactive_component_type: Requested component type.
+        column_type: Data type of the column.
+        column_name: Name of the column.
+
+    Returns:
+        A DMC Text component displaying an error message.
+    """
+    logger.warning(f"Unsupported interactive component type: {interactive_component_type}")
+    logger.warning(f"Column type: {column_type}")
+    logger.warning(f"Column name: {column_name}")
+    # Get available component types for the column type
+    column_config = agg_functions.get(column_type, {}) if column_type else {}
+    input_methods = (
+        column_config.get("input_methods", {}) if isinstance(column_config, dict) else {}
+    )
+    available_types = list(input_methods.keys()) if isinstance(input_methods, dict) else []
+    logger.warning(f"Available component types: {available_types}")
+
+    return dmc.Text(
+        f"Unsupported component type: {interactive_component_type} for {column_type} data",
+        id={"type": value_div_type, "index": str(index)},
+        c="red",
+    )
+
+
+def _build_frame_mode_component(
+    index,
+    wf_id,
+    dc_id,
+    column_name,
+    column_type,
+    interactive_component_type,
+    scale,
+    title,
+    icon_name,
+    marks_number,
+    title_size,
+    color,
+    value,
+    parent_index,
+    stepper,
+    value_div_type,
+):
+    """
+    Build a frame mode component with placeholder and trigger stores.
+
+    Creates a placeholder component with loader that will be populated
+    by callback later. This avoids the "Loading..." -> component transition.
+
+    Args:
+        index: Unique component identifier.
+        wf_id: Workflow ID for data loading.
+        dc_id: Data collection ID for data loading.
+        column_name: Name of the column to filter.
+        column_type: Data type of the column.
+        interactive_component_type: Type of filter component.
+        scale: Scale type ("linear" or "log10").
+        title: Display title for the filter.
+        icon_name: Icon name for the component.
+        marks_number: Number of marks for sliders.
+        title_size: Size for title text.
+        color: Custom color for styling.
+        value: Initial/current value.
+        parent_index: Parent component index if nested.
+        stepper: Whether in stepper (creation) mode.
+        value_div_type: Type suffix for component ID.
+
+    Returns:
+        dmc.Paper: Frame with placeholder component and trigger stores.
+    """
+    logger.debug(f"Build frame mode: creating placeholder for interactive {index}")
+
+    component_with_loader = html.Div(
+        id={"type": f"{value_div_type}-container", "index": str(index)},
+        children=[
+            dmc.Center(
+                dmc.Loader(type="dots", size="lg"),
+                style={"minHeight": "120px"},
+            )
+        ],
+        style={"padding": "10px"},
+    )
+
+    trigger_store = dcc.Store(
+        id={"type": "interactive-trigger", "index": str(index)},
+        data={
+            "index": str(index),
+            "wf_id": str(wf_id) if wf_id else None,
+            "dc_id": str(dc_id) if dc_id else None,
+            "column_name": column_name,
+            "column_type": column_type,
+            "interactive_component_type": interactive_component_type,
+            "scale": scale,
+            "title": title,
+            "icon_name": icon_name,
+            "marks_number": marks_number,
+            "title_size": title_size,
+            "color": color,
+            "value": value,
+            "parent_index": parent_index,
+            "stepper": stepper,
+        },
+    )
+
+    logger.debug(
+        f"Trigger store created: index={index}, column={column_name}, type={interactive_component_type}"
+    )
+
+    metadata_store = dcc.Store(id={"type": "interactive-metadata", "index": str(index)}, data={})
+
+    options_data_store = dcc.Store(
+        id={"type": "interactive-options-data", "index": str(index)},
+        data={},
+        storage_type="memory",
+    )
+
+    interactive_stored_metadata = dcc.Store(
+        id={"type": "interactive-stored-metadata", "index": str(index)},
+        data={
+            "index": str(index),
+            "interactive_component_type": interactive_component_type,
+            "column_name": column_name,
+            "default_state": {},
+        },
+        storage_type="memory",
+    )
+
+    return build_interactive_frame(
+        index=index,
+        children=[
+            component_with_loader,
+            trigger_store,
+            metadata_store,
+            options_data_store,
+            interactive_stored_metadata,
+        ],
+    )
+
+
+def _load_data_for_component(
+    df,
+    wf_id,
+    dc_id,
+    interactive_component_type,
+    TOKEN,
+    init_data,
+    index,
+):
+    """
+    Load data for the interactive component.
+
+    Handles loading unfiltered data for categorical components and general
+    data loading for other component types.
+
+    Args:
+        df: Pre-loaded DataFrame or None.
+        wf_id: Workflow ID for data loading.
+        dc_id: Data collection ID for data loading.
+        interactive_component_type: Type of filter component.
+        TOKEN: Authentication token for API calls.
+        init_data: Pre-loaded initialization data.
+        index: Component index for logging.
+
+    Returns:
+        pl.DataFrame: Loaded data for the component.
+    """
+    # For categorical components, always load unfiltered data for options
+    if interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
+        logger.info(
+            f"Interactive component {index}: Loading unfiltered data for options (type: {interactive_component_type})"
+        )
+        if not wf_id or not dc_id:
+            logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
+            return pl.DataFrame({})
+
+        if isinstance(dc_id, str) and "--" in dc_id:
+            return load_deltatable_lite(
+                ObjectId(wf_id),
+                dc_id,
+                TOKEN=TOKEN,
+                load_for_options=True,
+                init_data=init_data,
+            )
+        else:
+            return load_deltatable_lite(
+                ObjectId(wf_id),
+                ObjectId(dc_id),
+                TOKEN=TOKEN,
+                load_for_options=True,
+                init_data=init_data,
+            )
+
+    elif df is None:
+        logger.info(
+            f"Interactive component {index}: Loading delta table for {wf_id}:{dc_id} (no pre-loaded df)"
+        )
+        if not wf_id or not dc_id:
+            logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
+            return pl.DataFrame({})
+
+        if isinstance(dc_id, str) and "--" in dc_id:
+            return load_deltatable_lite(
+                ObjectId(wf_id),
+                dc_id,
+                TOKEN=TOKEN,
+                init_data=init_data,
+            )
+        else:
+            return load_deltatable_lite(
+                ObjectId(wf_id),
+                ObjectId(dc_id),
+                TOKEN=TOKEN,
+                init_data=init_data,
+            )
+
+    else:
+        logger.debug(
+            f"Interactive component {index}: Using pre-loaded DataFrame (shape: {df.shape})"
+        )
+        return df
+
+
+def _build_component_title(
+    title,
+    interactive_component_type,
+    column_name,
+    store_data,
+    icon_name,
+    title_size,
+    color,
+):
+    """
+    Build the title section for an interactive component.
+
+    Creates a title with icon and proper styling.
+
+    Args:
+        title: Custom title or None.
+        interactive_component_type: Type of component.
+        column_name: Name of the column.
+        store_data: Store data dictionary to check for scale.
+        icon_name: Icon name to display.
+        title_size: Size for title text.
+        color: Custom color for styling.
+
+    Returns:
+        dmc.Group: Title component with icon and text.
+    """
+    if not title:
+        card_title = f"{interactive_component_type} on {column_name}"
+    else:
+        card_title = f"{title}"
+
+    # Add scale information for sliders
+    if (
+        interactive_component_type in ["Slider", "RangeSlider"]
+        and store_data.get("scale") == "log10"
+    ):
+        card_title += " (Log10 Scale)"
+
+    title_style = {
+        "marginBottom": "0.25rem",
+    }
+    icon_color = color if color else None
+
+    if color:
+        title_style["color"] = color
+        logger.info(f"Applied custom color: {color}")
+    else:
+        logger.debug("Using Mantine's native theming for title")
+
+    icon_props = {
+        "icon": icon_name,
+        "width": int(title_size) if title_size.isdigit() else 20,
+    }
+    if icon_color:
+        icon_props["style"] = {"color": icon_color}
+    else:
+        icon_props["style"] = {"opacity": 0.9}
+
+    # Map title_size to valid DMC Text size literal
+    valid_sizes = {"xs", "sm", "md", "lg", "xl"}
+    text_size: str | None = title_size if title_size in valid_sizes else None
+
+    return dmc.Group(
+        [
+            DashIconify(**icon_props),
+            dmc.Text(card_title, size=text_size, fw="bold", style={"margin": "0"}),
+        ],
+        gap="xs",
+        align="center",
+        style=title_style,
+    )
+
+
+def _extract_unique_values(df, column_name, interactive_component_type):
+    """
+    Extract unique values from DataFrame for select-type components.
+
+    Args:
+        df: DataFrame to extract values from.
+        column_name: Name of the column.
+        interactive_component_type: Type of component.
+
+    Returns:
+        List of unique string values, or None if extraction fails.
+    """
+    if interactive_component_type not in ["Select", "MultiSelect", "SegmentedControl"]:
+        return None
+
+    if df is None:
+        return None
+
+    try:
+        unique_vals = df[column_name].unique()
+        if hasattr(unique_vals, "to_list") and callable(getattr(unique_vals, "to_list", None)):
+            unique_vals_list = unique_vals.to_list()
+        elif hasattr(unique_vals, "tolist") and callable(getattr(unique_vals, "tolist", None)):
+            unique_vals_list = unique_vals.tolist()
+        else:
+            unique_vals_list = list(unique_vals)
+
+        unique_values = [str(val) for val in unique_vals_list if val is not None][:100]
+        logger.debug(
+            f"Generated {len(unique_values)} unique values for {interactive_component_type}"
+        )
+        return unique_values
+    except Exception as e:
+        logger.warning(f"Failed to extract unique values for {column_name}: {e}")
+        return []
+
+
+# -----------------------------------------------------------------------------
+# Main Build Function
+# -----------------------------------------------------------------------------
+
+
+def build_interactive(**kwargs):
     """
     Build an interactive filter component for the dashboard.
 
@@ -633,6 +1739,7 @@ def build_interactive(**kwargs) -> dmc.Paper:
     Returns:
         dmc.Paper: The complete interactive filter component wrapped in a container.
     """
+    # Extract all kwargs
     index = kwargs.get("index")
     title = kwargs.get("title")
     wf_id = kwargs.get("wf_id")
@@ -646,26 +1753,22 @@ def build_interactive(**kwargs) -> dmc.Paper:
     TOKEN = kwargs.get("access_token")
     stepper = kwargs.get("stepper", False)
     parent_index = kwargs.get("parent_index", None)
-    scale = kwargs.get("scale", "linear")  # Default to linear scale
-    # Check both "color" (from frontend) and "custom_color" (from saved metadata) for DMC compliance
+    scale = kwargs.get("scale", "linear")
     color = kwargs.get("color") or kwargs.get("custom_color") or None
 
-    # DASHBOARD OPTIMIZATION: Extract init_data for API call elimination
     init_data = kwargs.get("init_data", None)
 
-    # REFACTORING: cols_json no longer stored in component metadata
-    # Callbacks access it directly from dashboard-init-data store via State input
-    # For build-time usage (like getting min/max for sliders), extract from init_data
+    # Extract cols_json from init_data if available
     cols_json = None
     if init_data and "column_specs" in init_data and str(dc_id) in init_data["column_specs"]:
         cols_json = init_data["column_specs"][str(dc_id)]
         logger.info(
-            f"📡 INTERACTIVE OPTIMIZATION: init_data available with {len(init_data.get('column_specs', {}))} column_specs"
+            f"INTERACTIVE OPTIMIZATION: init_data available with {len(init_data.get('column_specs', {}))} column_specs"
         )
     else:
-        logger.debug("⚠️  init_data not available (edit mode or stepper mode)")
+        logger.debug("init_data not available (edit mode or stepper mode)")
 
-    # Default icon mapping by component type for better UX
+    # Default icon mapping
     DEFAULT_ICONS = {
         "Select": "mdi:form-select",
         "MultiSelect": "mdi:form-select",
@@ -677,137 +1780,69 @@ def build_interactive(**kwargs) -> dmc.Paper:
         "Switch": "mdi:toggle-switch",
     }
 
-    # Get default icon based on component type, fallback to slider icon
     default_icon = DEFAULT_ICONS.get(interactive_component_type, "bx:slider-alt")
     icon_name = kwargs.get("icon_name") or default_icon
 
-    marks_number = kwargs.get("marks_number", 2)  # Default to 2 marks (min/max only)
-    title_size = kwargs.get("title_size", "md")  # Default title size
+    marks_number = kwargs.get("marks_number", 2)
+    title_size = kwargs.get("title_size", "md")
     cols_json = kwargs.get("cols_json")
 
     # Determine value div type based on stepper mode
-    if stepper:
-        value_div_type = "interactive-component-value-tmp"
-    else:
-        value_div_type = "interactive-component-value"
+    value_div_type = "interactive-component-value-tmp" if stepper else "interactive-component-value"
 
     # Build frame mode: create placeholder component with loader
-    # Callback will populate the actual interactive component
     if build_frame:
-        logger.debug(f"Build frame mode: creating placeholder for interactive {index}")
-
-        # Show only a loader until callback renders final component
-        # This avoids the "Loading..." -> component transition (eliminates visual flicker)
-        # The callback will replace this entire container with the final component
-        component_with_loader = html.Div(
-            id={"type": f"{value_div_type}-container", "index": str(index)},
-            children=[
-                dmc.Center(
-                    dmc.Loader(type="dots", size="lg"),
-                    style={"minHeight": "120px"},
-                )
-            ],
-            style={"padding": "10px"},
-        )
-
-        # Create trigger store with ALL metadata needed for callback
-        trigger_store = dcc.Store(
-            id={"type": "interactive-trigger", "index": str(index)},
-            data={
-                "index": str(index),
-                "wf_id": str(wf_id) if wf_id else None,
-                "dc_id": str(dc_id) if dc_id else None,
-                "column_name": column_name,
-                "column_type": column_type,
-                "interactive_component_type": interactive_component_type,
-                "scale": scale,
-                # SECURITY: access_token removed - accessed from local-store in callbacks
-                "title": title,
-                "icon_name": icon_name,
-                "marks_number": marks_number,
-                "title_size": title_size,
-                "color": color,
-                "value": value,
-                "parent_index": parent_index,
-                "stepper": stepper,
-                # REFACTORING: cols_json removed from component stores
-                # Callbacks access dashboard-init-data store directly via State input
-            },
-        )
-
-        logger.debug(
-            f"Trigger store created: index={index}, column={column_name}, type={interactive_component_type}"
-        )
-
-        # Create metadata store for reference values (like cards)
-        metadata_store = dcc.Store(
-            id={"type": "interactive-metadata", "index": str(index)}, data={}
-        )
-
-        # Create options data store for background callback (JSON-serializable data)
-        options_data_store = dcc.Store(
-            id={"type": "interactive-options-data", "index": str(index)},
-            data={},
-            storage_type="memory",
-        )
-
-        # Create interactive-stored-metadata Store (separate from stored-metadata-component to avoid conflicts)
-        # This Store is used by the card filtering system and filter reset callback
-        interactive_stored_metadata = dcc.Store(
-            id={"type": "interactive-stored-metadata", "index": str(index)},
-            data={
-                "index": str(index),
-                "interactive_component_type": interactive_component_type,
-                "column_name": column_name,
-                "default_state": {},  # Will be populated by async callback
-            },
-            storage_type="memory",
-        )
-
-        # Build frame with component and stores
-        frame_with_component = build_interactive_frame(
+        return _build_frame_mode_component(
             index=index,
-            children=[
-                component_with_loader,
-                trigger_store,
-                metadata_store,
-                options_data_store,
-                interactive_stored_metadata,
-            ],
+            wf_id=wf_id,
+            dc_id=dc_id,
+            column_name=column_name,
+            column_type=column_type,
+            interactive_component_type=interactive_component_type,
+            scale=scale,
+            title=title,
+            icon_name=icon_name,
+            marks_number=marks_number,
+            title_size=title_size,
+            color=color,
+            value=value,
+            parent_index=parent_index,
+            stepper=stepper,
+            value_div_type=value_div_type,
         )
-
-        return frame_with_component
 
     logger.debug(
         f"Building {interactive_component_type} for column_type={column_type}, "
         f"init_data={'available' if init_data else 'not available'}"
     )
 
-    if stepper:
-        value_div_type = "interactive-component-value-tmp"
-    else:
-        value_div_type = "interactive-component-value"
+    # Validate required parameters are not None
+    if interactive_component_type is None:
+        raise ValueError("interactive_component_type cannot be None")
+    if column_type is None:
+        raise ValueError("column_type cannot be None")
+    if column_type not in agg_functions:
+        raise ValueError(f"Unknown column_type: {column_type}")
 
-    # Check if the interactive_component_type is valid for this column_type
-    if interactive_component_type not in agg_functions[column_type]["input_methods"]:
+    # Validate component type for column type
+    column_config = agg_functions[column_type]
+    input_methods = column_config["input_methods"]
+    if interactive_component_type not in input_methods:
+        available_options = list(input_methods.keys())
         logger.error(
             f"INVALID COMBINATION: {interactive_component_type} not available for {column_type} columns"
         )
-        logger.error(
-            f"Available options: {list(agg_functions[column_type]['input_methods'].keys())}"
-        )
+        logger.error(f"Available options: {available_options}")
         raise ValueError(
-            f"Interactive component type '{interactive_component_type}' is not available for column type '{column_type}'. Available options: {list(agg_functions[column_type]['input_methods'].keys())}"
+            f"Interactive component type '{interactive_component_type}' is not available for column type '{column_type}'. Available options: {available_options}"
         )
 
-    func_name = agg_functions[column_type]["input_methods"][interactive_component_type]["component"]
+    func_name = input_methods[interactive_component_type]["component"]
 
-    # Common Store Component
-    # For stepper mode, use the temporary index to avoid conflicts with existing components
-    # For normal mode, use the original index (remove -tmp suffix if present)
+    # Determine store index
     if stepper:
-        store_index = index  # Use the temporary index with -tmp suffix
-        data_index = index.replace("-tmp", "") if index else "unknown"  # Clean index for data
+        store_index = index
+        data_index = index.replace("-tmp", "") if index else "unknown"
     else:
         store_index = index.replace("-tmp", "") if index else "unknown"
         data_index = store_index
@@ -819,18 +1854,16 @@ def build_interactive(**kwargs) -> dmc.Paper:
         "title": title,
         "wf_id": wf_id,
         "dc_id": dc_id,
-        # REFACTORING: dc_config and cols_json removed - available via init_data centrally
-        # Access via: init_data["dc_configs"][dc_id] and init_data["column_specs"][dc_id]
         "column_name": column_name,
         "column_type": column_type,
         "value": value,
         "corrected_value": value,
         "parent_index": parent_index,
-        "scale": scale,  # Save scale configuration for sliders
-        "marks_number": marks_number,  # Save marks number configuration for sliders
-        "title_size": title_size,  # Save title size configuration
-        "custom_color": color,  # Save custom color configuration for DMC theme compliance
-        "icon_name": icon_name,  # Save icon configuration
+        "scale": scale,
+        "marks_number": marks_number,
+        "title_size": title_size,
+        "custom_color": color,
+        "icon_name": icon_name,
     }
 
     logger.debug(f"Interactive component {index}: store_data: {store_data}")
@@ -841,884 +1874,95 @@ def build_interactive(**kwargs) -> dmc.Paper:
         f"Interactive component {index}: available agg_functions keys: {list(agg_functions.keys())}"
     )
 
-    # Load the delta table & get the specs
-    # CRITICAL: Always load unfiltered data for interactive component options
-    # Even if we have a pre-loaded filtered df, we need unfiltered data for options
+    # Load data
+    df = _load_data_for_component(
+        df, wf_id, dc_id, interactive_component_type, TOKEN, init_data, index
+    )
+
+    # Build the appropriate component type
     if interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
-        logger.info(
-            f"Interactive component {index}: Loading unfiltered data for options (type: {interactive_component_type})"
-        )
-        if not wf_id or not dc_id:
-            logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
-            df_for_options = pl.DataFrame({})  # Empty DataFrame with no columns
-        else:
-            # Always load unfiltered data for categorical component options
-            # Handle joined data collection IDs - don't convert to ObjectId
-            if isinstance(dc_id, str) and "--" in dc_id:
-                # For joined data collections, pass the DC ID as string
-                df_for_options = load_deltatable_lite(
-                    ObjectId(wf_id),
-                    dc_id,
-                    TOKEN=TOKEN,
-                    load_for_options=True,
-                    init_data=init_data,  # OPTIMIZATION: Use init_data from dashboard
-                )
-            else:
-                # Regular data collection - convert to ObjectId
-                df_for_options = load_deltatable_lite(
-                    ObjectId(wf_id),
-                    ObjectId(dc_id),
-                    TOKEN=TOKEN,
-                    load_for_options=True,
-                    init_data=init_data,  # OPTIMIZATION: Use init_data from dashboard
-                )
-
-        # Use the unfiltered data for generating options
-        df = df_for_options
-    elif df is None:
-        logger.info(
-            f"Interactive component {index}: Loading delta table for {wf_id}:{dc_id} (no pre-loaded df)"
-        )
-        # Validate that we have valid IDs before calling load_deltatable_lite
-        if not wf_id or not dc_id:
-            logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
-            df = pl.DataFrame({})  # Return empty DataFrame if IDs are missing
-        else:
-            # Handle joined data collection IDs - don't convert to ObjectId
-            if isinstance(dc_id, str) and "--" in dc_id:
-                # For joined data collections, pass the DC ID as string
-                df = load_deltatable_lite(
-                    ObjectId(wf_id),
-                    dc_id,
-                    TOKEN=TOKEN,
-                    init_data=init_data,  # OPTIMIZATION: Use init_data from dashboard
-                )
-            else:
-                # Regular data collection - convert to ObjectId
-                df = load_deltatable_lite(
-                    ObjectId(wf_id),
-                    ObjectId(dc_id),
-                    TOKEN=TOKEN,
-                    init_data=init_data,  # OPTIMIZATION: Use init_data from dashboard
-                )
-    else:
-        logger.debug(
-            f"Interactive component {index}: Using pre-loaded DataFrame (shape: {df.shape})"
+        interactive_component = _build_select_component(
+            df=df,
+            column_name=column_name,
+            index=index,
+            value=value,
+            value_div_type=value_div_type,
+            interactive_component_type=interactive_component_type,
+            func_name=func_name,
+            color=color,
         )
 
-    # Handling different aggregation values
-
-    ## Categorical data
-
-    # If the aggregation value is Select, MultiSelect or SegmentedControl
-    if interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
-        logger.debug(
-            f"Select component: column={column_name}, df.shape={df.shape}, "
-            f"column_present={column_name in df.columns}"
-        )
-
-        # Check if column exists before processing
-        if column_name not in df.columns:
-            logger.error(f"❌ SCHEMA MISMATCH: Column '{column_name}' not found in DataFrame")
-            logger.error(f"Available columns: {df.columns}")
-            # Return empty component to prevent crash
-            return dmc.Text(f"Error: Column '{column_name}' not found", c="red")
-
-        data = sorted(df[column_name].drop_nulls().unique())
-
-        # CRITICAL: If DataFrame is empty but we have a preserved value, include those values in options
-        # This ensures the component can display the preserved selection even when filtered data is empty
-        if df.height == 0 and value:
-            if interactive_component_type == "MultiSelect" and isinstance(value, list):
-                # For MultiSelect, extend data with all preserved values
-                for val in value:
-                    if val not in data:
-                        data.append(val)
-                data = sorted(data)
-                logger.debug(
-                    f"MultiSelect {index}: Added preserved values {value} to empty options, final data: {data}"
-                )
-            elif interactive_component_type in ["Select", "SegmentedControl"] and value not in data:
-                # For Select/SegmentedControl, add the single preserved value
-                data.append(value)
-                data = sorted(data)
-                logger.debug(
-                    f"{interactive_component_type} {index}: Added preserved value '{value}' to empty options, final data: {data}"
-                )
-
-        # Prepare kwargs for all component types to preserve value
-        component_kwargs = {
-            "data": data,
-            "id": {"type": value_div_type, "index": str(index)},
-            # UI/UX improvements for better space utilization
-            "w": "100%",  # Fill container width
-            "size": "md",  # Medium size for better readability
-            "styles": {
-                "root": {
-                    "width": "100%",
-                    "minWidth": "50px",
-                },  # Ultra-compact minimum width for tight layouts
-            },
-        }
-
-        # CRITICAL: Preserve value for ALL interactive component types, but handle SegmentedControl specially
-        if value is not None:
-            # For Select: only set value if it's still valid (in data options)
-            if interactive_component_type == "Select":
-                # Convert value to string if it's not already (handles numeric values from sliders)
-                if not isinstance(value, str):
-                    if isinstance(value, (list, tuple)):
-                        # If value is from a RangeSlider, don't set any value
-                        logger.warning(
-                            f"Select component {index}: Ignoring array value {value} from slider"
-                        )
-                        value = None
-                    else:
-                        # Convert numeric value to string
-                        value = str(value) if value is not None else None
-                        logger.debug(
-                            f"Select component {index}: Converted value to string: '{value}'"
-                        )
-
-                if value and value in data:
-                    component_kwargs["value"] = value
-                    logger.debug(
-                        f"Select component {index}: Preserved value '{value}' (available in options)"
-                    )
-                elif value:
-                    logger.warning(
-                        f"Select component {index}: Value '{value}' no longer available in options {data}"
-                    )
-            # For SegmentedControl: only set value if it's valid and not empty
-            elif interactive_component_type == "SegmentedControl":
-                # Convert value to string if it's not already (handles numeric values from sliders)
-                if not isinstance(value, str):
-                    if isinstance(value, (list, tuple)):
-                        # If value is from a RangeSlider, don't set any value
-                        logger.warning(
-                            f"SegmentedControl component {index}: Ignoring array value {value} from slider"
-                        )
-                        value = None
-                    else:
-                        # Convert numeric value to string
-                        value = str(value) if value is not None else None
-                        logger.debug(
-                            f"SegmentedControl component {index}: Converted value to string: '{value}'"
-                        )
-
-                if value and value in data:
-                    component_kwargs["value"] = value
-                    logger.debug(
-                        f"SegmentedControl component {index}: Preserved value '{value}' (available in options)"
-                    )
-                elif value:
-                    logger.warning(
-                        f"SegmentedControl component {index}: Value '{value}' no longer available in options {data}, defaulting to no selection"
-                    )
-                    # Don't set value - let it default to None (no selection)
-            # For MultiSelect: preserve value even if partially invalid
-            elif interactive_component_type == "MultiSelect":
-                # Ensure value is a list for MultiSelect
-                if value is not None and not isinstance(value, list):
-                    if isinstance(value, (tuple, set)):
-                        value = list(value)
-                        logger.debug(
-                            f"MultiSelect component {index}: Converted {type(value).__name__} to list"
-                        )
-                    else:
-                        # Single value - wrap in list
-                        value = [str(value)]
-                        logger.debug(
-                            f"MultiSelect component {index}: Wrapped single value in list: {value}"
-                        )
-
-                # Convert all values in list to strings
-                if isinstance(value, list):
-                    value = [str(v) for v in value if v is not None]
-                    logger.debug(
-                        f"MultiSelect component {index}: Converted values to strings: {value}"
-                    )
-
-                component_kwargs["value"] = value
-                logger.debug(f"MultiSelect component {index}: Preserved value '{value}'")
-        else:
-            # Explicit handling for no initial value
-            if interactive_component_type == "SegmentedControl":
-                # For SegmentedControl, explicitly set value to None for no selection
-                component_kwargs["value"] = None
-                logger.debug(
-                    f"SegmentedControl component {index}: No initial selection (value=None)"
-                )
-
-        # Apply custom color to DMC components if specified
-        if color and interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
-            # Merge color styles with existing base styles
-            existing_styles = component_kwargs.get("styles", {})
-            color_styles = {
-                "input": {"borderColor": color},
-                "dropdown": {"borderColor": color},
-                "label": {"color": color},
-            }
-            # Merge dictionaries - color_styles will override existing_styles for conflicting keys
-            component_kwargs["styles"] = {**existing_styles, **color_styles}
-
-        # WARNING: This is a temporary solution to avoid modifying dashboard data - the -tmp suffix is added to the id and removed once clicked on the btn-done D
-        interactive_component = func_name(**component_kwargs)
-
-        # If the aggregation value is MultiSelect, make the component searchable and clearable
-        if interactive_component_type == "MultiSelect":
-            # Add MultiSelect-specific styling properties
-            multiselect_kwargs = {
-                "searchable": True,
-                "clearable": True,
-                "limit": 100,  # Limit to 100 options displayed at once for performance
-                # "clearSearchOnChange": False,
-                "persistence_type": "local",
-                # "dropdownPosition": "bottom",
-                # "zIndex": 1000,
-                # "position": "relative",
-            }
-            # Merge with existing component_kwargs that already includes the preserved value
-            component_kwargs.update(multiselect_kwargs)
-            # Recreate the component with additional MultiSelect properties
-            interactive_component = func_name(**component_kwargs)
-
-    # # If the aggregation value is TextInput - DISABLED: causes auto-refresh on every character
-    # elif interactive_component_type == "TextInput":
-    #     logger.debug("TextInput")
-    #     logger.debug(f"Value: {value}")
-    #     logger.debug(f"Value type: {type(value)}")
-    #     kwargs = {"persistence_type": "local"}
-    #     if not value:
-    #         value = ""
-    #     logger.debug(f"Value: {value}")
-    #     logger.debug(f"Value type: {type(value)}")
-    #     kwargs.update({"value": value})
-
-    #     # Apply custom color to TextInput if specified
-    #     if color:
-    #         kwargs["styles"] = {"input": {"borderColor": color}, "label": {"color": color}}
-
-    #     interactive_component = func_name(
-    #         placeholder="Your selected value",
-    #         id={"type": value_div_type, "index": str(index)},
-    #         **kwargs,
-    #     )
-
-    ## Numerical data
-
-    # # If the aggregation value is Slider or RangeSlider
-    # elif interactive_component_type in ["Slider", "RangeSlider"]:
-    #     logger.info(f"Column name: {column_name}")
-
-    #     df = df.to_pandas()
-    #     logger.info(f"df['{column_name}']: {df[column_name]}")
-    #     # Drop NaN, None
-    #     df = df[~df[column_name].isin([None, "None", "nan", "NaN"])]
-
-    #     df[column_name] = df[column_name].replace([np.inf, -np.inf], np.nan)
-
-    #     df[column_name] = df[column_name].astype(float)
-
-    #     # Round the values to 2 decimal places when possible (not for inf, -inf)
-    #     df[column_name] = df[column_name].apply(lambda x: round(x, 2) if x not in [float("inf"), float("-inf")] else x)
-
-    #     df = df.dropna(subset=[column_name])
-    #     logger.info(f"df['{column_name}']: {df[column_name]}")
-
-    #     # Detect skewness
-    #     skewed = is_highly_skewed(df[column_name])
-
-    #     slider_series = df[column_name]
-
-    #     # Apply log transformation if skewed
-    #     if skewed:
-    #         logger.info(f"Data is highly skewed. Applying log transformation.")
-    #         transformed_series, shift = apply_log_transformation(df[column_name])
-    #         # Replace the original column with transformed data
-    #         df[f"{column_name}_log10"] = transformed_series
-    #         slider_series = df[f"{column_name}_log10"]
-    #         original_scale = True
-    #     else:
-    #         logger.info(f"Data is not highly skewed. Using linear scale.")
-    #     #     shift = 0.0
-    #     # slider_series = df[column_name]
-    #     #     original_scale = False
-
-    #     # Get valid min and max
-    #     min_value, max_value = get_valid_min_max(df, f"{column_name}_log10" if skewed else column_name, cols_json)
-    #     logger.info(f"Min value: {min_value}")
-    #     logger.info(f"Max value: {max_value}")
-
-    #     # Prepare kwargs for the slider
-    #     kwargs_component = {
-    #         "min": min_value,
-    #         "max": max_value,
-    #         "id": {"type": value_div_type, "index": str(index)},
-    #         "persistence_type": "local",
-    #     }
-    #     logger.info(f"kwargs: {kwargs_component}")
-
-    #     # # Set the value prop appropriately
-
-    #     # Construct marks
-    #     if skewed:
-    #         # Use fixed logarithmic intervals
-    #         marks = generate_log_marks(min_value, max_value, df[column_name].min(), df[column_name].max())
-
-    #     else:
-    #         # log_marks = generate_log_marks(min_value, max_value)
-
-    #         if slider_series.nunique() < 30:
-    #             logger.info(f"Case where nunique < 30")
-    #             unique_values = slider_series.unique()
-    #             # Filter out None and non-numeric values
-    #             unique_values = [elem for elem in unique_values if isinstance(elem, (int, float)) and not math.isinf(elem)]
-    #             # Construct marks with formatted labels, filtering out None labels
-    #             marks = {
-    #                 int(elem) if math.isclose(elem, int(elem), abs_tol=1e-9) else elem: format_mark_label(elem) for elem in unique_values if format_mark_label(elem) is not None
-    #             }
-    #         else:
-    #             logger.info(f"Case where nunique >= 30")
-
-    #             quantiles_nb = 6  # Adjust the number of quantiles as needed
-    #             quantiles_values = [i / quantiles_nb for i in range(1, quantiles_nb)]
-    #             logger.info(f"Quantiles values: {quantiles_values}")
-
-    #             # Compute quantiles in the slider_series
-    #             quantiles = slider_series.quantile(quantiles_values)
-    #             logger.info(f"Quantiles: {quantiles}")
-    #             logger.info(f"Min value: {min_value}")
-    #             logger.info(f"Max value: {max_value}")
-
-    #             # Combine min, quantiles, and max
-    #             mark_elements = [min_value] + list(quantiles) + [max_value]
-    #             # Filter out None and non-numeric values
-    #             mark_elements = [elem for elem in mark_elements if isinstance(elem, (int, float)) and not math.isinf(elem)]
-    #             # Construct marks with formatted labels
-    #             marks = {
-    #                 int(elem) if math.isclose(elem, int(elem), abs_tol=1e-9) else elem: format_mark_label(elem) for elem in mark_elements if format_mark_label(elem) is not None
-    #             }
-    #         logger.info(f"Marks: {marks}")
-
-    #         # Optionally enforce inclusion of min and max marks with default labels
-    #         if min_value not in marks:
-    #             marks[min_value] = "Min" if not original_scale else format_mark_label(min_value)
-    #             logger.warning(f"Min value {min_value} was not in marks. Assigned default label.")
-
-    #         if max_value not in marks:
-    #             marks[max_value] = "Max" if not original_scale else format_mark_label(max_value)
-    #             logger.warning(f"Max value {max_value} was not in marks. Assigned default label.")
-
-    #     if interactive_component_type == "RangeSlider":
-    #         if not value:
-    #             value = [min_value, max_value]
-    #         # else:
-    #         #     if skewed:
-    #         #         value = [math.log10(val) for val in value]
-    #         #     else:
-    #         #         value = [val for val in value]
-    #         # logger.info(f"VALUE - value: {value}")
-    #         kwargs_component.update({"value": value})
-    #     elif interactive_component_type == "Slider":
-    #         if not value:
-    #             value = min_value
-    #         # else:
-    #         #     if skewed:
-    #         #         value = math.log10(value)
-    #         #     else:
-    #         #         value = value
-    #         kwargs_component.update({"value": value})
-
-    #     # if skewed:
-    #     #     # card_title += " (Log10 Scale)"
-    #     #     store_data["scale"] = "log10"
-    #     #     real_value = [10**val for val in value] if interactive_component_type == "RangeSlider" else 10**value
-    #     #     store_data["value"] = real_value
-    #     #     logger.info(f"Interactive - real_value: {real_value}")
-
-    #     # else:
-    #     #     store_data["scale"] = "linear"
-
-    #     kwargs_component.update({"marks": marks})
-    #     interactive_component = func_name(**kwargs_component)
-
-    ## Numerical data
-
-    # If the aggregation value is Slider or RangeSlider
     elif interactive_component_type in ["Slider", "RangeSlider"]:
-        logger.info(f"Column name: {column_name}")
-        logger.info(f"Scale type: {scale}")
-
-        # Convert Polars DataFrame to Pandas for processing
-        df_pandas = df.to_pandas()
-        logger.debug(
-            f"Slider component: column={column_name}, df.shape={df_pandas.shape}, "
-            f"column_present={column_name in df_pandas.columns}"
+        interactive_component = _build_slider_component(
+            df=df,
+            column_name=column_name,
+            index=index,
+            value=value,
+            value_div_type=value_div_type,
+            interactive_component_type=interactive_component_type,
+            func_name=func_name,
+            scale=scale,
+            cols_json=cols_json,
+            marks_number=marks_number,
+            title_size=title_size,
+            color=color,
+            store_data=store_data,
         )
 
-        # Check if column exists before processing
-        if column_name not in df_pandas.columns:
-            logger.error(f"❌ SCHEMA MISMATCH: Column '{column_name}' not found in DataFrame")
-            logger.error(f"Available columns: {list(df_pandas.columns)}")
-            # Return empty options to prevent crash
-            return []
-
-        # Drop NaN, None, and invalid values
-        df_pandas = df_pandas[~df_pandas[column_name].isin([None, "None", "nan", "NaN"])]
-        df_pandas[column_name] = df_pandas[column_name].replace([np.inf, -np.inf], np.nan)
-        df_pandas[column_name] = df_pandas[column_name].astype(float)
-
-        # Round the values to 2 decimal places when possible (not for inf, -inf)
-        df_pandas[column_name] = df_pandas[column_name].apply(
-            lambda x: round(x, 2) if x not in [float("inf"), float("-inf")] else x
-        )
-        df_pandas = df_pandas.dropna(subset=[column_name])
-        # logger.info(f"Cleaned df['{column_name}']: {df_pandas[column_name]}")
-
-        # Always default to linear scale, only use log10 if explicitly selected
-        use_log_scale = False
-        if scale is not None and scale == "log10":
-            use_log_scale = True
-            logger.info("User explicitly selected log10 scale")
-        else:
-            # Always default to linear scale (including when scale is None, "linear", or any other value)
-            logger.info(f"Using linear scale (scale parameter: {scale})")
-
-        # Apply log transformation if using log scale
-        if use_log_scale:
-            logger.info("Applying log transformation")
-            transformed_series, _ = apply_log_transformation(df_pandas[column_name])
-            # Replace the original column with transformed data
-            df_pandas[f"{column_name}_log10"] = transformed_series
-        else:
-            logger.info("Using linear scale")
-
-        # Get valid min and max
-        series_name = f"{column_name}_log10" if use_log_scale else column_name
-        min_value, max_value = get_valid_min_max(df_pandas, series_name, cols_json)
-        logger.info(f"Min value: {min_value}, Max value: {max_value}")
-
-        # Ensure min_value and max_value are valid numbers (DMC sliders can't handle null)
-        if min_value is None or math.isnan(min_value) or math.isinf(min_value):
-            min_value = 0.0
-            logger.warning("Invalid min_value detected, setting to 0.0")
-
-        if max_value is None or math.isnan(max_value) or math.isinf(max_value):
-            max_value = 100.0
-            logger.warning("Invalid max_value detected, setting to 100.0")
-
-        # Ensure min < max
-        if min_value >= max_value:
-            max_value = min_value + 1.0
-            logger.warning(f"min_value >= max_value, adjusted max_value to {max_value}")
-
-        # Prepare kwargs for DMC slider components - simplified like working prototype
-        kwargs_component = {
-            "min": float(min_value),
-            "max": float(max_value),
-            "id": {"type": value_div_type, "index": str(index)},
-            # Keep it simple - no step, precision, or label parameters initially
-            "step": 0.01,  # Default step for DMC sliders
-            "persistence_type": "local",
-            # UI/UX improvements for better space utilization
-            "w": "100%",  # Fill container width
-            "size": title_size,  # Use title_size for slider component size
-            "styles": {
-                "root": {
-                    "width": "100%",
-                    "paddingLeft": "12px",  # Increased padding to prevent thumb overflow on left
-                    "paddingRight": "12px",  # Increased padding to prevent thumb overflow on right
-                },
-                "track": {
-                    "minWidth": "50px",  # Ultra-compact minimum width for tight layouts
-                },
-            },
-        }
-
-        # Add minRange only for RangeSlider (not supported by regular Slider)
-        if interactive_component_type == "RangeSlider":
-            kwargs_component["minRange"] = 0.01  # Default min range for DMC RangeSlider
-
-        logger.info(f"DMC Slider: Using range {min_value}-{max_value}")
-
-        # Set component values for DMC sliders
-        if interactive_component_type == "RangeSlider":
-            # For DMC RangeSlider, use simple value handling
-            try:
-                # Check if we have a valid value first
-                if (
-                    value is None
-                    or value == "null"
-                    or value == "None"
-                    or not isinstance(value, list)
-                    or len(value) != 2
-                    or any(v is None or v == "null" or v == "None" for v in value)
-                ):
-                    # Use range defaults
-                    cleaned_value = [min_value, max_value]
-                    logger.info(
-                        f"DMC RangeSlider: Using default value [{min_value}, {max_value}] (original: {value})"
-                    )
-                else:
-                    # Clean and validate values
-                    cleaned_value = []
-                    for i, v in enumerate(value):
-                        try:
-                            if v is None or v == "None":
-                                clean_val = min_value if i == 0 else max_value
-                            else:
-                                # Convert to float and clamp to valid range
-                                decimal_val = float(v)
-                                if not (math.isnan(decimal_val) or math.isinf(decimal_val)):
-                                    clean_val = max(min_value, min(max_value, decimal_val))
-                                else:
-                                    clean_val = min_value if i == 0 else max_value
-                            cleaned_value.append(clean_val)
-                        except (ValueError, TypeError):
-                            fallback_val = min_value if i == 0 else max_value
-                            cleaned_value.append(fallback_val)
-
-                    # Ensure order
-                    if cleaned_value[0] > cleaned_value[1]:
-                        cleaned_value = [cleaned_value[1], cleaned_value[0]]
-
-                # For DMC RangeSlider, use value property
-                kwargs_component["value"] = cleaned_value
-                logger.info(f"DMC RangeSlider: Set value: {cleaned_value}")
-
-            except Exception as e:
-                logger.error(f"DMC RangeSlider: Exception: {e}")
-        elif interactive_component_type == "Slider":
-            # For DMC Slider, ensure value is a single valid number
-            try:
-                if (
-                    value is None
-                    or value == "null"
-                    or value == "None"
-                    or (isinstance(value, float) and math.isnan(value))
-                ):
-                    # For null values, use middle of range as default
-                    cleaned_value = (min_value + max_value) / 2
-                    logger.info(
-                        f"DMC Slider: Using middle of range as default: {cleaned_value} (original: {value})"
-                    )
-                else:
-                    cleaned_value = float(value)
-                    # Ensure value is in range
-                    cleaned_value = max(min_value, min(max_value, cleaned_value))
-                    logger.info(f"DMC Slider: Cleaned value from {value} to {cleaned_value}")
-
-                # For DMC Slider, use value property
-                kwargs_component["value"] = cleaned_value
-            except (ValueError, TypeError) as e:
-                logger.info(f"DMC Slider: Conversion failed ({e})")
-
-        # Apply custom color styling for DMC sliders
-        if color:
-            kwargs_component["color"] = color
-            logger.info(f"DMC Slider: Applied custom color: {color}")
-
-        # Generate marks based on scale type and marks_number parameter
-        # For DMC sliders, always generate default marks if none specified
-        effective_marks_number = marks_number if marks_number and marks_number > 0 else 2
-
-        logger.info(
-            f"Generating {effective_marks_number} marks for DMC slider (requested: {marks_number})"
-        )
-        # Generate marks based on scale type
-        if use_log_scale:
-            # For log scale, use the specialized log marks function for better power-of-10 marks
-            marks_dict = generate_log_marks(
-                min_value, max_value, df_pandas[column_name].min(), df_pandas[column_name].max()
-            )
-            logger.info("Using specialized log marks function for better power-of-10 display")
-        else:
-            # Use equally spaced function for linear scale
-            marks_dict = generate_equally_spaced_marks(
-                min_value, max_value, marks_count=effective_marks_number, use_log_scale=False
-            )
-
-        # Convert DCC-style dict to DMC-style list of dicts
-        if marks_dict:
-            dmc_marks = []
-            for value, label in marks_dict.items():
-                try:
-                    mark_value = float(value)
-                    # Ensure mark value is within range with small tolerance for floating point precision
-                    tolerance = 1e-9
-                    if (min_value - tolerance) <= mark_value <= (max_value + tolerance):
-                        dmc_marks.append({"value": mark_value, "label": str(label)})
-                        logger.debug(f"Added DMC mark: {mark_value} -> {label}")
-                    else:
-                        logger.debug(f"Mark {mark_value} outside range [{min_value}, {max_value}]")
-                except (ValueError, TypeError) as e:
-                    logger.warning(f"Skipping invalid mark: {value} -> {label}, error: {e}")
-
-            if dmc_marks:
-                kwargs_component["marks"] = dmc_marks
-                logger.info(f"DMC marks created: {len(dmc_marks)} marks")
-            else:
-                logger.warning("No valid DMC marks created")
-        else:
-            logger.warning("No marks generated from mark generation function")
-
-        logger.debug(
-            f"DMC Slider params: min={kwargs_component.get('min')}, max={kwargs_component.get('max')}, "
-            f"value={kwargs_component.get('value')}, marks={len(kwargs_component.get('marks', []))}"
-        )
-
-        interactive_component = func_name(**kwargs_component)
-
-        # Store scale information for later use
-        store_data["scale"] = "log10" if use_log_scale else "linear"
-        if use_log_scale:
-            # Convert displayed values back to original scale for storage
-            if interactive_component_type == "RangeSlider":
-                real_value = [10**val for val in value] if isinstance(value, list) else value
-            else:
-                real_value = 10**value if value is not None else value
-            store_data["original_value"] = real_value
-            logger.info(f"Log scale - stored original value: {real_value}")
-        else:
-            store_data["original_value"] = value
-
-    # If the aggregation value is DateRangePicker (datetime data types)
     elif interactive_component_type == "DateRangePicker":
-        logger.info(f"Column name: {column_name}")
-        logger.info("Building DateRangePicker component")
-
-        # Convert Polars DataFrame to Pandas for processing
-        df_pandas = df.to_pandas()
-        logger.debug(
-            f"DateRangePicker: column={column_name}, df.shape={df_pandas.shape}, "
-            f"column_present={column_name in df_pandas.columns}"
+        interactive_component = _build_date_range_picker_component(
+            df=df,
+            column_name=column_name,
+            index=index,
+            value=value,
+            value_div_type=value_div_type,
+            func_name=func_name,
+            title_size=title_size,
+            color=color,
+            store_data=store_data,
         )
 
-        # Check if column exists before processing
-        if column_name not in df_pandas.columns:
-            logger.error(f"❌ SCHEMA MISMATCH: Column '{column_name}' not found in DataFrame")
-            logger.error(f"Available columns: {list(df_pandas.columns)}")
-            return dmc.Text(f"Error: Column '{column_name}' not found", c="red")
-
-        # Ensure column is datetime type
-        if not pd.api.types.is_datetime64_any_dtype(df_pandas[column_name]):
-            logger.error(
-                f"Column '{column_name}' is not a datetime type: {df_pandas[column_name].dtype}"
-            )
-            return dmc.Text(f"Error: Column '{column_name}' must be datetime type", c="red")
-
-        # Get min and max dates from the column
-        df_pandas[column_name] = pd.to_datetime(df_pandas[column_name], errors="coerce")
-        df_pandas = df_pandas.dropna(subset=[column_name])
-
-        if df_pandas.empty:
-            logger.error(f"No valid datetime values found in column '{column_name}'")
-            return dmc.Text(f"Error: No valid dates in column '{column_name}'", c="red")
-
-        min_date = df_pandas[column_name].min()
-        max_date = df_pandas[column_name].max()
-
-        # Convert to Python date objects (DMC requires date, not datetime)
-        min_date_py = min_date.date()
-        max_date_py = max_date.date()
-
-        logger.info(f"Date range: {min_date_py} to {max_date_py}")
-
-        # Prepare kwargs for DMC DatePickerInput
-        kwargs_component = {
-            "type": "range",
-            "id": {"type": value_div_type, "index": str(index)},
-            "minDate": min_date_py,
-            "maxDate": max_date_py,
-            "persistence_type": "local",
-            # UI/UX improvements
-            "w": "100%",
-            "size": title_size,
-            "clearable": False,  # Don't allow clearing the date range
-            "styles": {
-                "root": {
-                    "width": "100%",
-                },
-            },
-        }
-
-        # Handle value persistence
-        if value is not None and isinstance(value, list) and len(value) == 2:
-            try:
-                # Convert string dates to date objects if needed
-                if isinstance(value[0], str):
-                    value[0] = datetime.strptime(value[0], "%Y-%m-%d").date()
-                if isinstance(value[1], str):
-                    value[1] = datetime.strptime(value[1], "%Y-%m-%d").date()
-
-                # Ensure dates are within bounds
-                value[0] = max(min_date_py, min(max_date_py, value[0]))
-                value[1] = max(min_date_py, min(max_date_py, value[1]))
-
-                kwargs_component["value"] = value
-                logger.info(f"Preserved date range value: {value}")
-            except Exception as e:
-                logger.warning(f"Failed to parse date range value {value}: {e}")
-                kwargs_component["value"] = [min_date_py, max_date_py]
-        else:
-            # Default to full range
-            kwargs_component["value"] = [min_date_py, max_date_py]
-            logger.info(f"Using default date range: [{min_date_py}, {max_date_py}]")
-
-        # Apply custom color if specified
-        if color:
-            # Merge color styles with existing styles
-            existing_styles = kwargs_component.get("styles", {})
-            color_styles = {
-                "input": {"borderColor": color},
-                "label": {"color": color},
-            }
-            kwargs_component["styles"] = {**existing_styles, **color_styles}
-            logger.info(f"Applied custom color: {color}")
-
-        interactive_component = func_name(**kwargs_component)
-
-        # Store date range information for later use
-        store_data["min_date"] = str(min_date_py)
-        store_data["max_date"] = str(max_date_py)
-
-        # Update default_state with actual min/max dates for proper reset functionality
-        store_data["default_state"] = {
-            "type": "date_range",
-            "min_date": str(min_date_py),
-            "max_date": str(max_date_py),
-            "default_range": [str(min_date_py), str(max_date_py)],
-        }
-        logger.info(f"Updated default_state for DateRangePicker: {store_data['default_state']}")
-
-    # If the aggregation value is Checkbox or Switch (boolean data types)
     elif interactive_component_type in ["Checkbox", "Switch"]:
-        logger.debug(f"Boolean component: {interactive_component_type}")
-        logger.debug(f"Value: {value}")
-        logger.debug(f"Value type: {type(value)}")
-        kwargs = {"persistence_type": "local"}
-        if value is None:
-            value = False
-        # Convert value to boolean if it's not already
-        if isinstance(value, str):
-            value = value.lower() in ["true", "1", "yes", "on"]
-        elif not isinstance(value, bool):
-            value = bool(value)
-        kwargs.update({"checked": value})
-
-        # Apply custom color to boolean components if specified
-        if color:
-            kwargs["color"] = color
-
-        interactive_component = func_name(
-            id={"type": value_div_type, "index": str(index)},
-            **kwargs,
+        interactive_component = _build_boolean_component(
+            index=index,
+            value=value,
+            value_div_type=value_div_type,
+            interactive_component_type=interactive_component_type,
+            func_name=func_name,
+            color=color,
         )
 
-    # Fallback for any other component types
     else:
-        logger.warning(f"Unsupported interactive component type: {interactive_component_type}")
-        logger.warning(f"Column type: {column_type}")
-        logger.warning(f"Column name: {column_name}")
-        logger.warning(
-            f"Available component types: {list(agg_functions.get(column_type, {}).get('input_methods', {}).keys())}"
-        )
-        # Create a fallback text component
-        interactive_component = dmc.Text(
-            f"Unsupported component type: {interactive_component_type} for {column_type} data",
-            id={"type": value_div_type, "index": str(index)},
-            c="red",
+        interactive_component = _build_fallback_component(
+            index=index,
+            value_div_type=value_div_type,
+            interactive_component_type=interactive_component_type,
+            column_type=column_type,
+            column_name=column_name,
         )
 
-    # If no title is provided, use the aggregation value on the selected column
-    if not title:
-        card_title = f"{interactive_component_type} on {column_name}"
-    else:
-        card_title = f"{title}"
-
-    # Add scale information to title for sliders
-    if (
-        interactive_component_type in ["Slider", "RangeSlider"]
-        and store_data.get("scale") == "log10"
-    ):
-        card_title += " (Log10 Scale)"
+    # Build title
+    card_title_h5 = _build_component_title(
+        title=title,
+        interactive_component_type=interactive_component_type,
+        column_name=column_name,
+        store_data=store_data,
+        icon_name=icon_name,
+        title_size=title_size,
+        color=color,
+    )
 
     logger.info(f"Interactive - original value: {value}")
-    # Log the actual value used in the component
     if interactive_component_type in ["Slider", "RangeSlider"]:
-        # The component value was already logged in the slider section
         logger.info(
             f"Interactive - component type: {interactive_component_type} (component value logged above)"
         )
     else:
         logger.info(f"Interactive - component value: {value}")
 
-    # Apply custom color if specified, otherwise let Mantine handle theming
-    title_style = {
-        "marginBottom": "0.25rem",  # Reduced from 0.5rem for tighter spacing
-    }
-    icon_color = color if color else None  # Use custom color for icon if specified
+    # Extract unique values and generate default state
+    unique_values = _extract_unique_values(df, column_name, interactive_component_type)
 
-    if color:
-        title_style["color"] = color
-        logger.info(f"Applied custom color: {color}")
-    else:
-        logger.debug("Using Mantine's native theming for title")
-
-    # Create title with icon - apply color via CSS style to prevent browser freeze
-    icon_props = {
-        "icon": icon_name,
-        "width": int(title_size) if title_size.isdigit() else 20,  # Default to 20 for named sizes
-    }
-    if icon_color:
-        icon_props["style"] = {"color": icon_color}
-    else:
-        icon_props["style"] = {"opacity": 0.9}
-
-    card_title_h5 = dmc.Group(
-        [
-            DashIconify(**icon_props),
-            dmc.Text(card_title, size=title_size, fw="bold", style={"margin": "0"}),
-        ],
-        gap="xs",
-        align="center",
-        style=title_style,
-    )
-
-    # Generate default state information for the component
-    # For select-type components, pass unique values if available
-    unique_values = None
-    if (
-        interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]
-        and df is not None
-    ):
-        try:
-            # Get unique values from the dataframe
-            unique_vals = df[column_name].unique()
-            # Handle both pandas and polars dataframes
-            if hasattr(unique_vals, "to_list") and callable(getattr(unique_vals, "to_list", None)):
-                # Polars DataFrame
-                unique_vals_list = unique_vals.to_list()  # type: ignore
-            elif hasattr(unique_vals, "tolist") and callable(getattr(unique_vals, "tolist", None)):
-                # Pandas DataFrame
-                unique_vals_list = unique_vals.tolist()  # type: ignore
-            else:
-                # Fallback to list conversion
-                unique_vals_list = list(unique_vals)
-            # Clean and limit the unique values
-            unique_values = [str(val) for val in unique_vals_list if val is not None][
-                :100
-            ]  # Limit to 100 options
-            logger.debug(
-                f"Generated {len(unique_values)} unique values for {interactive_component_type}"
-            )
-        except Exception as e:
-            logger.warning(f"Failed to extract unique values for {column_name}: {e}")
-            unique_values = []
-
-    # Generate and add default state to store_data
-    # Only set if not already set (e.g., by DateRangePicker which computes actual values)
     if "default_state" not in store_data:
         default_state = get_default_state(
             interactive_component_type, column_name, cols_json, unique_values
@@ -1736,34 +1980,30 @@ def build_interactive(**kwargs) -> dmc.Paper:
         storage_type="memory",
     )
 
-    # Create wrapper with proper sizing for interactive components
+    # Create wrapper with proper sizing
     new_interactive_component = dmc.Stack(
         [card_title_h5, interactive_component, store_component],
-        gap="0",  # No gap - use title marginBottom instead for tighter control
+        gap=0,
         style={
-            "width": "100%",  # Fill container width
-            "minHeight": "120px",  # Ensure minimum height for better usability
-            "padding": "0.5rem 1rem 0.5rem 0.5rem",  # top right bottom left - reduced padding for compact layout
+            "width": "100%",
+            "minHeight": "120px",
+            "padding": "0.5rem 1rem 0.5rem 0.5rem",
             "boxSizing": "border-box",
             "display": "flex",
             "flexDirection": "column",
-            "justifyContent": "flex-start",  # Align content to top instead of center
-            "alignItems": "stretch",  # Stretch children to fill width
+            "justifyContent": "flex-start",
+            "alignItems": "stretch",
         },
     )
 
     if not build_frame:
         return new_interactive_component
     else:
-        # Build the interactive component with frame
         interactive_component = build_interactive_frame(
             index=index, children=new_interactive_component
         )
 
-        # For stepper mode with loading
         if not stepper:
-            # Interactive components load data synchronously, no loading wrapper needed
-            # Component is built with all data and options ready
             return interactive_component
         else:
             return interactive_component
@@ -1877,7 +2117,7 @@ async def build_interactive_async(**kwargs):
     Async wrapper for build_interactive function - async functionality disabled, calls sync version.
     """
     logger.info(
-        f"🔄 ASYNC INTERACTIVE: Building interactive component (using sync) - Index: {kwargs.get('index', 'UNKNOWN')}"
+        f"ASYNC INTERACTIVE: Building interactive component (using sync) - Index: {kwargs.get('index', 'UNKNOWN')}"
     )
 
     # Call the synchronous build_interactive function
@@ -1885,6 +2125,6 @@ async def build_interactive_async(**kwargs):
     result = build_interactive(**kwargs)
 
     logger.info(
-        f"✅ ASYNC INTERACTIVE: Interactive component built successfully - Index: {kwargs.get('index', 'UNKNOWN')}"
+        f"ASYNC INTERACTIVE: Interactive component built successfully - Index: {kwargs.get('index', 'UNKNOWN')}"
     )
     return result
