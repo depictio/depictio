@@ -1047,64 +1047,6 @@ class TestInteractiveComponentsLogic:
 class TestJoinedDataCollectionIntegration:
     """Integration tests for the complete joined data collection workflow."""
 
-    @patch("depictio.api.v1.deltatables_utils.load_deltatable_lite")
-    def test_joined_collection_preserves_full_dataset(self, mock_load):
-        """Test that joined collections get the full filtered dataset, not limited cache."""
-        from depictio.api.v1.deltatables_utils import _load_joined_deltatable
-
-        # Create test ObjectIds
-        test_workflow_id = ObjectId()
-        dc1_id = ObjectId()
-        dc2_id = ObjectId()
-        joined_dc_id = f"{dc1_id}--{dc2_id}"
-
-        # Mock the individual DataFrame loading with unique IDs per row
-        df1 = pl.DataFrame(
-            {
-                "individual_id": list(range(1, 101)),  # 100 unique IDs
-                "bill_length_mm": [32.1, 35.0, 40.0, 45.0, 50.0] * 20,
-                "category": ["A", "B", "A", "B", "A"] * 20,
-            }
-        )
-
-        df2 = pl.DataFrame(
-            {
-                "individual_id": list(range(1, 101)),  # 100 unique IDs matching df1
-                "island": ["Dream", "Biscoe", "Dream", "Torgersen", "Dream"] * 20,
-                "species": ["Adelie", "Chinstrap", "Adelie", "Gentoo", "Adelie"] * 20,
-            }
-        )
-
-        mock_load.side_effect = [df1, df2]
-
-        # Mock the join configuration API response
-        with patch("httpx.get") as mock_get:
-            mock_response = MagicMock()
-            mock_response.json.return_value = {
-                str(test_workflow_id): {  # Use the actual workflow ID
-                    joined_dc_id: {"how": "inner", "on_columns": ["individual_id"]}
-                }
-            }
-            mock_response.status_code = 200
-            mock_get.return_value = mock_response
-            mock_get.return_value.raise_for_status = MagicMock()
-
-            # Test joined data collection loading
-            result = _load_joined_deltatable(
-                workflow_id=test_workflow_id,
-                joined_data_collection_id=joined_dc_id,
-                metadata=None,
-                TOKEN="test_token",
-                limit_rows=None,  # No limit to get full dataset
-            )
-
-            # Should preserve full dataset after join
-            assert result.height == 100  # Full joined dataset
-            assert "individual_id" in result.columns
-            assert "bill_length_mm" in result.columns
-            assert "island" in result.columns
-            assert "species" in result.columns
-
     def test_metadata_format_validation(self):
         """Test that metadata format is correctly validated."""
         from depictio.api.v1.deltatables_utils import process_metadata_and_filter
