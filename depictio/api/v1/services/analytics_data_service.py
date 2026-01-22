@@ -924,7 +924,15 @@ class AnalyticsDataService:
 
         if activity_trends_df.height > 0:
             total_activities = activity_trends_df["activity_count"].sum()
-            avg_response_time = activity_trends_df["avg_response_time_ms"].mean()
+            avg_response_time_raw = activity_trends_df["avg_response_time_ms"].mean()
+            # Convert to float for round/isnan compatibility
+            # Polars mean returns a complex union type, so we convert via str to ensure float compatibility
+            try:
+                avg_response_time = (
+                    float(str(avg_response_time_raw)) if avg_response_time_raw is not None else 0.0
+                )
+            except (ValueError, TypeError):
+                avg_response_time = 0.0
 
             # Group by activity type
             activity_by_type = {}

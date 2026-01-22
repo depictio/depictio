@@ -230,28 +230,30 @@ class BenchmarkDatasetGenerator:
         # Generate realistic measurements with some variance
         np.random.seed(42 + run_idx)  # Reproducible but varied
 
+        # Extract range values - cast to float for type safety with numpy
+        bill_length_low = float(profile["bill_length_range"][0])
+        bill_length_high = float(profile["bill_length_range"][1])
+        bill_depth_low = float(profile["bill_depth_range"][0])
+        bill_depth_high = float(profile["bill_depth_range"][1])
+        flipper_low = float(profile["flipper_length_range"][0])
+        flipper_high = float(profile["flipper_length_range"][1])
+        body_mass_low = float(profile["body_mass_range"][0])
+        body_mass_high = float(profile["body_mass_range"][1])
+
         data["bill_length_mm"] = np.random.uniform(
-            profile["bill_length_range"][0], profile["bill_length_range"][1], num_rows
+            bill_length_low, bill_length_high, num_rows
         ).round(1)
 
-        data["bill_depth_mm"] = np.random.uniform(
-            profile["bill_depth_range"][0], profile["bill_depth_range"][1], num_rows
-        ).round(1)
+        data["bill_depth_mm"] = np.random.uniform(bill_depth_low, bill_depth_high, num_rows).round(
+            1
+        )
 
         data["flipper_length_mm"] = (
-            np.random.uniform(
-                profile["flipper_length_range"][0], profile["flipper_length_range"][1], num_rows
-            )
-            .round(0)
-            .astype(int)
+            np.random.uniform(flipper_low, flipper_high, num_rows).round(0).astype(int)
         )
 
         data["body_mass_g"] = (
-            np.random.uniform(
-                profile["body_mass_range"][0], profile["body_mass_range"][1], num_rows
-            )
-            .round(0)
-            .astype(int)
+            np.random.uniform(body_mass_low, body_mass_high, num_rows).round(0).astype(int)
         )
 
         # Add wide schema columns if needed

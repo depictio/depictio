@@ -1,3 +1,9 @@
+"""
+MongoDB database configuration and collection definitions.
+
+Provides synchronous MongoDB client and collection instances for the Depictio API.
+"""
+
 import os
 import sys
 
@@ -6,26 +12,23 @@ import pymongo
 from depictio.api.v1.configs.config import MONGODB_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 
-# Check if running in a test environment
-# First check environment variable, then check for pytest in sys.argv
 is_testing = os.environ.get("DEPICTIO_DEV_MODE", "false").lower() == "true" or any(
     "pytest" in arg for arg in sys.argv
 )
-logger.debug(f"Is testing: {is_testing}")
 
-# Initialize MongoDB client
-logger.debug(f"Using MongoDB URL: {MONGODB_URL}")
 client = pymongo.MongoClient(MONGODB_URL)
-
-# Get the database name from settings
 db_name = settings.mongodb.db_name
+db = client[db_name]
 
 
-# Function to clean the test database
-def clean_test_database():
+def clean_test_database() -> bool:
     """
     Clean the test database by dropping all collections.
-    Only use this in test environments.
+
+    Only operates in test environments. Returns False if not in test mode.
+
+    Returns:
+        True if database was cleaned successfully, False otherwise.
     """
     if not is_testing:
         logger.warning(
@@ -34,28 +37,15 @@ def clean_test_database():
         return False
 
     try:
-        # Get all collection names
-        collection_names = client[db_name].list_collection_names()
-
-        # Drop each collection
-        for collection_name in collection_names:
+        for collection_name in client[db_name].list_collection_names():
             client[db_name].drop_collection(collection_name)
-
-        logger.debug(f"Cleaned test database: {db_name}")
         return True
     except Exception as e:
         logger.error(f"Error cleaning test database: {e}")
         return False
 
 
-db = client[db_name]
-logger.debug(f"MongoDB database selected: {db_name}")
-logger.debug(f"Client: {client}")
-logger.debug(f"DB: {db}")
-
-
-# Define the collections
-
+# Collection instances
 data_collections_collection = db[settings.mongodb.collections.data_collection]
 workflows_collection = db[settings.mongodb.collections.workflow_collection]
 runs_collection = db[settings.mongodb.collections.runs_collection]

@@ -1,5 +1,6 @@
 import json
 import os
+from typing import Any
 
 from bson import ObjectId
 from fastapi import HTTPException
@@ -22,8 +23,7 @@ from depictio.models.utils import get_config
 
 
 async def create_initial_project(admin_user: UserBeanie, token_payload: dict | None) -> dict | None:
-    # from depictio.models.models.projects import Project,
-
+    """Create initial demo project with static IDs for K8s consistency."""
     project_yaml_path = os.path.join(
         os.path.dirname(__file__), "configs", "iris_dataset", "initial_project.yaml"
     )
@@ -53,7 +53,7 @@ async def create_initial_project(admin_user: UserBeanie, token_payload: dict | N
     project_config["permissions"] = {
         "owners": [
             UserBase(
-                id=admin_user.id,  # type: ignore[invalid-argument-type]  # type: ignore[invalid-argument-type]
+                id=admin_user.id,  # type: ignore[invalid-argument-type]
                 email=admin_user.email,
                 is_admin=True,
             )
@@ -84,19 +84,20 @@ async def create_initial_project(admin_user: UserBeanie, token_payload: dict | N
     )
 
     # Package original IDs in a structured format for passing to helper function
-    original_ids = {
-        "project": original_project_id,
-        "workflows": {},
-    }
+    workflows_dict: dict[int, dict[str, Any]] = {}
     for wf_idx, wf_id in original_workflow_ids.items():
-        original_ids["workflows"][wf_idx] = {
+        workflows_dict[wf_idx] = {
             "id": wf_id,
             "data_collections": {},
         }
     for (wf_idx, dc_idx), dc_id in original_dc_ids.items():
-        if wf_idx not in original_ids["workflows"]:
-            original_ids["workflows"][wf_idx] = {"id": None, "data_collections": {}}
-        original_ids["workflows"][wf_idx]["data_collections"][dc_idx] = dc_id
+        if wf_idx not in workflows_dict:
+            workflows_dict[wf_idx] = {"id": None, "data_collections": {}}
+        workflows_dict[wf_idx]["data_collections"][dc_idx] = dc_id
+    original_ids: dict[str, Any] = {
+        "project": original_project_id,
+        "workflows": workflows_dict,
+    }
     logger.debug(f"Project config: {project_config}")
     project = ProjectBeanie(**project_config)  # type: ignore[missing-argument]
 
@@ -155,11 +156,7 @@ async def create_initial_project(admin_user: UserBeanie, token_payload: dict | N
 
 
 async def create_initial_dashboard(admin_user: UserBeanie) -> dict | None:
-    """
-    Create an initial dashboard for the admin user.
-    This function is a placeholder and should be implemented based on your application's requirements.
-    """
-    # Check if dashboard was already created
+    """Create initial demo dashboard with static dc_ids for K8s consistency."""
     from depictio.api.v1.db import dashboards_collection
 
     dashboard_json_path = os.path.join(
@@ -279,10 +276,7 @@ async def create_initial_dashboard(admin_user: UserBeanie) -> dict | None:
 
 
 async def initialize_db(wipe: bool = False) -> UserBeanie | None:
-    """
-    Initialize the database with default users and groups. If wipe is True, the database will be wiped before initialization.
-    """
-    logger.debug(f"Bootstrap: {wipe} and type: {type(wipe)}")
+    """Initialize the database with default users and groups."""
 
     _ensure_mongodb_connection()
 
@@ -330,7 +324,7 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
             if user_payload["user"].is_admin:
                 admin_user = user_payload["user"]
                 logger.info(f"Admin user created: {admin_user.email}")
-                logger.debug(f"Admin token created: {format_pydantic(token_payload)}")
+                logger.debug(f"Admin token created: {token_payload}")
         else:
             token_beanie = await TokenBeanie.find_one(
                 {"user_id": user_payload["user"].id, "name": "default_token"}

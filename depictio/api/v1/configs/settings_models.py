@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -179,7 +179,7 @@ class AuthConfig(BaseSettings):
     keys_dir: Path = Field(
         default_factory=lambda: Path(__file__).parent.parent.parent.parent / "keys"
     )
-    keys_algorithm: str = Field(default="RS256")
+    keys_algorithm: Literal["RS256", "RS512", "ES256", "SHA256"] = Field(default="RS256")
     cli_config_dir: Path = Field(
         default_factory=lambda: Path(__file__).parent.parent.parent.parent / ".depictio"
     )

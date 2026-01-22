@@ -1,15 +1,13 @@
-"""
-Analytics API endpoints.
-"""
+"""Analytics API endpoints."""
 
 from datetime import datetime, timedelta
-from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel
 from pymongo import DESCENDING
 
 from depictio.api.v1.configs.config import settings
+from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.services.analytics_data_service import AnalyticsDataService
 from depictio.api.v1.services.analytics_service import AnalyticsService
 from depictio.models.models.analytics import (
@@ -26,12 +24,12 @@ class ClientPageView(BaseModel):
     """Client-side page view tracking data."""
 
     page_path: str
-    page_title: Optional[str] = None
-    user_type: Optional[str] = None  # "anonymous", "temporary", "authenticated"
-    user_id: Optional[str] = None
-    session_id: Optional[str] = None
-    referrer: Optional[str] = None
-    timestamp: Optional[datetime] = None
+    page_title: str | None = None
+    user_type: str | None = None  # "anonymous", "temporary", "authenticated"
+    user_id: str | None = None
+    session_id: str | None = None
+    referrer: str | None = None
+    timestamp: datetime | None = None
 
 
 def get_analytics_service() -> AnalyticsService:
@@ -69,12 +67,12 @@ async def get_analytics_summary(
     return await analytics_service.get_analytics_summary()
 
 
-@router.get("/sessions/active", response_model=List[SessionSummary])
+@router.get("/sessions/active", response_model=list[SessionSummary])
 async def get_active_sessions(
     limit: int = Query(50, ge=1, le=200),
     analytics_service: AnalyticsService = Depends(get_analytics_service),
     _: None = Depends(verify_internal_api_key),
-) -> List[SessionSummary]:
+) -> list[SessionSummary]:
     """
     Get list of currently active sessions.
     """
@@ -84,16 +82,16 @@ async def get_active_sessions(
     return await analytics_service.get_active_sessions(limit=limit)
 
 
-@router.get("/sessions", response_model=List[UserSession])
+@router.get("/sessions", response_model=list[UserSession])
 async def get_sessions(
-    user_id: Optional[str] = Query(None),
-    is_anonymous: Optional[bool] = Query(None),
-    start_date: Optional[datetime] = Query(None),
-    end_date: Optional[datetime] = Query(None),
+    user_id: str | None = Query(None),
+    is_anonymous: bool | None = Query(None),
+    start_date: datetime | None = Query(None),
+    end_date: datetime | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     skip: int = Query(0, ge=0),
     _: None = Depends(verify_internal_api_key),
-) -> List[UserSession]:
+) -> list[UserSession]:
     """
     Get user sessions with optional filtering.
     """
@@ -124,17 +122,17 @@ async def get_sessions(
     return sessions
 
 
-@router.get("/activities", response_model=List[UserActivity])
+@router.get("/activities", response_model=list[UserActivity])
 async def get_activities(
-    session_id: Optional[str] = Query(None),
-    user_id: Optional[str] = Query(None),
-    activity_type: Optional[str] = Query(None),
-    start_date: Optional[datetime] = Query(None),
-    end_date: Optional[datetime] = Query(None),
+    session_id: str | None = Query(None),
+    user_id: str | None = Query(None),
+    activity_type: str | None = Query(None),
+    start_date: datetime | None = Query(None),
+    end_date: datetime | None = Query(None),
     limit: int = Query(100, ge=1, le=500),
     skip: int = Query(0, ge=0),
     _: None = Depends(verify_internal_api_key),
-) -> List[UserActivity]:
+) -> list[UserActivity]:
     """
     Get user activities with optional filtering.
     """
@@ -183,13 +181,13 @@ async def get_session(session_id: str, _: None = Depends(verify_internal_api_key
     return session
 
 
-@router.get("/sessions/{session_id}/activities", response_model=List[UserActivity])
+@router.get("/sessions/{session_id}/activities", response_model=list[UserActivity])
 async def get_session_activities(
     session_id: str,
     limit: int = Query(100, ge=1, le=500),
     skip: int = Query(0, ge=0),
     _: None = Depends(verify_internal_api_key),
-) -> List[UserActivity]:
+) -> list[UserActivity]:
     """
     Get all activities for a specific session.
     """
@@ -201,16 +199,13 @@ async def get_session_activities(
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # Get activities
-    activities = (
+    return (
         await UserActivity.find(UserActivity.session_id == session_id)
         .sort([(UserActivity.timestamp, DESCENDING)])
         .skip(skip)
         .limit(limit)
         .to_list()
     )
-
-    return activities
 
 
 @router.delete("/sessions/{session_id}")
@@ -234,7 +229,7 @@ async def end_session(
 
 @router.post("/cleanup")
 async def cleanup_old_data(
-    days_to_keep: Optional[int] = Query(
+    days_to_keep: int | None = Query(
         None, ge=1, description="Days of data to keep (overrides default)"
     ),
     analytics_service: AnalyticsService = Depends(get_analytics_service),
@@ -410,8 +405,7 @@ async def track_client_pageview(
         }
 
     except Exception as e:
-        # Don't let analytics errors break the frontend
-        print(f"Client analytics error: {e}")
+        logger.warning(f"Client analytics error: {e}")
         return {"success": False, "error": str(e)}
 
 
@@ -422,11 +416,11 @@ def get_analytics_data_service() -> AnalyticsDataService:
 
 @router.get("/unique-connections")
 async def get_unique_connections_analytics(
-    start_date: Optional[str] = Query(None, description="Start date in YYYY-MM-DD format"),
-    end_date: Optional[str] = Query(None, description="End date in YYYY-MM-DD format"),
+    start_date: str | None = Query(None, description="Start date in YYYY-MM-DD format"),
+    end_date: str | None = Query(None, description="End date in YYYY-MM-DD format"),
     data_service: AnalyticsDataService = Depends(get_analytics_data_service),
     _: None = Depends(verify_internal_api_key),
-):
+) -> dict:
     """
     Get analytics for unique IP addresses and connections.
 
@@ -468,7 +462,7 @@ async def get_unique_connections_analytics(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error in unique connections analytics: {e}")
+        logger.error(f"Error in unique connections analytics: {e}")
         raise HTTPException(
             status_code=500, detail=f"Failed to get unique connections analytics: {str(e)}"
         )
@@ -478,7 +472,7 @@ async def get_unique_connections_analytics(
 async def consolidate_duplicate_sessions(
     analytics_service: AnalyticsService = Depends(get_analytics_service),
     _: None = Depends(verify_internal_api_key),
-):
+) -> dict:
     """
     Consolidate duplicate sessions from the same IP address.
 
@@ -507,14 +501,14 @@ async def consolidate_duplicate_sessions(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error in session consolidation: {e}")
+        logger.error(f"Error in session consolidation: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to consolidate sessions: {str(e)}")
 
 
 @router.delete("/admin/cleanup-anonymous-sessions")
 async def cleanup_anonymous_sessions(
     _: None = Depends(verify_internal_api_key),
-):
+) -> dict:
     """
     Clean up anonymous sessions when unauthenticated mode is disabled.
 
@@ -559,7 +553,7 @@ async def cleanup_anonymous_sessions(
         }
 
     except Exception as e:
-        print(f"Error in anonymous session cleanup: {e}")
+        logger.error(f"Error in anonymous session cleanup: {e}")
         raise HTTPException(
             status_code=500, detail=f"Failed to cleanup anonymous sessions: {str(e)}"
         )

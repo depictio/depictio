@@ -8,8 +8,6 @@ This module provides REST API endpoints for managing MultiQC reports:
 - Get MultiQC report metadata and plots
 """
 
-from typing import List, Optional
-
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
@@ -32,14 +30,14 @@ class MultiQCReportResponse(BaseModel):
     """Response model for MultiQC report data."""
 
     report: MultiQCReport
-    data_collection_tag: Optional[str] = None
-    workflow_name: Optional[str] = None
+    data_collection_tag: str | None = None
+    workflow_name: str | None = None
 
 
 class MultiQCReportsListResponse(BaseModel):
     """Response model for list of MultiQC reports."""
 
-    reports: List[MultiQCReportResponse]
+    reports: list[MultiQCReportResponse]
     total_count: int
 
 

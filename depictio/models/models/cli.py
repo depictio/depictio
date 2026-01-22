@@ -98,3 +98,21 @@ class CLIConfig(BaseModel):
         if not re.match(pattern, v):
             raise ValueError("Invalid URL format")
         return v
+
+
+class CLIValidationResponse(BaseModel):
+    """Response model for CLI config validation.
+
+    Args:
+        success: Whether the validation was successful.
+        message: A human-readable message about the validation result.
+        is_admin: Whether the user is an admin.
+        user_id: The user's ID if validation was successful.
+        email: The user's email if validation was successful.
+    """
+
+    success: bool
+    message: str
+    is_admin: bool = False
+    user_id: str | None = None
+    email: str | None = None

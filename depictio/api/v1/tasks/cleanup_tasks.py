@@ -17,6 +17,34 @@ from depictio.api.v1.services.analytics_service import AnalyticsService
 from depictio.models.models.users import UserBeanie
 
 
+def _calculate_interval(
+    interval_hours: int | None = None,
+    interval_minutes: int | None = None,
+    interval_seconds: int | None = None,
+    default_seconds: int = 3600,
+) -> tuple[int, str]:
+    """
+    Calculate interval in seconds with human-readable description.
+
+    Args:
+        interval_hours: Interval in hours
+        interval_minutes: Interval in minutes
+        interval_seconds: Interval in seconds
+        default_seconds: Default interval if none specified
+
+    Returns:
+        Tuple of (interval_in_seconds, description)
+    """
+    if interval_seconds is not None:
+        return interval_seconds, f"{interval_seconds} seconds"
+    elif interval_minutes is not None:
+        return interval_minutes * 60, f"{interval_minutes} minutes"
+    elif interval_hours is not None:
+        return interval_hours * 3600, f"{interval_hours} hours"
+    else:
+        return default_seconds, f"{default_seconds // 3600} hour(s)"
+
+
 async def periodic_cleanup_expired_temporary_users(
     interval_hours: int | None = None,
     interval_minutes: int | None = None,
@@ -33,20 +61,9 @@ async def periodic_cleanup_expired_temporary_users(
     Note: Only one interval should be specified. If multiple are provided, precedence is:
           seconds > minutes > hours. If none are provided, defaults to 1 hour.
     """
-    # Determine the interval in seconds
-    if interval_seconds is not None:
-        interval_in_seconds = interval_seconds
-        interval_description = f"{interval_seconds} seconds"
-    elif interval_minutes is not None:
-        interval_in_seconds = interval_minutes * 60
-        interval_description = f"{interval_minutes} minutes"
-    elif interval_hours is not None:
-        interval_in_seconds = interval_hours * 3600
-        interval_description = f"{interval_hours} hours"
-    else:
-        # Default to 1 hour
-        interval_in_seconds = 3600
-        interval_description = "1 hour"
+    interval_in_seconds, interval_description = _calculate_interval(
+        interval_hours, interval_minutes, interval_seconds, default_seconds=3600
+    )
 
     logger.info(f"Starting periodic cleanup task (every {interval_description})")
 
@@ -88,15 +105,9 @@ async def periodic_cleanup_analytics_data(
     Note: Only one interval should be specified. If multiple are provided, precedence is:
           seconds > minutes > hours. If none are provided, defaults to 24 hours.
     """
-    # Determine the interval in seconds
-    if interval_seconds is not None:
-        interval_in_seconds = interval_seconds
-    elif interval_minutes is not None:
-        interval_in_seconds = interval_minutes * 60
-    elif interval_hours is not None:
-        interval_in_seconds = interval_hours * 3600
-    else:
-        interval_in_seconds = 24 * 3600  # Default: 24 hours
+    interval_in_seconds, _ = _calculate_interval(
+        interval_hours, interval_minutes, interval_seconds, default_seconds=24 * 3600
+    )
 
     logger.info(f"Starting periodic analytics cleanup with interval: {interval_in_seconds} seconds")
 
@@ -145,15 +156,9 @@ async def periodic_cleanup_orphaned_s3_files(
     Note: Only one interval should be specified. If multiple are provided, precedence is:
           seconds > minutes > hours. If none are provided, defaults to 7 days.
     """
-    # Determine the interval in seconds
-    if interval_seconds is not None:
-        interval_in_seconds = interval_seconds
-    elif interval_minutes is not None:
-        interval_in_seconds = interval_minutes * 60
-    elif interval_hours is not None:
-        interval_in_seconds = interval_hours * 3600
-    else:
-        interval_in_seconds = 7 * 24 * 3600  # Default: 7 days
+    interval_in_seconds, _ = _calculate_interval(
+        interval_hours, interval_minutes, interval_seconds, default_seconds=7 * 24 * 3600
+    )
 
     logger.info(
         f"Starting periodic S3 cleanup with interval: {interval_in_seconds} seconds ({interval_in_seconds / 86400:.1f} days)"
@@ -210,20 +215,9 @@ async def periodic_purge_expired_tokens(
     Note: Only one interval should be specified. If multiple are provided, precedence is:
           seconds > minutes > hours. If none are provided, defaults to 1 hour.
     """
-    # Determine the interval in seconds
-    if interval_seconds is not None:
-        interval_in_seconds = interval_seconds
-        interval_description = f"{interval_seconds} seconds"
-    elif interval_minutes is not None:
-        interval_in_seconds = interval_minutes * 60
-        interval_description = f"{interval_minutes} minutes"
-    elif interval_hours is not None:
-        interval_in_seconds = interval_hours * 3600
-        interval_description = f"{interval_hours} hours"
-    else:
-        # Default to 1 hour (balances cleanup frequency vs system load)
-        interval_in_seconds = 3600
-        interval_description = "1 hour"
+    interval_in_seconds, interval_description = _calculate_interval(
+        interval_hours, interval_minutes, interval_seconds, default_seconds=3600
+    )
 
     logger.info(f"Starting periodic token purge task (every {interval_description})")
 

@@ -59,27 +59,21 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/depictio/api/v1/auth/login")
 
 
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> User:
-    """Returns the current user from the token.
+    """Get the currently authenticated user from the JWT token.
 
     Args:
-        token (Annotated[str, Depends): _description_
-
-    Raises:
-        HTTPException: _description_
-        HTTPException: _description_
+        token: JWT access token from the Authorization header.
 
     Returns:
-        _type_: _description_
+        The authenticated User object.
+
+    Raises:
+        HTTPException: 401 if token is invalid or user not found.
     """
     if token is None:
         raise HTTPException(status_code=401, detail="Invalid token")
 
     user = await _async_fetch_user_from_token(token)
-    if user:
-        logger.debug(f"User: {user.email if 'email' in user else 'No email found'}")
-    else:
-        logger.error("User not found for the provided token")
-
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid token")
 
@@ -89,7 +83,20 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Use
 async def get_user_or_anonymous(
     token: Annotated[str | None, Depends(oauth2_scheme)] = None,
 ) -> User:
-    """Return the authenticated user or the anonymous user if unauthenticated mode is enabled."""
+    """Get the authenticated user or anonymous user if unauthenticated mode is enabled.
+
+    Attempts to authenticate with the provided token first. If no token or invalid token,
+    and unauthenticated mode is enabled, returns the anonymous user.
+
+    Args:
+        token: Optional JWT access token from the Authorization header.
+
+    Returns:
+        The authenticated User object or anonymous user.
+
+    Raises:
+        HTTPException: 401 if token is invalid and unauthenticated mode is disabled.
+    """
     # First try to authenticate with token if provided
     if token is not None:
         try:
@@ -108,23 +115,22 @@ async def get_user_or_anonymous(
     raise HTTPException(status_code=401, detail="Invalid token")
 
 
-# Login endpoint
 @auth_endpoint_router.post("/login", response_model=TokenBeanie)
-async def login(login_request: OAuth2PasswordRequestForm = Depends()):
-    """Login endpoint
+async def login(login_request: OAuth2PasswordRequestForm = Depends()) -> TokenBeanie:
+    """Authenticate user and return access token.
+
+    Validates user credentials and returns a JWT token for API access.
+    In unauthenticated mode, returns the anonymous user's token.
 
     Args:
-        login_request (OAuth2PasswordRequestForm, optional): _description_. Defaults to Depends().
-
-    Raises:
-        HTTPException: _description_
-        HTTPException: _description_
+        login_request: OAuth2 form containing username (email) and password.
 
     Returns:
-        _type_: _description_
+        TokenBeanie with access token and metadata.
+
+    Raises:
+        HTTPException: 401 if credentials are invalid.
     """
-    logger.debug(f"Login attempt for user: {login_request.username}")
-
     if settings.auth.unauthenticated_mode:
         anon = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
         token = await TokenBeanie.find_one({"user_id": anon.id, "token_lifetime": "permanent"})
@@ -132,16 +138,8 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
             token = await _create_permanent_token(anon)
         return token
 
-    if settings.auth.unauthenticated_mode:
-        anon = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
-        token = await TokenBeanie.find_one({"user_id": anon.id, "token_lifetime": "permanent"})
-        if not token:
-            token = await _create_permanent_token(anon)
-        return token
-
-    _ = await _check_password(login_request.username, login_request.password)
-    if not _:
-        logger.error("Invalid credentials")
+    password_valid = await _check_password(login_request.username, login_request.password)
+    if not password_valid:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     token_name = f"{login_request.username}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -154,7 +152,7 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
             detail="Token with the same name already exists",
         )
     token.logged_in = True
-    return token  # TokenBeanie
+    return token
 
 
 @auth_endpoint_router.post("/create_token", include_in_schema=True)
@@ -162,19 +160,26 @@ async def create_token(
     token_data: TokenData,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> TokenBeanie:
-    logger.debug("Creating new token")
+    """Create a new API token for a user.
 
+    Internal endpoint that requires API key authentication.
+
+    Args:
+        token_data: Token configuration including name, lifetime, and user ID.
+        api_key: Internal API key for authentication.
+
+    Returns:
+        Created TokenBeanie with access token and metadata.
+
+    Raises:
+        HTTPException: 403 if API key is invalid.
+        HTTPException: 400 if token with same name already exists.
+    """
     if api_key != settings.auth.internal_api_key:
-        logger.error("Invalid API key")
-        raise HTTPException(
-            status_code=403,
-            detail="Invalid API key",
-        )
+        raise HTTPException(status_code=403, detail="Invalid API key")
 
-    # Generate and store token
     token = await _add_token(token_data)
     if token is None:
-        logger.error("Failed to create token: Token with the same name already exists.")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Token with the same name already exists",
@@ -187,19 +192,24 @@ async def create_token(
 async def refresh_token_endpoint(
     request: dict,
     api_key: str = Header(..., description="Internal API key for authentication"),
-):
-    logger.debug("Refreshing token")
+) -> dict:
+    """Refresh an access token using a valid refresh token.
 
+    Args:
+        request: Dict containing 'refresh_token' key.
+        api_key: Internal API key for authentication.
+
+    Returns:
+        Dict with new access_token and expire_datetime.
+
+    Raises:
+        HTTPException: 403 if API key is invalid.
+        HTTPException: 401 if refresh token is invalid or expired.
+    """
     if api_key != settings.auth.internal_api_key:
-        logger.error("Invalid API key")
-        raise HTTPException(
-            status_code=403,
-            detail="Invalid API key",
-        )
+        raise HTTPException(status_code=403, detail="Invalid API key")
 
     refresh_token = request.get("refresh_token")
-
-    # Find token by refresh_token and check if not expired
     token_doc = await TokenBeanie.find_one(
         {"refresh_token": refresh_token, "refresh_expire_datetime": {"$gt": datetime.now()}}
     )
@@ -207,18 +217,10 @@ async def refresh_token_endpoint(
     if not token_doc:
         raise HTTPException(401, "Invalid refresh token")
 
-    # Create new access_token (keep same refresh_token)
     user = await UserBeanie.find_one({"_id": token_doc.user_id})
-    token_data = TokenData(
-        name=token_doc.name,
-        sub=user.id,
-    )
-    new_access_token, expire_datetime = await create_access_token(
-        token_data,
-        expiry_hours=1,
-    )
+    token_data = TokenData(name=token_doc.name, sub=user.id)
+    new_access_token, expire_datetime = await create_access_token(token_data, expiry_hours=1)
 
-    # Update the token document
     token_doc.access_token = new_access_token
     token_doc.expire_datetime = expire_datetime
     await token_doc.save()
@@ -231,16 +233,23 @@ async def api_fetch_user_from_token(
     token: str,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> User:
-    logger.debug("Fetching user from token")
+    """Fetch user by access token.
+
+    Args:
+        token: JWT access token to look up.
+        api_key: Internal API key for authentication.
+
+    Returns:
+        User object associated with the token.
+
+    Raises:
+        HTTPException: 403 if API key is invalid.
+        HTTPException: 404 if user not found for the token.
+    """
     if api_key != settings.auth.internal_api_key:
-        logger.error("Invalid API key")
-        raise HTTPException(
-            status_code=403,
-            detail="Invalid API key",
-        )
+        raise HTTPException(status_code=403, detail="Invalid API key")
 
     user = await _async_fetch_user_from_token(token)
-
     if not user:
         raise HTTPException(status_code=404, detail="User not found for the provided token")
 
@@ -252,17 +261,23 @@ async def api_fetch_user_from_email(
     email: EmailStr,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> User:
-    logger.debug(f"Fetching user from email: {email}")
+    """Fetch user by email address.
 
+    Args:
+        email: Email address to look up.
+        api_key: Internal API key for authentication.
+
+    Returns:
+        User object with the matching email.
+
+    Raises:
+        HTTPException: 403 if API key is invalid.
+        HTTPException: 404 if user not found for the email.
+    """
     if api_key != settings.auth.internal_api_key:
-        logger.error("Invalid API key")
-        raise HTTPException(
-            status_code=403,
-            detail="Invalid API key",
-        )
+        raise HTTPException(status_code=403, detail="Invalid API key")
 
     user = await _async_fetch_user_from_email(email)
-
     if not user:
         raise HTTPException(status_code=404, detail="User not found for the provided email")
 
@@ -274,17 +289,23 @@ async def api_fetch_user_from_id(
     user_id: PydanticObjectId,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> User:
-    logger.debug(f"Fetching user from ID: {user_id}")
+    """Fetch user by ID.
 
+    Args:
+        user_id: MongoDB ObjectId of the user to fetch.
+        api_key: Internal API key for authentication.
+
+    Returns:
+        User object with the matching ID.
+
+    Raises:
+        HTTPException: 403 if API key is invalid.
+        HTTPException: 404 if user not found for the ID.
+    """
     if api_key != settings.auth.internal_api_key:
-        logger.error("Invalid API key")
-        raise HTTPException(
-            status_code=403,
-            detail="Invalid API key",
-        )
+        raise HTTPException(status_code=403, detail="Invalid API key")
 
     user = await _async_fetch_user_from_id(user_id)
-
     if not user:
         raise HTTPException(status_code=404, detail="User not found for the provided ID")
 

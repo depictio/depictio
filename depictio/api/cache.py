@@ -49,7 +49,7 @@ class SimpleCache:
             return
 
         try:
-            self._redis = redis.Redis(  # type: ignore
+            self._redis = redis.Redis(
                 host=self.cache_config.redis_host,
                 port=self.cache_config.redis_port,
                 password=self.cache_config.redis_password,
@@ -100,8 +100,8 @@ class SimpleCache:
         if self._redis_available:
             try:
                 data = self._redis.get(cache_key)
-                if data:
-                    result = pickle.loads(data)
+                if data is not None:
+                    result = pickle.loads(data)  # type: ignore[arg-type]
                     if isinstance(result, pl.DataFrame):
                         logger.info(f"🚀 Redis hit: {key} ({result.shape[0]}×{result.shape[1]})")
                     return result
@@ -152,8 +152,7 @@ def get_cache() -> SimpleCache:
     global _cache
     if _cache is None:
         _cache = SimpleCache()
-    # Cast to help type checker - we know _cache is not None after the check
-    return _cache  # type: ignore
+    return _cache
 
 
 # Simple convenience functions
@@ -188,8 +187,13 @@ def get_cache_stats() -> dict[str, Any]:
         try:
             # Count Redis keys with our prefix
             pattern = f"{cache.cache_config.cache_key_prefix}*"
-            keys = cache._redis.keys(pattern)
-            stats["redis_keys"] = len(keys)
+            keys_result = cache._redis.keys(pattern)
+            # Redis.keys() returns a list synchronously when decode_responses=False
+            # Cast to list for type checker (redis-py returns list, not Awaitable, in sync mode)
+            if isinstance(keys_result, list):
+                stats["redis_keys"] = len(keys_result)
+            else:
+                stats["redis_keys"] = 0
 
             # Get Redis memory usage
             info = cache._redis.info()

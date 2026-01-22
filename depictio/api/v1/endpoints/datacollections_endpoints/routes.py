@@ -1,5 +1,3 @@
-import collections
-
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -11,25 +9,15 @@ from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
     _get_data_collection_specs,
     _update_data_collection_name,
     generate_join_dict,
-    normalize_join_details,
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
-from depictio.api.v1.endpoints.workflow_endpoints.routes import (
-    get_all_workflows,
-    get_workflow_from_id,
-)
-from depictio.dash.utils import return_dc_tag_from_id, return_mongoid
-from depictio.models.models.base import PyObjectId, convert_objectid_to_str
+from depictio.api.v1.endpoints.workflow_endpoints.routes import get_workflow_from_id
+from depictio.models.models.base import PyObjectId
 
 datacollections_endpoint_router = APIRouter()
 
-
-data_collections_collection = db[settings.mongodb.collections.data_collection]
 workflows_collection = db[settings.mongodb.collections.workflow_collection]
-runs_collection = db[settings.mongodb.collections.runs_collection]
-files_collection = db[settings.mongodb.collections.files_collection]
-users_collection = db["users"]
 
 
 @datacollections_endpoint_router.get("/specs/{data_collection_id}")
@@ -64,70 +52,7 @@ async def delete_datacollection(
         {"_id": workflow_oid},
         {"$pull": {"data_collections": data_collection}},
     )
-    # delete_files_message = await delete_files(workflow_id, data_collection_id, current_user)
     return {"message": "Data collection deleted successfully."}
-
-
-# =============================================================================
-# DEPRECATED ENDPOINT - NO LONGER USED - PENDING DELETION
-# =============================================================================
-# Migration Status: Dashboard now uses /get_dc_joined/ for pre-computed joins
-# This endpoint fetched DC-level join configs for live join execution.
-# Replaced by: /get_dc_joined/ endpoint that returns result_dc_id
-# TODO: Delete in cleanup PR after migration verification completes
-# =============================================================================
-@datacollections_endpoint_router.get("/get_join_tables/{workflow_id}/{data_collection_id}")
-async def get_join_tables(
-    workflow_id: str,
-    data_collection_id: str,
-    current_user: str = Depends(get_user_or_anonymous),
-):
-    """
-    Retrieve join details for the data collections in a workflow.
-    """
-
-    # Retrieve all workflows
-    workflows = await get_all_workflows(current_user=current_user)
-    workflows = [convert_objectid_to_str(workflow.mongo()) for workflow in workflows]
-
-    # Retrieve the workflow corresponding to the given ID and extract its data collections
-    workflow = [e for e in workflows if e["_id"] == workflow_id][0]
-    data_collections = workflow.get("data_collections", [])
-
-    # Extract join details for each data collection
-    join_details_map = collections.defaultdict(list)
-    for dc in data_collections:
-        logger.info(f"Data collection: {dc}")
-        if dc["config"]["type"].lower() == "table" and "join" in dc["config"]:
-            dc_id = str(dc["_id"])
-            join_config = dc["config"]["join"]
-            zip_ids_list = [
-                return_mongoid(
-                    workflow_id=ObjectId(workflow_id),
-                    data_collection_tag=dc_tag,
-                    workflows=workflows,
-                )[1]
-                for dc_tag in join_config["with_dc"]
-            ]
-            join_config["with_dc_id"] = zip_ids_list
-            logger.info(f"Join config: {join_config}")
-            if join_config:
-                logger.info(f"IN : Join config: {join_config}")
-                join_details_map[dc_id].append(join_config)
-
-    # Ensure symmetric join details across all related data collections
-    join_details_map = normalize_join_details(join_details_map)
-    # Map the IDs back to tags
-    for dc_id in join_details_map:
-        TOKEN = current_user["access_token"]  # type: ignore[call-non-callable]
-        join_details_map[dc_id]["with_dc"] = [
-            return_dc_tag_from_id(dc_id, workflows, TOKEN)  # type: ignore[too-many-positional-arguments]
-            for dc_id in join_details_map[dc_id]["with_dc_id"]
-        ]
-
-    logger.info(f"Join details: {join_details_map}")
-
-    return join_details_map
 
 
 @datacollections_endpoint_router.get("/get_dc_joined/{workflow_id}")

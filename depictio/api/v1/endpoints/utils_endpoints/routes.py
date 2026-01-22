@@ -36,18 +36,11 @@ utils_endpoint_router = APIRouter()
 
 @utils_endpoint_router.get("/create_bucket")
 async def create_bucket_endpoint(current_user=Depends(get_current_user)):
+    """Create an S3 bucket for the application."""
     if not current_user:
-        logger.error("Current user not found.")
         raise HTTPException(status_code=401, detail="Current user not found.")
 
-    response = create_bucket(current_user)
-
-    if response.status_code == 200:  # type: ignore[unresolved-attribute]
-        logger.info(response.detail)  # type: ignore[unresolved-attribute]
-        return response
-    else:
-        logger.error(response.detail)  # type: ignore[unresolved-attribute]
-        raise HTTPException(status_code=response.status_code, detail=response.detail)  # type: ignore[unresolved-attribute]
+    return create_bucket(current_user)
 
 
 # TODO - remove this endpoint - only for testing purposes in order to drop the S3 bucket content & the DB collections
@@ -103,9 +96,6 @@ async def status():
     Check if the server is online.
     This endpoint is public and does not require authentication.
     """
-    logger.info("Checking server status...")
-    logger.info("Server is online.")
-
     return {"status": "online", "version": get_version()}
 
 

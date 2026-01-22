@@ -211,7 +211,7 @@ class DataCollectionConfig(MongoModel):
             if not isinstance(dc_specific_properties, DCTableConfig):
                 if isinstance(dc_specific_properties, dict) and "format" in dc_specific_properties:
                     try:
-                        values["dc_specific_properties"] = DCTableConfig(**dc_specific_properties)  # type: ignore[missing-argument]
+                        values["dc_specific_properties"] = DCTableConfig(**dc_specific_properties)
                     except Exception:
                         # Keep original if conversion fails
                         pass

@@ -1,10 +1,12 @@
 import os
 
 import yaml
+from fastapi import HTTPException
 from pydantic import validate_call
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.models.models.base import PyObjectId
 from depictio.models.models.cli import CLIConfig, UserBaseCLIConfig
 from depictio.models.models.users import TokenBeanie, UserBeanie
 from depictio.models.utils import make_json_serializable
@@ -21,15 +23,22 @@ async def _generate_agent_config(user: UserBeanie, token: TokenBeanie) -> CLICon
 
     Returns:
         A CLIConfigBeanie object with the agent configuration
+
+    Raises:
+        HTTPException: If user ID is not set
     """
     logger.info(f"Generating agent config for user: {user.email}")
 
+    # Ensure user ID exists
+    if user.id is None:
+        raise HTTPException(status_code=500, detail="User ID is not set")
+
     # Create the user CLI config
     user_cli_config = UserBaseCLIConfig(
-        id=user.id,  # type: ignore[invalid-argument-type]
+        id=PyObjectId(str(user.id)),
         email=user.email,
         is_admin=user.is_admin,
-        token=token,  # type: ignore[invalid-argument-type]
+        token=token,
     )
 
     # Create the complete CLI config

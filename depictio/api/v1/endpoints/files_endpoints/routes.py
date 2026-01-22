@@ -13,13 +13,7 @@ from depictio.models.models.files import File
 
 files_endpoint_router = APIRouter()
 
-# Define the collections from the settings
 files_collection = db[settings.mongodb.collections.files_collection]
-users_collection = db["users"]
-
-# Define the MinIO endpoint and bucket name from the settings
-endpoint_url = settings.minio.service_name
-bucket_name = settings.minio.bucket
 
 
 class UpsertFilesBatchRequest(BaseModel):
@@ -89,7 +83,6 @@ async def create_file(payload: UpsertFilesBatchRequest, current_user=Depends(get
 
 
 @files_endpoint_router.get("/list/{data_collection_id}")
-# @datacollections_endpoint_router.get("/files/{workflow_id}/{data_collection_id}", response_model=List[GridFSFileInfo])
 async def list_registered_files(data_collection_id: str, current_user=Depends(get_current_user)):
     """
     Fetch all files registered from a Data Collection registered into a workflow.
@@ -124,11 +117,7 @@ async def list_registered_files(data_collection_id: str, current_user=Depends(ge
     ]
 
     result = files_collection.aggregate(pipeline)
-    # logger.info(f"Result : {result}")
-
     files = list(result)
-    logger.info(f"Files : {files}")
-    # files = [convert_objectid_to_str(file) for file in files]
     return convert_objectid_to_str(files)
 
 

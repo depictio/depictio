@@ -88,23 +88,15 @@ def create_bucket(current_user: UserBeanie) -> BucketResponse:
     Raises:
         HTTPException: If the user is not an admin or if bucket operations fail
     """
-    # Validate user is an admin
     if not current_user.is_admin:
         logger.warning(f"Unauthorized bucket creation attempt by user: {current_user.email}")
         raise HTTPException(status_code=403, detail="User is not an admin")
 
-    # Get bucket name from settings
-    logger.info(f"Minio settings: {settings.minio}")
     bucket_name = settings.minio.bucket
-    logger.debug(f"Bucket name retrieved from settings: {bucket_name}")
 
-    # Check if bucket exists and create if needed
     if check_bucket_exists(s3_client, bucket_name):
-        logger.info(f"Bucket '{bucket_name}' already exists.")
         return BucketResponse(message="Bucket already exists", bucket_name=bucket_name)
-    else:
-        logger.info(f"Bucket '{bucket_name}' does not exist. Creating...")
-        return create_s3_bucket(s3_client, bucket_name)
+    return create_s3_bucket(s3_client, bucket_name)
 
 
 async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -> dict[str, Any]:
@@ -136,35 +128,21 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
     orphaned_prefixes = []
 
     try:
-        # Get all data collection IDs from MongoDB
-        # Data collection IDs are stored in multiple collections
         valid_dc_ids = set()
 
-        # Check deltatables collection
-        deltatables_count = deltatables_collection.count_documents({})
-        logger.info(f"Total deltatables in MongoDB: {deltatables_count}")
-
+        # Collect data collection IDs from deltatables
         cursor = deltatables_collection.find({}, {"data_collection_id": 1})
         for doc in cursor:
             if "data_collection_id" in doc:
-                dc_id = str(doc["data_collection_id"])
-                valid_dc_ids.add(dc_id)
-                logger.debug(f"Adding DC ID from deltatables: {dc_id}")
+                valid_dc_ids.add(str(doc["data_collection_id"]))
 
-        # Check multiqc collection
-        multiqc_count = multiqc_collection.count_documents({})
-        logger.info(f"Total MultiQC reports in MongoDB: {multiqc_count}")
-
+        # Collect data collection IDs from multiqc
         cursor = multiqc_collection.find({}, {"data_collection_id": 1})
         for doc in cursor:
             if "data_collection_id" in doc:
-                dc_id = str(doc["data_collection_id"])
-                valid_dc_ids.add(dc_id)
-                logger.debug(f"Adding DC ID from multiqc: {dc_id}")
+                valid_dc_ids.add(str(doc["data_collection_id"]))
 
         logger.info(f"Found {len(valid_dc_ids)} unique data collection IDs across all collections")
-        if valid_dc_ids:
-            logger.debug(f"Valid DC IDs: {list(valid_dc_ids)}")
 
         # List all top-level prefixes in S3 bucket (data collection IDs)
         paginator = s3_client.get_paginator("list_objects_v2")
@@ -174,19 +152,13 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
         for page in pages:
             if "CommonPrefixes" in page:
                 for prefix_obj in page["CommonPrefixes"]:
-                    prefix = prefix_obj["Prefix"].rstrip("/")
-                    s3_prefixes.add(prefix)
+                    s3_prefixes.add(prefix_obj["Prefix"].rstrip("/"))
 
         logger.info(f"Found {len(s3_prefixes)} data collection prefixes in S3")
-        if s3_prefixes:
-            logger.debug(f"Sample S3 prefixes: {list(s3_prefixes)[:5]}")
 
         # Find orphaned prefixes (in S3 but not in MongoDB)
         orphaned_prefixes = list(s3_prefixes - valid_dc_ids)
         logger.info(f"Identified {len(orphaned_prefixes)} orphaned data collection prefixes")
-
-        if orphaned_prefixes:
-            logger.info(f"Orphaned prefixes to clean: {orphaned_prefixes[:10]}")  # Show first 10
 
         # Safety check: if all prefixes are orphaned, something might be wrong
         if len(s3_prefixes) > 0 and len(orphaned_prefixes) == len(s3_prefixes) and not force:

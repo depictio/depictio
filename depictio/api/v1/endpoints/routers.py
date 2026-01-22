@@ -1,4 +1,9 @@
-# in /app/api/v1/routers.py
+"""
+API router configuration for Depictio API.
+
+Aggregates all endpoint routers into a single router instance.
+"""
+
 from fastapi import APIRouter
 
 from depictio.api.v1.configs.config import settings
@@ -25,8 +30,6 @@ from depictio.api.v1.endpoints.workflow_endpoints.routes import workflows_endpoi
 
 router = APIRouter()
 
-
-# initialize_db(settings)
 router.include_router(
     projects_endpoint_router,
     prefix="/projects",
