@@ -11,6 +11,7 @@ from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel
 from depictio.models.models.data_collections import DataCollection, DataCollectionResponse
 from depictio.models.models.joins import JoinDefinition
+from depictio.models.models.links import DCLink
 from depictio.models.models.users import Permission
 from depictio.models.models.workflows import Workflow, WorkflowResponse
 
@@ -27,6 +28,7 @@ class Project(MongoModel):
     workflows: list[Workflow] = []  # Optional for basic projects
     data_collections: list[DataCollection] = []  # Direct data collections for basic projects
     joins: list[JoinDefinition] = []  # Top-level join definitions for client-side joining
+    links: list[DCLink] = []  # Universal DC links for cross-DC filtering
     yaml_config_path: str | None = None  # Optional for basic projects
     permissions: Permission
     is_public: bool = False

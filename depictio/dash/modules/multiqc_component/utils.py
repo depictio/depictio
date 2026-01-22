@@ -176,6 +176,7 @@ def build_multiqc(**kwargs: Any):
         "data_collection_id": kwargs.get("data_collection_id"),
         "wf_id": kwargs.get("workflow_id"),  # Alias for compatibility
         "dc_id": kwargs.get("data_collection_id"),  # Alias for compatibility
+        "project_id": kwargs.get("project_id"),  # For cross-DC link resolution
         "selected_module": selected_module,
         "selected_plot": selected_plot,
         "selected_dataset": selected_dataset,

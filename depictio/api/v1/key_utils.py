@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Literal, TypeVar, cast
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
@@ -15,13 +15,70 @@ from depictio.api.v1.configs.logging_init import logger
 # Type definitions
 Algorithm = Literal["RS256", "RS512", "ES256", "SHA256"]
 KeyPathStr = str
-# Union types for private and public keys
-PrivateKeyType = RSAPrivateKey | ec.EllipticCurvePrivateKey
-PublicKeyType = RSAPublicKey | ec.EllipticCurvePublicKey
+PrivateKeyT = TypeVar("PrivateKeyT", bound=RSAPrivateKey | ec.EllipticCurvePrivateKey)
+PublicKeyT = TypeVar("PublicKeyT", bound=RSAPublicKey | ec.EllipticCurvePublicKey)
 
 
 class KeyGenerationError(Exception):
     """Custom exception for key generation failures."""
+
+
+# @validate_call(validate_return=True)
+# def _load_or_generate_api_internal_key(
+#     keys_dir: Path = Path("./depictio/keys"),
+#     algorithm: Algorithm = "RS256",
+# ) -> str:
+#     """Check if the API internal key is set in the environment.
+
+#     Returns:
+#         API internal key if set, otherwise generates a new one
+#     """
+#     logger.info("Checking for API internal key in environment variables.")
+#     key_path = os.path.join(keys_dir, "api_internal_key.pem")
+#     logger.info(f"Key path: {key_path}")
+#     logger.info(f"Loading or generating API internal key with algorithm: {algorithm}")
+
+#     # Create the directory if it doesn't exist
+#     logger.debug(f"Creating directory if it doesn't exist: {os.path.dirname(key_path)}")
+#     os.makedirs(os.path.dirname(key_path), exist_ok=True)
+
+#     logger.debug(f"Key path: {key_path}")
+#     if os.path.exists(key_path):
+#         with open(key_path) as f:
+#             key = f.read().strip()
+#             logger.debug(f"Loaded API internal key: {key}")
+#             return key
+#     else:
+#         key = _generate_api_internal_key()
+#         logger.debug(f"Generated API internal key: {key}")
+#         with open(key_path, "w") as f:
+#             f.write(key)
+#         return key
+
+
+# @validate_call(validate_return=True)
+# def _generate_api_internal_key() -> str:
+#     """Generate a consistent API internal key.
+
+#     Returns:
+#         Consistently generated API internal key
+#     """
+#     # Use a combination of environment variables and a salt to generate a consistent key
+#     salt = "DEPICTIO_INTERNAL_KEY_SALT"
+#     base_key = os.getenv("DEPICTIO_INTERNAL_API_KEY", "")
+
+#     # If no base key exists, generate a persistent key
+#     if not base_key:
+#         import hashlib
+
+#         # Generate a hash based on a combination of system information
+#         system_info = f"{os.getpid()}:{os.getuid()}:{salt}"
+#         base_key = hashlib.sha256(system_info.encode()).hexdigest()
+
+#         # Set the environment variable to persist the key
+#         os.environ["DEPICTIO_INTERNAL_API_KEY"] = base_key
+
+#     return base_key
 
 
 @validate_call()
@@ -75,7 +132,7 @@ def _resolve_key_paths(
     return priv_path, pub_path
 
 
-@validate_call(config={"arbitrary_types_allowed": True})
+@validate_call(config={"arbitrary_types_allowed": True})  # type: ignore[invalid-argument-type]
 def _generate_rsa_private_key(key_size: int = 2048) -> RSAPrivateKey:
     """Generate an RSA private key with the specified key size.
 
@@ -92,19 +149,17 @@ def _generate_rsa_private_key(key_size: int = 2048) -> RSAPrivateKey:
     )
 
 
-@validate_call(config={"arbitrary_types_allowed": True})
-def _save_private_key(private_key: Any, path: str) -> None:
+@validate_call(config={"arbitrary_types_allowed": True})  # type: ignore[invalid-argument-type]
+def _save_private_key(private_key: PrivateKeyT, path: str) -> None:
     """Save private key to file.
 
     Args:
-        private_key: Private key object to save (RSA or EC)
+        private_key: Private key object to save
         path: Path where the key should be saved
     """
-    # Cast to the specific type that has private_bytes method
-    key = cast(RSAPrivateKey, private_key)
     with open(path, "wb") as f:
         f.write(
-            key.private_bytes(
+            private_key.private_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PrivateFormat.PKCS8,
                 encryption_algorithm=serialization.NoEncryption(),
@@ -112,19 +167,17 @@ def _save_private_key(private_key: Any, path: str) -> None:
         )
 
 
-@validate_call(config={"arbitrary_types_allowed": True})
-def _save_public_key(public_key: Any, path: str) -> None:
+@validate_call(config={"arbitrary_types_allowed": True})  # type: ignore[invalid-argument-type]
+def _save_public_key(public_key: PublicKeyT, path: str) -> None:
     """Save public key to file.
 
     Args:
-        public_key: Public key object to save (RSA or EC)
+        public_key: Public key object to save
         path: Path where the key should be saved
     """
-    # Cast to the specific type that has public_bytes method
-    key = cast(RSAPublicKey, public_key)
     with open(path, "wb") as f:
         f.write(
-            key.public_bytes(
+            public_key.public_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PublicFormat.SubjectPublicKeyInfo,
             )
@@ -156,9 +209,13 @@ def generate_keys(
         KeyGenerationError: If key generation fails for any other reason
     """
     if not algorithm:
-        algorithm = "RS256"
+        algorithm = "RS256"  # Default algorithm
 
-    logger.debug(f"Generating keys with algorithm: {algorithm}, wipe={wipe}")
+    logger.debug(f"Generating keys with algorithm: {algorithm}")
+    logger.debug(f"Keys directory: {keys_dir}")
+    logger.debug(f"Private key path: {private_key_path}")
+    logger.debug(f"Public key path: {public_key_path}")
+    logger.debug(f"Wipe existing keys: {wipe}")
 
     if wipe:
         logger.warning("Wiping existing keys as requested.")
@@ -207,7 +264,7 @@ def generate_keys(
         raise KeyGenerationError(f"Failed to generate keys: {e}") from e
 
 
-@validate_call(validate_return=True, config={"arbitrary_types_allowed": True})
+@validate_call(validate_return=True, config={"arbitrary_types_allowed": True})  # type: ignore[invalid-argument-type]
 def check_and_generate_keys(
     private_key_path: str | None = None,
     public_key_path: str | None = None,
@@ -215,6 +272,8 @@ def check_and_generate_keys(
     algorithm: Algorithm | None = None,
 ) -> tuple[str, str]:
     """Check if key files exist, generate if they don't.
+
+    Uses file locking to prevent race conditions when multiple workers start simultaneously.
 
     Args:
         private_key_path: Optional custom path for private key
@@ -225,25 +284,55 @@ def check_and_generate_keys(
     Returns:
         Tuple of (private_key_path, public_key_path)
     """
+    import fcntl
+
     # Convert keys_dir to Path if it's a string
-    keys_dir_path: Path | None = None
-    if keys_dir:
-        keys_dir_path = Path(keys_dir) if isinstance(keys_dir, str) else keys_dir
+    if keys_dir and isinstance(keys_dir, str):
+        keys_dir = Path(keys_dir)
 
     # Resolve key paths
     private_key_path, public_key_path = _resolve_key_paths(
-        private_key_path, public_key_path, keys_dir_path
+        private_key_path, public_key_path, keys_dir
     )
 
-    if not os.path.exists(private_key_path) or not os.path.exists(public_key_path):
-        logger.warning("Key files not found. Generating new keys.")
-        return generate_keys(private_key_path, public_key_path, keys_dir_path, algorithm)
+    # Create lock file in the keys directory
+    lock_file_path = Path(private_key_path).parent / ".key_generation.lock"
+    lock_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-    logger.debug(f"Key files exist: {private_key_path}, {public_key_path}")
-    return private_key_path, public_key_path
+    # Use file lock to prevent race conditions between workers
+    with open(lock_file_path, "w") as lock_file:
+        try:
+            # Try to acquire exclusive lock (non-blocking first to detect contention)
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                logger.debug("Acquired key generation lock")
+            except BlockingIOError:
+                # Another worker is generating keys, wait for it
+                logger.info("Another worker is generating keys, waiting for lock...")
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                logger.info("Lock acquired after waiting")
+
+            # Check again after acquiring lock (another worker might have generated keys)
+            if os.path.exists(private_key_path) and os.path.exists(public_key_path):
+                logger.debug("Key files already exist. No need to generate new keys.")
+                logger.debug(f"Private key path: {private_key_path}")
+                logger.debug(f"Public key path: {public_key_path}")
+                return private_key_path, public_key_path
+
+            # Keys don't exist, generate them
+            logger.warning("Key files not found. Generating new keys.")
+            result = generate_keys(private_key_path, public_key_path, keys_dir, algorithm)  # type: ignore[invalid-argument-type]
+
+            # Lock will be released automatically when exiting the with block
+            return result
+
+        finally:
+            # Release lock (happens automatically with context manager)
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            logger.debug("Released key generation lock")
 
 
-@validate_call(validate_return=True, config={"arbitrary_types_allowed": True})
+@validate_call(validate_return=True, config={"arbitrary_types_allowed": True})  # type: ignore[invalid-argument-type]
 def load_private_key(private_key_path: Path) -> RSAPrivateKey:
     """Load a private key from a file.
 
@@ -262,7 +351,7 @@ def load_private_key(private_key_path: Path) -> RSAPrivateKey:
             key = serialization.load_pem_private_key(
                 f.read(), password=None, backend=default_backend()
             )
-            return cast(RSAPrivateKey, key)
+            return cast(RSAPrivateKey, key)  # Type casting for mypy
     except FileNotFoundError:
         logger.error(f"Private key file not found at {private_key_path}")
         raise
@@ -271,7 +360,7 @@ def load_private_key(private_key_path: Path) -> RSAPrivateKey:
         raise
 
 
-@validate_call(validate_return=True, config={"arbitrary_types_allowed": True})
+@validate_call(validate_return=True, config={"arbitrary_types_allowed": True})  # type: ignore[invalid-argument-type]
 def load_public_key(public_key_path: Path) -> RSAPublicKey:
     """Load a public key from a file.
 
@@ -288,7 +377,7 @@ def load_public_key(public_key_path: Path) -> RSAPublicKey:
     try:
         with open(public_key_path, "rb") as f:
             key = serialization.load_pem_public_key(f.read(), backend=default_backend())
-            return cast(RSAPublicKey, key)
+            return cast(RSAPublicKey, key)  # Type casting for mypy
     except FileNotFoundError:
         logger.error(f"Public key file not found at {public_key_path}")
         raise

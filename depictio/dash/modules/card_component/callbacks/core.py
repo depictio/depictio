@@ -39,6 +39,7 @@ from depictio.dash.utils import (
     get_columns_from_data_collection,
     get_component_data,
     get_result_dc_for_workflow,
+    resolve_link_values,
 )
 
 if TYPE_CHECKING:
@@ -302,23 +303,34 @@ def _determine_filtering_path(
     filters_by_dc: dict[str, list[dict[str, Any]]],
     wf_id: str,
     access_token: str,
-) -> tuple[bool, str | None, dict[str, list[dict[str, Any]]]]:
+    stored_metadata: dict[str, Any] | None = None,
+    has_active_filters: bool = False,
+) -> tuple[bool, str | None, bool, dict[str, Any] | None, dict[str, list[dict[str, Any]]]]:
     """
-    Determine whether to use joined-DC or same-DC filtering path.
+    Determine whether to use joined-DC, link-DC, or same-DC filtering path.
 
     Analyzes filter distribution across DCs and checks for pre-computed join
-    results to determine the optimal filtering strategy.
+    results or DC links to determine the optimal filtering strategy.
+
+    Path priority:
+    1. Joined-DC: Pre-computed join result exists
+    2. Link-DC: No pre-computed join, but DC link exists
+    3. Same-DC: No pre-computed join or link - use card DC only
 
     Args:
         card_dc_str: String ID of the card's data collection
         filters_by_dc: Dict mapping dc_id -> list of filters
         wf_id: Workflow ID for join result lookup
         access_token: Authentication token for API calls
+        stored_metadata: Card metadata containing project_id for link resolution
+        has_active_filters: Whether any filters have non-empty values
 
     Returns:
         Tuple of:
         - use_joined_path: Whether to use joined-DC path
         - result_dc_id: ID of pre-computed join result (if available)
+        - use_link_path: Whether to use link-based resolution
+        - link_resolved_filter: Synthetic filter from link resolution (if available)
         - filters_by_dc: Potentially modified filters dict (fallback to card DC only)
     """
     has_filters_for_card_dc = card_dc_str in filters_by_dc
@@ -339,11 +351,68 @@ def _determine_filtering_path(
 
     # Determine the filtering path
     use_joined_path = needs_join and result_dc_id is not None
+    use_link_path = False
+    link_resolved_filter: dict[str, Any] | None = None
 
-    # If filters on multiple DCs but no join config, fall back to SAME-DC
-    if len(filters_by_dc) > 1 and not use_joined_path:
+    # If needs join but no pre-computed join, try link resolution
+    if needs_join and not use_joined_path and has_active_filters:
+        project_id = stored_metadata.get("project_id") if stored_metadata else None
+
+        if project_id:
+            logger.info(f"Attempting LINK-BASED RESOLUTION for card (project_id={project_id})")
+
+            # Collect filter values from other DCs
+            for filter_dc_id, filter_components in filters_by_dc.items():
+                if filter_dc_id != card_dc_str:
+                    for comp in filter_components:
+                        filter_value = comp.get("value")
+                        filter_column = comp.get("metadata", {}).get("column_name")
+
+                        if filter_value and filter_column:
+                            filter_values = (
+                                filter_value if isinstance(filter_value, list) else [filter_value]
+                            )
+
+                            # Try link resolution
+                            resolved = resolve_link_values(
+                                project_id=project_id,
+                                source_dc_id=filter_dc_id,
+                                source_column=filter_column,
+                                filter_values=filter_values,
+                                target_dc_id=card_dc_str,
+                                token=access_token,
+                            )
+
+                            if resolved and resolved.get("resolved_values"):
+                                use_link_path = True
+                                target_column = resolved.get("target_column", filter_column)
+                                link_resolved_filter = {
+                                    "metadata": {
+                                        "column_name": target_column,
+                                        "dc_id": card_dc_str,
+                                        "interactive_component_type": "MultiSelect",
+                                    },
+                                    "value": resolved["resolved_values"],
+                                }
+                                logger.info(
+                                    f"Link resolution success: {len(filter_values)} values -> "
+                                    f"{len(resolved['resolved_values'])} resolved values "
+                                    f"(resolver: {resolved.get('resolver_used', 'unknown')})"
+                                )
+                                break  # Use first successful resolution
+
+                    if use_link_path:
+                        break
+
+            if not use_link_path:
+                logger.warning("Link resolution failed - no link found or no matches")
+        else:
+            logger.warning("No project_id in stored_metadata - cannot use link resolution")
+
+    # If filters on multiple DCs but no join config and no link, fall back to SAME-DC
+    if len(filters_by_dc) > 1 and not use_joined_path and not use_link_path:
         logger.warning(
-            f"Filters on {len(filters_by_dc)} DCs but no join config - "
+            f"Filters on {len(filters_by_dc)} DCs but no join config or link - "
             f"falling back to SAME-DC filtering (card DC only)"
         )
         if card_dc_str in filters_by_dc:
@@ -351,7 +420,7 @@ def _determine_filtering_path(
         else:
             filters_by_dc = {}
 
-    return use_joined_path, result_dc_id, filters_by_dc
+    return use_joined_path, result_dc_id, use_link_path, link_resolved_filter, filters_by_dc
 
 
 def _load_data_for_card(
@@ -366,12 +435,15 @@ def _load_data_for_card(
     card_to_load_key: dict[int, tuple[str, str, str]],
     dc_cache: dict[tuple[str, str, str], pl.DataFrame],
     access_token: str,
+    use_link_path: bool = False,
+    link_resolved_filter: dict[str, Any] | None = None,
 ) -> pl.DataFrame:
     """
-    Load data for a card using either joined-DC or same-DC path.
+    Load data for a card using joined-DC, link-DC, or same-DC path.
 
-    Handles both filtering paths:
+    Handles three filtering paths:
     - Joined-DC: Loads pre-computed join result with combined filters
+    - Link-DC: Uses link-resolved filter to load card's DC
     - Same-DC: Uses cached data or falls back to synchronous load
 
     Args:
@@ -386,6 +458,8 @@ def _load_data_for_card(
         card_to_load_key: Map of card index to load key
         dc_cache: Pre-loaded data cache
         access_token: Authentication token
+        use_link_path: Whether to use link-based resolution
+        link_resolved_filter: Synthetic filter from link resolution
 
     Returns:
         Loaded DataFrame with filters applied
@@ -419,6 +493,21 @@ def _load_data_for_card(
         )
 
         logger.info(f"Loaded result DC: {data.height:,} rows x {data.width} columns")
+        return data
+
+    if use_link_path and link_resolved_filter:
+        # LINK-DC PATH: Use link-resolved filter to load card's DC
+        logger.info("LINK-DC FILTERING: Loading card DC with link-resolved filter")
+
+        data = load_deltatable_lite(
+            ObjectId(wf_id),
+            ObjectId(dc_id),
+            metadata=[link_resolved_filter],
+            TOKEN=access_token,
+            select_columns=None,
+        )
+
+        logger.info(f"Loaded via link resolution: {data.height:,} rows x {data.width} columns")
         return data
 
     # SAME-DC PATH: Use cached data or fall back to synchronous load
@@ -1067,13 +1156,31 @@ def register_core_callbacks(app):
             f"Triggered by: {triggered_by}"
         )
 
-        # Handle dashboards with no interactive components
+        # Debug logging for troubleshooting callback state
+        logger.info(f"[{batch_task_id}] CARD PATCH STATE:")
+        logger.info(
+            f"[{batch_task_id}]   - filters_data: {bool(filters_data)} "
+            f"({len(filters_data.get('interactive_components_values', [])) if filters_data else 0} components)"
+        )
+        logger.info(
+            f"[{batch_task_id}]   - interactive_metadata_list: "
+            f"{len(interactive_metadata_list) if interactive_metadata_list else 0} items"
+        )
+        logger.info(
+            f"[{batch_task_id}]   - interactive_metadata_ids: "
+            f"{len(interactive_metadata_ids) if interactive_metadata_ids else 0} items"
+        )
+
+        # Handle dashboards with no interactive components (dash.ALL resolves to empty list)
         if not interactive_metadata_list or not interactive_metadata_ids:
-            logger.debug("No interactive components - preventing update (no filters to apply)")
+            logger.info(
+                f"[{batch_task_id}] ⚠️ NO INTERACTIVE METADATA - preventing update "
+                "(interactive-stored-metadata stores may not be populated yet)"
+            )
             raise dash.exceptions.PreventUpdate
 
         # Phase 1: Enrich lightweight store data with full metadata (shared for all cards)
-        logger.debug("Enriching lightweight store data with full metadata (shared setup)")
+        logger.info(f"[{batch_task_id}] Enriching lightweight store data with full metadata")
         enriched_components = _enrich_filters_with_metadata(
             filters_data, interactive_metadata_list, interactive_metadata_ids
         )
@@ -1269,9 +1376,16 @@ def _process_single_card(
         else:
             logger.info("No active filters - loading ALL unfiltered data")
 
-        # Determine filtering path (joined vs same-DC)
-        use_joined_path, result_dc_id, filters_by_dc = _determine_filtering_path(
-            dc_id_str, filters_by_dc, wf_id_str, access_token
+        # Determine filtering path (joined, link, or same-DC)
+        use_joined_path, result_dc_id, use_link_path, link_resolved_filter, filters_by_dc = (
+            _determine_filtering_path(
+                dc_id_str,
+                filters_by_dc,
+                wf_id_str,
+                access_token,
+                stored_metadata=stored_metadata,
+                has_active_filters=has_active_filters,
+            )
         )
 
         # Load data using appropriate path
@@ -1287,6 +1401,8 @@ def _process_single_card(
             card_to_load_key=card_to_load_key,
             dc_cache=dc_cache,
             access_token=access_token,
+            use_link_path=use_link_path,
+            link_resolved_filter=link_resolved_filter,
         )
 
         logger.debug("Loaded filtered data")

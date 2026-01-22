@@ -10,6 +10,34 @@ from depictio.models.utils import convert_model_to_dict
 # Get build functions from centralized metadata
 build_functions = get_build_functions()
 
+
+def _fetch_table_columns(child_metadata: dict, token: str) -> dict:
+    """Fetch column definitions for a table component from data collection.
+
+    Args:
+        child_metadata: Component metadata containing wf_id and dc_id
+        token: Access token for API authentication
+
+    Returns:
+        Column definitions dict, empty dict on failure
+    """
+    wf_id = child_metadata.get("wf_id")
+    dc_id = child_metadata.get("dc_id")
+
+    if not wf_id or not dc_id:
+        return {}
+
+    from depictio.dash.utils import get_columns_from_data_collection
+
+    try:
+        cols_json = get_columns_from_data_collection(wf_id, dc_id, token)
+        logger.info(f"Fetched {len(cols_json)} columns for table component")
+        return cols_json
+    except Exception as e:
+        logger.error(f"Failed to fetch cols_json for table: {e}")
+        return {}
+
+
 # DEBUGGING: Test flag to use simple DMC layout instead of draggable grid
 # Set to True to test if component disappearance is related to grid layout system
 # NOTE: "Simple layout" = NEW dual-panel DashGridLayout system with saved positions
@@ -18,7 +46,13 @@ USE_SIMPLE_LAYOUT_FOR_TESTING = True  # ENABLED - Use new dual-panel grid system
 
 
 def render_dashboard(
-    stored_metadata, edit_components_button, dashboard_id, theme, TOKEN, init_data=None
+    stored_metadata,
+    edit_components_button,
+    dashboard_id,
+    theme,
+    TOKEN,
+    init_data=None,
+    project_id=None,
 ):
     """
     Render dashboard components using build functions.
@@ -35,6 +69,7 @@ def render_dashboard(
         theme: Theme name ("light" or "dark")
         TOKEN: Access token
         init_data: Optional consolidated init data for API optimization
+        project_id: Optional project ID for cross-DC link resolution
 
     Returns:
         List of rendered components with callback infrastructure
@@ -59,6 +94,9 @@ def render_dashboard(
         child_metadata["build_frame"] = True
         child_metadata["access_token"] = TOKEN
         child_metadata["theme"] = theme
+        # Add project_id for cross-DC link resolution (used by MultiQC and other components)
+        if project_id:
+            child_metadata["project_id"] = str(project_id)
 
         # Add init_data if available (API optimization)
         if init_data:
@@ -216,11 +254,12 @@ def _enrich_component_metadata(
         child_metadata["join_config"] = join_configs[dc_id_str]
 
 
-def _build_component(child_metadata: dict) -> tuple:
+def _build_component(child_metadata: dict, token: str) -> tuple:
     """Build a single component from metadata.
 
     Args:
         child_metadata: Component metadata dict.
+        token: Access token for API authentication.
 
     Returns:
         Tuple of (component, component_type, child_metadata).
@@ -246,6 +285,10 @@ def _build_component(child_metadata: dict) -> tuple:
     if component_type not in build_functions:
         logger.warning(f"Unsupported child type: {component_type}")
         raise ValueError(f"Unsupported child type: {component_type}")
+
+    # Fetch cols_json for table components if empty
+    if component_type == "table" and not child_metadata.get("cols_json"):
+        child_metadata["cols_json"] = _fetch_table_columns(child_metadata, token)
 
     build_function = build_functions[component_type]
     child = build_function(**child_metadata)
@@ -487,7 +530,7 @@ def render_dashboard_original(
         )
 
         # Build component
-        child, component_type, metadata = _build_component(child_metadata)
+        child, component_type, metadata = _build_component(child_metadata, TOKEN)
         children.append((child, component_type, metadata))
 
         component_build_times.append((time.time() - start_component) * 1000)
@@ -701,6 +744,7 @@ def load_depictio_data_sync(
                 theme,
                 local_data["access_token"],
                 init_data=init_data,  # Pass consolidated init data to components
+                project_id=dashboard_data.project_id,  # Pass project_id for cross-DC link resolution
             )
             render_duration_ms = (time.time() - start_render) * 1000
             logger.info(f"⏱️ PROFILING: render_dashboard took {render_duration_ms:.1f}ms")

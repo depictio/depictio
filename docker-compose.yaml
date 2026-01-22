@@ -1,3 +1,32 @@
+# ============================================================================
+# DEPICTIO DOCKER COMPOSE - QUICK START
+# ============================================================================
+# This is the main docker-compose file for running Depictio with pre-built images.
+#
+# QUICK START:
+#   1. Copy .env.example to .env and configure MinIO credentials
+#   2. Run: docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio.yaml up -d
+#   3. Access: http://localhost:5080 (frontend) | http://localhost:8058 (API)
+#
+# COMMANDS:
+#   Start:  docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio.yaml up -d
+#   Stop:   docker compose down
+#   Logs:   docker compose logs -f
+#   Status: docker compose ps
+#
+# MinIO OVERLAY:
+#   The docker-compose/docker-compose.minio.yaml file provides a local MinIO instance.
+#   Skip it if using an external S3/MinIO - configure DEPICTIO_MINIO_* vars instead.
+#
+# DEVELOPMENT:
+#   For local development with hot-reload, use docker-compose.dev.yaml instead.
+#
+# CONFIGURATION:
+#   - Minimal config: .env.example
+#   - Complete reference: .env.complete.example
+#   - Documentation: https://depictio.github.io/depictio/installation/configuration
+# ============================================================================
+
 services:
   mongo:
     image: mongo:8.0
@@ -8,6 +37,13 @@ services:
       - 27018:27018
     volumes:
       - ./depictioDB:/data/depictioDB
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --port 27018 --eval 'db.adminCommand(\"ping\")'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
 
   redis:
     image: redis:8.2.1
@@ -22,6 +58,7 @@ services:
       interval: 30s
       timeout: 3s
       retries: 5
+    restart: unless-stopped
 
   depictio-frontend:
     image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-latest}
@@ -34,10 +71,20 @@ services:
       - .env
     command: ["/app/run_dash.sh"]
     user: "${UID:-1000}:${GID:-1000}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:5080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
     depends_on:
-      - mongo
-      - redis
-      - depictio-backend
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      depictio-backend:
+        condition: service_healthy
 
   depictio-backend:
     image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-latest}
@@ -50,9 +97,18 @@ services:
       - .env
     command: ["/app/run_fastapi.sh"]
     user: "${UID:-1000}:${GID:-1000}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8058/depictio/api/v1/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
     depends_on:
-      - mongo
-      - redis
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   depictio-celery-worker:
     container_name: depictio-celery-worker
@@ -67,10 +123,14 @@ services:
         DEPICTIO_CONTEXT: "server"
     command: ["/app/run_celery_worker.sh"]
     user: "${UID:-1000}:${GID:-1000}"
+    restart: unless-stopped
     depends_on:
-      - mongo
-      - redis
-      - depictio-backend
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      depictio-backend:
+        condition: service_healthy
 
 volumes:
   redis_data:

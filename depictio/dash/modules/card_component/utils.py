@@ -677,9 +677,13 @@ def _create_card_stores(
     stepper: bool,
     title_font_size: str,
     value_font_size: str,
+    project_id: str | None = None,
 ) -> tuple:
     """
     Create the store components for card metadata and triggering.
+
+    Args:
+        project_id: Project ID for cross-DC link resolution
 
     Returns:
         Tuple of (store_component, trigger_store, metadata_store, metadata_initial_store)
@@ -696,6 +700,7 @@ def _create_card_stores(
             "title": title,
             "wf_id": wf_id,
             "dc_id": dc_id,
+            "project_id": project_id,  # For cross-DC link resolution
             "aggregation": aggregation,
             "column_type": column_type,
             "column_name": column_name,
@@ -1070,7 +1075,7 @@ def build_card(**kwargs):
         store_index = index.replace("-tmp", "") if index else "unknown"
         data_index = store_index
 
-    # Create store components
+    # Create store components (includes project_id for cross-DC link resolution)
     stores = _create_card_stores(
         index=index,
         store_index=store_index,
@@ -1088,6 +1093,7 @@ def build_card(**kwargs):
         stepper=stepper,
         title_font_size=title_font_size,
         value_font_size=value_font_size,
+        project_id=kwargs.get("project_id"),
     )
 
     # Create card title
