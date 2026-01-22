@@ -12,7 +12,7 @@ from depictio.dash.component_metadata import get_component_color, get_dmc_button
 from depictio.dash.modules.figure_component.multiqc_vis import create_multiqc_plot
 from depictio.dash.modules.multiqc_component.models import MultiQCDashboardComponent
 from depictio.dash.modules.multiqc_component.utils import get_multiqc_reports_for_data_collection
-from depictio.dash.utils import UNSELECTED_STYLE, get_result_dc_for_workflow
+from depictio.dash.utils import UNSELECTED_STYLE
 
 
 def create_stepper_multiqc_button(n, disabled=None):
@@ -261,6 +261,7 @@ def design_multiqc(id, workflow_id=None, data_collection_id=None, local_data=Non
                     "data_collection_id": data_collection_id,
                     "wf_id": workflow_id,
                     "dc_id": data_collection_id,
+                    "project_id": kwargs.get("project_id"),  # For cross-DC link resolution
                     # Include initial selection state if provided
                     "selected_module": initial_module,
                     "selected_plot": initial_plot,
@@ -1298,324 +1299,8 @@ def register_callbacks_multiqc_component(app):
             "blue",  # alert color
         )
 
-    # Debug callback
-    @app.callback(
-        Input("interactive-values-store", "data"),
-        prevent_initial_call=True,
-    )
-    def debug_interactive_values(interactive_values):
-        logger.info(f"Interactive values updated: {interactive_values}")
-
-    # Callback to patch MultiQC figures based on interactive filtering
-    @app.callback(
-        # Output(
-        #     {"type": "multiqc-plot-container", "index": MATCH}, "children", allow_duplicate=True
-        # ),
-        Output({"type": "multiqc-graph", "index": MATCH}, "figure", allow_duplicate=True),
-        Input("interactive-values-store", "data"),
-        State({"type": "stored-metadata-component", "index": MATCH}, "data"),
-        State({"type": "multiqc-graph", "index": MATCH}, "figure"),
-        State({"type": "multiqc-trace-metadata", "index": MATCH}, "data"),
-        State("local-store", "data"),
-        prevent_initial_call=True,
-    )
-    def patch_multiqc_plot_with_interactive_filtering(
-        interactive_values,
-        stored_metadata,
-        current_figure,
-        trace_metadata,
-        local_data,
-    ):
-        """Patch MultiQC plots when interactive filtering is applied (only for joined workflows).
-
-        Uses existing figure and patches it directly without regenerating from S3.
-
-        RESET SUPPORT: Empty interactive_values reloads unfiltered data.
-        """
-        logger.info("MultiQC patching callback triggered")
-
-        # Early exit if no stored metadata (interactive_values can be empty for reset)
-        if not stored_metadata:
-            logger.debug("No stored metadata - skipping")
-            return dash.no_update
-
-        # RESET SUPPORT: Allow empty interactive_values to reload unfiltered data
-        if not interactive_values:
-            logger.info(
-                "🔄 RESET DETECTED: Empty interactive values - reloading unfiltered MultiQC data"
-            )
-            interactive_values = {"interactive_components_values": []}
-
-        # Get authentication token
-        token = local_data.get("access_token") if local_data else None
-        if not token:
-            logger.warning("No access token available for MultiQC patching")
-            return dash.no_update
-
-        # Extract MultiQC component data from stored metadata
-        s3_locations = stored_metadata.get("s3_locations", [])
-        selected_module = stored_metadata.get("selected_module")
-        selected_plot = stored_metadata.get("selected_plot")
-        metadata = stored_metadata.get("metadata", {})
-        workflow_id = stored_metadata.get("workflow_id") or stored_metadata.get("wf_id")
-        interactive_patching_enabled = stored_metadata.get("interactive_patching_enabled", False)
-
-        logger.info(
-            f"Processing MultiQC component - module: {selected_module}, "
-            f"plot: {selected_plot}, s3_locations count: {len(s3_locations)}, "
-            f"patching enabled: {interactive_patching_enabled}"
-        )
-
-        # Skip if patching is not enabled or basic requirements not met
-        if not interactive_patching_enabled:
-            logger.debug("Interactive patching not enabled for this component")
-            return dash.no_update
-
-        if not selected_module or not selected_plot or not s3_locations:
-            logger.debug("Missing required data for MultiQC patching")
-            return dash.no_update
-
-        if not workflow_id:
-            logger.debug("No workflow_id for this component")
-            return dash.no_update
-
-        # Get the MultiQC data collection ID to check for joins
-        multiqc_dc_id = stored_metadata.get("dc_id") or stored_metadata.get("data_collection_id")
-        if not multiqc_dc_id:
-            logger.warning("No dc_id found for MultiQC component")
-            return dash.no_update
-
-        # Build a complete metadata list including interactive components for join detection
-        # return_joins_dict needs to see ALL components to properly identify joins
-        stored_metadata_for_joins = [stored_metadata]
-
-        # Add interactive component metadata from the interactive_values structure
-        if (
-            isinstance(interactive_values, dict)
-            and "interactive_components_values" in interactive_values
-        ):
-            for component_data in interactive_values["interactive_components_values"]:
-                if isinstance(component_data, dict) and "metadata" in component_data:
-                    comp_metadata = component_data["metadata"]
-                    # Only add if it has a dc_id and is from the same workflow
-                    if comp_metadata.get("dc_id") and comp_metadata.get("wf_id") == workflow_id:
-                        stored_metadata_for_joins.append(comp_metadata)
-                        logger.debug(
-                            f"Added component metadata: dc_id={comp_metadata.get('dc_id')}, "
-                            f"type={comp_metadata.get('component_type')}"
-                        )
-
-        logger.info(
-            f"Checking joins for workflow {workflow_id} with {len(stored_metadata_for_joins)} components "
-            f"(MultiQC dc_id: {multiqc_dc_id})"
-        )
-
-        # MIGRATED: Check if pre-computed join exists
-        result_dc_id = get_result_dc_for_workflow(workflow_id, token)
-        if not result_dc_id:
-            logger.info(f"No pre-computed joins for workflow {workflow_id} - skipping patching")
-            return dash.no_update
-
-        logger.info(f"Pre-computed join detected for workflow {workflow_id}: {result_dc_id}")
-
-        # Build interactive_components_dict in the format expected by iterative_join
-        # Structure: {component_index: {"index": ..., "value": [...], "metadata": {...}}}
-        interactive_components_dict = {}
-        has_active_filters = False  # Track if any filters have actual values
-
-        if "interactive_components_values" in interactive_values:
-            for component_data in interactive_values["interactive_components_values"]:
-                component_index = component_data.get("index")
-                component_value = component_data.get("value", [])
-
-                # Check if this component has any active filter values
-                # For range components (RangeSlider, DateRangePicker), compare against default_range
-                if component_value and len(component_value) > 0:
-                    comp_metadata = component_data.get("metadata", {})
-                    component_type = comp_metadata.get("interactive_component_type", "")
-                    default_state = comp_metadata.get("default_state", {})
-
-                    # For RangeSlider and DateRangePicker, check if current value equals default range
-                    if component_type in ["RangeSlider", "DateRangePicker"]:
-                        default_range = default_state.get("default_range")
-                        # If current value equals default range, it's NOT an active filter
-                        if default_range and component_value == default_range:
-                            logger.debug(
-                                f"Component {component_index} ({component_type}) at default range "
-                                f"{default_range} - NOT counting as active filter"
-                            )
-                        else:
-                            # User has changed the range from default - this IS an active filter
-                            has_active_filters = True
-                            logger.debug(
-                                f"Component {component_index} ({component_type}) changed from default "
-                                f"{default_range} to {component_value} - IS active filter"
-                            )
-                    else:
-                        # For other component types (MultiSelect, SegmentedControl, etc.),
-                        # non-empty value means active filter
-                        has_active_filters = True
-                        logger.debug(
-                            f"Component {component_index} ({component_type}) has value "
-                            f"{component_value} - IS active filter"
-                        )
-
-                if component_index:
-                    interactive_components_dict[component_index] = component_data
-                    comp_metadata = component_data.get("metadata", {})
-                    logger.info(
-                        f"Interactive component {component_index}: "
-                        f"dc_id={comp_metadata.get('dc_id')}, "
-                        f"column={comp_metadata.get('column_name')}, "
-                        f"value={component_data.get('value')}"
-                    )
-
-        # Early exit if no interactive components exist
-        if not interactive_components_dict:
-            logger.info("No interactive components - skipping patching")
-            return dash.no_update
-
-        # Check if figure has been previously filtered by looking at the figure layout
-        # We store a custom flag _depictio_filter_applied when patching
-        figure_was_patched = False
-        if current_figure and isinstance(current_figure, dict):
-            layout = current_figure.get("layout", {})
-            # Check if filters were previously applied to this figure
-            figure_was_patched = layout.get("_depictio_filter_applied", False)
-
-        # Early exit if no filters are active AND figure hasn't been patched before
-        # (This prevents unnecessary patching on initial load with empty filters)
-        # BUT allow patching if figure was previously filtered (user is clearing filters)
-        if not has_active_filters and not figure_was_patched:
-            logger.info("No active filters on initial load - skipping patching")
-            return dash.no_update
-
-        # If user is clearing filters (no active filters but was previously patched),
-        # we need to restore the original unfiltered data
-        if not has_active_filters and figure_was_patched:
-            logger.info("🔄 RESET MODE: Clearing filters - restoring original unfiltered data")
-
-        try:
-            # MIGRATED: Extract metadata DC ID from interactive components
-            # (no longer need joins_dict since we use pre-computed joins)
-            metadata_dc_id = None
-            join_column = "sample"  # Default join column
-
-            # Extract metadata DC from interactive components
-            logger.debug(
-                "Extracting metadata DC from interactive components (pre-computed join migration)"
-            )
-            for comp_data in interactive_components_dict.values():
-                comp_dc_id = comp_data.get("metadata", {}).get("dc_id")
-                if comp_dc_id and comp_dc_id != multiqc_dc_id:
-                    metadata_dc_id = comp_dc_id
-                    logger.info(f"Found metadata DC from interactive component: {metadata_dc_id}")
-                    break
-
-            if not metadata_dc_id:
-                logger.error(
-                    f"Could not find metadata DC from interactive components. "
-                    f"multiqc_dc_id={multiqc_dc_id}"
-                )
-                return dash.no_update
-
-            logger.info(
-                f"Using metadata_dc_id={metadata_dc_id}, join_column={join_column} "
-                "for MultiQC patching"
-            )
-
-            # RESET HANDLING: Load ALL samples when filters are cleared
-            if not has_active_filters and figure_was_patched:
-                # Reset mode: Load ALL samples from metadata table without filtering
-                from bson import ObjectId
-
-                from depictio.api.v1.deltatables_utils import load_deltatable_lite
-
-                logger.info("🔄 Loading ALL samples from metadata (no filtering)")
-                df = load_deltatable_lite(
-                    workflow_id=ObjectId(workflow_id),
-                    data_collection_id=ObjectId(metadata_dc_id),
-                    metadata=None,
-                    TOKEN=token,
-                )
-
-                if df is None or df.is_empty():
-                    logger.warning("Metadata table is empty - cannot restore")
-                    return dash.no_update
-
-                if join_column not in df.columns:
-                    logger.error(
-                        f"Join column '{join_column}' not found in metadata. "
-                        f"Available columns: {df.columns}"
-                    )
-                    return dash.no_update
-
-                # Get ALL canonical samples (unfiltered)
-                canonical_samples = df[join_column].unique().to_list()
-                logger.info(f"✅ RESET: Loaded {len(canonical_samples)} total samples (unfiltered)")
-            else:
-                # Normal filtering mode: Get filtered samples
-                canonical_samples = get_samples_from_metadata_filter(
-                    workflow_id=workflow_id,
-                    metadata_dc_id=metadata_dc_id,
-                    join_column=join_column,
-                    interactive_components_dict=interactive_components_dict,
-                    token=token,
-                )
-
-                if not canonical_samples:
-                    logger.warning("No canonical samples found after filtering")
-                    return dash.no_update
-
-            # Expand canonical IDs to all MultiQC variants using stored mappings
-            sample_mappings = metadata.get("sample_mappings", {})
-            selected_samples = expand_canonical_samples_to_variants(
-                canonical_samples, sample_mappings
-            )
-
-            if not selected_samples:
-                logger.warning("No samples found after expansion")
-                return dash.no_update
-
-            # Check if we have a current figure to patch
-            if not current_figure:
-                logger.warning("No current figure available for patching")
-                return dash.no_update
-
-            # Check if we have trace metadata for proper patching
-            if not trace_metadata or not trace_metadata.get("original_data"):
-                logger.warning("No trace metadata available - cannot perform proper patching")
-                return dash.no_update
-
-            # Use existing figure and patch it directly (no regeneration)
-            logger.info(f"Patching existing figure with {len(selected_samples)} selected samples")
-            logger.debug(
-                f"Trace metadata available: {len(trace_metadata.get('original_data', []))} traces"
-            )
-
-            # Apply patching to filter the plot with the resolved sample names
-            patched_figures = patch_multiqc_figures(
-                [current_figure], selected_samples, metadata, trace_metadata
-            )
-
-            # Return the patched figure
-            if patched_figures:
-                patched_fig = patched_figures[0]
-                # Mark the figure as having been patched so we know to restore when filters are cleared
-                if "layout" not in patched_fig:
-                    patched_fig["layout"] = {}
-                patched_fig["layout"]["_depictio_filter_applied"] = has_active_filters
-                logger.info(
-                    f"Successfully patched MultiQC figure (filter_applied={has_active_filters})"
-                )
-                return patched_fig
-            else:
-                logger.warning("No data available after filtering")
-                return dash.no_update
-
-        except Exception as e:
-            logger.error(f"Error patching MultiQC plot: {e}", exc_info=True)
-            return dash.no_update
+    # NOTE: Debug callback and patching callback removed - they are now in callbacks/core.py
+    # The core.py version has proper metadata enrichment from interactive-stored-metadata stores
 
     # Callback to update MultiQC figures when theme changes (matches figure component pattern)
     @app.callback(
@@ -1646,278 +1331,91 @@ def register_callbacks_multiqc_component(app):
         logger.info(f"🎨 MultiQC THEME PATCH: Applied {template_name} (theme_data: {theme_data})")
         return patch
 
-    # Background callback to render MultiQC plots during dashboard restoration
-    @app.callback(
-        Output({"type": "multiqc-graph", "index": MATCH}, "figure"),
-        Output({"type": "multiqc-trace-metadata", "index": MATCH}, "data"),
-        Input({"type": "multiqc-trigger", "index": MATCH}, "data"),
-        State({"type": "multiqc-trace-metadata", "index": MATCH}, "data"),
-        background=False,  # Disabled background mode - using synchronous rendering
-        prevent_initial_call=False,
-    )
-    def render_multiqc_plot_background(trigger_data, existing_trace_metadata):
-        """Generate MultiQC plot for dashboard restoration."""
-        # Move import to top to avoid issues in background context
-        from depictio.dash.modules.multiqc_component.utils import analyze_multiqc_plot_structure
+    # NOTE: VIEW MODE rendering callback (render_multiqc_from_trigger) has been moved to
+    # callbacks/core.py to ensure it's always registered via register_core_callbacks().
+    # The callback handles:
+    # - Input: multiqc-trigger
+    # - Output: multiqc-graph (figure) + multiqc-trace-metadata (data)
 
-        logger.info("=" * 80)
-        logger.info("🎬 RENDER CALLBACK STARTED")
-        logger.info(f"🔍 Trigger data received: {trigger_data}")
+    # # Early exit if basic requirements not met
+    # if not selected_module or not selected_plot or not s3_locations or not interactive_values:
+    #     return dash.no_update
 
-        # DEFENSIVE CHECK: Skip if already rendered (prevents spurious re-renders during Patch operations)
-        # This prevents re-rendering when removing sibling components with Patch
-        if existing_trace_metadata and existing_trace_metadata.get("summary"):
-            from dash import no_update
+    # # Check if this workflow has joins configured
+    # workflow_id = stored_metadata.get("workflow_id") if stored_metadata else None
+    # if not workflow_id:
+    #     return dash.no_update
 
-            logger.info(
-                "✅ RENDER CALLBACK: Already rendered, skipping re-render "
-                "(Patch operation or spurious Store update detected)"
-            )
-            return no_update, no_update
+    # # Get authentication token
+    # token = local_data.get("access_token") if local_data else None
+    # if not token:
+    #     logger.warning("No access token available for MultiQC patching")
+    #     return dash.no_update
 
-        if not trigger_data:
-            logger.warning("⚠️ No trigger_data - returning no_update")
-            return dash.no_update, dash.no_update
+    # try:
+    #     # Check for joins in this workflow
+    #     joins_dict = return_joins_dict(workflow_id, [stored_metadata], token)
+    #     if not joins_dict:
+    #         logger.info("No joins configured for workflow - skipping MultiQC patching")
+    #         return dash.no_update
 
-        logger.info(f"✅ Trigger data is valid, type: {type(trigger_data)}")
+    #     logger.info(f"MultiQC patching triggered by interactive values: {interactive_values}")
+    #     logger.info(f"Joins detected for workflow {workflow_id}: {joins_dict}")
 
-        try:
-            # Log each extracted parameter
-            logger.info("📦 Extracting parameters from trigger_data...")
-            s3_locations = trigger_data.get("s3_locations", [])
-            logger.info(f"  - s3_locations: {s3_locations} (count: {len(s3_locations)})")
+    #     # Extract selected samples from interactive values
+    #     # Interactive values structure: {dc_id: {column: [selected_values]}}
+    #     selected_samples = []
+    #     for dc_filters in interactive_values.values():
+    #         for column_name, selected_values in dc_filters.items():
+    #             # Look for sample-related columns (common names)
+    #             if column_name.lower() in ["sample", "sample_id", "sample_name", "samples"]:
+    #                 selected_samples.extend(selected_values)
 
-            module = trigger_data.get("module")
-            logger.info(f"  - module: {module}")
+    #     if not selected_samples:
+    #         logger.info(
+    #             "No sample selections found in interactive values - using original plot"
+    #         )
+    #         return dash.no_update
 
-            plot = trigger_data.get("plot")
-            logger.info(f"  - plot: {plot}")
+    #     logger.info(f"Found {len(selected_samples)} selected samples for filtering")
 
-            dataset_id = trigger_data.get("dataset_id")
-            logger.info(f"  - dataset_id: {dataset_id}")
+    #     # Create the original plot
+    #     fig = create_multiqc_plot(
+    #         s3_locations=s3_locations,
+    #         module=selected_module,
+    #         plot=selected_plot,
+    #         dataset_id=selected_dataset,
+    #     )
 
-            theme = trigger_data.get("theme", "light")
-            logger.info(f"  - theme: {theme}")
+    #     # Apply patching to filter the plot
+    #     patched_figures = patch_multiqc_figures([fig], selected_samples, metadata)
 
-            component_id = trigger_data.get("component_id")
-            logger.info(f"  - component_id: {component_id}")
+    #     # Return the patched plot
+    #     if patched_figures:
+    #         return dcc.Graph(
+    #             figure=patched_figures[0],
+    #             style={"height": "500px"},
+    #             config={"displayModeBar": True, "responsive": True},
+    #         )
+    #     else:
+    #         return dmc.Center(
+    #             [dmc.Text("No data available after filtering", c="gray")],
+    #             style={"height": "400px"},
+    #         )
 
-            # Validate required parameters
-            if not s3_locations:
-                logger.error("❌ ERROR: s3_locations is empty!")
-                error_fig = {
-                    "data": [],
-                    "layout": {
-                        "title": "Error: No S3 locations",
-                        "xaxis": {"visible": False},
-                        "yaxis": {"visible": False},
-                        "annotations": [
-                            {
-                                "text": "Missing S3 locations for MultiQC data",
-                                "xref": "paper",
-                                "yref": "paper",
-                                "x": 0.5,
-                                "y": 0.5,
-                                "showarrow": False,
-                                "font": {"size": 16, "color": "red"},
-                            }
-                        ],
-                    },
-                }
-                return error_fig, {}
-
-            if not module:
-                logger.error("❌ ERROR: module is missing!")
-                error_fig = {
-                    "data": [],
-                    "layout": {
-                        "title": "Error: No module specified",
-                        "xaxis": {"visible": False},
-                        "yaxis": {"visible": False},
-                        "annotations": [
-                            {
-                                "text": "MultiQC module not specified",
-                                "xref": "paper",
-                                "yref": "paper",
-                                "x": 0.5,
-                                "y": 0.5,
-                                "showarrow": False,
-                                "font": {"size": 16, "color": "red"},
-                            }
-                        ],
-                    },
-                }
-                return error_fig, {}
-
-            if not plot:
-                logger.error("❌ ERROR: plot is missing!")
-                error_fig = {
-                    "data": [],
-                    "layout": {
-                        "title": "Error: No plot specified",
-                        "xaxis": {"visible": False},
-                        "yaxis": {"visible": False},
-                        "annotations": [
-                            {
-                                "text": "MultiQC plot name not specified",
-                                "xref": "paper",
-                                "yref": "paper",
-                                "x": 0.5,
-                                "y": 0.5,
-                                "showarrow": False,
-                                "font": {"size": 16, "color": "red"},
-                            }
-                        ],
-                    },
-                }
-                return error_fig, {}
-
-            logger.info("✅ All required parameters present")
-            logger.info(f"🎨 Rendering MultiQC plot: {module}/{plot}")
-
-            # Call create_multiqc_plot with extensive logging
-            logger.info("📞 Calling create_multiqc_plot...")
-            logger.info(
-                f"   Parameters: module={module}, plot={plot}, dataset_id={dataset_id}, theme={theme}"
-            )
-            logger.info(f"   S3 locations: {s3_locations}")
-
-            fig = create_multiqc_plot(
-                s3_locations=s3_locations,
-                module=module,
-                plot=plot,
-                dataset_id=dataset_id,
-                theme=theme,
-            )
-
-            logger.info("✅ create_multiqc_plot returned successfully")
-            logger.info(f"   Figure type: {type(fig)}")
-            logger.info(
-                f"   Figure has {len(fig.data) if hasattr(fig, 'data') else 'unknown'} traces"
-            )
-
-            # Analyze plot structure
-            logger.info("🔍 Analyzing plot structure...")
-            trace_metadata = analyze_multiqc_plot_structure(fig)
-            logger.info("✅ Plot structure analyzed")
-            logger.info(f"   Trace count: {trace_metadata.get('summary', {}).get('traces', 0)}")
-
-            # Return figure object directly (dcc.Graph already exists in DOM)
-            logger.info("✅ Returning figure object for dcc.Graph")
-            logger.info(f"   Figure type: {type(fig)}")
-            logger.info(f"   Figure traces: {len(fig.data)}")
-
-            logger.info("🎉 RENDER CALLBACK COMPLETED SUCCESSFULLY")
-            logger.info("=" * 80)
-            return fig, trace_metadata
-
-        except Exception as e:
-            logger.error("=" * 80)
-            logger.error(f"❌ EXCEPTION in render callback: {type(e).__name__}")
-            logger.error(f"❌ Exception message: {str(e)}")
-            logger.error("❌ Exception details:", exc_info=True)
-            logger.error("=" * 80)
-
-            error_fig = {
-                "data": [],
-                "layout": {
-                    "title": "Error Rendering MultiQC Plot",
-                    "xaxis": {"visible": False},
-                    "yaxis": {"visible": False},
-                    "annotations": [
-                        {
-                            "text": f"{type(e).__name__}: {str(e)}",
-                            "xref": "paper",
-                            "yref": "paper",
-                            "x": 0.5,
-                            "y": 0.5,
-                            "showarrow": False,
-                            "font": {"size": 14, "color": "red"},
-                        }
-                    ],
-                },
-            }
-            return error_fig, {}
-
-        # # Early exit if basic requirements not met
-        # if not selected_module or not selected_plot or not s3_locations or not interactive_values:
-        #     return dash.no_update
-
-        # # Check if this workflow has joins configured
-        # workflow_id = stored_metadata.get("workflow_id") if stored_metadata else None
-        # if not workflow_id:
-        #     return dash.no_update
-
-        # # Get authentication token
-        # token = local_data.get("access_token") if local_data else None
-        # if not token:
-        #     logger.warning("No access token available for MultiQC patching")
-        #     return dash.no_update
-
-        # try:
-        #     # Check for joins in this workflow
-        #     joins_dict = return_joins_dict(workflow_id, [stored_metadata], token)
-        #     if not joins_dict:
-        #         logger.info("No joins configured for workflow - skipping MultiQC patching")
-        #         return dash.no_update
-
-        #     logger.info(f"MultiQC patching triggered by interactive values: {interactive_values}")
-        #     logger.info(f"Joins detected for workflow {workflow_id}: {joins_dict}")
-
-        #     # Extract selected samples from interactive values
-        #     # Interactive values structure: {dc_id: {column: [selected_values]}}
-        #     selected_samples = []
-        #     for dc_filters in interactive_values.values():
-        #         for column_name, selected_values in dc_filters.items():
-        #             # Look for sample-related columns (common names)
-        #             if column_name.lower() in ["sample", "sample_id", "sample_name", "samples"]:
-        #                 selected_samples.extend(selected_values)
-
-        #     if not selected_samples:
-        #         logger.info(
-        #             "No sample selections found in interactive values - using original plot"
-        #         )
-        #         return dash.no_update
-
-        #     logger.info(f"Found {len(selected_samples)} selected samples for filtering")
-
-        #     # Create the original plot
-        #     fig = create_multiqc_plot(
-        #         s3_locations=s3_locations,
-        #         module=selected_module,
-        #         plot=selected_plot,
-        #         dataset_id=selected_dataset,
-        #     )
-
-        #     # Apply patching to filter the plot
-        #     patched_figures = patch_multiqc_figures([fig], selected_samples, metadata)
-
-        #     # Return the patched plot
-        #     if patched_figures:
-        #         return dcc.Graph(
-        #             figure=patched_figures[0],
-        #             style={"height": "500px"},
-        #             config={"displayModeBar": True, "responsive": True},
-        #         )
-        #     else:
-        #         return dmc.Center(
-        #             [dmc.Text("No data available after filtering", c="gray")],
-        #             style={"height": "400px"},
-        #         )
-
-        # except Exception as e:
-        #     logger.error(f"Error patching MultiQC plot: {e}")
-        #     # Return original plot on error
-        #     try:
-        #         fig = create_multiqc_plot(
-        #             s3_locations=s3_locations,
-        #             module=selected_module,
-        #             plot=selected_plot,
-        #             dataset_id=selected_dataset,
-        #         )
-        #         return dcc.Graph(figure=fig, style={"height": "500px"})
-        #     except Exception:
-        #         return dmc.Center(
-        #             [dmc.Text("Error loading plot", c="red")],
-        #             style={"height": "400px"},
-        #         )
+    # except Exception as e:
+    #     logger.error(f"Error patching MultiQC plot: {e}")
+    #     # Return original plot on error
+    #     try:
+    #         fig = create_multiqc_plot(
+    #             s3_locations=s3_locations,
+    #             module=selected_module,
+    #             plot=selected_plot,
+    #             dataset_id=selected_dataset,
+    #         )
+    #         return dcc.Graph(figure=fig, style={"height": "500px"})
+    #     except Exception:
+    #         return dmc.Center(
+    #             [dmc.Text("Error loading plot", c="red")],
+    #             style={"height": "400px"},
+    #         )

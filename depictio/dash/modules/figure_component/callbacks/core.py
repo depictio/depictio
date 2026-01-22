@@ -34,6 +34,7 @@ from depictio.dash.background_callback_helpers import (
     should_use_background_for_component,
 )
 from depictio.dash.modules.figure_component.utils import _get_theme_template
+from depictio.dash.utils import resolve_link_values
 
 # Use centralized background callback configuration
 USE_BACKGROUND_CALLBACKS = should_use_background_for_component("figure")
@@ -100,6 +101,107 @@ def _extend_filters_for_joined_dc(
         break  # Found the join definition
 
     return relevant_filters
+
+
+def _extend_filters_via_links(
+    target_dc_id: str,
+    filters_by_dc: dict,
+    project_metadata: dict | None,
+    access_token: str | None,
+    batch_task_id: str,
+) -> list:
+    """
+    Extend filters using DC links for cross-DC filtering.
+
+    When a filter is on a source DC that has a link to the target DC,
+    resolve the filter values through the link.
+
+    Args:
+        target_dc_id: The figure's data collection ID
+        filters_by_dc: Dictionary mapping DC IDs to their filters
+        project_metadata: Project metadata containing link definitions
+        access_token: Authentication token for API calls
+        batch_task_id: Task ID for logging
+
+    Returns:
+        List of filters to apply (resolved via links)
+    """
+    link_filters = []
+
+    if not project_metadata or not access_token:
+        return link_filters
+
+    project_data = project_metadata.get("project", {})
+    project_id = str(project_data.get("_id", ""))
+    project_links = project_data.get("links", [])
+
+    if not project_id or not project_links:
+        return link_filters
+
+    # Find links where target_dc_id is the target
+    for link in project_links:
+        if not link.get("enabled", True):
+            continue
+
+        link_target_dc = str(link.get("target_dc_id", ""))
+        link_source_dc = str(link.get("source_dc_id", ""))
+
+        if link_target_dc != target_dc_id:
+            continue
+
+        # Check if we have filters for the source DC
+        source_filters = filters_by_dc.get(link_source_dc, [])
+        active_source_filters = [
+            f for f in source_filters if f.get("value") not in [None, [], "", False]
+        ]
+
+        if not active_source_filters:
+            continue
+
+        # Get filter values from source DC
+        for source_filter in active_source_filters:
+            filter_value = source_filter.get("value", [])
+            source_column = source_filter.get("metadata", {}).get("column_name", "")
+
+            if not filter_value:
+                continue
+
+            filter_values = filter_value if isinstance(filter_value, list) else [filter_value]
+
+            # Resolve through link
+            resolved = resolve_link_values(
+                project_id=project_id,
+                source_dc_id=link_source_dc,
+                source_column=source_column,
+                filter_values=filter_values,
+                target_dc_id=target_dc_id,
+                token=access_token,
+            )
+
+            if resolved and resolved.get("resolved_values"):
+                resolved_values = resolved["resolved_values"]
+                target_column = link.get("link_config", {}).get("target_field", source_column)
+
+                # Create a synthetic filter for the target DC
+                # Use MultiSelect type so load_deltatable_lite applies is_in() filter
+                link_filter = {
+                    "index": f"link_{link.get('id', 'unknown')}",
+                    "value": resolved_values,
+                    "metadata": {
+                        "dc_id": target_dc_id,
+                        "column_name": target_column,
+                        "interactive_component_type": "MultiSelect",
+                    },
+                }
+                link_filters.append(link_filter)
+
+                logger.info(
+                    f"[{batch_task_id}] 🔗 Link resolution: {len(filter_values)} values from "
+                    f"{link_source_dc[:8]} → {len(resolved_values)} values for {target_dc_id[:8]} "
+                    f"(column: {target_column})"
+                )
+
+    return link_filters
 
 
 def register_core_callbacks(app):
@@ -258,6 +360,17 @@ def register_core_callbacks(app):
                     project_metadata,
                     batch_task_id,
                 )
+
+                # Include filters resolved via DC links (cross-DC filtering without joins)
+                link_resolved_filters = _extend_filters_via_links(
+                    target_dc_id=card_dc_str,
+                    filters_by_dc=filters_by_dc,
+                    project_metadata=project_metadata,
+                    access_token=access_token,
+                    batch_task_id=batch_task_id,
+                )
+                if link_resolved_filters:
+                    relevant_filters.extend(link_resolved_filters)
 
                 active_filters = [
                     c for c in relevant_filters if c.get("value") not in [None, [], "", False]

@@ -302,11 +302,22 @@ class PerformanceConfig(BaseSettings):
 
 
 class S3CacheConfig(BaseSettings):
-    """S3 file caching configuration for MultiQC and other S3 operations."""
+    """S3 file caching configuration for MultiQC and other S3 operations.
 
-    # Cache directory for S3 files
+    The cache directory stores downloaded S3 files locally to avoid repeated downloads.
+    Default location is ~/.depictio/s3_cache (persistent across restarts).
+
+    Environment variable: DEPICTIO_S3_CACHE_DIR
+    Example: export DEPICTIO_S3_CACHE_DIR=/data/depictio_s3_cache
+
+    Note: The previous default /tmp/depictio_s3_cache was ephemeral and caused
+    repeated downloads after system restarts.
+    """
+
+    # Cache directory for S3 files - persistent location
     cache_dir: str = Field(
-        default="/tmp/depictio_s3_cache", description="Local directory for S3 file cache"
+        default="~/.depictio/s3_cache",
+        description="Local directory for S3 file cache. Use DEPICTIO_S3_CACHE_DIR to override.",
     )
 
     # FUSE mount points (optional, comma-separated)

@@ -492,6 +492,285 @@ def get_result_dc_for_workflow(workflow_id: str, TOKEN: str | None) -> str | Non
         return None
 
 
+# ============================================================================
+# Link Resolution Helpers
+# ============================================================================
+
+# Cache for link resolution results
+_link_resolution_cache: Dict[str, Dict[str, Any]] = {}
+LINK_RESOLUTION_CACHE_TTL_SECONDS = 300  # 5 minutes
+
+
+def resolve_link_values(
+    project_id: str,
+    source_dc_id: str,
+    source_column: str,
+    filter_values: list,
+    target_dc_id: str,
+    token: str | None,
+    use_cache: bool = True,
+) -> Optional[Dict[str, Any]]:
+    """
+    Resolve filtered values from source DC to target DC via link.
+
+    This is the primary helper function for cross-DC filtering. It calls the
+    link resolution API endpoint to map source filter values to target identifiers.
+
+    Args:
+        project_id: Project ID containing the link definition
+        source_dc_id: Source data collection ID (where filter was applied)
+        source_column: Column name that was filtered
+        filter_values: Values from the filter to resolve
+        target_dc_id: Target data collection ID to resolve values for
+        token: Authorization token
+        use_cache: Whether to use cached results (default: True)
+
+    Returns:
+        Dict with resolved values or None if resolution fails:
+        {
+            "resolved_values": ["S1_R1", "S1_R2", ...],
+            "link_id": "link_001",
+            "resolver_used": "sample_mapping",
+            "match_count": 10,
+            "target_type": "multiqc",
+            "source_count": 3,
+            "unmapped_values": []
+        }
+
+    Example:
+        >>> resolved = resolve_link_values(
+        ...     project_id="...",
+        ...     source_dc_id="metadata_dc",
+        ...     source_column="sample_id",
+        ...     filter_values=["S1", "S2"],
+        ...     target_dc_id="multiqc_dc",
+        ...     token=TOKEN
+        ... )
+        >>> if resolved:
+        ...     # Apply filter with resolved["resolved_values"]
+        ...     filtered_plot = filter_multiqc_samples(plot_data, resolved["resolved_values"])
+    """
+    if not token:
+        logger.warning("No token provided for link resolution")
+        return None
+
+    if not filter_values:
+        logger.debug("Empty filter values - skipping link resolution")
+        return None
+
+    # Generate cache key
+    cache_key = (
+        f"link_{project_id}_{source_dc_id}_{target_dc_id}_"
+        f"{hash(tuple(sorted(str(v) for v in filter_values)))}"
+    )
+
+    # Check cache if enabled
+    if use_cache and cache_key in _link_resolution_cache:
+        cached = _link_resolution_cache[cache_key]
+        if time.time() - cached.get("timestamp", 0) < LINK_RESOLUTION_CACHE_TTL_SECONDS:
+            logger.debug(f"Link resolution cache hit for {source_dc_id} -> {target_dc_id}")
+            return cached.get("data")
+        else:
+            # Cache expired
+            del _link_resolution_cache[cache_key]
+
+    # Build request payload
+    payload = {
+        "source_dc_id": source_dc_id,
+        "source_column": source_column,
+        "filter_values": filter_values,
+        "target_dc_id": target_dc_id,
+    }
+
+    try:
+        response = httpx.post(
+            f"{API_BASE_URL}/depictio/api/v1/links/{project_id}/resolve",
+            json=payload,
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10.0,
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            logger.info(
+                f"Link resolution success: {len(filter_values)} source values -> "
+                f"{result.get('match_count', 0)} resolved values "
+                f"(resolver: {result.get('resolver_used', 'unknown')})"
+            )
+
+            # Cache result
+            if use_cache:
+                _link_resolution_cache[cache_key] = {
+                    "data": result,
+                    "timestamp": time.time(),
+                }
+
+            return result
+
+        elif response.status_code == 404:
+            # No link found - this is expected for some DC combinations
+            logger.debug(
+                f"No link found from {source_dc_id} to {target_dc_id} "
+                f"(may need to create link or use direct filtering)"
+            )
+            return None
+
+        else:
+            logger.warning(f"Link resolution failed: {response.status_code} - {response.text}")
+            return None
+
+    except httpx.TimeoutException:
+        logger.warning(f"Link resolution timed out for {source_dc_id} -> {target_dc_id}")
+        return None
+    except Exception as e:
+        logger.error(f"Link resolution error: {e}")
+        return None
+
+
+def get_multiqc_sample_mappings(
+    project_id: str,
+    dc_id: str,
+    token: str | None,
+) -> dict[str, list[str]]:
+    """
+    Fetch aggregated sample mappings for a MultiQC data collection.
+
+    This function calls the API endpoint that aggregates sample_mappings from
+    ALL MultiQC reports associated with the DC. Useful for reset operations
+    where all samples need to be restored.
+
+    Args:
+        project_id: Project ID
+        dc_id: MultiQC data collection ID
+        token: Authorization token
+
+    Returns:
+        Aggregated sample mappings dict {canonical_id: [variant1, variant2, ...]}
+        or empty dict if fetch fails
+    """
+    if not token:
+        logger.warning("No token provided for fetching sample mappings")
+        return {}
+
+    try:
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/links/{project_id}/multiqc/{dc_id}/sample-mappings",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=5.0,
+        )
+
+        if response.status_code == 200:
+            mappings = response.json()
+            logger.info(
+                f"Fetched {len(mappings)} aggregated sample mappings for MultiQC DC {dc_id}"
+            )
+            return mappings
+        else:
+            logger.warning(
+                f"Failed to fetch sample mappings for {dc_id}: "
+                f"{response.status_code} - {response.text[:100]}"
+            )
+            return {}
+
+    except httpx.TimeoutException:
+        logger.warning(f"Sample mappings fetch timed out for {dc_id}")
+        return {}
+    except Exception as e:
+        logger.error(f"Sample mappings fetch error: {e}")
+        return {}
+
+
+def get_links_for_target_dc(
+    project_id: str,
+    target_dc_id: str,
+    token: str | None,
+) -> list[Dict[str, Any]]:
+    """
+    Get all links where the specified DC is the target.
+
+    Useful for determining which source DCs can drive filtering for this target.
+
+    Args:
+        project_id: Project ID
+        target_dc_id: Target data collection ID
+        token: Authorization token
+
+    Returns:
+        List of link definitions or empty list if none found
+    """
+    if not token:
+        logger.warning("No token provided for fetching links")
+        return []
+
+    try:
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/links/{project_id}/target/{target_dc_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=5.0,
+        )
+
+        if response.status_code == 200:
+            links = response.json()
+            logger.debug(f"Found {len(links)} links for target DC {target_dc_id}")
+            return links
+        else:
+            logger.debug(f"No links found for target DC {target_dc_id}")
+            return []
+
+    except Exception as e:
+        logger.warning(f"Failed to fetch links for target DC {target_dc_id}: {e}")
+        return []
+
+
+def get_links_for_source_dc(
+    project_id: str,
+    source_dc_id: str,
+    token: str | None,
+) -> list[Dict[str, Any]]:
+    """
+    Get all links where the specified DC is the source.
+
+    Useful for finding all target DCs that can be updated when a filter
+    is applied to the source DC.
+
+    Args:
+        project_id: Project ID
+        source_dc_id: Source data collection ID
+        token: Authorization token
+
+    Returns:
+        List of link definitions or empty list if none found
+    """
+    if not token:
+        logger.warning("No token provided for fetching links")
+        return []
+
+    try:
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/links/{project_id}/source/{source_dc_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=5.0,
+        )
+
+        if response.status_code == 200:
+            links = response.json()
+            logger.debug(f"Found {len(links)} links from source DC {source_dc_id}")
+            return links
+        else:
+            logger.debug(f"No links found for source DC {source_dc_id}")
+            return []
+
+    except Exception as e:
+        logger.warning(f"Failed to fetch links for source DC {source_dc_id}: {e}")
+        return []
+
+
+def clear_link_resolution_cache():
+    """Clear the link resolution cache."""
+    _link_resolution_cache.clear()
+    logger.info("Cleared link resolution cache")
+
+
 def return_mongoid(
     workflow_tag: str | None = None,
     workflow_id: ObjectId | None = None,

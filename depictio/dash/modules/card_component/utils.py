@@ -805,6 +805,7 @@ def build_card(**kwargs):
             "title": title,
             "wf_id": wf_id,
             "dc_id": dc_id,
+            "project_id": kwargs.get("project_id"),  # For cross-DC link resolution
             # REFACTORING: dc_config removed - available via dashboard-init-data
             "aggregation": aggregation,
             "column_type": column_type,
