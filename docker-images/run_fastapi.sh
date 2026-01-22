@@ -10,7 +10,9 @@ echo "🚀 Starting FastAPI backend..."
 # echo "ℹ️  Note: Celery worker now runs in separate container (depictio-celery-worker)"
 
 # Start FastAPI server (this will block and keep the container running)
-if [ "$DEPICTIO_DEV_MODE" = "true" ]; then
+# Convert to lowercase for comparison (handle both "true" and "True")
+DEV_MODE_LOWER=$(echo "$DEPICTIO_DEV_MODE" | tr '[:upper:]' '[:lower:]')
+if [ "$DEV_MODE_LOWER" = "true" ]; then
     # Development mode with reload
     export DEPICTIO_DEV_MODE=true
     echo "🛠️ Running FastAPI in development mode on $FASTAPI_HOST:$FASTAPI_PORT with $FASTAPI_WORKERS workers"

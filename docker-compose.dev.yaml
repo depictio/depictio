@@ -66,6 +66,7 @@ services:
       - ${FASTAPI_PORT:-8058}:8058
     volumes:
       - ./depictio:/app/depictio
+      - ./dashboards:/app/dashboards
       - ./pyproject.toml:/app/pyproject.toml
       - ./VERSION:/app/VERSION
       - ./docker-images/run_fastapi.sh:/app/run_fastapi.sh
@@ -91,6 +92,7 @@ services:
       context: .
     volumes:
       - ./depictio:/app/depictio
+      - ./dashboards:/app/dashboards
       - ./pyproject.toml:/app/pyproject.toml
       - ./docker-images/run_celery_worker.sh:/app/run_celery_worker.sh
       - ./${DATA_DIR}/prof_files:/app/prof_files

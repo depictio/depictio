@@ -273,6 +273,8 @@ def check_and_generate_keys(
 ) -> tuple[str, str]:
     """Check if key files exist, generate if they don't.
 
+    Uses file locking to prevent race conditions when multiple workers start simultaneously.
+
     Args:
         private_key_path: Optional custom path for private key
         public_key_path: Optional custom path for public key
@@ -282,6 +284,8 @@ def check_and_generate_keys(
     Returns:
         Tuple of (private_key_path, public_key_path)
     """
+    import fcntl
+
     # Convert keys_dir to Path if it's a string
     if keys_dir and isinstance(keys_dir, str):
         keys_dir = Path(keys_dir)
@@ -291,15 +295,41 @@ def check_and_generate_keys(
         private_key_path, public_key_path, keys_dir
     )
 
-    # Check if key files exist, generate if they don't
-    if not os.path.exists(private_key_path) or not os.path.exists(public_key_path):
-        logger.warning("Key files not found. Generating new keys.")
-        return generate_keys(private_key_path, public_key_path, keys_dir, algorithm)  # type: ignore[invalid-argument-type]
+    # Create lock file in the keys directory
+    lock_file_path = Path(private_key_path).parent / ".key_generation.lock"
+    lock_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-    logger.debug("Key files already exist. No need to generate new keys.")
-    logger.debug(f"Private key path: {private_key_path}")
-    logger.debug(f"Public key path: {public_key_path}")
-    return private_key_path, public_key_path
+    # Use file lock to prevent race conditions between workers
+    with open(lock_file_path, "w") as lock_file:
+        try:
+            # Try to acquire exclusive lock (non-blocking first to detect contention)
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                logger.debug("Acquired key generation lock")
+            except BlockingIOError:
+                # Another worker is generating keys, wait for it
+                logger.info("Another worker is generating keys, waiting for lock...")
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                logger.info("Lock acquired after waiting")
+
+            # Check again after acquiring lock (another worker might have generated keys)
+            if os.path.exists(private_key_path) and os.path.exists(public_key_path):
+                logger.debug("Key files already exist. No need to generate new keys.")
+                logger.debug(f"Private key path: {private_key_path}")
+                logger.debug(f"Public key path: {public_key_path}")
+                return private_key_path, public_key_path
+
+            # Keys don't exist, generate them
+            logger.warning("Key files not found. Generating new keys.")
+            result = generate_keys(private_key_path, public_key_path, keys_dir, algorithm)  # type: ignore[invalid-argument-type]
+
+            # Lock will be released automatically when exiting the with block
+            return result
+
+        finally:
+            # Release lock (happens automatically with context manager)
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            logger.debug("Released key generation lock")
 
 
 @validate_call(validate_return=True, config={"arbitrary_types_allowed": True})  # type: ignore[invalid-argument-type]
