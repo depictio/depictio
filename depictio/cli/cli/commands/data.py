@@ -589,7 +589,7 @@ def link_create(
     # Create the link
     api_response = api_create_link(project_id, link_data, CLI_config)
 
-    if api_response.status_code == 200:
+    if api_response.status_code == 201:
         result = api_response.json()
         rich_print_checked_statement(
             f"Link created successfully! ID: {result.get('id', 'N/A')}", "success"
@@ -782,7 +782,7 @@ def link_delete(
     # Delete the link
     api_response = api_delete_link(project_id, link_id, CLI_config)
 
-    if api_response.status_code == 200:
+    if api_response.status_code == 204:
         rich_print_checked_statement(f"Link {link_id} deleted successfully", "success")
     elif api_response.status_code == 404:
         rich_print_checked_statement(f"Link {link_id} not found", "error")
