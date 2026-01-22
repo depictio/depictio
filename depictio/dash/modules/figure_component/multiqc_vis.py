@@ -602,14 +602,69 @@ def create_multiqc_plot(
     return fig
 
 
+def _filter_heatmap_trace(trace, samples_set: set) -> None:
+    """Filter heatmap trace to show only matching samples."""
+    x_data = list(trace.x) if trace.x is not None else []
+    y_data = list(trace.y) if trace.y is not None else []
+    z_data = list(trace.z) if trace.z is not None else []
+
+    x_matches = [i for i, x in enumerate(x_data) if str(x) in samples_set]
+    y_matches = [i for i, y in enumerate(y_data) if str(y) in samples_set]
+
+    logger.debug(
+        f"Heatmap filtering: x has {len(x_matches)}/{len(x_data)} matches, "
+        f"y has {len(y_matches)}/{len(y_data)} matches"
+    )
+
+    # Determine which axis contains samples (use the one with more matches)
+    if y_matches and len(y_matches) >= len(x_matches):
+        trace.y = [y_data[i] for i in y_matches]
+        if z_data:
+            trace.z = [z_data[i] for i in y_matches if i < len(z_data)]
+        logger.debug(f"Filtered heatmap to {len(y_matches)} rows (y-axis)")
+    elif x_matches:
+        trace.x = [x_data[i] for i in x_matches]
+        if z_data:
+            trace.z = [[row[i] for i in x_matches if i < len(row)] for row in z_data]
+        logger.debug(f"Filtered heatmap to {len(x_matches)} columns (x-axis)")
+
+
+def _filter_categorical_trace(trace, samples_set: set) -> None:
+    """Filter bar/box/violin trace to show only matching samples."""
+    if hasattr(trace, "name") and trace.name:
+        trace.visible = trace.name in samples_set
+        return
+
+    # Filter axis data when trace doesn't have a sample name
+    orientation = getattr(trace, "orientation", "v")
+    is_horizontal = orientation == "h"
+
+    sample_axis = list(trace.y if is_horizontal else trace.x) or []
+    value_axis = list(trace.x if is_horizontal else trace.y) or []
+
+    indices = [i for i, s in enumerate(sample_axis) if str(s) in samples_set]
+    if not indices:
+        return
+
+    filtered_samples = [sample_axis[i] for i in indices]
+    filtered_values = [value_axis[i] for i in indices if i < len(value_axis)]
+
+    if is_horizontal:
+        trace.y = filtered_samples
+        trace.x = filtered_values
+    else:
+        trace.x = filtered_samples
+        trace.y = filtered_values
+
+
 def filter_samples_in_plot(fig: go.Figure, samples_to_show: List[str]) -> go.Figure:
     """
     Filter which samples are visible in a MultiQC plot.
 
     Handles different trace types:
-    - Bar/Box/Violin: Filter by trace.name or x/y axis data
     - Heatmap: Filter rows (y-axis) or columns (x-axis) depending on where samples are
-    - Scatter: Filter by trace.name or data points
+    - Bar/Box/Violin: Filter by trace.name or x/y axis data
+    - Default (scatter, etc.): Filter by trace.name visibility
 
     Args:
         fig: Plotly figure to filter
@@ -625,64 +680,13 @@ def filter_samples_in_plot(fig: go.Figure, samples_to_show: List[str]) -> go.Fig
             trace_type = getattr(trace, "type", "").lower()
 
             if trace_type == "heatmap":
-                # Heatmaps: samples can be on x-axis (columns) or y-axis (rows)
-                x_data = list(trace.x) if trace.x is not None else []
-                y_data = list(trace.y) if trace.y is not None else []
-                z_data = list(trace.z) if trace.z is not None else []
-
-                # Check which axis contains samples
-                x_matches = [i for i, x in enumerate(x_data) if str(x) in samples_set]
-                y_matches = [i for i, y in enumerate(y_data) if str(y) in samples_set]
-
-                logger.debug(
-                    f"Heatmap filtering: x has {len(x_matches)}/{len(x_data)} matches, "
-                    f"y has {len(y_matches)}/{len(y_data)} matches"
-                )
-
-                if y_matches and len(y_matches) >= len(x_matches):
-                    # Samples are on y-axis (rows) - filter rows
-                    trace.y = [y_data[i] for i in y_matches]
-                    if z_data:
-                        trace.z = [z_data[i] for i in y_matches if i < len(z_data)]
-                    logger.debug(f"Filtered heatmap to {len(y_matches)} rows (y-axis)")
-                elif x_matches:
-                    # Samples are on x-axis (columns) - filter columns
-                    trace.x = [x_data[i] for i in x_matches]
-                    if z_data:
-                        trace.z = [[row[i] for i in x_matches if i < len(row)] for row in z_data]
-                    logger.debug(f"Filtered heatmap to {len(x_matches)} columns (x-axis)")
-
+                _filter_heatmap_trace(trace, samples_set)
             elif trace_type in ["bar", "box", "violin"]:
-                # Bar/Box/Violin: Filter by trace.name or x/y axis
-                if hasattr(trace, "name") and trace.name:
-                    trace.visible = trace.name in samples_set
-                else:
-                    # Filter axis data if trace doesn't have a sample name
-                    orientation = getattr(trace, "orientation", "v")
-                    if orientation == "h":
-                        sample_axis = list(trace.y) if trace.y is not None else []
-                        value_axis = list(trace.x) if trace.x is not None else []
-                    else:
-                        sample_axis = list(trace.x) if trace.x is not None else []
-                        value_axis = list(trace.y) if trace.y is not None else []
-
-                    # Filter to matching samples
-                    indices = [i for i, s in enumerate(sample_axis) if str(s) in samples_set]
-                    if indices:
-                        if orientation == "h":
-                            trace.y = [sample_axis[i] for i in indices]
-                            trace.x = [value_axis[i] for i in indices if i < len(value_axis)]
-                        else:
-                            trace.x = [sample_axis[i] for i in indices]
-                            trace.y = [value_axis[i] for i in indices if i < len(value_axis)]
-
+                _filter_categorical_trace(trace, samples_set)
+            elif hasattr(trace, "name") and trace.name:
+                trace.visible = trace.name in samples_set
             else:
-                # Default: Filter by trace.name
-                if hasattr(trace, "name") and trace.name:
-                    trace.visible = trace.name in samples_set
-                else:
-                    # Keep traces without names visible
-                    trace.visible = True
+                trace.visible = True
 
         visible_traces = sum(1 for trace in fig.data if getattr(trace, "visible", True))
         logger.info(

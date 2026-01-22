@@ -37,6 +37,7 @@ from depictio.dash.modules.multiqc_component.utils import (
     get_multiqc_reports_for_data_collection,
 )
 from depictio.dash.utils import (
+    enrich_interactive_components_with_metadata,
     get_multiqc_sample_mappings,
     get_result_dc_for_workflow,
     resolve_link_values,
@@ -1121,49 +1122,11 @@ def register_core_callbacks(app):
             logger.warning("No access token available for MultiQC patching")
             return dash.no_update
 
-        # ============================================================================
-        # ENRICH lightweight store data with full metadata (same pattern as card component)
-        # ============================================================================
-        # The interactive-values-store only contains {index, value} pairs.
-        # We need to enrich this with full metadata from interactive-stored-metadata stores.
-        logger.debug("🔍 Enriching lightweight store data with full metadata for MultiQC patching")
-
-        # Create index → metadata mapping
-        metadata_by_index = {}
-        if interactive_metadata_list and interactive_metadata_ids:
-            for i, meta_id in enumerate(interactive_metadata_ids):
-                if i < len(interactive_metadata_list) and interactive_metadata_list[i]:
-                    index = meta_id["index"]
-                    metadata_by_index[index] = interactive_metadata_list[i]
-
-        # Enrich lightweight store data with full metadata
-        lightweight_components = (
-            interactive_values.get("interactive_components_values", [])
-            if interactive_values
-            else []
-        )
-
-        enriched_components = []
-        for component in lightweight_components:
-            index = component.get("index")
-            value = component.get("value")
-            full_metadata = metadata_by_index.get(index, {})
-
-            if full_metadata:
-                enriched_components.append(
-                    {
-                        "index": index,
-                        "value": value,
-                        "metadata": full_metadata,
-                    }
-                )
-            else:
-                logger.warning(
-                    f"No metadata found for interactive component {index[:8] if index else 'unknown'}... - skipping"
-                )
-
-        logger.debug(
-            f"Enriched {len(enriched_components)}/{len(lightweight_components)} components with metadata"
+        # Enrich lightweight store data with full metadata using shared utility
+        enriched_components = enrich_interactive_components_with_metadata(
+            interactive_values,
+            interactive_metadata_list,
+            interactive_metadata_ids,
         )
 
         # Replace interactive_values with enriched version

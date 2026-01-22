@@ -771,6 +771,90 @@ def clear_link_resolution_cache():
     logger.info("Cleared link resolution cache")
 
 
+def enrich_interactive_components_with_metadata(
+    interactive_values: Dict[str, Any] | None,
+    interactive_metadata_list: list,
+    interactive_metadata_ids: list,
+) -> list[Dict[str, Any]]:
+    """
+    Enrich lightweight interactive component values with full metadata.
+
+    The interactive-values-store contains only {index, value} pairs for performance.
+    This function enriches them with full metadata from interactive-stored-metadata stores,
+    which is needed for filtering operations that require dc_id, column_name, etc.
+
+    Args:
+        interactive_values: Dict with 'interactive_components_values' key containing
+                           list of {index, value} pairs
+        interactive_metadata_list: List of full metadata dicts from State callbacks
+        interactive_metadata_ids: List of component IDs matching metadata_list
+
+    Returns:
+        List of enriched component dicts with {index, value, metadata} structure
+    """
+    if not interactive_values:
+        return []
+
+    lightweight_components = interactive_values.get("interactive_components_values", [])
+    if not lightweight_components:
+        return []
+
+    # Build index -> metadata mapping
+    metadata_by_index: Dict[str, Dict[str, Any]] = {}
+    if interactive_metadata_list and interactive_metadata_ids:
+        for i, meta_id in enumerate(interactive_metadata_ids):
+            if i < len(interactive_metadata_list) and interactive_metadata_list[i]:
+                index = meta_id.get("index") if isinstance(meta_id, dict) else meta_id
+                metadata_by_index[index] = interactive_metadata_list[i]
+
+    # Enrich lightweight data with full metadata
+    enriched_components = []
+    for component in lightweight_components:
+        index = component.get("index")
+        value = component.get("value")
+        full_metadata = metadata_by_index.get(index, {})
+
+        if full_metadata:
+            enriched_components.append(
+                {
+                    "index": index,
+                    "value": value,
+                    "metadata": full_metadata,
+                }
+            )
+        else:
+            logger.debug(
+                f"No metadata found for interactive component "
+                f"{index[:8] if index else 'unknown'}..."
+            )
+
+    logger.debug(
+        f"Enriched {len(enriched_components)}/{len(lightweight_components)} "
+        "interactive components with metadata"
+    )
+    return enriched_components
+
+
+def group_filters_by_dc(enriched_components: list[Dict[str, Any]]) -> Dict[str, list]:
+    """
+    Group enriched interactive components by their data collection ID.
+
+    Args:
+        enriched_components: List of components with {index, value, metadata} structure
+
+    Returns:
+        Dict mapping dc_id (str) to list of components for that DC
+    """
+    filters_by_dc: Dict[str, list] = {}
+    for component in enriched_components:
+        dc_id = str(component.get("metadata", {}).get("dc_id", ""))
+        if dc_id:
+            if dc_id not in filters_by_dc:
+                filters_by_dc[dc_id] = []
+            filters_by_dc[dc_id].append(component)
+    return filters_by_dc
+
+
 def return_mongoid(
     workflow_tag: str | None = None,
     workflow_id: ObjectId | None = None,
