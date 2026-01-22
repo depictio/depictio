@@ -39,6 +39,473 @@ from depictio.dash.modules.figure_component.utils import _get_theme_template
 USE_BACKGROUND_CALLBACKS = should_use_background_for_component("figure")
 
 
+# =============================================================================
+# Data Loading Registry Types
+# =============================================================================
+
+LoadKey = tuple[str, str, str]  # (wf_id, dc_id, filters_hash)
+LoadKeyExtended = tuple[str, str, str, str]  # (wf_id, dc_id, filters_hash, columns_hash)
+
+
+# =============================================================================
+# Filter Extraction Helpers
+# =============================================================================
+
+
+def _build_metadata_index(
+    interactive_metadata_list: list | None,
+    interactive_metadata_ids: list | None,
+) -> dict[str, dict]:
+    """
+    Build a mapping from component index to full metadata.
+
+    Args:
+        interactive_metadata_list: List of metadata dictionaries for interactive components
+        interactive_metadata_ids: List of component IDs with index keys
+
+    Returns:
+        Dictionary mapping component index strings to their metadata
+    """
+    metadata_by_index: dict[str, dict] = {}
+    if not interactive_metadata_list or not interactive_metadata_ids:
+        return metadata_by_index
+
+    for idx, meta_id in enumerate(interactive_metadata_ids):
+        if idx < len(interactive_metadata_list):
+            index = meta_id["index"]
+            metadata_by_index[index] = interactive_metadata_list[idx]
+
+    return metadata_by_index
+
+
+def _enrich_filter_components(
+    lightweight_components: list[dict],
+    metadata_by_index: dict[str, dict],
+) -> list[dict]:
+    """
+    Enrich lightweight filter components with full metadata.
+
+    Args:
+        lightweight_components: List of filter components with index and value
+        metadata_by_index: Mapping from index to full metadata
+
+    Returns:
+        List of enriched components with full metadata attached
+    """
+    enriched_components = []
+    for comp in lightweight_components:
+        comp_index = comp.get("index")
+        if comp_index is None:
+            full_metadata: dict = {}
+        else:
+            full_metadata = metadata_by_index.get(str(comp_index), {})
+        enriched_comp = {**comp, "metadata": full_metadata}
+        enriched_components.append(enriched_comp)
+    return enriched_components
+
+
+def _group_filters_by_dc(components: list[dict]) -> dict[str, list[dict]]:
+    """
+    Group filter components by their data collection ID.
+
+    Args:
+        components: List of enriched filter components
+
+    Returns:
+        Dictionary mapping DC IDs to lists of filter components
+    """
+    filters_by_dc: dict[str, list[dict]] = {}
+    for component in components:
+        component_dc = str(component.get("metadata", {}).get("dc_id", ""))
+        if component_dc:
+            if component_dc not in filters_by_dc:
+                filters_by_dc[component_dc] = []
+            filters_by_dc[component_dc].append(component)
+    return filters_by_dc
+
+
+def _filter_active_components(components: list[dict]) -> list[dict]:
+    """
+    Filter out components with empty or null values.
+
+    Args:
+        components: List of filter components
+
+    Returns:
+        List of components with active (non-empty) values
+    """
+    return [c for c in components if c.get("value") not in [None, [], "", False]]
+
+
+def _extract_filters_for_figure(
+    dc_id: str,
+    filters_data: dict | None,
+    interactive_metadata_list: list | None,
+    interactive_metadata_ids: list | None,
+    project_metadata: dict | None,
+    batch_task_id: str,
+) -> list[dict]:
+    """
+    Extract active filters for a specific figure's data collection.
+
+    This function handles the complete filter extraction process including:
+    - Building metadata index from interactive components
+    - Enriching lightweight filter data with full metadata
+    - Grouping filters by data collection
+    - Including filters from source DCs for joined data collections
+
+    Args:
+        dc_id: The data collection ID for the figure
+        filters_data: Filter state from interactive-values-store
+        interactive_metadata_list: Full metadata for interactive components
+        interactive_metadata_ids: IDs of interactive components
+        project_metadata: Project metadata with join definitions
+        batch_task_id: Task ID for logging
+
+    Returns:
+        List of active filter components for this figure
+    """
+    if not filters_data or not filters_data.get("interactive_components_values"):
+        return []
+
+    metadata_by_index = _build_metadata_index(interactive_metadata_list, interactive_metadata_ids)
+
+    lightweight_components = filters_data.get("interactive_components_values", [])
+    enriched_components = _enrich_filter_components(lightweight_components, metadata_by_index)
+    filters_by_dc = _group_filters_by_dc(enriched_components)
+
+    card_dc_str = str(dc_id)
+    relevant_filters = filters_by_dc.get(card_dc_str, [])
+
+    # Include filters from source DCs if this figure uses a joined DC
+    relevant_filters = _extend_filters_for_joined_dc(
+        relevant_filters,
+        card_dc_str,
+        filters_by_dc,
+        project_metadata,
+        batch_task_id,
+    )
+
+    return _filter_active_components(relevant_filters)
+
+
+# =============================================================================
+# DC Load Registry Building
+# =============================================================================
+
+
+def _compute_filters_hash(metadata_to_pass: list[dict]) -> str:
+    """
+    Compute a hash for a list of filter metadata.
+
+    Args:
+        metadata_to_pass: List of filter metadata dictionaries
+
+    Returns:
+        Short hash string for the filters, or 'nofilter' if empty
+    """
+    if not metadata_to_pass:
+        return "nofilter"
+
+    return hashlib.md5(
+        json.dumps(metadata_to_pass, sort_keys=True, default=str).encode()
+    ).hexdigest()[:8]
+
+
+def _build_dc_load_registry(
+    trigger_data_list: list[dict | None],
+    filters_data: dict | None,
+    interactive_metadata_list: list | None,
+    interactive_metadata_ids: list | None,
+    project_metadata: dict | None,
+    batch_task_id: str,
+) -> tuple[dict[LoadKey, tuple[list[dict], list[str]]], dict[int, LoadKey | None]]:
+    """
+    Build registry of unique DC loads and map figures to their load keys.
+
+    This function scans all figures to identify unique data load requirements,
+    enabling deduplication and parallel loading optimization.
+
+    Args:
+        trigger_data_list: List of trigger data for each figure
+        filters_data: Filter state from interactive-values-store
+        interactive_metadata_list: Full metadata for interactive components
+        interactive_metadata_ids: IDs of interactive components
+        project_metadata: Project metadata with workflows and DCs
+        batch_task_id: Task ID for logging
+
+    Returns:
+        Tuple of:
+        - dc_load_registry: Dict mapping load keys to (filters, columns) tuples
+        - figure_to_load_key: Dict mapping figure indices to their load keys
+    """
+    dc_load_registry: dict[LoadKey, tuple[list[dict], list[str]]] = {}
+    figure_to_load_key: dict[int, LoadKey | None] = {}
+
+    for i, trigger_data in enumerate(trigger_data_list):
+        if not trigger_data or not isinstance(trigger_data, dict):
+            figure_to_load_key[i] = None
+            continue
+
+        wf_id = trigger_data.get("wf_id")
+        dc_id = trigger_data.get("dc_id")
+        visu_type = trigger_data.get("visu_type", "scatter")
+        dict_kwargs = trigger_data.get("dict_kwargs", {})
+
+        if not wf_id or not dc_id:
+            figure_to_load_key[i] = None
+            continue
+
+        # At this point wf_id and dc_id are guaranteed to be non-None
+        wf_id_str = str(wf_id)
+        dc_id_str = str(dc_id)
+
+        required_columns = _extract_required_columns(dict_kwargs, visu_type)
+
+        metadata_to_pass = _extract_filters_for_figure(
+            dc_id_str,
+            filters_data,
+            interactive_metadata_list,
+            interactive_metadata_ids,
+            project_metadata,
+            batch_task_id,
+        )
+
+        filters_hash = _compute_filters_hash(metadata_to_pass)
+        load_key: LoadKey = (wf_id_str, dc_id_str, filters_hash)
+
+        if load_key not in dc_load_registry:
+            dc_load_registry[load_key] = (metadata_to_pass, required_columns)
+
+        figure_to_load_key[i] = load_key
+
+    return dc_load_registry, figure_to_load_key
+
+
+# =============================================================================
+# Parallel Data Loading
+# =============================================================================
+
+
+def _load_dcs_parallel(
+    dc_load_registry: dict[LoadKey, tuple[list[dict], list[str]]],
+    access_token: str,
+    batch_task_id: str,
+) -> dict[LoadKey, Any]:
+    """
+    Load data collections in parallel using ThreadPoolExecutor.
+
+    Args:
+        dc_load_registry: Registry of unique DC loads with (filters, columns) tuples
+        access_token: Authentication token for API calls
+        batch_task_id: Task ID for logging
+
+    Returns:
+        Dictionary mapping load keys to loaded DataFrames
+    """
+    dc_cache: dict[LoadKey, Any] = {}
+
+    def load_single_dc(
+        load_key: LoadKey,
+        metadata_to_pass: list[dict],
+        required_columns: list[str],
+    ) -> tuple[LoadKey, Any]:
+        """Load a single DC with optional filters (thread-safe operation)."""
+        wf_id, dc_id, filters_hash = load_key
+        try:
+            # NOTE: select_columns disabled - causes hang in ThreadPoolExecutor context
+            data = load_deltatable_lite(
+                ObjectId(wf_id),
+                ObjectId(dc_id),
+                metadata=metadata_to_pass,
+                TOKEN=access_token,
+            )
+            logger.debug(
+                f"   Parallel load: {dc_id[:8]} "
+                f"({data.height:,} rows x {data.width} cols, projected: {len(required_columns)} cols)"
+            )
+            return load_key, data
+        except Exception as e:
+            logger.error(f"   Parallel load failed: {dc_id[:8]}: {e}", exc_info=True)
+            return load_key, None
+
+    parallel_start = time.time()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        future_to_key = {
+            executor.submit(load_single_dc, load_key, metadata, columns): load_key
+            for load_key, (metadata, columns) in dc_load_registry.items()
+        }
+
+        for future in concurrent.futures.as_completed(future_to_key):
+            load_key, data = future.result()
+            if data is not None:
+                dc_cache[load_key] = data
+
+    parallel_duration = (time.time() - parallel_start) * 1000
+    cache_hit_rate = len(dc_cache) / len(dc_load_registry) * 100 if dc_load_registry else 0
+
+    logger.info(
+        f"[{batch_task_id}] Parallel loading complete: "
+        f"{len(dc_cache)}/{len(dc_load_registry)} DCs loaded in {parallel_duration:.1f}ms "
+        f"(success: {cache_hit_rate:.0f}%)"
+    )
+
+    return dc_cache
+
+
+# =============================================================================
+# Figure Processing
+# =============================================================================
+
+
+def _process_code_mode_figure(
+    code_content: str,
+    df: Any,
+    current_theme: str,
+    task_id: str,
+) -> tuple[bool, go.Figure | None, str | None]:
+    """
+    Process a figure in code mode by executing user-provided code.
+
+    Args:
+        code_content: User-provided Python code to execute
+        df: DataFrame to pass to the code execution
+        current_theme: Current theme name for styling
+        task_id: Task ID for logging
+
+    Returns:
+        Tuple of (success, figure, visu_type):
+        - success: Whether code execution succeeded
+        - figure: The generated figure (or None on failure)
+        - visu_type: Detected visualization type (or None on failure)
+    """
+    if not code_content:
+        logger.error(f"[{task_id}] Code mode but no code_content")
+        return False, None, None
+
+    from depictio.dash.modules.figure_component.code_mode import (
+        extract_visualization_type_from_code,
+    )
+    from depictio.dash.modules.figure_component.simple_code_executor import (
+        SimpleCodeExecutor,
+    )
+
+    executor = SimpleCodeExecutor()
+    success, fig, message = executor.execute_code(code_content, df)
+
+    if not success:
+        logger.error(f"[{task_id}] Code execution failed: {message}")
+        return False, _create_error_figure(f"Code execution error: {message}", current_theme), None
+
+    detected_visu_type = extract_visualization_type_from_code(code_content)
+
+    if "template=" not in code_content:
+        theme_template = f"mantine_{current_theme}"
+        fig.update_layout(template=theme_template)
+
+    logger.debug(f"[{task_id}] Code execution successful (visu_type: {detected_visu_type})")
+    return True, fig, detected_visu_type
+
+
+def _process_single_figure(
+    trigger_data: dict | None,
+    trigger_id: dict,
+    figure_index: int,
+    dc_cache: dict[LoadKey, Any],
+    figure_to_load_key: dict[int, LoadKey | None],
+    current_theme: str,
+    batch_task_id: str,
+) -> tuple[dict | go.Figure, dict]:
+    """
+    Process a single figure and return the figure and metadata.
+
+    Args:
+        trigger_data: Trigger data containing figure parameters
+        trigger_id: Component ID for the figure
+        figure_index: Index of the figure in the batch
+        dc_cache: Cache of loaded DataFrames keyed by load key
+        figure_to_load_key: Mapping from figure index to load key
+        current_theme: Current theme name
+        batch_task_id: Task ID for logging
+
+    Returns:
+        Tuple of (figure, metadata) where figure is a Plotly figure dict
+        and metadata contains rendering information
+    """
+    task_id = f"{batch_task_id}-{figure_index}"
+    component_id = trigger_id.get("index", "unknown")[:8] if trigger_id else "unknown"
+    figure_start_time = time.time()
+
+    try:
+        logger.debug(f"[{task_id}] Processing figure {figure_index + 1}: {component_id}")
+
+        if not trigger_data or not isinstance(trigger_data, dict):
+            logger.warning(f"[{task_id}] Invalid trigger data for figure {component_id}")
+            return _create_error_figure("Invalid trigger data", current_theme), {}
+
+        mode = trigger_data.get("mode", "ui")
+        visu_type = trigger_data.get("visu_type", "scatter")
+        dict_kwargs = trigger_data.get("dict_kwargs", {})
+        code_content = trigger_data.get("code_content", "")
+
+        logger.debug(
+            f"[{task_id}] Figure params: mode={mode}, visu_type={visu_type}, dict_kwargs={dict_kwargs}"
+        )
+
+        if mode == "code":
+            logger.info(f"RENDER: Code mode figure {component_id}")
+            logger.info(f"   code_content length: {len(code_content)}")
+            logger.info(
+                f"   code_content present in trigger_data: {'code_content' in trigger_data}"
+            )
+            logger.info(f"   Full trigger_data keys: {trigger_data.keys()}")
+            logger.info(f"   Full trigger_data: {trigger_data}")
+
+        load_key = figure_to_load_key.get(figure_index)
+        if not load_key or load_key not in dc_cache:
+            logger.warning(f"[{task_id}] No cached data for figure {component_id}")
+            return _create_error_figure("Data not available", current_theme), {}
+
+        df = dc_cache[load_key]
+
+        if mode == "code":
+            success, fig, detected_visu_type = _process_code_mode_figure(
+                code_content, df, current_theme, task_id
+            )
+            if not success:
+                return fig, {}
+            if detected_visu_type:
+                visu_type = detected_visu_type
+        else:
+            fig = _create_figure_from_data(
+                df=df,
+                visu_type=visu_type,
+                dict_kwargs=dict_kwargs,
+                theme=current_theme,
+            )
+
+        figure_duration = (time.time() - figure_start_time) * 1000
+        logger.debug(f"[{task_id}] Figure rendered in {figure_duration:.1f}ms")
+
+        if isinstance(fig, go.Figure):
+            fig_dict = json.loads(fig.to_json())
+        else:
+            fig_dict = fig
+
+        metadata = {
+            "index": component_id,
+            "visu_type": visu_type,
+            "rendered_at": time.time(),
+        }
+
+        return fig_dict, metadata
+
+    except Exception as e:
+        logger.error(f"[{task_id}] Figure rendering failed: {e}", exc_info=True)
+        return _create_error_figure(f"Error: {str(e)}", current_theme), {}
+
+
 def _extend_filters_for_joined_dc(
     relevant_filters: list,
     card_dc_str: str,
@@ -109,35 +576,31 @@ def register_core_callbacks(app):
     log_background_callback_status("figure", "render_figures_batch")
 
     # ============================================================================
-    # CALLBACK 1: Initial Figure Rendering (NO filter listening)
-    # ============================================================================
     # UNIFIED CALLBACK: Handles both initial render AND filter updates
     # ============================================================================
     @app.callback(
         Output({"type": "figure-graph", "index": ALL}, "figure"),
         Output({"type": "figure-metadata", "index": ALL}, "data"),
         Input({"type": "figure-trigger", "index": ALL}, "data"),
-        Input("interactive-values-store", "data"),  # Also listen to filters!
+        Input("interactive-values-store", "data"),
         State({"type": "figure-trigger", "index": ALL}, "id"),
         State({"type": "figure-metadata", "index": ALL}, "data"),
         State({"type": "stored-metadata-component", "index": ALL}, "data"),
-        State(
-            {"type": "interactive-stored-metadata", "index": ALL}, "data"
-        ),  # Full filter metadata!
+        State({"type": "interactive-stored-metadata", "index": ALL}, "data"),
         State({"type": "interactive-stored-metadata", "index": ALL}, "id"),
         State("project-metadata-store", "data"),
         State("local-store", "data"),
         State("theme-store", "data"),
         prevent_initial_call=False,
-        background=USE_BACKGROUND_CALLBACKS,  # Use centralized background callback config
+        background=USE_BACKGROUND_CALLBACKS,
     )
     def render_figures_batch(
         trigger_data_list,
-        filters_data,  # NEW: Filter state from interactive-values-store
+        filters_data,
         trigger_ids,
         existing_metadata_list,
         stored_metadata_list,
-        interactive_metadata_list,  # Full metadata for filters
+        interactive_metadata_list,
         interactive_metadata_ids,
         project_metadata,
         local_data,
@@ -149,320 +612,101 @@ def register_core_callbacks(app):
         This single callback handles BOTH initial rendering and filter updates, avoiding
         the race condition and duplicate Output issues from having separate callbacks.
 
+        The callback implements a three-phase optimization strategy:
+        1. Build DC load registry - scan figures to identify unique data load requirements
+        2. Parallel data loading - load unique DC+filter combinations concurrently
+        3. Figure processing - render each figure using cached data
+
         Args:
-            trigger_data_list: List of trigger data for each figure
+            trigger_data_list: List of trigger data for each figure containing:
+                - wf_id: Workflow ID
+                - dc_id: Data collection ID
+                - visu_type: Visualization type (scatter, line, bar, etc.)
+                - dict_kwargs: Figure parameters (x, y, color, etc.)
+                - mode: 'ui' or 'code'
+                - code_content: User code for code mode
             filters_data: Filter state from interactive-values-store (None on initial load)
-            trigger_ids: List of component IDs
-            existing_metadata_list: List of existing metadata stores
-            stored_metadata_list: List of stored component metadata
-            project_metadata: Dashboard metadata with workflows/DCs
-            local_data: User/token data
-            theme_data: Theme state (light/dark)
+            trigger_ids: List of component IDs for pattern matching
+            existing_metadata_list: List of existing metadata stores (unused, for state)
+            stored_metadata_list: List of stored component metadata (unused, for state)
+            interactive_metadata_list: Full metadata for interactive filter components
+            interactive_metadata_ids: IDs of interactive filter components
+            project_metadata: Dashboard metadata with workflows/DCs and join definitions
+            local_data: User/token data containing access_token
+            theme_data: Theme state ('light' or 'dark')
 
         Returns:
-            Tuple of (all_figures, all_metadata)
+            Tuple of (all_figures, all_metadata) where:
+            - all_figures: List of Plotly figure dicts for each figure component
+            - all_metadata: List of metadata dicts with index, visu_type, rendered_at
         """
-        # Generate batch task correlation ID and start timing
         batch_task_id = str(uuid.uuid4())[:8]
         batch_start_time = time.time()
 
-        logger.info(f"[{batch_task_id}] 🎨 FIGURE INITIAL RENDER - {len(trigger_ids)} figures")
+        logger.info(f"[{batch_task_id}] FIGURE INITIAL RENDER - {len(trigger_ids)} figures")
 
-        # Handle empty dashboard (no figures)
+        # Handle empty dashboard
         if not trigger_data_list or not trigger_ids:
             logger.debug("No figures to render - preventing update")
             raise dash.exceptions.PreventUpdate
 
-        # Extract theme from store (theme-store stores theme string directly, not dict)
         current_theme = theme_data if theme_data else "light"
         logger.debug(f"Current theme: {current_theme}")
 
-        # Extract access token from local-store
         access_token = local_data.get("access_token") if local_data else None
         if not access_token:
             logger.error("No access_token available in local-store")
-            # Return empty figures for all components
             num_figures = len(trigger_ids)
             empty_fig = {"data": [], "layout": {"title": "Auth Error"}}
             return [empty_fig] * num_figures, [{}] * num_figures
 
-        # Initialize result lists for batch processing
-        all_figures = []
-        all_metadata = []
+        # Phase 1: Build DC load registry
+        logger.info(f"[{batch_task_id}] Analyzing {len(trigger_ids)} figures for parallel loading")
 
-        # ⭐ OPTIMIZATION: Pre-load unique DC+filter combinations in parallel
-        # Scan all figures to identify unique data loads, then execute in parallel
-        logger.info(
-            f"[{batch_task_id}] 📊 Analyzing {len(trigger_ids)} figures for parallel loading"
+        dc_load_registry, figure_to_load_key = _build_dc_load_registry(
+            trigger_data_list,
+            filters_data,
+            interactive_metadata_list,
+            interactive_metadata_ids,
+            project_metadata,
+            batch_task_id,
         )
 
-        # Step 1: Build index of unique DC loads
-        dc_load_registry = {}  # Key: (wf_id, dc_id, filters_hash) -> (filters_metadata, required_columns)
-        figure_to_load_key = {}  # Map: figure_index -> load_key
-
-        for i, trigger_data in enumerate(trigger_data_list):
-            if not trigger_data or not isinstance(trigger_data, dict):
-                figure_to_load_key[i] = None
-                continue
-
-            wf_id = trigger_data.get("wf_id")
-            dc_id = trigger_data.get("dc_id")
-            visu_type = trigger_data.get("visu_type", "scatter")
-            dict_kwargs = trigger_data.get("dict_kwargs", {})
-
-            if not all([wf_id, dc_id]):
-                figure_to_load_key[i] = None
-                continue
-
-            # Extract required columns from parameters
-            required_columns = _extract_required_columns(dict_kwargs, visu_type)
-
-            # Extract filters for this figure's DC (if filters exist)
-            metadata_to_pass = []
-            if filters_data and filters_data.get("interactive_components_values"):
-                # Build index → full metadata mapping for interactive components
-                metadata_by_index = {}
-                if interactive_metadata_list and interactive_metadata_ids:
-                    for idx, meta_id in enumerate(interactive_metadata_ids):
-                        if idx < len(interactive_metadata_list):
-                            index = meta_id["index"]
-                            metadata_by_index[index] = interactive_metadata_list[idx]
-
-                # Enrich lightweight filter data with full metadata (including dc_id)
-                lightweight_components = filters_data.get("interactive_components_values", [])
-                enriched_components = []
-                for comp in lightweight_components:
-                    comp_index = comp.get("index")
-                    full_metadata = metadata_by_index.get(comp_index, {})
-                    enriched_comp = {**comp, "metadata": full_metadata}
-                    enriched_components.append(enriched_comp)
-
-                # Group filters by DC
-                card_dc_str = str(dc_id)
-                filters_by_dc = {}
-                for component in enriched_components:
-                    component_dc = str(component.get("metadata", {}).get("dc_id", ""))
-                    if component_dc and component_dc not in filters_by_dc:
-                        filters_by_dc[component_dc] = []
-                    if component_dc:
-                        filters_by_dc[component_dc].append(component)
-
-                # Get relevant filters for this figure's DC
-                relevant_filters = filters_by_dc.get(card_dc_str, [])
-
-                # Include filters from source DCs if this figure uses a joined DC
-                relevant_filters = _extend_filters_for_joined_dc(
-                    relevant_filters,
-                    card_dc_str,
-                    filters_by_dc,
-                    project_metadata,
-                    batch_task_id,
-                )
-
-                active_filters = [
-                    c for c in relevant_filters if c.get("value") not in [None, [], "", False]
-                ]
-                metadata_to_pass = active_filters
-
-            # Create load key: (wf_id, dc_id, filters_hash)
-            filters_hash = (
-                hashlib.md5(
-                    json.dumps(metadata_to_pass, sort_keys=True, default=str).encode()
-                ).hexdigest()[:8]
-                if metadata_to_pass
-                else "nofilter"
-            )
-
-            load_key = (str(wf_id), str(dc_id), filters_hash)
-
-            # Register this unique load
-            if load_key not in dc_load_registry:
-                dc_load_registry[load_key] = (metadata_to_pass, required_columns)
-
-            # Map figure to its load key
-            figure_to_load_key[i] = load_key
-
         logger.info(
-            f"[{batch_task_id}] 📊 Found {len(dc_load_registry)} unique DC loads "
+            f"[{batch_task_id}] Found {len(dc_load_registry)} unique DC loads "
             f"for {len(figure_to_load_key)} figures"
         )
 
-        # Step 2: Load all unique DCs in parallel
-        dc_cache = {}  # Cache: load_key -> DataFrame
+        # Phase 2: Load DCs in parallel
+        dc_cache = _load_dcs_parallel(dc_load_registry, access_token, batch_task_id)
 
-        def load_single_dc(load_key, metadata_to_pass, required_columns):
-            """Load a single DC with optional filters (thread-safe operation)."""
-            wf_id, dc_id, filters_hash = load_key
-            try:
-                # Load with column projection for performance
-                # NOTE: select_columns disabled - causes hang in ThreadPoolExecutor context
-                data = load_deltatable_lite(
-                    ObjectId(wf_id),
-                    ObjectId(dc_id),
-                    metadata=metadata_to_pass,
-                    TOKEN=access_token,
-                    # select_columns=required_columns if required_columns else None,  # DISABLED - causes hang
-                )
-                logger.debug(
-                    f"   ✅ Parallel load: {dc_id[:8]} "
-                    f"({data.height:,} rows × {data.width} cols, projected: {len(required_columns)} cols)"
-                )
-                return load_key, data
-            except Exception as e:
-                logger.error(f"   ❌ Parallel load failed: {dc_id[:8]}: {e}", exc_info=True)
-                return load_key, None
-
-        # Execute parallel loads (max 4 concurrent workers)
-        parallel_start = time.time()
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-            # Submit all load tasks
-            future_to_key = {
-                executor.submit(load_single_dc, load_key, metadata, columns): load_key
-                for load_key, (metadata, columns) in dc_load_registry.items()
-            }
-
-            # Collect results as they complete
-            for future in concurrent.futures.as_completed(future_to_key):
-                load_key, data = future.result()
-                if data is not None:
-                    dc_cache[load_key] = data
-        parallel_duration = (time.time() - parallel_start) * 1000
-        cache_hit_rate = len(dc_cache) / len(dc_load_registry) * 100 if dc_load_registry else 0
         dedup_ratio = len(figure_to_load_key) / len(dc_load_registry) if dc_load_registry else 1
-        logger.info(
-            f"[{batch_task_id}] ⚡ Parallel loading complete: "
-            f"{len(dc_cache)}/{len(dc_load_registry)} DCs loaded in {parallel_duration:.1f}ms "
-            f"(dedup: {dedup_ratio:.1f}x, success: {cache_hit_rate:.0f}%)"
-        )
+        logger.info(f"[{batch_task_id}] Deduplication ratio: {dedup_ratio:.1f}x")
 
-        # Step 3: Process each figure using cached data
+        # Phase 3: Process each figure
+        all_figures = []
+        all_metadata = []
+
         for i, (trigger_data, trigger_id) in enumerate(zip(trigger_data_list, trigger_ids)):
-            # Generate per-figure task ID
-            task_id = f"{batch_task_id}-{i}"
-            component_id = trigger_id.get("index", "unknown")[:8] if trigger_id else "unknown"
-            figure_start_time = time.time()
-
-            try:
-                logger.debug(
-                    f"[{task_id}] Processing figure {i + 1}/{len(trigger_ids)}: {component_id}"
-                )
-
-                # Validate trigger data
-                if not trigger_data or not isinstance(trigger_data, dict):
-                    logger.warning(f"[{task_id}] Invalid trigger data for figure {component_id}")
-                    all_figures.append(_create_error_figure("Invalid trigger data", current_theme))
-                    all_metadata.append({})
-                    continue
-
-                # Extract figure parameters
-                mode = trigger_data.get("mode", "ui")
-                visu_type = trigger_data.get("visu_type", "scatter")
-                dict_kwargs = trigger_data.get("dict_kwargs", {})
-                code_content = trigger_data.get("code_content", "")
-
-                logger.debug(
-                    f"[{task_id}] Figure params: mode={mode}, visu_type={visu_type}, dict_kwargs={dict_kwargs}"
-                )
-
-                # CRITICAL DEBUG: Log full trigger_data for code mode figures
-                if mode == "code":
-                    logger.info(f"🔍 RENDER: Code mode figure {component_id}")
-                    logger.info(f"   code_content length: {len(code_content)}")
-                    logger.info(
-                        f"   code_content present in trigger_data: {'code_content' in trigger_data}"
-                    )
-                    logger.info(f"   Full trigger_data keys: {trigger_data.keys()}")
-                    logger.info(f"   Full trigger_data: {trigger_data}")
-
-                # Get cached data
-                load_key = figure_to_load_key.get(i)
-                if not load_key or load_key not in dc_cache:
-                    logger.warning(f"[{task_id}] No cached data for figure {component_id}")
-                    all_figures.append(_create_error_figure("Data not available", current_theme))
-                    all_metadata.append({})
-                    continue
-
-                df = dc_cache[load_key]
-
-                # Create figure - branch on mode
-                if mode == "code":
-                    # CODE MODE: Execute user code
-                    if not code_content:
-                        logger.error(f"[{task_id}] Code mode but no code_content")
-                        all_figures.append(
-                            _create_error_figure("No code content provided", current_theme)
-                        )
-                        all_metadata.append({})
-                        continue
-
-                    from depictio.dash.modules.figure_component.code_mode import (
-                        extract_visualization_type_from_code,
-                    )
-                    from depictio.dash.modules.figure_component.simple_code_executor import (
-                        SimpleCodeExecutor,
-                    )
-
-                    executor = SimpleCodeExecutor()
-                    success, fig, message = executor.execute_code(code_content, df)
-
-                    if success:
-                        # Extract visu_type dynamically from code
-                        detected_visu_type = extract_visualization_type_from_code(code_content)
-                        if detected_visu_type:
-                            visu_type = detected_visu_type
-
-                        # Apply theme template if not in code
-                        if "template=" not in code_content:
-                            theme_template = f"mantine_{current_theme}"
-                            fig.update_layout(template=theme_template)
-
-                        logger.debug(
-                            f"[{task_id}] ✅ Code execution successful (visu_type: {visu_type})"
-                        )
-                    else:
-                        logger.error(f"[{task_id}] Code execution failed: {message}")
-                        all_figures.append(
-                            _create_error_figure(f"Code execution error: {message}", current_theme)
-                        )
-                        all_metadata.append({})
-                        continue
-                else:
-                    # UI MODE: Existing logic
-                    fig = _create_figure_from_data(
-                        df=df,
-                        visu_type=visu_type,
-                        dict_kwargs=dict_kwargs,
-                        theme=current_theme,
-                    )
-
-                figure_duration = (time.time() - figure_start_time) * 1000
-                logger.debug(f"[{task_id}] ✅ Figure rendered in {figure_duration:.1f}ms")
-
-                # Convert to JSON-serializable dict (handles NumPy arrays)
-                if isinstance(fig, go.Figure):
-                    fig_dict = json.loads(fig.to_json())  # Plotly's to_json() handles ndarrays
-                    all_figures.append(fig_dict)
-                else:
-                    all_figures.append(fig)
-                all_metadata.append(
-                    {
-                        "index": component_id,
-                        "visu_type": visu_type,
-                        "rendered_at": time.time(),
-                    }
-                )
-
-            except Exception as e:
-                logger.error(f"[{task_id}] ❌ Figure rendering failed: {e}", exc_info=True)
-                all_figures.append(_create_error_figure(f"Error: {str(e)}", current_theme))
-                all_metadata.append({})
+            fig_dict, metadata = _process_single_figure(
+                trigger_data,
+                trigger_id,
+                i,
+                dc_cache,
+                figure_to_load_key,
+                current_theme,
+                batch_task_id,
+            )
+            all_figures.append(fig_dict)
+            all_metadata.append(metadata)
 
         # Log batch completion
         batch_duration = (time.time() - batch_start_time) * 1000
+        avg_duration = batch_duration / len(all_figures) if all_figures else 0
         logger.info(
-            f"[{batch_task_id}] 🎨 FIGURE BATCH COMPLETE - "
+            f"[{batch_task_id}] FIGURE BATCH COMPLETE - "
             f"{len(all_figures)} figures rendered in {batch_duration:.1f}ms "
-            f"(avg: {batch_duration / len(all_figures):.1f}ms/figure)"
+            f"(avg: {avg_duration:.1f}ms/figure)"
         )
 
         return all_figures, all_metadata

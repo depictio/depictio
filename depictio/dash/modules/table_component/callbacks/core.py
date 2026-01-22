@@ -6,10 +6,15 @@ View mode callbacks for table component:
 - Infinite scroll with filtering, sorting, and interactive component integration
 """
 
+from typing import Any
+
 import polars as pl
+from bson import ObjectId
 from dash import ALL, MATCH, Input, Output, State, ctx, no_update
 
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.deltatables_utils import load_deltatable_lite
+from depictio.dash.utils import get_result_dc_for_workflow
 
 # AG Grid filter operators mapping to Polars operations
 OPERATORS = {
@@ -20,6 +25,668 @@ OPERATORS = {
     "notEqual": "ne",
     "equals": "eq",
 }
+
+
+# ==============================================================================
+# Helper Functions for load_table_data_with_filters
+# ==============================================================================
+
+
+def build_interactive_metadata_mapping(
+    interactive_metadata_list: list[dict[str, Any]] | None,
+    interactive_metadata_ids: list[dict[str, Any]] | None,
+) -> dict[str, dict[str, Any]]:
+    """
+    Build a mapping from component index to full metadata.
+
+    This function creates a lookup dictionary that maps interactive component
+    indices to their complete metadata, enabling efficient metadata retrieval
+    during component enrichment.
+
+    Args:
+        interactive_metadata_list: List of metadata dictionaries from State callbacks,
+            containing full component configuration (dc_id, column_name, etc.)
+        interactive_metadata_ids: List of component ID dictionaries from State callbacks,
+            containing the 'index' field used as the mapping key
+
+    Returns:
+        Dictionary mapping component index strings to their full metadata dictionaries.
+        Empty dictionary if either input is None or empty.
+
+    Example:
+        >>> metadata_list = [{"dc_id": "123", "column_name": "status"}]
+        >>> metadata_ids = [{"index": "comp-1", "type": "interactive-stored-metadata"}]
+        >>> mapping = build_interactive_metadata_mapping(metadata_list, metadata_ids)
+        >>> mapping["comp-1"]
+        {"dc_id": "123", "column_name": "status"}
+    """
+    metadata_by_index: dict[str, dict[str, Any]] = {}
+
+    if not interactive_metadata_list or not interactive_metadata_ids:
+        return metadata_by_index
+
+    for i, meta_id in enumerate(interactive_metadata_ids):
+        if i < len(interactive_metadata_list):
+            index = meta_id["index"]
+            metadata_by_index[index] = interactive_metadata_list[i]
+            logger.debug(f"Mapped metadata for interactive component {index}")
+
+    return metadata_by_index
+
+
+def enrich_interactive_components(
+    interactive_values: dict[str, Any] | None,
+    metadata_by_index: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """
+    Enrich lightweight component data from store with full metadata.
+
+    The interactive values store contains only lightweight data (index + value).
+    This function enriches each component with full metadata from the State
+    callbacks, enabling proper filtering and join operations.
+
+    Args:
+        interactive_values: Store data containing 'interactive_components_values' list,
+            where each item has 'index' and 'value' fields
+        metadata_by_index: Mapping from component index to full metadata,
+            built by build_interactive_metadata_mapping()
+
+    Returns:
+        Dictionary mapping component index to enriched component data containing:
+        - index: Component identifier
+        - value: Current filter value
+        - component_type: Always "interactive"
+        - metadata: Full component metadata (dc_id, column_name, etc.)
+
+    Note:
+        Components without matching metadata are skipped with a warning logged.
+    """
+    interactive_components_dict: dict[str, dict[str, Any]] = {}
+
+    lightweight_components = (
+        interactive_values.get("interactive_components_values", []) if interactive_values else []
+    )
+
+    logger.debug(
+        f"Enrichment starting - {len(lightweight_components)} lightweight components, "
+        f"{len(metadata_by_index)} metadata entries available"
+    )
+
+    for component in lightweight_components:
+        index = component.get("index")
+        value = component.get("value")
+
+        if not index:
+            continue
+
+        full_metadata = metadata_by_index.get(index)
+
+        if full_metadata:
+            enriched_component = {
+                "index": index,
+                "value": value,
+                "component_type": "interactive",
+                "metadata": full_metadata,
+            }
+            interactive_components_dict[index] = enriched_component
+
+            logger.debug(
+                f"Enriched component {index}: DC={full_metadata.get('dc_id')}, "
+                f"Column={full_metadata.get('column_name')}, "
+                f"Type={full_metadata.get('interactive_component_type')}"
+            )
+        else:
+            logger.warning(f"Component {index} has value but no metadata - skipping")
+
+    logger.info(f"Enrichment complete - {len(interactive_components_dict)} components enriched")
+    return interactive_components_dict
+
+
+def prepare_metadata_for_join(
+    stored_metadata: dict[str, Any],
+    interactive_components_dict: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    Prepare metadata list for iterative join operations.
+
+    Creates a list of metadata dictionaries that includes the table component
+    and all interactive components, with component_type annotations for
+    proper join calculation.
+
+    Args:
+        stored_metadata: Table component metadata containing wf_id, dc_id, etc.
+        interactive_components_dict: Enriched interactive components from
+            enrich_interactive_components()
+
+    Returns:
+        List of metadata dictionaries, each with 'component_type' field set.
+        Always includes table metadata first, followed by interactive components.
+    """
+    stored_metadata_for_join: list[dict[str, Any]] = []
+
+    table_metadata = dict(stored_metadata)
+    table_metadata["component_type"] = "table"
+    stored_metadata_for_join.append(table_metadata)
+
+    if interactive_components_dict:
+        for component_index, component_data in interactive_components_dict.items():
+            if component_data.get("metadata"):
+                interactive_meta = dict(component_data["metadata"])
+                interactive_meta["component_type"] = "interactive"
+                stored_metadata_for_join.append(interactive_meta)
+                logger.info(
+                    f"Including interactive component {component_index} in join calculation"
+                )
+
+    logger.info(
+        f"Metadata for join prepared: {len(stored_metadata_for_join)} component(s) (table + interactive)"
+    )
+    return stored_metadata_for_join
+
+
+def load_data_with_interactive_filters(
+    workflow_id: str,
+    data_collection_id: str,
+    stored_metadata: dict[str, Any],
+    interactive_components_dict: dict[str, dict[str, Any]],
+    TOKEN: str | None,
+) -> pl.DataFrame:
+    """
+    Load data from delta tables with interactive component filters applied.
+
+    Handles the complex logic of determining whether interactive components
+    target the same data collection as the table, and loads data accordingly
+    using pre-computed joins when available.
+
+    Args:
+        workflow_id: Workflow identifier for data loading
+        data_collection_id: Data collection identifier for the table
+        stored_metadata: Table component metadata
+        interactive_components_dict: Enriched interactive components with filters
+        TOKEN: Authentication token for API calls
+
+    Returns:
+        Polars DataFrame with interactive filters applied where applicable.
+
+    Note:
+        Falls back to unfiltered data if filter application fails.
+    """
+    if not interactive_components_dict:
+        return _load_data_without_interactive_filters(workflow_id, data_collection_id, TOKEN)
+
+    logger.info(f"Active interactive components: {len(interactive_components_dict)} component(s)")
+
+    table_dc_id = stored_metadata.get("dc_id")
+    table_dc_ids = {table_dc_id}
+    interactive_dc_ids = {
+        comp_data.get("metadata", {}).get("dc_id")
+        for comp_data in interactive_components_dict.values()
+    }
+
+    logger.info(f"Table DC: {table_dc_id}")
+    logger.info(f"Interactive DCs: {interactive_dc_ids}")
+
+    result_dc_id = get_result_dc_for_workflow(workflow_id, TOKEN)
+
+    if table_dc_ids & interactive_dc_ids:
+        logger.info("DC COMPATIBLE: Interactive filters target same DC as table")
+        return _load_compatible_dc_data(
+            workflow_id, data_collection_id, result_dc_id, interactive_components_dict, TOKEN
+        )
+    else:
+        logger.warning(
+            f"DC INCOMPATIBLE: Interactive filters target different DCs ({interactive_dc_ids}) "
+            f"than table ({table_dc_id})"
+        )
+        logger.warning("Loading table data UNJOINED")
+        df = load_deltatable_lite(
+            ObjectId(workflow_id), ObjectId(data_collection_id), metadata=None, TOKEN=TOKEN
+        )
+        logger.info(f"Loaded unjoined table data (shape: {df.shape})")
+        return df
+
+
+def _load_compatible_dc_data(
+    workflow_id: str,
+    data_collection_id: str,
+    result_dc_id: str | None,
+    interactive_components_dict: dict[str, dict[str, Any]],
+    TOKEN: str | None,
+) -> pl.DataFrame:
+    """
+    Load data when interactive components target compatible data collections.
+
+    Uses pre-computed joins when available, otherwise loads single DC with filters.
+
+    Args:
+        workflow_id: Workflow identifier
+        data_collection_id: Data collection identifier
+        result_dc_id: Pre-computed join result DC ID (if available)
+        interactive_components_dict: Enriched interactive components
+        TOKEN: Authentication token
+
+    Returns:
+        Filtered DataFrame from compatible data collection.
+    """
+    try:
+        if result_dc_id:
+            logger.info("Loading pre-computed joined table with interactive filters")
+            df = load_deltatable_lite(
+                ObjectId(workflow_id),
+                ObjectId(result_dc_id),
+                metadata=list(interactive_components_dict.values()),
+                TOKEN=TOKEN,
+            )
+            logger.info(f"Successfully loaded FILTERED data from result DC (shape: {df.shape})")
+        else:
+            logger.info("No joins - loading single DC with interactive filters")
+            df = load_deltatable_lite(
+                ObjectId(workflow_id),
+                ObjectId(data_collection_id),
+                metadata=list(interactive_components_dict.values()),
+                TOKEN=TOKEN,
+            )
+            logger.info(f"Successfully loaded FILTERED single DC (shape: {df.shape})")
+        return df
+    except Exception as interactive_error:
+        logger.error(f"Loading data failed: {str(interactive_error)}")
+        df = load_deltatable_lite(
+            ObjectId(workflow_id), ObjectId(data_collection_id), metadata=None, TOKEN=TOKEN
+        )
+        logger.info("Fallback: Loaded unfiltered data")
+        return df
+
+
+def _load_data_without_interactive_filters(
+    workflow_id: str,
+    data_collection_id: str,
+    TOKEN: str | None,
+) -> pl.DataFrame:
+    """
+    Load data when no interactive component filters are active.
+
+    Checks for pre-computed joins and loads from the appropriate source.
+
+    Args:
+        workflow_id: Workflow identifier
+        data_collection_id: Data collection identifier
+        TOKEN: Authentication token
+
+    Returns:
+        DataFrame loaded from delta table (joined or single DC).
+    """
+    logger.info(
+        f"Loading delta table data (no interactive components): {workflow_id}:{data_collection_id}"
+    )
+
+    try:
+        result_dc_id = get_result_dc_for_workflow(workflow_id, TOKEN)
+
+        if result_dc_id:
+            logger.info("Table has pre-computed join - loading result DC")
+            df = load_deltatable_lite(
+                ObjectId(workflow_id), ObjectId(result_dc_id), metadata=None, TOKEN=TOKEN
+            )
+            logger.info(f"Successfully loaded joined table data (shape: {df.shape})")
+        else:
+            df = load_deltatable_lite(
+                ObjectId(workflow_id), ObjectId(data_collection_id), metadata=None, TOKEN=TOKEN
+            )
+            logger.info(f"Successfully loaded single table data (shape: {df.shape})")
+        return df
+    except Exception as join_error:
+        logger.warning(f"Error checking table joins: {str(join_error)}")
+        df = load_deltatable_lite(
+            ObjectId(workflow_id), ObjectId(data_collection_id), metadata=None, TOKEN=TOKEN
+        )
+        logger.info(f"Fallback: Loaded single table data (shape: {df.shape})")
+        return df
+
+
+def apply_ag_grid_filters(df: pl.DataFrame, filter_model: dict[str, Any]) -> pl.DataFrame:
+    """
+    Apply all AG Grid filters from the filter model to a DataFrame.
+
+    Handles both simple filters and complex filters with AND/OR operators.
+    Logs warnings for filters that fail to apply but continues processing.
+
+    Args:
+        df: Input Polars DataFrame to filter
+        filter_model: AG Grid filter model dictionary mapping column names
+            to filter definitions
+
+    Returns:
+        Filtered DataFrame with all applicable filters applied.
+
+    Note:
+        Complex filters with 'operator' field are handled specially:
+        - AND: Both conditions must match
+        - OR: Either condition matches (using concat + unique)
+    """
+    if not filter_model:
+        return df
+
+    logger.info(f"Applying {len(filter_model)} AG Grid filters")
+
+    for col, filter_def in filter_model.items():
+        try:
+            if "operator" in filter_def:
+                if filter_def["operator"] == "AND":
+                    df = apply_ag_grid_filter(df, filter_def["condition1"], col)
+                    df = apply_ag_grid_filter(df, filter_def["condition2"], col)
+                    logger.debug(f"Applied AND filter to column {col}")
+                else:
+                    df1 = apply_ag_grid_filter(df, filter_def["condition1"], col)
+                    df2 = apply_ag_grid_filter(df, filter_def["condition2"], col)
+                    df = pl.concat([df1, df2]).unique()
+                    logger.debug(f"Applied OR filter to column {col}")
+            else:
+                df = apply_ag_grid_filter(df, filter_def, col)
+                logger.debug(f"Applied simple filter to column {col}")
+        except Exception as e:
+            logger.warning(f"Failed to apply filter for column {col}: {e}")
+            continue
+
+    logger.info(f"After filtering: {df.shape[0]} rows remaining")
+    return df
+
+
+# ==============================================================================
+# Helper Functions for infinite_scroll_component
+# ==============================================================================
+
+
+def create_synthetic_request(triggered_by_interactive: bool) -> dict[str, Any]:
+    """
+    Create a synthetic AG Grid request for initial data loading.
+
+    Used when AG Grid hasn't sent its first request yet (initial load)
+    or when interactive components change and need immediate processing.
+
+    Args:
+        triggered_by_interactive: Whether the callback was triggered by
+            an interactive component change
+
+    Returns:
+        Synthetic request dictionary with default pagination parameters:
+        - startRow: 0
+        - endRow: 100 (standard first page size)
+        - filterModel: empty
+        - sortModel: empty
+    """
+    if triggered_by_interactive:
+        logger.info("Interactive component changed - processing data immediately")
+    else:
+        logger.info("INITIAL LOAD: Creating synthetic request for first page")
+
+    request = {
+        "startRow": 0,
+        "endRow": 100,
+        "filterModel": {},
+        "sortModel": [],
+    }
+    logger.info("Created synthetic request to load initial data")
+    return request
+
+
+def prepare_dataframe_for_aggrid(
+    df: pl.DataFrame,
+    start_row: int,
+    end_row: int,
+) -> tuple[pl.DataFrame, int]:
+    """
+    Prepare a DataFrame slice for AG Grid consumption.
+
+    Performs the following transformations:
+    1. Slices the DataFrame to the requested row range
+    2. Renames columns containing dots (not supported by AG Grid)
+    3. Adds an ID column for row indexing
+
+    Args:
+        df: Full filtered/sorted DataFrame
+        start_row: Starting row index (inclusive)
+        end_row: Ending row index (exclusive)
+
+    Returns:
+        Tuple of (prepared DataFrame slice, total row count).
+    """
+    total_rows = df.shape[0]
+    partial_df = df[start_row:end_row]
+
+    if any("." in col for col in partial_df.columns):
+        column_mapping = {col: col.replace(".", "_") for col in partial_df.columns if "." in col}
+        partial_df = partial_df.rename(column_mapping)
+        logger.debug(
+            f"Renamed {len(column_mapping)} columns for AgGrid: {list(column_mapping.keys())}"
+        )
+
+    partial_df = partial_df.with_columns(
+        pl.Series("ID", range(start_row, start_row + len(partial_df)))
+    )
+
+    return partial_df, total_rows
+
+
+def build_aggrid_response(
+    partial_df: pl.DataFrame,
+    total_rows: int,
+    start_row: int,
+    table_index: str,
+) -> dict[str, Any]:
+    """
+    Build the response dictionary for AG Grid infinite row model.
+
+    Args:
+        partial_df: Prepared DataFrame slice for the current page
+        total_rows: Total number of rows available (for pagination)
+        start_row: Starting row index of this page
+        table_index: Table component index for logging
+
+    Returns:
+        Response dictionary with 'rowData' (list of row dicts) and
+        'rowCount' (total available rows).
+    """
+    row_data = partial_df.to_dicts()
+    actual_rows_returned = len(row_data)
+
+    logger.debug(f"Converted {actual_rows_returned} rows to dicts using Polars native method")
+    logger.info(
+        f"Table {table_index}: Delivered {actual_rows_returned} rows "
+        f"({start_row}-{start_row + actual_rows_returned})"
+    )
+    logger.info(f"Response: {actual_rows_returned} rows from {total_rows} total")
+
+    return {"rowData": row_data, "rowCount": total_rows}
+
+
+def log_interactive_filter_success(
+    interactive_values: dict[str, Any] | None,
+    actual_rows_returned: int,
+    total_rows: int,
+) -> None:
+    """
+    Log detailed information about successful interactive filtering.
+
+    Provides diagnostic information about active filters and their effect
+    on the dataset, useful for debugging filter behavior.
+
+    Args:
+        interactive_values: Store data containing interactive component values
+        actual_rows_returned: Number of rows returned in current page
+        total_rows: Total rows after filtering
+    """
+    if not interactive_values:
+        logger.info(
+            f"INFINITE SCROLL + PAGINATION: Standard pagination delivered "
+            f"{actual_rows_returned}/{total_rows} rows"
+        )
+        return
+
+    components_list = interactive_values.get("interactive_components_values", [])
+    has_interactive_values = bool(components_list)
+
+    if has_interactive_values:
+        active_filters = [
+            (comp.get("index"), comp.get("value"))
+            for comp in components_list
+            if comp.get("value") is not None
+        ]
+        logger.info(
+            f"HYBRID SUCCESS: Interactive + pagination delivered {actual_rows_returned}/{total_rows} rows"
+        )
+        logger.info(f"Active interactive filters: {active_filters}")
+        logger.info(f"Dataset after filtering: {total_rows} total rows available for pagination")
+
+        if active_filters:
+            logger.info(
+                f"FILTERING CONFIRMED: {len(active_filters)} active filters reduced dataset"
+            )
+        else:
+            logger.info("NO ACTIVE FILTERS: Interactive components exist but no values set")
+    else:
+        logger.info(
+            f"INFINITE SCROLL + PAGINATION: Standard pagination delivered "
+            f"{actual_rows_returned}/{total_rows} rows"
+        )
+
+
+def _log_interactive_values_debug(interactive_values: dict[str, Any] | None) -> None:
+    """Log debug information about interactive component values."""
+    if interactive_values and "interactive_components_values" in interactive_values:
+        components_count = len(interactive_values["interactive_components_values"])
+        logger.debug(f"Table: {components_count} interactive components detected")
+    else:
+        logger.debug("Table: No interactive values")
+
+
+def _log_pagination_request(
+    table_index: str,
+    start_row: int,
+    end_row: int,
+    filter_model: dict[str, Any],
+    sort_model: list[dict[str, Any]],
+) -> None:
+    """Log pagination request parameters for debugging."""
+    page_size = end_row - start_row
+    requested_rows = end_row - start_row
+
+    logger.info(f"Page size: {page_size} rows (user selected or default)")
+    logger.info(f"Table {table_index}: Loading rows {start_row}-{end_row} ({requested_rows} rows)")
+    logger.info(
+        f"Active filters: {len(filter_model)} filter(s) - "
+        f"{list(filter_model.keys()) if filter_model else 'none'}"
+    )
+    logger.info(
+        f"Active sorts: {len(sort_model)} sort(s) - "
+        f"{[(s['colId'], s['sort']) for s in sort_model] if sort_model else 'none'}"
+    )
+
+
+# ==============================================================================
+# Helper Functions for export_table_to_csv
+# ==============================================================================
+
+
+def create_export_notification(
+    notification_type: str,
+    message: str,
+    row_count: int | None = None,
+    csv_size_mb: float | None = None,
+) -> Any:
+    """
+    Create a DMC notification for export operations.
+
+    Args:
+        notification_type: One of "success", "error", or "blocked"
+        message: Message to display in the notification
+        row_count: Number of rows exported (for success notifications)
+        csv_size_mb: Size of CSV in MB (for success notifications)
+
+    Returns:
+        dmc.Notification component configured for the specified type.
+    """
+    import dash_mantine_components as dmc
+    from dash_iconify import DashIconify
+
+    if notification_type == "success":
+        return dmc.Notification(
+            title="Export complete!",
+            message=f"Downloaded {row_count:,} rows as CSV ({csv_size_mb:.1f} MB)",
+            color="green",
+            icon=DashIconify(icon="mdi:check-circle"),
+            action="show",
+            autoClose=5000,
+        )
+    elif notification_type == "blocked":
+        return dmc.Notification(
+            title="Export blocked",
+            message=message,
+            color="red",
+            icon=DashIconify(icon="mdi:alert-circle"),
+            action="show",
+            autoClose=10000,
+        )
+    else:
+        return dmc.Notification(
+            title="Export failed",
+            message=message,
+            color="red",
+            icon=DashIconify(icon="mdi:alert-circle"),
+            action="show",
+            autoClose=10000,
+        )
+
+
+def check_export_size_limit(row_count: int, max_rows: int = 1_000_000) -> tuple[bool, str | None]:
+    """
+    Check if the export size is within acceptable limits.
+
+    Args:
+        row_count: Number of rows to export
+        max_rows: Maximum allowed rows (default 1 million)
+
+    Returns:
+        Tuple of (is_allowed, error_message).
+        is_allowed is True if export should proceed.
+        error_message is set only when export is blocked.
+    """
+    if row_count > max_rows:
+        logger.error(
+            f"CSV EXPORT BLOCKED: Table too large ({row_count:,} rows > {max_rows:,} limit)"
+        )
+        return False, f"Table too large: {row_count:,} rows (limit: {max_rows:,})"
+
+    if row_count > 100_000:
+        logger.warning(f"CSV EXPORT: Large export ({row_count:,} rows)")
+
+    return True, None
+
+
+def generate_csv_download(
+    df: pl.DataFrame,
+    table_index: str,
+) -> tuple[str, str, float]:
+    """
+    Generate CSV content and filename for download.
+
+    Args:
+        df: DataFrame to export
+        table_index: Table component index for filename
+
+    Returns:
+        Tuple of (csv_string, filename, size_in_mb).
+    """
+    import datetime
+
+    csv_string = df.write_csv()
+    csv_size_mb = len(csv_string) / (1024 * 1024)
+
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"depictio_table_{table_index}_{timestamp}.csv"
+
+    logger.info(f"CSV EXPORT: Generated CSV ({csv_size_mb:.2f} MB)")
+
+    return csv_string, filename, csv_size_mb
 
 
 def apply_ag_grid_filter(df: pl.DataFrame, filter_model: dict, col: str) -> pl.DataFrame:
@@ -106,12 +773,12 @@ def apply_ag_grid_sorting(df: pl.DataFrame, sort_model: list) -> pl.DataFrame:
 def load_table_data_with_filters(
     workflow_id: str,
     data_collection_id: str,
-    stored_metadata: dict,
-    interactive_values: dict | None,
-    interactive_metadata_list: list,
-    interactive_metadata_ids: list,
-    filter_model: dict | None = None,
-    sort_model: list | None = None,
+    stored_metadata: dict[str, Any],
+    interactive_values: dict[str, Any] | None,
+    interactive_metadata_list: list[dict[str, Any]],
+    interactive_metadata_ids: list[dict[str, Any]],
+    filter_model: dict[str, Any] | None = None,
+    sort_model: list[dict[str, Any]] | None = None,
     TOKEN: str | None = None,
 ) -> pl.DataFrame:
     """
@@ -121,268 +788,55 @@ def load_table_data_with_filters(
     - infinite_scroll_component (with pagination)
     - export_table_to_csv (complete dataset)
 
+    The function performs three main steps:
+    1. Enrich interactive components with full metadata from State callbacks
+    2. Load data from delta tables with interactive filters applied
+    3. Apply AG Grid filters and sorting
+
     Args:
-        workflow_id: Workflow ID
-        data_collection_id: Data collection ID
-        stored_metadata: Table component metadata
-        interactive_values: Interactive component filter values
-        interactive_metadata_list: List of interactive component metadata
-        interactive_metadata_ids: List of interactive component IDs
-        filter_model: AG Grid filter model
-        sort_model: AG Grid sort model
-        TOKEN: Authentication token
+        workflow_id: Workflow ID for data loading
+        data_collection_id: Data collection ID for the table
+        stored_metadata: Table component metadata containing wf_id, dc_id, etc.
+        interactive_values: Interactive component filter values from store
+        interactive_metadata_list: List of interactive component metadata from State
+        interactive_metadata_ids: List of interactive component IDs from State
+        filter_model: AG Grid filter model dictionary
+        sort_model: AG Grid sort model list
+        TOKEN: Authentication token for API calls
 
     Returns:
-        pl.DataFrame: Filtered and sorted DataFrame
+        Filtered and sorted Polars DataFrame ready for display or export.
     """
-    from bson import ObjectId
+    logger.info("load_table_data_with_filters: Loading table data")
 
-    from depictio.api.v1.deltatables_utils import load_deltatable_lite
-    from depictio.dash.utils import get_result_dc_for_workflow
-
-    logger.info("🔄 load_table_data_with_filters: Loading table data")
-
-    # CRITICAL: Enrich lightweight store data with full metadata from States
-    # Pattern from card callback - fixes missing metadata issue
-
-    # Step 1: Build metadata mapping (index → full metadata)
-    metadata_by_index = {}
-    if interactive_metadata_list and interactive_metadata_ids:
-        for i, meta_id in enumerate(interactive_metadata_ids):
-            if i < len(interactive_metadata_list):
-                index = meta_id["index"]
-                metadata_by_index[index] = interactive_metadata_list[i]
-                logger.debug(f"Mapped metadata for interactive component {index}")
-
-    # Step 2: Extract lightweight components from store
-    lightweight_components = (
-        interactive_values.get("interactive_components_values", []) if interactive_values else []
+    # Step 1: Build metadata mapping and enrich interactive components
+    metadata_by_index = build_interactive_metadata_mapping(
+        interactive_metadata_list, interactive_metadata_ids
+    )
+    interactive_components_dict = enrich_interactive_components(
+        interactive_values, metadata_by_index
     )
 
-    logger.debug(
-        f"Enrichment starting - {len(lightweight_components)} lightweight components, "
-        f"{len(metadata_by_index)} metadata entries available"
+    # Step 2: Prepare metadata for join (used for logging/debugging)
+    prepare_metadata_for_join(stored_metadata, interactive_components_dict)
+
+    # Step 3: Load data with interactive filters
+    df = load_data_with_interactive_filters(
+        workflow_id, data_collection_id, stored_metadata, interactive_components_dict, TOKEN
     )
+    logger.info(f"Loaded initial dataset: {df.shape[0]} rows, {df.shape[1]} columns")
 
-    # Step 3: Enrich lightweight data with full metadata
-    interactive_components_dict = {}
-
-    for component in lightweight_components:
-        index = component.get("index")
-        value = component.get("value")
-
-        if not index:
-            continue
-
-        # Get full metadata from mapping
-        full_metadata = metadata_by_index.get(index)
-
-        if full_metadata:
-            # Build enriched component data
-            enriched_component = {
-                "index": index,
-                "value": value,
-                "component_type": "interactive",  # Type is known
-                "metadata": full_metadata,  # Full metadata added
-            }
-
-            interactive_components_dict[index] = enriched_component
-
-            logger.debug(
-                f"✅ Enriched component {index}: DC={full_metadata.get('dc_id')}, "
-                f"Column={full_metadata.get('column_name')}, "
-                f"Type={full_metadata.get('interactive_component_type')}"
-            )
-        else:
-            logger.warning(f"⚠️ Component {index} has value but no metadata - skipping")
-
-    logger.info(f"📊 Enrichment complete - {len(interactive_components_dict)} components enriched")
-
-    # CRITICAL FIX: Prepare metadata for iterative join INCLUDING all interactive components
-    # When interactive components exist, we need to include their metadata for proper joining
-    stored_metadata_for_join = []
-
-    # Always include the table metadata
-    table_metadata = dict(stored_metadata)  # Convert to regular dict
-    table_metadata["component_type"] = "table"  # Ensure component type is set
-    stored_metadata_for_join.append(table_metadata)
-
-    # CRITICAL: Include metadata from all interactive components for join calculation
-    if interactive_components_dict:
-        for component_index, component_data in interactive_components_dict.items():
-            if component_data.get("metadata"):
-                interactive_meta = dict(component_data["metadata"])
-                interactive_meta["component_type"] = "interactive"
-                stored_metadata_for_join.append(interactive_meta)
-                logger.info(
-                    f"✅ Including interactive component {component_index} in join calculation"
-                )
-
-    logger.info(
-        f"📊 Metadata for join prepared: {len(stored_metadata_for_join)} component(s) (table + interactive)"
-    )
-
-    # INTERACTIVE COMPONENT FILTERING LOGIC
-    if interactive_components_dict:
-        logger.info(
-            f"🎯 Active interactive components: {len(interactive_components_dict)} component(s)"
-        )
-
-        if interactive_components_dict:
-            # Extract DC IDs
-            table_dc_id = stored_metadata.get("dc_id")
-            table_dc_ids = {table_dc_id}
-            interactive_dc_ids = {
-                comp_data.get("metadata", {}).get("dc_id")
-                for comp_data in interactive_components_dict.values()
-            }
-
-            logger.info(f"📋 Table DC: {table_dc_id}")
-            logger.info(f"📋 Interactive DCs: {interactive_dc_ids}")
-
-            # MIGRATED: Check for pre-computed joins
-            result_dc_id = get_result_dc_for_workflow(workflow_id, TOKEN)
-
-            # Check DC compatibility
-            if table_dc_ids & interactive_dc_ids:
-                logger.info("✅ DC COMPATIBLE: Interactive filters target same DC as table")
-
-                # MIGRATED: With pre-computed joins, we no longer need semi-join optimization
-                # Just load the result DC (or single DC if no joins) with interactive filters
-                try:
-                    if result_dc_id:
-                        # Load pre-computed join result DC with interactive filters
-                        logger.info("🔗 Loading pre-computed joined table with interactive filters")
-                        df = load_deltatable_lite(
-                            ObjectId(workflow_id),
-                            ObjectId(result_dc_id),
-                            metadata=list(interactive_components_dict.values()),
-                            TOKEN=TOKEN,
-                        )
-                        logger.info(
-                            f"✅ Successfully loaded FILTERED data from result DC (shape: {df.shape})"
-                        )
-                    else:
-                        # No join - load single DC with interactive filters
-                        logger.info("📊 No joins - loading single DC with interactive filters")
-                        df = load_deltatable_lite(
-                            ObjectId(workflow_id),
-                            ObjectId(data_collection_id),
-                            metadata=list(interactive_components_dict.values()),
-                            TOKEN=TOKEN,
-                        )
-                        logger.info(
-                            f"✅ Successfully loaded FILTERED single DC (shape: {df.shape})"
-                        )
-                except Exception as interactive_error:
-                    logger.error(f"❌ Loading data failed: {str(interactive_error)}")
-                    # Fallback to unfiltered data
-                    df = load_deltatable_lite(
-                        ObjectId(workflow_id),
-                        ObjectId(data_collection_id),
-                        metadata=None,
-                        TOKEN=TOKEN,
-                    )
-                    logger.info("✅ Fallback: Loaded unfiltered data")
-            else:
-                # DC INCOMPATIBLE
-                logger.warning(
-                    f"⚠️ DC INCOMPATIBLE: Interactive filters target different DCs ({interactive_dc_ids}) than table ({table_dc_id})"
-                )
-                logger.warning("🔧 Loading table data UNJOINED")
-
-                df = load_deltatable_lite(
-                    ObjectId(workflow_id),
-                    ObjectId(data_collection_id),
-                    metadata=None,
-                    TOKEN=TOKEN,
-                )
-                logger.info(f"✅ Loaded unjoined table data (shape: {df.shape})")
-        else:
-            # No active interactive components
-            df = load_deltatable_lite(
-                ObjectId(workflow_id),
-                ObjectId(data_collection_id),
-                metadata=None,
-                TOKEN=TOKEN,
-            )
-            logger.info(f"✅ Loaded table data without interactive filters (shape: {df.shape})")
-    else:
-        # No interactive components - check if table needs joins
-        logger.info(
-            f"💾 Loading delta table data (no interactive components): {workflow_id}:{data_collection_id}"
-        )
-
-        try:
-            # MIGRATED: Load pre-computed join or single DC
-            result_dc_id = get_result_dc_for_workflow(workflow_id, TOKEN)
-
-            if result_dc_id:
-                # Table has pre-computed join - load result DC
-                logger.info("🔗 Table has pre-computed join - loading result DC")
-                df = load_deltatable_lite(
-                    ObjectId(workflow_id), ObjectId(result_dc_id), metadata=None, TOKEN=TOKEN
-                )
-                logger.info(f"✅ Successfully loaded joined table data (shape: {df.shape})")
-            else:
-                # No joins needed - load single DC
-                df = load_deltatable_lite(
-                    ObjectId(workflow_id),
-                    ObjectId(data_collection_id),
-                    metadata=None,
-                    TOKEN=TOKEN,
-                )
-                logger.info(f"✅ Successfully loaded single table data (shape: {df.shape})")
-
-        except Exception as join_error:
-            logger.warning(f"⚠️ Error checking table joins: {str(join_error)}")
-            # Fallback
-            df = load_deltatable_lite(
-                ObjectId(workflow_id),
-                ObjectId(data_collection_id),
-                metadata=None,
-                TOKEN=TOKEN,
-            )
-            logger.info(f"✅ Fallback: Loaded single table data (shape: {df.shape})")
-
-    logger.info(f"📊 Loaded initial dataset: {df.shape[0]} rows, {df.shape[1]} columns")
-
-    # APPLY AG GRID FILTERS
+    # Step 4: Apply AG Grid filters
     if filter_model:
-        logger.info(f"🔍 Applying {len(filter_model)} AG Grid filters")
-        for col, filter_def in filter_model.items():
-            try:
-                if "operator" in filter_def:
-                    # Handle complex filters with AND/OR operators
-                    if filter_def["operator"] == "AND":
-                        df = apply_ag_grid_filter(df, filter_def["condition1"], col)
-                        df = apply_ag_grid_filter(df, filter_def["condition2"], col)
-                        logger.debug(f"Applied AND filter to column {col}")
-                    else:  # OR operator
-                        df1 = apply_ag_grid_filter(df, filter_def["condition1"], col)
-                        df2 = apply_ag_grid_filter(df, filter_def["condition2"], col)
-                        df = pl.concat([df1, df2]).unique()
-                        logger.debug(f"Applied OR filter to column {col}")
-                else:
-                    # Handle simple filters
-                    df = apply_ag_grid_filter(df, filter_def, col)
-                    logger.debug(f"Applied simple filter to column {col}")
-            except Exception as e:
-                logger.warning(f"Failed to apply filter for column {col}: {e}")
-                continue
+        df = apply_ag_grid_filters(df, filter_model)
 
-        logger.info(f"📊 After filtering: {df.shape[0]} rows remaining")
-
-    # APPLY AG GRID SORTING
+    # Step 5: Apply AG Grid sorting
     if sort_model:
-        logger.info(f"🔤 Applying sorting: {[(s['colId'], s['sort']) for s in sort_model]}")
+        logger.info(f"Applying sorting: {[(s['colId'], s['sort']) for s in sort_model]}")
         df = apply_ag_grid_sorting(df, sort_model)
-        logger.info("✅ Sorting applied successfully")
+        logger.info("Sorting applied successfully")
 
-    logger.info(
-        f"📊 Final dataset after filters/sorting: {df.shape[0]} rows, {df.shape[1]} columns"
-    )
-
+    logger.info(f"Final dataset after filters/sorting: {df.shape[0]} rows, {df.shape[1]} columns")
     return df
 
 
@@ -430,7 +884,7 @@ def register_core_callbacks(app):
         interactive_metadata_ids,
     ):
         """
-        INFINITE SCROLL + PAGINATION CALLBACK WITH INTERACTIVE COMPONENT SUPPORT
+        Handle infinite scroll pagination with interactive component support.
 
         This callback handles ALL tables using infinite row model with pagination and includes:
         - Interactive component filtering via iterative_join
@@ -438,89 +892,46 @@ def register_core_callbacks(app):
         - Pagination with configurable page sizes (50, 100, 200, 500 rows)
         - Cache invalidation when interactive values change
 
-        Note: Dash AG Grid uses "infinite" rowModelType for server-side data loading with pagination
+        Note: Dash AG Grid uses "infinite" rowModelType for server-side data loading with pagination.
         """
+        logger.info("TABLE INFINITE SCROLL + PAGINATION CALLBACK FIRED!")
 
-        logger.info("🚀 TABLE INFINITE SCROLL + PAGINATION CALLBACK FIRED!")
-
-        # CACHE INVALIDATION: Detect if triggered by interactive component changes
+        # Detect if triggered by interactive component changes
         triggered_by_interactive = ctx.triggered and any(
             "interactive-values-store" in str(trigger["prop_id"]) for trigger in ctx.triggered
         )
 
-        logger.debug(f"🔄 Infinite scroll callback triggered - {ctx.triggered}")
-
-        # Detailed analysis of interactive values
-        if interactive_values and "interactive_components_values" in interactive_values:
-            components_count = len(interactive_values["interactive_components_values"])
-            logger.debug(f"🎯 Table: {components_count} interactive components detected")
-        else:
-            logger.debug("🎯 Table: No interactive values")
-
-        # LOGGING: Track pagination requests and trigger source
-        logger.debug(f"📊 Request: {request}")
-        logger.debug(f"🎯 Triggered by: {ctx.triggered_id if ctx.triggered else 'Unknown'}")
+        logger.debug(f"Infinite scroll callback triggered - {ctx.triggered}")
+        _log_interactive_values_debug(interactive_values)
+        logger.debug(f"Request: {request}")
+        logger.debug(f"Triggered by: {ctx.triggered_id if ctx.triggered else 'Unknown'}")
 
         # Validate inputs
         if not local_store or not stored_metadata:
             logger.warning(
-                "❌ Missing required data for infinite scroll - local_store or stored_metadata"
+                "Missing required data for infinite scroll - local_store or stored_metadata"
             )
             return no_update
 
         # Handle missing request (initial load or interactive changes)
         if request is None:
-            if triggered_by_interactive:
-                # Interactive component changed - always process immediately
-                logger.info("🔄 Interactive component changed - processing data immediately")
-            else:
-                # Initial load - AG Grid hasn't sent first request yet
-                logger.info("🆕 INITIAL LOAD: Creating synthetic request for first page")
+            request = create_synthetic_request(triggered_by_interactive)
 
-            # Create a synthetic request for the first page
-            request = {
-                "startRow": 0,
-                "endRow": 100,  # Standard first page size
-                "filterModel": {},
-                "sortModel": [],
-            }
-            logger.info("✅ Created synthetic request to load initial data")
-
-        # Extract authentication token
+        # Extract parameters
         TOKEN = local_store["access_token"]
-
-        # Extract table metadata
         workflow_id = stored_metadata["wf_id"]
         data_collection_id = stored_metadata["dc_id"]
         table_index = stored_metadata["index"]
 
-        # LOGGING: Track data request parameters
         start_row = request.get("startRow", 0)
         end_row = request.get("endRow", 100)
-        requested_rows = end_row - start_row
         filter_model = request.get("filterModel", {})
         sort_model = request.get("sortModel", [])
 
-        # Detect page size from request
-        page_size = end_row - start_row
-        logger.info(f"📄 Page size: {page_size} rows (user selected or default)")
-
-        logger.info(
-            f"📈 Table {table_index}: Loading rows {start_row}-{end_row} ({requested_rows} rows)"
-        )
-        logger.info(
-            f"🔍 Active filters: {len(filter_model)} filter(s) - {list(filter_model.keys()) if filter_model else 'none'}"
-        )
-        logger.info(
-            f"🔤 Active sorts: {len(sort_model)} sort(s) - {[(s['colId'], s['sort']) for s in sort_model] if sort_model else 'none'}"
-        )
-
-        # NOTE: Interactive component enrichment is handled inside load_table_data_with_filters()
-        # The helper function performs all necessary metadata enrichment, join calculations,
-        # filtering, and sorting - ensuring consistency between infinite scroll and export
+        _log_pagination_request(table_index, start_row, end_row, filter_model, sort_model)
 
         try:
-            # REFACTORED: Use centralized data loading helper function
+            # Load filtered and sorted data
             df = load_table_data_with_filters(
                 workflow_id=workflow_id,
                 data_collection_id=data_collection_id,
@@ -533,92 +944,18 @@ def register_core_callbacks(app):
                 TOKEN=TOKEN,
             )
 
-            total_rows = df.shape[0]
-            logger.info(
-                f"📊 Final dataset after filters/sorting: {total_rows} rows, {df.shape[1]} columns"
-            )
+            # Prepare DataFrame slice for AG Grid
+            partial_df, total_rows = prepare_dataframe_for_aggrid(df, start_row, end_row)
 
-            # OLD LOGIC REMOVED - Now handled by load_table_data_with_filters():
-            # - Interactive component compatibility checking
-            # - Semi-join vs full join logic
-            # - Data loading via load_deltatable_lite or iterative_join
-            # - AG Grid filter application
-            # - AG Grid sorting application
-            # SLICE DATA: Extract the requested row range
-            partial_df = df[start_row:end_row]
-            actual_rows_returned = partial_df.shape[0]
-
-            # Transform column names to replace dots with underscores for AgGrid compatibility
-            # Do this BEFORE conversion to avoid schema issues
-            if any("." in col for col in partial_df.columns):
-                column_mapping = {
-                    col: col.replace(".", "_") for col in partial_df.columns if "." in col
-                }
-                partial_df = partial_df.rename(column_mapping)
-                logger.debug(
-                    f"🔍 Renamed {len(column_mapping)} columns for AgGrid: {list(column_mapping.keys())}"
-                )
-
-            # Add ID field for row indexing
-            partial_df = partial_df.with_columns(
-                pl.Series("ID", range(start_row, start_row + len(partial_df)))
-            )
-
-            # Convert directly to dicts (AG Grid supports Polars natively - no Pandas conversion needed)
-            # This avoids the Polars -> Pandas -> dict conversion chain and potential Arrow RecordBatch errors
-            row_data = partial_df.to_dicts()
-            logger.debug(f"✅ Converted {len(row_data)} rows to dicts using Polars native method")
-
-            # LOGGING: Track successful data delivery
-            logger.info(
-                f"✅ Table {table_index}: Delivered {actual_rows_returned} rows ({start_row}-{start_row + actual_rows_returned})"
-            )
-            logger.info(f"📋 Response: {actual_rows_returned} rows from {total_rows} total")
-
-            # Return data in format expected by dash-ag-grid infinite model
-            response = {
-                "rowData": row_data,
-                "rowCount": total_rows,  # Total number of rows available
-            }
+            # Build and return response
+            response = build_aggrid_response(partial_df, total_rows, start_row, table_index)
 
             logger.info(
-                f"🚀 INFINITE SCROLL + PAGINATION RESPONSE SENT - {actual_rows_returned}/{total_rows} rows"
+                f"INFINITE SCROLL + PAGINATION RESPONSE SENT - {len(response['rowData'])}/{total_rows} rows"
             )
 
-            # HYBRID SUCCESS: Log successful integration of interactive + pagination
-            has_interactive_values = (
-                interactive_values
-                and "interactive_components_values" in interactive_values
-                and len(interactive_values["interactive_components_values"]) > 0
-            )
-
-            if has_interactive_values:
-                # Check if filtering actually reduced the dataset
-                active_filters = [
-                    (comp.get("index"), comp.get("value"))
-                    for comp in interactive_values.get("interactive_components_values", [])
-                    if comp.get("value") is not None
-                ]
-                logger.info(
-                    f"🎯 HYBRID SUCCESS: Interactive + pagination delivered {actual_rows_returned}/{total_rows} rows"
-                )
-                logger.info(f"🎛️ Active interactive filters: {active_filters}")
-                logger.info(
-                    f"📊 Dataset after filtering: {total_rows} total rows available for pagination"
-                )
-
-                if active_filters:
-                    logger.info(
-                        f"✅ FILTERING CONFIRMED: {len(active_filters)} active filters reduced dataset"
-                    )
-                else:
-                    logger.info(
-                        "📭 NO ACTIVE FILTERS: Interactive components exist but no values set"
-                    )
-            else:
-                logger.info(
-                    f"📊 INFINITE SCROLL + PAGINATION: Standard pagination delivered {actual_rows_returned}/{total_rows} rows"
-                )
+            # Log interactive filter success details
+            log_interactive_filter_success(interactive_values, len(response["rowData"]), total_rows)
 
             return response
 
@@ -671,27 +1008,17 @@ def register_core_callbacks(app):
         3. Convert to CSV in memory (never writes to disk)
         4. Return via dcc.Download (streams directly to browser)
         """
-        import datetime
-
-        import dash_mantine_components as dmc
-        from dash_iconify import DashIconify
-
-        logger.info("📥 CSV EXPORT: Export button clicked")
+        logger.info("CSV EXPORT: Export button clicked")
 
         if not n_clicks:
             return no_update, no_update
 
         # Validate inputs
         if not local_store or not stored_metadata:
-            logger.error("❌ CSV EXPORT: Missing required data")
-            error_notification = dmc.Notification(
-                title="Export failed",
-                message="Missing required authentication or metadata",
-                color="red",
-                icon=DashIconify(icon="mdi:alert-circle"),
-                action="show",
+            logger.error("CSV EXPORT: Missing required data")
+            return no_update, create_export_notification(
+                "error", "Missing required authentication or metadata"
             )
-            return no_update, error_notification
 
         # Extract metadata
         TOKEN = local_store.get("access_token")
@@ -700,11 +1027,12 @@ def register_core_callbacks(app):
         table_index = stored_metadata.get("index", "table")
 
         logger.info(
-            f"📊 CSV EXPORT: Starting export for table {table_index} (wf: {workflow_id}, dc: {data_collection_id})"
+            f"CSV EXPORT: Starting export for table {table_index} "
+            f"(wf: {workflow_id}, dc: {data_collection_id})"
         )
 
         try:
-            # Load complete filtered/sorted dataset using helper function
+            # Load complete filtered/sorted dataset
             df = load_table_data_with_filters(
                 workflow_id=workflow_id,
                 data_collection_id=data_collection_id,
@@ -718,74 +1046,33 @@ def register_core_callbacks(app):
             )
 
             row_count = df.shape[0]
-            col_count = df.shape[1]
-            logger.info(f"📊 CSV EXPORT: Loaded {row_count:,} rows, {col_count} columns")
+            logger.info(f"CSV EXPORT: Loaded {row_count:,} rows, {df.shape[1]} columns")
 
             # Check size limits
-            MAX_EXPORT_ROWS = 1_000_000  # 1M row limit
+            is_allowed, error_message = check_export_size_limit(row_count)
+            if not is_allowed:
+                return no_update, create_export_notification("blocked", error_message or "")
 
-            if row_count > MAX_EXPORT_ROWS:
-                # Too large - block export
-                logger.error(
-                    f"❌ CSV EXPORT BLOCKED: Table too large ({row_count:,} rows > {MAX_EXPORT_ROWS:,} limit)"
-                )
-                notification_error = dmc.Notification(
-                    title="Export blocked",
-                    message=f"Table too large: {row_count:,} rows (limit: {MAX_EXPORT_ROWS:,})",
-                    color="red",
-                    icon=DashIconify(icon="mdi:alert-circle"),
-                    action="show",
-                    autoClose=10000,
-                )
-                return no_update, notification_error
-
-            elif row_count > 100_000:
-                # Large table - warn but allow
-                logger.warning(f"⚠️ CSV EXPORT: Large export ({row_count:,} rows)")
-
-            # Convert to CSV (in memory, never written to disk)
-            csv_string = df.write_csv()
-            csv_size_mb = len(csv_string) / (1024 * 1024)
-            logger.info(f"💾 CSV EXPORT: Generated CSV ({csv_size_mb:.2f} MB)")
-
-            # Generate filename
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"depictio_table_{table_index}_{timestamp}.csv"
-
-            # Success notification
-            notification_success = dmc.Notification(
-                title="Export complete!",
-                message=f"Downloaded {row_count:,} rows as CSV ({csv_size_mb:.1f} MB)",
-                color="green",
-                icon=DashIconify(icon="mdi:check-circle"),
-                action="show",
-                autoClose=5000,
-            )
+            # Generate CSV and filename
+            csv_string, filename, csv_size_mb = generate_csv_download(df, table_index)
 
             logger.info(
-                f"✅ CSV EXPORT SUCCESS: {filename} ({row_count:,} rows, {csv_size_mb:.2f} MB)"
+                f"CSV EXPORT SUCCESS: {filename} ({row_count:,} rows, {csv_size_mb:.2f} MB)"
             )
 
-            # Return CSV download + notification
-            return dict(content=csv_string, filename=filename), notification_success
+            return (
+                dict(content=csv_string, filename=filename),
+                create_export_notification("success", "", row_count, csv_size_mb),
+            )
 
         except Exception as e:
-            error_msg = str(e)
-            logger.error(f"❌ CSV EXPORT ERROR: {error_msg}")
             import traceback
 
-            logger.error(f"❌ Traceback: {traceback.format_exc()}")
+            error_msg = str(e)
+            logger.error(f"CSV EXPORT ERROR: {error_msg}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
 
-            # Error notification
-            notification_error = dmc.Notification(
-                title="Export failed",
-                message=f"Error: {error_msg[:100]}",
-                color="red",
-                icon=DashIconify(icon="mdi:alert-circle"),
-                action="show",
-                autoClose=10000,
-            )
-            return no_update, notification_error
+            return no_update, create_export_notification("error", f"Error: {error_msg[:100]}")
 
     core_logger.info(
         "✅ Table component core callbacks registered (theme + infinite scroll + pagination + export)"
