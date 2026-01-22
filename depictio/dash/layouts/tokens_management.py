@@ -1,3 +1,26 @@
+"""
+CLI token and configuration management for Depictio.
+
+This module provides the UI and callbacks for managing CLI configurations
+(long-lived access tokens) that allow users to access Depictio via the
+command-line interface.
+
+Features:
+    - List existing CLI configurations with expiration dates
+    - Create new CLI configurations with custom names
+    - Delete existing configurations with confirmation
+    - Display generated YAML configuration for CLI setup
+    - Copy configuration to clipboard functionality
+
+UI Components:
+    - Main layout with token list and add button
+    - Token naming modal for new configurations
+    - Delete confirmation modal with safety input
+    - Configuration display modal with YAML output
+"""
+
+from typing import Any
+
 import dash
 import dash_mantine_components as dmc
 import yaml
@@ -31,8 +54,20 @@ event = {"event": "keydown", "props": ["key"]}
 clipboard_icon_uri = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'..."
 
 
-def render_tokens_list(tokens):
-    """Render the list of CLI configuration tokens with improved styling"""
+def render_tokens_list(tokens: list[dict[str, Any]] | None) -> dmc.Center | dmc.Stack:
+    """
+    Render the list of CLI configuration tokens.
+
+    Creates either an empty state message when no tokens exist, or a styled
+    list of token cards showing name, expiration date, and delete button.
+
+    Args:
+        tokens: List of token dictionaries with keys '_id', 'name', 'expire_datetime',
+               or None if no tokens exist.
+
+    Returns:
+        Either a centered empty state message or a stack of token cards.
+    """
     if not tokens:
         # Return the empty state message using the provided template
         return dmc.Center(
@@ -397,8 +432,328 @@ layout = dmc.Container(
 )
 
 
-def register_tokens_management_callbacks(app):
-    # Add this callback to your app
+def _create_default_response(
+    tokens: list[dict[str, Any]] | None,
+    delete_token_id: dict[str, Any],
+) -> tuple:
+    """
+    Create the default callback response with closed modals.
+
+    Args:
+        tokens: List of token data for rendering.
+        delete_token_id: Current delete token ID store value.
+
+    Returns:
+        Tuple of default values for all callback outputs.
+    """
+    return (
+        False,  # token-modal opened
+        False,  # delete-modal opened
+        render_tokens_list(tokens),  # tokens-list children
+        False,  # display-token-modal opened
+        "",  # display-agent children
+        delete_token_id,  # delete-token-id-store data
+        "",  # delete-confirm-input value
+        {"display": "none"},  # token-name-alert style
+        "",  # token-name-alert children
+    )
+
+
+def _handle_add_token(
+    tokens: list[dict[str, Any]] | None,
+    delete_token_id: dict[str, Any],
+) -> tuple:
+    """
+    Handle the add token button click - opens the token naming modal.
+
+    Args:
+        tokens: List of current tokens.
+        delete_token_id: Current delete token ID.
+
+    Returns:
+        Tuple with token modal opened.
+    """
+    return (
+        True,  # Open token modal
+        False,
+        render_tokens_list(tokens),
+        False,
+        "",
+        delete_token_id,
+        "",
+        {"display": "none"},
+        "",
+    )
+
+
+def _handle_cancel_modal(
+    tokens: list[dict[str, Any]] | None,
+    delete_token_id: dict[str, Any],
+) -> tuple:
+    """
+    Handle cancel button clicks - closes all modals.
+
+    Args:
+        tokens: List of current tokens.
+        delete_token_id: Current delete token ID.
+
+    Returns:
+        Tuple with all modals closed.
+    """
+    return (
+        False,
+        False,
+        render_tokens_list(tokens),
+        False,
+        "",
+        delete_token_id,
+        "",
+        {"display": "none"},
+        "",
+    )
+
+
+def _handle_delete_token_click(
+    tokens: list[dict[str, Any]] | None,
+    token_to_delete: str,
+) -> tuple:
+    """
+    Handle delete token button click - opens delete confirmation modal.
+
+    Args:
+        tokens: List of current tokens.
+        token_to_delete: ID of the token to delete.
+
+    Returns:
+        Tuple with delete modal opened and token ID stored.
+    """
+    return (
+        False,
+        True,  # Open delete modal
+        render_tokens_list(tokens),
+        False,
+        "",
+        token_to_delete,
+        "",
+        {"display": "none"},
+        "",
+    )
+
+
+def _handle_confirm_delete(
+    tokens: list[dict[str, Any]] | None,
+    delete_token_id: str,
+) -> tuple:
+    """
+    Handle confirmed token deletion.
+
+    Args:
+        tokens: List of current tokens.
+        delete_token_id: ID of the token to delete.
+
+    Returns:
+        Tuple with updated token list after deletion.
+    """
+    if tokens and delete_token_id in [str(t["_id"]) for t in tokens]:
+        api_call_delete_token(token_id=delete_token_id)
+        tokens = [e for e in tokens if str(e["_id"]) != delete_token_id]
+
+    return (
+        False,
+        False,
+        render_tokens_list(tokens),
+        False,
+        "",
+        {},
+        "",
+        {"display": "none"},
+        "",
+    )
+
+
+def _create_config_display(agent_config: str) -> html.Div:
+    """
+    Create the configuration display component with YAML code.
+
+    Args:
+        agent_config: YAML-formatted configuration string.
+
+    Returns:
+        Div containing the success message and configuration display.
+    """
+    return html.Div(
+        [
+            dmc.Stack(
+                [
+                    dmc.Group(
+                        [
+                            DashIconify(
+                                icon="mdi:check-circle",
+                                width=28,
+                                style={"color": colors["green"]},
+                            ),
+                            dmc.Title(
+                                id="config-created-success",
+                                children="Configuration Created Successfully",
+                                order=3,
+                                c=colors["green"],
+                            ),
+                        ],
+                        gap="sm",
+                    ),
+                    dmc.Alert(
+                        title="Important",
+                        color="yellow",
+                        children=[
+                            html.Span(
+                                "Please copy the configuration and store it in a safe place, such as "
+                            ),
+                            dmc.Code("~/.depictio/CLI.yaml"),
+                            html.Span(
+                                ". You will not be able to access this configuration again once you close this dialog."
+                            ),
+                        ],
+                        icon=DashIconify(icon="mdi:alert", width=24),
+                    ),
+                    dmc.Paper(
+                        children=[
+                            dmc.CodeHighlight(
+                                id="agent-config-md", language="yaml", code=agent_config
+                            ),
+                        ],
+                        p="sm",
+                    ),
+                ],
+                gap="md",
+            ),
+        ]
+    )
+
+
+def _handle_save_token(
+    token_name: str,
+    tokens: list[dict[str, Any]] | None,
+    delete_token_id: dict[str, Any],
+    local_store: dict[str, Any],
+    user: Any,
+) -> tuple:
+    """
+    Handle saving a new token configuration.
+
+    Creates a new long-lived token with the given name and generates
+    the CLI configuration YAML.
+
+    Args:
+        token_name: Name for the new token.
+        tokens: List of current tokens.
+        delete_token_id: Current delete token ID.
+        local_store: Local storage data with access token.
+        user: Current user object.
+
+    Returns:
+        Tuple with either error alert or success display.
+    """
+    # Validate token name uniqueness
+    if not token_name or (tokens and token_name in [t["name"] for t in tokens]):
+        error_msg = (
+            "CLI Configuration name already exists. Please choose a different name."
+            if token_name
+            else "CLI Configuration name is required."
+        )
+        return (
+            True,  # Keep modal open
+            False,
+            render_tokens_list(tokens),
+            False,
+            "",
+            delete_token_id,
+            "",
+            {"display": "block"},  # Show alert
+            error_msg,
+        )
+
+    # Create token data and call API
+    _token_data_dict = {
+        "name": token_name,
+        "token_lifetime": "long-lived",
+        "token_type": "bearer",
+        "sub": user.id,
+    }
+    token_data = TokenData(**_token_data_dict)
+    token_generated = api_call_create_token(token_data=token_data)
+
+    if not token_generated:
+        div = html.Div(
+            [
+                dmc.Alert(
+                    title="Configuration Creation Failed",
+                    children="A configuration with that name already exists. Please choose a different name.",
+                    color="red",
+                    icon=DashIconify(icon="mdi:alert-circle", width=24),
+                )
+            ]
+        )
+        return (
+            False,
+            False,
+            render_tokens_list(tokens),
+            True,
+            div,
+            delete_token_id,
+            "",
+            {"display": "none"},
+            "",
+        )
+
+    # Create TokenBase and generate config
+    token_generated = TokenBase(
+        user_id=token_generated["user_id"],
+        access_token=token_generated["access_token"],
+        refresh_token=token_generated["refresh_token"],
+        expire_datetime=token_generated["expire_datetime"],
+        refresh_expire_datetime=token_generated["refresh_expire_datetime"],
+    )
+    agent_config = api_call_generate_agent_config(
+        token=token_generated, current_token=local_store["access_token"]
+    )
+
+    # Refresh tokens list
+    tokens = api_call_list_tokens(
+        current_token=local_store["access_token"], token_lifetime="long-lived"
+    )
+
+    # Format as YAML
+    agent_config_yaml = yaml.dump(agent_config, default_flow_style=False)
+    div_agent_config = _create_config_display(agent_config_yaml)
+
+    return (
+        False,
+        False,
+        render_tokens_list(tokens),
+        True,  # Open display modal
+        div_agent_config,
+        delete_token_id,
+        "",
+        {"display": "none"},
+        "",
+    )
+
+
+def register_tokens_management_callbacks(app: dash.Dash) -> None:
+    """
+    Register all callbacks for CLI token management.
+
+    Registers callbacks for:
+    - Copying configuration to clipboard
+    - Opening/closing token naming modal
+    - Saving new token configurations
+    - Opening/closing delete confirmation modal
+    - Confirming token deletion
+
+    Args:
+        app: The Dash application instance.
+    """
+
     @app.callback(
         Output("copy-config-clipboard", "content"),
         Input("copy-config-button", "n_clicks"),
@@ -449,6 +804,11 @@ def register_tokens_management_callbacks(app):
         local_store,
         delete_token_id,
     ):
+        """
+        Main callback handler for token management actions.
+
+        Routes to appropriate handler based on which button triggered the callback.
+        """
         logger.info("Handling token management callbacks")
         triggered = ctx.triggered_id
 
@@ -456,294 +816,40 @@ def register_tokens_management_callbacks(app):
             raise PreventUpdate
 
         user = api_call_fetch_user_from_token(local_store["access_token"])
-
         tokens = api_call_list_tokens(
             current_token=local_store["access_token"], token_lifetime="long-lived"
         )
-        # logger.info(f"tokens: {tokens}")
-        # logger.info(f"triggered: {triggered}")
-        # logger.info(f"local_store: {local_store}")
         delete_token_id = delete_token_id or {}
 
+        # Handle add token button
         if triggered == "add-token-button" and add_clicks:
-            return (
-                True,
-                False,
-                render_tokens_list(tokens),
-                False,
-                "",
-                delete_token_id,
-                "",
-                {"display": "none"},  # Hide alert initially
-                "",
-            )
+            return _handle_add_token(tokens, delete_token_id)
 
-        elif triggered == "cancel-token-modal" and cancel_token_clicks:
-            return (
-                False,
-                False,
-                render_tokens_list(tokens),
-                False,
-                "",
-                delete_token_id,
-                "",
-                {"display": "none"},  # Hide alert initially
-                "",
-            )
+        # Handle cancel buttons
+        if triggered == "cancel-token-modal" and cancel_token_clicks:
+            return _handle_cancel_modal(tokens, delete_token_id)
 
-        elif triggered == "cancel-delete-modal" and cancel_delete_clicks:
-            return (
-                False,
-                False,
-                render_tokens_list(tokens),
-                False,
-                "",
-                delete_token_id,
-                "",
-                {"display": "none"},  # Hide alert initially
-                "",
-            )
+        if triggered == "cancel-delete-modal" and cancel_delete_clicks:
+            return _handle_cancel_modal(tokens, delete_token_id)
 
-        elif triggered == "save-token-name" and save_clicks and token_name:
+        # Handle save token
+        if triggered == "save-token-name" and save_clicks and token_name:
             logger.info(f"Token name: {token_name}")
+            return _handle_save_token(token_name, tokens, delete_token_id, local_store, user)
 
-            if not token_name or (tokens and token_name in [t["name"] for t in tokens]):
-                return (
-                    True,
-                    False,
-                    render_tokens_list(tokens),
-                    False,
-                    "",
-                    delete_token_id,
-                    "",
-                    {"display": "block"},  # Show alert
-                    (
-                        "CLI Configuration name already exists. Please choose a different name."
-                        if token_name
-                        else "CLI Configuration name is required."
-                    ),
-                )
-
-            _token_data_dict = {
-                "name": token_name,
-                "token_lifetime": "long-lived",
-                "token_type": "bearer",
-                "sub": user.id,  # Explicitly pass the user ID
-            }
-            # logger.debug(f"Token data dict: {_token_data_dict}")
-            token_data = TokenData(**_token_data_dict)
-            # logger.debug(f"Token data: {format_pydantic(token_data)}")
-            # logger.debug(token_data.model_dump())
-            token_generated = api_call_create_token(token_data=token_data)
-
-            if not token_generated:
-                div = html.Div(
-                    [
-                        dmc.Alert(
-                            title="Configuration Creation Failed",
-                            children="A configuration with that name already exists. Please choose a different name.",
-                            color="red",
-                            icon=DashIconify(icon="mdi:alert-circle", width=24),
-                        )
-                    ]
-                )
-
-                return (
-                    False,
-                    False,
-                    render_tokens_list(tokens),
-                    True,
-                    div,
-                    delete_token_id,
-                    "",
-                    {"display": "none"},  # Show alert
-                    "",
-                )
-
-            # logger.info(f"Token generated: {token_generated}")
-            token_generated = TokenBase(
-                user_id=token_generated["user_id"],
-                access_token=token_generated["access_token"],
-                refresh_token=token_generated["refresh_token"],
-                expire_datetime=token_generated["expire_datetime"],
-                refresh_expire_datetime=token_generated["refresh_expire_datetime"],
-            )
-            # logger.info(f"Token generated: {format_pydantic(token_generated)}")
-            agent_config = api_call_generate_agent_config(
-                token=token_generated, current_token=local_store["access_token"]
-            )
-            # logger.info(f"Config: {agent_config}")
-
-            tokens = api_call_list_tokens(
-                current_token=local_store["access_token"], token_lifetime="long-lived"
-            )
-
-            # Format token data for display using dcc.Markdown, using YAML format
-            agent_config = yaml.dump(agent_config, default_flow_style=False)
-            # logger.info(f"Token data: {token_data}")
-
-            # Add extra formatting to color with YAML ('''...''') and add a copy button
-            agent_config = f"""{agent_config}"""
-            # agent_config = f"""```yaml\n{agent_config}\n```"""
-
-            # logger.info(f"Config: {agent_config}")
-
-            # Modified component definition
-            div_agent_config = html.Div(
-                [
-                    dmc.Stack(
-                        [
-                            dmc.Group(
-                                [
-                                    DashIconify(
-                                        icon="mdi:check-circle",
-                                        width=28,
-                                        style={"color": colors["green"]},
-                                    ),
-                                    dmc.Title(
-                                        id="config-created-success",
-                                        children="Configuration Created Successfully",
-                                        order=3,
-                                        # style={"color": colors["green"]},
-                                        c=colors["green"],
-                                    ),
-                                ],
-                                gap="sm",
-                            ),
-                            dmc.Alert(
-                                title="Important",
-                                color="yellow",
-                                children=[
-                                    html.Span(
-                                        "Please copy the configuration and store it in a safe place, such as "
-                                    ),
-                                    dmc.Code("~/.depictio/CLI.yaml"),
-                                    html.Span(
-                                        ". You will not be able to access this configuration again once you close this dialog."
-                                    ),
-                                ],
-                                icon=DashIconify(icon="mdi:alert", width=24),
-                            ),
-                            dmc.Paper(
-                                children=[
-                                    dmc.CodeHighlight(
-                                        id="agent-config-md", language="yaml", code=agent_config
-                                    ),
-                                ],
-                                # withBorder=True,
-                                p="sm",
-                                # style={
-                                #     "position": "relative",
-                                #     "backgroundColor": "#f8f9fa",
-                                #     "borderColor": colors["teal"] + "40",
-                                # },
-                            ),
-                            # dmc.Group(
-                            #     [
-                            #         # dmc.Button(
-                            #         #     "Copy Configuration",
-                            #         #     variant="filled",
-                            #         #     color="teal",
-                            #         #     radius="md",
-                            #         #     leftIcon=DashIconify(
-                            #         #         icon="mdi:content-copy", width=20
-                            #         #     ),
-                            #         #     id="copy-config-button",
-                            #         # ),
-                            #         # Styled clipboard component
-                            #         dcc.Clipboard(
-                            #             id="copy-config-clipboard",
-                            #             target_id="agent-config-md",
-                            #             className="clipboard-button",
-                            #             title="Copy to clipboard",  # Basic tooltip
-                            #             content="",
-                            #             n_clicks=0,
-                            #             style={
-                            #                 "position": "absolute",
-                            #                 "top": "270px",
-                            #                 "right": "45px",
-                            #                 # grey background
-                            #                 "background-color": "#f8f9fa",
-                            #                 "border": "none",
-                            #                 "color": "grey",
-                            #                 "border-radius": "4px",
-                            #                 "padding": "8px",
-                            #                 "cursor": "pointer",
-                            #                 "box-shadow": "0 2px 5px rgba(0,0,0,0.2)",
-                            #             },
-                            #             # children=html.Img(
-                            #             #     src=clipboard_icon_uri,
-                            #             #     style={"width": "16px", "height": "16px"},
-                            #             # ),
-                            #         ),
-                            #     ],
-                            #     justify="flex-end",
-                            # ),
-                        ],
-                        gap="md",
-                    ),
-                ]
-            )
-
-            return (
-                False,
-                False,
-                render_tokens_list(tokens),
-                True,
-                div_agent_config,
-                delete_token_id,
-                "",
-                {"display": "none"},  # Hide alert
-                "",
-            )
-
-        elif isinstance(triggered, dict) and triggered.get("type") == "delete-token":
+        # Handle delete token button click
+        if isinstance(triggered, dict) and triggered.get("type") == "delete-token":
             logger.info(f"{triggered}")
-            token_to_delete = triggered["index"]
-            return (
-                False,
-                True,
-                render_tokens_list(tokens),
-                False,
-                "",
-                token_to_delete,
-                "",
-                {"display": "none"},  # Hide alert
-                "",
-            )
+            return _handle_delete_token_click(tokens, triggered["index"])
 
-        elif (
+        # Handle confirm delete
+        if (
             triggered == "confirm-delete-button"
             and confirm_delete_clicks
             and delete_confirm_input == "delete"
         ):
             logger.info(f"Deleting config {delete_token_id}")
-            # logger.info(f"tokens: {tokens}")
-            if tokens and delete_token_id in [str(t["_id"]) for t in tokens]:
-                # logger.info(f"Deleting token {delete_token_id}")
-                api_call_delete_token(token_id=delete_token_id)
-                tokens = [e for e in tokens if str(e["_id"]) != delete_token_id]
+            return _handle_confirm_delete(tokens, delete_token_id)
 
-            return (
-                False,
-                False,
-                render_tokens_list(tokens),
-                False,
-                "",
-                {},
-                "",
-                {"display": "none"},
-                "",
-            )
-
-        return (
-            False,
-            False,
-            render_tokens_list(tokens),
-            False,
-            "",
-            {},
-            "",
-            {"display": "none"},
-            "",
-        )
+        # Default response
+        return _create_default_response(tokens, {})

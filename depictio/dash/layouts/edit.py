@@ -1,3 +1,17 @@
+"""
+Dashboard component edit mode controls and button management.
+
+This module provides functions for:
+- Creating edit mode UI controls (drag handles, edit/remove/duplicate buttons)
+- Wrapping components in draggable containers with edit capabilities
+- Managing component action buttons based on component type
+
+The module is designed to work with the DashGridLayout system for
+drag-and-drop dashboard editing.
+"""
+
+from typing import Any
+
 import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
 from dash import html
@@ -9,9 +23,18 @@ from depictio.dash.layouts.stepper import create_stepper_output_edit
 from depictio.dash.utils import get_component_data
 
 
-def register_partial_data_button_callbacks(app):
-    """Register callbacks to update partial data warning popover content with real counts."""
+def register_partial_data_button_callbacks(app) -> None:
+    """
+    Register callbacks to update partial data warning popover content with real counts.
 
+    Note:
+        The popover content update callback has been moved to frontend.py
+        (update_partial_data_popover_from_interactive) to avoid duplicate callbacks
+        and ensure it's closer to the data source for better synchronization.
+
+    Args:
+        app: The Dash application instance.
+    """
     # NOTE: The popover content update callback has been moved to frontend.py
     # (update_partial_data_popover_from_interactive) to avoid duplicate callbacks
     # and ensure it's closer to the data source for better synchronization.
@@ -113,72 +136,118 @@ def register_partial_data_button_callbacks(app):
     pass  # Placeholder to keep function structure valid
 
 
-def register_reset_button_callbacks(app):
+def register_reset_button_callbacks(app) -> None:
     """
     Register callbacks to update reset button colors based on filter activity.
 
-    ⚠️ TEMPORARILY DISABLED FOR DEBUGGING
+    Note:
+        Currently disabled for debugging purposes. The reset button visual
+        feedback will be re-enabled once performance testing is complete.
+
+    Args:
+        app: The Dash application instance.
     """
-    logger.info("⚠️ Reset button callback DISABLED for debugging")
+    logger.info("Reset button callback DISABLED for debugging")
     pass
 
 
-def _check_component_filter_activity(interactive_values, component_index):
-    """Check if a specific component has active filters."""
-    logger.info(f"🔍 _check_component_filter_activity for component {component_index}")
+def _check_component_filter_activity(
+    interactive_values: dict[str, Any] | None, component_index: str
+) -> bool:
+    """
+    Check if a specific component has active filters that differ from default state.
+
+    Args:
+        interactive_values: Dictionary containing interactive component values and metadata.
+        component_index: The unique identifier of the component to check.
+
+    Returns:
+        True if the component has filters different from its default state, False otherwise.
+    """
+    logger.info(f"_check_component_filter_activity for component {component_index}")
 
     if not interactive_values:
-        logger.info("📭 No interactive_values provided")
+        logger.info("No interactive_values provided")
         return False
 
-    # Handle different possible structures in interactive_values
-    interactive_values_data = []
-
-    if "interactive_components_values" in interactive_values:
-        interactive_values_data = interactive_values["interactive_components_values"]
-        logger.info(f"📦 Found interactive_components_values: {len(interactive_values_data)} items")
-    elif isinstance(interactive_values, dict):
-        # Look for any values that might be interactive components
-        for key, value in interactive_values.items():
-            if isinstance(value, dict) and "value" in value:
-                interactive_values_data.append(value)
-        logger.info(f"📦 Extracted from dict structure: {len(interactive_values_data)} items")
+    interactive_values_data = _extract_interactive_values_data(interactive_values)
 
     if not interactive_values_data:
-        logger.info("📭 No interactive component data found")
+        logger.info("No interactive component data found")
         return False
 
     logger.info(
-        f"🔍 Searching for component {component_index} among {len(interactive_values_data)} components"
+        f"Searching for component {component_index} among {len(interactive_values_data)} components"
     )
 
-    # Find the specific component by index
+    return _find_and_check_component(interactive_values_data, component_index)
+
+
+def _extract_interactive_values_data(interactive_values: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Extract interactive component data from various possible structures.
+
+    Args:
+        interactive_values: Dictionary containing interactive values in various formats.
+
+    Returns:
+        List of interactive component data dictionaries.
+    """
+    if "interactive_components_values" in interactive_values:
+        data = interactive_values["interactive_components_values"]
+        logger.info(f"Found interactive_components_values: {len(data)} items")
+        return data
+
+    # Look for any values that might be interactive components
+    data = []
+    for value in interactive_values.values():
+        if isinstance(value, dict) and "value" in value:
+            data.append(value)
+    logger.info(f"Extracted from dict structure: {len(data)} items")
+    return data
+
+
+def _find_and_check_component(
+    interactive_values_data: list[dict[str, Any]], component_index: str
+) -> bool:
+    """
+    Find a specific component and check if its value differs from default.
+
+    Args:
+        interactive_values_data: List of interactive component data dictionaries.
+        component_index: The unique identifier of the component to find.
+
+    Returns:
+        True if component found and differs from default, False otherwise.
+    """
     for i, component_data in enumerate(interactive_values_data):
-        if isinstance(component_data, dict):
-            component_metadata = component_data.get("metadata", {})
-            component_id = component_metadata.get("index")
+        if not isinstance(component_data, dict):
+            continue
 
-            logger.info(f"  Component {i}: ID={component_id}, looking for {component_index}")
+        component_metadata = component_data.get("metadata", {})
+        component_id = component_metadata.get("index")
 
-            # Check if this is the component we're looking for
-            if str(component_id) == str(component_index):
-                component_value = component_data.get("value")
-                default_state = component_metadata.get("default_state", {})
+        logger.info(f"  Component {i}: ID={component_id}, looking for {component_index}")
 
-                logger.info(f"  ✅ Found target component {component_index}")
-                logger.info(f"    Current value: {component_value}")
-                logger.info(f"    Default state: {default_state}")
+        if str(component_id) != str(component_index):
+            continue
 
-                if component_value is None or not default_state:
-                    logger.info("  ❌ No value or default_state, returning False")
-                    return False
+        component_value = component_data.get("value")
+        default_state = component_metadata.get("default_state", {})
 
-                # Use the same logic as the header reset button
-                is_different = _is_different_from_default(component_value, default_state)
-                logger.info(f"  🎯 Is different from default: {is_different}")
-                return is_different
+        logger.info(f"  Found target component {component_index}")
+        logger.info(f"    Current value: {component_value}")
+        logger.info(f"    Default state: {default_state}")
 
-    logger.info(f"❌ Component {component_index} not found in interactive values")
+        if component_value is None or not default_state:
+            logger.info("  No value or default_state, returning False")
+            return False
+
+        is_different = _is_different_from_default(component_value, default_state)
+        logger.info(f"  Is different from default: {is_different}")
+        return is_different
+
+    logger.info(f"Component {component_index} not found in interactive values")
     return False
 
 
@@ -188,9 +257,9 @@ def _check_component_filter_activity(interactive_values, component_index):
 
 
 def _create_component_buttons(
-    component_type,
-    component_data,
-    btn_index,
+    component_type: str | None,
+    component_data: dict[str, Any] | None,
+    btn_index: str,
     create_drag_handle,
     create_remove_button,
     create_edit_button,
@@ -200,13 +269,31 @@ def _create_component_buttons(
     create_alignment_button=None,
     create_metadata_button=None,
     create_partial_data_warning_button=None,
-):
-    """Create action buttons based on component type and configuration.
+) -> tuple[dmc.ActionIconGroup | None, None]:
+    """
+    Create action buttons based on component type and configuration.
+
+    This function generates the appropriate set of action buttons for a dashboard
+    component based on its type. Buttons are categorized as edit-only (hidden in
+    view mode) or view-accessible (always visible).
+
+    Args:
+        component_type: Type of component (figure, card, table, interactive, etc.).
+        component_data: Metadata dictionary for the component.
+        btn_index: Unique identifier for button IDs.
+        create_drag_handle: Factory function for drag handle button.
+        create_remove_button: Factory function for remove button.
+        create_edit_button: Factory function for edit button.
+        create_duplicate_button: Factory function for duplicate button.
+        create_reset_button: Factory function for reset button.
+        create_export_button: Factory function for export button.
+        create_alignment_button: Optional factory for text alignment menu.
+        create_metadata_button: Optional factory for metadata info button.
+        create_partial_data_warning_button: Optional factory for partial data warning.
 
     Returns:
-        tuple: (edit_buttons_group, view_buttons_group)
-            - edit_buttons_group: ActionIconGroup with edit-only buttons (hidden in view mode)
-            - view_buttons_group: ActionIconGroup with view-accessible buttons (always visible)
+        Tuple of (unified_button_group, None). The first element contains all buttons
+        in a single ActionIconGroup. The second element is None for API compatibility.
     """
     # Define button configurations for different component types
     # Buttons are categorized:
@@ -333,61 +420,99 @@ def _create_component_buttons(
     return unified_button_group, None  # Return None for second value to maintain API compatibility
 
 
-def edit_component(index, parent_id, active=0, component_data=None, TOKEN=None):
+def edit_component(
+    index: str,
+    parent_id: str,
+    active: int = 0,
+    component_data: dict[str, Any] | None = None,
+    TOKEN: str | None = None,
+):
+    """
+    Create edit stepper output for a component.
+
+    Args:
+        index: Unique identifier for the component.
+        parent_id: ID of the parent dashboard or container.
+        active: Currently active stepper step (0-indexed).
+        component_data: Existing component configuration data.
+        TOKEN: Authentication token for API calls.
+
+    Returns:
+        The stepper output component for editing.
+    """
     logger.info("=== EDIT COMPONENT ===")
-    logger.info("Function parameters:")
-    logger.info(f"  index: {index}")
-    logger.info(f"  parent_id: {parent_id}")
-    logger.info(f"  active: {active}")
+    logger.info(f"  index: {index}, parent_id: {parent_id}, active: {active}")
     logger.info(f"  component_data type: {type(component_data)}")
-    logger.info(f"  component_data: {component_data}")
-    logger.info(f"  TOKEN: {'***' if TOKEN else None}")
 
-    current_draggable_children = create_stepper_output_edit(
-        index, parent_id, active, component_data, TOKEN
-    )
+    return create_stepper_output_edit(index, parent_id, active, component_data, TOKEN)
 
-    return current_draggable_children
+
+def _extract_component_id(component) -> str:
+    """
+    Extract component ID from native Dash component or JSON representation.
+
+    Args:
+        component: A Dash component (native or JSON dict).
+
+    Returns:
+        The component's unique identifier string.
+    """
+    import uuid
+
+    # Handle native Dash components
+    if hasattr(component, "id") and component.id:
+        if isinstance(component.id, dict) and "index" in component.id:
+            return component.id["index"]
+        if isinstance(component.id, str):
+            return component.id
+
+    # Handle JSON representation (legacy)
+    if isinstance(component, dict) and "props" in component:
+        try:
+            return component["props"]["id"]["index"]
+        except (KeyError, TypeError):
+            pass
+
+    # Fallback: generate a unique index
+    fallback_id = str(uuid.uuid4())
+    logger.warning(f"Component missing id, generated fallback: {fallback_id}")
+    return fallback_id
 
 
 def enable_box_edit_mode(
     box,
-    switch_state=True,
-    dashboard_id=None,
-    fresh=False,
-    component_data=dict(),
-    TOKEN=None,
+    switch_state: bool = True,
+    dashboard_id: str | None = None,
+    fresh: bool = False,
+    component_data: dict[str, Any] | None = None,
+    TOKEN: str | None = None,
 ):
-    # Extract component ID from native Dash component or JSON
-    def extract_component_id(component):
-        """Extract component ID from native Dash component or JSON representation."""
-        # Handle native Dash components
-        if hasattr(component, "id") and component.id:
-            if isinstance(component.id, dict) and "index" in component.id:
-                return component.id["index"]
-            elif isinstance(component.id, str):
-                return component.id
+    """
+    Wrap a component with edit mode controls in a draggable container.
 
-        # Handle JSON representation (legacy)
-        if isinstance(component, dict) and "props" in component:
-            try:
-                return component["props"]["id"]["index"]
-            except (KeyError, TypeError):
-                pass
+    This function adds action buttons (drag, edit, delete, etc.) to a dashboard
+    component and wraps it in a DraggableWrapper for the DashGridLayout system.
 
-        # Fallback: generate a unique index
-        import uuid
+    Args:
+        box: The Dash component to wrap (native or JSON format).
+        switch_state: Whether edit mode is currently active.
+        dashboard_id: ID of the parent dashboard.
+        fresh: Whether this is a freshly created component.
+        component_data: Component metadata dictionary.
+        TOKEN: Authentication token for API calls.
 
-        fallback_id = str(uuid.uuid4())
-        logger.warning(f"Component missing id, generated fallback: {fallback_id}")
-        return fallback_id
+    Returns:
+        An html.Div containing the DraggableWrapper with the component and buttons.
+    """
+    if component_data is None:
+        component_data = {}
 
     # Prioritize component_data index if available, otherwise extract from component
     if component_data and "index" in component_data:
         btn_index = component_data["index"]
         logger.debug(f"ENABLE BOX EDIT MODE - Using index from component_data: {btn_index}")
     else:
-        btn_index = extract_component_id(box)
+        btn_index = _extract_component_id(box)
         logger.debug(f"ENABLE BOX EDIT MODE - Extracted index from component: {btn_index}")
 
     component_type = None

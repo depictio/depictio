@@ -1,3 +1,16 @@
+"""Projects layout module for the Depictio dashboard.
+
+This module provides the UI components and callbacks for project management,
+including:
+- Project listing and categorization (owned vs shared)
+- Project creation modal with stepper wizard
+- Project editing and deletion
+- Workflow and data collection rendering within projects
+
+The module uses DMC 2.0+ (Dash Mantine Components) for consistent UI and
+supports both light and dark themes.
+"""
+
 import dash
 import dash_ag_grid as dag
 import dash_mantine_components as dmc
@@ -11,40 +24,37 @@ from pydantic import validate_call
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
-
-# from depictio.api.v1.endpoints.user_endpoints.models import UserBase
 from depictio.dash.api_calls import (
     api_call_create_project,
     api_call_delete_project,
     api_call_fetch_user_from_token,
     api_call_update_project,
 )
-from depictio.dash.colors import colors  # Import Depictio color palette
+from depictio.dash.colors import colors
 from depictio.models.models.data_collections import DataCollection
 from depictio.models.models.projects import Project
 from depictio.models.models.users import Permission, UserBase
 from depictio.models.models.workflows import Workflow
 
-# =========================
-# Module Level Components (defined after functions)
-# =========================
-
-# =========================
+# =============================================================================
 # Data Fetching Functions
-# =========================
+# =============================================================================
 
 
 @validate_call
 def fetch_projects(token: str) -> list[Project]:
-    """
-    Fetch all projects for the current user.
+    """Fetch all projects accessible to the current user.
+
+    Args:
+        token: JWT authentication token for API authorization.
+
+    Returns:
+        List of Project objects. Returns empty list on error.
     """
     url = f"{API_BASE_URL}/depictio/api/v1/projects/get/all"
-
     headers = {"Authorization": f"Bearer {token}"}
     response = httpx.get(url, headers=headers)
 
-    # Handle error responses
     if response.status_code != 200:
         logger.warning(f"Failed to fetch projects: HTTP {response.status_code}")
         return []
@@ -56,67 +66,29 @@ def fetch_projects(token: str) -> list[Project]:
             return []
 
         logger.debug(f"Fetched {len(projects_data)} projects from API.")
-        projects = [Project.from_mongo(project) for project in projects_data]
-        return projects
+        return [Project.from_mongo(project) for project in projects_data]
     except Exception as e:
         logger.error(f"Error processing projects data: {e}")
         return []
 
 
-# =====================
-# Helper Functions
-# =====================
-
-
-# def categorize_projects(projects: List[Project], current_user):
-#     """Categorize projects into owned and shared/accessed."""
-#     owned = []
-#     shared = []
-
-#     for project in projects:
-#         # Get owner IDs from the Project model
-#         owners_ids = [str(o.id) for o in project.permissions.owners]
-#         if str(current_user.id) in owners_ids:
-#             owned.append(project)
-#         elif (
-#             str(current_user.id) in project.permissions.viewers
-#             or "*" in project.permissions.viewers
-#         ):
-#             shared.append(project)
-
-#     return owned, shared
-
-
-# def categorize_workflows(workflows, current_user):
-#     """Categorize workflows into owned and shared/accessed."""
-#     owned = []
-#     shared = []
-
-#     for wf in workflows:
-#         owners_ids = [str(o["_id"]) for o in wf["permissions"]["owners"]]
-#         if str(current_user.id) in owners_ids:
-#             owned.append(wf)
-#         elif (
-#             str(current_user.id) in wf["permissions"]["viewers"]
-#             or "*" in wf["permissions"]["viewers"]
-#         ):
-#             shared.append(wf)
-
-#     return owned, shared
-
-
-# =====================
+# =============================================================================
 # Modal Components
-# =====================
+# =============================================================================
 
 
-def create_project_modal(opened=False):
-    """
-    Creates a stylish modal for project creation with DMC Stepper.
+def create_project_modal(opened: bool = False) -> tuple[dmc.Modal, str]:
+    """Create the project creation modal with stepper wizard.
+
+    The modal guides users through a two-step process:
+    1. Project Type Selection (Basic vs Advanced)
+    2. Project Details Configuration
+
+    Args:
+        opened: Initial open state of the modal. Defaults to False.
 
     Returns:
-    - modal: The project creation modal
-    - modal_id: The ID of the modal for callbacks
+        Tuple of (modal component, modal ID string).
     """
     modal_id = "project-creation-modal"
 
@@ -267,8 +239,16 @@ layout = html.Div(
 )
 
 
-def create_step_1_content():
-    """Create Step 1: Project Type Selection."""
+def create_step_1_content() -> dmc.Stack:
+    """Create Step 1 content: Project Type Selection.
+
+    Displays two card options:
+    - Basic Project: UI-based data collection upload
+    - Advanced Project: CLI-based workflow management (disabled in UI)
+
+    Returns:
+        Stack component containing the project type selection cards.
+    """
     return dmc.Stack(
         [
             dmc.Space(h="xl"),  # Add extra space above the title
@@ -419,8 +399,18 @@ def create_step_1_content():
     )
 
 
-def create_step_2_content(project_type=None):
-    """Create Step 2: Project Details."""
+def create_step_2_content(project_type: str | None = None) -> dmc.Stack:
+    """Create Step 2 content: Project Details configuration.
+
+    For basic projects: Shows name, description, and visibility inputs.
+    For advanced projects: Shows CLI setup instructions.
+
+    Args:
+        project_type: Either 'basic' or 'advanced'. None returns basic form.
+
+    Returns:
+        Stack component containing the project details form.
+    """
     if project_type == "advanced":
         return dmc.Stack(
             [
@@ -485,8 +475,15 @@ def create_step_2_content(project_type=None):
     )
 
 
-def create_step_3_content():
-    """Create Step 3: Data Collections (Basic projects only)."""
+def create_step_3_content() -> dmc.Stack:
+    """Create Step 3 content: Data Collections upload (Basic projects only).
+
+    Note: This step is currently unused in the two-step wizard but kept
+    for potential future expansion.
+
+    Returns:
+        Stack component with data collection upload interface.
+    """
     return dmc.Stack(
         [
             dmc.Text("Add Data Collections", fw="bold", size="lg"),
@@ -506,14 +503,26 @@ def create_step_3_content():
     )
 
 
-# =====================
+# =============================================================================
 # Rendering Components
-# =====================
+# =============================================================================
 
 
-def return_deltatable_for_view(workflow_id: str, dc: DataCollection, token: str):
-    """
-    Return a DeltaTable component for viewing data collections.
+def return_deltatable_for_view(
+    workflow_id: str, dc: DataCollection, token: str
+) -> tuple[dmc.AccordionPanel, dmc.AccordionControl]:
+    """Create an AG Grid table preview for a data collection.
+
+    Loads data from the Delta table and displays up to 100 rows
+    in a paginated AG Grid component.
+
+    Args:
+        workflow_id: ID of the parent workflow.
+        dc: DataCollection model instance.
+        token: JWT authentication token.
+
+    Returns:
+        Tuple of (AccordionPanel with grid, AccordionControl for toggle).
     """
     df = load_deltatable_lite(
         workflow_id=ObjectId(workflow_id),
@@ -564,17 +573,21 @@ def return_deltatable_for_view(workflow_id: str, dc: DataCollection, token: str)
     return preview_panel, preview_control
 
 
-def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
-    """
-    Render a single data collection item.
+def render_data_collection(dc: DataCollection, workflow_id: str, token: str) -> dmc.Paper:
+    """Render a single data collection as an expandable accordion item.
+
+    Displays the data collection with nested accordions for:
+    - Details (ID, tag, description, type, metatype)
+    - CLI configuration (YAML dump)
+    - Preview (table data, if applicable)
 
     Args:
-        dc: DataCollection model
-        workflow_id: ID of the workflow
-        token: Authentication token for the API
+        dc: DataCollection model instance.
+        workflow_id: ID of the parent workflow (empty string for basic projects).
+        token: JWT authentication token for loading previews.
 
     Returns:
-        Dash Mantine Paper component
+        Paper component containing the data collection accordion.
     """
     # Set icon based on data collection type
     if dc.config.type.lower() == "table":
@@ -796,16 +809,18 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
     )
 
 
-def render_workflow_item(wf: Workflow, token: str):
-    """
-    Render a single workflow item.
+def render_workflow_item(wf: Workflow, token: str) -> dmc.AccordionItem:
+    """Render a single workflow as an expandable accordion item.
+
+    Displays workflow details and nested data collections with
+    engine-specific icons (Snakemake, Nextflow, etc.).
 
     Args:
-        wf: Workflow object
-        token: Authentication token for the API
+        wf: Workflow model instance.
+        token: JWT authentication token for loading data collections.
 
     Returns:
-        Dash Mantine AccordionItem component
+        AccordionItem component containing workflow details and data collections.
     """
     workflow_details = dmc.Paper(
         children=[
@@ -964,15 +979,17 @@ def render_workflow_item(wf: Workflow, token: str):
 
 
 def create_project_management_panel(project: Project, current_user: UserBase) -> list:
-    """
-    Create the project management panel with edit and delete buttons and their modals.
+    """Create the project management panel with edit and delete controls.
+
+    Includes edit name button, delete button, and their respective modals.
+    Buttons are disabled if the user lacks management permissions.
 
     Args:
-        project: Project object
-        current_user: Current user object for permission checking
+        project: Project model instance.
+        current_user: Current user for permission checking.
 
     Returns:
-        List of components for the management panel including modals
+        List containing the button group and modal components.
     """
     from depictio.dash.layouts.layouts_toolbox import (
         create_add_with_input_modal,
@@ -1049,234 +1066,175 @@ def create_project_management_panel(project: Project, current_user: UserBase) ->
     ]
 
 
-def render_project_item(
-    project: Project, current_user: UserBase, admin_UI: bool = False, token: str = ""
-):
-    """
-    Render a single project item containing multiple workflows.
+# =============================================================================
+# PROJECT ITEM HELPER FUNCTIONS
+# =============================================================================
+
+
+def _create_project_detail_row(label: str, value) -> dmc.Group:
+    """Create a single detail row for project information.
 
     Args:
-        project: Project object
-        current_user: Current user object
-        token: Authentication token for the API
+        label: Label text for the row.
+        value: Value component or text.
 
     Returns:
-        Dash Mantine AccordionItem component
+        Group component with label and value.
     """
-    # logger.info(f"Rendering project item: {project}")
-    project_details = dmc.Paper(
+    return dmc.Group(
         children=[
-            html.Div(
-                children=[
-                    dmc.Group(
-                        children=[
-                            dmc.Text("Name:", fw="bold", className="label-text"),
-                            dmc.Text(project.name, fw="normal"),
-                        ],
-                        gap="xs",
-                    ),
-                    dmc.Group(
-                        children=[
-                            dmc.Text("Database ID:", fw="bold", className="label-text"),
-                            dmc.Text(str(project.id), fw="normal"),
-                        ],
-                        gap="xs",
-                    ),
-                    dmc.Group(
-                        children=[
-                            dmc.Text("Description:", fw="bold", className="label-text"),
-                            dmc.Text(
-                                (project.description if project.description else "Not defined"),
-                                fw="normal",
-                            ),
-                        ],
-                        gap="xs",
-                    ),
-                    dmc.Group(
-                        children=[
-                            dmc.Text(
-                                "Data Management Platform URL:",
-                                fw="bold",
-                                className="label-text",
-                            ),
-                            (
-                                dmc.Anchor(
-                                    project.data_management_platform_project_url,
-                                    href=project.data_management_platform_project_url,
-                                    target="_blank",
-                                    fw="normal",
-                                )
-                                if project.data_management_platform_project_url
-                                else dmc.Text(
-                                    "Not defined",
-                                    fw="normal",
-                                )
-                            ),
-                        ],
-                        gap="xs",
-                    ),
-                    dmc.Group(
-                        children=[
-                            dmc.Text("Created at:", fw="bold", className="label-text"),
-                            dmc.Text(project.registration_time, fw="normal"),
-                        ],
-                        gap="xs",
-                    ),
-                    dmc.Group(
-                        children=[
-                            dmc.Text("Owners:", fw="bold", className="label-text"),
-                            dmc.Text(
-                                str(
-                                    " ; ".join(
-                                        [f"{o.email} - {o.id}" for o in project.permissions.owners]
-                                    )
-                                ),
-                                fw="normal",
-                            ),
-                        ],
-                        gap="xs",
-                    ),
-                    dmc.Group(
-                        children=[
-                            dmc.Text("Editors:", fw="bold", className="label-text"),
-                            dmc.Text(
-                                (
-                                    str(
-                                        " ; ".join(
-                                            [
-                                                f"{o.email} - {o.id}"
-                                                for o in project.permissions.editors
-                                            ]
-                                        )
-                                    )
-                                    if project.permissions.editors
-                                    else "None"
-                                ),
-                                fw="normal",
-                            ),
-                        ],
-                        gap="xs",
-                    ),
-                    dmc.Group(
-                        children=[
-                            dmc.Text("Viewers:", fw="bold", className="label-text"),
-                            dmc.Text(
-                                (
-                                    str(
-                                        " ; ".join(
-                                            [
-                                                f"{o.email} - {o.id}"
-                                                for o in project.permissions.viewers
-                                            ]
-                                        )
-                                    )
-                                    if project.permissions.viewers
-                                    else "None"
-                                ),
-                                fw="normal",
-                            ),
-                        ],
-                        gap="xs",
-                    ),
-                    dmc.Group(
-                        children=[
-                            dmc.Text("Is public:", fw="bold", className="label-text"),
-                            dmc.Badge(
-                                "Public" if project.is_public else "Private",
-                                color="green" if project.is_public else "violet",
-                                variant="filled",
-                                radius="xl",
-                                size="xs",
-                                style={"width": "100px", "justifyContent": "center"},
-                            ),
-                        ],
-                        gap="xs",
-                    ),
-                    dmc.Group(
-                        children=[
-                            dmc.Text("Project type:", fw="bold", className="label-text"),
-                            dmc.Badge(
-                                getattr(project, "project_type", "basic").title(),
-                                color="orange"
-                                if getattr(project, "project_type", "basic") == "advanced"
-                                else "cyan",
-                                variant="light",
-                                radius="xl",
-                                size="xs",
-                                style={"width": "100px", "justifyContent": "center"},
-                            ),
-                        ],
-                        gap="xs",
-                    ),
-                ],
-                className="project-details p-3",
-            ),
+            dmc.Text(f"{label}:", fw="bold", className="label-text"),
+            value if not isinstance(value, str) else dmc.Text(value, fw="normal"),
         ],
+        gap="xs",
+    )
+
+
+def _format_users_list(users: list) -> str:
+    """Format a list of users for display.
+
+    Args:
+        users: List of user objects with email and id.
+
+    Returns:
+        Formatted string of users.
+    """
+    if not users:
+        return "None"
+    return " ; ".join([f"{u.email} - {u.id}" for u in users])
+
+
+def _create_project_details_paper(project: Project) -> dmc.Paper:
+    """Create the project details paper component.
+
+    Args:
+        project: Project model instance.
+
+    Returns:
+        Paper component with project details.
+    """
+    project_type = getattr(project, "project_type", "basic")
+
+    # Create URL row - either as anchor or text
+    url_value = (
+        dmc.Anchor(
+            project.data_management_platform_project_url,
+            href=project.data_management_platform_project_url,
+            target="_blank",
+            fw="normal",
+        )
+        if project.data_management_platform_project_url
+        else dmc.Text("Not defined", fw="normal")
+    )
+
+    rows = [
+        _create_project_detail_row("Name", project.name),
+        _create_project_detail_row("Database ID", str(project.id)),
+        _create_project_detail_row(
+            "Description", project.description if project.description else "Not defined"
+        ),
+        dmc.Group(
+            children=[
+                dmc.Text("Data Management Platform URL:", fw="bold", className="label-text"),
+                url_value,
+            ],
+            gap="xs",
+        ),
+        _create_project_detail_row("Created at", project.registration_time),
+        _create_project_detail_row("Owners", _format_users_list(project.permissions.owners)),
+        _create_project_detail_row(
+            "Editors",
+            _format_users_list(project.permissions.editors)
+            if project.permissions.editors
+            else "None",
+        ),
+        _create_project_detail_row(
+            "Viewers",
+            _format_users_list(project.permissions.viewers)
+            if project.permissions.viewers
+            else "None",
+        ),
+        dmc.Group(
+            children=[
+                dmc.Text("Is public:", fw="bold", className="label-text"),
+                dmc.Badge(
+                    "Public" if project.is_public else "Private",
+                    color="green" if project.is_public else "violet",
+                    variant="filled",
+                    radius="xl",
+                    size="xs",
+                    style={"width": "100px", "justifyContent": "center"},
+                ),
+            ],
+            gap="xs",
+        ),
+        dmc.Group(
+            children=[
+                dmc.Text("Project type:", fw="bold", className="label-text"),
+                dmc.Badge(
+                    project_type.title(),
+                    color="orange" if project_type == "advanced" else "cyan",
+                    variant="light",
+                    radius="xl",
+                    size="xs",
+                    style={"width": "100px", "justifyContent": "center"},
+                ),
+            ],
+            gap="xs",
+        ),
+    ]
+
+    return dmc.Paper(
+        children=[html.Div(children=rows, className="project-details p-3")],
         radius="md",
         withBorder=True,
         shadow="sm",
         p="md",
     )
 
-    def create_workflow_section(title, workflows: list[Workflow]):
-        if not workflows:
-            return None
-        workflow_items = [render_workflow_item(wf=wf, token=token) for wf in workflows]
-        return [
-            dmc.Title(title, order=4, style={"marginTop": "10px"}),
-            dmc.Accordion(
-                children=workflow_items,
-                chevronPosition="right",
-                className="mb-3",
-            ),
-        ]
 
-    def create_data_collections_section(title, data_collections: list[DataCollection]):
-        if not data_collections:
-            return None
-        dc_items = [
-            render_data_collection(dc=dc, workflow_id="", token=token) for dc in data_collections
-        ]
-        return [
-            dmc.Title(title, order=4, style={"marginTop": "10px"}),
-            dmc.Stack(dc_items, gap="sm"),
-        ]
+def _determine_user_role(project: Project, current_user: UserBase) -> tuple[str, str]:
+    """Determine user's role and badge color for the project.
 
-    # For basic projects, show data collections directly; for advanced projects, show workflows
-    project_type = getattr(project, "project_type", "advanced")
-    if project_type == "basic":
-        # For basic projects, show data collections directly; for advanced projects, show workflows
-        # Note: sections are now handled by the new data collections route
-        pass
+    Args:
+        project: Project model instance.
+        current_user: Current user.
 
-    # Determine user's role in the project
-    role = "Viewer"  # Default role
-    color = "gray"  # Default color
+    Returns:
+        Tuple of (role_name, badge_color).
+    """
+    owner_ids = [str(o.id) for o in project.permissions.owners]
+    if str(current_user.id) in owner_ids:
+        return "Owner", "blue"
 
-    if str(current_user.id) in [str(o.id) for o in project.permissions.owners]:
-        role = "Owner"
-        color = "blue"
-    elif hasattr(project.permissions, "editors") and str(current_user.id) in [
-        str(e.id) for e in project.permissions.editors
-    ]:
-        role = "Editor"
-        color = "teal"
-    elif str(current_user.id) in [
-        str(v.id) for v in project.permissions.viewers if hasattr(v, "id")
-    ]:
-        role = "Viewer"
-        color = "gray"
+    if hasattr(project.permissions, "editors") and project.permissions.editors:
+        editor_ids = [str(e.id) for e in project.permissions.editors]
+        if str(current_user.id) in editor_ids:
+            return "Editor", "teal"
 
-    badge_ownership = dmc.Badge(
-        children=role,
-        color=color,
-        style={"width": "100px", "justifyContent": "center"},
-    )
+    viewer_ids = [str(v.id) for v in project.permissions.viewers if hasattr(v, "id")]
+    if str(current_user.id) in viewer_ids:
+        return "Viewer", "gray"
 
-    # Create project type badge
-    project_type = getattr(
-        project, "project_type", "basic"
-    )  # Default to 'basic' for backward compatibility
+    return "Viewer", "gray"
+
+
+def _create_project_badges(
+    project: Project, current_user: UserBase
+) -> tuple[dmc.Badge, dmc.Badge, dmc.Badge]:
+    """Create badges for project type, visibility, and user role.
+
+    Args:
+        project: Project model instance.
+        current_user: Current user for role determination.
+
+    Returns:
+        Tuple of (project_type_badge, visibility_badge, role_badge).
+    """
+    project_type = getattr(project, "project_type", "basic")
+    is_public = getattr(project, "is_public", False)
+    role, role_color = _determine_user_role(project, current_user)
+
     badge_project_type = dmc.Badge(
         children=project_type.title(),
         color="orange" if project_type == "advanced" else "cyan",
@@ -1284,14 +1242,117 @@ def render_project_item(
         style={"width": "100px", "justifyContent": "center"},
     )
 
-    # Create visibility badge
-    is_public = getattr(project, "is_public", False)  # Default to private if not set
     badge_visibility = dmc.Badge(
         children="Public" if is_public else "Private",
         color="green" if is_public else "violet",
         variant="filled",
         style={"width": "100px", "justifyContent": "center"},
     )
+
+    badge_ownership = dmc.Badge(
+        children=role,
+        color=role_color,
+        style={"width": "100px", "justifyContent": "center"},
+    )
+
+    return badge_project_type, badge_visibility, badge_ownership
+
+
+def _create_project_accordion_items(
+    project: Project, project_details: dmc.Paper, current_user: UserBase
+) -> list[dmc.AccordionItem]:
+    """Create accordion items for project sections.
+
+    Args:
+        project: Project model instance.
+        project_details: Project details paper component.
+        current_user: Current user.
+
+    Returns:
+        List of AccordionItem components.
+    """
+    project_type = getattr(project, "project_type", "basic")
+    content_label = "Data Collections" if project_type == "basic" else "Workflows"
+    content_icon = "mdi:database" if project_type == "basic" else "mdi:workflow"
+
+    return [
+        dmc.AccordionItem(
+            value="project-details",
+            children=[
+                dmc.AccordionControl(
+                    "Project Details",
+                    icon=DashIconify(icon="mdi:information-outline", width=20),
+                ),
+                dmc.AccordionPanel(project_details),
+            ],
+        ),
+        dmc.AccordionItem(
+            value="project-content",
+            children=[
+                dmc.Anchor(
+                    dmc.AccordionControl(
+                        content_label,
+                        icon=DashIconify(icon=content_icon, width=20),
+                    ),
+                    href=f"/project/{str(project.id)}/data",
+                    style={"textDecoration": "none", "color": "inherit"},
+                ),
+            ],
+        ),
+        dmc.AccordionItem(
+            value="roles-permissions",
+            children=[
+                dmc.Anchor(
+                    dmc.AccordionControl(
+                        "Roles and permissions",
+                        icon=DashIconify(icon="mdi:shield-account", width=20),
+                    ),
+                    href=f"/project/{str(project.id)}/permissions",
+                    style={"textDecoration": "none", "color": "inherit"},
+                ),
+            ],
+        ),
+        dmc.AccordionItem(
+            value="project-management",
+            children=[
+                dmc.AccordionControl(
+                    "Project Management",
+                    icon=DashIconify(icon="mdi:cog", width=20),
+                ),
+                dmc.AccordionPanel(children=create_project_management_panel(project, current_user)),
+            ],
+        ),
+    ]
+
+
+def render_project_item(
+    project: Project, current_user: UserBase, admin_UI: bool = False, token: str = ""
+) -> dmc.AccordionItem:
+    """Render a single project as an expandable accordion item.
+
+    Displays project details, workflows/data collections, permissions link,
+    and management controls. Shows badges for project type, visibility,
+    and user's permission role.
+
+    Args:
+        project: Project model instance.
+        current_user: Current user for permission display.
+        admin_UI: Whether rendering in admin context (currently unused).
+        token: JWT authentication token.
+
+    Returns:
+        AccordionItem component containing the full project view.
+    """
+    # Create project details
+    project_details = _create_project_details_paper(project)
+
+    # Create badges
+    badge_project_type, badge_visibility, badge_ownership = _create_project_badges(
+        project, current_user
+    )
+
+    # Create accordion items
+    accordion_items = _create_project_accordion_items(project, project_details, current_user)
 
     return dmc.AccordionItem(
         children=[
@@ -1302,135 +1363,34 @@ def render_project_item(
                         badge_visibility,
                         badge_ownership,
                         dmc.Text(f"{project.name}", fw="bold", style={"flex": "1"}),
-                        # dmc.Text(f" ({str(project.id)})", fw="medium"),
                     ],
                     gap="md",
                     style={"width": "100%", "alignItems": "center"},
                 ),
             ),
-            dmc.AccordionPanel(
-                children=[
-                    dmc.Accordion(
-                        children=[
-                            dmc.AccordionItem(
-                                value="project-details",
-                                children=[
-                                    dmc.AccordionControl(
-                                        "Project Details",
-                                        icon=DashIconify(icon="mdi:information-outline", width=20),
-                                    ),
-                                    dmc.AccordionPanel(project_details),
-                                ],
-                            ),
-                            dmc.AccordionItem(
-                                value="project-content",
-                                children=[
-                                    dmc.Anchor(
-                                        dmc.AccordionControl(
-                                            "Data Collections"
-                                            if project_type == "basic"
-                                            else "Workflows",
-                                            icon=DashIconify(
-                                                icon="mdi:database"
-                                                if project_type == "basic"
-                                                else "mdi:workflow",
-                                                width=20,
-                                            ),
-                                        ),
-                                        href=f"/project/{str(project.id)}/data",
-                                        style={"textDecoration": "none", "color": "inherit"},
-                                    ),
-                                    # dmc.AccordionPanel(
-                                    #     children=(
-                                    #         sections
-                                    #         if sections
-                                    #         else [
-                                    #             html.P(
-                                    #                 "No data collections available."
-                                    #                 if project_type == "basic"
-                                    #                 else "No workflows available."
-                                    #             )
-                                    #         ]
-                                    #     )
-                                    # ),
-                                ],
-                            ),
-                            dmc.AccordionItem(
-                                value="roles-permissions",
-                                children=[
-                                    dmc.Anchor(
-                                        dmc.AccordionControl(
-                                            "Roles and permissions",
-                                            icon=DashIconify(icon="mdi:shield-account", width=20),
-                                        ),
-                                        href=f"/project/{str(project.id)}/permissions",
-                                        style={"textDecoration": "none", "color": "inherit"},
-                                    ),
-                                    # dmc.AccordionPanel(
-                                    #     children=[
-                                    #         dmc.Accordion(
-                                    #             children=[
-                                    #                 dag.AgGrid(
-                                    #                     columnDefs=[
-                                    #                         # set types
-                                    #                         {"field": "id"},
-                                    #                         {"field": "email"},
-                                    #                         {
-                                    #                             "field": "Owner",
-                                    #                             "cellRenderer": "agCheckboxCellRenderer",
-                                    #                         },
-                                    #                         {"field": "Editor"},
-                                    #                         {"field": "Viewer"},
-                                    #                     ],
-                                    #                     rowData=[
-                                    #                         {
-                                    #                             "id": str(user.id),
-                                    #                             "email": user.email,
-                                    #                             "Owner": True,
-                                    #                             "Editor": False,
-                                    #                             "Viewer": False,
-                                    #                         }
-                                    #                         for user in project.permissions.viewers
-                                    #                         + project.permissions.owners
-                                    #                     ],
-                                    #                     defaultColDef={
-                                    #                         "resizable": True,
-                                    #                         "sortable": True,
-                                    #                         "filter": True,
-                                    #                     },
-                                    #                 )
-                                    #             ]
-                                    #         )
-                                    #     ]
-                                    # ),
-                                ],
-                            ),
-                            dmc.AccordionItem(
-                                value="project-management",
-                                children=[
-                                    dmc.AccordionControl(
-                                        "Project Management",
-                                        icon=DashIconify(icon="mdi:cog", width=20),
-                                    ),
-                                    dmc.AccordionPanel(
-                                        # children=html.Div()
-                                        children=create_project_management_panel(
-                                            project, current_user
-                                        )
-                                    ),
-                                ],
-                            ),
-                        ],
-                    ),
-                ]
-            ),
+            dmc.AccordionPanel(children=[dmc.Accordion(children=accordion_items)]),
         ],
         value=f"{project.name}",
     )
 
 
-def render_projects_list(projects: list[Project], admin_UI: bool = False, token: str | None = None):
-    """Render the full projects list, categorized into owned and shared."""
+def render_projects_list(
+    projects: list[Project], admin_UI: bool = False, token: str | None = None
+) -> dmc.Container:
+    """Render the complete projects list with column headers.
+
+    Displays projects in an accordion with column headers for:
+    Project Type, Visibility, Permission, and Project Name.
+    Shows an empty state message if no projects exist.
+
+    Args:
+        projects: List of Project model instances.
+        admin_UI: Whether rendering in admin context.
+        token: JWT authentication token for fetching user info.
+
+    Returns:
+        Container component with projects accordion or empty state.
+    """
 
     if not projects:
         content = dmc.Container(
@@ -1556,17 +1516,24 @@ def render_projects_list(projects: list[Project], admin_UI: bool = False, token:
     )
 
 
-# =====================
+# =============================================================================
 # Callback Registrations
-# =====================
+# =============================================================================
 
 
-def register_projects_callbacks(app):
-    """
-    Register callbacks related to projects and data collections.
+def register_projects_callbacks(app) -> None:
+    """Register callbacks for project creation modal and data collection tables.
+
+    Callbacks registered:
+    - toggle_project_modal: Open/close project creation modal
+    - initialize_step_content: Load step 1 content when modal opens
+    - manage_stepper_content: Handle stepper navigation
+    - handle_project_card_click: Process project type selection
+    - handle_project_creation: Create project via API
+    - AG Grid theme switching and infinite scroll
 
     Args:
-        app: Dash application instance
+        app: Dash application instance.
     """
 
     # Project creation modal callbacks
@@ -1969,12 +1936,20 @@ def register_projects_callbacks(app):
             return dash.no_update
 
 
-def register_workflows_callbacks(app):
-    """
-    Register callbacks related to projects and workflows.
+def register_workflows_callbacks(app) -> None:
+    """Register callbacks for project list display and management.
+
+    Callbacks registered:
+    - update_projects_content: Render projects list on page load
+    - refresh_projects_after_creation: Refresh list after new project
+    - open_edit_project_name_modal: Show edit modal
+    - open_delete_project_modal: Show delete confirmation modal
+    - handle_delete_project_confirm: Process project deletion
+    - handle_edit_project_name_confirm: Process project rename
+    - refresh_projects_after_deletion/edit: Update list after changes
 
     Args:
-        app: Dash application instance
+        app: Dash application instance.
     """
 
     @app.callback(

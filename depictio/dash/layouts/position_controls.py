@@ -590,12 +590,15 @@ def handle_position_change(
     return new_metadata, new_metadata
 
 
-def register_position_clientside_callback(app):
+def register_position_clientside_callback(app) -> None:
     """
     Register clientside callback for lightweight position updates.
 
     This callback applies CSS order/grid changes to components without
     triggering React re-renders, preserving component state.
+
+    Args:
+        app: The Dash application instance.
     """
     app.clientside_callback(
         """

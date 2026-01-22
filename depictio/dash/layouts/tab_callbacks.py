@@ -1,4 +1,19 @@
-"""Callbacks for dashboard tab management."""
+"""
+Callbacks for dashboard tab management.
+
+This module provides callbacks for managing dashboard tabs including:
+
+- Populating sidebar tabs based on the current dashboard
+- Navigating between tabs via URL changes
+- Opening and handling tab creation modal
+- Creating new tabs with custom icons and colors
+
+Key Callbacks:
+    populate_sidebar_tabs: Loads and displays tabs for the dashboard family
+    navigate_to_tab: Handles tab click navigation
+    open_tab_modal: Opens the tab creation modal
+    create_tab: Creates a new child tab under the parent dashboard
+"""
 
 import httpx
 from dash import Input, Output, State
@@ -10,6 +25,125 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.dashboards import DashboardData
 from depictio.models.models.users import Permission
+
+
+def _extract_dashboard_id_from_pathname(pathname: str) -> tuple[str | None, bool]:
+    """
+    Extract dashboard ID and edit mode flag from URL pathname.
+
+    Args:
+        pathname: URL pathname (e.g., '/dashboard/{id}' or '/dashboard-edit/{id}')
+
+    Returns:
+        Tuple of (dashboard_id, is_edit_mode) or (None, False) if invalid
+    """
+    try:
+        if "/dashboard-edit/" in pathname:
+            dashboard_id = pathname.split("/dashboard-edit/")[1].split("/")[0]
+            return dashboard_id, True
+        else:
+            dashboard_id = pathname.split("/dashboard/")[1].split("/")[0]
+            is_edit_mode = "/edit" in pathname
+            return dashboard_id, is_edit_mode
+    except (IndexError, AttributeError):
+        return None, False
+
+
+def _fetch_dashboard(dashboard_id: str, token: str) -> dict | None:
+    """
+    Fetch dashboard data from the API.
+
+    Args:
+        dashboard_id: The dashboard ID to fetch
+        token: Authentication token
+
+    Returns:
+        Dashboard data dict or None if fetch failed
+    """
+    try:
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        if response.status_code == 200:
+            return response.json()
+        logger.warning(f"Failed to fetch dashboard {dashboard_id}: {response.status_code}")
+        return None
+    except Exception as e:
+        logger.error(f"Error fetching dashboard {dashboard_id}: {e}")
+        return None
+
+
+def _fetch_child_tabs(parent_id: str, token: str) -> list[dict]:
+    """
+    Fetch child tabs for a parent dashboard.
+
+    Args:
+        parent_id: The parent dashboard ID
+        token: Authentication token
+
+    Returns:
+        List of child tab dictionaries sorted by tab_order
+    """
+    try:
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/dashboards/list?include_child_tabs=true",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        if response.status_code != 200:
+            logger.warning("Failed to fetch dashboard list for child tabs")
+            return []
+
+        all_dashboards = response.json()
+        child_tabs = [
+            d
+            for d in all_dashboards
+            if not d.get("is_main_tab", True) and str(d.get("parent_dashboard_id", "")) == parent_id
+        ]
+        return child_tabs
+    except Exception as e:
+        logger.error(f"Error fetching child tabs: {e}")
+        return []
+
+
+def _build_tab_item(tab: dict):
+    """
+    Build a DMC TabsTab component from tab data.
+
+    Args:
+        tab: Tab dictionary containing dashboard data
+
+    Returns:
+        DMC TabsTab component
+    """
+    import dash_mantine_components as dmc
+
+    tab_label = "Main" if tab.get("is_main_tab", True) else tab.get("title", "Untitled")
+    icon_name = tab.get("icon", "mdi:view-dashboard")
+    icon_color = tab.get("icon_color", "orange")
+    tab_dashboard_id = str(tab["dashboard_id"])
+
+    # Use default icon if icon is a file path
+    if icon_name and ("/" in icon_name or icon_name.endswith((".png", ".svg", ".jpg", ".jpeg"))):
+        icon_name = "mdi:view-dashboard"
+        logger.info(f"Tab '{tab_label}': Using default icon (file path detected)")
+
+    return dmc.TabsTab(
+        tab_label,
+        value=tab_dashboard_id,
+        leftSection=dmc.ActionIcon(
+            DashIconify(icon=icon_name, width=20),
+            color=icon_color,
+            radius="xl",
+            size="md",
+            variant="filled",
+        ),
+        style={
+            "width": "100%",
+            "fontSize": "16px",
+            "padding": "16px 16px",
+        },
+    )
 
 
 def register_tab_callbacks(app):
@@ -45,168 +179,77 @@ def register_tab_callbacks(app):
         import dash_mantine_components as dmc
 
         logger.info(
-            f"🔄 populate_sidebar_tabs called - pathname: {pathname}, has_cache: {bool(dashboard_cache)}, has_local: {bool(local_data)}"
+            f"populate_sidebar_tabs called - pathname: {pathname}, "
+            f"has_cache: {bool(dashboard_cache)}, has_local: {bool(local_data)}"
         )
-        if dashboard_cache:
-            logger.info(f"   Dashboard cache keys: {list(dashboard_cache.keys())}")
 
-        # EARLY EXIT: Don't populate tabs on component add/edit pages
-        # This prevents the callback from running at all when editing/adding components
+        # Early exits for non-applicable pages
         if pathname and ("/component/edit/" in pathname or "/component/add/" in pathname):
-            logger.info("🔒 Component page detected - skipping tab population entirely")
+            logger.info("Component page detected - skipping tab population")
             raise PreventUpdate
 
-        # Check if we're on a dashboard page (viewer or editor app)
         if not pathname or ("/dashboard/" not in pathname and "/dashboard-edit/" not in pathname):
-            logger.info("⏭️ Not on dashboard page, skipping tab population")
+            logger.info("Not on dashboard page, skipping tab population")
             raise PreventUpdate
 
-        # Extract dashboard ID from pathname
-        try:
-            # Handle both viewer (/dashboard/{id}) and editor (/dashboard-edit/{id}) URLs
-            if "/dashboard-edit/" in pathname:
-                dashboard_id = pathname.split("/dashboard-edit/")[1].split("/")[0]
-                is_edit_mode = True
-            else:
-                dashboard_id = pathname.split("/dashboard/")[1].split("/")[0]
-                is_edit_mode = "/edit" in pathname  # Legacy edit mode check
-            logger.info(f"📍 Dashboard ID: {dashboard_id}, Edit mode: {is_edit_mode}")
-        except (IndexError, AttributeError) as e:
-            logger.warning(f"⚠️ Failed to parse dashboard ID from pathname: {e}")
+        # Extract dashboard ID and edit mode from pathname
+        dashboard_id, is_edit_mode = _extract_dashboard_id_from_pathname(pathname)
+        if not dashboard_id:
+            logger.warning("Failed to parse dashboard ID from pathname")
             raise PreventUpdate
 
-        # Get access token
+        logger.info(f"Dashboard ID: {dashboard_id}, Edit mode: {is_edit_mode}")
+
+        # Validate access token
         if not local_data or "access_token" not in local_data:
-            logger.warning(
-                f"⚠️ No access token available for tab loading - local_data keys: {local_data.keys() if local_data else 'None'}"
-            )
+            logger.warning("No access token available for tab loading")
             raise PreventUpdate
 
         token = local_data["access_token"]
 
         try:
-            # Get current dashboard to determine parent
-            current_dash_response = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-
-            if current_dash_response.status_code != 200:
-                logger.warning(f"Failed to fetch dashboard {dashboard_id}")
+            # Fetch current dashboard to determine parent
+            current_dash = _fetch_dashboard(dashboard_id, token)
+            if not current_dash:
                 raise PreventUpdate
-
-            current_dash = current_dash_response.json()
 
             # Determine parent dashboard ID
-            if current_dash.get("is_main_tab", True):
-                parent_id = dashboard_id
-            else:
-                parent_id = str(current_dash["parent_dashboard_id"])
+            parent_id = (
+                dashboard_id
+                if current_dash.get("is_main_tab", True)
+                else str(current_dash["parent_dashboard_id"])
+            )
 
             # Fetch main tab
-            main_tab_response = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{parent_id}",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-
-            if main_tab_response.status_code != 200:
-                logger.warning(f"Failed to fetch main tab {parent_id}")
+            main_tab = _fetch_dashboard(parent_id, token)
+            if not main_tab:
                 raise PreventUpdate
 
-            main_tab = main_tab_response.json()
-
-            # Fetch all dashboards to find child tabs (include_child_tabs=true for sidebar)
-            all_dashboards_response = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/dashboards/list?include_child_tabs=true",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-
-            if all_dashboards_response.status_code != 200:
-                logger.warning("Failed to fetch dashboard list")
-                # At minimum, show the main tab
-                tabs = [main_tab]
-            else:
-                all_dashboards = all_dashboards_response.json()
-
-                # Filter child tabs for this parent
-                child_tabs = [
-                    d
-                    for d in all_dashboards
-                    if not d.get("is_main_tab", True)
-                    and str(d.get("parent_dashboard_id", "")) == parent_id
-                ]
-
-                logger.info(
-                    f"Found {len(child_tabs)} child tabs for parent {parent_id}: "
-                    f"{[t.get('title') for t in child_tabs]}"
-                )
-
-                # Combine and sort by tab_order
-                tabs = [main_tab] + child_tabs
-                tabs.sort(key=lambda t: t.get("tab_order", 0))
-
-            # Build tab items
-            tab_items = []
-            for tab in tabs:
-                # Use "Main" for main tab, otherwise use the tab's title
-                tab_label = "Main" if tab.get("is_main_tab", True) else tab.get("title", "Untitled")
-                icon_name = tab.get("icon", "mdi:view-dashboard")
-                icon_color = tab.get("icon_color", "orange")
-                tab_dashboard_id = str(tab["dashboard_id"])
-
-                # Only use DashIconify - if icon is a file path, use default icon
-                if icon_name and (
-                    "/" in icon_name or icon_name.endswith((".png", ".svg", ".jpg", ".jpeg"))
-                ):
-                    # File path detected - use default icon
-                    icon_name = "mdi:view-dashboard"
-                    logger.info(f"Tab '{tab_label}': Using default icon (file path detected)")
-
-                tab_items.append(
-                    dmc.TabsTab(
-                        tab_label,
-                        value=tab_dashboard_id,
-                        leftSection=dmc.ActionIcon(
-                            DashIconify(
-                                icon=icon_name,
-                                width=20,  # Slightly smaller for tab context
-                            ),
-                            color=icon_color,
-                            radius="xl",  # Circular shape
-                            size="md",  # Medium size for tabs
-                            variant="filled",  # Solid filled background
-                        ),
-                        style={
-                            "width": "100%",
-                            "fontSize": "16px",
-                            "padding": "16px 16px",  # Increased height with more vertical padding
-                        },
-                    )
-                )
-
-            # Add "+ Add Tab" button in edit mode
+            # Fetch child tabs and combine with main tab
+            child_tabs = _fetch_child_tabs(parent_id, token)
             logger.info(
-                f"🔍 Checking if we should add '+ Add Tab': is_edit_mode={is_edit_mode}, has_cache={bool(dashboard_cache)}"
+                f"Found {len(child_tabs)} child tabs for parent {parent_id}: "
+                f"{[t.get('title') for t in child_tabs]}"
             )
 
+            tabs = [main_tab] + child_tabs
+            tabs.sort(key=lambda t: t.get("tab_order", 0))
+
+            # Build tab items using helper function
+            tab_items = [_build_tab_item(tab) for tab in tabs]
+
+            # Add "+ Add Tab" button in edit mode for owners
             if is_edit_mode and dashboard_cache:
-                # Check if user is owner using user_permissions from init endpoint
-                # The API endpoint already validates the user via JWT and returns permission level
                 user_permissions = dashboard_cache.get("user_permissions", {})
                 is_owner = user_permissions.get("level") == "owner"
 
                 logger.info(
-                    f"🔐 Permission check for Add Tab:\n"
-                    f"   - is_edit_mode: {is_edit_mode}\n"
-                    f"   - has_dashboard_cache: {bool(dashboard_cache)}\n"
-                    f"   - dashboard_cache keys: {list(dashboard_cache.keys()) if dashboard_cache else 'None'}\n"
-                    f"   - user_permissions: {user_permissions}\n"
-                    f"   - level: {user_permissions.get('level')}\n"
-                    f"   - is_owner: {is_owner}"
+                    f"Permission check for Add Tab: level={user_permissions.get('level')}, "
+                    f"is_owner={is_owner}"
                 )
 
                 if is_owner:
-                    logger.info("✅ Adding '+ Add Tab' button to sidebar")
+                    logger.info("Adding '+ Add Tab' button to sidebar")
                     tab_items.append(
                         dmc.TabsTab(
                             "Add Tab",
@@ -215,18 +258,16 @@ def register_tab_callbacks(app):
                             style={
                                 "width": "100%",
                                 "fontSize": "16px",
-                                "padding": "16px 16px",  # Increased height to match other tabs
+                                "padding": "16px 16px",
                             },
                         )
-                    )
-                else:
-                    logger.warning(
-                        f"❌ Not adding '+ Add Tab' button - user level is '{user_permissions.get('level')}', not 'owner'"
                     )
 
             logger.info(f"Loaded {len(tab_items)} tabs for dashboard {dashboard_id}")
             return tab_items, dashboard_id
 
+        except PreventUpdate:
+            raise
         except Exception as e:
             logger.error(f"Error populating sidebar tabs: {e}")
             raise PreventUpdate

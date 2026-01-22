@@ -1,3 +1,21 @@
+"""
+Utility functions for MultiQC component integration.
+
+This module provides helper functions for building and managing MultiQC components
+in the Depictio dashboard, including:
+
+- Plot structure analysis for interactive filtering support
+- Logo overlay management for proper MultiQC branding
+- Report retrieval and metadata extraction from the API
+- Data availability checking and summary formatting
+
+Key Functions:
+    analyze_multiqc_plot_structure: Preserves trace data for interactive patching
+    build_multiqc: Creates MultiQC plot components for dashboard display
+    get_multiqc_reports_for_data_collection: Retrieves reports via API
+    check_multiqc_data_availability: Validates MultiQC data presence
+"""
+
 from typing import Any
 
 import httpx

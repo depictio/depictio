@@ -1,5 +1,19 @@
-"""
-Code mode component for figure creation using Python/Plotly code
+"""Code mode component for figure creation using Python/Plotly code.
+
+This module provides a code editor interface for creating Plotly figures
+using Python code. It includes:
+
+- Interactive Ace editor with Python syntax highlighting
+- Code analysis and validation with constraints
+- Parameter extraction from code for UI synchronization
+- Code generation from UI parameters
+- Support for preprocessing with df_modified pattern
+
+Key functions:
+- create_code_mode_interface: Creates the full code editor UI
+- analyze_constrained_code: Validates code structure and preprocessing
+- extract_params_from_code: AST-based parameter extraction
+- convert_ui_params_to_code: Generate code from UI selections
 """
 
 from typing import Any, Dict, Literal
@@ -18,14 +32,23 @@ from .simple_code_executor import get_code_examples
 def create_code_mode_interface(component_index: str, initial_code: str = "") -> html.Div:
     """Create the code mode interface for figure creation.
 
-    Args:
-        component_index: Component identifier
-        initial_code: Initial code to populate the editor (for edit mode)
-    """
-    logger.info(f"🔧 CREATING CODE MODE INTERFACE for component: {component_index}")
-    logger.info(f"   Initial code length: {len(initial_code) if initial_code else 0}")
+    Creates a complete code editing environment with:
+    - macOS-style editor header with traffic lights
+    - Ace editor with Python syntax highlighting and autocompletion
+    - Execute/Clear buttons
+    - Status alerts for feedback
+    - Code examples section
 
-    interface = html.Div(
+    Args:
+        component_index: Component identifier for pattern matching callbacks.
+        initial_code: Initial code to populate the editor (for edit mode).
+
+    Returns:
+        HTML Div containing the complete code mode interface.
+    """
+    logger.info(f"Creating code mode interface for component: {component_index}")
+
+    return html.Div(
         [
             _create_editor_section(component_index, initial_code),
             _create_status_section(component_index),
@@ -38,9 +61,6 @@ def create_code_mode_interface(component_index: str, initial_code: str = "") -> 
             "padding": "10px",
         },
     )
-
-    logger.info("✅ CODE MODE INTERFACE CREATED - returning interface")
-    return interface
 
 
 def _create_traffic_light_dot(color: str) -> dmc.Box:
@@ -349,7 +369,18 @@ def _create_status_section(component_index: str) -> dmc.Stack:
 
 
 def convert_ui_params_to_code(dict_kwargs: Dict[str, Any], visu_type: str) -> str:
-    """Convert UI parameters to Python code with proper line wrapping"""
+    """Convert UI parameters to Python code with proper line wrapping.
+
+    Generates syntactically correct Python code from parameter dictionary,
+    handling line length constraints and special visualization types.
+
+    Args:
+        dict_kwargs: Dictionary of parameter names to values.
+        visu_type: Type of visualization (e.g., 'scatter', 'bar', 'umap').
+
+    Returns:
+        Formatted Python code string with proper line wrapping.
+    """
     if not dict_kwargs:
         return ""
 
@@ -596,7 +627,18 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
 
 
 def extract_visualization_type_from_code(code: str) -> str:
-    """Extract visualization type from Python code"""
+    """Extract visualization type from Python code.
+
+    Parses the code to identify the Plotly Express function or custom
+    clustering function being used.
+
+    Args:
+        code: Python code string containing a figure creation call.
+
+    Returns:
+        Visualization type name (e.g., 'scatter', 'bar', 'umap').
+        Defaults to 'scatter' if no pattern is matched.
+    """
     import re
 
     # Look for px.function_name patterns
@@ -616,7 +658,17 @@ def extract_visualization_type_from_code(code: str) -> str:
 
 
 def extract_params_from_code(code: str) -> Dict[str, Any]:
-    """Extract ALL parameter information from Python code dynamically"""
+    """Extract ALL parameter information from Python code dynamically.
+
+    Uses AST parsing for accurate extraction, with regex fallback for
+    edge cases. Handles both px.function() and create_*_plot() patterns.
+
+    Args:
+        code: Python code string containing a figure creation call.
+
+    Returns:
+        Dictionary mapping parameter names to their values.
+    """
     params = {}
 
     import ast
@@ -707,7 +759,18 @@ def extract_params_from_code(code: str) -> Dict[str, Any]:
 
 
 def evaluate_params_in_context(params: Dict[str, Any], df: pl.DataFrame) -> Dict[str, Any]:
-    """Evaluate parameter expressions that contain references to df in the execution context"""
+    """Evaluate parameter expressions that contain references to df.
+
+    Some parameters may contain expressions like df['column'].unique() that
+    need to be evaluated in the execution context with the actual DataFrame.
+
+    Args:
+        params: Dictionary of parameter names to values (some may be expressions).
+        df: The DataFrame to use for evaluation.
+
+    Returns:
+        Dictionary with expression parameters evaluated to their actual values.
+    """
 
     evaluated_params = {}
     for param_name, param_value in params.items():

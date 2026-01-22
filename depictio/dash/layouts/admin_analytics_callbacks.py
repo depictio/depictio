@@ -1,5 +1,10 @@
-"""
-Callbacks for Admin Analytics Dashboard.
+"""Callbacks for Admin Analytics Dashboard.
+
+This module registers callbacks for the admin analytics dashboard,
+providing real-time metrics, charts, and user activity summaries.
+
+Analytics are only available when settings.analytics.enabled is True
+and only accessible to admin users.
 """
 
 import dash_mantine_components as dmc
@@ -18,8 +23,26 @@ from depictio.dash.layouts.admin_analytics import (
 )
 
 
-def register_admin_analytics_callbacks(app):
-    """Register all analytics dashboard callbacks."""
+def register_admin_analytics_callbacks(app) -> None:
+    """Register all analytics dashboard callbacks.
+
+    Callbacks registered:
+    - render_analytics_dashboard: Render main dashboard layout
+    - update_realtime_metrics: Update active users, sessions, pageviews
+    - update_daily_activity_chart: Line chart of daily activity trends
+    - update_user_types_chart: Pie chart of user type distribution
+    - update_users_active_today: Active users in last 24h
+    - update_activity_overview: Activity breakdown by type
+    - refresh_all_analytics_data: Trigger ETL data refresh
+    - update_user_filter_options: Populate user dropdown
+    - update_top_pages: Most visited pages list
+    - clear_all_filters: Reset all filter controls
+    - update_comprehensive_summary: Detailed user activity table
+    - update_unique_connections: IP address analytics
+
+    Args:
+        app: Dash application instance.
+    """
 
     @app.callback(
         Output("analytics-dashboard-content", "children"),

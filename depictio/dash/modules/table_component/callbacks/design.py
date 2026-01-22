@@ -1,8 +1,15 @@
 """
 Design mode callbacks for table component.
 
-Handles live preview when WF/DC selection changes in stepper or edit page.
-Provides minimal design UI focused on data source selection (WF/DC).
+This module provides callbacks for the table component design interface,
+handling live preview updates when workflow/data collection selection changes
+in the stepper or edit page.
+
+The design mode provides a minimal interface focused on data source selection,
+as tables don't require additional configuration beyond choosing the data source.
+
+Functions:
+    register_design_callbacks: Register all design mode callbacks with the Dash app.
 """
 
 import httpx
@@ -14,8 +21,57 @@ from depictio.dash.modules.table_component.utils import build_table
 from depictio.dash.utils import get_columns_from_data_collection
 
 
+def _fetch_data_collection_specs(dc_id: str, token: str) -> dict | None:
+    """Fetch data collection specifications from the API.
+
+    Args:
+        dc_id: Data collection ID.
+        token: Authentication token.
+
+    Returns:
+        Data collection specs dictionary, or None if fetch fails.
+    """
+    try:
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=30.0,
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        logger.error(f"Failed to fetch DC specs: {e}")
+        return None
+
+
+def _fetch_column_definitions(wf_id: str, dc_id: str, token: str) -> dict | None:
+    """Fetch column definitions for the data collection.
+
+    Args:
+        wf_id: Workflow ID.
+        dc_id: Data collection ID.
+        token: Authentication token.
+
+    Returns:
+        Column definitions dictionary, or None if fetch fails.
+    """
+    try:
+        return get_columns_from_data_collection(wf_id, dc_id, token)
+    except Exception as e:
+        logger.error(f"Failed to get columns: {e}")
+        return None
+
+
 def register_design_callbacks(app):
-    """Register design mode callbacks for table component."""
+    """Register design mode callbacks for table component.
+
+    This function registers the callback that handles live preview updates
+    when the user selects a workflow and data collection in the stepper
+    or edit interface.
+
+    Args:
+        app: The Dash application instance.
+    """
 
     @app.callback(
         Output({"type": "table-body", "index": MATCH}, "children"),
@@ -28,89 +84,77 @@ def register_design_callbacks(app):
             State("local-store", "data"),
             State("url", "pathname"),
         ],
-        prevent_initial_call=False,  # Allow initial call to populate table when WF/DC already selected
+        prevent_initial_call=False,
     )
     def design_table_component(wf_id, dc_id, table_id, local_data, pathname):
-        """
-        Live preview callback for table design.
+        """Update table preview when WF/DC selection changes.
 
-        Automatically updates table preview when WF/DC selection changes.
-        No button click needed - tables display immediately upon data source selection.
-        Follows the minimal design approach - tables only need data source selection.
+        This callback provides live preview functionality for the table design
+        interface. Tables display immediately upon data source selection without
+        requiring a button click, following the minimal design approach.
 
         Args:
-            wf_id: Workflow ID from hidden select (step 2) - triggers update
-            dc_id: Data collection ID from hidden select (step 2) - triggers update
-            table_id: Table component ID dict from State
-            local_data: Local store containing access token
-            pathname: Current URL path (to detect stepper vs edit)
+            wf_id: Workflow ID from the workflow selector.
+            dc_id: Data collection ID from the data collection selector.
+            table_id: Table component ID dict containing the index.
+            local_data: Local store data containing the access token.
+            pathname: Current URL path to detect stepper vs edit mode.
 
         Returns:
-            Table preview content for table-body container
+            Table preview content for the table-body container, or empty list
+            if prerequisites are not met.
         """
-
-        # GUARD: Validate local_data
         if not local_data:
             logger.warning("design_table_component: No local_data available")
             return []
 
-        # GUARD: Validate WF/DC selection
         if not wf_id or not dc_id:
             logger.info("design_table_component: Waiting for WF/DC selection")
             return []
 
-        TOKEN = local_data["access_token"]
+        token = local_data["access_token"]
+        component_index = table_id["index"]
 
         logger.info("=" * 80)
-        logger.info(f"🎨 DESIGN TABLE - Component: {table_id['index']}")
+        logger.info(f"DESIGN TABLE - Component: {component_index}")
         logger.info(f"   WF: {wf_id}, DC: {dc_id}")
         logger.info(f"   Pathname: {pathname}")
 
-        # Fetch DC specs
-        try:
-            response = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_id}",
-                headers={"Authorization": f"Bearer {TOKEN}"},
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            dc_specs = response.json()
-            logger.info(f"   ✓ Fetched DC specs: {dc_specs.get('collection_name', 'unknown')}")
-        except Exception as e:
-            logger.error(f"❌ Failed to fetch DC specs: {e}")
+        # Fetch data collection specifications
+        dc_specs = _fetch_data_collection_specs(dc_id, token)
+        if not dc_specs:
             return []
+        logger.info(f"   Fetched DC specs: {dc_specs.get('collection_name', 'unknown')}")
 
-        # Get columns
-        try:
-            cols_json = get_columns_from_data_collection(wf_id, dc_id, TOKEN)
-            logger.info(f"   ✓ Fetched columns: {len(cols_json)} columns")
-        except Exception as e:
-            logger.error(f"❌ Failed to get columns: {e}")
+        # Fetch column definitions
+        cols_json = _fetch_column_definitions(wf_id, dc_id, token)
+        if not cols_json:
             return []
+        logger.info(f"   Fetched columns: {len(cols_json)} columns")
 
-        # Determine if stepper mode (add flow) or edit mode
+        # Determine mode
         is_stepper_mode = "/component/add/" in pathname
         logger.info(f"   Mode: {'stepper (add)' if is_stepper_mode else 'edit'}")
 
         # Build table
         table_kwargs = {
-            "index": table_id["index"],
+            "index": component_index,
             "wf_id": wf_id,
             "dc_id": dc_id,
             "dc_config": dc_specs["config"],
             "cols_json": cols_json,
-            "access_token": TOKEN,
+            "access_token": token,
             "stepper": is_stepper_mode,
-            "build_frame": False,  # Return just content for preview area
+            "build_frame": False,
         }
 
         try:
             new_table = build_table(**table_kwargs)
-            logger.info("✅ DESIGN TABLE - Preview built successfully")
+            logger.info("DESIGN TABLE - Preview built successfully")
             logger.info("=" * 80)
             return new_table
         except Exception as e:
-            logger.error(f"❌ Failed to build table: {e}")
+            logger.error(f"Failed to build table: {e}")
             import traceback
 
             logger.error(f"   Traceback: {traceback.format_exc()}")

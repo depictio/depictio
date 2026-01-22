@@ -1,3 +1,17 @@
+"""Reusable UI component toolbox for Depictio dashboard layouts.
+
+This module provides factory functions for creating commonly used modal
+dialogs and UI components throughout the application, including:
+
+- Dashboard creation modal with icon customization
+- Delete confirmation modal
+- Add/Edit modals with input fields
+- Password editing modal
+- Data collection CRUD modals (create, edit, delete, overwrite)
+
+All components follow DMC 2.0+ patterns and support dark/light themes.
+"""
+
 import dash_mantine_components as dmc
 from dash import dcc, html
 from dash_extensions import EventListener
@@ -6,12 +20,12 @@ from dash_iconify import DashIconify
 from depictio.dash.colors import colors
 
 
-def get_workflow_icon_mapping():
-    """
-    Map workflow systems to their logo image paths.
+def get_workflow_icon_mapping() -> dict[str, str | None]:
+    """Map workflow systems to their logo image paths.
 
     Returns:
-        dict: Workflow system to image path mapping
+        Dictionary mapping workflow system names to asset paths.
+        Value is None for systems using custom Iconify icons.
     """
     return {
         "nextflow": "/assets/images/workflows/nextflow.png",
@@ -23,12 +37,11 @@ def get_workflow_icon_mapping():
     }
 
 
-def get_workflow_icon_color():
-    """
-    Map workflow systems to their brand colors.
+def get_workflow_icon_color() -> dict[str, str]:
+    """Map workflow systems to their brand colors.
 
     Returns:
-        dict: Workflow system to color mapping
+        Dictionary mapping workflow system names to Mantine color names.
     """
     return {
         "nextflow": "teal",  # Nextflow green
@@ -41,25 +54,29 @@ def get_workflow_icon_color():
 
 
 def create_dashboard_modal(
-    dashboard_title="",
-    projects=[],
-    selected_project=None,
-    opened=False,
-    id_prefix="dashboard",
-):
-    """
-    Creates a stylish modal for dashboard creation with improved visual design.
+    dashboard_title: str = "",
+    projects: list = [],
+    selected_project: str | None = None,
+    opened: bool = False,
+    id_prefix: str = "dashboard",
+) -> tuple[dmc.Modal, str]:
+    """Create a dashboard creation modal with icon customization.
 
-    Parameters:
-    - dashboard_title: Pre-filled dashboard title (optional)
-    - projects: List of project options for the dropdown
-    - selected_project: Pre-selected project (optional)
-    - opened: Whether the modal is initially open
-    - id_prefix: Prefix for all IDs in the modal
+    The modal includes:
+    - Title and subtitle inputs
+    - Project selection dropdown
+    - Icon customization panel (icon, color, workflow system)
+    - Live icon preview
+
+    Args:
+        dashboard_title: Pre-filled dashboard title.
+        projects: List of project options for dropdown (unused, populated by callback).
+        selected_project: Pre-selected project ID.
+        opened: Whether the modal starts open.
+        id_prefix: Prefix for component IDs.
 
     Returns:
-    - modal: The dashboard creation modal
-    - modal_id: The ID of the modal for callbacks
+        Tuple of (modal component, modal ID string).
     """
     modal_id = f"{id_prefix}-modal"
 
@@ -389,19 +406,30 @@ def create_dashboard_modal(
     return modal, modal_id
 
 
-# Define the delete confirmation modal function
 def create_delete_confirmation_modal(
-    id_prefix,
-    item_id,
-    title="Confirm Deletion",
-    message="Are you sure you want to delete this item? This action cannot be undone.",
-    delete_button_text="Delete",
-    cancel_button_text="Cancel",
-    icon="mdi:alert-circle",
-    opened=False,
-):
-    """
-    Creates a reusable deletion confirmation modal with improved styling.
+    id_prefix: str,
+    item_id: str,
+    title: str = "Confirm Deletion",
+    message: str = "Are you sure you want to delete this item? This action cannot be undone.",
+    delete_button_text: str = "Delete",
+    cancel_button_text: str = "Cancel",
+    icon: str = "mdi:alert-circle",
+    opened: bool = False,
+) -> tuple[dmc.Modal, dict]:
+    """Create a reusable deletion confirmation modal.
+
+    Args:
+        id_prefix: Prefix for component IDs (used in pattern matching).
+        item_id: Unique identifier for the item being deleted.
+        title: Modal title text.
+        message: Warning message displayed to user.
+        delete_button_text: Text for delete confirmation button.
+        cancel_button_text: Text for cancel button.
+        icon: Iconify icon name for header.
+        opened: Whether the modal starts open.
+
+    Returns:
+        Tuple of (modal component, modal ID dict for pattern matching).
     """
     modal_id = {
         "type": f"{id_prefix}-delete-confirmation-modal",
@@ -494,21 +522,37 @@ def create_delete_confirmation_modal(
 
 
 def create_add_with_input_modal(
-    id_prefix,
+    id_prefix: str,
     input_field,
-    item_id=None,
-    title="Add Item",
-    title_color="blue",
-    message="Please complete the input field to add a new item.",
-    confirm_button_text="Add",
-    confirm_button_color="blue",
-    cancel_button_text="Cancel",
-    # + Add input field
-    icon="mdi:plus",
-    opened=False,
-):
-    """
-    Creates a reusable add confirmation modal with improved styling.
+    item_id: str | None = None,
+    title: str = "Add Item",
+    title_color: str = "blue",
+    message: str = "Please complete the input field to add a new item.",
+    confirm_button_text: str = "Add",
+    confirm_button_color: str = "blue",
+    cancel_button_text: str = "Cancel",
+    icon: str = "mdi:plus",
+    opened: bool = False,
+) -> tuple[dmc.Modal, dict | str]:
+    """Create a reusable modal with a custom input field.
+
+    Used for adding or editing items with form input validation.
+
+    Args:
+        id_prefix: Prefix for component IDs.
+        input_field: Dash component for user input (TextInput, Select, etc.).
+        item_id: Optional unique identifier for pattern matching.
+        title: Modal title text.
+        title_color: Mantine color for title and icon.
+        message: Description text shown above input.
+        confirm_button_text: Text for confirmation button.
+        confirm_button_color: Mantine color for confirm button.
+        cancel_button_text: Text for cancel button.
+        icon: Iconify icon name for header.
+        opened: Whether the modal starts open.
+
+    Returns:
+        Tuple of (modal component, modal ID - dict if item_id provided, else string).
     """
     if item_id:
         modal_id = {
@@ -641,26 +685,22 @@ def create_add_with_input_modal(
 
 
 def create_edit_password_modal(
-    title="Edit Password",
-    opened=False,
-    event=None,
-):
-    """
-    Creates a password editing modal with improved styling.
+    title: str = "Edit Password",
+    opened: bool = False,
+    event: dict | None = None,
+) -> dmc.Modal:
+    """Create a password editing modal with validation fields.
 
-    Parameters:
-    -----------
-    title : str, optional
-        Title for the modal
-    opened : bool, optional
-        Whether the modal is initially opened
-    event : dict, optional
-        Event dictionary for EventListener
+    Includes fields for old password, new password, and confirmation.
+    Uses EventListener for enhanced interaction handling.
+
+    Args:
+        title: Modal title text.
+        opened: Whether the modal starts open.
+        event: Optional event dictionary for EventListener.
 
     Returns:
-    --------
-    dmc.Modal
-        The modal component
+        Modal component with password change form.
     """
     modal = dmc.Modal(
         opened=opened,
@@ -787,19 +827,24 @@ def create_edit_password_modal(
 
 
 def create_data_collection_modal(
-    opened=False,
-    id_prefix="data-collection-creation",
-):
-    """
-    Creates a data collection creation modal with form fields for metadata-only data collections.
+    opened: bool = False,
+    id_prefix: str = "data-collection-creation",
+) -> tuple[dmc.Modal, str]:
+    """Create a data collection creation modal with file upload.
 
-    Parameters:
-    - opened: Whether the modal is initially open
-    - id_prefix: Prefix for all IDs in the modal
+    Provides form fields for:
+    - Name and description
+    - Data type and file format selection
+    - Separator and compression options
+    - Header row toggle
+    - File upload (max 5MB)
+
+    Args:
+        opened: Whether the modal starts open.
+        id_prefix: Prefix for component IDs.
 
     Returns:
-    - modal: The data collection creation modal
-    - modal_id: The ID of the modal for callbacks
+        Tuple of (modal component, modal ID string).
     """
     modal_id = f"{id_prefix}-modal"
 
@@ -1111,23 +1156,24 @@ def create_data_collection_modal(
 
 
 def create_data_collection_overwrite_modal(
-    opened=False,
-    id_prefix="data-collection-overwrite",
-    data_collection_name="",
-    data_collection_id="",
-):
-    """
-    Creates a modal for overwriting data collection files with schema validation.
+    opened: bool = False,
+    id_prefix: str = "data-collection-overwrite",
+    data_collection_name: str = "",
+    data_collection_id: str = "",
+) -> tuple[dmc.Modal, str]:
+    """Create a modal for overwriting data collection files.
 
-    Parameters:
-    - opened: Whether the modal is initially open
-    - id_prefix: Prefix for all IDs in the modal
-    - data_collection_name: Name of the data collection being overwritten
-    - data_collection_id: ID of the data collection being overwritten
+    Includes schema validation to ensure the new file matches
+    the existing column structure.
+
+    Args:
+        opened: Whether the modal starts open.
+        id_prefix: Prefix for component IDs.
+        data_collection_name: Name of collection being overwritten.
+        data_collection_id: ID of collection being overwritten.
 
     Returns:
-    - modal: The overwrite modal
-    - modal_id: The ID of the modal for callbacks
+        Tuple of (modal component, modal ID string).
     """
     modal_id = f"{id_prefix}-modal"
 
@@ -1309,23 +1355,21 @@ def create_data_collection_overwrite_modal(
 
 
 def create_data_collection_edit_name_modal(
-    opened=False,
-    id_prefix="data-collection-edit-name",
-    current_name="",
-    data_collection_id="",
-):
-    """
-    Creates a modal for editing data collection names.
+    opened: bool = False,
+    id_prefix: str = "data-collection-edit-name",
+    current_name: str = "",
+    data_collection_id: str = "",
+) -> tuple[dmc.Modal, str]:
+    """Create a modal for renaming a data collection.
 
-    Parameters:
-    - opened: Whether the modal is initially open
-    - id_prefix: Prefix for all IDs in the modal
-    - current_name: Current name of the data collection
-    - data_collection_id: ID of the data collection being edited
+    Args:
+        opened: Whether the modal starts open.
+        id_prefix: Prefix for component IDs.
+        current_name: Current name to pre-fill in input.
+        data_collection_id: ID of collection being renamed.
 
     Returns:
-    - modal: The edit name modal
-    - modal_id: The ID of the modal for callbacks
+        Tuple of (modal component, modal ID string).
     """
     modal_id = f"{id_prefix}-modal"
 
@@ -1432,23 +1476,24 @@ def create_data_collection_edit_name_modal(
 
 
 def create_data_collection_delete_modal(
-    opened=False,
-    id_prefix="data-collection-delete",
-    data_collection_name="",
-    data_collection_id="",
-):
-    """
-    Creates a modal for confirming data collection deletion.
+    opened: bool = False,
+    id_prefix: str = "data-collection-delete",
+    data_collection_name: str = "",
+    data_collection_id: str = "",
+) -> tuple[dmc.Modal, str]:
+    """Create a modal for confirming data collection deletion.
 
-    Parameters:
-    - opened: Whether the modal is initially open
-    - id_prefix: Prefix for all IDs in the modal
-    - data_collection_name: Name of the data collection to delete
-    - data_collection_id: ID of the data collection to delete
+    Shows a warning about permanent deletion and lists all
+    data that will be removed (files, delta tables, visualizations, joins).
+
+    Args:
+        opened: Whether the modal starts open.
+        id_prefix: Prefix for component IDs.
+        data_collection_name: Name of collection to delete.
+        data_collection_id: ID of collection to delete.
 
     Returns:
-    - modal: The delete confirmation modal
-    - modal_id: The ID of the modal for callbacks
+        Tuple of (modal component, modal ID string).
     """
     modal_id = f"{id_prefix}-modal"
 

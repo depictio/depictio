@@ -1,20 +1,129 @@
-"""
-Interactive Component - Background Rendering Callbacks
+"""Interactive Component - Background Rendering Callbacks.
 
 Two-stage pattern for Celery background processing:
 1. Background callback: Load data and extract options (JSON serializable)
 2. Regular callback: Build UI components from extracted data
 
 This ensures all Celery task parameters and returns are JSON serializable.
+
+Key components:
+- register_async_rendering_callback: Batch rendering callback for all interactive components
+- build_select_component: Creates Select/MultiSelect/SegmentedControl components
+- build_slider_component: Creates Slider/RangeSlider components
+- build_datepicker_component: Creates DateRangePicker components
 """
 
+from typing import Any, Optional
+
 import dash_mantine_components as dmc
+import polars as pl
 from bson import ObjectId
 from dash import ALL, Input, Output, State, no_update
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+# Common wrapper style for all interactive components
+_WRAPPER_STYLE: dict[str, Any] = {
+    "width": "100%",
+    "minHeight": "120px",
+    "padding": "0.5rem 1rem 0.5rem 0.5rem",
+    "boxSizing": "border-box",
+    "display": "flex",
+    "flexDirection": "column",
+    "justifyContent": "flex-start",
+    "alignItems": "stretch",
+}
+
+
+def _create_component_title(
+    title: Optional[str],
+    column_name: str,
+    component_type: str,
+    icon_name: str,
+    title_size: str,
+    color: Optional[str],
+) -> dmc.Group:
+    """Create a styled title with icon for interactive components.
+
+    Args:
+        title: Custom title text, or None to auto-generate.
+        column_name: Column name for auto-generated title.
+        component_type: Component type for auto-generated title.
+        icon_name: DashIconify icon name.
+        title_size: Size parameter for text and icon.
+        color: Optional color for title and icon.
+
+    Returns:
+        DMC Group containing icon and title text.
+    """
+    card_title = title if title else f"{component_type} on {column_name}"
+
+    title_style = {"marginBottom": "0.25rem"}
+    if color:
+        title_style["color"] = color
+
+    icon_width = int(title_size) if str(title_size).isdigit() else 20
+    icon_style = {"color": color} if color else {"opacity": 0.9}
+
+    return dmc.Group(
+        [
+            DashIconify(icon=icon_name, width=icon_width, style=icon_style),
+            dmc.Text(card_title, size=title_size, fw="bold", style={"margin": "0"}),
+        ],
+        gap="xs",
+        align="center",
+        style=title_style,
+    )
+
+
+def _wrap_component_with_title(title_element: dmc.Group, component: Any) -> dmc.Stack:
+    """Wrap an interactive component with its title in a styled Stack.
+
+    Args:
+        title_element: The title Group element.
+        component: The interactive DMC component.
+
+    Returns:
+        DMC Stack containing title and component.
+    """
+    return dmc.Stack(
+        [title_element, component],
+        gap="0",
+        style=_WRAPPER_STYLE,
+    )
+
+
+def _build_stored_metadata(
+    index: str,
+    component_type: str,
+    column_name: str,
+    trigger_data: dict,
+    default_state: dict,
+) -> dict:
+    """Build stored metadata dict for interactive components.
+
+    Args:
+        index: Component index.
+        component_type: Interactive component type (e.g., 'Select', 'RangeSlider').
+        column_name: Data column name.
+        trigger_data: Trigger data containing dc_id, wf_id, column_type.
+        default_state: Component-specific default state.
+
+    Returns:
+        Stored metadata dict for persistence.
+    """
+    return {
+        "index": str(index),
+        "component_type": "interactive",
+        "interactive_component_type": component_type,
+        "column_name": column_name,
+        "column_type": trigger_data.get("column_type", "object"),
+        "dc_id": trigger_data.get("dc_id"),
+        "wf_id": trigger_data.get("wf_id"),
+        "default_state": default_state,
+    }
 
 
 def register_async_rendering_callback(app):
@@ -214,29 +323,32 @@ def register_async_rendering_callback(app):
         return all_components, all_metadata, all_stored_metadata
 
 
-def build_select_component(df, column_name, component_type, trigger_data, delta_locations):
-    """
-    Build Select/MultiSelect/SegmentedControl component.
+def build_select_component(
+    df: pl.DataFrame,
+    column_name: str,
+    component_type: str,
+    trigger_data: dict,
+    delta_locations: dict,
+) -> tuple[Any, dict, dict]:
+    """Build Select/MultiSelect/SegmentedControl component.
 
     Args:
-        df: Polars DataFrame with data
-        column_name: Column to extract options from
-        component_type: Type of select component
-        trigger_data: Metadata from trigger store
-        delta_locations: Delta locations dict (for cache optimization)
+        df: Polars DataFrame with data.
+        column_name: Column to extract options from.
+        component_type: Type of select component ('Select', 'MultiSelect', 'SegmentedControl').
+        trigger_data: Metadata from trigger store.
+        delta_locations: Delta locations dict (for cache optimization).
 
     Returns:
-        tuple: (component, metadata, stored_metadata)
+        Tuple of (wrapped_component, metadata, stored_metadata).
     """
-    # Check if column exists
     if column_name not in df.columns:
         logger.error(f"Column '{column_name}' not found in DataFrame")
         return dmc.Text(f"Error: Column '{column_name}' not found", c="red"), {}, {}
 
-    # Get unique values
+    # Extract unique values
     try:
         unique_vals = df[column_name].unique()
-        # Handle both pandas and polars dataframes
         if hasattr(unique_vals, "to_list"):
             unique_vals_list = unique_vals.to_list()
         elif hasattr(unique_vals, "tolist"):
@@ -244,190 +356,147 @@ def build_select_component(df, column_name, component_type, trigger_data, delta_
         else:
             unique_vals_list = list(unique_vals)
 
-        # Clean and limit options
         options = [
             {"label": str(val), "value": str(val)} for val in unique_vals_list if val is not None
         ][:100]
-
     except Exception as e:
         logger.error(f"Error extracting unique values: {e}")
         return dmc.Text("Error: Could not extract options", c="red"), {}, {}
 
-    # Build component
     index = trigger_data.get("index")
     preserved_value = trigger_data.get("value")
+    component_id = {"type": "interactive-component-value", "index": str(index)}
 
-    # Select appropriate DMC component
+    # Build appropriate DMC component
     if component_type == "Select":
+        default_value = (
+            preserved_value if preserved_value else (options[0]["value"] if options else None)
+        )
         interactive_component = dmc.Select(
-            id={"type": "interactive-component-value", "index": str(index)},
+            id=component_id,
             data=options,
-            value=preserved_value
-            if preserved_value
-            else (options[0]["value"] if options else None),
+            value=default_value,
             clearable=True,
             searchable=True,
             w="100%",
         )
     elif component_type == "MultiSelect":
         interactive_component = dmc.MultiSelect(
-            id={"type": "interactive-component-value", "index": str(index)},
+            id=component_id,
             data=options,
-            value=preserved_value if preserved_value else [],
+            value=preserved_value or [],
             clearable=True,
             searchable=True,
             w="100%",
         )
     elif component_type == "SegmentedControl":
+        default_value = (
+            preserved_value if preserved_value else (options[0]["value"] if options else None)
+        )
         interactive_component = dmc.SegmentedControl(
-            id={"type": "interactive-component-value", "index": str(index)},
-            data=[opt["value"] for opt in options],
-            value=preserved_value
-            if preserved_value
-            else (options[0]["value"] if options else None),
-            w="100%",
+            id=component_id, data=[opt["value"] for opt in options], value=default_value, w="100%"
         )
     else:
         return dmc.Text(f"Error: Unknown select type: {component_type}", c="red"), {}, {}
 
-    # Extract title parameters from trigger_data
+    # Create title and wrap component
     title = trigger_data.get("title")
     icon_name = trigger_data.get("icon_name", "bx:slider-alt")
     title_size = trigger_data.get("title_size", "md")
     color = trigger_data.get("color") or trigger_data.get("custom_color")
 
-    # Generate title text
-    if not title:
-        card_title = f"{component_type} on {column_name}"
-    else:
-        card_title = title
+    logger.info(f"SELECT COMPONENT: '{title or column_name}' (type={component_type})")
 
-    logger.info(
-        f"📝 SELECT COMPONENT TITLE: '{card_title}' (icon={icon_name}, size={title_size}, color={color})"
+    title_element = _create_component_title(
+        title, column_name, component_type, icon_name, title_size, color
     )
+    wrapped_component = _wrap_component_with_title(title_element, interactive_component)
 
-    # Create title with icon and color support
-    title_style = {"marginBottom": "0.25rem"}
-    if color:
-        title_style["color"] = color
+    metadata = {"options": options, "reference_value": preserved_value}
 
-    icon_props = {
-        "icon": icon_name,
-        "width": int(title_size) if str(title_size).isdigit() else 20,
+    default_state = {
+        "type": "select",
+        "options": [opt["value"] for opt in options],
+        "default_value": None,
     }
-    if color:
-        icon_props["style"] = {"color": color}
-    else:
-        icon_props["style"] = {"opacity": 0.9}
-
-    card_title_h5 = dmc.Group(
-        [
-            DashIconify(**icon_props),
-            dmc.Text(card_title, size=title_size, fw="bold", style={"margin": "0"}),
-        ],
-        gap="xs",
-        align="center",
-        style=title_style,
+    stored_metadata = _build_stored_metadata(
+        index, component_type, column_name, trigger_data, default_state
     )
-
-    # Wrap component with title in Stack
-    wrapped_component = dmc.Stack(
-        [card_title_h5, interactive_component],
-        gap="0",
-        style={
-            "width": "100%",
-            "minHeight": "120px",
-            "padding": "0.5rem 1rem 0.5rem 0.5rem",
-            "boxSizing": "border-box",
-            "display": "flex",
-            "flexDirection": "column",
-            "justifyContent": "flex-start",
-            "alignItems": "stretch",
-        },
-    )
-
-    # Build metadata for reference (lightweight, for interactive-metadata store)
-    metadata = {
-        "options": options,
-        "reference_value": preserved_value,
-    }
-
-    # Build stored_metadata with ALL fields required for filtering
-    stored_metadata = {
-        "index": str(index),
-        "component_type": "interactive",  # Required for panel separation in draggable.py
-        "interactive_component_type": component_type,
-        "column_name": column_name,
-        "column_type": trigger_data.get("column_type", "object"),  # Get from trigger
-        "dc_id": trigger_data.get("dc_id"),
-        "wf_id": trigger_data.get("wf_id"),
-        "default_state": {
-            "type": "select",
-            "options": [opt["value"] for opt in options],
-            "default_value": None,
-        },
-    }
 
     return wrapped_component, metadata, stored_metadata
 
 
-def build_slider_component(df, column_name, component_type, trigger_data, delta_locations):
-    """
-    Build Slider/RangeSlider component.
+def _clean_numeric_column(df_pandas, column_name: str):
+    """Clean numeric column data for slider components.
 
     Args:
-        df: Polars DataFrame with data
-        column_name: Column to extract min/max from
-        component_type: "Slider" or "RangeSlider"
-        trigger_data: Metadata from trigger store
-        delta_locations: Delta locations dict (for cache optimization)
+        df_pandas: Pandas DataFrame.
+        column_name: Column to clean.
 
     Returns:
-        tuple: (component, metadata, stored_metadata)
+        Tuple of (cleaned_df, min_value, max_value) or (None, None, None) on error.
     """
     import math
 
     import numpy as np
 
-    # Convert to pandas for processing
-    df_pandas = df.to_pandas()
-
-    # Check if column exists
-    if column_name not in df_pandas.columns:
-        logger.error(f"Column '{column_name}' not found in DataFrame")
-        return dmc.Text(f"Error: Column '{column_name}' not found", c="red"), {}, {}
-
-    # Clean data: drop NaN, None, and invalid values
     df_pandas = df_pandas[~df_pandas[column_name].isin([None, "None", "nan", "NaN"])]
     df_pandas[column_name] = df_pandas[column_name].replace([np.inf, -np.inf], np.nan)
     df_pandas[column_name] = df_pandas[column_name].astype(float)
-
-    # Round to 2 decimal places
     df_pandas[column_name] = df_pandas[column_name].apply(
         lambda x: round(x, 2) if x not in [float("inf"), float("-inf")] else x
     )
     df_pandas = df_pandas.dropna(subset=[column_name])
 
     if df_pandas.empty:
-        logger.error(f"No valid numeric data in column '{column_name}'")
-        return dmc.Text(f"Error: No valid data in column '{column_name}'", c="red"), {}, {}
+        return None, None, None
 
-    # Get min/max values
     min_value = float(df_pandas[column_name].min())
     max_value = float(df_pandas[column_name].max())
 
     # Validate min/max
     if math.isnan(min_value) or math.isinf(min_value):
         min_value = 0.0
-
     if math.isnan(max_value) or math.isinf(max_value):
         max_value = 100.0
-
-    # Ensure min < max
     if min_value >= max_value:
         max_value = min_value + 1.0
 
-    # Extract parameters from trigger store
+    return df_pandas, min_value, max_value
+
+
+def build_slider_component(
+    df: pl.DataFrame,
+    column_name: str,
+    component_type: str,
+    trigger_data: dict,
+    delta_locations: dict,
+) -> tuple[Any, dict, dict]:
+    """Build Slider/RangeSlider component.
+
+    Args:
+        df: Polars DataFrame with data.
+        column_name: Column to extract min/max from.
+        component_type: 'Slider' or 'RangeSlider'.
+        trigger_data: Metadata from trigger store.
+        delta_locations: Delta locations dict (for cache optimization).
+
+    Returns:
+        Tuple of (wrapped_component, metadata, stored_metadata).
+    """
+    import math
+
+    df_pandas = df.to_pandas()
+
+    if column_name not in df_pandas.columns:
+        logger.error(f"Column '{column_name}' not found in DataFrame")
+        return dmc.Text(f"Error: Column '{column_name}' not found", c="red"), {}, {}
+
+    df_pandas, min_value, max_value = _clean_numeric_column(df_pandas, column_name)
+    if df_pandas is None:
+        logger.error(f"No valid numeric data in column '{column_name}'")
+        return dmc.Text(f"Error: No valid data in column '{column_name}'", c="red"), {}, {}
+
     index = trigger_data.get("index")
     preserved_value = trigger_data.get("value")
     color = trigger_data.get("color")
@@ -443,173 +512,117 @@ def build_slider_component(df, column_name, component_type, trigger_data, delta_
         "w": "100%",
         "size": title_size,
         "styles": {
-            "root": {
-                "width": "100%",
-                "paddingLeft": "12px",
-                "paddingRight": "12px",
-            },
-            "track": {
-                "minWidth": "50px",
-            },
+            "root": {"width": "100%", "paddingLeft": "12px", "paddingRight": "12px"},
+            "track": {"minWidth": "50px"},
         },
+        "marks": [
+            {"value": min_value, "label": str(round(min_value, 2))},
+            {"value": max_value, "label": str(round(max_value, 2))},
+        ],
     }
 
-    # Handle value for component type
-    if component_type == "RangeSlider":
-        # RangeSlider needs [min, max] value
-        kwargs_component["minRange"] = 0.01
+    if color:
+        kwargs_component["color"] = color
 
+    # Handle value based on component type
+    if component_type == "RangeSlider":
+        kwargs_component["minRange"] = 0.01
         if (
             preserved_value is None
             or not isinstance(preserved_value, list)
             or len(preserved_value) != 2
         ):
-            # Default to full range
             cleaned_value = [min_value, max_value]
         else:
-            # Clean and clamp values
             cleaned_value = [
                 max(min_value, min(max_value, float(preserved_value[0]))),
                 max(min_value, min(max_value, float(preserved_value[1]))),
             ]
-            # Ensure order
             if cleaned_value[0] > cleaned_value[1]:
                 cleaned_value = [cleaned_value[1], cleaned_value[0]]
-
         kwargs_component["value"] = cleaned_value
-
-    else:  # Slider
-        # Slider needs single value
+        interactive_component = dmc.RangeSlider(**kwargs_component)
+    else:
         if preserved_value is None or (
             isinstance(preserved_value, float) and math.isnan(preserved_value)
         ):
-            # Default to middle of range
             cleaned_value = (min_value + max_value) / 2
         else:
-            # Clamp to range
             cleaned_value = max(min_value, min(max_value, float(preserved_value)))
-
         kwargs_component["value"] = cleaned_value
-
-    # Apply custom color if specified
-    if color:
-        kwargs_component["color"] = color
-
-    # Generate marks (simple 2-mark approach for now)
-    kwargs_component["marks"] = [
-        {"value": min_value, "label": str(round(min_value, 2))},
-        {"value": max_value, "label": str(round(max_value, 2))},
-    ]
-
-    # Build component
-    if component_type == "RangeSlider":
-        interactive_component = dmc.RangeSlider(**kwargs_component)
-    else:
         interactive_component = dmc.Slider(**kwargs_component)
 
-    # Extract title parameters from trigger_data
+    # Create title and wrap component
     title = trigger_data.get("title")
     icon_name = trigger_data.get("icon_name", "bx:slider-alt")
     title_size_param = trigger_data.get("title_size", "md")
 
-    # Generate title text
-    if not title:
-        card_title = f"{component_type} on {column_name}"
-    else:
-        card_title = title
+    logger.info(f"SLIDER COMPONENT: '{title or column_name}' (type={component_type})")
 
-    logger.info(
-        f"📝 SLIDER COMPONENT TITLE: '{card_title}' (icon={icon_name}, size={title_size_param}, color={color})"
+    title_element = _create_component_title(
+        title, column_name, component_type, icon_name, title_size_param, color
     )
+    wrapped_component = _wrap_component_with_title(title_element, interactive_component)
 
-    # Create title with icon and color support
-    title_style = {"marginBottom": "0.25rem"}
-    if color:
-        title_style["color"] = color
+    metadata = {"min": min_value, "max": max_value, "reference_value": preserved_value}
 
-    icon_props = {
-        "icon": icon_name,
-        "width": int(title_size_param) if str(title_size_param).isdigit() else 20,
+    default_state = {
+        "type": "range",
+        "min_value": min_value,
+        "max_value": max_value,
+        "default_range": [min_value, max_value],
     }
-    if color:
-        icon_props["style"] = {"color": color}
-    else:
-        icon_props["style"] = {"opacity": 0.9}
-
-    card_title_h5 = dmc.Group(
-        [
-            DashIconify(**icon_props),
-            dmc.Text(card_title, size=title_size_param, fw="bold", style={"margin": "0"}),
-        ],
-        gap="xs",
-        align="center",
-        style=title_style,
+    stored_metadata = _build_stored_metadata(
+        index, component_type, column_name, trigger_data, default_state
     )
-
-    # Wrap component with title in Stack
-    wrapped_component = dmc.Stack(
-        [card_title_h5, interactive_component],
-        gap="0",
-        style={
-            "width": "100%",
-            "minHeight": "120px",
-            "padding": "0.5rem 1rem 0.5rem 0.5rem",
-            "boxSizing": "border-box",
-            "display": "flex",
-            "flexDirection": "column",
-            "justifyContent": "flex-start",
-            "alignItems": "stretch",
-        },
-    )
-
-    # Build metadata for reference (lightweight, for interactive-metadata store)
-    metadata = {
-        "min": min_value,
-        "max": max_value,
-        "reference_value": preserved_value,
-    }
-
-    # Build stored_metadata with ALL fields required for filtering
-    stored_metadata = {
-        "index": str(index),
-        "component_type": "interactive",  # Required for panel separation in draggable.py
-        "interactive_component_type": component_type,
-        "column_name": column_name,
-        "column_type": trigger_data.get("column_type", "float64"),  # Get from trigger
-        "dc_id": trigger_data.get("dc_id"),
-        "wf_id": trigger_data.get("wf_id"),
-        "default_state": {
-            "type": "range",
-            "min_value": min_value,
-            "max_value": max_value,
-            "default_range": [min_value, max_value],
-        },
-    }
+    stored_metadata["column_type"] = trigger_data.get("column_type", "float64")
 
     return wrapped_component, metadata, stored_metadata
 
 
-def build_datepicker_component(df, column_name, trigger_data, delta_locations):
-    """
-    Build DateRangePicker component.
+def _parse_date_value(val: Any, min_date, max_date):
+    """Parse a date value from various formats.
 
     Args:
-        df: Polars DataFrame with data
-        column_name: Column to extract date range from
-        trigger_data: Metadata from trigger store
-        delta_locations: Delta locations dict (for cache optimization)
+        val: Date value (string, datetime, or date).
+        min_date: Minimum allowed date.
+        max_date: Maximum allowed date.
 
     Returns:
-        tuple: (component, metadata, stored_metadata)
+        Clamped date object.
     """
     from datetime import datetime
 
+    if isinstance(val, str):
+        date_obj = datetime.strptime(val, "%Y-%m-%d").date()
+    elif hasattr(val, "date"):
+        date_obj = val.date()
+    else:
+        date_obj = val
+    return max(min_date, min(max_date, date_obj))
+
+
+def build_datepicker_component(
+    df: pl.DataFrame,
+    column_name: str,
+    trigger_data: dict,
+    delta_locations: dict,
+) -> tuple[Any, dict, dict]:
+    """Build DateRangePicker component.
+
+    Args:
+        df: Polars DataFrame with data.
+        column_name: Column to extract date range from.
+        trigger_data: Metadata from trigger store.
+        delta_locations: Delta locations dict (for cache optimization).
+
+    Returns:
+        Tuple of (wrapped_component, metadata, stored_metadata).
+    """
     import pandas as pd
 
-    # Convert to pandas for processing
     df_pandas = df.to_pandas()
 
-    # Check if column exists
     if column_name not in df_pandas.columns:
         logger.error(f"Column '{column_name}' not found in DataFrame")
         return dmc.Text(f"Error: Column '{column_name}' not found", c="red"), {}, {}
@@ -620,28 +633,18 @@ def build_datepicker_component(df, column_name, trigger_data, delta_locations):
             df_pandas[column_name] = pd.to_datetime(df_pandas[column_name], errors="coerce")
         except Exception as e:
             logger.error(f"Failed to convert column to datetime: {e}")
-            return (
-                dmc.Text(f"Error: Column '{column_name}' must be datetime type", c="red"),
-                {},
-                {},
-            )
+            return dmc.Text(f"Error: Column '{column_name}' must be datetime type", c="red"), {}, {}
 
-    # Drop NaN values
     df_pandas = df_pandas.dropna(subset=[column_name])
 
     if df_pandas.empty:
         logger.error(f"No valid datetime values in column '{column_name}'")
         return dmc.Text(f"Error: No valid dates in column '{column_name}'", c="red"), {}, {}
 
-    # Get min and max dates
-    min_date = df_pandas[column_name].min()
-    max_date = df_pandas[column_name].max()
+    # Get min and max dates as Python date objects
+    min_date_py = df_pandas[column_name].min().date()
+    max_date_py = df_pandas[column_name].max().date()
 
-    # Convert to Python date objects (DMC requires date, not datetime)
-    min_date_py = min_date.date()
-    max_date_py = max_date.date()
-
-    # Extract parameters from trigger store
     index = trigger_data.get("index")
     preserved_value = trigger_data.get("value")
     color = trigger_data.get("color")
@@ -657,11 +660,7 @@ def build_datepicker_component(df, column_name, trigger_data, delta_locations):
         "w": "100%",
         "size": title_size,
         "clearable": False,
-        "styles": {
-            "root": {
-                "width": "100%",
-            },
-        },
+        "styles": {"root": {"width": "100%"}},
     }
 
     # Handle value preservation
@@ -671,118 +670,54 @@ def build_datepicker_component(df, column_name, trigger_data, delta_locations):
         and len(preserved_value) == 2
     ):
         try:
-            # Convert string dates to date objects if needed
-            date_value = []
-            for val in preserved_value:
-                if isinstance(val, str):
-                    date_obj = datetime.strptime(val, "%Y-%m-%d").date()
-                elif hasattr(val, "date"):
-                    date_obj = val.date()
-                else:
-                    date_obj = val
-                date_value.append(date_obj)
-
-            # Ensure dates are within bounds
-            date_value[0] = max(min_date_py, min(max_date_py, date_value[0]))
-            date_value[1] = max(min_date_py, min(max_date_py, date_value[1]))
-
+            date_value = [
+                _parse_date_value(preserved_value[0], min_date_py, max_date_py),
+                _parse_date_value(preserved_value[1], min_date_py, max_date_py),
+            ]
             kwargs_component["value"] = date_value
         except Exception as e:
             logger.warning(f"Failed to parse date range value: {e}")
             kwargs_component["value"] = [min_date_py, max_date_py]
     else:
-        # Default to full range
         kwargs_component["value"] = [min_date_py, max_date_py]
 
     # Apply custom color if specified
     if color:
-        existing_styles = kwargs_component.get("styles", {})
-        color_styles = {
+        kwargs_component["styles"] = {
+            **kwargs_component.get("styles", {}),
             "input": {"borderColor": color},
             "label": {"color": color},
         }
-        kwargs_component["styles"] = {**existing_styles, **color_styles}
 
-    # Build component
     interactive_component = dmc.DatePickerInput(**kwargs_component)
 
-    # Extract title parameters from trigger_data
+    # Create title and wrap component
     title = trigger_data.get("title")
     icon_name = trigger_data.get("icon_name", "bx:calendar")
     title_size_param = trigger_data.get("title_size", "md")
 
-    # Generate title text
-    if not title:
-        card_title = f"DateRangePicker on {column_name}"
-    else:
-        card_title = title
+    logger.info(f"DATEPICKER COMPONENT: '{title or column_name}'")
 
-    logger.info(
-        f"📝 DATEPICKER COMPONENT TITLE: '{card_title}' (icon={icon_name}, size={title_size_param}, color={color})"
+    title_element = _create_component_title(
+        title, column_name, "DateRangePicker", icon_name, title_size_param, color
     )
+    wrapped_component = _wrap_component_with_title(title_element, interactive_component)
 
-    # Create title with icon and color support
-    title_style = {"marginBottom": "0.25rem"}
-    if color:
-        title_style["color"] = color
-
-    icon_props = {
-        "icon": icon_name,
-        "width": int(title_size_param) if str(title_size_param).isdigit() else 20,
-    }
-    if color:
-        icon_props["style"] = {"color": color}
-    else:
-        icon_props["style"] = {"opacity": 0.9}
-
-    card_title_h5 = dmc.Group(
-        [
-            DashIconify(**icon_props),
-            dmc.Text(card_title, size=title_size_param, fw="bold", style={"margin": "0"}),
-        ],
-        gap="xs",
-        align="center",
-        style=title_style,
-    )
-
-    # Wrap component with title in Stack
-    wrapped_component = dmc.Stack(
-        [card_title_h5, interactive_component],
-        gap="0",
-        style={
-            "width": "100%",
-            "minHeight": "120px",
-            "padding": "0.5rem 1rem 0.5rem 0.5rem",
-            "boxSizing": "border-box",
-            "display": "flex",
-            "flexDirection": "column",
-            "justifyContent": "flex-start",
-            "alignItems": "stretch",
-        },
-    )
-
-    # Build metadata for reference (lightweight, for interactive-metadata store)
     metadata = {
         "min_date": str(min_date_py),
         "max_date": str(max_date_py),
         "reference_value": preserved_value,
     }
 
-    # Build stored_metadata with ALL fields required for filtering
-    stored_metadata = {
-        "index": str(index),
-        "component_type": "interactive",  # Required for panel separation in draggable.py
-        "interactive_component_type": "DateRangePicker",
-        "column_name": column_name,
-        "column_type": trigger_data.get("column_type", "datetime"),  # Get from trigger
-        "dc_id": trigger_data.get("dc_id"),
-        "wf_id": trigger_data.get("wf_id"),
-        "default_state": {
-            "type": "date_range",
-            "min_date": str(min_date_py),
-            "max_date": str(max_date_py),
-            "default_range": [str(min_date_py), str(max_date_py)],
-        },
+    default_state = {
+        "type": "date_range",
+        "min_date": str(min_date_py),
+        "max_date": str(max_date_py),
+        "default_range": [str(min_date_py), str(max_date_py)],
     }
+    stored_metadata = _build_stored_metadata(
+        index, "DateRangePicker", column_name, trigger_data, default_state
+    )
+    stored_metadata["column_type"] = trigger_data.get("column_type", "datetime")
 
     return wrapped_component, metadata, stored_metadata

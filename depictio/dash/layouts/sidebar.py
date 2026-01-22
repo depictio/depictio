@@ -1,3 +1,17 @@
+"""
+Sidebar layout and callbacks for Depictio application.
+
+This module provides:
+- Management app sidebar with navigation links (Dashboards, Projects, Admin, About)
+- Dashboard viewer sidebar with tab-based navigation between dashboard views
+- Standardized sidebar footer with theme controls and server status
+- Clientside callbacks for responsive UI updates
+
+The sidebar adapts based on context:
+- Management app: Shows main navigation links
+- Dashboard viewer: Shows dashboard-specific tabs and back navigation
+"""
+
 import dash
 import dash_mantine_components as dmc
 from dash import ALL, Input, Output, State, dcc, html
@@ -169,16 +183,33 @@ def create_static_navbar_content():
     ]
 
 
-def register_sidebar_callbacks(app):
+def register_sidebar_callbacks(app) -> None:
+    """
+    Register all sidebar-related callbacks for the application.
+
+    This includes:
+    - Tab navigation callbacks (for dashboard viewer)
+    - Favicon visibility based on sidebar collapse state
+    - Navbar collapse state management for dashboard pages
+    - Sidebar link active state highlighting
+    - Server status polling and display
+    - Admin link visibility based on user permissions
+    - Avatar rendering from user session data
+
+    Most callbacks are implemented clientside for instant UI response.
+
+    Args:
+        app: The Dash application instance.
+    """
     # Import and register tab callbacks
     from depictio.dash.layouts.tab_callbacks import register_tab_callbacks
     from depictio.dash.layouts.tab_modal import register_tab_modal_callbacks
 
     register_tab_callbacks(app)
-    logger.info("✅ SIDEBAR: Tab callbacks registered")
+    logger.info("SIDEBAR: Tab callbacks registered")
 
     register_tab_modal_callbacks(app)
-    logger.info("✅ SIDEBAR: Tab modal callbacks registered")
+    logger.info("SIDEBAR: Tab modal callbacks registered")
 
     # Inject JavaScript to handle the resize when sidebar state changes
     # app.clientside_callback(

@@ -1,3 +1,17 @@
+"""Stepper module for dashboard component creation and editing.
+
+This module provides a multi-step wizard interface for creating and configuring
+dashboard components. The stepper guides users through:
+
+1. Component Type Selection - Choose Figure, Card, Interactive, Table, etc.
+2. Data Source Selection - Select workflow and data collection
+3. Component Design - Configure appearance and behavior
+4. Completion - Add component to dashboard
+
+The module supports both modal-based (legacy) and route-based (new) workflows
+for component creation and editing.
+"""
+
 from datetime import datetime
 
 import dash
@@ -7,7 +21,6 @@ import httpx
 from dash import ALL, MATCH, Input, Output, State, callback, clientside_callback, ctx, html
 from dash_iconify import DashIconify
 
-# Depictio imports
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
@@ -16,18 +29,15 @@ from depictio.dash.api_calls import (
     api_call_get_dashboard,
     api_call_save_dashboard,
 )
-
-# Stepper parts imports
 from depictio.dash.layouts.stepper_parts.part_one import register_callbacks_stepper_part_one
 from depictio.dash.layouts.stepper_parts.part_three import register_callbacks_stepper_part_three
 from depictio.dash.layouts.stepper_parts.part_two import register_callbacks_stepper_part_two
 from depictio.dash.modules.card_component.frontend import design_card
-
-# Figure component stepper integration - Phase 2A with simplified design UI
 from depictio.dash.modules.figure_component.utils import design_figure
 from depictio.dash.modules.interactive_component.frontend import design_interactive
 from depictio.models.models.projects import ProjectResponse
 
+# Stepper step bounds
 min_step = 0
 max_step = 3
 active = 0
@@ -48,7 +58,21 @@ def _get_ag_grid_theme_class(theme: str) -> str:
     return "ag-theme-alpine-dark" if effective_theme == "dark" else "ag-theme-alpine"
 
 
-def register_callbacks_stepper(app):
+def register_callbacks_stepper(app) -> None:
+    """Register all stepper-related callbacks for the Dash application.
+
+    This function registers callbacks for:
+    - Stepper initialization and button store setup
+    - Component saving to dashboard
+    - Navigation back to dashboard after save
+    - Modal open/close handling
+    - Workflow and data collection selection
+    - Stepper step navigation
+    - Data preview rendering
+
+    Args:
+        app: Dash application instance.
+    """
     # Register callbacks from modular parts
     register_callbacks_stepper_part_one(app)
     register_callbacks_stepper_part_two(app)
@@ -857,9 +881,26 @@ def register_callbacks_stepper(app):
                 )
 
 
-def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
-    logger.info(f"🔍 CREATE_STEPPER_OUTPUT_EDIT - Component data: {component_data}")
-    logger.info(f"🔍 n={n}, parent_id={parent_id}, active={active}")
+def create_stepper_output_edit(
+    n: str, parent_id: str, active: int, component_data: dict, TOKEN: str
+) -> dmc.Modal:
+    """Create the edit modal for modifying an existing dashboard component.
+
+    Loads the component's current configuration and presents the design
+    interface pre-populated with existing values.
+
+    Args:
+        n: Component index/identifier for pattern matching callbacks.
+        parent_id: Parent component ID (unused, kept for API compatibility).
+        active: Initial active step (usually 2 for edit mode).
+        component_data: Existing component configuration dictionary.
+        TOKEN: JWT authentication token.
+
+    Returns:
+        Modal component with edit interface.
+    """
+    logger.info(f"CREATE_STEPPER_OUTPUT_EDIT - Component data: {component_data}")
+    logger.info(f"n={n}, parent_id={parent_id}, active={active}")
     id = {"type": f"{component_data['component_type']}-component", "index": n}
 
     # wf_tag = return_wf_tag_from_id(component_data["wf_id"], TOKEN=TOKEN)
@@ -1019,7 +1060,22 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
     return modal
 
 
-def create_stepper_output(n, active):
+def create_stepper_output(n: str, active: int) -> html.Div:
+    """Create the fullscreen modal stepper for new component creation.
+
+    Generates a 4-step wizard interface for creating dashboard components:
+    1. Component Type - Select Figure, Card, Interactive, etc.
+    2. Data Source - Choose workflow and data collection
+    3. Design - Configure component appearance
+    4. Completion - Add to dashboard
+
+    Args:
+        n: Component index/identifier for pattern matching callbacks.
+        active: Initial active step (0-3).
+
+    Returns:
+        Div containing the fullscreen modal with stepper.
+    """
     logger.info(f"Creating stepper output for index {n}")
     logger.info(f"Active step: {active}")
 
@@ -1329,20 +1385,19 @@ def create_stepper_output(n, active):
     return modal
 
 
-def create_stepper_content(n, active):
-    """
-    Create stepper content as standard layout (not modal).
+def create_stepper_content(n: str, active: int) -> dmc.Stack:
+    """Create stepper content as standard page layout (not modal).
 
-    This function creates the same stepper structure as create_stepper_output,
-    but returns it as a standard page layout instead of wrapping it in a modal.
-    This is used by the stepper page for route-based component creation/editing.
+    Creates the same stepper structure as create_stepper_output but returns
+    it as a standard page layout instead of wrapping in a modal. Used by
+    the stepper page for route-based component creation/editing.
 
     Args:
-        n: Component index/identifier for pattern matching callbacks
-        active: Initial active step (0-3)
+        n: Component index/identifier for pattern matching callbacks.
+        active: Initial active step (0-3).
 
     Returns:
-        dmc.Stack: Stepper content with footer in standard page layout
+        Stack component with stepper content and sticky navigation footer.
     """
     logger.info(f"Creating stepper content (standard layout) for index {n}")
     logger.info(f"Active step: {active}")

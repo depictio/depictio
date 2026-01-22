@@ -949,450 +949,482 @@ def create_data_collections_manager_section(workflow=None):
     )
 
 
+# =============================================================================
+# Data Collection Viewer Helper Functions
+# =============================================================================
+
+
+def _extract_dc_info(data_collection) -> tuple[str, str, str, str]:
+    """Extract data collection info from dict or object.
+
+    Args:
+        data_collection: Data collection dict or object.
+
+    Returns:
+        Tuple of (dc_tag, dc_id, dc_type, dc_metatype).
+    """
+    if isinstance(data_collection, dict):
+        dc_tag = data_collection.get("data_collection_tag", "Unknown")
+        dc_id = data_collection.get("id", "unknown")
+        dc_type = data_collection.get("config", {}).get("type", "unknown")
+        dc_metatype = data_collection.get("config", {}).get("metatype", "Unknown")
+    else:
+        dc_tag = getattr(data_collection, "data_collection_tag", "Unknown")
+        dc_id = getattr(data_collection, "id", "unknown")
+        dc_type = getattr(data_collection.config, "type", "unknown")
+        dc_metatype = getattr(data_collection.config, "metatype", "Unknown")
+
+    return dc_tag, dc_id, dc_type, dc_metatype
+
+
+def _get_dc_icon(dc_type: str):
+    """Get icon component based on data collection type.
+
+    Args:
+        dc_type: Data collection type string.
+
+    Returns:
+        Icon component (DashIconify or html.Img).
+    """
+    if dc_type.lower() == "table":
+        return DashIconify(icon="mdi:table", width=32, color=colors["teal"])
+    elif dc_type.lower() == "multiqc":
+        return html.Img(
+            src="/assets/images/logos/multiqc.png",
+            style={"width": "32px", "height": "32px"},
+        )
+    else:
+        return DashIconify(icon="mdi:file-document", width=32, color=colors["teal"])
+
+
+def _create_dc_header_section(dc_tag: str, dc_type: str) -> dmc.Group:
+    """Create the header section with icon and tag.
+
+    Args:
+        dc_tag: Data collection tag.
+        dc_type: Data collection type.
+
+    Returns:
+        Group component with header.
+    """
+    return dmc.Group(
+        [
+            _get_dc_icon(dc_type),
+            dmc.Stack([dmc.Text(dc_tag, fw="bold", size="xl")]),
+        ],
+        gap="md",
+        align="center",
+    )
+
+
+def _create_configuration_card(data_collection, dc_type: str, dc_metatype: str) -> dmc.Card:
+    """Create the configuration details card.
+
+    Args:
+        data_collection: Data collection dict or object.
+        dc_type: Data collection type.
+        dc_metatype: Data collection metatype.
+
+    Returns:
+        Card component with configuration details.
+    """
+    dc_id_display = (
+        data_collection.get("id")
+        if isinstance(data_collection, dict)
+        else str(getattr(data_collection, "id", "N/A"))
+    )
+
+    metatype_row = (
+        dmc.Group(
+            [
+                dmc.Text("Metatype:", size="sm", fw="bold", c="gray"),
+                dmc.Badge(dc_metatype or "Unknown", color="gray", size="xs"),
+            ],
+            justify="space-between",
+        )
+        if dc_type.lower() != "multiqc"
+        else html.Div()
+    )
+
+    return dmc.Card(
+        [
+            dmc.Group(
+                [
+                    DashIconify(icon="mdi:cog", width=20, color=colors["blue"]),
+                    dmc.Text("Configuration", fw="bold", size="md"),
+                ],
+                gap="xs",
+                align="center",
+            ),
+            dmc.Divider(my="sm"),
+            dmc.Stack(
+                [
+                    dmc.Group(
+                        [
+                            dmc.Text("Data Collection ID:", size="sm", fw="bold", c="gray"),
+                            dmc.Text(dc_id_display, size="sm", ff="monospace"),
+                        ],
+                        justify="space-between",
+                    ),
+                    dmc.Group(
+                        [
+                            dmc.Text("Type:", size="sm", fw="bold", c="gray"),
+                            dmc.Badge(dc_type, color="blue", size="xs"),
+                        ],
+                        justify="space-between",
+                    ),
+                    metatype_row,
+                ],
+                gap="xs",
+            ),
+        ],
+        withBorder=True,
+        shadow="xs",
+        radius="md",
+        p="md",
+    )
+
+
+def _get_storage_location(data_collection, dc_type: str, dc_id: str, delta_info) -> str:
+    """Get storage location based on data collection type.
+
+    Args:
+        data_collection: Data collection dict or object.
+        dc_type: Data collection type.
+        dc_id: Data collection ID.
+        delta_info: Delta table information.
+
+    Returns:
+        Storage location string.
+    """
+    if dc_type.lower() == "multiqc":
+        flex_metadata = getattr(data_collection, "flexible_metadata", {})
+        return (
+            flex_metadata.get("s3_location")
+            or flex_metadata.get("primary_s3_location")
+            or f"s3://depictio-bucket/{dc_id}/"
+        )
+    else:
+        return delta_info.get("delta_table_location", "N/A") if delta_info else "N/A"
+
+
+def _get_data_format(data_collection) -> str:
+    """Get data format from data collection.
+
+    Args:
+        data_collection: Data collection dict or object.
+
+    Returns:
+        Format string.
+    """
+    if isinstance(data_collection, dict):
+        return (
+            data_collection.get("config", {}).get("dc_specific_properties", {}).get("format")
+            or "Unknown"
+        )
+    elif hasattr(data_collection, "config"):
+        dc_props = getattr(data_collection.config, "dc_specific_properties", None)
+        return getattr(dc_props, "format", "Unknown") if dc_props else "Unknown"
+    return "Unknown"
+
+
+def _create_storage_card(data_collection, dc_type: str, dc_id: str, delta_info) -> dmc.Card:
+    """Create the storage details card.
+
+    Args:
+        data_collection: Data collection dict or object.
+        dc_type: Data collection type.
+        dc_id: Data collection ID.
+        delta_info: Delta table information.
+
+    Returns:
+        Card component with storage details.
+    """
+    is_multiqc = dc_type.lower() == "multiqc"
+    icon_name = "mdi:cloud" if is_multiqc else "mdi:delta"
+    title = "S3 Storage Details" if is_multiqc else "Delta Table Details"
+    location_label = "S3 Location:" if is_multiqc else "Delta Location:"
+
+    storage_location = _get_storage_location(data_collection, dc_type, dc_id, delta_info)
+
+    last_aggregated = "Never"
+    if delta_info and delta_info.get("aggregation"):
+        last_aggregated = delta_info.get("aggregation", [{}])[-1].get("aggregation_time", "Never")
+
+    data_format = _get_data_format(data_collection)
+
+    return dmc.Card(
+        [
+            dmc.Group(
+                [
+                    DashIconify(icon=icon_name, width=20, color=colors["green"]),
+                    dmc.Text(title, fw="bold", size="md"),
+                ],
+                gap="xs",
+                align="center",
+            ),
+            dmc.Divider(my="sm"),
+            dmc.Stack(
+                [
+                    dmc.Group(
+                        [
+                            dmc.Text(location_label, size="sm", fw="bold", c="gray"),
+                            dmc.Text(storage_location, size="sm", ff="monospace"),
+                        ],
+                        justify="space-between",
+                    ),
+                    dmc.Group(
+                        [
+                            dmc.Text("Last Aggregated:", size="sm", fw="bold", c="gray"),
+                            dmc.Text(last_aggregated, size="sm"),
+                        ],
+                        justify="space-between",
+                    ),
+                    dmc.Group(
+                        [
+                            dmc.Text("Format:", size="sm", fw="bold", c="gray"),
+                            dmc.Badge(data_format, color="blue", size="xs"),
+                        ],
+                        justify="space-between",
+                    ),
+                    dmc.Group(
+                        [
+                            dmc.Text("Size:", size="sm", fw="bold", c="gray"),
+                            dmc.Text(
+                                get_data_collection_size_display(data_collection),
+                                size="sm",
+                                ff="monospace",
+                            ),
+                        ],
+                        justify="space-between",
+                    ),
+                ],
+                gap="xs",
+            ),
+        ],
+        withBorder=True,
+        shadow="xs",
+        radius="md",
+        p="md",
+    )
+
+
+def _create_additional_info_card(data_collection, workflow_info) -> dmc.Card:
+    """Create the additional information card.
+
+    Args:
+        data_collection: Data collection dict or object.
+        workflow_info: Workflow information dict.
+
+    Returns:
+        Card component with additional info.
+    """
+    description = (
+        data_collection.get("description")
+        if isinstance(data_collection, dict)
+        else getattr(data_collection, "description", "No description available")
+    )
+
+    created_time = workflow_info.get("registration_time", "N/A") if workflow_info else "N/A"
+
+    return dmc.Card(
+        [
+            dmc.Group(
+                [
+                    DashIconify(icon="mdi:information-outline", width=20, color=colors["orange"]),
+                    dmc.Text("Additional Information", fw="bold", size="md"),
+                ],
+                gap="xs",
+                align="center",
+            ),
+            dmc.Divider(my="sm"),
+            dmc.Stack(
+                [
+                    dmc.Group(
+                        [
+                            dmc.Text("Description:", size="sm", fw="bold", c="gray"),
+                            dmc.Text(description, size="sm"),
+                        ],
+                        justify="flex-start",
+                        align="flex-start",
+                    ),
+                    dmc.Group(
+                        [
+                            dmc.Text("Created:", size="sm", fw="bold", c="gray"),
+                            dmc.Text(created_time, size="sm"),
+                        ],
+                        gap="xs",
+                    ),
+                ],
+                gap="sm",
+            ),
+        ],
+        withBorder=True,
+        shadow="xs",
+        radius="md",
+        p="md",
+        mt="md",
+    )
+
+
+def _create_data_preview_card(dc_type: str, dc_id: str) -> dmc.Card:
+    """Create the data preview card (table or MultiQC metadata).
+
+    Args:
+        dc_type: Data collection type.
+        dc_id: Data collection ID.
+
+    Returns:
+        Card component with data preview controls.
+    """
+    if dc_type.lower() == "multiqc":
+        return dmc.Card(
+            [
+                dmc.Group(
+                    [
+                        html.Img(
+                            src="/assets/images/logos/multiqc.png",
+                            style={"width": "20px", "height": "20px"},
+                        ),
+                        dmc.Text("MultiQC Report Metadata", fw="bold", size="md"),
+                    ],
+                    gap="xs",
+                    align="center",
+                ),
+                dmc.Divider(my="sm"),
+                html.Div(id={"type": "dc-viewer-multiqc-metadata-content", "index": dc_id}),
+            ],
+            withBorder=True,
+            shadow="xs",
+            radius="md",
+            p="md",
+            mt="md",
+        )
+
+    return dmc.Card(
+        [
+            dmc.Group(
+                [
+                    DashIconify(icon="mdi:table-eye", width=20, color=colors["teal"]),
+                    dmc.Text("Data Preview", fw="bold", size="md"),
+                ],
+                gap="xs",
+                align="center",
+            ),
+            dmc.Divider(my="sm"),
+            dmc.Stack(
+                [
+                    dmc.Group(
+                        [
+                            dmc.NumberInput(
+                                id="dc-viewer-row-limit",
+                                value=1000,
+                                min=100,
+                                max=10000,
+                                step=100,
+                                w="120px",
+                                style={"display": "none"},
+                            ),
+                            dmc.Button(
+                                "Load Data",
+                                id="dc-viewer-load-btn",
+                                leftSection=DashIconify(icon="mdi:table-refresh"),
+                                variant="light",
+                                size="sm",
+                            ),
+                        ],
+                        gap="md",
+                        align="center",
+                    ),
+                    dmc.Divider(),
+                    html.Div(id="dc-viewer-data-content"),
+                ],
+                gap="md",
+            ),
+        ],
+        withBorder=True,
+        shadow="xs",
+        radius="md",
+        p="md",
+        mt="md",
+    )
+
+
+def _create_empty_dc_viewer() -> dmc.Center:
+    """Create empty state for data collection viewer.
+
+    Returns:
+        Center component with empty state message.
+    """
+    return dmc.Center(
+        [
+            dmc.Stack(
+                [
+                    DashIconify(
+                        icon="mdi:table-eye",
+                        width=48,
+                        color="gray",
+                        style={"opacity": 0.5},
+                    ),
+                    dmc.Text(
+                        "No data collection selected",
+                        size="lg",
+                        c="gray",
+                        ta="center",
+                    ),
+                    dmc.Text(
+                        "Select a data collection above to preview its contents",
+                        size="sm",
+                        c="gray",
+                        ta="center",
+                    ),
+                ],
+                align="center",
+                gap="sm",
+            )
+        ],
+        p="xl",
+    )
+
+
 def create_data_collection_viewer_content(
     data_collection=None, delta_info=None, workflow_info=None, theme="light"
 ):
-    """
-    Create the content for the data collection viewer section.
+    """Create the content for the data collection viewer section.
 
     Args:
-        data_collection: Selected data collection object or data
-        delta_info: Delta table information from API
-        workflow_info: Workflow information containing registration_time
-        theme: Current theme ("light" or "dark") for AG Grid styling
+        data_collection: Selected data collection object or data.
+        delta_info: Delta table information from API.
+        workflow_info: Workflow information containing registration_time.
+        theme: Current theme ("light" or "dark") for AG Grid styling.
 
     Returns:
-        html.Div: Data collection viewer content
+        html.Div: Data collection viewer content.
     """
     if not data_collection:
-        return dmc.Center(
-            [
-                dmc.Stack(
-                    [
-                        DashIconify(
-                            icon="mdi:table-eye",
-                            width=48,
-                            color="gray",
-                            style={"opacity": 0.5},
-                        ),
-                        dmc.Text(
-                            "No data collection selected",
-                            size="lg",
-                            c="gray",
-                            ta="center",
-                        ),
-                        dmc.Text(
-                            "Select a data collection above to preview its contents",
-                            size="sm",
-                            c="gray",
-                            ta="center",
-                        ),
-                    ],
-                    align="center",
-                    gap="sm",
-                )
-            ],
-            p="xl",
-        )
+        return _create_empty_dc_viewer()
 
-    # Extract data collection info (could be from dict or object)
-    dc_tag = (
-        data_collection.get("data_collection_tag")
-        if isinstance(data_collection, dict)
-        else getattr(data_collection, "data_collection_tag", "Unknown")
-    )
-    dc_id = (
-        data_collection.get("id")
-        if isinstance(data_collection, dict)
-        else getattr(data_collection, "id", "unknown")
-    )
-    dc_type = (
-        data_collection.get("config", {}).get("type")
-        if isinstance(data_collection, dict)
-        else getattr(data_collection.config, "type", "unknown")
-    )
-    dc_metatype = (
-        data_collection.get("config", {}).get("metatype")
-        if isinstance(data_collection, dict)
-        else getattr(data_collection.config, "metatype", "Unknown")
-    )
+    # Extract data collection info
+    dc_tag, dc_id, dc_type, dc_metatype = _extract_dc_info(data_collection)
+
+    # Build sections
+    header_section = _create_dc_header_section(dc_tag, dc_type)
+    config_card = _create_configuration_card(data_collection, dc_type, dc_metatype)
+    storage_card = _create_storage_card(data_collection, dc_type, dc_id, delta_info)
+    additional_info_card = _create_additional_info_card(data_collection, workflow_info)
+    data_preview_card = _create_data_preview_card(dc_type, dc_id)
 
     return dmc.Stack(
         [
-            # Data collection header info
-            dmc.Group(
-                [
-                    # Set icon based on data collection type
-                    (
-                        DashIconify(icon="mdi:table", width=32, color=colors["teal"])
-                        if dc_type.lower() == "table"
-                        else (
-                            html.Img(
-                                src="/assets/images/logos/multiqc.png",
-                                style={"width": "32px", "height": "32px"},
-                            )
-                            if dc_type.lower() == "multiqc"
-                            else DashIconify(
-                                icon="mdi:file-document", width=32, color=colors["teal"]
-                            )
-                        )
-                    ),
-                    dmc.Stack(
-                        [
-                            dmc.Text(dc_tag, fw="bold", size="xl"),
-                            # dmc.Group(
-                            #     [
-                            #         dmc.Badge(dc_type, color="blue", size="sm"),
-                            #         dmc.Badge(dc_metatype, color="gray", size="sm"),
-                            #     ],
-                            #     gap="sm",
-                            # ),
-                        ],
-                        # gap="xs",
-                    ),
-                ],
-                gap="md",
-                align="center",
-            ),
-            # Detailed data collection information
+            header_section,
             dmc.Divider(my="md"),
             dmc.SimpleGrid(
                 cols=2,
                 spacing="lg",
-                children=[
-                    # Configuration Details
-                    dmc.Card(
-                        [
-                            dmc.Group(
-                                [
-                                    DashIconify(icon="mdi:cog", width=20, color=colors["blue"]),
-                                    dmc.Text("Configuration", fw="bold", size="md"),
-                                ],
-                                gap="xs",
-                                align="center",
-                            ),
-                            dmc.Divider(my="sm"),
-                            dmc.Stack(
-                                [
-                                    dmc.Group(
-                                        [
-                                            dmc.Text(
-                                                "Data Collection ID:",
-                                                size="sm",
-                                                fw="bold",
-                                                c="gray",
-                                            ),
-                                            dmc.Text(
-                                                data_collection.get("id")
-                                                if isinstance(data_collection, dict)
-                                                else str(getattr(data_collection, "id", "N/A")),
-                                                size="sm",
-                                                ff="monospace",
-                                            ),
-                                        ],
-                                        justify="space-between",
-                                    ),
-                                    dmc.Group(
-                                        [
-                                            dmc.Text("Type:", size="sm", fw="bold", c="gray"),
-                                            dmc.Badge(dc_type, color="blue", size="xs"),
-                                        ],
-                                        justify="space-between",
-                                    ),
-                                    # Hide metatype for MultiQC collections
-                                    (
-                                        dmc.Group(
-                                            [
-                                                dmc.Text(
-                                                    "Metatype:", size="sm", fw="bold", c="gray"
-                                                ),
-                                                dmc.Badge(
-                                                    dc_metatype or "Unknown",
-                                                    color="gray",
-                                                    size="xs",
-                                                ),
-                                            ],
-                                            justify="space-between",
-                                        )
-                                        if dc_type.lower() != "multiqc"
-                                        else html.Div()  # Empty placeholder for MultiQC
-                                    ),
-                                ],
-                                gap="xs",
-                            ),
-                        ],
-                        withBorder=True,
-                        shadow="xs",
-                        radius="md",
-                        p="md",
-                    ),
-                    # Storage Information (Delta Table for tables, S3 for MultiQC)
-                    dmc.Card(
-                        [
-                            dmc.Group(
-                                [
-                                    DashIconify(
-                                        icon=(
-                                            "mdi:cloud"
-                                            if dc_type.lower() == "multiqc"
-                                            else "mdi:delta"
-                                        ),
-                                        width=20,
-                                        color=colors["green"],
-                                    ),
-                                    dmc.Text(
-                                        "S3 Storage Details"
-                                        if dc_type.lower() == "multiqc"
-                                        else "Delta Table Details",
-                                        fw="bold",
-                                        size="md",
-                                    ),
-                                ],
-                                gap="xs",
-                                align="center",
-                            ),
-                            dmc.Divider(my="sm"),
-                            dmc.Stack(
-                                [
-                                    # Show S3 location for MultiQC, Delta location for others
-                                    dmc.Group(
-                                        [
-                                            dmc.Text(
-                                                "S3 Location:"
-                                                if dc_type.lower() == "multiqc"
-                                                else "Delta Location:",
-                                                size="sm",
-                                                fw="bold",
-                                                c="gray",
-                                            ),
-                                            dmc.Text(
-                                                # For MultiQC, show S3 location with better logic
-                                                (
-                                                    # For MultiQC, try multiple S3 location sources
-                                                    (
-                                                        getattr(
-                                                            data_collection, "flexible_metadata", {}
-                                                        ).get("s3_location")
-                                                        or getattr(
-                                                            data_collection, "flexible_metadata", {}
-                                                        ).get("primary_s3_location")
-                                                        or f"s3://depictio-bucket/{dc_id}/"
-                                                    )
-                                                    if dc_type.lower() == "multiqc"
-                                                    else (
-                                                        delta_info.get(
-                                                            "delta_table_location", "N/A"
-                                                        )
-                                                        if delta_info
-                                                        else "N/A"
-                                                    )
-                                                ),
-                                                size="sm",
-                                                ff="monospace",
-                                            ),
-                                        ],
-                                        justify="space-between",
-                                    ),
-                                    dmc.Group(
-                                        [
-                                            dmc.Text(
-                                                "Last Aggregated:", size="sm", fw="bold", c="gray"
-                                            ),
-                                            dmc.Text(
-                                                # Get the most recent aggregation time from delta_info
-                                                (
-                                                    delta_info.get("aggregation", [{}])[-1].get(
-                                                        "aggregation_time", "Never"
-                                                    )
-                                                    if delta_info and delta_info.get("aggregation")
-                                                    else "Never"
-                                                ),
-                                                size="sm",
-                                            ),
-                                        ],
-                                        justify="space-between",
-                                    ),
-                                    dmc.Group(
-                                        [
-                                            dmc.Text("Format:", size="sm", fw="bold", c="gray"),
-                                            dmc.Badge(
-                                                # Access format through proper config structure
-                                                (
-                                                    data_collection.get("config", {})
-                                                    .get("dc_specific_properties", {})
-                                                    .get("format")
-                                                    if isinstance(data_collection, dict)
-                                                    else getattr(
-                                                        getattr(
-                                                            data_collection.config,
-                                                            "dc_specific_properties",
-                                                            None,
-                                                        ),
-                                                        "format",
-                                                        "Unknown",
-                                                    )
-                                                    if hasattr(data_collection, "config")
-                                                    else "Unknown"
-                                                )
-                                                or "Unknown",
-                                                color="blue",
-                                                size="xs",
-                                            ),
-                                        ],
-                                        justify="space-between",
-                                    ),
-                                    # Add size information from flexible_metadata
-                                    dmc.Group(
-                                        [
-                                            dmc.Text("Size:", size="sm", fw="bold", c="gray"),
-                                            dmc.Text(
-                                                get_data_collection_size_display(data_collection),
-                                                size="sm",
-                                                ff="monospace",
-                                            ),
-                                        ],
-                                        justify="space-between",
-                                    ),
-                                ],
-                                gap="xs",
-                            ),
-                        ],
-                        withBorder=True,
-                        shadow="xs",
-                        radius="md",
-                        p="md",
-                    ),
-                ],
+                children=[config_card, storage_card],
             ),
-            # Description and Additional Info
-            dmc.Card(
-                [
-                    dmc.Group(
-                        [
-                            DashIconify(
-                                icon="mdi:information-outline", width=20, color=colors["orange"]
-                            ),
-                            dmc.Text("Additional Information", fw="bold", size="md"),
-                        ],
-                        gap="xs",
-                        align="center",
-                    ),
-                    dmc.Divider(my="sm"),
-                    dmc.Stack(
-                        [
-                            dmc.Group(
-                                [
-                                    dmc.Text("Description:", size="sm", fw="bold", c="gray"),
-                                    dmc.Text(
-                                        data_collection.get("description")
-                                        if isinstance(data_collection, dict)
-                                        else getattr(
-                                            data_collection,
-                                            "description",
-                                            "No description available",
-                                        ),
-                                        size="sm",
-                                    ),
-                                ],
-                                justify="flex-start",
-                                align="flex-start",
-                            ),
-                            dmc.Group(
-                                [
-                                    dmc.Text("Created:", size="sm", fw="bold", c="gray"),
-                                    dmc.Text(
-                                        workflow_info.get("registration_time", "N/A")
-                                        if workflow_info
-                                        else "N/A",
-                                        size="sm",
-                                    ),
-                                ],
-                                gap="xs",
-                            ),
-                        ],
-                        gap="sm",
-                    ),
-                ],
-                withBorder=True,
-                shadow="xs",
-                radius="md",
-                p="md",
-                mt="md",
-            ),
-            # Data Visualization Section (disabled for MultiQC)
-            (
-                dmc.Card(
-                    [
-                        dmc.Group(
-                            [
-                                DashIconify(icon="mdi:table-eye", width=20, color=colors["teal"]),
-                                dmc.Text("Data Preview", fw="bold", size="md"),
-                            ],
-                            gap="xs",
-                            align="center",
-                        ),
-                        dmc.Divider(my="sm"),
-                        dmc.Stack(
-                            [
-                                dmc.Group(
-                                    [
-                                        # dmc.Text("Rows to load:", size="sm", c="gray"),
-                                        dmc.NumberInput(
-                                            id="dc-viewer-row-limit",
-                                            value=1000,
-                                            min=100,
-                                            max=10000,
-                                            step=100,
-                                            w="120px",
-                                            style={"display": "none"},
-                                        ),
-                                        dmc.Button(
-                                            "Load Data",
-                                            id="dc-viewer-load-btn",
-                                            leftSection=DashIconify(icon="mdi:table-refresh"),
-                                            variant="light",
-                                            size="sm",
-                                        ),
-                                    ],
-                                    gap="md",
-                                    align="center",
-                                ),
-                                dmc.Divider(),
-                                html.Div(id="dc-viewer-data-content"),
-                            ],
-                            gap="md",
-                        ),
-                    ],
-                    withBorder=True,
-                    shadow="xs",
-                    radius="md",
-                    p="md",
-                    mt="md",
-                )
-                if dc_type.lower() != "multiqc"  # Hide data preview for MultiQC
-                else dmc.Card(
-                    [
-                        dmc.Group(
-                            [
-                                html.Img(
-                                    src="/assets/images/logos/multiqc.png",
-                                    style={"width": "20px", "height": "20px"},
-                                ),
-                                dmc.Text("MultiQC Report Metadata", fw="bold", size="md"),
-                            ],
-                            gap="xs",
-                            align="center",
-                        ),
-                        dmc.Divider(my="sm"),
-                        html.Div(id={"type": "dc-viewer-multiqc-metadata-content", "index": dc_id}),
-                    ],
-                    withBorder=True,
-                    shadow="xs",
-                    radius="md",
-                    p="md",
-                    mt="md",
-                )
-            ),
+            additional_info_card,
+            data_preview_card,
         ],
         gap="md",
     )

@@ -1,3 +1,14 @@
+"""
+Table component utilities for building AG Grid tables.
+
+This module provides functions to create and configure Dash AG Grid table components
+with features like infinite scrolling, pagination, filtering, and theme support.
+
+Functions:
+    build_table_frame: Creates the outer Paper container for a table.
+    build_table: Builds a complete AG Grid table with all configurations.
+"""
+
 import dash_ag_grid as dag
 import dash_mantine_components as dmc
 import polars as pl
@@ -10,7 +21,17 @@ from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.dash.modules.figure_component.utils import stringify_id
 
 
-def build_table_frame(index, children=None):
+def build_table_frame(index: str, children: html.Div | None = None) -> dmc.Paper:
+    """Create the outer Paper container frame for a table component.
+
+    Args:
+        index: Unique identifier for the table component.
+        children: Optional content to display inside the frame. If None,
+            displays a placeholder message.
+
+    Returns:
+        A dmc.Paper component configured as the table container.
+    """
     if not children:
         return dmc.Paper(
             children=[
@@ -42,210 +63,220 @@ def build_table_frame(index, children=None):
             w="100%",
             h="100%",
         )
-    else:
-        return dmc.Paper(
-            children=children,
-            id={
-                "type": "table-component",
-                "index": index,
-            },
-            withBorder=True,
-            radius="sm",
-            p="xs",
-            w="100%",
-            h="100%",
-            style={
-                "display": "flex",
-                "flexDirection": "column",
-                "overflow": "hidden",  # Prevent content overflow
-                "paddingBottom": "12px",  # Extra padding for pagination controls
-            },
-        )
+
+    return dmc.Paper(
+        children=children,
+        id={
+            "type": "table-component",
+            "index": index,
+        },
+        withBorder=True,
+        radius="sm",
+        p="xs",
+        w="100%",
+        h="100%",
+        style={
+            "display": "flex",
+            "flexDirection": "column",
+            "overflow": "hidden",
+            "paddingBottom": "12px",
+        },
+    )
 
 
 def _get_theme_template(theme: str) -> str:
-    """Get the appropriate Plotly template based on the theme.
+    """Get the appropriate AG Grid theme class based on the theme setting.
 
     Args:
-        theme: Theme name ("light", "dark", or other)
+        theme: Theme name ("light", "dark", or other).
 
     Returns:
-        Plotly template name
+        AG Grid theme class name (e.g., "ag-theme-alpine" or "ag-theme-alpine-dark").
     """
-    # Handle case where theme is empty dict, None, or other falsy value
     if not theme or theme == {} or theme == "{}":
         theme = "light"
 
-    logger.debug(f"TABLE COMPONENT - Using theme: {theme} for Plotly template")
-    # Use actual available Plotly templates
+    logger.debug(f"TABLE COMPONENT - Using theme: {theme} for AG Grid")
     return "ag-theme-alpine-dark" if theme == "dark" else "ag-theme-alpine"
 
 
-def build_table(**kwargs):
-    logger.debug("build_table")
-    # def build_card(index, title, wf_id, dc_id, dc_config, column_name, column_type, aggregation, v, build_frame=False):
-    index = kwargs.get("index")
-    wf_id = kwargs.get("wf_id")
-    dc_id = kwargs.get("dc_id")
-    dc_config = kwargs.get("dc_config")
-    cols = kwargs.get("cols_json")
-    theme = kwargs.get("theme", "light")  # Default to light theme
-    build_frame = kwargs.get("build_frame", False)
+def _load_dataframe(
+    wf_id: str | None,
+    dc_id: str | None,
+    token: str,
+    index: str,
+    refresh: bool,
+) -> pl.DataFrame:
+    """Load DataFrame from delta table if needed.
 
-    df = kwargs.get("df", pl.DataFrame())
-    TOKEN = kwargs.get("access_token")
-    stepper = kwargs.get("stepper", False)
+    Args:
+        wf_id: Workflow ID.
+        dc_id: Data collection ID.
+        token: Authentication token.
+        index: Component index for logging.
+        refresh: Whether to refresh data from source.
 
-    df = kwargs.get("df", pl.DataFrame())
+    Returns:
+        Loaded DataFrame or empty DataFrame if loading fails.
+    """
+    if not refresh:
+        logger.info(
+            f"Table component {index}: Using empty DataFrame from filters - "
+            "filters exclude all data"
+        )
+        return pl.DataFrame()
 
-    # if stepper:
-    #     value_div_type = "table-aggrid-tmp"
-    # else:
-    value_div_type = "table-aggrid"
+    logger.debug(f"Table component {index}: Loading delta table for {wf_id}:{dc_id}")
 
-    if df.is_empty():
-        # Check if we're in a refresh context where we should load new data
-        if kwargs.get("refresh", True):
-            logger.debug(
-                f"Table component {index}: Loading delta table for {wf_id}:{dc_id} (no pre-loaded df)"
-            )
-            # Validate that we have valid IDs before calling load_deltatable_lite
-            if not wf_id or not dc_id:
-                logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
-                df = pl.DataFrame()  # Return empty DataFrame if IDs are missing
-            else:
-                # Handle joined data collection IDs - don't convert to ObjectId
-                if isinstance(dc_id, str) and "--" in dc_id:
-                    # For joined data collections, pass the DC ID as string
-                    df = load_deltatable_lite(ObjectId(wf_id), dc_id, TOKEN=TOKEN)
-                else:
-                    # Regular data collection - convert to ObjectId
-                    df = load_deltatable_lite(ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN)
-        else:
-            # If refresh=False and df is empty, this means filters resulted in no data
-            # Keep the empty DataFrame to properly reflect the filtered state
-            logger.info(
-                f"Table component {index}: Using empty DataFrame from filters (shape: {df.shape}) - filters exclude all data"
-            )
-    else:
-        logger.debug(f"Table component {index}: Using pre-loaded DataFrame (shape: {df.shape})")
+    if not wf_id or not dc_id:
+        logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
+        return pl.DataFrame()
 
-    # Add dash aggrid filters to the columns with enhanced filter configuration
-    if cols:
-        for c in cols:
-            if c in cols and "type" in cols[c]:
-                if cols[c]["type"] == "object":
-                    cols[c]["filter"] = "agTextColumnFilter"
-                    # Enable floating filters for better UX
-                    cols[c]["floatingFilter"] = True
-                elif cols[c]["type"] in ["int64", "float64"]:
-                    cols[c]["filter"] = "agNumberColumnFilter"
-                    cols[c]["floatingFilter"] = True
-                    # Add filter parameters for number columns
-                    cols[c]["filterParams"] = {
-                        "filterOptions": ["equals", "lessThan", "greaterThan", "inRange"],
-                        "maxNumConditions": 2,
-                    }
-                # FIXME: use properly this: https://dash.plotly.com/dash-ag-grid/date-filters
-                elif cols[c]["type"] == "datetime":
-                    cols[c]["filter"] = "agDateColumnFilter"
-                    cols[c]["floatingFilter"] = True
-                elif cols[c]["type"] == "bool":
-                    cols[c]["filter"] = "agTextColumnFilter"  # Use text filter for boolean
-                    cols[c]["floatingFilter"] = True
-                else:
-                    # Default filter for unknown types
-                    cols[c]["filter"] = "agTextColumnFilter"
-                    cols[c]["floatingFilter"] = True
-                    logger.debug(
-                        f"Using default text filter for column '{c}' with type '{cols[c]['type']}'"
-                    )
+    # Handle joined data collection IDs - don't convert to ObjectId
+    if isinstance(dc_id, str) and "--" in dc_id:
+        return load_deltatable_lite(ObjectId(wf_id), dc_id, TOKEN=token)
 
-    # Add ID column (removed SpinnerCellRenderer to avoid AG Grid error)
-    columnDefs = [{"field": "ID", "maxWidth": 100}]
+    return load_deltatable_lite(ObjectId(wf_id), ObjectId(dc_id), TOKEN=token)
 
-    # Add data columns with enhanced filtering and sorting support
-    if cols:
-        data_columns = []
-        for c, e in cols.items():  # type: ignore[possibly-unbound-attribute]
-            column_def = {
-                "headerName": " ".join(
-                    word.capitalize() for word in c.split(".")
-                ),  # Transform display name
-                "headerTooltip": f"Column type: {e['type']}",
-                "filter": e.get("filter", "agTextColumnFilter"),  # Default to text filter
-                "floatingFilter": e.get("floatingFilter", False),
-                "filterParams": e.get("filterParams", {}),
-                "sortable": True,  # Enable sorting for all columns
-                "resizable": True,  # Enable column resizing
-                "minWidth": 150,  # Ensure readable column width
+
+def _configure_column_filters(cols: dict | None) -> None:
+    """Configure AG Grid filters for each column based on data type.
+
+    Modifies the cols dictionary in place to add appropriate filter configurations.
+
+    Args:
+        cols: Dictionary of column configurations keyed by column name.
+    """
+    if not cols:
+        return
+
+    for col_name, col_config in cols.items():
+        if "type" not in col_config:
+            continue
+
+        col_type = col_config["type"]
+
+        if col_type == "object":
+            col_config["filter"] = "agTextColumnFilter"
+            col_config["floatingFilter"] = True
+        elif col_type in ["int64", "float64"]:
+            col_config["filter"] = "agNumberColumnFilter"
+            col_config["floatingFilter"] = True
+            col_config["filterParams"] = {
+                "filterOptions": ["equals", "lessThan", "greaterThan", "inRange"],
+                "maxNumConditions": 2,
             }
-
-            # Handle field names with dots - replace dots with underscores
-            if "." in c:
-                # Create a safe field name by replacing dots with underscores
-                safe_field_name = c.replace(".", "_")
-                column_def["field"] = safe_field_name
-            else:
-                column_def["field"] = c  # Use field for simple names
-
-            data_columns.append(column_def)
-        columnDefs.extend(data_columns)
-
-    # if description in col sub dict, update headerTooltip
-    for col in columnDefs:
-        if (
-            cols
-            and "field" in col  # Check if field exists in column definition
-            and col["field"] in cols
-            and "description" in cols[col["field"]]
-            and cols[col["field"]]["description"] is not None
-        ):
-            col["headerTooltip"] = (
-                f"{col['headerTooltip']} | Description: {cols[col['field']]['description']}"
+        elif col_type == "datetime":
+            # FIXME: use properly: https://dash.plotly.com/dash-ag-grid/date-filters
+            col_config["filter"] = "agDateColumnFilter"
+            col_config["floatingFilter"] = True
+        elif col_type == "bool":
+            col_config["filter"] = "agTextColumnFilter"
+            col_config["floatingFilter"] = True
+        else:
+            col_config["filter"] = "agTextColumnFilter"
+            col_config["floatingFilter"] = True
+            logger.debug(
+                f"Using default text filter for column '{col_name}' with type '{col_type}'"
             )
-    logger.debug(f"Columns definitions for table {index}: {columnDefs}")
 
-    # INFINITE ROW MODEL WITH PAGINATION: Use infinite model with pagination controls
-    # CRITICAL: Dash AG Grid uses "infinite" rowModelType for server-side data loading
-    # Pagination IS supported with infinite model when cacheBlockSize >= paginationPageSize
-    # The infinite scroll callback handles:
-    # - Interactive component filtering via iterative_join
-    # - AG Grid server-side filtering and sorting
-    # - Pagination with configurable page sizes (50, 100, 200, 500 rows)
 
-    logger.debug(f"📊 Table {index}: Using INFINITE row model with pagination support")
-    logger.debug("🔄 Interactive filters and pagination handled by infinite scroll callback")
+def _build_column_definitions(cols: dict | None) -> list[dict]:
+    """Build AG Grid column definitions from column configuration.
 
-    logger.debug(f"Using theme: {theme} for AG Grid template")
-    aggrid_theme = _get_theme_template(theme)  # Get the appropriate theme template
+    Args:
+        cols: Dictionary of column configurations keyed by column name.
 
-    # Infinite row model with pagination
-    table_aggrid = dag.AgGrid(
-        id={"type": value_div_type, "index": str(index)},
-        # CRITICAL: Don't set rowData for infinite model - data comes from getRowsResponse
-        # CRITICAL: Dash AG Grid uses "infinite" for server-side data loading (not "serverSide")
-        rowModelType="infinite",  # Required for Dash AG Grid server-side datasource
-        columnDefs=columnDefs,
+    Returns:
+        List of AG Grid column definition dictionaries.
+    """
+    # Start with ID column
+    column_defs = [{"field": "ID", "maxWidth": 100}]
+
+    if not cols:
+        return column_defs
+
+    for col_name, col_config in cols.items():
+        # Handle field names with dots - replace with underscores
+        safe_field_name = col_name.replace(".", "_") if "." in col_name else col_name
+
+        column_def = {
+            "headerName": " ".join(word.capitalize() for word in col_name.split(".")),
+            "headerTooltip": f"Column type: {col_config.get('type', 'unknown')}",
+            "field": safe_field_name,
+            "filter": col_config.get("filter", "agTextColumnFilter"),
+            "floatingFilter": col_config.get("floatingFilter", False),
+            "filterParams": col_config.get("filterParams", {}),
+            "sortable": True,
+            "resizable": True,
+            "minWidth": 150,
+        }
+        column_defs.append(column_def)
+
+    return column_defs
+
+
+def _add_description_tooltips(column_defs: list[dict], cols: dict | None) -> None:
+    """Add description tooltips to column definitions.
+
+    Modifies column_defs in place to append descriptions to header tooltips.
+
+    Args:
+        column_defs: List of AG Grid column definitions.
+        cols: Dictionary of column configurations with optional descriptions.
+    """
+    if not cols:
+        return
+
+    for col_def in column_defs:
+        field = col_def.get("field")
+        if not field or field not in cols:
+            continue
+
+        description = cols[field].get("description")
+        if description:
+            col_def["headerTooltip"] = f"{col_def['headerTooltip']} | Description: {description}"
+
+
+def _create_ag_grid_component(
+    index: str,
+    column_defs: list[dict],
+    theme: str,
+) -> dag.AgGrid:
+    """Create the AG Grid component with infinite row model configuration.
+
+    Args:
+        index: Unique identifier for the table.
+        column_defs: List of column definitions.
+        theme: Theme name for styling.
+
+    Returns:
+        Configured dag.AgGrid component.
+    """
+    aggrid_theme = _get_theme_template(theme)
+
+    return dag.AgGrid(
+        id={"type": "table-aggrid", "index": str(index)},
+        rowModelType="infinite",
+        columnDefs=column_defs,
         dashGridOptions={
             "tooltipShowDelay": 500,
-            # INFINITE MODEL CONFIGURATION (optimized for interactive + pagination)
-            "rowBuffer": 0,  # Match documentation example
-            "maxBlocksInCache": 10,  # Reasonable cache size
-            "cacheBlockSize": 100,  # Each block contains 100 rows
-            "cacheOverflowSize": 2,  # Allow 2 extra blocks beyond maxBlocksInCache
-            "infiniteInitialRowCount": 1000,  # Initial estimate
-            # PAGINATION SETTINGS (supported with infinite model!)
-            # CRITICAL: cacheBlockSize (100) >= paginationPageSize (100) - required constraint
-            "pagination": True,  # Enable pagination controls (footer with page navigation)
-            "paginationPageSize": 100,  # Default: 100 rows per page (matches cacheBlockSize)
-            "paginationPageSizeSelector": [50, 100, 200, 500],  # User can choose page size
-            # OTHER OPTIONS
+            # Infinite model configuration
+            "rowBuffer": 0,
+            "maxBlocksInCache": 10,
+            "cacheBlockSize": 100,
+            "cacheOverflowSize": 2,
+            "infiniteInitialRowCount": 1000,
+            # Pagination settings
+            "pagination": True,
+            "paginationPageSize": 100,
+            "paginationPageSizeSelector": [50, 100, 200, 500],
+            # Selection and interaction
             "rowSelection": "multiple",
             "enableCellTextSelection": True,
             "ensureDomOrder": True,
-            "domLayout": "normal",  # CRITICAL: Use normal layout to respect height constraints
-            # STATUS BAR: Show row counts and selection info at bottom
+            "domLayout": "normal",
+            # Status bar
             "statusBar": {
                 "statusPanels": [
                     {"statusPanel": "agTotalRowCountComponent", "align": "left"},
@@ -253,12 +284,11 @@ def build_table(**kwargs):
                     {"statusPanel": "agSelectedRowCountComponent"},
                 ]
             },
-            # CRITICAL: Cache management for interactive components
-            "purgeClosedRowNodes": True,  # Clean up when filters change
-            "resetRowDataOnUpdate": True,  # Force refresh when interactive values change
-            # CRITICAL: Ensure AG Grid makes new requests after cache invalidation
-            "maxConcurrentDatasourceRequests": 1,  # Prevent racing conditions
-            "blockLoadDebounceMillis": 0,  # Immediate loading after cache reset
+            # Cache management
+            "purgeClosedRowNodes": True,
+            "resetRowDataOnUpdate": True,
+            "maxConcurrentDatasourceRequests": 1,
+            "blockLoadDebounceMillis": 0,
         },
         getRowId="params.data.ID",
         defaultColDef={
@@ -269,28 +299,39 @@ def build_table(**kwargs):
             "floatingFilter": True,
             "filter": True,
         },
-        # style={"width": "100%", "height": "100%"},
         className=aggrid_theme,
     )
 
-    logger.debug(f"✅ Table {index}: Infinite row model with pagination configured")
 
-    # Metadata management - Create a store component to store the metadata of the card
-    # CRITICAL: The stored-metadata-component index must match the table component index
-    # for MATCH patterns to work correctly in callbacks like infinite_scroll_component
-    #
-    # However, the draggable callback expects clean metadata index and appends -tmp
-    # Solution: Create with matching index, but store clean index in data
-    store_index = str(index)  # Keep same index as table component for MATCH patterns
-    clean_index = str(index).replace("-tmp", "")  # Clean index for data storage
+def _create_metadata_store(
+    index: str,
+    wf_id: str | None,
+    dc_id: str | None,
+    dc_config: dict | None,
+    cols: dict | None,
+) -> dcc.Store:
+    """Create the metadata store component for the table.
 
-    store_component = dcc.Store(
+    Args:
+        index: Component index.
+        wf_id: Workflow ID.
+        dc_id: Data collection ID.
+        dc_config: Data collection configuration.
+        cols: Column definitions.
+
+    Returns:
+        dcc.Store component with table metadata.
+    """
+    store_index = str(index)
+    clean_index = str(index).replace("-tmp", "")
+
+    return dcc.Store(
         id={
             "type": "stored-metadata-component",
-            "index": store_index,  # Same as table component index
+            "index": store_index,
         },
         data={
-            "index": clean_index,  # Clean index for draggable callback
+            "index": clean_index,
             "component_type": "table",
             "wf_id": wf_id,
             "dc_id": dc_id,
@@ -300,42 +341,44 @@ def build_table(**kwargs):
         },
     )
 
-    # Create the card body - default title is the aggregation value on the selected column
 
-    # Create export components
+def _create_table_body(
+    index: str,
+    ag_grid: dag.AgGrid,
+    store: dcc.Store,
+) -> html.Div:
+    """Create the table body container with AG Grid and supporting components.
+
+    Args:
+        index: Component index.
+        ag_grid: The AG Grid component.
+        store: The metadata store component.
+
+    Returns:
+        html.Div containing the complete table body.
+    """
     download_component = dcc.Download(id={"type": "download-table-csv", "index": str(index)})
-
-    export_notification_container = html.Div(
+    export_notification = html.Div(
         id={"type": "export-notification-container", "index": str(index)}
     )
 
-    # Create the card body with proper height constraint
-    # CRITICAL: Use flexbox to make AG Grid respect container height
-    # AG Grid with domLayout="normal" requires explicit height constraint
-    new_card_body = html.Div(
+    hidden_style = {"position": "absolute", "visibility": "hidden"}
+
+    return html.Div(
         [
             html.Div(
-                table_aggrid,
+                ag_grid,
                 style={
                     "width": "100%",
-                    "height": "calc(100% - 4px)",  # Slight reduction to show pagination
-                    "minHeight": "0",  # Critical for flex child to shrink
+                    "height": "calc(100% - 4px)",
+                    "minHeight": "0",
                     "position": "relative",
-                    "overflow": "auto",  # Allow scrolling if needed
+                    "overflow": "auto",
                 },
             ),
-            html.Div(
-                store_component,
-                style={"position": "absolute", "visibility": "hidden"},
-            ),
-            html.Div(
-                download_component,
-                style={"position": "absolute", "visibility": "hidden"},
-            ),
-            html.Div(
-                export_notification_container,
-                style={"position": "absolute", "visibility": "hidden"},
-            ),
+            html.Div(store, style=hidden_style),
+            html.Div(download_component, style=hidden_style),
+            html.Div(export_notification, style=hidden_style),
         ],
         id={"type": "table-content", "index": index},
         style={
@@ -343,40 +386,100 @@ def build_table(**kwargs):
             "height": "100%",
             "display": "flex",
             "flexDirection": "column",
-            "minHeight": "0",  # Allow flex container to shrink
+            "minHeight": "0",
             "position": "relative",
-            "paddingBottom": "8px",  # Extra padding for pagination footer
+            "paddingBottom": "8px",
         },
     )
-    if not build_frame:
-        return new_card_body
+
+
+def build_table(**kwargs) -> html.Div | dmc.Paper | dcc.Loading:
+    """Build a complete AG Grid table component with all configurations.
+
+    This function creates a fully configured table with infinite scrolling,
+    pagination, filtering, and theme support. It handles data loading,
+    column configuration, and optional loading spinners.
+
+    Args:
+        **kwargs: Keyword arguments containing:
+            - index (str): Unique identifier for the table.
+            - wf_id (str): Workflow ID.
+            - dc_id (str): Data collection ID.
+            - dc_config (dict): Data collection configuration.
+            - cols_json (dict): Column definitions with types.
+            - theme (str): Theme name ("light" or "dark").
+            - build_frame (bool): Whether to wrap in a Paper frame.
+            - df (pl.DataFrame): Pre-loaded DataFrame (optional).
+            - access_token (str): Authentication token.
+            - stepper (bool): Whether in stepper mode.
+            - refresh (bool): Whether to refresh data from source.
+
+    Returns:
+        The table component, optionally wrapped in a frame and/or loading spinner.
+    """
+    logger.debug("build_table")
+
+    # Extract parameters
+    index = kwargs.get("index")
+    wf_id = kwargs.get("wf_id")
+    dc_id = kwargs.get("dc_id")
+    dc_config = kwargs.get("dc_config")
+    cols = kwargs.get("cols_json")
+    theme = kwargs.get("theme", "light")
+    build_frame = kwargs.get("build_frame", False)
+    df = kwargs.get("df", pl.DataFrame())
+    token = kwargs.get("access_token")
+    stepper = kwargs.get("stepper", False)
+
+    # Load data if needed
+    if df.is_empty():
+        df = _load_dataframe(wf_id, dc_id, token, index, kwargs.get("refresh", True))
     else:
-        # Build the table component with frame
-        table_component = build_table_frame(index=index, children=new_card_body)
+        logger.debug(f"Table component {index}: Using pre-loaded DataFrame (shape: {df.shape})")
 
-        if not stepper:
-            # Dashboard mode - return table directly without extra wrapper
-            from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
-                create_skeleton_component,
-            )
+    # Configure columns
+    _configure_column_filters(cols)
+    column_defs = _build_column_definitions(cols)
+    _add_description_tooltips(column_defs, cols)
+    logger.debug(f"Columns definitions for table {index}: {column_defs}")
 
-            graph_id_dict = {"type": "table-aggrid", "index": str(index)}
-            target_id = stringify_id(graph_id_dict)
-            logger.debug(f"Target ID for loading: {target_id}")
+    logger.debug(f"Table {index}: Using INFINITE row model with pagination support")
+    logger.debug(f"Using theme: {theme} for AG Grid template")
 
-            if settings.performance.disable_loading_spinners:
-                logger.info("🚀 PERFORMANCE MODE: Table loading spinners disabled")
-                return new_card_body
+    # Build components
+    ag_grid = _create_ag_grid_component(index, column_defs, theme)
+    store = _create_metadata_store(index, wf_id, dc_id, dc_config, cols)
+    table_body = _create_table_body(index, ag_grid, store)
 
-            return dcc.Loading(
-                children=new_card_body,
-                custom_spinner=create_skeleton_component("table"),
-                target_components={target_id: "rowData"},
-                delay_show=50,  # Minimal delay to prevent flashing
-                delay_hide=300,  #
-                id={"type": "table-loading", "index": index},
-            )
+    logger.debug(f"Table {index}: Infinite row model with pagination configured")
 
-        else:
-            # For stepper mode without loading
-            return table_component
+    if not build_frame:
+        return table_body
+
+    # Build the table component with frame
+    table_component = build_table_frame(index=index, children=table_body)
+
+    if stepper:
+        return table_component
+
+    # Dashboard mode - add loading spinner
+    from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
+        create_skeleton_component,
+    )
+
+    if settings.performance.disable_loading_spinners:
+        logger.info("PERFORMANCE MODE: Table loading spinners disabled")
+        return table_body
+
+    graph_id_dict = {"type": "table-aggrid", "index": str(index)}
+    target_id = stringify_id(graph_id_dict)
+    logger.debug(f"Target ID for loading: {target_id}")
+
+    return dcc.Loading(
+        children=table_body,
+        custom_spinner=create_skeleton_component("table"),
+        target_components={target_id: "rowData"},
+        delay_show=50,
+        delay_hide=300,
+        id={"type": "table-loading", "index": index},
+    )

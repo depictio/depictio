@@ -1,16 +1,21 @@
-"""
-MultiQC Component - Core Rendering Callbacks
+"""MultiQC Component - Core Rendering Callbacks.
 
 This module contains callbacks essential for rendering MultiQC components in view mode.
 These callbacks are always loaded at app startup.
 
-Phase 1: View mode only
-- load_multiqc_metadata: Load MultiQC reports and populate module selector
-- populate_plot_selector: Populate plot dropdown when module changes
-- populate_dataset_selector: Show/hide dataset selector if plot has multiple datasets
-- render_multiqc_plot: Render MultiQC plot with optional sample filtering
+Callbacks:
+    - render_multiqc_from_trigger: Render plot in view mode (existing dashboards)
+    - load_multiqc_metadata: Load MultiQC reports and populate module selector
+    - populate_plot_selector: Populate plot dropdown when module changes
+    - populate_dataset_selector: Show/hide dataset selector for multi-dataset plots
+    - render_multiqc_plot: Render MultiQC plot with optional sample filtering
 
-Callbacks handle dropdown cascade: WF/DC → Modules → Plots → Datasets (optional) → Render
+Callback cascade: WF/DC -> Modules -> Plots -> Datasets (optional) -> Render
+
+Helper functions:
+    - _normalize_multiqc_paths: Support both S3 and local filesystem paths
+    - _extract_sample_filters: Extract sample filtering from interactive components
+    - _create_error_figure: Create error figure with message
 """
 
 import os
@@ -34,6 +39,32 @@ from depictio.dash.modules.multiqc_component.utils import (
 
 # Use centralized background callback configuration
 USE_BACKGROUND_CALLBACKS = should_use_background_for_component("multiqc")
+
+
+def _create_error_figure(title: str, message: Optional[str] = None) -> dict:
+    """Create a Plotly figure dict displaying an error.
+
+    Args:
+        title: The title to display (also used as error heading).
+        message: Optional additional error message for annotation.
+
+    Returns:
+        Plotly figure dict with error display.
+    """
+    layout = {"title": title, "data": []}
+    if message:
+        layout["annotations"] = [
+            {
+                "text": message,
+                "xref": "paper",
+                "yref": "paper",
+                "x": 0.5,
+                "y": 0.5,
+                "showarrow": False,
+                "font": {"size": 16},
+            }
+        ]
+    return {"data": [], "layout": layout}
 
 
 def _normalize_multiqc_paths(locations: List[str]) -> List[str]:
@@ -173,29 +204,23 @@ def register_core_callbacks(app):
         prevent_initial_call=False,  # Trigger on initial load
     )
     def render_multiqc_from_trigger(trigger_data, theme_data):
-        """
-        Render MultiQC plot for view mode (existing dashboards).
+        """Render MultiQC plot for view mode (existing dashboards).
 
         This callback is triggered by the multiqc-trigger store created by
         build_multiqc(). It reads the stored module/plot/dataset selections
         and renders the plot directly.
 
         Args:
-            trigger_data: Dict with s3_locations, module, plot, dataset_id, theme
-            theme_data: Current theme (light/dark)
+            trigger_data: Dict with s3_locations, module, plot, dataset_id, theme.
+            theme_data: Current theme (light/dark).
 
         Returns:
-            Plotly Figure object
+            Plotly Figure object.
         """
         if not trigger_data:
-            return {
-                "data": [],
-                "layout": {"title": "No data available"},
-            }
+            return _create_error_figure("No data available")
 
         task_id = str(uuid.uuid4())[:8]
-        logger.info("=" * 80)
-        logger.info(f"🎨 [{task_id}] RENDER MULTIQC (VIEW MODE)")
 
         # Extract parameters from trigger
         s3_locations = trigger_data.get("s3_locations", [])
@@ -205,32 +230,23 @@ def register_core_callbacks(app):
         theme = trigger_data.get("theme", "light")
 
         # Override theme from theme-store if available
-        # theme-store data is a string ("light" or "dark"), not a dict
         if theme_data and isinstance(theme_data, str):
             theme = theme_data
         elif theme_data and isinstance(theme_data, dict):
             theme = theme_data.get("theme", theme)
 
-        logger.info(f"   Module: {selected_module}")
-        logger.info(f"   Plot: {selected_plot}")
-        logger.info(f"   Dataset: {selected_dataset}")
-        logger.info(f"   Data locations: {len(s3_locations)}")
-        logger.info(f"   Theme: {theme}")
+        logger.info(
+            f"[{task_id}] Rendering MultiQC: {selected_module}/{selected_plot} (theme={theme})"
+        )
 
         # Validate inputs
         if not selected_module or not selected_plot or not s3_locations:
-            logger.error("   Missing required parameters")
-            return {
-                "data": [],
-                "layout": {"title": "Error: Missing parameters"},
-            }
+            logger.error(f"[{task_id}] Missing required parameters")
+            return _create_error_figure("Error: Missing parameters")
 
         try:
-            # Normalize paths (support both S3 and local FS)
             normalized_locations = _normalize_multiqc_paths(s3_locations)
-            logger.info(f"   Normalized {len(normalized_locations)} data locations")
 
-            # Generate plot using multiqc_vis module
             fig = create_multiqc_plot(
                 s3_locations=normalized_locations,
                 module=selected_module,
@@ -240,38 +256,15 @@ def register_core_callbacks(app):
             )
 
             if not fig:
-                logger.error("   Plot generation returned None")
-                return {
-                    "data": [],
-                    "layout": {"title": "Error generating plot"},
-                }
+                logger.error(f"[{task_id}] Plot generation returned None")
+                return _create_error_figure("Error generating plot")
 
-            logger.info(f"✅ [{task_id}] MULTIQC VIEW MODE PLOT RENDERED")
-            logger.info("=" * 80)
-
+            logger.info(f"[{task_id}] MultiQC view mode plot rendered successfully")
             return fig
 
         except Exception as e:
-            logger.error(f"❌ [{task_id}] Error rendering MultiQC plot: {e}")
-            import traceback
-
-            logger.error(traceback.format_exc())
-            return {
-                "data": [],
-                "layout": {
-                    "title": f"Error: {str(e)}",
-                    "annotations": [
-                        {
-                            "text": str(e),
-                            "xref": "paper",
-                            "yref": "paper",
-                            "x": 0.5,
-                            "y": 0.5,
-                            "showarrow": False,
-                        }
-                    ],
-                },
-            }
+            logger.error(f"[{task_id}] Error rendering MultiQC plot: {e}", exc_info=True)
+            return _create_error_figure(f"Error: {str(e)}", str(e))
 
     # ============================================================================
     # CALLBACK 1: Load MultiQC Metadata and Populate Module Selector (DESIGN MODE)
@@ -293,30 +286,22 @@ def register_core_callbacks(app):
         prevent_initial_call=False,
     )
     def load_multiqc_metadata(wf_id, dc_id, component_id, local_data):
-        """
-        Load MultiQC reports and populate module selector.
+        """Load MultiQC reports and populate module selector.
 
-        Triggered by:
-        - Dashboard load (view mode) - reads saved WF/DC from stored metadata
-        - WF/DC selection (design mode) - user selects in stepper
+        Triggered by dashboard load (view mode) or WF/DC selection (design mode).
+
+        Args:
+            wf_id: Workflow ID.
+            dc_id: Data collection ID.
+            component_id: Component ID dict with 'index' key.
+            local_data: Local store data with access_token.
 
         Returns:
-        - metadata_store: Complete MultiQC metadata (modules, plots, samples)
-        - s3_store: List of data locations (S3 or local FS paths)
-        - module_options: Dropdown data for module selector
-        - status_text: Status message
-
-        Flow:
-        1. Fetch MultiQC reports for DC
-        2. Extract data locations (s3_locations field - can be S3 or local paths)
-        3. Get metadata from first report (contains modules/plots structure)
-        4. Populate module dropdown options
+            Tuple of (metadata, data_locations, module_options, status_text).
         """
-        logger.info("=" * 80)
-        logger.info(f"🔍 LOAD MULTIQC METADATA - Component: {component_id['index']}")
-        logger.info(f"   WF: {wf_id}, DC: {dc_id}")
+        component_index = component_id.get("index", "unknown")
+        logger.info(f"Loading MultiQC metadata for component {component_index}")
 
-        # GUARD: Validate inputs
         if not wf_id or not dc_id or not local_data:
             logger.warning("Missing WF/DC or local_data")
             return {}, [], [], "Waiting for workflow/data collection selection"
@@ -327,27 +312,18 @@ def register_core_callbacks(app):
             return {}, [], [], "Error: No access token"
 
         try:
-            # Fetch MultiQC reports for this DC
             reports = get_multiqc_reports_for_data_collection(dc_id, TOKEN)
 
             if not reports:
                 logger.warning(f"No MultiQC reports found for DC {dc_id}")
                 return {}, [], [], "No MultiQC reports found"
 
-            logger.info(f"   Found {len(reports)} MultiQC reports")
-
-            # Extract data locations (can be S3 or local FS paths)
             data_locations = [r.get("s3_location") for r in reports if r.get("s3_location")]
 
             if not data_locations:
                 logger.error("No data locations found in reports")
                 return {}, [], [], "Error: No data locations found"
 
-            logger.info(f"   Data locations: {len(data_locations)}")
-            for loc in data_locations[:3]:  # Log first 3
-                logger.debug(f"     - {loc}")
-
-            # Get metadata from first report (contains modules/plots structure)
             report_id = reports[0].get("id")
             if not report_id:
                 logger.error("No report ID in first report")
@@ -359,27 +335,15 @@ def register_core_callbacks(app):
                 logger.error(f"Failed to load metadata for report {report_id}")
                 return {}, data_locations, [], "Error loading metadata"
 
-            # Extract modules and create dropdown options
             modules = metadata.get("modules", [])
             module_options = [{"label": mod, "value": mod} for mod in modules]
 
-            logger.info(f"   Loaded {len(modules)} modules")
-            logger.debug(f"   Modules: {modules}")
-            logger.info("✅ MULTIQC METADATA LOADED")
-            logger.info("=" * 80)
+            logger.info(f"Loaded {len(modules)} modules from {len(reports)} reports")
 
-            return (
-                metadata,
-                data_locations,
-                module_options,
-                f"{len(modules)} modules available",
-            )
+            return metadata, data_locations, module_options, f"{len(modules)} modules available"
 
         except Exception as e:
-            logger.error(f"❌ Failed to load MultiQC metadata: {e}")
-            import traceback
-
-            logger.error(traceback.format_exc())
+            logger.error(f"Failed to load MultiQC metadata: {e}", exc_info=True)
             return {}, [], [], f"Error: {str(e)}"
 
     # ============================================================================
@@ -586,9 +550,7 @@ def register_core_callbacks(app):
             return dcc.Graph(figure=error_fig), {}
 
         try:
-            # Normalize paths (support both S3 and local FS)
             normalized_locations = _normalize_multiqc_paths(data_locations)
-            logger.info(f"   Normalized {len(normalized_locations)} data locations")
 
             # Extract sample filtering from interactive components
             filtered_samples = None
@@ -597,11 +559,11 @@ def register_core_callbacks(app):
                     filter_values, interactive_metadata_list, component_metadata
                 )
                 if filtered_samples:
-                    logger.info(f"   Applying sample filter: {len(filtered_samples)} samples")
+                    logger.info(
+                        f"[{task_id}] Applying sample filter: {len(filtered_samples)} samples"
+                    )
 
-            # Generate plot using multiqc_vis module
             current_theme = theme if theme else "light"
-            logger.info(f"   Theme: {current_theme}")
 
             fig = create_multiqc_plot(
                 s3_locations=normalized_locations,
@@ -612,25 +574,16 @@ def register_core_callbacks(app):
             )
 
             if not fig:
-                logger.error("   Plot generation returned None")
-                error_fig = {
-                    "data": [],
-                    "layout": {"title": "Error generating plot"},
-                }
-                return dcc.Graph(figure=error_fig), {}
+                logger.error(f"[{task_id}] Plot generation returned None")
+                return dcc.Graph(figure=_create_error_figure("Error generating plot")), {}
 
-            # Apply sample filtering if specified
             if filtered_samples:
-                logger.info(f"   Filtering plot to {len(filtered_samples)} samples")
                 fig = filter_samples_in_plot(fig, filtered_samples)
 
-            # Analyze plot structure for interactive filtering support
             trace_metadata = analyze_multiqc_plot_structure(fig)
 
-            logger.info(f"✅ [{task_id}] MULTIQC PLOT RENDERED")
-            logger.info("=" * 80)
+            logger.info(f"[{task_id}] MultiQC plot rendered successfully")
 
-            # Wrap figure in dcc.Graph
             graph = dcc.Graph(
                 figure=fig,
                 config={"displayModeBar": "hover", "responsive": True},
@@ -640,29 +593,11 @@ def register_core_callbacks(app):
             return graph, trace_metadata
 
         except Exception as e:
-            logger.error(f"❌ [{task_id}] Failed to render plot: {e}")
-            import traceback
-
-            logger.error(traceback.format_exc())
-
-            error_layout = {
-                "data": [],
-                "layout": {
-                    "title": f"Error: {str(e)}",
-                    "annotations": [
-                        {
-                            "text": "Failed to generate plot. Check logs for details.",
-                            "xref": "paper",
-                            "yref": "paper",
-                            "x": 0.5,
-                            "y": 0.5,
-                            "showarrow": False,
-                            "font": {"size": 16},
-                        }
-                    ],
-                },
-            }
-
-            return dcc.Graph(figure=error_layout), {}
+            logger.error(f"[{task_id}] Failed to render plot: {e}", exc_info=True)
+            return dcc.Graph(
+                figure=_create_error_figure(
+                    f"Error: {str(e)}", "Failed to generate plot. Check logs for details."
+                )
+            ), {}
 
     logger.info("✅ MultiQC core callbacks registered (5 callbacks: view mode + 4 design mode)")

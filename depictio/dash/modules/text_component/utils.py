@@ -1,3 +1,18 @@
+"""
+Text component utilities for inline editable text elements.
+
+This module provides utilities for building inline editable text components
+that serve as section delimiters and titles within dashboards. Supports
+markdown-style headers with configurable alignment and styling.
+
+Key Functions:
+    get_first_available_wf_dc_for_text: Get suitable workflow/data collection for text
+    create_inline_editable_text: Create an inline editable text component
+    build_text_frame: Build the text component frame container
+    build_text: Build the complete text component
+    build_text_async: Async wrapper for background callbacks
+"""
+
 import dash_mantine_components as dmc
 import httpx
 from dash import dcc
@@ -9,17 +24,19 @@ from depictio.api.v1.configs.logging_init import logger
 
 def get_first_available_wf_dc_for_text(dashboard_id, token):
     """
-    Get the first available workflow ID and data collection ID that supports text components.
+    Get the first available workflow and data collection for text components.
 
-    Text components are mapped to 'table' data collection type, so this function finds
-    the first workflow that has a 'table' type data collection.
+    Text components are mapped to 'table' data collection type. This function
+    finds the first workflow that has a 'table' type data collection, making
+    text components compatible with the existing data processing pipeline.
 
     Args:
-        dashboard_id (str): Dashboard ID to get project context
-        token (str): Authentication token
+        dashboard_id: Dashboard ID to get project context.
+        token: Authentication token for API calls.
 
     Returns:
-        tuple: (wf_id, dc_id) or (None, None) if no suitable workflow found
+        Tuple of (wf_id, dc_id) if found, or (None, None) if no suitable
+        workflow/data collection exists.
     """
     try:
         # Get project from dashboard ID
@@ -52,7 +69,24 @@ def get_first_available_wf_dc_for_text(dashboard_id, token):
 def create_inline_editable_text(
     component_id, initial_text="# Section Title", initial_order=1, initial_alignment="left"
 ):
-    """Create an inline editable text component for dashboard section delimiters."""
+    """
+    Create an inline editable text component for dashboard section delimiters.
+
+    Creates a Paper-wrapped Title component that supports inline editing via
+    double-click. Includes hidden input and store components for state management.
+
+    Args:
+        component_id: Unique identifier for pattern-matching callbacks.
+        initial_text: Initial text content (markdown headers supported).
+            Defaults to '# Section Title'.
+        initial_order: Header order (1-6) for Title component.
+            Defaults to 1 (H1).
+        initial_alignment: Text alignment ('left', 'center', 'right').
+            Defaults to 'left'.
+
+    Returns:
+        dmc.Paper component containing the editable text structure.
+    """
 
     return dmc.Paper(
         [
@@ -128,86 +162,68 @@ def build_text_frame(index, children=None, show_border=False):
     Build the text component frame container.
 
     Args:
-        index: Component index
-        children: Children components to render inside
-        show_border: Whether to show border (for editing mode)
+        index: Component index for pattern-matching callbacks.
+        children: Child components to render inside the frame.
+        show_border: Whether to show border (for editing mode).
 
     Returns:
-        dmc.Paper: Text component frame
+        dmc.Paper: Text component frame container.
     """
-    if not children:
-        return dmc.Paper(
-            children=[
-                dmc.Center(
-                    dmc.Text(
-                        "Configure your text component using the edit menu",
-                        size="sm",
-                        fs="italic",
-                        ta="center",
-                    ),
-                    id={
-                        "type": "text-body",
-                        "index": index,
-                    },
-                    style={
-                        "minHeight": "150px",
-                        "height": "100%",
-                        "minWidth": "150px",
-                    },
-                )
-            ],
-            id={
-                "type": "text-component",
-                "index": index,
-            },
-            withBorder=show_border,
-            radius="sm",
-            p="md",
-            w="100%",
-            h="100%",
-        )
+    body_id = {"type": "text-body", "index": index}
+    component_id = {"type": "text-component", "index": index}
+
+    if children:
+        body_content = dmc.Stack(children=children, id=body_id, gap="xs", h="100%")
+        padding = "xs"
     else:
-        return dmc.Paper(
-            children=[
-                dmc.Stack(
-                    children=children,
-                    id={
-                        "type": "text-body",
-                        "index": index,
-                    },
-                    gap="xs",
-                    h="100%",
-                )
-            ],
-            id={
-                "type": "text-component",
-                "index": index,
-            },
-            withBorder=show_border,
-            radius="sm",
-            p="xs",
-            w="100%",
-            h="100%",
+        body_content = dmc.Center(
+            dmc.Text(
+                "Configure your text component using the edit menu",
+                size="sm",
+                fs="italic",
+                ta="center",
+            ),
+            id=body_id,
+            style={"minHeight": "150px", "height": "100%", "minWidth": "150px"},
         )
+        padding = "md"
+
+    return dmc.Paper(
+        children=[body_content],
+        id=component_id,
+        withBorder=show_border,
+        radius="sm",
+        p=padding,
+        w="100%",
+        h="100%",
+    )
 
 
 def build_text(**kwargs):
     """
     Build the text component with inline editable text.
 
+    Creates a text component with support for inline editing, configurable
+    styling, and proper index handling for both stepper and dashboard modes.
+
     Args:
         **kwargs: Component configuration parameters including:
-            - index: Component index
-            - title: Text component title
-            - content: Initial text content
-            - build_frame: Whether to wrap in frame container
-            - stepper: Whether in stepper mode
-            - parent_index: Parent component index for editing
-            - show_toolbar: Whether to display formatting controls (legacy, kept for compatibility)
-            - show_title: Whether to display the component title
+            - index: Component index for pattern-matching.
+            - title: Text component title (optional).
+            - content: Initial text content (markdown headers supported).
+            - build_frame: Whether to wrap in frame container.
+            - stepper: Whether in stepper mode (design workflow).
+            - parent_index: Parent component index for editing.
+            - show_toolbar: Legacy parameter for formatting controls.
+            - show_title: Whether to display the component title.
+            - alignment: Text alignment ('left', 'center', 'right').
+            - wf_id: Workflow ID (auto-detected if not provided).
+            - dc_id: Data collection ID (auto-detected if not provided).
+            - access_token: Authentication token.
+            - dashboard_id: Dashboard identifier.
 
     Returns:
-        Component tree for inline editable text
+        Component tree for inline editable text, optionally wrapped in frame.
     """
     logger.info("Building inline editable text component")
 
@@ -370,11 +386,19 @@ def build_text(**kwargs):
         )
 
 
-# Async wrapper for background callbacks (following card component pattern)
 async def build_text_async(**kwargs):
     """
     Async wrapper for build_text function.
+
     Used in background callbacks where async execution is needed.
+    Currently calls the synchronous build_text function, but could be
+    extended to run in a thread pool for true parallelism.
+
+    Args:
+        **kwargs: Same parameters as build_text().
+
+    Returns:
+        Component tree for inline editable text.
     """
     from depictio.api.v1.configs.logging_init import logger
 

@@ -1,3 +1,28 @@
+"""
+Stepper Part One: Component type and data source selection.
+
+This module implements the first step of the component creation stepper workflow,
+where users select:
+1. The type of component to create (Figure, Card, Table, Interactive, Text, etc.)
+2. The data source (workflow and data collection)
+
+The step displays:
+- Component type selection buttons with icons and descriptions
+- Workflow and data collection dropdowns
+- Data collection information panel showing metadata, shape, and type
+
+Callbacks:
+    - update_component_selected_display: Updates the component type badge for Text
+      components (which don't require data selection)
+    - update_step_1: Main callback that handles workflow/data collection selection
+      and displays the data collection information panel
+
+The module supports:
+    - Regular data collections (table, JBrowse, MultiQC)
+    - Joined data collections (synthetic specs for joined tables)
+    - Shape information display (rows and columns count)
+"""
+
 import dash
 import dash_mantine_components as dmc
 import httpx
@@ -12,7 +37,18 @@ from depictio.dash.component_metadata import (
 )
 
 
-def register_callbacks_stepper_part_one(app):
+def register_callbacks_stepper_part_one(app: dash.Dash) -> None:
+    """
+    Register callbacks for stepper part one (component type and data selection).
+
+    Registers:
+    - update_component_selected_display: Badge update for Text components
+    - update_step_1: Main workflow/data collection selection handler
+
+    Args:
+        app: The Dash application instance.
+    """
+
     @app.callback(
         Output({"type": "component-selected", "index": MATCH}, "children", allow_duplicate=True),
         Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
@@ -20,7 +56,12 @@ def register_callbacks_stepper_part_one(app):
         prevent_initial_call=True,
     )
     def update_component_selected_display(n_clicks, component_selected):
-        """Update component-selected display for components that don't need data selection like Text."""
+        """
+        Update component-selected badge for components that don't need data selection.
+
+        Text components can be created without selecting a data source, so their
+        badge is displayed immediately upon selection.
+        """
         if ctx.triggered_id and isinstance(ctx.triggered_id, dict):
             if ctx.triggered_id["type"] == "btn-option":
                 selected_component = ctx.triggered_id["value"]
@@ -63,8 +104,16 @@ def register_callbacks_stepper_part_one(app):
         id,
         local_store,
     ):
-        # Use dcc.Store in store-list to get the latest button clicked using timestamps
+        """
+        Handle step 1 interactions: workflow/data collection selection and component type.
 
+        Fetches data collection specifications and displays an information panel
+        with metadata including type, description, rows, and columns count.
+        Supports both regular and joined data collections.
+
+        Returns:
+            Tuple of (layout component, component badge).
+        """
         if not local_store:
             raise dash.exceptions.PreventUpdate
 

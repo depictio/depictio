@@ -1,3 +1,14 @@
+"""User authentication and management module for Depictio.
+
+This module provides the authentication interface including:
+- Login form with email/password authentication
+- Registration form for new users
+- Google OAuth integration (when enabled)
+- Animated triangle particle background
+
+The module uses DMC 2.0+ components and supports dark/light themes.
+"""
+
 import re
 
 import dash
@@ -19,6 +30,7 @@ from depictio.dash.api_calls import (
 )
 from depictio.dash.colors import colors
 
+# Event listener configuration for Enter key handling
 EVENT_KEYDOWN = {"event": "keydown", "props": ["key"]}
 
 # Triangle configuration constants
@@ -51,7 +63,14 @@ ANIMATION_CLASSES = [
 ]
 
 
-def render_login_form():
+def render_login_form() -> dmc.Stack:
+    """Render the login form with email/password inputs.
+
+    Includes optional Google OAuth button when enabled in settings.
+
+    Returns:
+        Stack component containing the login form elements.
+    """
     return dmc.Stack(
         [
             dmc.Center(
@@ -210,7 +229,14 @@ def render_login_form():
     )
 
 
-def render_register_form():
+def render_register_form() -> dmc.Stack:
+    """Render the registration form with email/password inputs.
+
+    Includes password confirmation field and back to login button.
+
+    Returns:
+        Stack component containing the registration form elements.
+    """
     return dmc.Stack(
         [
             dmc.Center(
@@ -312,7 +338,16 @@ def render_register_form():
     )
 
 
-def validate_login(login_email, login_password):
+def validate_login(login_email: str, login_password: str) -> tuple:
+    """Validate login credentials and return authentication result.
+
+    Args:
+        login_email: User's email address.
+        login_password: User's password.
+
+    Returns:
+        Tuple of (message, modal_open, session_data, token_data).
+    """
     if not login_email or not login_password:
         return "Please fill in all fields.", True, dash.no_update, dash.no_update
 
@@ -373,8 +408,19 @@ def validate_login(login_email, login_password):
     return "Invalid email or password.", True, dash.no_update, dash.no_update
 
 
-# Function to handle registration
-def handle_registration(register_email, register_password, register_confirm_password):
+def handle_registration(
+    register_email: str, register_password: str, register_confirm_password: str
+) -> tuple[str, bool]:
+    """Handle user registration process.
+
+    Args:
+        register_email: User's email address.
+        register_password: User's password.
+        register_confirm_password: Password confirmation.
+
+    Returns:
+        Tuple of (feedback_message, modal_should_stay_open).
+    """
     if not register_email or not register_password or not register_confirm_password:
         return "Please fill in all fields.", True
     if api_call_fetch_user_from_email(register_email):
@@ -390,7 +436,15 @@ def handle_registration(register_email, register_password, register_confirm_pass
 
 
 def _create_triangle_svg(size_key: str, color_hex: str) -> str:
-    """Generate an SVG data URL for a triangle with the Depictio style."""
+    """Generate an SVG data URL for a triangle with the Depictio style.
+
+    Args:
+        size_key: Size category ('small', 'medium', 'large', 'xlarge').
+        color_hex: Hex color code for the triangle fill.
+
+    Returns:
+        CSS url() string with embedded SVG data.
+    """
     size_info = TRIANGLE_SIZES[size_key]
     w, h = size_info["width"], size_info["height"]
 
@@ -402,7 +456,10 @@ def _create_triangle_svg(size_key: str, color_hex: str) -> str:
 
 
 def _select_triangle_size(index: int) -> str:
-    """Select a triangle size based on weighted distribution."""
+    """Select a triangle size based on weighted distribution.
+
+    Uses a deterministic pseudo-random approach for consistent layouts.
+    """
     rand_val = (index * 0.37) % 1
     cumulative_weight = 0.0
 
@@ -415,7 +472,10 @@ def _select_triangle_size(index: int) -> str:
 
 
 def _calculate_particle_position(index: int, grid_cols: int, grid_rows: int) -> tuple[float, float]:
-    """Calculate particle position using grid-based distribution with pseudo-random offset."""
+    """Calculate particle position using grid-based distribution.
+
+    Uses deterministic offset for consistent but organic-looking layouts.
+    """
     cell_width = 85 / grid_cols
     cell_height = 70 / grid_rows
 
@@ -436,7 +496,11 @@ def _calculate_particle_position(index: int, grid_cols: int, grid_rows: int) -> 
 
 
 def create_triangle_background() -> html.Div:
-    """Create GPU-optimized triangle particle background for the auth page."""
+    """Create GPU-optimized triangle particle background for the auth page.
+
+    Generates 40 animated triangles with varied sizes, colors, and animations
+    for a dynamic, branded login experience.
+    """
     num_particles = 40
     grid_cols = 8
     grid_rows = 5
@@ -573,16 +637,16 @@ layout = html.Div(
 )
 
 
-def register_google_oauth_callbacks(app):
-    """
-    Register Google OAuth authentication callbacks.
+def register_google_oauth_callbacks(app) -> None:
+    """Register Google OAuth authentication callbacks.
 
     Only called when settings.auth.google_oauth_enabled is True.
+    Registers button click handler and redirect callback.
 
     Args:
-        app: Dash app instance
+        app: Dash application instance.
     """
-    logger.info("🔐 Registering Google OAuth callbacks")
+    logger.info("Registering Google OAuth callbacks")
 
     # Google OAuth callback using server-side callback
     @app.callback(
@@ -631,7 +695,21 @@ def register_google_oauth_callbacks(app):
     )
 
 
-def register_callbacks_users_management(app):
+def register_callbacks_users_management(app) -> None:
+    """Register callbacks for user authentication and management.
+
+    Callbacks registered:
+    - auto_open_auth_modal_on_auth_page: Open modal on /auth route
+    - trigger_save_on_enter: Submit form on Enter key
+    - disable_login_button: Validate email format for login
+    - disable_register_button: Validate email format for registration
+    - handle_auth_and_switch_forms: Handle all auth actions
+    - Google OAuth callbacks (if enabled)
+
+    Args:
+        app: Dash application instance.
+    """
+
     @app.callback(
         [
             Output("auth-modal", "opened", allow_duplicate=True),

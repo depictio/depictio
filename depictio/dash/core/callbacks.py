@@ -1,5 +1,22 @@
 """
 Callback registration for the Depictio Dash application.
+
+This module contains legacy callback registration code from the single-app
+architecture. The new multi-app architecture (flask_dispatcher.py + pages/*.py)
+handles all callback registration.
+
+Note:
+    This file is kept for reference but should not be used in production.
+    Multi-app callback registration happens in:
+        - depictio/dash/pages/management_app.py (Management app callbacks)
+        - depictio/dash/pages/dashboard_viewer.py (Viewer app callbacks)
+        - depictio/dash/pages/dashboard_editor.py (Editor app callbacks)
+
+Functions:
+    register_main_callback: Register the main callback for page routing
+    register_all_callbacks: Legacy function to register all callbacks (deprecated)
+    register_layout_callbacks: Legacy layout callbacks registration (deprecated)
+    register_component_callbacks: Legacy component callbacks registration (deprecated)
 """
 
 from dash import Input, Output, State, ctx
@@ -7,56 +24,39 @@ from dash import Input, Output, State, ctx
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.core.auth import process_authentication
 
-# NOTE: This file contains legacy callback registration code from the single-app architecture.
-# The new multi-app architecture (flask_dispatcher.py + pages/*.py) handles all callback registration.
-# This file is kept for reference but should not be used in production.
-#
-# Multi-app callback registration happens in:
-#   - depictio/dash/pages/management_app.py - Management app callbacks
-#   - depictio/dash/pages/dashboard_viewer.py - Viewer app callbacks
-#   - depictio/dash/pages/dashboard_editor.py - Editor app callbacks (future)
 
-
-def register_main_callback(app):
+def register_main_callback(app) -> None:
     """
     Register the main callback for page routing and authentication.
 
+    This callback handles URL pathname changes and local storage data changes,
+    performing authentication validation and routing to appropriate pages.
+
     Args:
-        app (dash.Dash): The Dash application instance
+        app: The Dash application instance.
     """
     logger.info("🔥 REGISTERING MAIN CALLBACK for page routing and authentication")
 
-    # Cache for tracking last processed state to prevent duplicate processing (Phase 4E-3 final)
-    # Hash only user-visible state (logged_in, user_id) NOT tokens (silent refresh)
+    # Cache for tracking last processed state to prevent duplicate processing
     last_processed_state = {"pathname": None, "timestamp": 0, "user_state_hash": None}
 
     def get_user_state_hash(local_data):
         """
-        Hash only fields that affect page VISUAL rendering.
+        Hash only fields that affect page visual rendering.
+
         Token refresh (access_token change) should NOT trigger re-render.
+        Only user-visible state changes (login status, user identity) should
+        cause a page update.
 
-        Fields that affect UI:
-        - logged_in: Login vs. logout state
-        - user_id: Different user = different data
-
-        Fields that DON'T affect UI (excluded):
-        - access_token: Refreshes silently every 15 min
-        - expire_datetime: Changes with token refresh
-        - refresh_token: Rarely changes
+        Args:
+            local_data: Local storage data dictionary.
 
         Returns:
-            int: Hash of user-visible state, or None if no local_data
+            Hash of user-visible state, or None if no local_data.
         """
         if not local_data:
             return None
-
-        # Only hash fields that require visual page update
-        user_visible_state = (
-            local_data.get("logged_in"),
-            local_data.get("user_id"),
-            # Explicitly NOT including tokens - silent refresh!
-        )
-        return hash(user_visible_state)
+        return hash((local_data.get("logged_in"), local_data.get("user_id")))
 
     @app.callback(
         Output("page-content", "children"),
@@ -82,18 +82,18 @@ def register_main_callback(app):
         """
         Main callback for handling page routing and authentication.
 
-        PERFORMANCE OPTIMIZATION (Phase 4E):
-        - Added comprehensive profiling to track duplicate executions
-        - Added timing logs to identify bottlenecks
-        - Added unique call ID for tracking execution flow
-        - Added early return when triggered by local-store with unchanged pathname (Phase 4E-2)
+        Includes performance optimizations to prevent duplicate processing
+        when authentication updates trigger local-store changes.
 
         Args:
-            pathname (str): Current URL pathname
-            local_data (dict): Local storage data containing authentication information
+            pathname: Current URL pathname.
+            local_data: Local storage data containing authentication information.
+            theme_store: Theme store data (light/dark).
+            cached_project_data: Cached project data.
+            dashboard_init_data: Dashboard initialization data.
 
         Returns:
-            tuple: (page_content, header, pathname, local_data)
+            Tuple of (page_content, header, pathname, local_data).
         """
         import time
         import uuid
@@ -277,20 +277,16 @@ def register_main_callback(app):
     # )
 
 
-def register_all_callbacks(app):
+def register_all_callbacks(app) -> None:
     """
-    LEGACY: Register all callbacks for the application (single-app architecture).
+    Register all callbacks for the application (deprecated).
 
-    NOTE: This function is NO LONGER USED in the multi-app architecture.
-    Callback registration now happens in:
-      - depictio/dash/pages/management_app.py (Management app)
-      - depictio/dash/pages/dashboard_viewer.py (Viewer app)
-      - depictio/dash/pages/dashboard_editor.py (Editor app - future)
-
-    DEPRECATED ARCHITECTURE: This was for the old single-app with lazy loading.
+    Deprecated:
+        This function is no longer used in the multi-app architecture.
+        Callback registration now happens in page-specific modules.
 
     Args:
-        app (dash.Dash): The Dash application instance
+        app: The Dash application instance.
     """
     # DEPRECATED: This callback registration is no longer used
     logger.warning(
@@ -343,21 +339,16 @@ def register_all_callbacks(app):
     # register_admin_analytics_callbacks(app)  # Commented out for performance
 
 
-def register_layout_callbacks(app):
+def register_layout_callbacks(app) -> None:
     """
-    LEGACY: Register core layout callbacks (single-app architecture).
+    Register core layout callbacks (deprecated).
 
-    NOTE: This function is NO LONGER USED in the multi-app architecture.
-    Layout callbacks are now registered in page-specific modules.
-
-    DEPRECATED - Used in old single-app architecture.
-    Multi-app architecture registers callbacks per app in:
-      - management_app.py: Header, save, draggable callbacks
-      - dashboard_viewer.py: Minimal header callbacks
-      - dashboard_editor.py: Edit mode callbacks (future)
+    Deprecated:
+        This function is no longer used in the multi-app architecture.
+        Layout callbacks are now registered in page-specific modules.
 
     Args:
-        app (dash.Dash): The Dash application instance
+        app: The Dash application instance.
     """
     from depictio.dash.layouts.draggable import register_callbacks_draggable
     from depictio.dash.layouts.header import register_callbacks_header
@@ -380,19 +371,16 @@ def register_layout_callbacks(app):
     # NOTE: No longer relevant in multi-app architecture
 
 
-def register_component_callbacks(app):
+def register_component_callbacks(app) -> None:
     """
-    LEGACY: Register callbacks for UI components (single-app architecture).
+    Register callbacks for UI components (deprecated).
 
-    NOTE: This function is NO LONGER USED in the multi-app architecture.
-    Component callbacks are now registered per app in:
-      - dashboard_viewer.py: All component rendering callbacks
-      - dashboard_editor.py: Component design callbacks (future)
-
-    DEPRECATED - Used in old single-app architecture.
+    Deprecated:
+        This function is no longer used in the multi-app architecture.
+        Component callbacks are now registered per app in page modules.
 
     Args:
-        app (dash.Dash): The Dash application instance
+        app: The Dash application instance.
     """
     # Import core callback registration functions
     from depictio.dash.modules.card_component.callbacks import (
