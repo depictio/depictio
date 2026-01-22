@@ -1342,6 +1342,7 @@ def _check_deltatables(dc_ids: list[str], token: str) -> bool:
                     return True
         else:
             logger.error(f"Batch deltatable check failed: {batch_response.text}")
+            return _check_deltatables_fallback(dc_ids, token)
     except Exception as e:
         logger.error(f"Batch deltatable check exception: {e}")
         # Fallback to individual checks
