@@ -186,19 +186,13 @@ class TestAsyncFetchUserFromEmail:
         test_email = "test@example.com"
 
         # Set up mocks
-        with (
-            patch(
-                "depictio.api.v1.endpoints.user_endpoints.core_functions.UserBeanie.find_one",
-                new_callable=AsyncMock,
-            ) as mock_user_find_one,
-            patch(
-                "depictio.api.v1.endpoints.user_endpoints.core_functions.format_pydantic"
-            ) as mock_format_pydantic,
-        ):
+        with patch(
+            "depictio.api.v1.endpoints.user_endpoints.core_functions.UserBeanie.find_one",
+            new_callable=AsyncMock,
+        ) as mock_user_find_one:
             # Configure mocks
             mock_user = MagicMock(spec=UserBeanie)
             mock_user_find_one.return_value = mock_user
-            mock_format_pydantic.return_value = "formatted_user_output"
 
             # Act
             result = await _async_fetch_user_from_email(test_email)
