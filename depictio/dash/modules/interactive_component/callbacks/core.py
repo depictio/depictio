@@ -43,19 +43,14 @@ def register_core_callbacks(app):
                                   triggered_id.includes('reset-all-filters-button');
 
             if (!is_reset_trigger) {
-                // Not a reset button - preserve existing value from store
-                console.log('📥 Non-reset trigger for ' + component_index + ', preserving store value');
-                if (store_data && store_data.interactive_components_values) {
-                    var components = store_data.interactive_components_values;
-                    for (var i = 0; i < components.length; i++) {
-                        if (components[i].index === component_index) {
-                            var existing_value = components[i].value;
-                            console.log('✅ Preserving existing value for ' + component_index + ':', existing_value);
-                            return existing_value;
-                        }
-                    }
-                }
-                console.log('No store value found for ' + component_index + ', no update');
+                // Not a reset button - DO NOT update the component value
+                // Previously this tried to "preserve" the store value, but that caused race conditions:
+                // 1. User selects value -> component value = ['selected']
+                // 2. This callback fires (triggered by button init/re-render)
+                // 3. Store hasn't updated yet, so store value = [] (stale)
+                // 4. Returning store value overwrites user's selection
+                // FIX: Always return no_update when not a reset trigger
+                console.log('📥 Non-reset trigger for ' + component_index + ', skipping (no_update)');
                 return window.dash_clientside.no_update;
             }
 

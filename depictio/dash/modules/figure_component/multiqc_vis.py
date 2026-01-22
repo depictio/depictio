@@ -9,6 +9,7 @@ import hashlib
 import os
 import tempfile
 import threading
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -139,7 +140,8 @@ def _get_local_path_for_s3(s3_location: str, use_cache: bool = True) -> str:
         # we'll use a simpler approach: download to a persistent cache directory
 
         # Create a cache directory structure that mirrors S3
-        cache_base = settings.s3_cache.cache_dir
+        # Expand ~ to home directory for persistent caching
+        cache_base = os.path.expanduser(settings.s3_cache.cache_dir)
         os.makedirs(cache_base, exist_ok=True)
 
         # Parse S3 path to create cache path
@@ -491,11 +493,18 @@ def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = Tru
             logger.info("🔓 Released MultiQC lock")
             return False
 
-        # Cache the FULL report object (includes all plot data)
-        logger.info("💾 Caching MultiQC report...")
+        # Cache the report in memory only (Redis can't serialize module objects)
+        # The multiqc.report object contains Python modules that fail pickle serialization
+        # Memory cache is sufficient since it persists for the lifetime of the Dash process
+        logger.info("💾 Caching MultiQC report (memory-only, Redis incompatible)...")
         try:
-            cache.set(cache_key, multiqc.report, ttl=7200)
-            logger.info(f"✅ Report cached: {cache_key}")
+            # Use memory-only caching by bypassing Redis for this object type
+            cache._memory_cache[cache_key] = {
+                "data": multiqc.report,
+                "cached_at": time.time(),
+                "ttl": 7200,
+            }
+            logger.info(f"✅ Report cached in memory: {cache_key}")
         except Exception as e:
             logger.warning(f"⚠️ Failed to cache report: {e}")
 
@@ -593,9 +602,69 @@ def create_multiqc_plot(
     return fig
 
 
+def _filter_heatmap_trace(trace, samples_set: set) -> None:
+    """Filter heatmap trace to show only matching samples."""
+    x_data = list(trace.x) if trace.x is not None else []
+    y_data = list(trace.y) if trace.y is not None else []
+    z_data = list(trace.z) if trace.z is not None else []
+
+    x_matches = [i for i, x in enumerate(x_data) if str(x) in samples_set]
+    y_matches = [i for i, y in enumerate(y_data) if str(y) in samples_set]
+
+    logger.debug(
+        f"Heatmap filtering: x has {len(x_matches)}/{len(x_data)} matches, "
+        f"y has {len(y_matches)}/{len(y_data)} matches"
+    )
+
+    # Determine which axis contains samples (use the one with more matches)
+    if y_matches and len(y_matches) >= len(x_matches):
+        trace.y = [y_data[i] for i in y_matches]
+        if z_data:
+            trace.z = [z_data[i] for i in y_matches if i < len(z_data)]
+        logger.debug(f"Filtered heatmap to {len(y_matches)} rows (y-axis)")
+    elif x_matches:
+        trace.x = [x_data[i] for i in x_matches]
+        if z_data:
+            trace.z = [[row[i] for i in x_matches if i < len(row)] for row in z_data]
+        logger.debug(f"Filtered heatmap to {len(x_matches)} columns (x-axis)")
+
+
+def _filter_categorical_trace(trace, samples_set: set) -> None:
+    """Filter bar/box/violin trace to show only matching samples."""
+    if hasattr(trace, "name") and trace.name:
+        trace.visible = trace.name in samples_set
+        return
+
+    # Filter axis data when trace doesn't have a sample name
+    orientation = getattr(trace, "orientation", "v")
+    is_horizontal = orientation == "h"
+
+    sample_axis = list(trace.y if is_horizontal else trace.x) or []
+    value_axis = list(trace.x if is_horizontal else trace.y) or []
+
+    indices = [i for i, s in enumerate(sample_axis) if str(s) in samples_set]
+    if not indices:
+        return
+
+    filtered_samples = [sample_axis[i] for i in indices]
+    filtered_values = [value_axis[i] for i in indices if i < len(value_axis)]
+
+    if is_horizontal:
+        trace.y = filtered_samples
+        trace.x = filtered_values
+    else:
+        trace.x = filtered_samples
+        trace.y = filtered_values
+
+
 def filter_samples_in_plot(fig: go.Figure, samples_to_show: List[str]) -> go.Figure:
     """
     Filter which samples are visible in a MultiQC plot.
+
+    Handles different trace types:
+    - Heatmap: Filter rows (y-axis) or columns (x-axis) depending on where samples are
+    - Bar/Box/Violin: Filter by trace.name or x/y axis data
+    - Default (scatter, etc.): Filter by trace.name visibility
 
     Args:
         fig: Plotly figure to filter
@@ -605,13 +674,18 @@ def filter_samples_in_plot(fig: go.Figure, samples_to_show: List[str]) -> go.Fig
         Modified Plotly figure with filtered samples
     """
     try:
-        # Hide traces that don't match the samples to show
+        samples_set = set(str(s) for s in samples_to_show)
+
         for trace in fig.data:
-            if hasattr(trace, "name") and trace.name:
-                # Show trace if its name is in the samples list
-                trace.visible = trace.name in samples_to_show
+            trace_type = getattr(trace, "type", "").lower()
+
+            if trace_type == "heatmap":
+                _filter_heatmap_trace(trace, samples_set)
+            elif trace_type in ["bar", "box", "violin"]:
+                _filter_categorical_trace(trace, samples_set)
+            elif hasattr(trace, "name") and trace.name:
+                trace.visible = trace.name in samples_set
             else:
-                # Keep traces without names visible (usually summary data)
                 trace.visible = True
 
         visible_traces = sum(1 for trace in fig.data if getattr(trace, "visible", True))

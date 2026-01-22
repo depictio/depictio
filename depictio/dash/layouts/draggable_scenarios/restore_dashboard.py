@@ -46,7 +46,13 @@ USE_SIMPLE_LAYOUT_FOR_TESTING = True  # ENABLED - Use new dual-panel grid system
 
 
 def render_dashboard(
-    stored_metadata, edit_components_button, dashboard_id, theme, TOKEN, init_data=None
+    stored_metadata,
+    edit_components_button,
+    dashboard_id,
+    theme,
+    TOKEN,
+    init_data=None,
+    project_id=None,
 ):
     """
     Render dashboard components using build functions.
@@ -63,6 +69,7 @@ def render_dashboard(
         theme: Theme name ("light" or "dark")
         TOKEN: Access token
         init_data: Optional consolidated init data for API optimization
+        project_id: Optional project ID for cross-DC link resolution
 
     Returns:
         List of rendered components with callback infrastructure
@@ -87,6 +94,9 @@ def render_dashboard(
         child_metadata["build_frame"] = True
         child_metadata["access_token"] = TOKEN
         child_metadata["theme"] = theme
+        # Add project_id for cross-DC link resolution (used by MultiQC and other components)
+        if project_id:
+            child_metadata["project_id"] = str(project_id)
 
         # Add init_data if available (API optimization)
         if init_data:
@@ -701,6 +711,7 @@ def load_depictio_data_sync(
                 theme,
                 local_data["access_token"],
                 init_data=init_data,  # Pass consolidated init data to components
+                project_id=dashboard_data.project_id,  # Pass project_id for cross-DC link resolution
             )
             render_duration_ms = (time.time() - start_render) * 1000
             logger.info(f"⏱️ PROFILING: render_dashboard took {render_duration_ms:.1f}ms")
