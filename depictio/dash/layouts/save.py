@@ -1,3 +1,16 @@
+"""
+Dashboard Save Module
+
+This module provides functionality for saving dashboard state and metadata.
+It includes callbacks for persisting dashboard layouts, component metadata,
+and user preferences to the database via API calls.
+
+The module is organized into:
+- Layout validation and cleanup functions
+- Minimal save callback registration for lightweight saves
+- (Backup) Complex save callback for reference (commented out)
+"""
+
 import json
 
 import dash
@@ -106,7 +119,28 @@ def register_callbacks_save_lite(app):
         left_panel_layouts,
         right_panel_layouts,
     ):
-        """Minimal save: Capture component metadata → Build DashboardData → Save to DB"""
+        """
+        Minimal dashboard save callback.
+
+        Captures component metadata and layout positions, validates with Pydantic,
+        and persists to database via API. This is a lightweight save that focuses
+        on essential dashboard state.
+
+        Args:
+            n_clicks: Number of times save button has been clicked.
+            pathname: Current URL pathname containing dashboard ID.
+            local_store: Local storage data containing access token.
+            stored_metadata: List of component metadata from stored-metadata-component stores.
+            interactive_metadata: List of interactive component metadata.
+            left_panel_layouts: Layout data from left panel grid.
+            right_panel_layouts: Layout data from right panel grid.
+
+        Returns:
+            list: Notification data for success/failure feedback to user.
+
+        Raises:
+            dash.exceptions.PreventUpdate: When save should be skipped (no auth, stepper page).
+        """
         from depictio.models.models.dashboards import DashboardData
 
         logger.info("=== MINIMAL SAVE CALLBACK TRIGGERED ===")

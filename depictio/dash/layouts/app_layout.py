@@ -41,8 +41,19 @@ from depictio.dash.layouts.users_management import layout as users_management_la
 
 
 def return_create_dashboard_button(email, is_anonymous=False):
-    # For anonymous users, show "Login to Create Dashboards" button that redirects to profile
-    # For authenticated users, show normal "+ New Dashboard" button
+    """
+    Create a dashboard creation button with user-appropriate styling.
+
+    For anonymous users, shows "Login to Create Dashboards" button.
+    For authenticated users, shows normal "+ New Dashboard" button.
+
+    Args:
+        email: User email address for button ID.
+        is_anonymous: Whether the user is anonymous (not fully authenticated).
+
+    Returns:
+        dmc.Button: Styled button component for dashboard creation.
+    """
     button_text = "+ New Dashboard" if not is_anonymous else "Login to Create Dashboards"
     button_color = (
         "orange" if not is_anonymous else "blue"
@@ -65,8 +76,19 @@ def return_create_dashboard_button(email, is_anonymous=False):
 
 
 def return_create_project_button(email, is_anonymous=False):
-    # For anonymous users, show "Login to Create Projects" button that redirects to profile
-    # For authenticated users, show normal "+ Create Project" button
+    """
+    Create a project creation button with user-appropriate styling.
+
+    For anonymous users, shows "Login to Create Projects" button.
+    For authenticated users, shows normal "+ Create Project" button.
+
+    Args:
+        email: User email address (unused, kept for API consistency).
+        is_anonymous: Whether the user is anonymous (not fully authenticated).
+
+    Returns:
+        dmc.Button: Styled button component for project creation.
+    """
     button_text = "+ Create Project" if not is_anonymous else "Login to Create Projects"
     button_color = (
         "teal" if not is_anonymous else "blue"  # Use teal color matching colors.py
@@ -90,6 +112,18 @@ def return_create_project_button(email, is_anonymous=False):
 
 
 def handle_unauthenticated_user(pathname):
+    """
+    Handle routing for unauthenticated users.
+
+    Redirects all unauthenticated requests to the login/auth page.
+
+    Args:
+        pathname: The URL pathname the user was trying to access.
+
+    Returns:
+        tuple: (layout, header, redirect_path, local_data) where local_data
+               indicates logged_in=False.
+    """
     header = create_default_header("Welcome to Depictio")
     logger.info("User not logged in")
 
@@ -370,7 +404,17 @@ def handle_authenticated_user(
 
 
 def create_default_header(text):
-    # Return content for AppShellHeader - Simple text without sidebar button
+    """
+    Create a simple header with a text title.
+
+    Returns content for AppShellHeader - simple text without sidebar button.
+
+    Args:
+        text: The title text to display in the header.
+
+    Returns:
+        dmc.Group: Header content component with styled title.
+    """
     return dmc.Group(
         [
             dmc.Text(
@@ -550,7 +594,18 @@ def create_admin_header(text):
 
 
 def create_header_with_button(text, button):
-    # Return content for AppShellHeader - Simple text and button without sidebar button
+    """
+    Create a header with a title and action button.
+
+    Returns content for AppShellHeader - title text on the left, action button on the right.
+
+    Args:
+        text: The title text to display in the header.
+        button: A button component to display on the right side.
+
+    Returns:
+        dmc.Group: Header content component with title and button.
+    """
     return dmc.Group(
         [
             dmc.Text(
@@ -602,6 +657,24 @@ def create_dashboard_layout(
     cached_project_data=None,
     edit_mode: bool = False,
 ):
+    """
+    Create the main dashboard layout with draggable components.
+
+    Constructs the dashboard view including the draggable grid, backend stores,
+    progressive loading indicators, and workflow logo overlay.
+
+    Args:
+        depictio_dash_data: Dashboard data including stored_layout_data and stored_metadata.
+        dashboard_id: Unique identifier for the dashboard.
+        local_data: User authentication data with access_token.
+        backend_components: Backend store components from design_header.
+        theme: Current theme ("light" or "dark").
+        cached_project_data: Pre-fetched project data to avoid redundant API calls.
+        edit_mode: If True, enables edit controls. If False, view-only mode.
+
+    Returns:
+        dmc.Container: Complete dashboard layout container.
+    """
     import time
 
     start_time_total = time.time()
@@ -728,6 +801,19 @@ def create_dashboard_layout(
 
 
 def create_app_layout():
+    """
+    Create the root application layout with Mantine AppShell structure.
+
+    Sets up the complete Dash application layout including:
+    - MantineProvider for theming
+    - URL routing (dcc.Location)
+    - Global stores (authentication, theme, sidebar state, etc.)
+    - Analytics tracking
+    - AppShell structure with navbar, header, and main content area
+
+    Returns:
+        dmc.MantineProvider: Root layout component wrapping the entire application.
+    """
     return dmc.MantineProvider(
         id="mantine-provider",
         forceColorScheme="light",  # Default to light, will be updated by callback

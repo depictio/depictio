@@ -1,3 +1,20 @@
+"""
+Interactive Component Utilities.
+
+This module provides utility functions for building and configuring interactive
+filter components in dashboards. It supports various component types including:
+- RangeSlider: Numeric range filtering with linear and logarithmic scales
+- Select/MultiSelect: Categorical selection filtering
+- SegmentedControl: Button-based categorical filtering
+- DateRangePicker: Date range filtering
+
+Key features:
+- Smart mark generation for sliders (linear and logarithmic)
+- Default state management for filter reset functionality
+- Data loading and filtering with cached column specifications
+- Component frame building with proper styling
+"""
+
 import math
 from datetime import datetime
 
@@ -51,7 +68,7 @@ def build_interactive_frame(index, children=None, show_border=False):
             },
             w="100%",
             h="100%",
-            p="0",
+            p=0,
             radius="md",
             withBorder=show_border,
         )
@@ -80,7 +97,7 @@ def build_interactive_frame(index, children=None, show_border=False):
             },
             w="100%",
             h="100%",
-            p="0",
+            p=0,
             radius="md",
             style={
                 "width": "100%",
@@ -578,8 +595,44 @@ def apply_log_transformation(series, shift=1e-6):
         return transformed_series, 0.0
 
 
-def build_interactive(**kwargs):
-    """Build an interactive component (filter) for the dashboard."""
+def build_interactive(**kwargs) -> dmc.Paper:
+    """
+    Build an interactive filter component for the dashboard.
+
+    Creates various types of interactive filter components (Select, MultiSelect,
+    RangeSlider, DateRangePicker, SegmentedControl, etc.) based on the specified
+    parameters and data column characteristics.
+
+    Supported interactive_component_type values:
+    - Select: Single selection dropdown
+    - MultiSelect: Multiple selection dropdown
+    - SegmentedControl: Radio-button style selector
+    - RangeSlider: Numeric range slider
+    - DateRangePicker: Date range picker
+    - Slider: Single value slider
+    - TextInput: Free text input
+
+    Args:
+        **kwargs: Keyword arguments including:
+            index (str): Unique component identifier.
+            title (str): Display title for the filter.
+            wf_id (str): Workflow ID for data loading.
+            dc_id (str): Data collection ID for data loading.
+            column_name (str): Name of the column to filter.
+            column_type (str): Data type of the column.
+            interactive_component_type (str): Type of filter component.
+            value: Initial/current value for the component.
+            df: Pre-loaded DataFrame (optional).
+            build_frame (bool): Whether to wrap in frame container.
+            access_token (str): Authentication token for API calls.
+            stepper (bool): Whether in stepper (creation) mode.
+            parent_index (str): Parent component index if nested.
+            scale (str): "linear" or "log" for numeric components.
+            color (str): Custom color for component styling.
+
+    Returns:
+        dmc.Paper: The complete interactive filter component wrapped in a container.
+    """
     index = kwargs.get("index")
     title = kwargs.get("title")
     wf_id = kwargs.get("wf_id")

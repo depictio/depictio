@@ -1471,6 +1471,178 @@ def create_data_collections_landing_ui():
 layout = create_data_collections_landing_ui()
 
 
+# =============================================================================
+# Helper functions for project data callbacks
+# =============================================================================
+
+
+def _find_data_collection_by_tag(
+    project_data: dict, dc_tag: str, selected_workflow_id: str | None = None
+) -> tuple[dict | None, str | None, dict | None]:
+    """
+    Find a data collection by its tag in project data.
+
+    Args:
+        project_data: Project data dictionary containing data collections.
+        dc_tag: Data collection tag to search for.
+        selected_workflow_id: Optional workflow ID for advanced projects.
+
+    Returns:
+        Tuple of (data_collection_dict, dc_id, workflow_info)
+    """
+    selected_dc = None
+    dc_id = None
+    workflow_info = None
+
+    if project_data.get("project_type") == "basic":
+        data_collections = project_data.get("data_collections", [])
+        for dc in data_collections:
+            if dc.get("data_collection_tag") == dc_tag:
+                selected_dc = dc
+                dc_id = dc.get("id")
+                break
+    else:
+        if selected_workflow_id:
+            workflows = project_data.get("workflows", [])
+            for workflow in workflows:
+                if str(workflow.get("id")) == selected_workflow_id:
+                    workflow_info = workflow
+                    for dc in workflow.get("data_collections", []):
+                        if dc.get("data_collection_tag") == dc_tag:
+                            selected_dc = dc
+                            dc_id = dc.get("id")
+                            break
+                    break
+
+    return selected_dc, dc_id, workflow_info
+
+
+def _build_project_store_data(
+    project, project_id: str, all_data_collections: list | None = None
+) -> dict:
+    """
+    Build project store data dictionary from project response.
+
+    Args:
+        project: ProjectResponse object.
+        project_id: Project ID string.
+        all_data_collections: Optional list of all data collections (for basic projects).
+
+    Returns:
+        Dictionary containing project store data.
+    """
+    if project.project_type == "basic":
+        if all_data_collections is None:
+            all_data_collections = []
+            if project.data_collections:
+                all_data_collections.extend(project.data_collections)
+            if project.workflows:
+                for workflow in project.workflows:
+                    if workflow.data_collections:
+                        all_data_collections.extend(workflow.data_collections)
+
+        return {
+            "project_id": project_id,
+            "project_type": project.project_type,
+            "workflows": [w.model_dump() for w in project.workflows] if project.workflows else [],
+            "data_collections": [dc.model_dump() for dc in all_data_collections],
+            "permissions": project.permissions.dict() if project.permissions else {},
+        }
+    else:
+        return {
+            "project_id": project_id,
+            "project_type": project.project_type,
+            "workflows": [w.model_dump() for w in project.workflows] if project.workflows else [],
+            "data_collections": [dc.model_dump() for dc in project.data_collections]
+            if project.data_collections
+            else [],
+            "permissions": project.permissions.dict() if project.permissions else {},
+        }
+
+
+def _create_mock_workflow_from_data(workflow_data: dict):
+    """
+    Create a mock workflow object from workflow data dictionary.
+
+    Args:
+        workflow_data: Dictionary containing workflow data.
+
+    Returns:
+        SimpleNamespace object mimicking a workflow.
+    """
+    from types import SimpleNamespace
+
+    mock_wf = SimpleNamespace()
+    mock_wf.id = workflow_data.get("id")
+    mock_wf.name = workflow_data.get("name", "Unknown")
+    mock_wf.engine = SimpleNamespace()
+    mock_wf.engine.name = workflow_data.get("engine", {}).get("name", "unknown")
+    mock_wf.data_collections = workflow_data.get("data_collections", [])
+    mock_wf.repository_url = workflow_data.get("repository_url")
+    mock_wf.catalog = SimpleNamespace() if workflow_data.get("catalog") else None
+    if mock_wf.catalog:
+        mock_wf.catalog.name = workflow_data.get("catalog", {}).get("name", "Unknown")
+    mock_wf.version = workflow_data.get("version")
+    return mock_wf
+
+
+def _create_mock_data_collections_from_workflow(workflow_data: dict) -> list:
+    """
+    Create mock data collection objects from workflow data.
+
+    Args:
+        workflow_data: Dictionary containing workflow data with data_collections.
+
+    Returns:
+        List of SimpleNamespace objects mimicking data collections.
+    """
+    from types import SimpleNamespace
+
+    mock_dcs = []
+    if "data_collections" in workflow_data:
+        for dc_data in workflow_data["data_collections"]:
+            mock_dc = SimpleNamespace()
+            mock_dc.data_collection_tag = dc_data.get("data_collection_tag", "Unknown DC")
+            mock_dc.config = SimpleNamespace()
+            mock_dc.config.type = dc_data.get("config", {}).get("type", "unknown")
+            mock_dc.config.metatype = dc_data.get("config", {}).get("metatype", "Unknown")
+            mock_dcs.append(mock_dc)
+    return mock_dcs
+
+
+def _handle_modal_result(
+    success: bool, result: dict | None, project_data: dict, success_action: str
+) -> tuple:
+    """
+    Handle modal submission result with consistent error/success handling.
+
+    Args:
+        success: Whether the operation succeeded.
+        result: API result dictionary.
+        project_data: Current project data for refresh.
+        success_action: Description of successful action for logging.
+
+    Returns:
+        Tuple of (modal_opened, updated_project_data, error_message, error_style)
+    """
+    from datetime import datetime
+
+    if success and result and result.get("success"):
+        logger.info(f"{success_action}: {result.get('message')}")
+        updated_project_data = project_data.copy()
+        updated_project_data["refresh_timestamp"] = datetime.now().isoformat()
+        return False, updated_project_data, "", {"display": "none"}
+    else:
+        error_msg = result.get("message", "Unknown error") if result else "API call failed"
+        logger.error(f"Failed: {error_msg}")
+        return (
+            dash.no_update,
+            dash.no_update,
+            f"Operation failed: {error_msg}",
+            {"display": "block"},
+        )
+
+
 def register_project_data_collections_callbacks(app):
     """
     Register callbacks for project data collections functionality.
@@ -1500,7 +1672,23 @@ def register_project_data_collections_callbacks(app):
     def load_dc_viewer_data(
         n_clicks, row_limit, selected_dc_data, project_data, local_data, theme_data
     ):
-        """Load and display data in the data collection viewer using AG Grid."""
+        """
+        Load and display data in the data collection viewer using AG Grid.
+
+        Fetches data from the selected data collection's Delta table and renders
+        it in an AG Grid component with pagination, sorting, and filtering.
+
+        Args:
+            n_clicks: Number of times load button has been clicked.
+            row_limit: Maximum number of rows to load from the Delta table.
+            selected_dc_data: Selected data collection tag from store.
+            project_data: Project data dictionary containing data collections.
+            local_data: Local storage data containing access token.
+            theme_data: Current theme for AG Grid styling.
+
+        Returns:
+            Dash component containing AG Grid with data or error alert.
+        """
         if not n_clicks or not selected_dc_data:
             return dmc.Center(
                 [
@@ -1690,7 +1878,22 @@ def register_project_data_collections_callbacks(app):
         prevent_initial_call=True,
     )
     def load_project_data_and_workflows(pathname, local_data, project_data_store):
-        """Load project data and populate workflows manager based on project type."""
+        """
+        Load project data and populate workflows manager based on project type.
+
+        Handles initial page load and data refresh. For basic projects, flattens
+        data collections from workflows. For advanced projects, displays workflow
+        manager with selectable workflows.
+
+        Args:
+            pathname: Current URL pathname containing project ID.
+            local_data: Local storage data containing access token.
+            project_data_store: Existing project data store (for refresh detection).
+
+        Returns:
+            Tuple of (project_store_data, workflows_section, data_collections_section,
+                      project_type_indicator)
+        """
         ctx_trigger = ctx.triggered_id
 
         # If triggered by project-data-store change (refresh), handle differently
@@ -1900,7 +2103,20 @@ def register_project_data_collections_callbacks(app):
         prevent_initial_call=True,
     )
     def handle_workflow_selection(workflow_clicks, project_data):
-        """Handle workflow card selection for advanced projects only."""
+        """
+        Handle workflow card selection for advanced projects.
+
+        Updates the selected workflow store and refreshes the data collections
+        manager section to display the selected workflow's data collections.
+        Only active for advanced project types.
+
+        Args:
+            workflow_clicks: List of click counts for workflow cards.
+            project_data: Project data dictionary containing workflows.
+
+        Returns:
+            Tuple of (selected_workflow_id, data_collections_section)
+        """
         if not any(workflow_clicks) or not project_data:
             return dash.no_update, dash.no_update
 
@@ -1957,7 +2173,20 @@ def register_project_data_collections_callbacks(app):
         prevent_initial_call=True,
     )
     def update_workflow_selection_visual(selected_workflow_id, project_data):
-        """Update workflow cards to show selected state."""
+        """
+        Update workflow cards to show selected state.
+
+        Recreates the workflows manager section with updated visual styling
+        to highlight the currently selected workflow. Only active for
+        advanced project types.
+
+        Args:
+            selected_workflow_id: ID of the currently selected workflow.
+            project_data: Project data dictionary containing workflows.
+
+        Returns:
+            Updated workflows manager section component.
+        """
         if not project_data or project_data.get("project_type") != "advanced":
             return dash.no_update
 
@@ -1994,7 +2223,19 @@ def register_project_data_collections_callbacks(app):
         prevent_initial_call=True,
     )
     def initialize_data_collection_viewer(pathname, theme_data):
-        """Initialize the data collection viewer with empty state."""
+        """
+        Initialize the data collection viewer with empty state.
+
+        Called on URL change to reset the viewer to its default empty state,
+        showing a placeholder message to select a data collection.
+
+        Args:
+            pathname: Current URL pathname.
+            theme_data: Current theme setting for consistent styling.
+
+        Returns:
+            Empty data collection viewer content component.
+        """
         if not pathname or not pathname.startswith("/project/") or not pathname.endswith("/data"):
             return dash.no_update
 
@@ -2018,7 +2259,23 @@ def register_project_data_collections_callbacks(app):
     def handle_data_collection_selection(
         dc_clicks, project_data, selected_workflow_id, local_data, theme_data
     ):
-        """Handle data collection card selection and populate viewer."""
+        """
+        Handle data collection card selection and populate viewer.
+
+        Finds the selected data collection from project data, fetches its
+        delta table information, and populates the viewer with detailed
+        information including configuration and storage details.
+
+        Args:
+            dc_clicks: List of click counts for data collection cards.
+            project_data: Project data dictionary containing data collections.
+            selected_workflow_id: Currently selected workflow ID (for advanced projects).
+            local_data: Local storage data containing access token.
+            theme_data: Current theme setting for styling.
+
+        Returns:
+            Tuple of (selected_dc_tag, viewer_content)
+        """
         if not any(dc_clicks) or not project_data:
             return dash.no_update, dash.no_update
 
@@ -2295,7 +2552,20 @@ def register_project_data_collections_callbacks(app):
         prevent_initial_call=True,
     )
     def handle_data_collection_actions(upload_clicks, import_clicks, template_clicks):
-        """Handle data collection action button clicks."""
+        """
+        Handle data collection action button clicks.
+
+        Placeholder callback for future functionality including file upload,
+        URL import, and template-based creation of data collections.
+
+        Args:
+            upload_clicks: Click count for upload button.
+            import_clicks: Click count for URL import button.
+            template_clicks: Click count for template creation button.
+
+        Returns:
+            Alert component indicating feature status.
+        """
         ctx_trigger = ctx.triggered_id
 
         if ctx_trigger == "upload-data-collection-btn":
@@ -2340,7 +2610,20 @@ def register_project_data_collections_callbacks(app):
         prevent_initial_call=True,
     )
     def update_joins_visualization(project_data, selected_workflow_id):
-        """Update joins visualization based on project data."""
+        """
+        Update joins visualization based on project data.
+
+        Generates cytoscape elements to visualize relationships between
+        data collections when join configurations are present. Shows
+        sample visualization if multiple data collections exist without joins.
+
+        Args:
+            project_data: Project data dictionary containing data collections.
+            selected_workflow_id: Currently selected workflow ID (for advanced projects).
+
+        Returns:
+            Tuple of (section_style, cytoscape_elements)
+        """
 
         if not project_data:
             return {"display": "none"}, []
@@ -2393,7 +2676,19 @@ def register_project_data_collections_callbacks(app):
         ],
     )
     def update_separator_visibility(file_format, separator_value):
-        """Control visibility of separator options based on file format."""
+        """
+        Control visibility of separator options based on file format.
+
+        Shows separator selection for delimited file formats (CSV, TSV) and
+        custom separator input when 'custom' is selected.
+
+        Args:
+            file_format: Selected file format (csv, tsv, parquet, etc.).
+            separator_value: Selected separator option.
+
+        Returns:
+            Tuple of (separator_container_style, custom_separator_container_style)
+        """
         # Show separator options only for delimited file formats
         delimited_formats = ["csv", "tsv"]
         show_separator = file_format in delimited_formats
@@ -2488,7 +2783,19 @@ def register_project_data_collections_callbacks(app):
         prevent_initial_call=True,
     )
     def control_create_button_access(project_data, local_data):
-        """Control access to Create Data Collection button based on user role."""
+        """
+        Control access to Create Data Collection button based on user role.
+
+        Disables the button for users who are only viewers of the project.
+        Owners and editors can create new data collections.
+
+        Args:
+            project_data: Project data dictionary containing permissions.
+            local_data: Local storage data containing user ID.
+
+        Returns:
+            bool: True to disable button (viewer), False to enable (owner/editor).
+        """
         return _check_user_is_viewer(project_data, local_data)
 
     @app.callback(
@@ -2504,7 +2811,19 @@ def register_project_data_collections_callbacks(app):
         prevent_initial_call=True,
     )
     def control_dc_action_buttons_access(project_data, local_data):
-        """Control access to data collection action buttons based on user role."""
+        """
+        Control access to data collection action buttons based on user role.
+
+        Disables overwrite, edit, and delete buttons for viewers. Returns
+        disabled state lists matching the number of data collections.
+
+        Args:
+            project_data: Project data dictionary containing data collections.
+            local_data: Local storage data containing user ID.
+
+        Returns:
+            Tuple of three lists of disabled states for each button type.
+        """
         is_viewer = _check_user_is_viewer(project_data, local_data)
 
         # Get the number of data collections to return the right number of disabled states
@@ -2536,7 +2855,20 @@ def register_project_data_collections_callbacks(app):
         prevent_initial_call=True,
     )
     def toggle_data_collection_modal(open_clicks, cancel_clicks, opened):
-        """Handle opening and closing of data collection creation modal."""
+        """
+        Handle opening and closing of data collection creation modal.
+
+        Opens modal when create button is clicked, closes when cancel is clicked.
+        Hides error alert when modal state changes.
+
+        Args:
+            open_clicks: Click count for create button.
+            cancel_clicks: Click count for cancel button.
+            opened: Current modal opened state.
+
+        Returns:
+            Tuple of (modal_opened_state, error_alert_style)
+        """
         if not ctx.triggered:
             return False, {"display": "none"}
 
@@ -2561,7 +2893,20 @@ def register_project_data_collections_callbacks(app):
         prevent_initial_call=True,
     )
     def handle_file_upload(contents, filename, last_modified):
-        """Handle file upload and display file information."""
+        """
+        Handle file upload and display file information.
+
+        Decodes uploaded file, validates size against 5MB limit, and displays
+        file information card with name and size.
+
+        Args:
+            contents: Base64-encoded file contents.
+            filename: Original filename.
+            last_modified: File last modified timestamp.
+
+        Returns:
+            Component showing file info or error alert.
+        """
         if not contents or not filename:
             return []
 
@@ -2624,7 +2969,18 @@ def register_project_data_collections_callbacks(app):
         ],
     )
     def update_submit_button_state(name, file_contents):
-        """Enable/disable submit button based on form completeness."""
+        """
+        Enable/disable submit button based on form completeness.
+
+        Requires both a name and uploaded file for the button to be enabled.
+
+        Args:
+            name: Data collection name input value.
+            file_contents: Uploaded file contents.
+
+        Returns:
+            bool: True to disable button, False to enable.
+        """
         # Require name and file upload (data type has default value)
         if not name or not file_contents:
             return True
@@ -2647,7 +3003,23 @@ def register_project_data_collections_callbacks(app):
     def validate_file_with_polars(
         contents, file_format, separator, custom_separator, has_header, filename
     ):
-        """Validate uploaded file using polars and display detailed information."""
+        """
+        Validate uploaded file using polars and display detailed information.
+
+        Saves file temporarily, reads with polars using specified format options,
+        and displays row/column counts with column names preview.
+
+        Args:
+            contents: Base64-encoded file contents.
+            file_format: Selected file format for parsing.
+            separator: Selected delimiter character.
+            custom_separator: Custom delimiter if separator is 'custom'.
+            has_header: Whether file has header row.
+            filename: Original filename.
+
+        Returns:
+            Stack component with file info and data preview, or error alert.
+        """
         if not contents or not filename:
             return []
 
@@ -2839,7 +3211,30 @@ def register_project_data_collections_callbacks(app):
         project_data,
         local_data,
     ):
-        """Handle data collection creation submission with file processing."""
+        """
+        Handle data collection creation submission with file processing.
+
+        Validates inputs, calls API to create data collection, and updates
+        project store to trigger UI refresh on success.
+
+        Args:
+            submit_clicks: Submit button click count.
+            name: Data collection name.
+            description: Optional description.
+            data_type: Data type (e.g., 'table').
+            file_format: File format (csv, parquet, etc.).
+            separator: Delimiter character.
+            custom_separator: Custom delimiter if applicable.
+            compression: Compression type.
+            has_header: Whether file has header row.
+            file_contents: Base64-encoded file contents.
+            filename: Original filename.
+            project_data: Project data for refresh timestamp.
+            local_data: Local storage with access token.
+
+        Returns:
+            Tuple of (modal_opened, project_data, error_message, error_style)
+        """
         if not submit_clicks or not name or not file_contents or not filename:
             return dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
@@ -2945,7 +3340,21 @@ def register_project_data_collections_callbacks(app):
         prevent_initial_call=True,
     )
     def handle_dc_action_buttons(overwrite_clicks, edit_clicks, delete_clicks, project_data):
-        """Handle data collection action button clicks by creating appropriate modals."""
+        """
+        Handle data collection action button clicks by creating appropriate modals.
+
+        Determines which action button was clicked (overwrite, edit, or delete),
+        finds the corresponding data collection, and creates the appropriate modal.
+
+        Args:
+            overwrite_clicks: List of click counts for overwrite buttons.
+            edit_clicks: List of click counts for edit buttons.
+            delete_clicks: List of click counts for delete buttons.
+            project_data: Project data containing data collections.
+
+        Returns:
+            List containing the appropriate modal component, or empty list.
+        """
         ctx_trigger = ctx.triggered_id
 
         if not ctx_trigger or not any(
@@ -3050,7 +3459,22 @@ def register_project_data_collections_callbacks(app):
         prevent_initial_call=True,
     )
     def handle_edit_name_submit(submit_clicks, new_name, dc_id, project_data, local_data):
-        """Handle edit name modal submission."""
+        """
+        Handle edit name modal submission.
+
+        Validates inputs, calls API to update data collection name, and
+        triggers project data refresh on success.
+
+        Args:
+            submit_clicks: Submit button click count.
+            new_name: New name for the data collection.
+            dc_id: Data collection ID to update.
+            project_data: Project data for refresh timestamp.
+            local_data: Local storage with access token.
+
+        Returns:
+            Tuple of (modal_opened, project_data, error_message, error_style)
+        """
         if not submit_clicks or not new_name or not dc_id:
             return dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
@@ -3114,7 +3538,21 @@ def register_project_data_collections_callbacks(app):
         prevent_initial_call=True,
     )
     def handle_delete_submit(submit_clicks, dc_id, project_data, local_data):
-        """Handle delete modal submission."""
+        """
+        Handle delete modal submission.
+
+        Validates inputs, calls API to delete data collection, and
+        triggers project data refresh on success.
+
+        Args:
+            submit_clicks: Submit button click count.
+            dc_id: Data collection ID to delete.
+            project_data: Project data for refresh timestamp.
+            local_data: Local storage with access token.
+
+        Returns:
+            Tuple of (modal_opened, project_data, error_message, error_style)
+        """
         if not submit_clicks or not dc_id:
             return dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
@@ -3170,7 +3608,19 @@ def register_project_data_collections_callbacks(app):
         ],
     )
     def update_overwrite_submit_button_state(file_contents, validation_result):
-        """Enable/disable overwrite submit button based on file upload and validation."""
+        """
+        Enable/disable overwrite submit button based on file upload and validation.
+
+        Enables button only when file is uploaded and schema validation passes.
+        Checks validation result for green color or 'validation passed' text.
+
+        Args:
+            file_contents: Uploaded file contents.
+            validation_result: Schema validation result component(s).
+
+        Returns:
+            bool: True to disable button, False to enable.
+        """
         logger.debug(
             f"Button state update: file_contents={'[PRESENT]' if file_contents else '[MISSING]'}"
         )
@@ -3253,7 +3703,21 @@ def register_project_data_collections_callbacks(app):
         prevent_initial_call=True,
     )
     def handle_overwrite_file_upload(file_contents, filename, dc_id, local_data):
-        """Handle file upload for overwrite modal with schema validation."""
+        """
+        Handle file upload for overwrite modal with schema validation.
+
+        Uploads file, retrieves existing data collection schema from API,
+        and validates that new file has matching columns (excluding system columns).
+
+        Args:
+            file_contents: Base64-encoded uploaded file contents.
+            filename: Original filename.
+            dc_id: Data collection ID to overwrite.
+            local_data: Local storage with access token.
+
+        Returns:
+            Tuple of (file_info_component, validation_result_component)
+        """
         if not file_contents or not filename or not dc_id:
             return [], []
 
@@ -3480,7 +3944,23 @@ def register_project_data_collections_callbacks(app):
     def handle_overwrite_submit(
         submit_clicks, file_contents, filename, dc_id, project_data, local_data
     ):
-        """Handle overwrite modal submission."""
+        """
+        Handle overwrite modal submission.
+
+        Validates inputs, determines file format from extension, calls API
+        to overwrite data collection with new file, and triggers refresh.
+
+        Args:
+            submit_clicks: Submit button click count.
+            file_contents: Base64-encoded file contents.
+            filename: Original filename (used to detect format).
+            dc_id: Data collection ID to overwrite.
+            project_data: Project data for refresh timestamp.
+            local_data: Local storage with access token.
+
+        Returns:
+            Tuple of (modal_opened, project_data, error_message, error_style)
+        """
         if not submit_clicks or not file_contents or not filename or not dc_id:
             return dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
@@ -3559,7 +4039,18 @@ def register_project_data_collections_callbacks(app):
         prevent_initial_call=False,  # Allow initial call to show default state
     )
     def update_storage_size_display(project_data):
-        """Update the storage size display card with cumulative size of all data collections."""
+        """
+        Update the storage size display card with cumulative size of all data collections.
+
+        Calculates total storage used across all workflows' data collections
+        and displays with appropriate color coding (gray=zero, orange=<1GB, red=>=1GB).
+
+        Args:
+            project_data: Project data containing workflows with data collections.
+
+        Returns:
+            List of Text components showing formatted size and unit.
+        """
         if not project_data:
             return [
                 dmc.Text("0", size="lg", fw="bold", c="gray", ta="center"),

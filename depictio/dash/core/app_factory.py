@@ -71,8 +71,8 @@ def create_dash_app():
 
     # Configure Flask's logger to use custom logging settings
     server = app.server
-    server.logger.handlers = logger.handlers  # type: ignore[possibly-unbound-attribute]
-    server.logger.setLevel(logger.level)  # type: ignore[possibly-unbound-attribute]
+    server.logger.handlers = logger.handlers
+    server.logger.setLevel(logger.level)
 
     # PERFORMANCE OPTIMIZATION: Configure Flask to use orjson for JSON serialization
     # orjson is 10-16x faster than standard json library
@@ -107,8 +107,8 @@ def create_dash_app():
     # Configure static folder for Flask server
     # This is separate from Dash's assets folder
     static_folder = os.path.join(dash_root_path, "static")
-    server.static_folder = static_folder  # type: ignore[invalid-assignment]
-    server.static_url_path = "/static"  # type: ignore[invalid-assignment]
+    server.static_folder = static_folder
+    server.static_url_path = "/static"
 
     # Integrate Google Analytics via index_string
     integrate_google_analytics(app, title="Depictio")

@@ -1,3 +1,22 @@
+"""
+Draggable Dashboard Layout Module.
+
+This module provides the core dashboard layout system with dual-panel grid functionality.
+It handles component positioning, layout calculations, and grid management for interactive
+dashboards.
+
+Key features:
+- Dual-panel layout (left: filters, right: visualizations)
+- Automatic component positioning with collision detection
+- Saved layout restoration with position/size preservation
+- Grid item management (create, duplicate, delete)
+
+The module uses DashGridLayout for responsive grid layouts with separate column
+configurations for filter components (1-column) and visualization components (8-column).
+"""
+
+import json
+
 import dash
 import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
@@ -128,7 +147,18 @@ def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
 
 # KEEPME - MODULARISE
 # Update any nested component IDs within the duplicated component
-def update_nested_ids(component, old_index, new_index):
+def update_nested_ids(component: dict | list, old_index: str, new_index: str) -> None:
+    """
+    Recursively update nested component IDs, replacing old_index with new_index.
+
+    Traverses dictionary and list structures to find ID dicts and update
+    their 'index' field when it matches old_index.
+
+    Args:
+        component: Component structure (dict or list) to traverse.
+        old_index: The index value to replace.
+        new_index: The new index value to use.
+    """
     if isinstance(component, dict):
         for key, value in component.items():
             if key == "id" and isinstance(value, dict):
@@ -145,7 +175,22 @@ def update_nested_ids(component, old_index, new_index):
 
 
 # KEEPME - MODULARISE - TO EVALUATE
-def remove_duplicates_by_index(components):
+def remove_duplicates_by_index(components: list[dict]) -> list[dict]:
+    """
+    Remove duplicate components, keeping the most relevant version.
+
+    When duplicates are found (same index), preference is given to:
+    1. Components with a non-None parent_index
+    2. Components with more recent last_updated timestamps
+
+    Also preserves code_content from earlier versions if missing in later ones.
+
+    Args:
+        components: List of component metadata dictionaries.
+
+    Returns:
+        List of deduplicated component metadata dictionaries.
+    """
     unique_components = {}
     for component in components:
         index = component["index"]
@@ -195,7 +240,20 @@ def remove_duplicates_by_index(components):
 
 
 # KEEPME - MODULARISE
-def clean_stored_metadata(stored_metadata):
+def clean_stored_metadata(stored_metadata: list[dict]) -> list[dict]:
+    """
+    Clean stored metadata by removing duplicates and parent components.
+
+    First removes duplicate components by index, then filters out components
+    whose index appears as another component's parent_index (i.e., removes
+    parent containers, keeping only leaf components).
+
+    Args:
+        stored_metadata: List of component metadata dictionaries.
+
+    Returns:
+        Cleaned list with duplicates removed and parent containers filtered out.
+    """
     # Remove duplicates from stored_metadata by checking parent_index and index
     stored_metadata = remove_duplicates_by_index(stored_metadata)
     parent_indexes = set(
@@ -250,6 +308,54 @@ def find_component_by_type(component, target_type, target_index):
 # ============================================================================
 # DUAL-PANEL GRID UTILITIES
 # ============================================================================
+
+
+def _build_saved_positions_lookup(saved_layout_data: list | None) -> dict[str, dict]:
+    """
+    Build a lookup dictionary from saved layout data.
+
+    Handles both plain UUIDs and JSON-stringified dict IDs from DashGridLayout.
+    Strips "box-" prefix for consistent lookup.
+
+    Args:
+        saved_layout_data: List of saved layout positions from database.
+
+    Returns:
+        Dictionary mapping component IDs to their saved position data.
+    """
+    saved_positions: dict[str, dict] = {}
+    if not saved_layout_data:
+        return saved_positions
+
+    for saved_item in saved_layout_data:
+        item_id = saved_item.get("i")
+        if not item_id:
+            continue
+
+        # Try to parse as JSON (DashGridLayout serializes dict IDs as JSON strings)
+        try:
+            parsed_id = json.loads(item_id)
+            # Extract the index from the dict
+            if isinstance(parsed_id, dict) and "index" in parsed_id:
+                component_id = str(parsed_id["index"])
+            else:
+                # Strip box- prefix for consistent lookup
+                component_id = (
+                    str(item_id).replace("box-", "")
+                    if str(item_id).startswith("box-")
+                    else str(item_id)
+                )
+        except (json.JSONDecodeError, TypeError):
+            # Not JSON, use as-is (strip box- prefix for consistent lookup)
+            component_id = (
+                str(item_id).replace("box-", "")
+                if str(item_id).startswith("box-")
+                else str(item_id)
+            )
+
+        saved_positions[component_id] = saved_item
+
+    return saved_positions
 
 
 def extract_component_id(component):
@@ -341,39 +447,9 @@ def calculate_left_panel_positions(components, saved_layout_data=None):
     layout = []
     current_y = 0
 
-    # Create lookup dict for saved positions (keyed by component index)
-    # Handle both plain UUIDs and JSON-stringified dict IDs from DashGridLayout
-    saved_positions = {}
-    if saved_layout_data:
-        import json
-
-        for saved_item in saved_layout_data:
-            item_id = saved_item.get("i")
-            if item_id:
-                # Try to parse as JSON (DashGridLayout serializes dict IDs as JSON strings)
-                try:
-                    parsed_id = json.loads(item_id)
-                    # Extract the index from the dict
-                    if isinstance(parsed_id, dict) and "index" in parsed_id:
-                        component_id = str(parsed_id["index"])
-                    else:
-                        # Strip box- prefix for consistent lookup
-                        component_id = (
-                            str(item_id).replace("box-", "")
-                            if str(item_id).startswith("box-")
-                            else str(item_id)
-                        )
-                except (json.JSONDecodeError, TypeError):
-                    # Not JSON, use as-is (strip box- prefix for consistent lookup)
-                    component_id = (
-                        str(item_id).replace("box-", "")
-                        if str(item_id).startswith("box-")
-                        else str(item_id)
-                    )
-
-                saved_positions[component_id] = saved_item
-
-    logger.info(f"📐 LEFT: Built saved_positions lookup with {len(saved_positions)} items")
+    # Build lookup dict for saved positions
+    saved_positions = _build_saved_positions_lookup(saved_layout_data)
+    logger.info(f"LEFT: Built saved_positions lookup with {len(saved_positions)} items")
     if saved_positions:
         logger.info(f"📐 LEFT: Sample saved_positions keys: {list(saved_positions.keys())[:3]}")
 
@@ -456,39 +532,9 @@ def calculate_right_panel_positions(components, saved_layout_data=None):
     cards = [c for c in components if c.get("component_type") == "card"]
     other = [c for c in components if c.get("component_type") != "card"]
 
-    # Create lookup dict for saved positions (keyed by component index)
-    # Handle both plain UUIDs and JSON-stringified dict IDs from DashGridLayout
-    saved_positions = {}
-    if saved_layout_data:
-        import json
-
-        for saved_item in saved_layout_data:
-            item_id = saved_item.get("i")
-            if item_id:
-                # Try to parse as JSON (DashGridLayout serializes dict IDs as JSON strings)
-                try:
-                    parsed_id = json.loads(item_id)
-                    # Extract the index from the dict
-                    if isinstance(parsed_id, dict) and "index" in parsed_id:
-                        component_id = str(parsed_id["index"])
-                    else:
-                        # Strip box- prefix for consistent lookup
-                        component_id = (
-                            str(item_id).replace("box-", "")
-                            if str(item_id).startswith("box-")
-                            else str(item_id)
-                        )
-                except (json.JSONDecodeError, TypeError):
-                    # Not JSON, use as-is (strip box- prefix for consistent lookup)
-                    component_id = (
-                        str(item_id).replace("box-", "")
-                        if str(item_id).startswith("box-")
-                        else str(item_id)
-                    )
-
-                saved_positions[component_id] = saved_item
-
-    logger.info(f"📐 RIGHT: Built saved_positions lookup with {len(saved_positions)} items")
+    # Build lookup dict for saved positions
+    saved_positions = _build_saved_positions_lookup(saved_layout_data)
+    logger.info(f"RIGHT: Built saved_positions lookup with {len(saved_positions)} items")
     if saved_positions:
         logger.info(f"📐 RIGHT: Sample saved_positions keys: {list(saved_positions.keys())[:3]}")
 
@@ -609,7 +655,18 @@ def calculate_right_panel_positions(components, saved_layout_data=None):
     return layout
 
 
-def register_callbacks_draggable(app):
+def register_callbacks_draggable(app: dash.Dash) -> None:
+    """
+    Register all Dash callbacks for the draggable dashboard layout system.
+
+    This function registers callbacks for:
+    - Component metadata storage and synchronization
+    - Grid layout changes and position updates
+    - Component deletion and duplication
+
+    Args:
+        app: The Dash application instance to register callbacks with.
+    """
     # KEEPME - MODULARISE - TO EVALUATE
     logger.info("⚠️ store_wf_dc_selection callback (duplicate/edit buttons) DISABLED for debugging")
 
@@ -1098,7 +1155,28 @@ def design_draggable(
     edit_mode: bool = False,
     left_panel_layout_data: list | None = None,
     right_panel_layout_data: list | None = None,
-):
+) -> html.Div:
+    """
+    Design the main draggable dashboard layout with dual-panel grid system.
+
+    Creates a two-panel layout with:
+    - Left panel: Interactive filter components (1-column grid)
+    - Right panel: Cards, figures, and tables (8-column grid)
+
+    Args:
+        init_layout: Initial layout configuration from dashboard settings.
+        init_children: List of rendered component dictionaries.
+        dashboard_id: Unique identifier for the dashboard.
+        local_data: Local storage data containing user session info.
+        cached_project_data: Cached project data for performance optimization.
+        stored_metadata: Component metadata for position/state restoration.
+        edit_mode: Whether dashboard is in edit mode.
+        left_panel_layout_data: Saved positions for left panel components.
+        right_panel_layout_data: Saved positions for right panel components.
+
+    Returns:
+        html.Div: The complete dashboard layout with both panels.
+    """
     import time
 
     # logger.info("design_draggable - Initializing draggable layout")

@@ -210,7 +210,8 @@ def register_core_callbacks(app):
         Input({"type": "card-dropdown-column", "index": MATCH}, "value"),
         prevent_initial_call=True,
     )
-    def reset_aggregation_value(column_name):
+    def reset_aggregation_value(column_name: str | None) -> None:
+        """Reset aggregation dropdown value when column selection changes."""
         return None
 
     # OPTION A: Batch rendering - Process ALL cards in single callback (700ms total instead of 9×700ms)
