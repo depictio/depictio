@@ -40,6 +40,46 @@ def health_check(self):
     }
 
 
+@celery_app.task(bind=True, name="generate_dashboard_screenshot")
+def generate_dashboard_screenshot(self, dashboard_id: str) -> dict:
+    """
+    Generate dashboard screenshot in background.
+
+    This task is fire-and-forget - the user doesn't wait for it.
+    Screenshot failures are logged but don't affect the save operation.
+
+    Args:
+        dashboard_id: The dashboard ID to screenshot.
+
+    Returns:
+        dict with status and details.
+    """
+    import httpx
+
+    from depictio.api.v1.configs.config import API_BASE_URL
+    from depictio.api.v1.configs.logging_init import logger
+
+    try:
+        screenshot_timeout = settings.performance.screenshot_api_timeout
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/utils/screenshot-dash-fixed/{dashboard_id}",
+            timeout=screenshot_timeout,
+        )
+
+        if response.status_code == 200:
+            logger.info(f"Background screenshot completed for dashboard {dashboard_id}")
+            return {"status": "success", "dashboard_id": dashboard_id}
+        else:
+            logger.warning(
+                f"Background screenshot failed for {dashboard_id}: {response.status_code}"
+            )
+            return {"status": "failed", "dashboard_id": dashboard_id, "code": response.status_code}
+
+    except Exception as e:
+        logger.error(f"Background screenshot error for {dashboard_id}: {e}")
+        return {"status": "error", "dashboard_id": dashboard_id, "error": str(e)}
+
+
 # NOTE: Dash apps will import celery_app when they're created in flask_dispatcher.py
 # Background callbacks are registered automatically when apps are initialized
 # No need to import apps here - that would create a circular dependency:
