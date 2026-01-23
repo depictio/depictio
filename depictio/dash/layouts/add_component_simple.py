@@ -88,9 +88,5 @@ def register_add_component_simple_callback(app):
         # Build stepper page URL (preserves viewer/editor app prefix)
         stepper_url = f"/{app_prefix}/{dashboard_id}/component/add/{component_id}"
 
-        logger.info(
-            f"✨ NAVIGATE TO STEPPER - Dashboard: {dashboard_id}, Component: {component_id}"
-        )
-
         # Return both the URL and the updated stored clicks dict (maintaining the dict structure)
         return stepper_url, {"count": n_clicks, "initialized": True, "_id": ""}

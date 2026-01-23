@@ -67,6 +67,10 @@ def _load_component_data(component_type: str, wf_id: str | None, dc_id: str | No
     if component_type in ["Text", "MultiQC"]:
         return None
 
+    # Guard: require valid dc_id
+    if not dc_id:
+        return None
+
     try:
         response = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_id}",
@@ -128,7 +132,7 @@ def _determine_component_to_render(
     # No button clicked, use last_button
     if last_button != "None" and last_button in supported_components:
         last_button_index = components_list.index(last_button)
-        logger.info(f"Using last button: {last_button}, id: {ids[last_button_index]}")
+        logger.debug(f"Using last button: {last_button}")
         return last_button, ids[last_button_index]
 
     if last_button != "None":
@@ -185,16 +189,9 @@ def return_design_component(
     Returns:
         Tuple of (component layout, button component state).
     """
-    logger.info("return_design_component called:")
-    logger.info(f"   component_selected={component_selected}")
-    logger.info(f"   id={id}")
-    logger.info(f"   wf_id={wf_id}")
-    logger.info(f"   dc_id={dc_id}")
-    logger.info(f"   local_data present={local_data is not None}")
-
     # Check if DC is MultiQC type and override component selection
     if component_selected == "Figure" and _check_multiqc_routing(dc_id, local_data):
-        logger.info("ROUTING: MultiQC DC detected - routing to MultiQC component instead of Figure")
+        logger.debug("Routing to MultiQC component")
         component_selected = "MultiQC"
 
     if component_selected == "Figure":
@@ -285,9 +282,7 @@ def register_callbacks_stepper_part_three(app):
         wf_id = workflow_selection
         dc_id = data_collection_selection
 
-        logger.info(f"workflow_selection: {workflow_selection}")
-        logger.info(f"data_collection_selection: {data_collection_selection}")
-        logger.info(f"STEP 3 last_button: {last_button}")
+        logger.debug(f"Step 3 - workflow: {workflow_selection}, dc: {data_collection_selection}")
 
         components_list = [
             "Figure",

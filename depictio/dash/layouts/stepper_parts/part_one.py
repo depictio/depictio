@@ -117,19 +117,15 @@ def register_callbacks_stepper_part_one(app: dash.Dash) -> None:
         if not local_store:
             raise dash.exceptions.PreventUpdate
 
-        TOKEN = local_store["access_token"]
+        # Guard: require both workflow and data collection to be selected
+        if not workflow_id or not data_collection_id:
+            raise dash.exceptions.PreventUpdate
 
-        logger.info(f"CTX Triggered ID: {ctx.triggered_id}")
-        logger.info(f"CTX triggered: {ctx.triggered}")
+        TOKEN = local_store["access_token"]
 
         # Determine current component selection from trigger
         if (isinstance(ctx.triggered_id, dict)) and (ctx.triggered_id["type"] == "btn-option"):
             component_selected = ctx.triggered_id["value"]
-            logger.info(f"Component selected from trigger: {component_selected}")
-        else:
-            # Keep previous selection if triggered by workflow/datacollection changes
-            # component_selected remains from State parameter
-            logger.info(f"Component selected from state: {component_selected}")
 
         # Component metadata is now handled by centralized functions
 
