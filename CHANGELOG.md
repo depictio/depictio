@@ -6,23 +6,18 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.6.0-b7</summary>
+<summary>Click to expand the changelog for 0.6.0-b8</summary>
 
 ### Changes 📜
 
-#### Improvements 🚀
+#### Bug Fixes 🐛
 
-* refactor: move API docs workflow to depictio-docs repo [037df501]
+* fix: notify docs after Docker build completes [61a1b6fa]
 
 #### Other Changes 📝
 
-* Bump version: 0.6.0-b6 → 0.6.0-b7 [1e88518a]
-* feat(dash): add fullscreen mode for figure components [0fe66bd8]
-* fix(ci): add tag push trigger to update-api-docs workflow [25856c56]
-* perf(save): move screenshot generation to background Celery task [81ce338d]
-* refactor(save): remove 700+ lines of commented backup code [ea91dbb6]
-* Update CHANGELOG.md for v0.6.0-b5 [bf0c4805]
-* Bump version: 0.6.0-b4 → 0.6.0-b5 [72ed264d]
+* Bump version: 0.6.0-b7 → 0.6.0-b8 [69d4e78a]
+* Update CHANGELOG.md for v0.6.0-b7 [e6c02560]
 
 
 </details>
@@ -31,64 +26,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ecessary reset button [dd437f42]
-* refactor: Handle multiple components returned from design functions in modal body [1896704f]
-* refactor: Enhance offcanvas toggle functionality to manage footer visibility and page class updates [4da1d168]
-* refactor: Enhance logging for schema validation in interactive components and add border option in Paper component [172178e5]
-* refactor: Replace html.H5 with dmc.Title for improved consistency in card components [473deb53]
-* refactor: Update action icon component to include gray color for improved visibility [189013e0]
-* refactor: Update agent configuration display to use dmc.CodeHighlight for improved formatting and remove unused clipboard functionality [e260e296]
-* refactor: Update workflow card styles to use DMC-native properties for consistency [ad69e39d]
-* refactor: Update padding in AccordionPanel and Paper components to use DMC-native spacing for consistency [5dad57d1]
-* refactor: Replace Dash Bootstrap components with Dash Mantine components in figure component utilities for improved styling and layout consistency [f59330ac]
-* refactor: Refactor theme management system to use DMC-native theming; remove old theme utilities and simplify callbacks. Delete autofill test HTML file and enhance FOUC prevention styles in CSS. Add logging for main callback registration and execution. [19a92e74]
-* refactor: replace Dash Bootstrap components with Dash Mantine components across multiple files [37f12901]
-* refactor: Update layout and debug section in minimal_dash_dock_test.py for improved readability and functionality [c7b60eff]
-
-#### Other Changes 📝
-
-* Bump version: 0.4.0-b2 → 0.4.0-b3 [eb33499b]
-* Refactor components to use Dash Mantine Components (DMC) for improved theming and layout [3f79672f]
-* Refactor components to use Dash Mantine instead of Dash Bootstrap [8eeb9d30]
-* Add MultiQC clientside callback dispatcher and modular functions [a1fac181]
-* Update CHANGELOG.md for v0.4.0-b2 [71fc3708]
-* Bump version: 0.4.0-b1 → 0.4.0-b2 [fc41cb7f]
-* Add Same-Origin MultiQC Proxy Test with Automation Features [71767344]
-
-
-</details>
-
-### Documentation 📖
-
-For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
-
-erCellRenderer to prevent AG Grid error [ef2ba9ca]
-* fix: ensure className is a string before checking for dash-debug-menu in MutationObserver [371892ae]
-* fix: change default value of disable_theme_animations to True in PerformanceConfig [a2e13b59]
-* fix: update tag pattern for stable releases in multi-arch build workflow [2691f934]
-* fix: remove commented-out sed command for updating helm chart version [7751d5d6]
-
-#### Other Changes 📝
-
-* Bump version: 0.4.0-b1 → 0.4.0-b2 [845c84e3]
-* Update CHANGELOG.md for v0.4.0-b1 [6ef6a68f]
-* Bump version: 0.3.2 → 0.4.0-b1 [667050b7]
-
-
-</details>
-
-### Documentation 📖
-
-For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
-
-ecessary Pandas conversions [795d4e24]
-* feat: Disable async functionality in build_card, build_figure, and build_interactive wrappers, switching to synchronous calls [94fdf80b]
-* feat: Optimize AG Grid data handling with Polars and add theme support for table rendering [e46a0178]
-* feat: Refactor consolidated API callbacks to use async tasks for user and server data fetching [b9d37806]
-* feat: Add autofill ID sanitizer and enhance debug menu control with improved logging [e0948e53]
-* feat: Refactor Celery background callback setup and enhance dashboard data loading process [3cea1fcd]
-* feat: Add logging to avatar and admin link callbacks for improved debugging [1e9f5285]
-* feat: Enhance save callbacks by allowing optional inputs and removing unnecessary updates [a02143b7]
+ecessary updates [a02143b7]
 * feat: Implement dynamic dropdowns with callback for adding filters in the dashboard [f87fdb2e]
 * feat: Allow duplicate outputs in joins selection info callback for enhanced data handling [97e4e5d8]
 * feat: Optimize performance by conditionally disabling animations in loading and theme components [96ebcc4e]
