@@ -234,7 +234,6 @@ def create_stepper_table_button(n: int, disabled: bool | None = None) -> tuple:
 
     dmc_color = get_dmc_button_color("table")
     hex_color = get_component_color("table")
-    logger.info(f"Table button DMC color: {dmc_color}, hex color: {hex_color}")
 
     button = dmc.Button(
         "Table",

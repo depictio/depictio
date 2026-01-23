@@ -225,12 +225,10 @@ def register_callbacks_text_component(app) -> None:
             Tuple of (title_style, input_style, updated_store_data).
         """
         ctx = callback_context
-        logger.info(f"Toggle edit mode triggered by: {ctx.triggered}")
         if not ctx.triggered:
             return dash.no_update, dash.no_update, dash.no_update
 
         trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
-        logger.info(f"Toggle edit mode triggered by: {trigger_id}")
 
         if not store_data:
             store_data = _get_default_store_data()
@@ -241,7 +239,6 @@ def register_callbacks_text_component(app) -> None:
 
         prop_id = ctx.triggered[0]["prop_id"]
         if "edit-input" in trigger_id and ("n_submit" in prop_id or "n_blur" in prop_id):
-            logger.info(f"Stopping edit mode, saving: {input_value}")
             store_data["editing"] = False
             store_data["text"] = input_value
 
@@ -391,7 +388,6 @@ def register_callbacks_text_component(app) -> None:
                 new_store_data = store_data.copy()
                 new_store_data["alignment"] = alignment
                 icon = DashIconify(icon=icon_name, width=16)
-                logger.info(f"Text alignment changed to: {alignment}")
                 return new_style, new_store_data, icon
 
         return dash.no_update, dash.no_update, dash.no_update
@@ -424,18 +420,11 @@ def register_callbacks_text_component(app) -> None:
         if not ctx.triggered:
             return dash.no_update
 
-        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
-        logger.info(f"sync_text_content_for_save triggered by: {trigger_id}")
-
         if not text_store_data:
             return dash.no_update
 
         updated_text = text_store_data.get("text", "")
         updated_alignment = text_store_data.get("alignment", "left")
-
-        logger.info(
-            f"Text store updated - text: {updated_text[:50]}..., alignment: {updated_alignment}"
-        )
 
         component_index = _extract_component_index(ctx.triggered[0]["prop_id"])
 
@@ -449,14 +438,7 @@ def register_callbacks_text_component(app) -> None:
         existing_alignment = stored_metadata.get("alignment", "left")
 
         if existing_content == updated_text and existing_alignment == updated_alignment:
-            logger.debug(
-                f"No content/alignment change for text component {component_index}, preserving existing metadata"
-            )
             return dash.no_update
-
-        logger.info(
-            f"Text alignment/content changed for component {component_index}: alignment '{existing_alignment}' -> '{updated_alignment}'"
-        )
 
         updated_metadata = stored_metadata.copy()
         updated_metadata["content"] = updated_text
@@ -636,7 +618,6 @@ def create_stepper_text_button(n: int, disabled: bool | None = None) -> tuple:
 
     color = get_dmc_button_color("text")
     hex_color = get_component_color("text")
-    logger.info(f"Text button color: {color}")
 
     button = dmc.Button(
         "Text",
