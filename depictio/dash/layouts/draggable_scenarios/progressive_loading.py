@@ -1,11 +1,33 @@
 """
-Simple progressive loading for Depictio dashboards - just like the prototype.
-Includes skeleton components for progressive loading.
+Progressive loading system for Depictio dashboards.
+
+This module implements a multi-phase progressive loading strategy to optimize
+dashboard rendering performance and provide visual feedback during data loading.
+
+Features:
+    - Skeleton components that display while actual components load
+    - Animated Depictio logo loading indicator with SVG pulse animation
+    - Incremental figure loading via pattern-matching callbacks
+    - Smart loading progress display with fade transitions
+    - Performance optimization settings to disable animations
+
+Skeleton Component Types:
+    - create_skeleton_component: Generic overlay skeleton with loader
+    - create_figure_placeholder: Lightweight figure loading placeholder
+    - create_card_placeholder: Minimal card loading placeholder
+    - create_interactive_placeholder: Controls/filter loading placeholder
+
+Performance Considerations:
+    - Skeleton components use fixed positioning for overlay effects
+    - SVG content is loaded once at module import time
+    - Animations can be disabled via settings.performance.disable_animations
+    - Clientside callbacks handle most visual effects for responsiveness
 """
 
 import base64
 import os
 
+import dash
 import dash_mantine_components as dmc
 from dash import Input, Output, dcc, get_app, html
 
@@ -33,9 +55,8 @@ def create_skeleton_component(component_type: str) -> html.Div:
     Returns:
         dmc.Center: A skeleton loader component
     """
-    logger.info(f"Creating skeleton for component type: {component_type}")
+    logger.debug(f"Creating skeleton for component type: {component_type}")
     component_metadata = get_component_metadata(component_type)
-    # logger.info(f"Component metadata: {component_metadata}")
 
     return html.Div(
         dmc.Center(
@@ -240,8 +261,16 @@ def create_interactive_placeholder(component_uuid: str) -> html.Div:
 # =============================================================================
 
 
-def _load_svg_content():
-    """Load SVG content at module import time."""
+def _load_svg_content() -> str | None:
+    """
+    Load the animated favicon SVG content at module import time.
+
+    Attempts to read the SVG file from the assets directory. The SVG is used
+    for the animated Depictio logo in the loading progress display.
+
+    Returns:
+        The SVG content as a string, or None if the file could not be loaded.
+    """
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
         # Go up from draggable_scenarios -> layouts -> dash -> assets
@@ -259,8 +288,16 @@ def _load_svg_content():
 SVG_CONTENT = _load_svg_content()
 
 
-def create_inline_svg_logo():
-    """Create an inline SVG logo component for animation using embedded content."""
+def create_inline_svg_logo() -> html.Div | html.Img:
+    """
+    Create an inline SVG logo component for animation using embedded content.
+
+    Returns either an embedded SVG (preferred for animation control) or falls
+    back to an img tag if the SVG content couldn't be loaded at import time.
+
+    Returns:
+        A Div containing the SVG container and trigger interval, or an Img fallback.
+    """
     if SVG_CONTENT:
         return html.Div(
             [
@@ -294,12 +331,24 @@ def create_inline_svg_logo():
         )
 
 
-def create_loading_progress_display(dashboard_id: str):
-    """Create a loading display with animated Depictio logo, real-time loading status and fade transitions."""
+def create_loading_progress_display(dashboard_id: str) -> html.Div:
+    """
+    Create a loading display with animated Depictio logo and fade transitions.
+
+    Creates a centered modal-like overlay with the animated Depictio logo.
+    Includes CSS for fade-in/fade-out animations. If animations are disabled
+    via settings, returns a hidden empty div.
+
+    Args:
+        dashboard_id: Unique identifier for the dashboard being loaded.
+
+    Returns:
+        A Div containing the loading progress display, or an empty hidden Div
+        if animations are disabled.
+    """
 
     # PERFORMANCE OPTIMIZATION: Return empty div if animations disabled
     if settings.performance.disable_animations:
-        logger.info("⚡ PERFORMANCE: Loading progress display creation skipped")
         return html.Div(
             id={"type": "loading-progress-container", "dashboard": dashboard_id},
             style={"display": "none"},
@@ -376,23 +425,24 @@ def create_loading_progress_display(dashboard_id: str):
     )
 
 
-def register_figure_loading_callback(app):
+def register_figure_loading_callback(app: dash.Dash) -> None:
     """
     Register callback to load figure components incrementally.
 
-    PERFORMANCE OPTIMIZATION (Phase 5B):
-    This callback loads figure components progressively via dcc.Interval triggers,
-    reducing the initial 378-mutation React render into smaller chunks.
+    This callback implements Phase 5B performance optimization by loading figure
+    components progressively via dcc.Interval triggers, reducing the initial
+    React render burden into smaller chunks.
 
-    Each figure placeholder has a dcc.Interval that fires once with a staggered delay.
-    This callback builds the actual figure component when triggered.
+    Each figure placeholder has a dcc.Interval that fires once with a staggered
+    delay. This callback builds the actual figure component when triggered.
+
+    Args:
+        app: The Dash application instance.
     """
     from dash import ALL, Input, Output, State, callback_context, no_update
 
     from depictio.dash.component_metadata import get_build_functions
     from depictio.dash.layouts.edit import enable_box_edit_mode
-
-    logger.info("⚡ PHASE 5B: Registering incremental figure loading callback")
 
     # Get figure build function
     build_functions = get_build_functions()
@@ -436,8 +486,6 @@ def register_figure_loading_callback(app):
         # CRITICAL FIX: Use "index" key consistently (changed from "uuid")
         triggered_index = trigger_id.get("index")
 
-        logger.info(f"⚡ PROGRESSIVE LOADING: Loading figure component {triggered_index}")
-
         # Build output list
         outputs = []
         for i, (n_intervals, metadata, container_id) in enumerate(
@@ -448,8 +496,6 @@ def register_figure_loading_callback(app):
 
             # Only build the figure that was triggered
             if container_index == triggered_index and n_intervals and n_intervals > 0:
-                logger.info(f"⚡ PROGRESSIVE LOADING: Building figure {container_index}")
-
                 try:
                     # Build the actual figure component
                     figure_component = figure_build_function(**metadata)
@@ -480,13 +526,24 @@ def register_figure_loading_callback(app):
 
         return outputs
 
-    logger.info("⚡ PHASE 5B: Incremental figure loading callback registered")
 
+def register_progressive_loading_callbacks(app: dash.Dash) -> None:
+    """
+    Register all progressive loading visual effects and callbacks.
 
-def register_progressive_loading_callbacks(app):
-    """Register simple progressive loading visual effects - just like the prototype."""
+    Registers:
+    - Component-specific loading callbacks for figure, card, and interactive types
+    - SVG logo animation injection via clientside callback
+    - Dashboard loading monitor to hide progress display when components load
 
-    logger.info("Registering simple progressive loading callbacks")
+    If settings.performance.disable_animations is True, animation callbacks
+    are skipped for better performance.
+
+    Args:
+        app: The Dash application instance.
+    """
+
+    logger.debug("Registering simple progressive loading callbacks")
 
     # PERFORMANCE OPTIMIZATION (Phase 5B): Register callbacks to load components incrementally
     from depictio.dash.layouts.draggable_scenarios.progressive_loading_component import (
@@ -648,7 +705,6 @@ def register_progressive_loading_callbacks(app):
     # Smart callback to hide loading progress when components are actually loaded
     # PERFORMANCE OPTIMIZATION: Skip loading progress if animations disabled
     if settings.performance.disable_animations:
-        logger.info("⚡ PERFORMANCE: Loading progress display disabled")
         return
 
     app.clientside_callback(
@@ -746,4 +802,4 @@ def register_progressive_loading_callbacks(app):
         prevent_initial_call=True,
     )
 
-    logger.info("Progressive loading callbacks registered successfully")
+    logger.debug("Progressive loading callbacks registered successfully")

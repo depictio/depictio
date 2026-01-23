@@ -111,7 +111,6 @@ def extract_project_id_from_pathname(pathname: str) -> str:
 #         ]
 #         return groups_dict, group_options
 #     except Exception as e:
-#         logger.info(f"Error fetching groups data: {e}")
 #         return {}, []
 
 
@@ -120,16 +119,15 @@ def extract_project_id_from_pathname(pathname: str) -> str:
 # -----------------------------------------------------------------------------
 
 
-def create_column_defs(is_admin=False, is_owner=False):
-    """
-    Create column definitions for the permissions grid based on user roles.
+def create_column_defs(is_admin: bool = False, is_owner: bool = False) -> list[dict]:
+    """Create column definitions for the permissions grid based on user roles.
 
     Args:
-        is_admin (bool): Whether the current user is an admin.
-        is_owner (bool): Whether the current user is an owner.
+        is_admin: Whether the current user is an admin.
+        is_owner: Whether the current user is a project owner.
 
     Returns:
-        list: Column definitions for the AG Grid.
+        List of column definition dictionaries for AG Grid.
     """
     can_edit = is_admin or is_owner
 
@@ -186,19 +184,24 @@ def create_column_defs(is_admin=False, is_owner=False):
     ]
 
 
-def create_project_header(project_name, project_id, is_public, is_admin=False, is_owner=False):
-    """
-    Create the project header component with title and visibility toggle.
+def create_project_header(
+    project_name: str,
+    project_id: str,
+    is_public: bool,
+    is_admin: bool = False,
+    is_owner: bool = False,
+) -> dmc.Paper:
+    """Create the project header component with title and visibility toggle.
 
     Args:
-        project_name (str): Name of the project.
-        project_id (str): Project identifier.
-        is_public (bool): Current project visibility.
-        is_admin (bool): Whether the current user is an admin.
-        is_owner (bool): Whether the current user is a project owner.
+        project_name: Name of the project.
+        project_id: Project identifier.
+        is_public: Current project visibility status.
+        is_admin: Whether the current user is an admin.
+        is_owner: Whether the current user is a project owner.
 
     Returns:
-        dmc.Paper: Component wrapping the project header.
+        Paper component wrapping the project header.
     """
     title = dmc.Title(
         f"Project: {project_name}",
@@ -310,8 +313,15 @@ text_table_header = dmc.Text("Project Permissions", size="xl", fw="bold")
 # -----------------------------------------------------------------------------
 
 
-def create_layout(theme="light"):
-    """Create the main layout with theme support."""
+def create_layout(theme: str = "light") -> dmc.Container:
+    """Create the main project permissions management layout.
+
+    Args:
+        theme: Color theme ('light' or 'dark').
+
+    Returns:
+        Container with permissions grid and management controls.
+    """
     return dmc.Container(
         [
             # Modals and Store
@@ -465,15 +475,17 @@ layout = create_layout()
 # -----------------------------------------------------------------------------
 
 
-def build_permissions_payload(rows):
-    """
-    Build the permissions payload from grid rows.
+def build_permissions_payload(rows: list[dict]) -> dict:
+    """Build the permissions payload from grid rows.
+
+    Transforms AG Grid row data into the API permissions format
+    with owners, editors, and viewers lists.
 
     Args:
-        rows (list): List of user permission dictionaries.
+        rows: List of user permission dictionaries from the grid.
 
     Returns:
-        dict: Permissions payload.
+        Dictionary with 'owners', 'editors', and 'viewers' lists.
     """
     return {
         "owners": [
@@ -509,17 +521,16 @@ def build_permissions_payload(rows):
     }
 
 
-def update_permissions_api(rows, project_id, token):
-    """
-    Update project permissions via the API using centralized api_utils.
+def update_permissions_api(rows: list[dict], project_id: str, token: str) -> bool:
+    """Update project permissions via the API.
 
     Args:
-        rows (list): Updated permissions rows.
-        project_id (str): Project ID.
-        token (str): Access token.
+        rows: Updated permissions rows from the grid.
+        project_id: Project ID to update.
+        token: JWT access token.
 
     Returns:
-        bool: True if successful, False otherwise.
+        True if update succeeded, False otherwise.
     """
     result = update_project_permissions_api(project_id, rows, token)
     return result["success"]
@@ -530,12 +541,23 @@ def update_permissions_api(rows, project_id, token):
 # -----------------------------------------------------------------------------
 
 
-def register_projectwise_user_management_callbacks(app):
-    """
-    Register all callbacks for project-wise user management.
+def register_projectwise_user_management_callbacks(app) -> None:
+    """Register all callbacks for project-wise user management.
+
+    Callbacks registered:
+    - update_visibility_button_color: Update visibility toggle appearance
+    - initialize_data: Load initial grid and header data
+    - toggle_add_buttons: Enable/disable add controls based on selection
+    - add_users: Add selected users with permissions
+    - update_dropdown_on_grid_change: Sync dropdown with grid state
+    - handle_cell_interactions: Handle delete and permission changes
+    - toggle_user_exists_modal: Show warning for duplicate users
+    - toggle_cannot_delete_owner_modal: Prevent last owner deletion
+    - toggle_make_project_public_modal: Confirm visibility changes
+    - Theme-aware AG Grid styling
 
     Args:
-        app (Dash): The Dash application instance.
+        app: Dash application instance.
     """
 
     @app.callback(
@@ -670,8 +692,6 @@ def register_projectwise_user_management_callbacks(app):
     #     """
     #     Populate the email dropdown based on the selected group.
     #     """
-    #     logger.info(f"Selected group ID: {selected_group_id}")
-    #     logger.info(f"Groups data: {GROUPS_DATA}")
     #     if selected_group_id and selected_group_id in GROUPS_DATA:
     #         email_options = [
     #             {"value": user["id"], "label": user["email"]}
@@ -863,10 +883,10 @@ def register_projectwise_user_management_callbacks(app):
 
                 # Skip if user already exists in the project
                 if any(row["id"] == user_id for row in current_rows):
-                    logger.info(f"User {user_email} already exists in project, skipping")
+                    logger.debug(f"User {user_email} already exists in project, skipping")
                     continue
 
-                logger.info(f"Adding user: {user_email} with permissions: {permissions}")
+                logger.debug(f"Adding user: {user_email} with permissions: {permissions}")
                 new_users.append(
                     {
                         "id": user_id,

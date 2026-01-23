@@ -1,3 +1,21 @@
+"""
+JBrowse component utilities for genome browser visualization.
+
+This module provides utilities for building and managing JBrowse genome browser
+components within the Depictio dashboard. It handles track filtering, session
+management, and iframe rendering.
+
+Key Functions:
+    build_jbrowse_df_mapping_dict: Build mapping between JBrowse tracks and data
+    build_jbrowse_frame: Build the JBrowse component frame container
+    build_jbrowse: Build the complete JBrowse component with iframe
+
+Constants:
+    my_assembly: Default GRCh38 assembly configuration
+    my_location: Default genome location (chr17)
+    my_tracks: Default NCBI RefSeq track configuration
+"""
+
 import collections
 import json
 import os
@@ -12,6 +30,22 @@ from depictio.dash.api_calls import api_call_fetch_user_from_token
 
 
 def build_jbrowse_df_mapping_dict(stored_metadata, df_dict_processed, access_token):
+    """
+    Build mapping between JBrowse tracks and DataFrame columns.
+
+    Creates a mapping dictionary that links JBrowse component indices to
+    the unique values in joined data collection columns. This mapping is
+    used to filter tracks based on interactive component selections.
+
+    Args:
+        stored_metadata: List of component metadata dictionaries.
+        df_dict_processed: Dictionary of processed DataFrames keyed by join identifiers.
+        access_token: Authentication token for API calls.
+
+    Side Effects:
+        - Saves mapping dictionary to 'data/jbrowse_df_mapping_dict.json'
+        - Posts mapping to JBrowse API endpoint
+    """
     jbrowse_df_mapping_dict = collections.defaultdict(dict)
 
     stored_metadata_jbrowse_components = [
@@ -51,57 +85,61 @@ def build_jbrowse_df_mapping_dict(stored_metadata, df_dict_processed, access_tok
 
 
 def build_jbrowse_frame(index, children=None):
-    if not children:
-        return dmc.Paper(
-            children=[
-                dmc.Stack(
-                    [],
-                    id={
-                        "type": "jbrowse-body",
-                        "index": index,
-                    },
-                )
-            ],
-            id={
-                "type": "jbrowse-component",
-                "index": index,
-            },
-            withBorder=True,
-            radius="md",
-            style={
-                "width": "100%",
-                "height": "100%",
-                "padding": "0",
-                "margin": "0",
-            },
-        )
+    """
+    Build the JBrowse component frame container.
+
+    Creates a Paper component wrapper for the JBrowse iframe with proper
+    styling for full-width/height display.
+
+    Args:
+        index: Component index for pattern-matching callbacks.
+        children: Optional child components to render inside the frame.
+
+    Returns:
+        dmc.Paper component containing the JBrowse frame structure.
+    """
+    frame_style = {"width": "100%", "height": "100%", "padding": "0", "margin": "0"}
+
+    if children:
+        body_content = html.Div(children=children, id={"type": "jbrowse-body", "index": index})
     else:
-        return dmc.Paper(
-            children=[
-                html.Div(
-                    children=children,
-                    id={
-                        "type": "jbrowse-body",
-                        "index": index,
-                    },
-                )
-            ],
-            id={
-                "type": "jbrowse-component",
-                "index": index,
-            },
-            withBorder=True,
-            radius="md",
-            style={
-                "width": "100%",
-                "height": "100%",
-                "padding": "0",
-                "margin": "0",
-            },
-        )
+        body_content = dmc.Stack([], id={"type": "jbrowse-body", "index": index})
+
+    return dmc.Paper(
+        children=[body_content],
+        id={"type": "jbrowse-component", "index": index},
+        withBorder=True,
+        radius="md",
+        style=frame_style,
+    )
 
 
 def build_jbrowse(**kwargs):
+    """
+    Build the complete JBrowse genome browser component.
+
+    Creates an iframe-based JBrowse component with optional track filtering
+    based on interactive component selections. Supports both initial render
+    and refresh scenarios.
+
+    Args:
+        **kwargs: Component configuration parameters including:
+            - wf_id: Workflow ID
+            - dc_id: Data collection ID
+            - dc_config: Data collection configuration
+            - refresh: Whether to refresh track filtering
+            - stored_metadata_jbrowse: JBrowse component metadata
+            - index: Component index for pattern-matching
+            - build_frame: Whether to wrap in frame container
+            - stepper: Whether in stepper mode (design workflow)
+            - access_token: Authentication token
+            - dashboard_id: Dashboard identifier
+            - user_cache: Consolidated user cache data
+
+    Returns:
+        Component tree for JBrowse genome browser, either standalone or
+        wrapped in a frame with loading skeleton.
+    """
     wf_id = kwargs.get("wf_id")
     dc_id = kwargs.get("dc_id")
     dc_config = kwargs.get("dc_config")
@@ -114,7 +152,6 @@ def build_jbrowse(**kwargs):
     dashboard_id = kwargs.get("dashboard_id")
     user_cache = kwargs.get("user_cache")
 
-    # logger.info(f"build_jbrowse access_token {access_token}")
     logger.info(f"build_jbrowse dc_config {dc_config}")
     logger.info(f"build_jbrowse stored_metadata_jbrowse {stored_metadata_jbrowse}")
     logger.info(f"build_jbrowse index {index}")
@@ -129,11 +166,9 @@ def build_jbrowse(**kwargs):
 
     user_context = UserContext.from_cache(user_cache)
     if user_context:
-        logger.info("✅ JBrowse: Using consolidated cache for user data")
         user = user_context  # Use UserContext directly
     else:
         # Fallback to direct API call if cache not available
-        logger.info("🔄 JBrowse: Using fallback API call for user data")
         user = api_call_fetch_user_from_token(access_token)
         logger.info(f"user {user}")
 
@@ -212,7 +247,7 @@ def build_jbrowse(**kwargs):
         )
         if track_ids:
             updated_jbrowse_config += f"&tracks={','.join(track_ids)}"
-        logger.info(f"updated_jbrowse_config {updated_jbrowse_config}")
+        logger.debug(f"updated_jbrowse_config {updated_jbrowse_config}")
 
         # if not session.endswith("_lite.json"):
         # session = session.split(".")[0] + "_lite.json"

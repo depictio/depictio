@@ -115,7 +115,6 @@ def register_callbacks(app):
     Args:
         app (dash.Dash): Editor app instance
     """
-    logger.info("🔥 EDITOR APP: Registering callbacks")
 
     # 1. Main routing callback
     register_routing_callback(app)
@@ -123,7 +122,6 @@ def register_callbacks(app):
     # 1.5. Cache population callbacks (consolidated API)
     from depictio.dash.layouts.consolidated_api import register_consolidated_api_callbacks
 
-    logger.info("  📦 Registering consolidated API cache population callbacks")
     register_consolidated_api_callbacks(app)
 
     # 2. Component rendering callbacks
@@ -132,7 +130,6 @@ def register_callbacks(app):
     # 2.5. Theme system callbacks
     from depictio.dash.simple_theme import register_simple_theme_system
 
-    logger.info("  🎨 Registering theme system callbacks")
     register_simple_theme_system(app)
 
     # 3. Header callbacks (full edit mode)
@@ -144,8 +141,6 @@ def register_callbacks(app):
     # 5. Save and layout management callbacks
     register_save_callbacks(app)
 
-    logger.info("✅ EDITOR APP: All callbacks registered (~65 callbacks)")
-
 
 def register_routing_callback(app):
     """
@@ -156,7 +151,6 @@ def register_routing_callback(app):
     - Component creation (/dashboard-edit/{id}/component/add/{uuid})
     - Component editing (/dashboard-edit/{id}/component/edit/{uuid})
     """
-    logger.info("  📋 Registering main routing callback")
 
     @app.callback(
         Output("page-content", "children"),
@@ -200,7 +194,6 @@ def register_routing_callback(app):
             tuple: (page_content, header_content, pathname, local_data)
         """
         logger.info("=" * 100)
-        logger.info("🔄 EDITOR ROUTING CALLBACK STARTED")
         logger.info(f"   Input pathname: {pathname}")
         logger.info(f"   Triggered by: {ctx.triggered_id}")
         logger.info(f"   Triggered prop: {ctx.triggered}")
@@ -217,8 +210,6 @@ def register_routing_callback(app):
 
         # Validate authentication
         updated_local_data, is_authenticated, reason = validate_and_refresh_token(local_data)
-
-        logger.info(f"🔐 AUTH STATUS: is_authenticated={is_authenticated}, reason={reason}")
 
         # Handle unauthenticated users - redirect to management app /auth
         if not is_authenticated:
@@ -244,22 +235,17 @@ def register_routing_callback(app):
 
         # Check if this is a component creation/editing route
         if "/component/add/" in pathname:
-            logger.info(f"📝 Component creation route detected - pathname: {pathname}")
             result = route_component_creation(pathname, updated_local_data, theme)
-            logger.info(f"📝 Component creation returning pathname: {result[2]}")
             logger.info("=" * 100)
             # If triggered by local-store, preserve current URL
             if triggered_by_local_store:
                 return result[0], result[1], no_update, result[3]
             return result
         elif "/component/edit/" in pathname:
-            logger.info(f"✏️ Component editing route detected - pathname: {pathname}")
             result = route_component_editing(pathname, updated_local_data, theme)
-            logger.info(f"📤 COMPONENT EDITING RETURNING - pathname: {result[2]}")
             logger.info("=" * 100)
             # If triggered by local-store, preserve current URL
             if triggered_by_local_store:
-                logger.info("   🔒 Preserving edit URL (not updating pathname)")
                 return result[0], result[1], no_update, result[3]
             return result
 
@@ -275,7 +261,6 @@ def register_routing_callback(app):
             return error_content, html.Div(), pathname, updated_local_data
 
         # Load dashboard data in edit mode
-        logger.info(f"📊 Loading dashboard for editing: {dashboard_id}")
         content, header_content = load_and_render_dashboard(
             dashboard_id=dashboard_id,
             local_data=updated_local_data,
@@ -292,7 +277,6 @@ def register_routing_callback(app):
             logger.info("=" * 100)
             return content, header_content, no_update, updated_local_data
         else:
-            logger.info(f"📤 EDITOR ROUTING RETURNING - pathname: {pathname}")
             logger.info("=" * 100)
             return content, header_content, pathname, updated_local_data
 
@@ -353,8 +337,6 @@ def route_component_editing(pathname: str, local_data: dict, theme: str):
         dashboard_id = parts[1]
         component_id = parts[4]
 
-        logger.info(f"✏️ EDIT COMPONENT - Dashboard: {dashboard_id}, Component: {component_id}")
-
         # Fetch dashboard data to get component metadata
         dashboard_data = None
         component_data = None
@@ -365,8 +347,6 @@ def route_component_editing(pathname: str, local_data: dict, theme: str):
 
                 # Find component in stored_metadata
                 stored_metadata = dashboard_data.get("stored_metadata", [])
-                logger.info(f"🔍 EDIT COMPONENT - Looking for component_id: {component_id}")
-                logger.info(f"🔍 EDIT COMPONENT - stored_metadata count: {len(stored_metadata)}")
 
                 # Try multiple fields: component_id, index, _id
                 for meta in stored_metadata:
@@ -492,7 +472,6 @@ def load_and_render_dashboard(
     right_panel_layout_data = depictio_dash_data.get("right_panel_layout_data", [])
 
     # DEBUG: Log loaded layout data
-    logger.info("📐 EDITOR: Loaded layout data from dashboard:")
     logger.info(f"   - LEFT panel: {len(left_panel_layout_data)} layout items")
     logger.info(f"   - RIGHT panel: {len(right_panel_layout_data)} layout items")
     if left_panel_layout_data:
@@ -584,7 +563,6 @@ def register_component_callbacks(app):
     Args:
         app: Dash app instance
     """
-    logger.info("  📋 Registering component rendering callbacks")
 
     # Register card component callbacks (core + design for editor app)
     from depictio.dash.modules.card_component.callbacks import (
@@ -639,8 +617,6 @@ def register_component_callbacks(app):
     register_callbacks_multiqc_component(app)
     load_multiqc_design(app)  # Load design callbacks immediately (editor app always in edit mode)
 
-    logger.info("  ✅ Component rendering callbacks registered")
-
 
 def register_header_callbacks(app):
     """
@@ -657,7 +633,6 @@ def register_header_callbacks(app):
     Args:
         app: Dash app instance
     """
-    logger.info("  📋 Registering header callbacks (edit mode)")
 
     # Register full header callbacks (edit mode)
     from depictio.dash.layouts.header import register_callbacks_header
@@ -685,8 +660,6 @@ def register_header_callbacks(app):
         prevent_initial_call="initial_duplicate",
     )
 
-    logger.info("  ✅ Header callbacks registered")
-
 
 def register_component_editing_callbacks(app):
     """
@@ -703,7 +676,6 @@ def register_component_editing_callbacks(app):
     Args:
         app: Dash app instance
     """
-    logger.info("  📋 Registering component editing callbacks")
 
     # Register add component callback
     from depictio.dash.layouts.add_component_simple import (
@@ -743,8 +715,6 @@ def register_component_editing_callbacks(app):
     # - depictio/dash/modules/card_component/callbacks/edit.py
     # - depictio/dash/modules/interactive_component/callbacks/edit.py
 
-    logger.info("  ✅ Component editing callbacks registered (lazy loading)")
-
 
 def register_save_callbacks(app):
     """
@@ -759,7 +729,6 @@ def register_save_callbacks(app):
     Args:
         app: Dash app instance
     """
-    logger.info("  📋 Registering save callbacks")
 
     # Register save callback for dashboard persistence
     from depictio.dash.layouts.save import register_callbacks_save_lite
@@ -770,5 +739,3 @@ def register_save_callbacks(app):
     from depictio.dash.layouts.draggable import register_callbacks_draggable
 
     register_callbacks_draggable(app)
-
-    logger.info("  ✅ Save callbacks registered")

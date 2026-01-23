@@ -144,7 +144,6 @@ def create_edit_page(
             else design_interface_raw
         )
     elif component_type == "figure":
-        logger.info("🎯 EDIT PAGE - Creating design interface for FIGURE component")
         logger.info(f"   component_id: {component_id}")
         logger.info(f"   wf_id: {wf_id}")
         logger.info(f"   dc_id: {dc_id}")
@@ -190,7 +189,6 @@ def create_edit_page(
             design_interface = design_interface_raw
 
         logger.info(f"   design_interface type: {type(design_interface)}")
-        logger.info("✅ EDIT PAGE - Figure design interface created")
     else:
         # Other component types not yet implemented for editing
         design_interface = html.Div(
@@ -291,7 +289,5 @@ def create_edit_page(
         ],
         style={"minHeight": "100vh", "width": "100%"},
     )
-
-    logger.info(f"✅ EDIT PAGE CREATED - Component {component_id}")
 
     return page_layout

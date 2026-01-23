@@ -10,8 +10,6 @@ This module exists primarily for structural consistency with other components
 in the system, even though MultiQC doesn't require separate design-specific callbacks.
 """
 
-from depictio.api.v1.configs.logging_init import logger
-
 
 def register_design_callbacks(app):
     """
@@ -36,7 +34,6 @@ def register_design_callbacks(app):
     - Core callbacks render plots with theme support
     - No additional design-specific callbacks needed
     """
-    logger.info("✅ MultiQC design callbacks registered (using core callbacks)")
 
 
 __all__ = ["register_design_callbacks"]

@@ -1,3 +1,22 @@
+"""
+Draggable Dashboard Layout Module.
+
+This module provides the core dashboard layout system with dual-panel grid functionality.
+It handles component positioning, layout calculations, and grid management for interactive
+dashboards.
+
+Key features:
+- Dual-panel layout (left: filters, right: visualizations)
+- Automatic component positioning with collision detection
+- Saved layout restoration with position/size preservation
+- Grid item management (create, duplicate, delete)
+
+The module uses DashGridLayout for responsive grid layouts with separate column
+configurations for filter components (1-column) and visualization components (8-column).
+"""
+
+import json
+
 import dash
 import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
@@ -41,8 +60,6 @@ def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
     dimensions = component_dimensions.get(
         child_type, {"w": 20, "h": 16}
     )  # Default 20x16 for 48-column grid with rowHeight=20
-    logger.info(f"📐 Selected dimensions: {dimensions} for {child_type}")
-    logger.info(f"📋 Existing layouts: {existing_layouts}")
 
     columns_per_row = 48  # Updated for 48-column grid
     components_per_row = columns_per_row // dimensions["w"]
@@ -97,7 +114,6 @@ def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
                 if position_available:
                     col_position = x_position
                     found_position = True
-                    logger.info(f"✅ Found available position: x={col_position}, y={y_position}")
                     break
 
             if not found_position:
@@ -107,13 +123,10 @@ def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
         if not found_position:
             col_position = 0
             y_position = max_bottom
-            logger.info(f"⬇️ Fallback: placing below all components at y={y_position}")
     else:
         # No existing components, place at origin
         col_position = 0
         y_position = 0
-
-    logger.info(f"📍 Calculated position: x={col_position}, y={y_position}")
 
     return {
         "x": col_position,
@@ -128,7 +141,18 @@ def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
 
 # KEEPME - MODULARISE
 # Update any nested component IDs within the duplicated component
-def update_nested_ids(component, old_index, new_index):
+def update_nested_ids(component: dict | list, old_index: str, new_index: str) -> None:
+    """
+    Recursively update nested component IDs, replacing old_index with new_index.
+
+    Traverses dictionary and list structures to find ID dicts and update
+    their 'index' field when it matches old_index.
+
+    Args:
+        component: Component structure (dict or list) to traverse.
+        old_index: The index value to replace.
+        new_index: The new index value to use.
+    """
     if isinstance(component, dict):
         for key, value in component.items():
             if key == "id" and isinstance(value, dict):
@@ -145,7 +169,22 @@ def update_nested_ids(component, old_index, new_index):
 
 
 # KEEPME - MODULARISE - TO EVALUATE
-def remove_duplicates_by_index(components):
+def remove_duplicates_by_index(components: list[dict]) -> list[dict]:
+    """
+    Remove duplicate components, keeping the most relevant version.
+
+    When duplicates are found (same index), preference is given to:
+    1. Components with a non-None parent_index
+    2. Components with more recent last_updated timestamps
+
+    Also preserves code_content from earlier versions if missing in later ones.
+
+    Args:
+        components: List of component metadata dictionaries.
+
+    Returns:
+        List of deduplicated component metadata dictionaries.
+    """
     unique_components = {}
     for component in components:
         index = component["index"]
@@ -195,7 +234,20 @@ def remove_duplicates_by_index(components):
 
 
 # KEEPME - MODULARISE
-def clean_stored_metadata(stored_metadata):
+def clean_stored_metadata(stored_metadata: list[dict]) -> list[dict]:
+    """
+    Clean stored metadata by removing duplicates and parent components.
+
+    First removes duplicate components by index, then filters out components
+    whose index appears as another component's parent_index (i.e., removes
+    parent containers, keeping only leaf components).
+
+    Args:
+        stored_metadata: List of component metadata dictionaries.
+
+    Returns:
+        Cleaned list with duplicates removed and parent containers filtered out.
+    """
     # Remove duplicates from stored_metadata by checking parent_index and index
     stored_metadata = remove_duplicates_by_index(stored_metadata)
     parent_indexes = set(
@@ -250,6 +302,54 @@ def find_component_by_type(component, target_type, target_index):
 # ============================================================================
 # DUAL-PANEL GRID UTILITIES
 # ============================================================================
+
+
+def _build_saved_positions_lookup(saved_layout_data: list | None) -> dict[str, dict]:
+    """
+    Build a lookup dictionary from saved layout data.
+
+    Handles both plain UUIDs and JSON-stringified dict IDs from DashGridLayout.
+    Strips "box-" prefix for consistent lookup.
+
+    Args:
+        saved_layout_data: List of saved layout positions from database.
+
+    Returns:
+        Dictionary mapping component IDs to their saved position data.
+    """
+    saved_positions: dict[str, dict] = {}
+    if not saved_layout_data:
+        return saved_positions
+
+    for saved_item in saved_layout_data:
+        item_id = saved_item.get("i")
+        if not item_id:
+            continue
+
+        # Try to parse as JSON (DashGridLayout serializes dict IDs as JSON strings)
+        try:
+            parsed_id = json.loads(item_id)
+            # Extract the index from the dict
+            if isinstance(parsed_id, dict) and "index" in parsed_id:
+                component_id = str(parsed_id["index"])
+            else:
+                # Strip box- prefix for consistent lookup
+                component_id = (
+                    str(item_id).replace("box-", "")
+                    if str(item_id).startswith("box-")
+                    else str(item_id)
+                )
+        except (json.JSONDecodeError, TypeError):
+            # Not JSON, use as-is (strip box- prefix for consistent lookup)
+            component_id = (
+                str(item_id).replace("box-", "")
+                if str(item_id).startswith("box-")
+                else str(item_id)
+            )
+
+        saved_positions[component_id] = saved_item
+
+    return saved_positions
 
 
 def extract_component_id(component):
@@ -314,7 +414,6 @@ def separate_components_by_panel(stored_metadata):
         else:
             metadata["panel"] = "right"
             right_panel_components.append(metadata)
-            logger.info(f"  ➡️ RIGHT PANEL: {component_type} component {metadata.get('index')}")
 
     logger.info(
         f"📊 COMPONENT SEPARATION: {len(interactive_components)} interactive, "
@@ -341,39 +440,9 @@ def calculate_left_panel_positions(components, saved_layout_data=None):
     layout = []
     current_y = 0
 
-    # Create lookup dict for saved positions (keyed by component index)
-    # Handle both plain UUIDs and JSON-stringified dict IDs from DashGridLayout
-    saved_positions = {}
-    if saved_layout_data:
-        import json
-
-        for saved_item in saved_layout_data:
-            item_id = saved_item.get("i")
-            if item_id:
-                # Try to parse as JSON (DashGridLayout serializes dict IDs as JSON strings)
-                try:
-                    parsed_id = json.loads(item_id)
-                    # Extract the index from the dict
-                    if isinstance(parsed_id, dict) and "index" in parsed_id:
-                        component_id = str(parsed_id["index"])
-                    else:
-                        # Strip box- prefix for consistent lookup
-                        component_id = (
-                            str(item_id).replace("box-", "")
-                            if str(item_id).startswith("box-")
-                            else str(item_id)
-                        )
-                except (json.JSONDecodeError, TypeError):
-                    # Not JSON, use as-is (strip box- prefix for consistent lookup)
-                    component_id = (
-                        str(item_id).replace("box-", "")
-                        if str(item_id).startswith("box-")
-                        else str(item_id)
-                    )
-
-                saved_positions[component_id] = saved_item
-
-    logger.info(f"📐 LEFT: Built saved_positions lookup with {len(saved_positions)} items")
+    # Build lookup dict for saved positions
+    saved_positions = _build_saved_positions_lookup(saved_layout_data)
+    logger.debug(f"LEFT: Built saved_positions lookup with {len(saved_positions)} items")
     if saved_positions:
         logger.info(f"📐 LEFT: Sample saved_positions keys: {list(saved_positions.keys())[:3]}")
 
@@ -433,7 +502,6 @@ def calculate_left_panel_positions(components, saved_layout_data=None):
         # Update current_y for next component (use y + h to stack properly)
         current_y = y + h
 
-    logger.info(f"📐 LEFT PANEL: Generated {len(layout)} positions, max_y={current_y}")
     return layout
 
 
@@ -456,39 +524,9 @@ def calculate_right_panel_positions(components, saved_layout_data=None):
     cards = [c for c in components if c.get("component_type") == "card"]
     other = [c for c in components if c.get("component_type") != "card"]
 
-    # Create lookup dict for saved positions (keyed by component index)
-    # Handle both plain UUIDs and JSON-stringified dict IDs from DashGridLayout
-    saved_positions = {}
-    if saved_layout_data:
-        import json
-
-        for saved_item in saved_layout_data:
-            item_id = saved_item.get("i")
-            if item_id:
-                # Try to parse as JSON (DashGridLayout serializes dict IDs as JSON strings)
-                try:
-                    parsed_id = json.loads(item_id)
-                    # Extract the index from the dict
-                    if isinstance(parsed_id, dict) and "index" in parsed_id:
-                        component_id = str(parsed_id["index"])
-                    else:
-                        # Strip box- prefix for consistent lookup
-                        component_id = (
-                            str(item_id).replace("box-", "")
-                            if str(item_id).startswith("box-")
-                            else str(item_id)
-                        )
-                except (json.JSONDecodeError, TypeError):
-                    # Not JSON, use as-is (strip box- prefix for consistent lookup)
-                    component_id = (
-                        str(item_id).replace("box-", "")
-                        if str(item_id).startswith("box-")
-                        else str(item_id)
-                    )
-
-                saved_positions[component_id] = saved_item
-
-    logger.info(f"📐 RIGHT: Built saved_positions lookup with {len(saved_positions)} items")
+    # Build lookup dict for saved positions
+    saved_positions = _build_saved_positions_lookup(saved_layout_data)
+    logger.debug(f"RIGHT: Built saved_positions lookup with {len(saved_positions)} items")
     if saved_positions:
         logger.info(f"📐 RIGHT: Sample saved_positions keys: {list(saved_positions.keys())[:3]}")
 
@@ -498,7 +536,6 @@ def calculate_right_panel_positions(components, saved_layout_data=None):
     for idx, card in enumerate(cards):
         index = card.get("index")
         component_id = str(index)
-        logger.debug(f"📐 RIGHT: Processing card {component_id}, checking if in saved_positions")
 
         # Check if we have saved position for this component
         if component_id in saved_positions:
@@ -551,8 +588,6 @@ def calculate_right_panel_positions(components, saved_layout_data=None):
         component_type = component.get("component_type", "figure")
         index = component.get("index")
         component_id = str(index)
-
-        logger.debug(f"📐 RIGHT: Processing {component_type} {component_id}")
 
         # Check if we have saved position for this component
         if component_id in saved_positions:
@@ -609,9 +644,19 @@ def calculate_right_panel_positions(components, saved_layout_data=None):
     return layout
 
 
-def register_callbacks_draggable(app):
+def register_callbacks_draggable(app: dash.Dash) -> None:
+    """
+    Register all Dash callbacks for the draggable dashboard layout system.
+
+    This function registers callbacks for:
+    - Component metadata storage and synchronization
+    - Grid layout changes and position updates
+    - Component deletion and duplication
+
+    Args:
+        app: The Dash application instance to register callbacks with.
+    """
     # KEEPME - MODULARISE - TO EVALUATE
-    logger.info("⚠️ store_wf_dc_selection callback (duplicate/edit buttons) DISABLED for debugging")
 
     # TEMPORARILY DISABLED FOR DEBUGGING - this callback handles duplicate-box-button
     # @app.callback(
@@ -696,7 +741,7 @@ def register_callbacks_draggable(app):
             )
             return components_store or dash.no_update
 
-        logger.info(f"[PERF] Metadata callback PROCESSING (triggered by: {ctx.triggered_id})")
+        logger.debug(f"[PERF] Metadata callback PROCESSING (triggered by: {ctx.triggered_id})")
 
         # PERFORMANCE OPTIMIZATION: Save original state for comparison at end
         # This enables hash-based change detection to prevent unnecessary downstream updates
@@ -714,8 +759,6 @@ def register_callbacks_draggable(app):
         logger.info(f"Button done edit clicks: {btn_done_edit_clicks}")
         logger.info(f"Edit box button clicks: {edit_box_button_clicks}")
         logger.info(f"Duplicate box button clicks: {duplicate_box_button_clicks}")
-        # logger.info(f"Local store data: {local_store}")
-        # logger.info(f"Components store data before update: {components_store}")
         logger.info(f"Workflow IDs: {wf_ids}")
         logger.info(f"Data collection IDs: {dc_ids}")
         logger.info(f"Current edit parent index: {current_edit_parent_index}")
@@ -764,7 +807,7 @@ def register_callbacks_draggable(app):
                         logger.info(
                             f"Component data retrieved for '{trigger_index}': {component_data}"
                         )
-                        logger.info(f"Updated wf_id_value for '{trigger_index}': {wf_id_value}")
+                        logger.debug(f"Updated wf_id_value for '{trigger_index}': {wf_id_value}")
 
                         logger.info(f"Component data: {component_data}")
             except Exception as e:
@@ -773,7 +816,7 @@ def register_callbacks_draggable(app):
             # Use comp
 
             # Get the workflow tag from the ID for reference/display purposes
-            logger.info(f"Updating component '{trigger_index}' with wf_id: {wf_id_value}")
+            logger.debug(f"Updating component '{trigger_index}' with wf_id: {wf_id_value}")
             try:
                 wf_tag = return_wf_tag_from_id(workflow_id=wf_id_value, TOKEN=TOKEN)
                 components_store[trigger_index]["wf_tag"] = wf_tag
@@ -813,10 +856,9 @@ def register_callbacks_draggable(app):
                             TOKEN=TOKEN,
                         )
                         dc_id_value = component_data.get("dc_id", dc_id_value)
-                        # logger.info(
                         #     f"Component data retrieved for '{trigger_index}': {component_data}"
                         # )
-                        logger.info(f"Updated dc_id_value for '{trigger_index}': {dc_id_value}")
+                        logger.debug(f"Updated dc_id_value for '{trigger_index}': {dc_id_value}")
                 dc_tag = return_dc_tag_from_id(data_collection_id=dc_id_value, TOKEN=TOKEN)
                 components_store[trigger_index]["dc_tag"] = dc_tag
                 logger.debug(
@@ -842,11 +884,10 @@ def register_callbacks_draggable(app):
                 )
                 return dash.no_update
 
-            logger.info("[PERF] Metadata changed - returning updated components_store")
+            logger.debug("[PERF] Metadata changed - returning updated components_store")
         except Exception as e:
             logger.warning(f"[PERF] Failed to compare metadata: {e}, returning components_store")
 
-        # logger.debug(f"Components store data after update: {components_store}")
         return components_store
 
     # KEEPME
@@ -909,8 +950,6 @@ def register_callbacks_draggable(app):
     # )
     # def update_empty_dashboard_wrapper(edit_mode_enabled, local_data, current_draggable_items):
     #     """Update draggable wrapper to show empty state messages when dashboard is empty"""
-    #     logger.info(f"🔄 update_empty_dashboard_wrapper triggered - Edit mode: {edit_mode_enabled}")
-    #     logger.info(f"🔄 Trigger: {ctx.triggered_id}, Current items: {len(current_draggable_items) if current_draggable_items else 0}")
     #     return html.Div(id="draggable")
 
     #     # Guard clause: If dashboard has stored components, always keep the draggable (don't show empty state)
@@ -921,24 +960,18 @@ def register_callbacks_draggable(app):
     #     if (stored_children_data and len(stored_children_data) > 0) or (
     #         stored_layout_data and len(stored_layout_data) > 0
     #     ):
-    #         logger.info(
     #             f"Dashboard has stored components ({len(stored_children_data)} children, {len(stored_layout_data)} layouts) - keeping original draggable"
     #         )
     #         return dash.no_update
 
     #     # Also check current draggable items as secondary check
     #     if current_draggable_items and len(current_draggable_items) > 0:
-    #         logger.info("Dashboard has current draggable items, keeping original draggable")
     #         return dash.no_update
 
     #     if not local_data:
-    #         logger.info("No local data available, keeping original draggable")
     #         return dash.no_update
 
-    #     logger.info(f"Truly empty dashboard - Edit mode: {edit_mode_enabled}")
-
     #     if not edit_mode_enabled:
-    #         logger.info("🔵 Empty dashboard + Edit mode OFF - showing welcome message")
     #         # Welcome message (blue theme) - now clickable to enable edit mode
     #         welcome_message = html.Div(
     #             dmc.Center(
@@ -998,7 +1031,6 @@ def register_callbacks_draggable(app):
     #         empty_draggable = html.Div(id="draggable")
     #         return [welcome_message, empty_draggable]
     #     else:
-    #         logger.info("🧡 Empty dashboard + Edit mode ON - showing add component message")
     #         # Add component message (orange theme) - now clickable to trigger add button
     #         add_component_message = html.Div(
     #             dmc.Center(
@@ -1087,7 +1119,495 @@ def register_callbacks_draggable(app):
         return dash.no_update
 
 
-# KEEPME - MAIN FUNCTION - TO CLEAN
+# ============================================================================
+# DESIGN_DRAGGABLE HELPER FUNCTIONS
+# ============================================================================
+
+
+def _separate_children_by_panel(
+    init_children: list, stored_metadata: list[dict]
+) -> tuple[list, list, list, list]:
+    """
+    Separate component children into left (interactive) and right panels.
+
+    Args:
+        init_children: List of rendered component children
+        stored_metadata: Component metadata list
+
+    Returns:
+        Tuple of (interactive_children, interactive_ids, right_children, right_ids)
+    """
+    metadata_by_index = {str(meta.get("index")): meta for meta in stored_metadata}
+
+    interactive_children = []
+    interactive_ids = []
+    right_panel_children = []
+    right_panel_ids = []
+
+    for child in init_children:
+        if not child:
+            continue
+
+        # Extract box ID (which corresponds to component index)
+        box_id = None
+        if hasattr(child, "id") and isinstance(child.id, str):
+            if child.id.startswith("box-"):
+                box_id = child.id.replace("box-", "")
+
+        if not box_id:
+            logger.warning(f"Could not extract box_id from child: {child}")
+            continue
+
+        metadata = metadata_by_index.get(box_id)
+        if not metadata:
+            logger.warning(f"No metadata found for component {box_id}")
+            continue
+
+        component_type = metadata.get("component_type")
+
+        if component_type == "interactive":
+            interactive_children.append(child)
+            interactive_ids.append(box_id)
+            logger.debug(f"Added interactive component {box_id} to LEFT panel")
+        else:
+            right_panel_children.append(child)
+            right_panel_ids.append(box_id)
+            logger.debug(f"Added {component_type} component {box_id} to RIGHT panel")
+
+    return interactive_children, interactive_ids, right_panel_children, right_panel_ids
+
+
+def _enrich_metadata_with_layout(metadata_list: list[dict], layout_list: list[dict]) -> None:
+    """
+    Enrich metadata entries with layout position data (x, y).
+
+    Args:
+        metadata_list: List of metadata dictionaries to enrich (modified in-place)
+        layout_list: List of layout data with positions
+    """
+    for meta in metadata_list:
+        layout_data = next(
+            (item for item in layout_list if item.get("i") == f"box-{meta['index']}"), {}
+        )
+        meta["x"] = layout_data.get("x")
+        meta["y"] = layout_data.get("y")
+
+
+def _create_grid_items(children: list, component_ids: list) -> list:
+    """
+    Create grid item wrappers for components.
+
+    Args:
+        children: List of component children
+        component_ids: List of component IDs matching children
+
+    Returns:
+        List of grid item divs
+    """
+    return [
+        html.Div(
+            child,
+            id=f"box-{component_id}",
+            style={"width": "100%", "height": "100%"},
+        )
+        for child, component_id in zip(children, component_ids)
+    ]
+
+
+def _create_dual_panel_layout(
+    left_grid: dgl.DashGridLayout,
+    right_grid: dgl.DashGridLayout,
+    has_left_items: bool,
+    has_right_items: bool,
+) -> dmc.Grid:
+    """
+    Create the dual-panel DMC Grid layout.
+
+    Args:
+        left_grid: Left panel DashGridLayout
+        right_grid: Right panel DashGridLayout
+        has_left_items: Whether left panel has items
+        has_right_items: Whether right panel has items
+
+    Returns:
+        DMC Grid with both panels
+    """
+    return dmc.Grid(
+        columns=12,
+        gutter="sm",
+        style={"height": "100%", "overflow": "hidden"},
+        children=[
+            # Left panel: Interactive components (25%)
+            dmc.GridCol(
+                span=3,
+                children=[left_grid] if has_left_items else [dmc.Center("No filters")],
+                style={
+                    "borderRight": "1px solid var(--app-border-color, #ddd)",
+                    "padding": "12px",
+                    "height": "calc(100vh - 65px)",
+                    "overflowY": "auto",
+                    "minWidth": "300px",
+                },
+            ),
+            # Right panel: Cards and other components (75%)
+            dmc.GridCol(
+                span=9,
+                children=[right_grid] if has_right_items else [dmc.Center("No components")],
+                style={
+                    "padding": "12px",
+                    "height": "calc(100vh - 65px)",
+                    "overflowY": "auto",
+                },
+            ),
+        ],
+        id="draggable",
+    )
+
+
+def _check_data_availability(workflows: list, token: str) -> bool:
+    """
+    Check if any data (DeltaTables or MultiQC) is available for the dashboard.
+
+    Args:
+        workflows: List of workflow objects
+        token: Authentication token
+
+    Returns:
+        True if data is available, False otherwise
+    """
+    deltatable_dc_ids = []
+    multiqc_dc_ids = []
+
+    for wf in workflows:
+        for dc in wf.data_collections:
+            dc_type = dc.config.type if dc.config else None
+            if dc_type == "multiqc":
+                multiqc_dc_ids.append(str(dc.id))
+            else:
+                deltatable_dc_ids.append(str(dc.id))
+
+    data_available = False
+
+    # Check DeltaTables with batch API
+    if deltatable_dc_ids:
+        data_available = _check_deltatables(deltatable_dc_ids, token)
+
+    # Check MultiQC if no deltatables found
+    if multiqc_dc_ids and not data_available:
+        data_available = _check_multiqc(multiqc_dc_ids, token)
+
+    logger.info(f"DESIGN_DRAGGABLE: Final data availability: {data_available}")
+    return data_available
+
+
+def _check_deltatables(dc_ids: list[str], token: str) -> bool:
+    """Check if DeltaTables exist for given data collection IDs."""
+    logger.debug(f"DESIGN_DRAGGABLE: Batch checking {len(dc_ids)} deltatables")
+    try:
+        batch_response = httpx.post(
+            f"{API_BASE_URL}/depictio/api/v1/deltatables/batch/exists",
+            headers={"Authorization": f"Bearer {token}"},
+            json=dc_ids,
+        )
+        if batch_response.status_code == 200:
+            batch_results = batch_response.json()
+            for dc_id, result in batch_results.items():
+                if result.get("exists") and result.get("delta_table_location"):
+                    logger.debug(f"Delta table found: {result['delta_table_location']}")
+                    return True
+        else:
+            logger.error(f"Batch deltatable check failed: {batch_response.text}")
+            return _check_deltatables_fallback(dc_ids, token)
+    except Exception as e:
+        logger.error(f"Batch deltatable check exception: {e}")
+        # Fallback to individual checks
+        return _check_deltatables_fallback(dc_ids, token)
+    return False
+
+
+def _check_deltatables_fallback(dc_ids: list[str], token: str) -> bool:
+    """Fallback to individual deltatable checks."""
+    logger.warning("Falling back to individual deltatable checks")
+    for dc_id in dc_ids:
+        try:
+            response = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{dc_id}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if response.status_code == 200:
+                logger.debug(f"Delta table found via fallback for {dc_id}")
+                return True
+        except Exception as e:
+            logger.error(f"Fallback deltatable check failed for {dc_id}: {e}")
+    return False
+
+
+def _check_multiqc(dc_ids: list[str], token: str) -> bool:
+    """Check if MultiQC reports exist for given data collection IDs."""
+    logger.debug(f"DESIGN_DRAGGABLE: Checking {len(dc_ids)} MultiQC collections")
+    for dc_id in dc_ids:
+        try:
+            response = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/multiqc/reports/data-collection/{dc_id}",
+                headers={"Authorization": f"Bearer {token}"},
+                params={"limit": 1},
+            )
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("total_count", 0) > 0:
+                    logger.debug(f"MultiQC reports found for data collection '{dc_id}'")
+                    return True
+        except Exception as e:
+            logger.error(f"MultiQC check failed for {dc_id}: {e}")
+    return False
+
+
+def _create_no_data_message() -> html.Div:
+    """Create the 'No data available' message component."""
+    return html.Div(
+        dmc.Center(
+            dmc.Paper(
+                dmc.Stack(
+                    [
+                        dmc.Center(
+                            DashIconify(
+                                icon="tabler:database-off",
+                                width=64,
+                                height=64,
+                                color=colors["red"],
+                            )
+                        ),
+                        dmc.Text(
+                            "No data available",
+                            size="xl",
+                            fw="bold",
+                            ta="center",
+                            c="red",
+                            style={"color": f"var(--app-text-color, {colors['red']})"},
+                        ),
+                        dmc.Text(
+                            "Please first register workflows and data using Depictio CLI",
+                            size="md",
+                            ta="center",
+                            c="gray",
+                            style={"color": "var(--app-text-color, #666)"},
+                        ),
+                    ],
+                    gap="md",
+                    align="center",
+                ),
+                p="xl",
+                radius="lg",
+                shadow="sm",
+                withBorder=True,
+                style={
+                    "border": f"1px solid var(--app-border-color, {colors['red']}20)",
+                    "maxWidth": "500px",
+                    "marginTop": "2rem",
+                },
+            ),
+            style={
+                "height": "50vh",
+                "display": "flex",
+                "alignItems": "center",
+                "justifyContent": "center",
+            },
+        )
+    )
+
+
+def _get_initial_edit_mode(dashboard_id: str, token: str) -> tuple[bool, bool]:
+    """
+    Get initial edit mode state and ownership status.
+
+    Args:
+        dashboard_id: Dashboard identifier
+        token: Authentication token
+
+    Returns:
+        Tuple of (initial_edit_mode, is_owner)
+    """
+    initial_edit_mode = True
+    is_owner = False
+
+    try:
+        from depictio.dash.api_calls import api_call_fetch_user_from_token, api_call_get_dashboard
+
+        current_user = api_call_fetch_user_from_token(token)
+        dashboard_data_dict = api_call_get_dashboard(dashboard_id, token)
+
+        if dashboard_data_dict and current_user:
+            owner_ids = [
+                str(owner["id"])
+                for owner in dashboard_data_dict.get("permissions", {}).get("owners", [])
+            ]
+            is_owner = str(current_user.id) in owner_ids or current_user.is_admin
+            logger.info(f"User is owner: {is_owner}")
+
+            if "buttons_data" in dashboard_data_dict:
+                initial_edit_mode = dashboard_data_dict["buttons_data"].get(
+                    "unified_edit_mode",
+                    dashboard_data_dict["buttons_data"].get("edit_components_button", True),
+                )
+                logger.info(f"Initial edit mode from dashboard data: {initial_edit_mode}")
+
+            if not is_owner:
+                initial_edit_mode = False
+                logger.info("Non-owner user - forcing edit mode OFF")
+
+    except Exception as e:
+        logger.warning(f"Could not fetch dashboard edit mode state: {e}")
+
+    return initial_edit_mode, is_owner
+
+
+def _get_project_data(dashboard_id: str, token: str, cached_project_data: dict | None) -> dict:
+    """
+    Get project data from cache or API.
+
+    Args:
+        dashboard_id: Dashboard identifier
+        token: Authentication token
+        cached_project_data: Cached project data if available
+
+    Returns:
+        Project JSON data
+    """
+    import time
+
+    if cached_project_data and cached_project_data.get("cache_key") == f"project_{dashboard_id}":
+        return cached_project_data["project"]
+    else:
+        logger.warning(
+            f"DESIGN_DRAGGABLE: Cache MISS, making HTTP call for dashboard {dashboard_id}"
+        )
+        start_time = time.time()
+        project_json = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/projects/get/from_dashboard_id/{dashboard_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        ).json()
+        logger.warning(
+            f"DESIGN_DRAGGABLE: HTTP call took {(time.time() - start_time) * 1000:.0f}ms"
+        )
+        return project_json
+
+
+def _build_dual_panel_layout(
+    init_layout: dict,
+    init_children: list,
+    dashboard_id: str,
+    local_data: dict,
+    stored_metadata: list[dict],
+    left_panel_layout_data: list | None,
+    right_panel_layout_data: list | None,
+) -> html.Div:
+    """
+    Build the dual-panel layout for testing mode.
+
+    Args:
+        init_layout: Initial layout configuration
+        init_children: Component children
+        dashboard_id: Dashboard identifier
+        local_data: Local session data
+        stored_metadata: Component metadata
+        left_panel_layout_data: Saved left panel positions
+        right_panel_layout_data: Saved right panel positions
+
+    Returns:
+        html.Div with dual-panel layout
+    """
+    logger.debug("DUAL-PANEL MODE: Creating two-panel layout")
+    logger.info(f"Received {len(init_children)} children to process")
+
+    if not stored_metadata:
+        logger.warning("No stored_metadata provided - cannot separate components")
+        stored_metadata = []
+
+    # Separate components into panels
+    interactive_metadata, right_panel_metadata = separate_components_by_panel(stored_metadata)
+    interactive_children, interactive_ids, right_children, right_ids = _separate_children_by_panel(
+        init_children, stored_metadata
+    )
+
+    logger.info(
+        f"DUAL-PANEL: Separated {len(interactive_children)} interactive, "
+        f"{len(right_children)} right panel components"
+    )
+
+    # Convert layout to list format
+    if isinstance(init_layout, dict):
+        layout_list = [{"i": k, **v} for k, v in init_layout.items() if isinstance(v, dict)]
+    elif isinstance(init_layout, list):
+        layout_list = init_layout
+    else:
+        layout_list = []
+
+    # Enrich metadata with positions
+    _enrich_metadata_with_layout(interactive_metadata, layout_list)
+    _enrich_metadata_with_layout(right_panel_metadata, layout_list)
+
+    # Calculate panel positions
+    left_saved = left_panel_layout_data or []
+    right_saved = right_panel_layout_data or []
+
+    left_layout = calculate_left_panel_positions(interactive_metadata, left_saved)
+    right_layout = calculate_right_panel_positions(right_panel_metadata, right_saved)
+
+    # Create grid items
+    left_grid_items = _create_grid_items(interactive_children, interactive_ids)
+    right_grid_items = _create_grid_items(right_children, right_ids)
+
+    # Determine edit mode styling
+    is_owner = local_data.get("user_id") == local_data.get("dashboard_owner_id", None)
+    grid_className = "" if is_owner else "drag-handles-hidden"
+
+    # Create left panel grid (1 column)
+    left_grid = dgl.DashGridLayout(
+        id={"type": "left-panel-grid", "index": dashboard_id},
+        items=left_grid_items,
+        itemLayout=left_layout,
+        rowHeight=50,
+        cols={"lg": 1, "md": 1, "sm": 1, "xs": 1, "xxs": 1},
+        showRemoveButton=False,
+        showResizeHandles=False,
+        className=grid_className,
+        allowOverlap=False,
+        compactType="vertical",
+        margin=[10, 10],
+        style={"width": "100%", "minWidth": "280px", "height": "auto"},
+    )
+
+    # Create right panel grid (8 columns)
+    right_grid = dgl.DashGridLayout(
+        id={"type": "right-panel-grid", "index": dashboard_id},
+        items=right_grid_items,
+        itemLayout=right_layout,
+        rowHeight=100,
+        cols={"lg": 8, "md": 8, "sm": 8, "xs": 8, "xxs": 8},
+        showRemoveButton=False,
+        showResizeHandles=True,
+        className=grid_className,
+        allowOverlap=False,
+        compactType="vertical",
+        margin=[10, 10],
+        style={"width": "100%", "height": "auto"},
+    )
+
+    # Create dual-panel layout
+    dual_panel_layout = _create_dual_panel_layout(
+        left_grid, right_grid, bool(left_grid_items), bool(right_grid_items)
+    )
+
+    return html.Div(
+        html.Div(
+            dual_panel_layout,
+            id="draggable-wrapper",
+            style={"width": "100%", "height": "100%", "overflow": "hidden"},
+        ),
+        style={"width": "100%", "height": "100%", "overflow": "hidden"},
+    )
+
+
 def design_draggable(
     init_layout: dict,
     init_children: list[dict],
@@ -1098,451 +1618,68 @@ def design_draggable(
     edit_mode: bool = False,
     left_panel_layout_data: list | None = None,
     right_panel_layout_data: list | None = None,
-):
-    import time
+) -> html.Div:
+    """
+    Design the main draggable dashboard layout with dual-panel grid system.
 
-    # logger.info("design_draggable - Initializing draggable layout")
-    # logger.info(f"design_draggable - Dashboard ID: {dashboard_id}")
-    # logger.info(f"design_draggable - Local data: {local_data}")
-    # logger.info(f"design_draggable - Initial layout: {init_layout}")
-    # DEBUGGING: Bypass draggable grid entirely when in test mode
+    Creates a two-panel layout with:
+    - Left panel: Interactive filter components (1-column grid)
+    - Right panel: Cards, figures, and tables (8-column grid)
+
+    Args:
+        init_layout: Initial layout configuration from dashboard settings.
+        init_children: List of rendered component dictionaries.
+        dashboard_id: Unique identifier for the dashboard.
+        local_data: Local storage data containing user session info.
+        cached_project_data: Cached project data for performance optimization.
+        stored_metadata: Component metadata for position/state restoration.
+        edit_mode: Whether dashboard is in edit mode.
+        left_panel_layout_data: Saved positions for left panel components.
+        right_panel_layout_data: Saved positions for right panel components.
+
+    Returns:
+        html.Div: The complete dashboard layout with both panels.
+    """
+
     from depictio.dash.layouts.draggable_scenarios.restore_dashboard import (
         USE_SIMPLE_LAYOUT_FOR_TESTING,
     )
 
+    # Handle dual-panel mode for testing
     if USE_SIMPLE_LAYOUT_FOR_TESTING:
-        logger.info("🎨 DUAL-PANEL MODE: Creating two-panel layout with grids")
-        logger.info(f"🔍 Received {len(init_children)} children to process")
-
-        # Use cached metadata as source of truth for component types
-        if not stored_metadata:
-            logger.warning("⚠️ No stored_metadata provided - cannot separate components into panels")
-            stored_metadata = []
-
-        logger.info(f"📊 Using {len(stored_metadata)} metadata entries from cache")
-
-        # Separate components into left/right panels using cached metadata
-        interactive_metadata, right_panel_metadata = separate_components_by_panel(stored_metadata)
-
-        # Create mapping of box_id to metadata for quick lookup
-        metadata_by_index = {str(meta.get("index")): meta for meta in stored_metadata}
-
-        # Separate actual component children into panels based on metadata
-        # Also track the component IDs for grid item creation
-        interactive_children = []
-        interactive_ids = []
-        right_panel_children = []
-        right_panel_ids = []
-
-        for child in init_children:
-            if not child:
-                continue
-
-            # Extract box ID (which corresponds to component index)
-            box_id = None
-            if hasattr(child, "id") and isinstance(child.id, str):
-                # Box ID is like "box-{uuid}"
-                if child.id.startswith("box-"):
-                    box_id = child.id.replace("box-", "")
-
-            if not box_id:
-                logger.warning(f"⚠️ Could not extract box_id from child: {child}")
-                continue
-
-            # Look up component metadata
-            metadata = metadata_by_index.get(box_id)
-            if not metadata:
-                logger.warning(f"⚠️ No metadata found for component {box_id}")
-                continue
-
-            component_type = metadata.get("component_type")
-
-            # Add to appropriate panel with ID tracking
-            if component_type == "interactive":
-                interactive_children.append(child)
-                interactive_ids.append(box_id)
-                logger.debug(f"✅ Added interactive component {box_id} to LEFT panel")
-            else:
-                right_panel_children.append(child)
-                right_panel_ids.append(box_id)
-                logger.debug(f"✅ Added {component_type} component {box_id} to RIGHT panel")
-
-        logger.info(
-            f"📊 DUAL-PANEL: Separated {len(interactive_children)} interactive, "
-            f"{len(right_panel_children)} right panel components"
+        return _build_dual_panel_layout(
+            init_layout=init_layout,
+            init_children=init_children,
+            dashboard_id=dashboard_id,
+            local_data=local_data,
+            stored_metadata=stored_metadata or [],
+            left_panel_layout_data=left_panel_layout_data,
+            right_panel_layout_data=right_panel_layout_data,
         )
 
-        # Extract layout data for position calculation
-        # Convert dict layout to list format if needed
-        if isinstance(init_layout, dict):
-            layout_list = [{"i": k, **v} for k, v in init_layout.items() if isinstance(v, dict)]
-        elif isinstance(init_layout, list):
-            layout_list = init_layout
-        else:
-            layout_list = []
-
-        # Enrich metadata with layout data (x, y positions)
-        # interactive_metadata and right_panel_metadata already populated by separate_components_by_panel()
-        logger.info(
-            f"📐 Enriching {len(interactive_metadata)} interactive components with layout data"
-        )
-        for meta in interactive_metadata:
-            layout_data = next(
-                (item for item in layout_list if item.get("i") == f"box-{meta['index']}"), {}
-            )
-            meta["x"] = layout_data.get("x")
-            meta["y"] = layout_data.get("y")
-            logger.debug(
-                f"  - Interactive {meta['index']}: type={meta.get('interactive_component_type', 'UNKNOWN')}, "
-                f"x={meta.get('x')}, y={meta.get('y')}"
-            )
-
-        logger.info(
-            f"📐 Enriching {len(right_panel_metadata)} right panel components with layout data"
-        )
-        for meta in right_panel_metadata:
-            layout_data = next(
-                (item for item in layout_list if item.get("i") == f"box-{meta['index']}"), {}
-            )
-            meta["x"] = layout_data.get("x")
-            meta["y"] = layout_data.get("y")
-
-        # Use provided dual-panel layout data (from dashboard data)
-        left_panel_saved_layout = (
-            left_panel_layout_data if left_panel_layout_data is not None else []
-        )
-        right_panel_saved_layout = (
-            right_panel_layout_data if right_panel_layout_data is not None else []
-        )
-
-        logger.info(
-            f"📐 Saved layout data - LEFT: {len(left_panel_saved_layout)} items, "
-            f"RIGHT: {len(right_panel_saved_layout)} items"
-        )
-
-        # Calculate positions for both panels (with saved layout data)
-        # logger.info(
-        #     f"📐 Calculating positions for {len(interactive_metadata)} interactive components"
-        # )
-        # logger.info(
-        #     f"📐 Interactive metadata sample: {interactive_metadata[:2] if interactive_metadata else []}"
-        # )
-        left_layout = calculate_left_panel_positions(interactive_metadata, left_panel_saved_layout)
-        logger.info(f"📐 Left layout calculated: {len(left_layout)} items")
-        logger.info(f"📐 Left layout sample: {left_layout[:2] if left_layout else []}")
-
-        logger.info(
-            f"📐 Calculating positions for {len(right_panel_metadata)} right panel components"
-        )
-        right_layout = calculate_right_panel_positions(
-            right_panel_metadata, right_panel_saved_layout
-        )
-        logger.info(f"📐 Right layout calculated: {len(right_layout)} items")
-        logger.info(f"📐 Right layout sample: {right_layout[:2] if right_layout else []}")
-
-        # Create grid items using tracked IDs
-        left_grid_items = [
-            html.Div(
-                child,
-                id=f"box-{component_id}",  # Must match layout 'i' field exactly
-                style={
-                    "width": "100%",
-                    "height": "100%",
-                },
-            )
-            for child, component_id in zip(interactive_children, interactive_ids)
-        ]
-        logger.info(f"🎨 Created {len(left_grid_items)} left grid items")
-        logger.info(f"🎨 Left grid item IDs (from interactive_ids): {interactive_ids}")
-        logger.info(
-            f"🎨 Left layout IDs (from left_layout): {[item.get('i') for item in left_layout]}"
-        )
-
-        right_grid_items = [
-            html.Div(
-                child,
-                id=f"box-{component_id}",  # Must match layout 'i' field exactly
-                style={
-                    "width": "100%",
-                    "height": "100%",
-                },
-            )
-            for child, component_id in zip(right_panel_children, right_panel_ids)
-        ]
-        logger.info(f"🎨 Created {len(right_grid_items)} right grid items")
-        logger.info(f"🎨 Right grid item IDs (from right_panel_ids): {right_panel_ids}")
-        logger.info(
-            f"🎨 Right layout IDs (from right_layout): {[item.get('i') for item in right_layout]}"
-        )
-
-        # Get edit mode state
-        is_owner = local_data.get("user_id") == local_data.get("dashboard_owner_id", None)
-        grid_className = ""
-        if not is_owner:
-            grid_className = "drag-handles-hidden"
-
-        # Create left panel grid (1 column, rowHeight=100) - 1 component per row
-        left_grid = dgl.DashGridLayout(
-            id={"type": "left-panel-grid", "index": dashboard_id},
-            items=left_grid_items,
-            itemLayout=left_layout,
-            rowHeight=50,
-            cols={"lg": 1, "md": 1, "sm": 1, "xs": 1, "xxs": 1},
-            showRemoveButton=False,
-            showResizeHandles=False,  # Never allow resizing
-            className=grid_className,
-            allowOverlap=False,
-            compactType="vertical",
-            margin=[10, 10],
-            style={
-                "width": "100%",
-                "minWidth": "280px",  # Ensure grid has minimum width
-                "height": "auto",
-            },
-        )
-
-        # Create right panel grid (8 columns, rowHeight=100)
-        right_grid = dgl.DashGridLayout(
-            id={"type": "right-panel-grid", "index": dashboard_id},
-            items=right_grid_items,
-            itemLayout=right_layout,
-            rowHeight=100,
-            cols={"lg": 8, "md": 8, "sm": 8, "xs": 8, "xxs": 8},
-            showRemoveButton=False,
-            showResizeHandles=True,  # Enable per-item resize handles (controlled by resizeHandles property)
-            className=grid_className,
-            allowOverlap=False,
-            compactType="vertical",
-            margin=[10, 10],
-            style={"width": "100%", "height": "auto"},
-        )
-
-        # Create dual-panel layout
-        dual_panel_layout = dmc.Grid(
-            columns=12,
-            gutter="sm",
-            style={"height": "100%", "overflow": "hidden"},  # Prevent Grid-level scrolling
-            children=[
-                # Left panel: Interactive components (wider - 3 out of 12 = 25%)
-                dmc.GridCol(
-                    span=3,
-                    children=[left_grid] if left_grid_items else [dmc.Center("No filters")],
-                    style={
-                        # "backgroundColor": "var(--app-surface-color, #f8f9fa)",
-                        "borderRight": "1px solid var(--app-border-color, #ddd)",
-                        "padding": "12px",
-                        "height": "calc(100vh - 65px)",  # Full viewport height minus header
-                        "overflowY": "auto",  # Individual panel scrollbar
-                        "minWidth": "300px",  # Ensure minimum width
-                    },
-                ),
-                # Right panel: Cards and other components (9 out of 12 = 75%)
-                dmc.GridCol(
-                    span=9,
-                    children=[right_grid] if right_grid_items else [dmc.Center("No components")],
-                    style={
-                        # "backgroundColor": "var(--app-bg-color, #ffffff)",
-                        "padding": "12px",
-                        "height": "calc(100vh - 65px)",  # Full viewport height minus header
-                        "overflowY": "auto",  # Individual panel scrollbar
-                    },
-                ),
-            ],
-            id="draggable",  # Keep ID for callback compatibility
-        )
-
-        core = html.Div(
-            html.Div(
-                dual_panel_layout,
-                id="draggable-wrapper",
-                style={
-                    "width": "100%",
-                    "height": "100%",  # Full height of parent container
-                    "overflow": "hidden",  # Prevent scrolling at wrapper level
-                },
-            ),
-            style={
-                "width": "100%",
-                "height": "100%",  # Full height to enable panel scrolling
-                "overflow": "hidden",  # Prevent scrolling at container level
-            },
-        )
-
-        logger.info("🎨 DUAL-PANEL: Returning two-panel layout with grids")
-        return core
-
-    # Generate core layout based on data availability
-
-    # TODO: if required, check if data was registered for the project
+    # Standard single-panel layout
     TOKEN = local_data["access_token"]
 
-    # Use cached project data if available, otherwise fallback to HTTP call
-    if cached_project_data and cached_project_data.get("cache_key") == f"project_{dashboard_id}":
-        logger.info(
-            f"✅ DESIGN_DRAGGABLE: Cache HIT - using cached project data for dashboard {dashboard_id}"
-        )
-        logger.info(
-            f"✅ DESIGN_DRAGGABLE: Cache age: {time.time() - cached_project_data.get('timestamp', 0):.2f}s"
-        )
-        project_json = cached_project_data["project"]
-    else:
-        cache_info = f"cached_project_data={bool(cached_project_data)}, cache_key={cached_project_data.get('cache_key') if cached_project_data else None}, expected_key=project_{dashboard_id}"
-        logger.warning(
-            f"❌ DESIGN_DRAGGABLE: Cache MISS ({cache_info}), making blocking HTTP call for dashboard {dashboard_id}"
-        )
-        start_time = time.time()
-        project_json = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/projects/get/from_dashboard_id/{dashboard_id}",
-            headers={"Authorization": f"Bearer {TOKEN}"},
-        ).json()
-        http_duration = time.time() - start_time
-        logger.warning(f"❌ DESIGN_DRAGGABLE: HTTP call took {http_duration * 1000:.0f}ms")
+    # Get project data (from cache or API)
+    project_json = _get_project_data(dashboard_id, TOKEN, cached_project_data)
 
-    # logger.info(f"design_draggable - Project: {project_json}")
     from depictio.models.models.projects import Project
 
-    # Extract project data from enriched API response
-    # API returns: {"project": {...}, "delta_locations": {...}}
     project_data = project_json.get("project", project_json)
     project = Project.from_mongo(project_data)
-    # logger.info(f"design_draggable - Project: {project}")
     workflows = project.workflows
-    data_available = False  # Track if any data (DeltaTables or MultiQC) is available
 
-    # Collect all data collections by type
-    deltatable_dc_ids = []
-    multiqc_dc_ids = []
-    for wf in workflows:
-        for dc in wf.data_collections:
-            dc_type = dc.config.type if dc.config else None
-            if dc_type == "multiqc":
-                multiqc_dc_ids.append(str(dc.id))
-            else:
-                # All non-multiqc types use deltatables
-                deltatable_dc_ids.append(str(dc.id))
+    # Check data availability
+    data_available = _check_data_availability(workflows, TOKEN)
 
-    # Check for DeltaTables
-    if deltatable_dc_ids:
-        # Single batch API call to check deltatable existence
-        logger.info(f"🚀 DESIGN_DRAGGABLE: Batch checking {len(deltatable_dc_ids)} deltatables")
-        try:
-            batch_response = httpx.post(
-                f"{API_BASE_URL}/depictio/api/v1/deltatables/batch/exists",
-                headers={"Authorization": f"Bearer {TOKEN}"},
-                json=deltatable_dc_ids,
-            )
-            if batch_response.status_code == 200:
-                batch_results = batch_response.json()
-                for dc_id, result in batch_results.items():
-                    if result.get("exists") and result.get("delta_table_location"):
-                        data_available = True
-                        logger.info(f"✅ Delta table found: {result['delta_table_location']}")
-                    else:
-                        logger.warning(f"⚠️  No deltatable found for data collection '{dc_id}'")
-                logger.info(f"✅ Batch deltatable check complete: data_available={data_available}")
-            else:
-                logger.error(f"❌ Batch deltatable check failed: {batch_response.text}")
-        except Exception as e:
-            logger.error(f"❌ Batch deltatable check exception: {e}")
-            # Fallback to individual checks if batch fails
-            logger.warning("🔄 Falling back to individual deltatable checks")
-            for dc_id in deltatable_dc_ids:
-                try:
-                    response = httpx.get(
-                        f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{dc_id}",
-                        headers={"Authorization": f"Bearer {TOKEN}"},
-                    )
-                    if response.status_code == 200:
-                        data_available = True
-                        logger.info(f"✅ Delta table found via fallback for {dc_id}")
-                except Exception as fallback_e:
-                    logger.error(f"❌ Fallback deltatable check failed for {dc_id}: {fallback_e}")
-
-    # Check for MultiQC data
-    if multiqc_dc_ids and not data_available:  # Only check if no deltatables found
-        logger.info(f"🧬 DESIGN_DRAGGABLE: Checking {len(multiqc_dc_ids)} MultiQC collections")
-        for dc_id in multiqc_dc_ids:
-            try:
-                response = httpx.get(
-                    f"{API_BASE_URL}/depictio/api/v1/multiqc/reports/data-collection/{dc_id}",
-                    headers={"Authorization": f"Bearer {TOKEN}"},
-                    params={"limit": 1},  # Just check if any reports exist
-                )
-                if response.status_code == 200:
-                    result = response.json()
-                    if result.get("total_count", 0) > 0:
-                        data_available = True
-                        logger.info(f"✅ MultiQC reports found for data collection '{dc_id}'")
-                        break  # At least one MultiQC collection has data
-                    else:
-                        logger.warning(f"⚠️  No MultiQC reports for data collection '{dc_id}'")
-            except Exception as e:
-                logger.error(f"❌ MultiQC check failed for {dc_id}: {e}")
-
-    logger.info(f"📊 DESIGN_DRAGGABLE: Final data availability check: {data_available}")
-
+    # Build core children based on data availability
     if not data_available:
-        # When there are no workflows, log information and prepare a message
-        # logger.info(f"init_children {init_children}")
-        # logger.info(f"init_layout {init_layout}")
-        # message = html.Div(["No workflows available."])
-        message = html.Div(
-            dmc.Center(
-                dmc.Paper(
-                    dmc.Stack(
-                        [
-                            dmc.Center(
-                                DashIconify(
-                                    icon="tabler:database-off",
-                                    width=64,
-                                    height=64,
-                                    color=colors["red"],
-                                )
-                            ),
-                            dmc.Text(
-                                "No data available",
-                                size="xl",
-                                fw="bold",
-                                ta="center",
-                                c=colors["red"],
-                                style={"color": f"var(--app-text-color, {colors['red']})"},
-                            ),
-                            dmc.Text(
-                                "Please first register workflows and data using Depictio CLI",
-                                size="md",
-                                ta="center",
-                                c="gray",
-                                style={"color": "var(--app-text-color, #666)"},
-                            ),
-                        ],
-                        gap="md",
-                        align="center",
-                    ),
-                    p="xl",
-                    radius="lg",
-                    shadow="sm",
-                    withBorder=True,
-                    style={
-                        "border": f"1px solid var(--app-border-color, {colors['red']}20)",
-                        "maxWidth": "500px",
-                        "marginTop": "2rem",
-                    },
-                ),
-                style={
-                    "height": "50vh",
-                    "display": "flex",
-                    "alignItems": "center",
-                    "justifyContent": "center",
-                },
-            )
-        )
-        display_style = "none"  # Hide the draggable layout
+        message = _create_no_data_message()
+        display_style = "none"
         core_children = [message]
     else:
-        display_style = "flex"  # Show the draggable layout
+        display_style = "flex"
         core_children = []
-
-    # logger.info(f"Init layout: {init_layout}")
 
     # Ensure init_layout has the required breakpoints
     # Ensure init_layout is in list format
@@ -1571,9 +1708,6 @@ def design_draggable(
         current_layout = []
 
     # Debug logging for grid configuration
-    logger.debug("🔍 GRID DEBUG - Creating DashGridLayout with configuration:")
-    logger.debug("🔍 GRID DEBUG - rowHeight: 20")
-    logger.debug("🔍 GRID DEBUG - cols: {'lg': 48, 'md': 48, 'sm': 48, 'xs': 48, 'xxs': 48}")
     logger.debug(
         f"🔍 GRID DEBUG - current_layout items: {len(current_layout) if current_layout else 0}"
     )
@@ -1625,7 +1759,7 @@ def design_draggable(
     grid_className = "draggable-grid-container"
     if not initial_edit_mode:
         grid_className += " drag-handles-hidden"
-        logger.info("Initial load with edit mode OFF - adding .drag-handles-hidden class")
+        logger.debug("Initial load with edit mode OFF - adding .drag-handles-hidden class")
 
     draggable = dgl.DashGridLayout(
         id="draggable",

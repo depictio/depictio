@@ -1,3 +1,14 @@
+"""User authentication and management module for Depictio.
+
+This module provides the authentication interface including:
+- Login form with email/password authentication
+- Registration form for new users
+- Google OAuth integration (when enabled)
+- Animated triangle particle background
+
+The module uses DMC 2.0+ components and supports dark/light themes.
+"""
+
 import re
 
 import dash
@@ -19,6 +30,7 @@ from depictio.dash.api_calls import (
 )
 from depictio.dash.colors import colors
 
+# Event listener configuration for Enter key handling
 EVENT_KEYDOWN = {"event": "keydown", "props": ["key"]}
 
 # Triangle configuration constants
@@ -51,7 +63,14 @@ ANIMATION_CLASSES = [
 ]
 
 
-def render_login_form():
+def render_login_form() -> dmc.Stack:
+    """Render the login form with email/password inputs.
+
+    Includes optional Google OAuth button when enabled in settings.
+
+    Returns:
+        Stack component containing the login form elements.
+    """
     return dmc.Stack(
         [
             dmc.Center(
@@ -210,7 +229,14 @@ def render_login_form():
     )
 
 
-def render_register_form():
+def render_register_form() -> dmc.Stack:
+    """Render the registration form with email/password inputs.
+
+    Includes password confirmation field and back to login button.
+
+    Returns:
+        Stack component containing the registration form elements.
+    """
     return dmc.Stack(
         [
             dmc.Center(
@@ -312,7 +338,16 @@ def render_register_form():
     )
 
 
-def validate_login(login_email, login_password):
+def validate_login(login_email: str, login_password: str) -> tuple:
+    """Validate login credentials and return authentication result.
+
+    Args:
+        login_email: User's email address.
+        login_password: User's password.
+
+    Returns:
+        Tuple of (message, modal_open, session_data, token_data).
+    """
     if not login_email or not login_password:
         return "Please fill in all fields.", True, dash.no_update, dash.no_update
 
@@ -373,8 +408,19 @@ def validate_login(login_email, login_password):
     return "Invalid email or password.", True, dash.no_update, dash.no_update
 
 
-# Function to handle registration
-def handle_registration(register_email, register_password, register_confirm_password):
+def handle_registration(
+    register_email: str, register_password: str, register_confirm_password: str
+) -> tuple[str, bool]:
+    """Handle user registration process.
+
+    Args:
+        register_email: User's email address.
+        register_password: User's password.
+        register_confirm_password: Password confirmation.
+
+    Returns:
+        Tuple of (feedback_message, modal_should_stay_open).
+    """
     if not register_email or not register_password or not register_confirm_password:
         return "Please fill in all fields.", True
     if api_call_fetch_user_from_email(register_email):
@@ -382,7 +428,7 @@ def handle_registration(register_email, register_password, register_confirm_pass
     if register_password != register_confirm_password:
         return "Passwords do not match.", True
     # response = add_user(register_email, register_password)
-    logger.info(f"Registering user with email: {register_email}")
+    logger.debug(f"Registering user with email: {register_email}")
     response = api_call_register_user(register_email, register_password)
     if not response:
         return f"Error registering user: {response.text}", True
@@ -390,7 +436,15 @@ def handle_registration(register_email, register_password, register_confirm_pass
 
 
 def _create_triangle_svg(size_key: str, color_hex: str) -> str:
-    """Generate an SVG data URL for a triangle with the Depictio style."""
+    """Generate an SVG data URL for a triangle with the Depictio style.
+
+    Args:
+        size_key: Size category ('small', 'medium', 'large', 'xlarge').
+        color_hex: Hex color code for the triangle fill.
+
+    Returns:
+        CSS url() string with embedded SVG data.
+    """
     size_info = TRIANGLE_SIZES[size_key]
     w, h = size_info["width"], size_info["height"]
 
@@ -402,7 +456,10 @@ def _create_triangle_svg(size_key: str, color_hex: str) -> str:
 
 
 def _select_triangle_size(index: int) -> str:
-    """Select a triangle size based on weighted distribution."""
+    """Select a triangle size based on weighted distribution.
+
+    Uses a deterministic pseudo-random approach for consistent layouts.
+    """
     rand_val = (index * 0.37) % 1
     cumulative_weight = 0.0
 
@@ -415,7 +472,10 @@ def _select_triangle_size(index: int) -> str:
 
 
 def _calculate_particle_position(index: int, grid_cols: int, grid_rows: int) -> tuple[float, float]:
-    """Calculate particle position using grid-based distribution with pseudo-random offset."""
+    """Calculate particle position using grid-based distribution.
+
+    Uses deterministic offset for consistent but organic-looking layouts.
+    """
     cell_width = 85 / grid_cols
     cell_height = 70 / grid_rows
 
@@ -436,7 +496,11 @@ def _calculate_particle_position(index: int, grid_cols: int, grid_rows: int) -> 
 
 
 def create_triangle_background() -> html.Div:
-    """Create GPU-optimized triangle particle background for the auth page."""
+    """Create GPU-optimized triangle particle background for the auth page.
+
+    Generates 40 animated triangles with varied sizes, colors, and animations
+    for a dynamic, branded login experience.
+    """
     num_particles = 40
     grid_cols = 8
     grid_rows = 5
@@ -577,16 +641,16 @@ layout = html.Div(
 )
 
 
-def register_google_oauth_callbacks(app):
-    """
-    Register Google OAuth authentication callbacks.
+def register_google_oauth_callbacks(app) -> None:
+    """Register Google OAuth authentication callbacks.
 
     Only called when settings.auth.google_oauth_enabled is True.
+    Registers button click handler and redirect callback.
 
     Args:
-        app: Dash app instance
+        app: Dash application instance.
     """
-    logger.info("🔐 Registering Google OAuth callbacks")
+    logger.debug("Registering Google OAuth callbacks")
 
     # Google OAuth callback using server-side callback
     @app.callback(
@@ -635,7 +699,21 @@ def register_google_oauth_callbacks(app):
     )
 
 
-def register_callbacks_users_management(app):
+def register_callbacks_users_management(app) -> None:
+    """Register callbacks for user authentication and management.
+
+    Callbacks registered:
+    - auto_open_auth_modal_on_auth_page: Open modal on /auth route
+    - trigger_save_on_enter: Submit form on Enter key
+    - disable_login_button: Validate email format for login
+    - disable_register_button: Validate email format for registration
+    - handle_auth_and_switch_forms: Handle all auth actions
+    - Google OAuth callbacks (if enabled)
+
+    Args:
+        app: Dash application instance.
+    """
+
     @app.callback(
         [
             Output("auth-modal", "opened", allow_duplicate=True),
@@ -742,16 +820,6 @@ def register_callbacks_users_management(app):
     ):
         button_id = ctx.triggered[0]["prop_id"].split(".")[0]
 
-        # logger.debug(f"Button ID: {button_id}")
-        # logger.debug(f"Current state: {current_state}")
-        # logger.debug(f"Local data: {local_data}")
-        # logger.debug(f"Modal open: {modal_open}")
-        # logger.debug(f"Login email: {login_email}")
-        # logger.debug(f"Login password: {login_password}")
-        # logger.debug(f"Register email: {register_email}")
-        # logger.debug(f"Register password: {register_password}")
-        # logger.debug(f"Register confirm password: {register_confirm_password}")
-
         # If user is already logged in, do not show the login form
         if local_data and local_data.get("logged_in", False):
             logger.info("User is already logged in.")
@@ -804,10 +872,6 @@ def register_callbacks_users_management(app):
             feedback_message, modal_open_new, session_data, local_data_new = validate_login(
                 login_email, login_password
             )
-            # logger.debug(f"Feedback message: {feedback_message}")
-            # logger.debug(f"Modal open new: {modal_open_new}")
-            # logger.debug(f"Session data: {session_data}")
-            # logger.debug(f"Local data new: {local_data_new}")
             if not modal_open_new:
                 content = render_login_form()
             else:
@@ -859,8 +923,6 @@ def register_callbacks_users_management(app):
             # else:
             #     modal_state = "register"
             content = render_register_form()
-            # logger.debug(f"Modal state: {modal_state}")
-            # logger.debug(f"Content: {content}")
 
             return (
                 True,
@@ -890,7 +952,7 @@ def register_callbacks_users_management(app):
     if settings.auth.google_oauth_enabled:
         register_google_oauth_callbacks(app)
     else:
-        logger.info("🔐 Google OAuth disabled - skipping OAuth callback registration")
+        logger.debug("🔐 Google OAuth disabled - skipping OAuth callback registration")
 
 
 # Add Google OAuth callback handler for when user returns from Google
@@ -929,9 +991,6 @@ def register_callbacks_users_management(app):
 #     call_id = str(uuid.uuid4())[:8]
 #     start_time = time.time()
 
-#     logger.info(f"[PERF-4E][{call_id}] 🔐 OAUTH CALLBACK ENTRY (has search params)")
-#     logger.info(f"[PERF-4E][{call_id}]   search_params: {search_params[:100]}")
-#     logger.info(f"[PERF-4E][{call_id}]   local_data: {'present' if local_data else 'None'}")
 
 #     # Parse URL parameters
 #     from urllib.parse import parse_qs, urlparse
@@ -940,26 +999,22 @@ def register_callbacks_users_management(app):
 #     parsed = urlparse(f"?{search_params}" if not search_params.startswith("?") else search_params)
 #     params = parse_qs(parsed.query)
 #     parse_duration = (time.time() - parse_start) * 1000
-#     logger.info(f"[PERF-4E][{call_id}]   URL parse: {parse_duration:.0f}ms")
 
 #     # Check if this is an OAuth callback
 #     if "code" not in params or "state" not in params:
 #         elapsed = (time.time() - start_time) * 1000
-#         logger.info(
 #             f"[PERF-4E][{call_id}] 🔐 OAUTH CALLBACK EXIT (not OAuth flow) - {elapsed:.0f}ms"
 #         )
 #         raise PreventUpdate
 
 #     code = params["code"][0]
 #     state = params["state"][0]
-#     logger.info(f"[PERF-4E][{call_id}]   OAuth code present: {code[:20]}...")
 
 #     try:
 #         # Call the OAuth callback API
 #         api_start = time.time()
 #         oauth_result = api_call_handle_google_oauth_callback(code, state)
 #         api_duration = (time.time() - api_start) * 1000
-#         logger.info(f"[PERF-4E][{call_id}]   API call: {api_duration:.0f}ms")
 
 #         if oauth_result and oauth_result.get("success"):
 #             # Extract token data and user info
@@ -978,23 +1033,17 @@ def register_callbacks_users_management(app):
 #             }
 
 #             elapsed = (time.time() - start_time) * 1000
-#             logger.info(f"[PERF-4E][{call_id}] 🔐 OAUTH CALLBACK EXIT (success) - {elapsed:.0f}ms")
-#             logger.info(f"Google OAuth login successful for: {user_data['email']}")
 
 #             # Update session
 #             return [session_data]
 #         else:
 #             elapsed = (time.time() - start_time) * 1000
-#             logger.info(
 #                 f"[PERF-4E][{call_id}] 🔐 OAUTH CALLBACK EXIT (API failed) - {elapsed:.0f}ms"
 #             )
-#             logger.error(
 #                 f"OAuth callback failed: {oauth_result.get('message', 'Unknown error') if oauth_result else 'API call failed'}"
 #             )
 #             raise PreventUpdate
 
 #     except Exception as e:
 #         elapsed = (time.time() - start_time) * 1000
-#         logger.info(f"[PERF-4E][{call_id}] 🔐 OAUTH CALLBACK EXIT (exception) - {elapsed:.0f}ms")
-#         logger.error(f"Error handling OAuth callback: {e}")
 #         raise PreventUpdate

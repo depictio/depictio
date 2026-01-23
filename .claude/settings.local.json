@@ -57,7 +57,8 @@
       "Bash(/Users/tweber/Gits/workspaces/depictio-workspace/depictio/depictio-venv-dash-v3/bin/pre-commit run:*)",
       "Bash(gh run list:*)",
       "Bash(/Users/tweber/Gits/workspaces/depictio-workspace/depictio/depictio-venv-dash-v3/bin/python -m ruff:*)",
-      "Bash(/Users/tweber/Gits/workspaces/depictio-workspace/depictio/depictio-venv-dash-v3/bin/python -m pre_commit run:*)"
+      "Bash(/Users/tweber/Gits/workspaces/depictio-workspace/depictio/depictio-venv-dash-v3/bin/python -m pre_commit run:*)",
+      "Bash(/Users/tweber/Gits/workspaces/depictio-workspace/depictio/depictio-venv-dash-v3/bin/python:*)"
     ],
     "deny": []
   }

@@ -1,3 +1,20 @@
+"""
+Dashboard Management Module
+
+This module provides the landing page and management interface for dashboards
+in the Depictio application. It handles:
+- Listing and displaying user-owned and accessible dashboards
+- Creating new dashboards with customizable icons and settings
+- Editing dashboard names and duplicating existing dashboards
+- Deleting dashboards with confirmation dialogs
+- Managing dashboard visibility (public/private status)
+
+The module is organized into:
+- Database interaction functions (load, insert, delete, edit)
+- UI rendering functions for dashboard cards and sections
+- Callback registration for user interactions
+"""
+
 import os
 import shutil
 from datetime import datetime
@@ -36,8 +53,20 @@ layout = html.Div(
 )
 
 
-def load_dashboards_from_db(token):
-    logger.info("Loading dashboards from the database")
+def load_dashboards_from_db(token: str) -> dict:
+    """
+    Load all accessible dashboards from the database via API.
+
+    Args:
+        token: Authentication token for API access.
+
+    Returns:
+        dict: Dictionary with 'dashboards' key containing list of dashboard data.
+
+    Raises:
+        ValueError: If token is not provided or API request fails.
+    """
+    logger.debug("Loading dashboards from the database")
     if not token:
         raise ValueError("Token is required to load dashboards from the database.")
 
@@ -60,7 +89,18 @@ def load_dashboards_from_db(token):
         return {"dashboards": []}
 
 
-def insert_dashboard(dashboard_id, dashboard_data, token):
+def insert_dashboard(dashboard_id: str | PyObjectId, dashboard_data: dict, token: str) -> None:
+    """
+    Insert or update a dashboard in the database via API.
+
+    Args:
+        dashboard_id: Unique identifier for the dashboard (str or PyObjectId).
+        dashboard_data: Dashboard configuration and content data.
+        token: Authentication token for API access.
+
+    Raises:
+        ValueError: If required parameters are missing or API request fails.
+    """
     logger.info(f"Inserting dashboard with ID: {dashboard_id} and data: {dashboard_data}")
     if not token:
         raise ValueError("Token is required to insert a dashboard into the database.")
@@ -86,7 +126,17 @@ def insert_dashboard(dashboard_id, dashboard_data, token):
         raise ValueError(f"Failed to insert dashboard into the database. Error: {response.text}")
 
 
-def delete_dashboard(dashboard_id, token):
+def delete_dashboard(dashboard_id: str, token: str) -> None:
+    """
+    Delete a dashboard from the database via API.
+
+    Args:
+        dashboard_id: Unique identifier of the dashboard to delete.
+        token: Authentication token for API access.
+
+    Raises:
+        ValueError: If API request fails.
+    """
     logger.info(f"Deleting dashboard with ID: {dashboard_id}")
     response = httpx.delete(
         f"{API_BASE_URL}/depictio/api/v1/dashboards/delete/{dashboard_id}",
@@ -100,7 +150,22 @@ def delete_dashboard(dashboard_id, token):
         raise ValueError(f"Failed to delete dashboard from the database. Error: {response.text}")
 
 
-def edit_dashboard_name(new_name, dashboard_id, dashboards, token):
+def edit_dashboard_name(new_name: str, dashboard_id: str, dashboards: list, token: str) -> list:
+    """
+    Edit the name of a dashboard and update in database.
+
+    Args:
+        new_name: New name for the dashboard.
+        dashboard_id: Unique identifier of the dashboard to rename.
+        dashboards: List of dashboard objects to update locally.
+        token: Authentication token for API access.
+
+    Returns:
+        list: Updated list of dashboards with the renamed dashboard.
+
+    Raises:
+        ValueError: If API request fails.
+    """
     logger.info(f"Editing dashboard name for dashboard ID: {dashboard_id}")
 
     updated_dashboards = list()
@@ -108,7 +173,7 @@ def edit_dashboard_name(new_name, dashboard_id, dashboards, token):
     # Iterate over the dashboards to find the dashboard with the matching ID and update the name
     for dashboard in dashboards:
         if dashboard.dashboard_id == dashboard_id:
-            logger.info(f"Found dashboard to edit: {dashboard}")
+            logger.debug(f"Found dashboard to edit: {dashboard}")
             dashboard.title = new_name
         updated_dashboards.append(dashboard)
 
@@ -127,7 +192,17 @@ def edit_dashboard_name(new_name, dashboard_id, dashboards, token):
     return updated_dashboards
 
 
-def render_welcome_section(email, is_anonymous=False):
+def render_welcome_section(email: str, is_anonymous: bool = False) -> dmc.Grid:
+    """
+    Render the welcome section with user avatar and create dashboard button.
+
+    Args:
+        email: User's email address for display and avatar.
+        is_anonymous: Whether the user is anonymous (disables create button).
+
+    Returns:
+        dmc.Grid: Welcome section layout component.
+    """
     # Check if user is anonymous and disable button accordingly
     button_disabled = is_anonymous
     button_text = "+ New Dashboard" if not is_anonymous else "Login to Create Dashboards"
@@ -182,7 +257,16 @@ def render_welcome_section(email, is_anonymous=False):
     )
 
 
-def render_dashboard_list_section(email):
+def render_dashboard_list_section(email: str) -> html.Div:
+    """
+    Render the container for the dashboard list.
+
+    Args:
+        email: User's email used as index for the component ID.
+
+    Returns:
+        html.Div: Container div for dashboard list content.
+    """
     return html.Div(
         id={"type": "dashboard-list", "index": email},
         style={
@@ -192,8 +276,35 @@ def render_dashboard_list_section(email):
     )
 
 
-def register_callbacks_dashboards_management(app):
-    def create_dashboards_view(dashboards):
+def register_callbacks_dashboards_management(app: dash.Dash) -> None:
+    """
+    Register all Dash callbacks for dashboard management functionality.
+
+    Registers callbacks for:
+    - Dashboard listing and filtering
+    - Dashboard creation, deletion, and renaming
+    - Dashboard card rendering and interactions
+    - Modal dialogs for dashboard operations
+
+    Args:
+        app: The Dash application instance to register callbacks with.
+    """
+
+    def create_dashboards_view(dashboards: list) -> list:
+        """
+        Create a list view of dashboards as styled Paper components.
+
+        Generates a simple list view of dashboards with basic information
+        (title, version, owner) and action buttons (View, Delete).
+
+        Args:
+            dashboards: List of dashboard dictionaries containing dashboard
+                metadata including title, version, permissions, and dashboard_id.
+
+        Returns:
+            list: List of dmc.Paper components, each representing a dashboard
+                with its information and action buttons in a horizontal layout.
+        """
         logger.debug(f"dashboards: {dashboards}")
 
         dashboards_view = [
@@ -248,12 +359,63 @@ def register_callbacks_dashboards_management(app):
         return dashboards_view
 
     def create_homepage_view(dashboards, user_id, token, current_user):
+        """
+        Create the main homepage view displaying all accessible dashboards.
+
+        Renders the complete dashboard management homepage with dashboards
+        organized into two sections: owned dashboards and accessed dashboards.
+        Each dashboard is displayed as a card with thumbnail, metadata badges,
+        and action buttons (view, edit, duplicate, delete, privacy toggle).
+
+        This function orchestrates the rendering of dashboard cards by:
+        1. Categorizing dashboards into owned vs accessed based on user_id
+        2. Generating dashboard cards with thumbnails and action buttons
+        3. Organizing cards into responsive grid layouts
+        4. Caching project lookups to minimize API calls
+
+        Args:
+            dashboards: List of dashboard dictionaries containing full dashboard
+                data including permissions, project_id, title, and customization.
+            user_id: The current user's ID used to determine ownership status
+                and enable/disable edit controls.
+            token: Authentication token for API calls (e.g., project lookups).
+            current_user: User object containing user context information
+                including is_anonymous flag for permission checks.
+
+        Returns:
+            html.Div: Complete homepage layout with two sections:
+                - Owned Dashboards: Dashboards where user is an owner
+                - Accessed Dashboards: Dashboards user can view but doesn't own
+                Both sections use responsive SimpleGrid layouts that adjust
+                columns based on screen size (1/2/3 columns).
+        """
         logger.debug(f"dashboards: {dashboards}")
 
         # Create project cache to avoid redundant API calls
         project_cache = {}
 
         def modal_edit_name_dashboard(dashboard):
+            """
+            Create a modal dialog for editing a dashboard's name.
+
+            Generates a styled modal with a text input field for entering
+            a new dashboard name, along with Cancel and Save buttons.
+            The modal includes proper styling, icons, and error message
+            placeholder for validation feedback.
+
+            Args:
+                dashboard: Dashboard dictionary containing at minimum the
+                    'dashboard_id' key used for component ID indexing.
+
+            Returns:
+                dmc.Modal: A Mantine modal component with:
+                    - Header with rename icon and title
+                    - Text input field for new dashboard name
+                    - Error message text (initially hidden)
+                    - Cancel and Save action buttons
+                    The modal uses pattern-matching IDs based on dashboard_id
+                    for callback routing.
+            """
             modal = dmc.Modal(
                 id={"type": "edit-password-modal", "index": dashboard["dashboard_id"]},
                 opened=False,
@@ -354,6 +516,36 @@ def register_callbacks_dashboards_management(app):
             return modal
 
         def create_dashboad_view_header(dashboard, user_id, token):
+            """
+            Create the header section of a dashboard card.
+
+            Generates the visual header for a dashboard card including:
+            - Dashboard icon (either Iconify icon or workflow logo image)
+            - Dashboard title and optional subtitle
+            - Metadata badges for project, owner, and public/private status
+
+            The header uses visual indicators to show ownership (blue badge
+            for owned dashboards, gray for others) and visibility status
+            (green for public, purple for private).
+
+            Args:
+                dashboard: Dashboard dictionary containing:
+                    - is_public: Boolean visibility status
+                    - permissions.owners: List of owner user objects
+                    - project_id: ID of associated project
+                    - title: Dashboard title text
+                    - icon: Icon identifier (Iconify string or asset path)
+                    - icon_color: Color for the icon display
+                    - subtitle: Optional subtitle text
+                user_id: Current user's ID for ownership badge coloring.
+                token: Authentication token for project name API lookup.
+
+            Returns:
+                html.Div: Header component containing:
+                    - Icon display (ActionIcon or html.Img for workflow logos)
+                    - Title and subtitle text
+                    - Stack of badges (Project, Owner, Public/Private status)
+            """
             public = dashboard["is_public"]
 
             if str(user_id) in [str(owner["_id"]) for owner in dashboard["permissions"]["owners"]]:
@@ -376,7 +568,6 @@ def register_callbacks_dashboards_management(app):
             else:
                 response = api_get_project_from_id(project_id=dashboard["project_id"], token=token)
                 if response.status_code == 200:
-                    # logger.debug(f"Project response: {response.json()}")
                     project = response.json()
                     project_name = project["name"]
                     project_cache[project_id_str] = project_name  # Cache for next use
@@ -523,6 +714,33 @@ def register_callbacks_dashboards_management(app):
             return group
 
         def create_buttons(dashboard, user_id, current_user):
+            """
+            Create the action buttons for a dashboard card.
+
+            Generates a group of buttons for dashboard operations including
+            View, Edit name, Duplicate, Delete, and Privacy toggle. Buttons
+            are conditionally enabled/disabled based on user permissions:
+            - Non-owners cannot edit, delete, or toggle privacy
+            - Anonymous users cannot duplicate dashboards
+
+            Args:
+                dashboard: Dashboard dictionary containing:
+                    - dashboard_id: Unique identifier for button IDs
+                    - permissions.owners: List of owner objects for permission check
+                    - is_public: Current visibility status for privacy button text
+                user_id: Current user's ID for ownership permission check.
+                current_user: User object with is_anonymous and is_temporary
+                    attributes for anonymous user detection.
+
+            Returns:
+                html.Div: Container with a dmc.Group of action buttons:
+                    - View: Link to dashboard page (always enabled)
+                    - Edit name: Opens rename modal (owner only)
+                    - Duplicate: Creates dashboard copy (authenticated users)
+                    - Delete: Opens delete confirmation (owner only)
+                    - Privacy toggle: Switches public/private (owner only, hidden)
+                    All buttons use pattern-matching IDs with dashboard_id index.
+            """
             disabled = (
                 True
                 if str(user_id)
@@ -628,6 +846,34 @@ def register_callbacks_dashboards_management(app):
             return group
 
         def return_thumbnail(user_id, dashboard):
+            """
+            Generate the thumbnail image section for a dashboard card.
+
+            Creates a clickable thumbnail display for a dashboard. If a
+            screenshot exists in the static/screenshots folder, displays it
+            with proper sizing and object-fit for 16:9 aspect ratio images.
+            Otherwise, displays a default placeholder image with "No thumbnail
+            available" text.
+
+            The thumbnail is wrapped in a link to the dashboard view page,
+            allowing users to click the image to open the dashboard.
+
+            Args:
+                user_id: Current user's ID (currently unused, kept for
+                    potential future per-user thumbnail support).
+                dashboard: Dashboard dictionary containing:
+                    - _id: MongoDB ObjectId used for thumbnail filename
+                    - dashboard_id: Used for the navigation link URL
+                    - title: Used for image alt text
+
+            Returns:
+                html.Div or html.A: Clickable thumbnail component:
+                    - If thumbnail exists: html.A wrapping dmc.CardSection
+                      with the dashboard screenshot image
+                    - If no thumbnail: html.Div with default placeholder
+                      image and "No thumbnail available" message
+                    Both link to /dashboard/{dashboard_id} on click.
+            """
             import os
 
             # Define the output folder where screenshots are saved
@@ -720,6 +966,31 @@ def register_callbacks_dashboards_management(app):
             return thumbnail
 
         def loop_over_dashboards(user_id, dashboards, token, current_user):
+            """
+            Generate a list of dashboard card components.
+
+            Iterates over all provided dashboards and creates a complete
+            card component for each, assembling the thumbnail, header,
+            action buttons (in an accordion), and modal dialogs for
+            delete confirmation and name editing.
+
+            Args:
+                user_id: Current user's ID for permission checks and
+                    ownership display.
+                dashboards: List of dashboard dictionaries to render.
+                token: Authentication token for API calls during rendering.
+                current_user: User object for anonymous user detection
+                    and permission validation.
+
+            Returns:
+                list: List of dmc.Card components, each containing:
+                    - Clickable thumbnail image linking to dashboard
+                    - Header with icon, title, subtitle, and badges
+                    - Collapsible accordion with action buttons
+                    - Delete confirmation modal
+                    - Edit name modal
+                    Cards are styled with borders, shadows, and flex layout.
+            """
             view = list()
             for dashboard in dashboards:
                 # delete_modal = modal_delete_dashboard(dashboard)
@@ -887,6 +1158,19 @@ def register_callbacks_dashboards_management(app):
         prevent_initial_call=True,
     )
     def load_projects(modal_opened, user_data):
+        """
+        Load available projects when dashboard creation modal is opened.
+
+        Fetches all projects accessible to the user from the API and formats
+        them for display in a select dropdown.
+
+        Args:
+            modal_opened: Whether the dashboard creation modal is open.
+            user_data: User session data containing access token.
+
+        Returns:
+            list: List of project options with label and value keys.
+        """
         # Only load projects when modal is opened
         if not modal_opened:
             logger.info("Modal not opened, returning empty list")
@@ -1053,6 +1337,30 @@ def register_callbacks_dashboards_management(app):
         user_data,
         modal_data,
     ):
+        """
+        Main callback for dashboard list updates.
+
+        Handles all dashboard actions: creation, deletion, duplication, name editing,
+        and public/private status toggling. Routes to appropriate handler based on
+        which button triggered the callback.
+
+        Args:
+            delete_n_clicks_list: Click counts for delete confirmation buttons.
+            edit_n_clicks_list: Click counts for save name edit buttons.
+            duplicate_n_clicks_list: Click counts for duplicate buttons.
+            make_public_n_clicks_list: Click counts for public/private toggle buttons.
+            make_public_children_list: Button text for public/private buttons.
+            make_public_id_list: IDs for public/private buttons.
+            store_data_list: Dashboard store data list.
+            delete_ids_list: IDs of dashboards to delete.
+            new_name_list_values: New name input values.
+            new_name_list_ids: IDs for name input fields.
+            user_data: User session data with access token.
+            modal_data: Dashboard creation modal data.
+
+        Returns:
+            list: Updated dashboard view components for each dashboard-list output.
+        """
         # log_context_info()
 
         # Fetch user data using cached API call
@@ -1172,7 +1480,7 @@ def register_callbacks_dashboards_management(app):
         dashboards, modal_data, user_data, current_userbase, store_data_list
     ):
         if modal_data.get("title"):
-            logger.info("Creating new dashboard")
+            logger.debug("Creating new dashboard")
 
             dashboard_id = PyObjectId()
             # dashboard_id = generate_unique_index()
@@ -1228,7 +1536,6 @@ def register_callbacks_dashboards_management(app):
         updated_dashboards = list()
         for dashboard in dashboards:
             if str(dashboard.dashboard_id) == str(index_make_public):
-                logger.debug(f"Found dashboard to update status: {dashboard}")
                 response = httpx.post(
                     f"{API_BASE_URL}/depictio/api/v1/dashboards/toggle_public_status/{index_make_public}",
                     headers={"Authorization": f"Bearer {user_data['access_token']}"},
@@ -1255,6 +1562,37 @@ def register_callbacks_dashboards_management(app):
         )
 
     def handle_dashboard_duplication(dashboards, user_data, store_data_list, current_userbase):
+        """
+        Handle the duplication of an existing dashboard.
+
+        Creates a complete copy of a dashboard including all its data
+        and components. The duplicated dashboard is assigned a new ID,
+        ownership is transferred to the current user, and it is set to
+        private by default. The dashboard thumbnail is also copied.
+
+        This function:
+        1. Identifies the dashboard to duplicate from callback context
+        2. Fetches the full dashboard data from the API
+        3. Creates a deep copy with new ID and "(copy)" title suffix
+        4. Transfers ownership to the current user
+        5. Sets the duplicate to private visibility
+        6. Saves the new dashboard to the database
+        7. Copies the thumbnail screenshot if it exists
+
+        Args:
+            dashboards: List of current DashboardData objects.
+            user_data: User session data containing access_token for API calls.
+            store_data_list: List of store data for generating view response.
+            current_userbase: UserBase object representing the current user,
+                used to set ownership on the duplicated dashboard.
+
+        Returns:
+            list: Updated dashboard view components reflecting the addition
+                of the duplicated dashboard.
+
+        Raises:
+            ValueError: If fetching the original dashboard data fails.
+        """
         logger.info("Duplicate dashboard button clicked")
         ctx_triggered_dict = ctx.triggered[0]
         index_duplicate = eval(ctx_triggered_dict["prop_id"].split(".")[0])["index"]
@@ -1263,7 +1601,7 @@ def register_callbacks_dashboards_management(app):
         for dashboard in dashboards:
             updated_dashboards.append(dashboard)
             if str(dashboard.dashboard_id) == str(index_duplicate):
-                logger.info(f"Found dashboard to duplicate: {dashboard}")
+                logger.debug(f"Found dashboard to duplicate: {dashboard}")
 
                 # Load full dashboard data from the database
                 dashboard_data_response = httpx.get(
@@ -1346,6 +1684,19 @@ def register_callbacks_dashboards_management(app):
         prevent_initial_call=True,
     )
     def handle_edit_name_modal(edit_clicks, cancel_clicks, opened):
+        """
+        Handle the edit name modal open/close state.
+
+        Opens modal when edit button clicked, closes when cancel clicked.
+
+        Args:
+            edit_clicks: Click count for edit button.
+            cancel_clicks: Click count for cancel button.
+            opened: Current modal open state.
+
+        Returns:
+            bool: New modal open state.
+        """
         # Check which button was clicked
         ctx = dash.callback_context
         if not ctx.triggered:
@@ -1403,6 +1754,29 @@ def register_callbacks_dashboards_management(app):
         init_create_dashboard_button,
         project,
     ):
+        """
+        Handle dashboard creation modal interactions.
+
+        Manages modal open/close state, validates inputs (unique title, project selection),
+        and submits dashboard creation data. Redirects anonymous users to profile page.
+
+        Args:
+            n_clicks_create: Click counts for create dashboard buttons.
+            n_clicks_submit: Click count for submit button.
+            n_clicks_cancel: Click count for cancel button.
+            title: Dashboard title input value.
+            subtitle: Dashboard subtitle input value.
+            icon: Selected icon identifier.
+            icon_color: Selected icon color.
+            workflow_system: Selected workflow system.
+            opened: Current modal open state.
+            user_data: User session data with access token.
+            init_create_dashboard_button: Initialization flag for create button.
+            project: Selected project ID.
+
+        Returns:
+            Tuple of (modal_data, modal_opened, init_flag, warning_style, warning_children, url_pathname)
+        """
         data = {
             "title": "",
             "subtitle": "",
@@ -1567,6 +1941,20 @@ def register_callbacks_dashboards_management(app):
         prevent_initial_call=True,
     )
     def open_delete_modal(n1, n2, n3, opened):
+        """
+        Toggle the delete confirmation modal open/close state.
+
+        Any of the three buttons (delete, confirm, cancel) will toggle the modal.
+
+        Args:
+            n1: Click count for delete button.
+            n2: Click count for confirm button.
+            n3: Click count for cancel button.
+            opened: Current modal open state.
+
+        Returns:
+            bool: New modal open state (toggled).
+        """
         return not opened
 
     @app.callback(
@@ -1580,6 +1968,22 @@ def register_callbacks_dashboards_management(app):
         pathname,
         data,
     ):
+        """
+        Update the landing page content based on URL and user data.
+
+        Renders the dashboard list section when user navigates to /dashboards
+        or when user session data changes.
+
+        Args:
+            pathname: Current URL pathname.
+            data: User session data containing access token.
+
+        Returns:
+            Component: Landing page content with dashboard list, or no_update.
+
+        Raises:
+            dash.exceptions.PreventUpdate: When no trigger is present.
+        """
         # Use consolidated user cache instead of individual API call
 
         # Fetch user data using cached API call

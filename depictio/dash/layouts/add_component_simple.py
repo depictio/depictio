@@ -17,7 +17,6 @@ from depictio.api.v1.configs.logging_init import logger
 def register_add_component_simple_callback(app):
     """Register the component creation navigation callback."""
     logger.info("=" * 80)
-    logger.info("📋 REGISTERING ADD COMPONENT CALLBACK")
     logger.info(f"   App name: {app.config.get('name', 'Unknown')}")
     logger.info("=" * 80)
 
@@ -48,12 +47,10 @@ def register_add_component_simple_callback(app):
 
         # EARLY EXIT: Don't process on component edit pages
         if current_pathname and "/component/edit/" in current_pathname:
-            logger.info("🔒 On component edit page - skipping add button callback")
             raise PreventUpdate
 
         # CRITICAL: Log immediately when callback is entered
         logger.info("=" * 80)
-        logger.info("🚀 ADD BUTTON CALLBACK ENTERED")
         logger.info("=" * 80)
 
         # Log for debugging URL redirection issues
@@ -126,10 +123,6 @@ def register_add_component_simple_callback(app):
         logger.info(
             f"✨ NAVIGATE TO STEPPER - Dashboard: {dashboard_id}, Component: {component_id}"
         )
-        logger.info(f"  🔗 URL: {stepper_url}")
-        logger.info(f"  📝 Storing n_clicks: {n_clicks}")
 
         # Return both the URL and the updated stored clicks dict (maintaining the dict structure)
         return stepper_url, {"count": n_clicks, "initialized": True, "_id": ""}
-
-    logger.info("✅ Component creation navigation callback registered")

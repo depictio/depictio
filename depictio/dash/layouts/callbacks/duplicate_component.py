@@ -126,7 +126,7 @@ def register_duplicate_component_callback(app):
         dims = get_dual_panel_dimensions(component_type)
         new_box_id = f"box-{new_component_id}"
 
-        logger.info(f"🔨 Building fresh component: {component_type}, new_id: {new_component_id}")
+        logger.debug(f"🔨 Building fresh component: {component_type}, new_id: {new_component_id}")
 
         # Build fresh component from duplicated metadata using module build functions
         if component_type == "card":

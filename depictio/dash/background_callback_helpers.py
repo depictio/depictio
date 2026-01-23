@@ -67,13 +67,13 @@ def log_background_callback_status(component_type: str, callback_name: str):
     """
     Log the background callback status for a component's callback.
 
+    No-op in production to reduce log verbosity.
+
     Args:
         component_type: Component type ('card', 'figure', etc.)
         callback_name: Name of the callback being registered
     """
-    is_background = should_use_background_for_component(component_type)
-    mode = "BACKGROUND" if is_background else "SYNCHRONOUS"
-    logger.info(f"🔧 {component_type.upper()} {callback_name}: {mode} mode")
+    pass
 
 
 # Log overall background callback status at module load
@@ -82,10 +82,10 @@ if _USE_BACKGROUND_CALLBACKS:
         "✅ DASHBOARD VIEW MODE: Background callbacks ENABLED (DEPICTIO_CELERY_ENABLED=true)"
     )
     logger.info("   Dashboard view/edit will use background callbacks for: card, figure, table")
-    logger.info("   Design mode ALWAYS uses background callbacks (not affected by this setting)")
+    logger.debug("   Design mode ALWAYS uses background callbacks (not affected by this setting)")
 else:
     logger.info(
         "🚫 DASHBOARD VIEW MODE: Background callbacks DISABLED (DEPICTIO_CELERY_ENABLED=false)"
     )
     logger.info("   Dashboard view/edit will run callbacks synchronously")
-    logger.info("   Design mode ALWAYS uses background callbacks (not affected by this setting)")
+    logger.debug("   Design mode ALWAYS uses background callbacks (not affected by this setting)")

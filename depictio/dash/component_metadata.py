@@ -17,8 +17,8 @@ Available Functions:
 - get_skeleton_loader_color(component_type) -> str: Get skeleton loader color (alias for get_component_color)
 
 Legacy Support Functions:
+- get_component_type_from_display_name(display_name) -> str | None: Convert display name to component type
 - get_component_metadata_by_display_name(display_name) -> dict: Get metadata using display name
-- get_component_type_from_display_name(display_name) -> str: Convert display name to component type
 """
 
 from typing import Literal
@@ -174,14 +174,15 @@ def get_dual_panel_dimensions(component_type: str) -> dict:
     Get grid dimensions for a component type in the dual-panel layout.
 
     Args:
-        component_type: Component type ('interactive', 'card', 'figure', 'table')
+        component_type: Component type ('interactive', 'card', 'figure', 'table').
 
     Returns:
-        dict: {'w': width, 'h': height} in grid units
+        Dictionary with 'w' (width) and 'h' (height) in grid units.
+        Defaults to card dimensions if component type not found.
 
     Example:
         >>> get_dual_panel_dimensions('card')
-        {'w': 2, 'h': 3}  # 2 columns wide, 3 rows tall
+        {'w': 2, 'h': 3}
     """
     return DUAL_PANEL_DIMENSIONS.get(
         component_type,
@@ -194,10 +195,12 @@ def get_component_metadata(component_type: str) -> dict:
     Get metadata for a specific component type.
 
     Args:
-        component_type (str): The type of component ('figure', 'card', 'interactive', etc.)
+        component_type: The type of component ('figure', 'card', 'interactive', etc.).
 
     Returns:
-        dict: Component metadata dictionary
+        Component metadata dictionary containing color, icon, display_name,
+        description, supports_edit, supports_reset, and enabled flags.
+        Returns default values if component type not found.
     """
     return COMPONENT_METADATA.get(
         component_type,
@@ -218,10 +221,10 @@ def get_component_color(component_type: str) -> str:
     Get the primary color for a component type.
 
     Args:
-        component_type (str): The type of component
+        component_type: The type of component.
 
     Returns:
-        str: Color name or hex value
+        Color name or hex value for the component.
     """
     metadata = get_component_metadata(component_type)
     return metadata["color"]
@@ -232,10 +235,10 @@ def get_component_icon(component_type: str) -> str:
     Get the icon for a component type.
 
     Args:
-        component_type (str): The type of component
+        component_type: The type of component.
 
     Returns:
-        str: Icon name/identifier
+        Icon name/identifier (e.g., 'mdi:graph-box').
     """
     metadata = get_component_metadata(component_type)
     return metadata["icon"]
@@ -246,10 +249,10 @@ def get_component_display_name(component_type: str) -> str:
     Get the display name for a component type.
 
     Args:
-        component_type (str): The type of component
+        component_type: The type of component.
 
     Returns:
-        str: Human-readable display name
+        Human-readable display name (e.g., 'Figure', 'Card').
     """
     metadata = get_component_metadata(component_type)
     return metadata["display_name"]
@@ -260,25 +263,98 @@ def is_enabled(component_type: str) -> bool:
     Check if a component type is enabled.
 
     Args:
-        component_type (str): The type of component
+        component_type: The type of component.
 
     Returns:
-        bool: True if component is enabled for use
+        True if component is enabled for use, False otherwise.
+        Defaults to True if not specified in metadata.
     """
     metadata = get_component_metadata(component_type)
-    return metadata.get("enabled", True)  # Default to enabled if not specified
+    return metadata.get("enabled", True)
+
+
+def supports_edit(component_type: str) -> bool:
+    """
+    Check if a component type supports editing.
+
+    Args:
+        component_type: The type of component.
+
+    Returns:
+        True if component supports edit mode, False otherwise.
+    """
+    metadata = get_component_metadata(component_type)
+    return metadata.get("supports_edit", False)
+
+
+def supports_reset(component_type: str) -> bool:
+    """
+    Check if a component type supports reset functionality.
+
+    Args:
+        component_type: The type of component.
+
+    Returns:
+        True if component supports reset, False otherwise.
+    """
+    metadata = get_component_metadata(component_type)
+    return metadata.get("supports_reset", False)
+
+
+def get_component_dimensions(component_type: str) -> dict:
+    """
+    Get default grid dimensions for a component type.
+
+    Args:
+        component_type: The type of component.
+
+    Returns:
+        Dictionary with 'w' (width) and 'h' (height) in grid units.
+    """
+    metadata = get_component_metadata(component_type)
+    return metadata.get("default_dimensions", {"w": 20, "h": 16})
+
+
+def get_component_build_function(component_type: str):
+    """
+    Get the build function for a component type.
+
+    Args:
+        component_type: The type of component.
+
+    Returns:
+        Callable build function for the component, or None if not found.
+    """
+    metadata = get_component_metadata(component_type)
+    return metadata.get("build_function")
+
+
+def get_skeleton_loader_color(component_type: str) -> str:
+    """
+    Get the skeleton loader color for a component type.
+
+    Alias for get_component_color, used for loading state visual feedback.
+
+    Args:
+        component_type: The type of component.
+
+    Returns:
+        Color name or hex value for the skeleton loader.
+    """
+    return get_component_color(component_type)
 
 
 def get_build_functions() -> dict:
     """
     Get a dictionary mapping component types to their build functions.
 
-    Includes logging wrapper to track build function executions and detect double-rendering.
-    Returns a special '_reset_counts' function to clear counters between dashboard loads.
+    Returns build functions wrapped with logging to track executions and
+    detect double-rendering issues. Includes a special '_reset_counts'
+    function to clear counters between dashboard loads.
 
     Returns:
-        dict: Dictionary with component types as keys and wrapped build functions as values,
-              plus '_reset_counts' key with reset function
+        Dictionary with component types as keys and wrapped build functions
+        as values. Also includes '_reset_counts' key with the reset function.
     """
     import functools
 
@@ -290,7 +366,6 @@ def get_build_functions() -> dict:
     def reset_counts():
         """Clear all build counts - call this at start of each dashboard render"""
         build_counts.clear()
-        logger.info("🔄 BUILD COUNTS RESET")
 
     def wrap_build_function(component_type, original_func):
         """Wrapper to log and track build function executions"""
@@ -335,11 +410,14 @@ def get_build_functions() -> dict:
 
 def get_async_build_functions() -> dict:
     """
-    DEPRECATED: Use get_build_functions() instead. Async functionality has been disabled.
-    This function now returns the same sync functions as get_build_functions().
+    Get build functions dictionary (deprecated async version).
+
+    Deprecated:
+        Use get_build_functions() instead. Async functionality has been disabled.
+        This function now returns the same sync functions as get_build_functions().
 
     Returns:
-        dict: Dictionary with component types as keys and sync build functions as values
+        Dictionary with component types as keys and sync build functions as values.
     """
     # Return sync functions instead of async to disable async functionality
     return get_build_functions()
@@ -349,11 +427,12 @@ def get_component_dimensions_dict() -> dict:
     """
     Get a dictionary mapping all component types to their default dimensions.
 
-    This function provides backward compatibility for the old component_dimensions
-    dictionary format used in the draggable layout system.
+    Provides backward compatibility for the old component_dimensions dictionary
+    format used in the draggable layout system.
 
     Returns:
-        dict: Dictionary with component types as keys and dimension dicts as values
+        Dictionary with component types as keys and dimension dicts as values.
+        Each dimension dict contains 'w' (width) and 'h' (height) in grid units.
     """
     return {
         component_type: metadata.get("default_dimensions", {"w": 20, "h": 16})
@@ -375,18 +454,36 @@ DISPLAY_NAME_TO_TYPE_MAPPING = {
 }
 
 
+def get_component_type_from_display_name(display_name: str) -> str | None:
+    """
+    Convert a display name to its internal component type.
+
+    Args:
+        display_name: Human-readable display name ('Card', 'Figure', etc.).
+
+    Returns:
+        Internal component type string, or None if not found.
+
+    Example:
+        >>> get_component_type_from_display_name('Card')
+        'card'
+    """
+    return DISPLAY_NAME_TO_TYPE_MAPPING.get(display_name)
+
+
 def get_component_metadata_by_display_name(display_name: str) -> dict:
     """
     Get metadata for a component using its display name.
 
-    This function provides backward compatibility for code that uses display names
-    like "Card", "Figure", etc. instead of the internal component types.
+    Provides backward compatibility for code that uses display names like
+    'Card', 'Figure', etc. instead of internal component types.
 
     Args:
-        display_name (str): The display name of the component ('Card', 'Figure', etc.)
+        display_name: The display name of the component ('Card', 'Figure', etc.).
 
     Returns:
-        dict: Dictionary with 'color' and 'icon' keys for the component
+        Dictionary with 'color' and 'icon' keys for the component.
+        Returns default gray color and circle icon for unknown display names.
     """
     component_type = DISPLAY_NAME_TO_TYPE_MAPPING.get(display_name)
     if component_type:
@@ -394,9 +491,7 @@ def get_component_metadata_by_display_name(display_name: str) -> dict:
             "color": get_component_color(component_type),
             "icon": get_component_icon(component_type),
         }
-    else:
-        # Default for "None" case or unknown display names
-        return {"color": "gray", "icon": "ph:circle"}
+    return {"color": "gray", "icon": "ph:circle"}
 
 
 def get_dmc_button_color(
@@ -420,13 +515,15 @@ def get_dmc_button_color(
     """
     Get a valid DMC Button color for a component type.
 
-    Maps hex color values from component metadata to valid DMC Button color literals.
+    Maps hex color values from component metadata to valid DMC Button color
+    literals. This is necessary because DMC buttons require specific color
+    names rather than hex values.
 
     Args:
-        component_type (str): The type of component
+        component_type: The type of component.
 
     Returns:
-        str: Valid DMC Button color literal
+        Valid DMC Button color literal. Defaults to 'gray' if no mapping found.
     """
     metadata_color = get_component_color(component_type)
 

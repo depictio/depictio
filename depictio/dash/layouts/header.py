@@ -27,9 +27,19 @@ BUTTON_STYLE = {"margin": "0 0px", "fontFamily": "Virgil", "marginTop": "5px"}
 # =============================================================================
 
 
-def _check_filter_activity(interactive_values):
-    """Check if any interactive components have active filters by comparing current values with default states."""
-    # logger.debug(f"🔍 _check_filter_activity called with: {interactive_values}")
+def _check_filter_activity(interactive_values: dict | None) -> bool:
+    """Check if any interactive components have active filters.
+
+    Compares current component values with their default states to determine
+    if any filters are currently applied.
+
+    Args:
+        interactive_values: Dictionary containing interactive component values
+            and metadata with default states.
+
+    Returns:
+        True if any filter differs from its default state, False otherwise.
+    """
 
     if not interactive_values:
         logger.info("📭 No interactive_values provided")
@@ -40,19 +50,15 @@ def _check_filter_activity(interactive_values):
 
     if "interactive_components_values" in interactive_values:
         interactive_values_data = interactive_values["interactive_components_values"]
-        logger.info(f"📦 Found interactive_components_values: {len(interactive_values_data)} items")
     elif isinstance(interactive_values, dict):
         # Look for any values that might be interactive components
         for key, value in interactive_values.items():
             if isinstance(value, dict) and "value" in value:
                 interactive_values_data.append(value)
-        logger.info(f"📦 Extracted from dict structure: {len(interactive_values_data)} items")
 
     if not interactive_values_data:
-        logger.info("📭 No interactive component data found")
+        logger.debug("📭 No interactive component data found")
         return False
-
-    logger.info(f"🔍 Checking {len(interactive_values_data)} components for filter activity")
 
     for i, component_data in enumerate(interactive_values_data):
         if isinstance(component_data, dict):
@@ -60,22 +66,16 @@ def _check_filter_activity(interactive_values):
             component_metadata = component_data.get("metadata", {})
             default_state = component_metadata.get("default_state", {})
 
-            logger.info(f"🎛️ Component {i}: value={component_value}")
-            logger.info(f"  🎯 Default state: {default_state}")
-
             # Skip None values
             if component_value is None:
-                logger.info("  ⏭️ Skipping None value")
                 continue
 
             # Skip if no default_state available
             if not default_state:
-                logger.info("  ⚠️ No default_state available, skipping")
                 continue
 
             # Compare current value with default state
             if _is_different_from_default(component_value, default_state):
-                logger.info("  ✅ Component differs from default state - filter active!")
                 return True
             else:
                 logger.info("  ⏭️ Component matches default state")
@@ -84,24 +84,27 @@ def _check_filter_activity(interactive_values):
     return False
 
 
-def _is_empty_selection(value):
-    """
-    Check if a value represents an empty selection.
-    Handles both empty arrays [] and null/None values.
+def _is_empty_selection(value) -> bool:
+    """Check if a value represents an empty selection.
+
+    Handles both empty arrays [] and null/None values for
+    consistent filter comparison.
     """
     return value is None or (isinstance(value, list) and len(value) == 0)
 
 
-def _is_different_from_default(current_value, default_state):
-    """
-    Simple comparison of current value with default state.
+def _is_different_from_default(current_value, default_state: dict) -> bool:
+    """Compare current value with default state.
+
+    Handles different component types (range sliders, selects, etc.)
+    with appropriate comparison logic.
 
     Args:
-        current_value: The current value of the component
-        default_state (dict): The default state configuration for the component
+        current_value: The current value of the component.
+        default_state: Default state config with 'default_value' or 'default_range'.
 
     Returns:
-        bool: True if the component differs from its default state
+        True if the component differs from its default state.
     """
     try:
         # For range sliders, compare with default_range
@@ -130,8 +133,16 @@ def _is_different_from_default(current_value, default_state):
         return False
 
 
-def _get_user_permissions(current_user, data):
-    """Extract user permissions for the dashboard."""
+def _get_user_permissions(current_user, data: dict) -> tuple[bool, bool]:
+    """Extract user permissions for the dashboard.
+
+    Args:
+        current_user: User model with id attribute.
+        data: Dashboard data with permissions structure.
+
+    Returns:
+        Tuple of (is_owner, is_viewer) booleans.
+    """
     owner = str(current_user.id) in [str(e["id"]) for e in data["permissions"]["owners"]]
 
     viewer_ids = [str(e["id"]) for e in data["permissions"]["viewers"] if e != "*"]
@@ -148,8 +159,27 @@ def _get_user_permissions(current_user, data):
 # =============================================================================
 
 
-def _create_action_icon(icon, button_id, disabled=False, n_clicks=None, tooltip=None, **kwargs):
-    """Create a standardized action icon button with optional tooltip."""
+def _create_action_icon(
+    icon: str,
+    button_id: str,
+    disabled: bool = False,
+    n_clicks: int | None = None,
+    tooltip: str | None = None,
+    **kwargs,
+) -> dmc.ActionIcon | dmc.Tooltip:
+    """Create a standardized action icon button with optional tooltip.
+
+    Args:
+        icon: Iconify icon name (e.g., 'mdi:plus').
+        button_id: Unique ID for the action icon.
+        disabled: Whether button is disabled.
+        n_clicks: Initial click count.
+        tooltip: Optional tooltip text.
+        **kwargs: Additional props passed to ActionIcon.
+
+    Returns:
+        ActionIcon component, optionally wrapped in Tooltip.
+    """
     # Add n_clicks to constructor parameters if provided
     action_icon_params = {
         "id": button_id,
@@ -170,7 +200,7 @@ def _create_action_icon(icon, button_id, disabled=False, n_clicks=None, tooltip=
 
     button = dmc.ActionIcon(
         DashIconify(icon=icon, width=28, color="gray"),
-        **action_icon_params,
+        **action_icon_params,  # type: ignore[arg-type]  # dynamic kwargs
     )
 
     if tooltip:
@@ -185,8 +215,8 @@ def _create_action_icon(icon, button_id, disabled=False, n_clicks=None, tooltip=
     return button
 
 
-def _create_reset_filters_button():
-    """Create the reset all filters button with consistent styling."""
+def _create_reset_filters_button() -> dmc.Tooltip:
+    """Create the reset all filters button with tooltip."""
     button = dmc.ActionIcon(
         DashIconify(icon="bx:reset", width=28, color="gray"),
         id="reset-all-filters-button",
@@ -208,8 +238,8 @@ def _create_reset_filters_button():
     )
 
 
-def _create_apply_filters_button():
-    """Create the apply filters button with checkmark icon."""
+def _create_apply_filters_button() -> dmc.Tooltip:
+    """Create the apply filters button (hidden by default, shown when live interactivity OFF)."""
     button = dmc.ActionIcon(
         DashIconify(icon="material-symbols:check", width=28, color="gray"),
         id="apply-filters-button",
@@ -232,8 +262,8 @@ def _create_apply_filters_button():
     )
 
 
-def _create_info_badges(data, project_name):
-    """Create the informational badges for project, owner, and last saved."""
+def _create_info_badges(data: dict, project_name: str) -> dmc.Stack:
+    """Create informational badges for project, owner, and last saved timestamp."""
     return dmc.Stack(
         [
             dmc.Badge(
@@ -260,8 +290,8 @@ def _create_info_badges(data, project_name):
     )
 
 
-def _format_last_saved(timestamp):
-    """Format the last saved timestamp."""
+def _format_last_saved(timestamp: str) -> str:
+    """Format the last saved timestamp for display."""
     if timestamp == "":
         return "Last saved: Never"
     else:
@@ -269,8 +299,8 @@ def _format_last_saved(timestamp):
         return f"Last saved: {formatted_ts}"
 
 
-def _create_backend_components():
-    """Create backend components (stores, modals, etc.)."""
+def _create_backend_components() -> dmc.Box:
+    """Create backend components (stores, modals, hidden outputs)."""
     modal_save_button = dmc.Modal(
         children=[
             dmc.Stack(
@@ -336,8 +366,20 @@ def _create_backend_components():
 # =============================================================================
 
 
-def register_callbacks_header(app):
-    logger.info("🔧 REGISTERING HEADER CALLBACKS (including interactive filter Store callback)")
+def register_callbacks_header(app) -> None:
+    """Register header-related callbacks.
+
+    Callbacks registered:
+    - offcanvas_toggle: Open/close settings drawer
+    - burger_sync: Sync burger menu with sidebar state
+    - edit_mode_navigation: Handle edit/view mode navigation
+    - layout_change_tracking: Track unsaved changes
+    - save_button_indicator: Visual feedback for unsaved state
+
+    Args:
+        app: Dash application instance.
+    """
+    logger.debug("Registering header callbacks")
 
     # REMOVED: toggle_buttons clientside callback (replaced by URL-based edit mode)
     # Previously controlled button disabled states based on unified-edit-mode-button toggle
@@ -455,16 +497,12 @@ def register_callbacks_header(app):
 
     #     has_active_filters = _check_filter_activity(interactive_values)
 
-    #     logger.info(f"🎯 Filter activity detected: {has_active_filters}")
-
     #     if has_active_filters:
     #         # Orange filled variant with white icon when filters are active
-    #         logger.info("🟠 Setting reset button to orange with white icon (filters active)")
     #         icon = DashIconify(icon="bx:reset", width=16, color="white")
     #         return colors["orange"], "filled", icon
     #     else:
     #         # Gray subtle variant with gray icon when no filters
-    #         logger.info("⚪ Setting reset button to gray with gray icon (no filters)")
     #         icon = DashIconify(icon="bx:reset", width=16, color="gray")
     #         return "gray", "light", icon
 
@@ -479,24 +517,19 @@ def register_callbacks_header(app):
     #     """
     #     try:
     #         dashboard_id = pathname.split("/")[-1]
-    #         logger.info(f"Loading stored_metadata for dashboard_id: {dashboard_id}")
 
     #         from depictio.api.v1.db import dashboards_collection
     #         dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     #         if not dashboard:
-    #             logger.error(f"Dashboard with ID {dashboard_id} not found.")
     #             return dash.no_update
 
     #         stored_metadata = dashboard.get("stored_metadata", [])
     #         if not stored_metadata:
-    #             logger.warning(f"No stored_metadata found for dashboard_id: {dashboard_id}.")
     #             return []
 
-    #         logger.info(f"Loaded stored_metadata: {stored_metadata}")
     #         return stored_metadata
 
     #     except Exception as e:
-    #         logger.exception("Failed to load stored_metadata from MongoDB.")
     #         return dash.no_update
 
     # =============================================================================
@@ -673,67 +706,63 @@ def register_callbacks_header(app):
 
 
 # =============================================================================
-# MAIN LAYOUT FUNCTION
+# HEADER COMPONENT BUILDERS
 # =============================================================================
 
 
-def design_header(data, local_store, edit_mode: bool = False):
-    """
-    Design the main dashboard header with modular components.
+def _ensure_data_structure(data: dict) -> None:
+    """Ensure required data structure fields exist.
 
     Args:
-        data: Dashboard data
-        local_store: Local storage with access token
-        edit_mode: If True, show full edit controls. If False, show simplified view-mode header.
+        data: Dashboard data dictionary to validate and update.
     """
-    # Ensure data structure exists
-    if data:
-        if "stored_add_button" not in data:
-            data["stored_add_button"] = {"count": 0}
-        if "stored_edit_dashboard_mode_button" not in data:
-            data["stored_edit_dashboard_mode_button"] = [int(0)]
-        if "buttons_data" not in data:
-            data["buttons_data"] = {"unified_edit_mode": True}  # Default edit mode ON for owners
+    if not data:
+        return
 
-    # Get user and permissions
-    current_user = api_call_fetch_user_from_token(local_store["access_token"])
-    owner, viewer = _get_user_permissions(current_user, data)
+    if "stored_add_button" not in data:
+        data["stored_add_button"] = {"count": 0}
+    if "stored_edit_dashboard_mode_button" not in data:
+        data["stored_edit_dashboard_mode_button"] = [int(0)]
+    if "buttons_data" not in data:
+        data["buttons_data"] = {"unified_edit_mode": True}
 
-    # Determine button states based on ownership
-    # Edit mode controls (add/edit/save/share) are only available to owners
-    # They are conditionally rendered based on edit_mode parameter (URL-based)
-    if not owner:
-        # Non-owners: disable all edit controls (but they won't be rendered in view mode anyway)
-        disabled = True
-    else:
-        # Owners: enable controls (will be rendered based on edit_mode)
-        disabled = False
 
-    # Get project name
+def _fetch_project_name(project_id: str, access_token: str) -> str:
+    """Fetch project name from API.
+
+    Args:
+        project_id: Project ID to fetch.
+        access_token: JWT access token.
+
+    Returns:
+        Project name string.
+
+    Raises:
+        Exception: If project fetch fails.
+    """
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id",
-        params={"project_id": data["project_id"]},
-        headers={"Authorization": f"Bearer {local_store['access_token']}"},
+        params={"project_id": project_id},
+        headers={"Authorization": f"Bearer {access_token}"},
         timeout=settings.performance.api_request_timeout,
     )
     if response.status_code != 200:
         raise Exception("Failed to fetch project data.")
-    project_name = response.json()["name"]
+    return response.json()["name"]
 
-    # Initialize click counts
-    init_nclicks_add_button = (
-        data["stored_add_button"] if data else {"count": 0, "initialized": False, "_id": ""}
-    )
-    init_nclicks_edit_dashboard_mode_button = (
-        data["stored_edit_dashboard_mode_button"] if data else [int(0)]
-    )
 
-    # SIMPLIFIED HEADER: Consistent button styling
-    # All buttons use dmc.Button for consistent UX
-    # Removed: add_new_component_button, save_button, apply_filters_button
+def _create_header_action_buttons(
+    disabled: bool, edit_mode: bool
+) -> tuple[dmc.Button, dmc.Button, dmc.Button, dmc.Button, dmc.Button, dmc.Button]:
+    """Create action buttons for the header.
 
-    # Reset filters button - simplified text
-    # IMPORTANT: ID must be "reset-all-filters-button" to match callbacks
+    Args:
+        disabled: Whether edit controls should be disabled (non-owners).
+        edit_mode: Whether in edit mode.
+
+    Returns:
+        Tuple of (reset_filters, settings, edit_dashboard, exit_edit, add_component, save_dashboard) buttons.
+    """
     reset_filters_button = dmc.Button(
         "Reset",
         id="reset-all-filters-button",
@@ -741,11 +770,10 @@ def design_header(data, local_store, edit_mode: bool = False):
         size="sm",
         color="orange",
         variant="filled",
-        n_clicks=0,  # Required for callback
+        n_clicks=0,
     )
 
-    # Settings button - always visible to access dashboard info and settings
-    open_offcanvas_parameters_button = dmc.Button(
+    settings_button = dmc.Button(
         "Settings",
         id="open-offcanvas-parameters-button",
         leftSection=DashIconify(icon="ic:baseline-settings", width=16, color="white"),
@@ -754,12 +782,6 @@ def design_header(data, local_store, edit_mode: bool = False):
         variant="filled",
     )
 
-    # REMOVED: edit_mode_button_header (replaced by dedicated Edit Dashboard / Exit Edit Mode buttons)
-    # The old edit-status-badge-clickable-2 button was used to toggle edit mode via unified-edit-mode-button
-    # Now we use URL-based edit mode with explicit navigation buttons
-
-    # Create "Edit" button for view mode (navigates to /edit URL)
-    # Uses blue color matching edit ActionIcon in components
     edit_dashboard_button = dmc.Button(
         "Edit",
         id="enter-edit-mode-button",
@@ -767,12 +789,11 @@ def design_header(data, local_store, edit_mode: bool = False):
         size="sm",
         color="blue",
         variant="filled",
-        disabled=disabled,  # Disable for non-owners
-        style={"display": "none" if edit_mode else "block"},  # Only show in view mode
-        n_clicks=0,  # Required for clientside callback
+        disabled=disabled,
+        style={"display": "none" if edit_mode else "block"},
+        n_clicks=0,
     )
 
-    # Create "Exit" button for edit mode (navigates back to view URL)
     exit_edit_button = dmc.Button(
         "Exit Edit",
         id="exit-edit-mode-button",
@@ -780,51 +801,54 @@ def design_header(data, local_store, edit_mode: bool = False):
         size="sm",
         color="gray",
         variant="filled",
-        style={"display": "block" if edit_mode else "none"},  # Only show in edit mode
-        n_clicks=0,  # Required for clientside callback
+        style={"display": "block" if edit_mode else "none"},
+        n_clicks=0,
     )
 
-    # Create "Add Component" button for edit mode
     add_component_button = dmc.Button(
         "Add",
-        id="add-button",  # Must match callback in add_component_simple.py
+        id="add-button",
         leftSection=DashIconify(icon="mdi:plus-circle", width=16, color="white"),
         size="sm",
         color="green",
         variant="filled",
-        disabled=disabled,  # Disable for non-owners
-        style={"display": "block" if edit_mode else "none"},  # Only show in edit mode
-        # n_clicks not set - Dash preserves count across re-renders
+        disabled=disabled,
+        style={"display": "block" if edit_mode else "none"},
     )
 
-    # Create "Save Dashboard" button for edit mode
     save_dashboard_button = dmc.Button(
         "Save",
-        id="save-button-dashboard",  # Must match callback in save.py
+        id="save-button-dashboard",
         leftSection=DashIconify(icon="mdi:content-save", width=16, color="white"),
         size="sm",
         color="teal",
         variant="filled",
-        disabled=disabled,  # Disable for non-owners
-        style={"display": "block" if edit_mode else "none"},  # Only show in edit mode
-        n_clicks=0,  # Required for callback to trigger properly
-    )
-
-    # Create remove all components button for offcanvas
-    remove_all_components_button = dmc.Button(
-        "Remove all components",
-        id="remove-all-components-button",
-        leftSection=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
-        size="md",
-        radius="xl",
-        variant="gradient",
-        gradient={"from": "red", "to": "pink", "deg": 105},
         disabled=disabled,
-        fullWidth=True,
+        style={"display": "block" if edit_mode else "none"},
+        n_clicks=0,
     )
 
-    # NEW: Dashboard Info Section for drawer
-    dashboard_info_group = dmc.Stack(
+    return (
+        reset_filters_button,
+        settings_button,
+        edit_dashboard_button,
+        exit_edit_button,
+        add_component_button,
+        save_dashboard_button,
+    )
+
+
+def _create_dashboard_info_section(data: dict, project_name: str) -> dmc.Stack:
+    """Create dashboard info section for the settings drawer.
+
+    Args:
+        data: Dashboard data dictionary.
+        project_name: Name of the project.
+
+    Returns:
+        Stack component with dashboard info badges.
+    """
+    return dmc.Stack(
         [
             dmc.Title("Dashboard Info", order=4),
             dmc.Stack(
@@ -856,21 +880,6 @@ def design_header(data, local_store, edit_mode: bool = False):
                 gap="sm",
             ),
             dmc.Divider(),
-            # Status badges section
-            # dmc.Group(
-            #     [
-            #         dmc.Text("Edit Mode:", fw="bold", size="sm"),
-            #         dmc.Badge(
-            #             "Edit OFF",
-            #             id="edit-status-badge-drawer",
-            #             size="sm",
-            #             color="gray",
-            #             leftSection=DashIconify(icon="mdi:pencil-off", width=8, color="white"),
-            #         ),
-            #     ],
-            #     justify="space-between",
-            #     style={"width": "100%"},
-            # ),
             dmc.Group(
                 [
                     dmc.Text("Live Interactivity:", fw="bold", size="sm"),
@@ -885,14 +894,23 @@ def design_header(data, local_store, edit_mode: bool = False):
                     ),
                 ],
                 justify="space-between",
-                style={"width": "100%", "display": "none"},  # Hidden for now
+                style={"width": "100%", "display": "none"},
             ),
         ],
         gap="md",
     )
 
-    # DMC Stack instead of html.Div for better theme support
-    toggle_switches_group = dmc.Stack(
+
+def _create_toggle_switches_section(data: dict) -> dmc.Stack:
+    """Create toggle switches section for the settings drawer.
+
+    Args:
+        data: Dashboard data dictionary.
+
+    Returns:
+        Stack component with toggle switches.
+    """
+    return dmc.Stack(
         [
             dmc.Title("Switches", order=4),
             dmc.Group(
@@ -907,12 +925,8 @@ def design_header(data, local_store, edit_mode: bool = False):
                         width=16,
                         color="blue.5",
                     ),
-                    # rightSection=DashIconify(icon="radix-icons:chevron-down"),
                 )
             ),
-            # REMOVED: unified-edit-mode-button toggle (replaced by URL-based edit mode)
-            # Edit mode is now controlled by URL: /dashboard/{id} vs /dashboard/{id}/edit
-            # Use "Edit Dashboard" / "Exit Edit Mode" buttons in header instead
             dmc.Group(
                 [
                     dmc.Switch(
@@ -930,7 +944,7 @@ def design_header(data, local_store, edit_mode: bool = False):
                 [
                     dmc.Switch(
                         id="live-interactivity-toggle",
-                        checked=False,  # Default off
+                        checked=False,
                         color="blue",
                     ),
                     dmc.Text("Live interactivity", style={"fontFamily": "default"}),
@@ -943,30 +957,66 @@ def design_header(data, local_store, edit_mode: bool = False):
         gap="xs",
     )
 
-    # DMC Stack for action buttons (only shown in edit mode)
-    # In view mode, these buttons should not be accessible
-    buttons_group = dmc.Stack(
+
+def _create_actions_section(disabled: bool, edit_mode: bool) -> dmc.Stack:
+    """Create actions section for the settings drawer.
+
+    Args:
+        disabled: Whether actions should be disabled.
+        edit_mode: Whether in edit mode.
+
+    Returns:
+        Stack component with action buttons.
+    """
+    remove_all_button = dmc.Button(
+        "Remove all components",
+        id="remove-all-components-button",
+        leftSection=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
+        size="md",
+        radius="xl",
+        variant="gradient",
+        gradient={"from": "red", "to": "pink", "deg": 105},
+        disabled=disabled,
+        fullWidth=True,
+    )
+
+    return dmc.Stack(
         [
             dmc.Title("Actions", order=4),
             dmc.Group(
-                [remove_all_components_button],
+                [remove_all_button],
                 align="center",
                 gap="sm",
                 style={"padding": "5px", "margin": "5px 0"},
             ),
-            # REMOVED: Share button (feature not implemented)
-            # Previously had share-button ActionIcon with modal - removed to reduce callback graph size
         ],
         gap="md",
-        style={"display": "block" if edit_mode else "none"},  # Hide in view mode
+        style={"display": "block" if edit_mode else "none"},
     )
 
-    # Drawer content - conditionally include buttons_group only in edit mode
-    drawer_children = [dashboard_info_group, toggle_switches_group]
-    if edit_mode:
-        drawer_children.append(buttons_group)
 
-    offcanvas_parameters = dmc.Drawer(
+def _create_settings_drawer(
+    dashboard_info: dmc.Stack,
+    toggle_switches: dmc.Stack,
+    actions_section: dmc.Stack,
+    edit_mode: bool,
+) -> dmc.Drawer:
+    """Create the settings drawer component.
+
+    Args:
+        dashboard_info: Dashboard info section.
+        toggle_switches: Toggle switches section.
+        actions_section: Actions section.
+        edit_mode: Whether in edit mode.
+
+    Returns:
+        Drawer component for settings.
+    """
+    drawer_children = [dashboard_info, toggle_switches]
+    if edit_mode:
+        drawer_children.append(actions_section)
+
+    return dmc.Drawer(
         id="offcanvas-parameters",
         title="Dashboard Settings",
         position="right",
@@ -977,176 +1027,28 @@ def design_header(data, local_store, edit_mode: bool = False):
         size="400px",
     )
 
-    # notes_button and open_offcanvas_parameters_button are now created above with tooltips
 
-    # These dummy outputs are created in _create_backend_components
-    # dummy_output = html.Div(id="dummy-output", style={"display": "none"})
-    # dummy_output2 = html.Div(id="dummy-output2", style={"display": "none"})
-    # stepper_output = html.Div(id="stepper-output", style={"display": "none"})
+def _create_header_stores(data: dict, owner: bool, viewer: bool) -> list[dcc.Store]:
+    """Create store components for header state management.
 
-    # Store the number of clicks for the add button and edit dashboard mode button
-    stores_add_edit = [
-        dcc.Store(
-            id="stored-add-button",
-            # storage_type="memory",
-            storage_type="local",
-            data=init_nclicks_add_button,
-        ),
-        dcc.Store(
-            id="initialized-add-button",
-            storage_type="memory",
-            data=False,
-        ),
-        dcc.Store(
-            id="stored-edit-dashboard-mode-button",
-            # storage_type="memory",
-            storage_type="session",
-            data=init_nclicks_edit_dashboard_mode_button,
-        ),
-    ]
+    Args:
+        data: Dashboard data dictionary.
+        owner: Whether current user is owner.
+        viewer: Whether current user is viewer.
 
-    # DMC Burger for navbar toggle (replaces custom sidebar button)
-    burger_button = dmc.Burger(
-        id="burger-button",
-        opened=False,  # Consistent initial state, managed by sidebar-collapsed store
-        size="md",
-        color="gray",
-        style={"marginRight": "10px"},
+    Returns:
+        List of dcc.Store components.
+    """
+    init_nclicks_add = (
+        data["stored_add_button"] if data else {"count": 0, "initialized": False, "_id": ""}
     )
+    init_nclicks_edit = data["stored_edit_dashboard_mode_button"] if data else [int(0)]
 
-    # DMC 2.0+ - Use Group instead of Grid for better flex control
-    header_content = dmc.Group(
-        [
-            # Left section - burger button + dashboard icon + title + subtitle
-            dmc.Group(
-                [
-                    burger_button,  # DMC Burger instead of custom button
-                    # Dashboard icon from DashboardData model with filled variant
-                    # Check if icon is an image path or Iconify icon
-                    (
-                        html.Img(
-                            src=data.get("icon", "mdi:view-dashboard"),
-                            style={
-                                "width": "32px",
-                                "height": "32px",
-                                "objectFit": "contain",
-                                "borderRadius": "50%",
-                                "padding": "4px",
-                            },
-                        )
-                        if data.get("icon", "").startswith("/assets/")
-                        else dmc.ActionIcon(
-                            DashIconify(
-                                icon=data.get("icon", "mdi:view-dashboard"),
-                                width=24,
-                                height=24,
-                            ),
-                            color=data.get("icon_color", "orange"),
-                            radius="xl",
-                            size="lg",
-                            variant="filled",
-                        )
-                    ),
-                    # Title only (subtitle removed for simplified header)
-                    dmc.Title(
-                        f"{data['title']}",
-                        order=3,
-                        id="dashboard-title",
-                        fw="bold",
-                        fz=20,
-                        m=0,
-                        style={"lineHeight": "1.2"},
-                    ),
-                ],
-                gap="sm",
-                align="center",
-                style={"minWidth": "fit-content", "flexShrink": 0},  # Prevent shrinking
-            ),
-            # Center section - spacer for layout balance
-            dmc.Box(
-                style={
-                    "flex": "1",
-                    "minWidth": 0,
-                },
-            ),
-            # Right section - "Powered by" + action buttons (compact spacing)
-            # CONDITIONAL RENDERING: In view mode, only show essential buttons
-            # In edit mode, show all buttons including add, save, edit controls
-            dmc.Group(
-                [
-                    # Powered by Depictio section (always shown) - clickable link to docs
-                    html.A(
-                        dmc.Group(
-                            [
-                                dmc.Text(
-                                    "Powered by",
-                                    size="xs",
-                                    c="gray",
-                                    fw="bold",
-                                    style={"opacity": "0.7"},
-                                ),
-                                dmc.Image(
-                                    id="header-powered-by-logo",
-                                    src=dash.get_asset_url("images/logos/logo_black.svg"),
-                                    h=20,
-                                    w="auto",
-                                ),
-                            ],
-                            gap=5,
-                            align="center",
-                            style={
-                                "marginRight": "15px",
-                                "borderRight": "1px solid var(--app-border-color, #ddd)",
-                                "paddingRight": "15px",
-                            },
-                        ),
-                        href="https://depictio.github.io/depictio-docs/",
-                        target="_blank",
-                        rel="noopener noreferrer",
-                        style={
-                            "textDecoration": "none",
-                            "cursor": "pointer",
-                            "transition": "opacity 0.2s",
-                        },
-                        className="hover-link",
-                    ),
-                ]
-                + [
-                    # EDIT MODE TOGGLE BUTTONS: Both always in layout, visibility controlled by display style
-                    exit_edit_button,  # Only visible when edit_mode=True (controlled by style display)
-                    edit_dashboard_button,  # Only visible when edit_mode=False (controlled by style display)
-                ]
-                + [
-                    # EDIT MODE ACTIONS: Only visible in edit mode
-                    add_component_button,  # Add new component (only visible in edit mode)
-                    save_dashboard_button,  # Save dashboard (only visible in edit mode)
-                ]
-                + [
-                    # COMMON CONTROLS: Always shown (settings at the end)
-                    reset_filters_button,  # Reset all filters
-                    open_offcanvas_parameters_button,  # Settings/dashboard info drawer (rightmost)
-                ],
-                gap=8,  # Comfortable gap between buttons for better UX
-                style={"minWidth": "fit-content", "flexShrink": 0},
-            ),
-        ],
-        justify="space-between",
-        align="center",
-        style={
-            "height": "100%",
-            "padding": "0 20px",
-            "width": "100%",
-            "flexWrap": "nowrap",  # Prevent wrapping
-            "minWidth": 0,  # Allow flex items to shrink
-        },
-    )
-
-    # Store components for button states
-    stores_add_edit = [
+    return [
         dcc.Store(
             id="stored-add-button",
             storage_type="local",
-            data=init_nclicks_add_button,
+            data=init_nclicks_add,
         ),
         dcc.Store(
             id="initialized-add-button",
@@ -1156,10 +1058,8 @@ def design_header(data, local_store, edit_mode: bool = False):
         dcc.Store(
             id="stored-edit-dashboard-mode-button",
             storage_type="session",
-            data=init_nclicks_edit_dashboard_mode_button,
+            data=init_nclicks_edit,
         ),
-        # PERFORMANCE: Cache dashboard permissions to avoid redundant API calls in toggle_buttons
-        # This cache is populated during layout creation and eliminates a 2147ms dashboard fetch
         dcc.Store(
             id="dashboard-permissions-cache",
             storage_type="session",
@@ -1173,18 +1073,249 @@ def design_header(data, local_store, edit_mode: bool = False):
         ),
     ]
 
-    # Backend components
+
+def _create_header_left_section(data: dict) -> dmc.Group:
+    """Create the left section of the header with burger, icon, and title.
+
+    Args:
+        data: Dashboard data dictionary.
+
+    Returns:
+        Group component for left header section.
+    """
+    burger_button = dmc.Burger(
+        id="burger-button",
+        opened=False,
+        size="md",
+        color="gray",
+        style={"marginRight": "10px"},
+    )
+
+    icon_value = data.get("icon", "mdi:view-dashboard")
+    if icon_value.startswith("/assets/"):
+        icon_component = html.Img(
+            src=icon_value,
+            style={
+                "width": "32px",
+                "height": "32px",
+                "objectFit": "contain",
+                "borderRadius": "50%",
+                "padding": "4px",
+            },
+        )
+    else:
+        icon_component = dmc.ActionIcon(
+            DashIconify(icon=icon_value, width=24, height=24),
+            color=data.get("icon_color", "orange"),
+            radius="xl",
+            size="lg",
+            variant="filled",
+        )
+
+    title = dmc.Title(
+        f"{data['title']}",
+        order=3,
+        id="dashboard-title",
+        fw="bold",
+        fz=20,
+        m=0,
+        style={"lineHeight": "1.2"},
+    )
+
+    return dmc.Group(
+        [burger_button, icon_component, title],
+        gap="sm",
+        align="center",
+        style={"minWidth": "fit-content", "flexShrink": 0},
+    )
+
+
+def _create_powered_by_section() -> html.A:
+    """Create the 'Powered by Depictio' branding section.
+
+    Returns:
+        Anchor element with branding.
+    """
+    return html.A(
+        dmc.Group(
+            [
+                dmc.Text(
+                    "Powered by",
+                    size="xs",
+                    c="gray",
+                    fw="bold",
+                    style={"opacity": "0.7"},
+                ),
+                dmc.Image(
+                    id="header-powered-by-logo",
+                    src=dash.get_asset_url("images/logos/logo_black.svg"),
+                    h=20,
+                    w="auto",
+                ),
+            ],
+            gap=5,
+            align="center",
+            style={
+                "marginRight": "15px",
+                "borderRight": "1px solid var(--app-border-color, #ddd)",
+                "paddingRight": "15px",
+            },
+        ),
+        href="https://depictio.github.io/depictio-docs/",
+        target="_blank",
+        rel="noopener noreferrer",
+        style={
+            "textDecoration": "none",
+            "cursor": "pointer",
+            "transition": "opacity 0.2s",
+        },
+        className="hover-link",
+    )
+
+
+def _create_header_right_section(
+    reset_filters: dmc.Button,
+    settings: dmc.Button,
+    edit_dashboard: dmc.Button,
+    exit_edit: dmc.Button,
+    add_component: dmc.Button,
+    save_dashboard: dmc.Button,
+) -> dmc.Group:
+    """Create the right section of the header with action buttons.
+
+    Args:
+        reset_filters: Reset filters button.
+        settings: Settings button.
+        edit_dashboard: Edit dashboard button.
+        exit_edit: Exit edit mode button.
+        add_component: Add component button.
+        save_dashboard: Save dashboard button.
+
+    Returns:
+        Group component for right header section.
+    """
+    powered_by = _create_powered_by_section()
+
+    return dmc.Group(
+        [
+            powered_by,
+            exit_edit,
+            edit_dashboard,
+            add_component,
+            save_dashboard,
+            reset_filters,
+            settings,
+        ],
+        gap=8,
+        style={"minWidth": "fit-content", "flexShrink": 0},
+    )
+
+
+def _assemble_header_content(left_section: dmc.Group, right_section: dmc.Group) -> dmc.Group:
+    """Assemble the complete header content.
+
+    Args:
+        left_section: Left section with burger, icon, title.
+        right_section: Right section with action buttons.
+
+    Returns:
+        Group component for complete header.
+    """
+    center_spacer = dmc.Box(style={"flex": "1", "minWidth": 0})
+
+    return dmc.Group(
+        [left_section, center_spacer, right_section],
+        justify="space-between",
+        align="center",
+        style={
+            "height": "100%",
+            "padding": "0 20px",
+            "width": "100%",
+            "flexWrap": "nowrap",
+            "minWidth": 0,
+        },
+    )
+
+
+# =============================================================================
+# MAIN LAYOUT FUNCTION
+# =============================================================================
+
+
+def design_header(
+    data: dict, local_store: dict, edit_mode: bool = False
+) -> tuple[dmc.Group, dmc.Stack]:
+    """Design the main dashboard header with modular components.
+
+    Creates the header layout with navigation controls, action buttons,
+    and settings drawer. Button visibility is controlled by edit_mode:
+    - View mode: Reset filters, Settings, Edit Dashboard button
+    - Edit mode: All above plus Add, Save, Exit Edit buttons
+
+    Args:
+        data: Dashboard data dictionary with title, permissions, etc.
+        local_store: Local storage dictionary with access token.
+        edit_mode: Whether in edit mode (shows additional controls).
+
+    Returns:
+        Tuple of (header_content Group, backend_components Stack).
+    """
+    # Ensure data structure exists
+    _ensure_data_structure(data)
+
+    # Get user and permissions
+    current_user = api_call_fetch_user_from_token(local_store["access_token"])
+    owner, viewer = _get_user_permissions(current_user, data)
+
+    # Determine button states based on ownership
+    disabled = not owner
+
+    # Get project name
+    project_name = _fetch_project_name(data["project_id"], local_store["access_token"])
+
+    # Create action buttons
+    (
+        reset_filters,
+        settings,
+        edit_dashboard,
+        exit_edit,
+        add_component,
+        save_dashboard,
+    ) = _create_header_action_buttons(disabled, edit_mode)
+
+    # Create drawer sections
+    dashboard_info = _create_dashboard_info_section(data, project_name)
+    toggle_switches = _create_toggle_switches_section(data)
+    actions_section = _create_actions_section(disabled, edit_mode)
+
+    # Create settings drawer
+    settings_drawer = _create_settings_drawer(
+        dashboard_info, toggle_switches, actions_section, edit_mode
+    )
+
+    # Create stores
+    stores = _create_header_stores(data, owner, viewer)
+
+    # Create header sections
+    left_section = _create_header_left_section(data)
+    right_section = _create_header_right_section(
+        reset_filters, settings, edit_dashboard, exit_edit, add_component, save_dashboard
+    )
+
+    # Assemble header content
+    header_content = _assemble_header_content(left_section, right_section)
+
+    # Create backend components
     backend_components = _create_backend_components()
 
-    # Extended backend components that need to be in the layout (DMC Stack)
+    # Extended backend components
     backend_components_extended = dmc.Stack(
         [
             backend_components,
-            offcanvas_parameters,
-            dmc.Stack(children=stores_add_edit, gap=0),  # DMC Stack for stores list
+            settings_drawer,
+            dmc.Stack(children=stores, gap=0),
         ],
-        gap=0,  # No gap needed for backend components
+        gap=0,
     )
 
-    # Return header content (tabs are now in sidebar, not header)
     return header_content, backend_components_extended

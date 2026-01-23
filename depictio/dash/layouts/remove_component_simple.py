@@ -40,18 +40,13 @@ def find_component_in_children(children_list, component_id):
             child_id = child.id
 
         if child_id:
-            logger.debug(f"  🔍 FIND_COMPONENT: Child {i} has ID={child_id}")
-
             # Extract component_id from box-{component_id} format
             if isinstance(child_id, str) and child_id.startswith("box-"):
                 extracted_id = child_id[4:]  # Remove "box-" prefix
-                logger.debug(f"  🔍 FIND_COMPONENT: Child {i} extracted ID={extracted_id}")
 
                 if extracted_id == str(component_id):
-                    logger.debug(f"  🔍 FIND_COMPONENT: MATCH found at index {i}")
                     return i
 
-    logger.debug(f"  🔍 FIND_COMPONENT: No match found for ID={component_id}")
     return -1
 
 
@@ -61,7 +56,6 @@ def register_remove_component_simple_callback(app):
 
     ⚠️ TEMPORARILY DISABLED FOR DEBUGGING
     """
-    logger.info("⚠️ Remove button callback DISABLED for debugging")
     pass
 
     # TEMPORARILY DISABLED FOR DEBUGGING
@@ -110,7 +104,6 @@ def remove_component_from_dashboard__disabled(
     triggered_prop_id = ctx.triggered[0]["prop_id"]
     triggered_value = ctx.triggered[0]["value"]
 
-    logger.info("🗑️ REMOVE COMPONENT - Callback triggered")
     logger.info(f"  Component ID: {component_id_to_remove}")
     logger.info(f"  Triggered property: {triggered_prop_id}")
     logger.info(f"  Triggered value (n_clicks): {triggered_value}")
@@ -138,8 +131,6 @@ def remove_component_from_dashboard__disabled(
             logger.warning(f"    - {trigger}")
         raise PreventUpdate
 
-    logger.info("  ✅ All guards passed - proceeding with component removal")
-
     # Get component metadata to determine panel
     target_metadata = None
     for meta in stored_metadata_all:
@@ -156,14 +147,11 @@ def remove_component_from_dashboard__disabled(
 
     # Navigate and patch the layout structure
     # DEBUG: Log the actual structure we received
-    logger.info(f"  DEBUG: current_children type: {type(current_children)}")
-    logger.info(f"  DEBUG: current_children is list: {isinstance(current_children, list)}")
     logger.info(
         f"  DEBUG: current_children length: {len(current_children) if isinstance(current_children, list) else 'N/A'}"
     )
 
     if isinstance(current_children, list) and len(current_children) > 0:
-        logger.info(f"  DEBUG: current_children[0] type: {type(current_children[0])}")
         if hasattr(current_children[0], "__class__"):
             logger.info(
                 f"  DEBUG: current_children[0] class: {current_children[0].__class__.__name__}"
@@ -171,7 +159,6 @@ def remove_component_from_dashboard__disabled(
 
         # Check if it's a dict (serialized component)
         if isinstance(current_children[0], dict):
-            logger.info(f"  DEBUG: current_children[0] keys: {list(current_children[0].keys())}")
             if "props" in current_children[0]:
                 logger.info(
                     f"  DEBUG: current_children[0]['props'] keys: {list(current_children[0]['props'].keys())}"
@@ -244,13 +231,11 @@ def remove_component_from_dashboard__disabled(
                 if namespace == "dash_mantine_components" and child_type == "Grid":
                     grid_component = child
                     grid_index = i
-                    logger.info(f"  DEBUG: Found Grid at wrapper index {i}")
                     break
             elif hasattr(child, "__class__"):
                 if "Grid" in child.__class__.__name__:
                     grid_component = child
                     grid_index = i
-                    logger.info(f"  DEBUG: Found Grid at wrapper index {i}")
                     break
 
         if not grid_component:
@@ -261,7 +246,6 @@ def remove_component_from_dashboard__disabled(
         else:
             # Extract left and right panels from Grid's children (GridCol components)
             grid_children = get_children(grid_component)
-            logger.info(f"  DEBUG: Grid has {len(grid_children)} GridCol children")
 
             if len(grid_children) < 2:
                 logger.warning(f"  Grid doesn't have 2 GridCol children (got {len(grid_children)})")
@@ -315,7 +299,7 @@ def remove_component_from_dashboard__disabled(
                     # Structure: [left_panel, right_panel_group]
                     # Path: patch[0]['props']['children'][idx]
                     del patch[0]["props"]["children"][idx]
-                logger.info(f"    Removed interactive component at index {idx} using Patch()")
+                logger.debug(f"    Removed interactive component at index {idx} using Patch()")
             else:
                 logger.warning("    Component not found in left panel")
                 raise PreventUpdate
@@ -334,45 +318,10 @@ def remove_component_from_dashboard__disabled(
         removed = False
         if right_children and len(right_children) > 0:
             cards_grid = right_children[0]
-            logger.info(f"  DEBUG: Cards grid type: {type(cards_grid)}")
             cards_grid_children = get_children(cards_grid)
             logger.info(
                 f"  DEBUG: Cards grid children count: {len(cards_grid_children) if cards_grid_children else 0}"
             )
-
-            # Debug: log first few children to see structure
-            if cards_grid_children:
-                logger.info(f"  DEBUG: Inspecting all {len(cards_grid_children)} cards in grid...")
-                for i, child in enumerate(cards_grid_children):  # All cards
-                    logger.info(f"  DEBUG: Card {i} type: {type(child)}")
-                    if isinstance(child, dict):
-                        logger.info(f"  DEBUG: Card {i} keys: {list(child.keys())}")
-                        child_id = child.get("props", {}).get("id")
-                        logger.info(f"  DEBUG: Card {i} ID: {child_id}")
-                        child_children = child.get("props", {}).get("children", [])
-                        logger.info(
-                            f"  DEBUG: Card {i} children type: {type(child_children)}, len: {len(child_children) if isinstance(child_children, list) else 'N/A'}"
-                        )
-
-                        # Handle both list and dict children
-                        children_to_inspect = child_children
-                        if not isinstance(child_children, list):
-                            children_to_inspect = [child_children]
-
-                        if isinstance(children_to_inspect, list) and len(children_to_inspect) > 0:
-                            first_child = children_to_inspect[0]
-                            logger.info(f"  DEBUG: Card {i} first child type: {type(first_child)}")
-                            if isinstance(first_child, dict):
-                                logger.info(
-                                    f"  DEBUG: Card {i} first child keys: {list(first_child.keys())}"
-                                )
-                                first_child_type = first_child.get("type")
-                                first_child_namespace = first_child.get("namespace")
-                                logger.info(
-                                    f"  DEBUG: Card {i} first child component: {first_child_namespace}.{first_child_type}"
-                                )
-                                store_id = first_child.get("props", {}).get("id")
-                                logger.info(f"  DEBUG: Card {i} first child ID: {store_id}")
 
             if cards_grid_children:
                 idx = find_component_in_children(cards_grid_children, component_id_to_remove)
@@ -380,7 +329,6 @@ def remove_component_from_dashboard__disabled(
                     # Delete from cards grid using Patch with structure-aware nested path
                     if has_group_wrapper:
                         # Log detailed structure for debugging Patch() path
-                        logger.info(f"  🔍 PATCH PATH TRACE for card at index {idx}:")
                         logger.info(f"    [0] = wrapper (type: {type(current_children[0])})")
                         logger.info(f"    ['props']['children'][{grid_index}] = Grid")
                         logger.info("    ['props']['children'][1] = GridCol[1] (right panel)")
@@ -391,13 +339,10 @@ def remove_component_from_dashboard__disabled(
                         # Verify path step by step
                         try:
                             step1 = current_children[0]
-                            logger.info(f"    ✓ Step 1: wrapper = {type(step1)}")
 
                             step2 = step1["props"]["children"][grid_index]
-                            logger.info(f"    ✓ Step 2: Grid = {step2.get('type')}")
 
                             step3 = step2["props"]["children"][1]
-                            logger.info(f"    ✓ Step 3: GridCol[1] = {step3.get('type')}")
 
                             step4 = step3["props"]["children"]
                             logger.info(
@@ -438,7 +383,6 @@ def remove_component_from_dashboard__disabled(
                                 f"    ✓ Step 8: cards_grid children type = {type(step8)}, is_list = {isinstance(step8, list)}, len = {len(step8) if isinstance(step8, list) else 'N/A'}"
                             )
 
-                            logger.info(f"    ✓ All steps verified - target is at index {idx}")
                         except Exception as e:
                             logger.error(f"    ✗ Path verification failed: {e}")
 
@@ -452,7 +396,7 @@ def remove_component_from_dashboard__disabled(
                         # Structure: [left_panel, right_panel_group]
                         # Path: patch[1]['props']['children'][0]['props']['children'][idx]
                         del patch[1]["props"]["children"][0]["props"]["children"][idx]
-                    logger.info(f"    Removed card at index {idx} from grid using Patch()")
+                    logger.debug(f"    Removed card at index {idx} from grid using Patch()")
                     removed = True
 
         # Fallback: If not found in grid, try other components section
@@ -471,7 +415,7 @@ def remove_component_from_dashboard__disabled(
                     # Structure: [left_panel, right_panel_group]
                     # Path: patch[1]['props']['children'][idx]
                     del patch[1]["props"]["children"][idx]
-                logger.info(f"    Removed card at index {idx} from other components using Patch()")
+                logger.debug(f"    Removed card at index {idx} from other components using Patch()")
                 removed = True
 
         if not removed:
@@ -498,7 +442,7 @@ def remove_component_from_dashboard__disabled(
                     # Structure: [left_panel, right_panel_group]
                     # Path: patch[1]['props']['children'][idx]
                     del patch[1]["props"]["children"][idx]
-                logger.info(f"    Removed other component at index {idx} using Patch()")
+                logger.debug(f"    Removed other component at index {idx} using Patch()")
             else:
                 logger.warning("    Component not found in right panel")
                 raise PreventUpdate
@@ -515,8 +459,6 @@ def remove_component_from_dashboard__disabled(
         updated_metadata = [
             meta for meta in stored_metadata_all if str(meta.get("index")) != component_id_to_remove
         ]
-
-        logger.info(f"  💾 Saving to backend: {len(updated_metadata)} components remaining")
 
         try:
             from datetime import datetime
@@ -539,7 +481,7 @@ def remove_component_from_dashboard__disabled(
             # Save the complete dashboard data
             save_success = api_call_save_dashboard(dashboard_id, dashboard_data, TOKEN)
             if save_success:
-                logger.info("✅ Component removed and saved (patch mode)")
+                logger.debug("✅ Component removed and saved (patch mode)")
             else:
                 logger.warning("⚠️ Failed to save dashboard")
         except Exception as e:
@@ -547,7 +489,7 @@ def remove_component_from_dashboard__disabled(
     else:
         logger.warning("  ⚠️ Cannot save: missing dashboard_id or TOKEN")
 
-    logger.info("  🎉 Component removed successfully using Patch()!")
+    logger.debug("  🎉 Component removed successfully using Patch()!")
 
     # Return Patch object - Dash will apply the changes efficiently
     return patch

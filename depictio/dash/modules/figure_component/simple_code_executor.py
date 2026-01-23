@@ -154,8 +154,6 @@ class SimpleCodeExecutor:
 
             # Handle preprocessing if needed
             if analysis["has_preprocessing"]:
-                logger.info("🔄 Executing preprocessing step")
-
                 # Compile and execute preprocessing code
                 preprocessing_code = analysis["preprocessing_code"]
                 preprocessing_bytecode = compile_restricted(
@@ -181,10 +179,7 @@ class SimpleCodeExecutor:
                         "❌ Preprocessing failed: No dataframe variables created",
                     )
 
-                logger.info(f"✅ Preprocessing successful: Created {', '.join(preprocessing_vars)}")
-
             # Execute figure generation code
-            logger.info("🎨 Executing figure generation code")
             figure_code = analysis["figure_code"]
             figure_bytecode = compile_restricted(figure_code, filename="<figure_code>", mode="exec")
 
@@ -208,7 +203,6 @@ class SimpleCodeExecutor:
                 return False, None, "❌ The 'fig' variable is not a valid Plotly figure."
 
             preprocessing_msg = " with preprocessing" if analysis["has_preprocessing"] else ""
-            logger.info(f"✅ Code executed successfully using RestrictedPython{preprocessing_msg}")
             return True, fig, f"✅ Code executed successfully{preprocessing_msg}!"
 
         except SyntaxError as e:
@@ -280,7 +274,6 @@ class SimpleCodeExecutor:
                 return False, None, "❌ Preprocessing failed: 'df_modified' variable not created"
 
             df_modified = execution_locals["df_modified"]
-            logger.info("✅ Preprocessing-only execution successful: df_modified created")
 
             # Verify that df_modified is a Polars DataFrame
             if not isinstance(df_modified, pl.DataFrame):

@@ -58,7 +58,6 @@ def register_admin_notifications_callbacks(app):
     #                 if user_response.status_code == 200:
     #                     user_data = user_response.json()
     #                     if user_data.get("is_admin", False):
-    #                         logger.warning("Admin still has default password")
     #
     #                         return [
     #                             dict(
@@ -75,7 +74,6 @@ def register_admin_notifications_callbacks(app):
     #                             )
     #                         ]
     #     except Exception as e:
-    #         logger.error(f"Error checking admin default password: {e}")
     #
     #     return no_update
     pass  # Placeholder to keep function structure valid

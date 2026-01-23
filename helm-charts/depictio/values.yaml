@@ -216,6 +216,40 @@ backend:
     seccompProfile:
       type: RuntimeDefault
 
+# Celery Worker settings
+celery:
+  enabled: true
+  image:
+    # Inherits from backend.image by default if empty
+    repository: ""  # Empty = use backend.image.repository
+    tag: ""         # Empty = use backend.image.tag
+    pullPolicy: ""  # Empty = use backend.image.pullPolicy
+  replicas: 1
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "1"
+  env:
+    DEPICTIO_CELERY_WORKERS: "2"
+    DEPICTIO_CELERY_ENABLED: "false"  # Controls dashboard view mode callbacks
+  podSecurityContext:
+    runAsUser: 1000
+    runAsGroup: 2000
+    fsGroup: 2000
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 2000
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
+    seccompProfile:
+      type: RuntimeDefault
+
 # Frontend settings
 frontend:
   image:

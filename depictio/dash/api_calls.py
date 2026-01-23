@@ -1,3 +1,19 @@
+"""
+API Calls Module - Dash Frontend API Integration.
+
+This module provides synchronous API call wrappers for the Dash frontend to communicate
+with the FastAPI backend. It includes authentication, user management, project/dashboard
+operations, and data collection management.
+
+Key features:
+- Token-based authentication with refresh support
+- Caching layer for user data and token validity to reduce API calls
+- Project and dashboard CRUD operations
+- Data collection creation and management
+
+All functions use httpx for synchronous HTTP requests, as required by Dash callbacks.
+"""
+
 import os
 import sys
 import time
@@ -43,6 +59,95 @@ _token_purge_cache: dict[str, float] = {}
 _purge_cache_timeout = 600  # 10 minutes
 
 
+# =============================================================================
+# Cache Helper Functions
+# =============================================================================
+
+
+def _check_cache(
+    cache: dict[str, tuple[Any, float]], cache_key: str, timeout: float
+) -> tuple[Any | None, bool]:
+    """
+    Check if a cached value exists and is still valid.
+
+    Args:
+        cache: The cache dictionary to check.
+        cache_key: The key to look up in the cache.
+        timeout: Maximum age in seconds for valid cache entries.
+
+    Returns:
+        Tuple of (cached_value, is_valid). If invalid or missing, cached_value is None.
+    """
+    current_time = time.time()
+    if cache_key in cache:
+        cached_data, cache_time = cache[cache_key]
+        cache_age = current_time - cache_time
+        if cache_age < timeout:
+            return (cached_data, True)
+        del cache[cache_key]
+    return (None, False)
+
+
+def _update_cache(
+    cache: dict[str, tuple[Any, float]], cache_key: str, value: Any, max_entries: int = 100
+) -> None:
+    """
+    Update cache with a new value, cleaning old entries if needed.
+
+    Args:
+        cache: The cache dictionary to update.
+        cache_key: The key for the new cache entry.
+        value: The value to cache.
+        max_entries: Maximum number of entries before cleanup.
+    """
+    current_time = time.time()
+    cache[cache_key] = (value, current_time)
+
+    # Clean oldest entry if cache is too large
+    if len(cache) > max_entries:
+        oldest_key = min(cache.keys(), key=lambda k: cache[k][1])
+        del cache[oldest_key]
+
+
+def _check_simple_cache(cache: dict[str, float], cache_key: str, timeout: float) -> bool:
+    """
+    Check if a simple timestamp cache entry exists and is valid.
+
+    Used for caches that only need to track when an operation was last performed.
+
+    Args:
+        cache: The cache dictionary with timestamp values.
+        cache_key: The key to look up.
+        timeout: Maximum age in seconds for valid entries.
+
+    Returns:
+        True if entry exists and is valid, False otherwise.
+    """
+    current_time = time.time()
+    if cache_key in cache:
+        cache_time = cache[cache_key]
+        if current_time - cache_time < timeout:
+            return True
+    return False
+
+
+def _update_simple_cache(cache: dict[str, float], cache_key: str, max_entries: int = 20) -> None:
+    """
+    Update a simple timestamp cache, cleaning old entries if needed.
+
+    Args:
+        cache: The cache dictionary to update.
+        cache_key: The key for the new cache entry.
+        max_entries: Maximum number of entries before cleanup.
+    """
+    current_time = time.time()
+    cache[cache_key] = current_time
+
+    if len(cache) > max_entries:
+        oldest_key = min(cache.keys(), key=lambda k: cache[k])
+        del cache[oldest_key]
+
+
 @validate_call(validate_return=True)
 def api_call_register_user(
     email: EmailStr, password: str, group: str | None = None, is_admin: bool = False
@@ -60,7 +165,7 @@ def api_call_register_user(
         Response from registration or None if failed
     """
     try:
-        logger.info(f"Registering user with email: {email}")
+        logger.debug(f"Registering user with email: {email}")
 
         # Create payload with parameters
         params = {"email": email, "password": password, "is_admin": is_admin}
@@ -72,7 +177,7 @@ def api_call_register_user(
         )
 
         if response.status_code == 200:
-            logger.info("User registered successfully.")
+            logger.debug("User registered successfully.")
             return dict(response.json())
         else:
             logger.error(f"Registration error: {response.text}")
@@ -87,41 +192,31 @@ def api_call_register_user(
 def api_call_fetch_user_from_token(token: str) -> User | None:
     """
     Fetch a user from the authentication service using a token.
-    Synchronous version for Dash compatibility with caching to reduce redundant API calls.
 
-    Uses manual caching with configurable TTL (default 5 minutes) instead of @lru_cache
-    to support cache expiration and prevent stale user data.
+    Synchronous version for Dash compatibility with caching to reduce redundant API calls.
+    Uses manual caching with configurable TTL (default 5 minutes, set via DEPICTIO_USER_CACHE_TTL)
+    instead of @lru_cache to support cache expiration and prevent stale user data.
 
     Args:
-        token: The authentication token
+        token: The authentication token.
 
     Returns:
-        Optional[User]: The user if found, None otherwise
+        The user if found, None otherwise.
     """
-    # Check cache first
-    current_time = time.time()
     cache_key = f"user_token_{token}"
 
-    if cache_key in _user_cache:
-        cached_data, cache_time = _user_cache[cache_key]
-        cache_age = current_time - cache_time
-        if cache_age < _cache_timeout:
-            _cache_stats["hits"] += 1
-            logger.info(
-                f"🎯 CACHE HIT: user_token (age={cache_age:.1f}s, ttl={_cache_timeout}s, email={cached_data.email if cached_data else 'None'})"
-            )
-            return cached_data
-        else:
-            _cache_stats["expirations"] += 1
-            logger.info(
-                f"⏱️  CACHE EXPIRED: user_token (age={cache_age:.1f}s, ttl={_cache_timeout}s)"
-            )
-            # Remove expired entry
-            del _user_cache[cache_key]
+    # Check cache first
+    cached_user, is_valid = _check_cache(_user_cache, cache_key, _cache_timeout)
+    if is_valid:
+        _cache_stats["hits"] += 1
+        email = cached_user.email if cached_user else "None"
+        logger.info(f"CACHE HIT: user_token (email={email})")
+        return cached_user
 
-    # Make API call if not cached or expired
+    # Cache miss - make API call
     _cache_stats["misses"] += 1
-    logger.info(f"❌ CACHE MISS: user_token - fetching from API (cache_size={len(_user_cache)})")
+    logger.debug(f"CACHE MISS: user_token - fetching from API (cache_size={len(_user_cache)})")
+
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token",
         params={"token": token},
@@ -138,17 +233,10 @@ def api_call_fetch_user_from_token(token: str) -> User | None:
     if not user_data:
         return None
 
-    # Add default password since frontend doesn't receive actual password
-    # user_data_with_password = {**user_data, "password": "$2b$12$dummy"}
-    user = User(**user_data)  # type: ignore[misc]
+    user = User(**user_data)
 
     # Cache the result
-    _user_cache[cache_key] = (user, current_time)
-
-    # Clean old cache entries (simple cleanup)
-    if len(_user_cache) > 100:  # Prevent memory buildup
-        oldest_key = min(_user_cache.keys(), key=lambda k: _user_cache[k][1])
-        del _user_cache[oldest_key]
+    _update_cache(_user_cache, cache_key, user, max_entries=100)
 
     return user
 
@@ -165,7 +253,6 @@ def api_call_fetch_user_from_email(email: EmailStr) -> User | None:
     Returns:
         Optional[User]: The user if found, None otherwise
     """
-    logger.debug(f"Fetching user with email: {email}")
     logger.debug(f"API internal key: {settings.auth.internal_api_key}")
 
     response = httpx.get(
@@ -187,7 +274,7 @@ def api_call_fetch_user_from_email(email: EmailStr) -> User | None:
 
     # Add default password since frontend doesn't receive actual password
     # user_data_with_password = {**user_data, "password": "$2b$12$dummy"}
-    user = User(**user_data)  # type: ignore[misc]
+    user = User(**user_data)
 
     return user
 
@@ -201,7 +288,6 @@ def api_call_get_anonymous_user_session() -> dict | None:
     Returns:
         Optional[dict]: The session data if successful, None otherwise
     """
-    logger.debug("Fetching anonymous user session via API")
 
     try:
         response = httpx.get(
@@ -239,7 +325,7 @@ def api_call_create_temporary_user(expiry_hours: int = 24) -> dict[str, Any] | N
         Session data for the temporary user or None if failed
     """
     try:
-        logger.info(f"Creating temporary user with expiry: {expiry_hours} hours")
+        logger.debug(f"Creating temporary user with expiry: {expiry_hours} hours")
 
         response = httpx.post(
             f"{API_BASE_URL}/depictio/api/v1/auth/create_temporary_user",
@@ -250,7 +336,7 @@ def api_call_create_temporary_user(expiry_hours: int = 24) -> dict[str, Any] | N
 
         if response.status_code == 200:
             session_data = response.json()
-            logger.info("Successfully created temporary user session")
+            logger.debug("Successfully created temporary user session")
             return session_data
         else:
             logger.error(
@@ -354,7 +440,7 @@ def api_call_create_token(token_data: TokenData) -> dict[str, Any] | None:
     )
 
     if response.status_code == 200:
-        logger.info("Token created successfully.")
+        logger.debug("Token created successfully.")
         return dict(response.json())
     else:
         logger.error(f"Token creation error: {response.text}")
@@ -365,46 +451,38 @@ def api_call_create_token(token_data: TokenData) -> dict[str, Any] | None:
 def purge_expired_tokens(token: str) -> dict[str, Any] | None:
     """
     Purge expired tokens from the database with caching to avoid repeated calls.
+
+    Uses a 10-minute cache to prevent excessive purge operations.
+
     Args:
-        token: The authentication token
+        token: The authentication token.
+
     Returns:
-        Optional[Dict[str, Any]]: The response from the purge operation
+        The response from the purge operation, or None if failed.
     """
     if not token:
         logger.error("Token not found.")
         return None
 
+    cache_key = f"purge_{token[:10]}"
+
     # Check cache to avoid repeated purge calls
-    cache_key = f"purge_{token[:10]}"  # Use token prefix for cache key
-    current_time = time.time()
+    if _check_simple_cache(_token_purge_cache, cache_key, _purge_cache_timeout):
+        logger.debug("Skipping token purge - recently purged (cached)")
+        return {"message": "Purge skipped - recently executed"}
 
-    if cache_key in _token_purge_cache:
-        cache_time = _token_purge_cache[cache_key]
-        if current_time - cache_time < _purge_cache_timeout:
-            logger.debug("Skipping token purge - recently purged (cached)")
-            return {"message": "Purge skipped - recently executed"}
-
-    # Clean existing expired token from DB
     response = httpx.post(
         f"{API_BASE_URL}/depictio/api/v1/auth/purge_expired_tokens",
         headers={"Authorization": f"Bearer {token}"},
     )
 
-    if response.status_code == 200:
-        logger.info("Expired tokens purged successfully.")
-
-        # Cache the purge operation
-        _token_purge_cache[cache_key] = current_time
-
-        # Clean old cache entries
-        if len(_token_purge_cache) > 20:
-            oldest_key = min(_token_purge_cache.keys(), key=lambda k: _token_purge_cache[k])
-            del _token_purge_cache[oldest_key]
-
-        return dict(response.json())
-    else:
+    if response.status_code != 200:
         logger.error(f"Error purging expired tokens: {response.text}")
         return None
+
+    logger.info("Expired tokens purged successfully.")
+    _update_simple_cache(_token_purge_cache, cache_key, max_entries=20)
+    return dict(response.json())
 
 
 # Helper function for refresh token API call
@@ -445,27 +523,32 @@ def refresh_access_token(refresh_token: str) -> dict | None:
 @validate_call(validate_return=True)
 def check_token_validity(token: TokenBase) -> dict:
     """
-    Enhanced token validity check that returns detailed status with caching to eliminate API calls during routing.
+    Check token validity with caching to eliminate API calls during routing.
+
+    Returns a detailed status indicating whether the token is valid, can be refreshed,
+    or requires logout. Uses caching with a 5-minute TTL to reduce API calls.
+
+    Args:
+        token: The TokenBase object containing access and refresh tokens.
 
     Returns:
-        dict: {
-            "valid": bool,
-            "can_refresh": bool,
-            "action": str  # "valid", "refresh", "logout"
-        }
+        Dictionary with keys:
+        - valid (bool): Whether the token is currently valid.
+        - can_refresh (bool): Whether the token can be refreshed.
+        - action (str): Recommended action - "valid", "refresh", or "logout".
     """
-    # Create cache key from access token
     cache_key = f"token_validity_{token.access_token}"
-    current_time = time.time()
+    failure_result = {"valid": False, "can_refresh": False, "action": "logout"}
 
     # Check cache first
-    if cache_key in _token_validity_cache:
-        cached_result, cache_time = _token_validity_cache[cache_key]
-        if current_time - cache_time < _validity_cache_timeout:
-            logger.debug("Returning cached token validity result")
-            return cached_result
+    cached_result, is_valid = _check_cache(
+        _token_validity_cache, cache_key, _validity_cache_timeout
+    )
+    if is_valid and cached_result is not None:
+        logger.debug("Returning cached token validity result")
+        return cached_result
 
-    logger.info("Checking token validity via API.")
+    logger.debug("Checking token validity via API.")
     logger.info(
         f"Token with name: {token.name}, user_id: {token.user_id}, access_token: {token.access_token[:10]}..."
     )
@@ -477,41 +560,39 @@ def check_token_validity(token: TokenBase) -> dict:
             timeout=10,
         )
 
-        if response.status_code == 200:
-            data = response.json()
-            result = {
-                "valid": data.get("success", False),
-                "can_refresh": data.get("can_refresh", False),
-                "action": data.get("action", "logout"),
-            }
-
-            # Cache the result (only cache successful responses)
-            _token_validity_cache[cache_key] = (result, current_time)
-
-            # Clean old cache entries (simple cleanup)
-            if len(_token_validity_cache) > 50:  # Prevent memory buildup
-                oldest_key = min(
-                    _token_validity_cache.keys(), key=lambda k: _token_validity_cache[k][1]
-                )
-                del _token_validity_cache[oldest_key]
-
-            logger.debug(f"Token validation result cached: action={result['action']}")
-            return result
-        else:
+        if response.status_code != 200:
             logger.error(f"Token validation failed with status {response.status_code}")
-            failure_result = {"valid": False, "can_refresh": False, "action": "logout"}
-            # Don't cache failure results as they might be temporary
             return failure_result
+
+        data = response.json()
+        result = {
+            "valid": data.get("success", False),
+            "can_refresh": data.get("can_refresh", False),
+            "action": data.get("action", "logout"),
+        }
+
+        # Cache successful responses only
+        _update_cache(_token_validity_cache, cache_key, result, max_entries=50)
+        logger.debug(f"Token validation result cached: action={result['action']}")
+        return result
 
     except Exception as e:
         logger.error(f"Error during token validation: {e}")
-        failure_result = {"valid": False, "can_refresh": False, "action": "logout"}
-        # Don't cache exceptions as they might be temporary network issues
         return failure_result
 
 
-def api_create_group(group_dict: dict, current_token: str):
-    logger.info(f"Creating group {group_dict}.")
+def api_create_group(group_dict: dict, current_token: str) -> httpx.Response:
+    """
+    Create a new group via the API.
+
+    Args:
+        group_dict: Dictionary containing group data (must include 'name' key).
+        current_token: Authentication token for the API request.
+
+    Returns:
+        httpx.Response: The API response object.
+    """
+    logger.debug(f"Creating group {group_dict}.")
 
     response = httpx.post(
         f"{API_BASE_URL}/depictio/api/v1/auth/create_group",
@@ -519,27 +600,47 @@ def api_create_group(group_dict: dict, current_token: str):
         headers={"Authorization": f"Bearer {current_token}"},
     )
     if response.status_code == 200:
-        logger.info(f"Group {group_dict['name']} created successfully.")
+        logger.debug(f"Group {group_dict['name']} created successfully.")
     else:
         logger.error(f"Error creating group {group_dict['name']}: {response.text}")
     return response
 
 
-def api_update_group_in_users(group_id: str, payload: dict, current_token: str):
-    logger.info(f"Updating group {group_id}.")
+def api_update_group_in_users(group_id: str, payload: dict, current_token: str) -> httpx.Response:
+    """
+    Update a group's user membership via the API.
+
+    Args:
+        group_id: ID of the group to update.
+        payload: Dictionary containing user updates for the group.
+        current_token: Authentication token for the API request.
+
+    Returns:
+        httpx.Response: The API response object.
+    """
+    logger.debug(f"Updating group {group_id}.")
     response = httpx.post(
         f"{API_BASE_URL}/depictio/api/v1/auth/update_group_in_users/{group_id}",
         json=payload,
         headers={"Authorization": f"Bearer {current_token}"},
     )
     if response.status_code == 200:
-        logger.info(f"Group {group_id} updated successfully.")
+        logger.debug(f"Group {group_id} updated successfully.")
     else:
         logger.error(f"Error updating group {group_id}: {response.text}")
     return response
 
 
-def api_call_delete_token(token_id):
+def api_call_delete_token(token_id: str) -> bool:
+    """
+    Delete a token by its ID via the API.
+
+    Args:
+        token_id: ID of the token to delete.
+
+    Returns:
+        bool: True if deletion was successful, False otherwise.
+    """
     response = httpx.post(
         f"{API_BASE_URL}/depictio/api/v1/auth/delete_token",
         params={"token_id": token_id},
@@ -614,13 +715,13 @@ def api_call_generate_agent_config(token: TokenBase, current_token: str) -> dict
         return None
 
 
-@validate_call(config=dict(arbitrary_types_allowed=True), validate_return=True)  # type: ignore[invalid-argument-type]
+@validate_call(config=dict(arbitrary_types_allowed=True), validate_return=True)
 def api_get_project_from_id(project_id: PyObjectId, token: str) -> httpx.Response:
     """
     Get a project from the server using the project ID.
     """
     # First check if the project exists on the server DB for existing IDs and if the same metadata hash is used
-    logger.info(f"Getting project with ID: {project_id}")
+    logger.debug(f"Getting project with ID: {project_id}")
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id",
         params={"project_id": convert_objectid_to_str(project_id)},
@@ -689,17 +790,13 @@ def api_call_get_dashboard(dashboard_id: str, token: str) -> dict[str, Any] | No
 
         # Log what metadata is being received from the API
         # stored_metadata = dashboard_data.get("stored_metadata", [])
-        # logger.info(f"📊 API LOAD DEBUG - Received {len(stored_metadata)} metadata items from API")
         # if stored_metadata:
         #     for i, elem in enumerate(stored_metadata[:2]):  # Only first 2 to avoid spam
         #         if elem:
-        # logger.info(
         #     f"📊 API LOAD DEBUG - Metadata {i}: dict_kwargs={elem.get('dict_kwargs', 'MISSING')}"
         # )
-        # logger.info(
         #     f"📊 API LOAD DEBUG - Metadata {i}: wf_id={elem.get('wf_id', 'MISSING')}"
         # )
-        # logger.info(
         #     f"📊 API LOAD DEBUG - Metadata {i}: dc_id={elem.get('dc_id', 'MISSING')}"
         # )
 
@@ -731,17 +828,13 @@ def api_call_save_dashboard(
     try:
         # Log what metadata is being sent to the API
         # stored_metadata = dashboard_data.get("stored_metadata", [])
-        # logger.info(f"📊 API SAVE DEBUG - Sending {len(stored_metadata)} metadata items to API")
         # if stored_metadata:
         #     for i, elem in enumerate(stored_metadata[:2]):  # Only first 2 to avoid spam
         #         if elem:
-        #             logger.info(
         #                 f"📊 API SAVE DEBUG - Metadata {i}: dict_kwargs={elem.get('dict_kwargs', 'MISSING')}"
         #             )
-        #             logger.info(
         #                 f"📊 API SAVE DEBUG - Metadata {i}: wf_id={elem.get('wf_id', 'MISSING')}"
         #             )
-        #             logger.info(
         #                 f"📊 API SAVE DEBUG - Metadata {i}: dc_id={elem.get('dc_id', 'MISSING')}"
         #             )
 
@@ -809,7 +902,7 @@ def api_call_get_google_oauth_login_url() -> dict[str, Any] | None:
         Dictionary with authorization_url and state, or None if failed
     """
     try:
-        logger.info("Getting Google OAuth login URL")
+        logger.debug("Getting Google OAuth login URL")
 
         with httpx.Client() as client:
             response = client.get(f"{API_BASE_URL}/depictio/api/v1/auth/google/login")
@@ -880,8 +973,6 @@ def api_call_fetch_project_by_id(
         Project data dictionary or None if not found
     """
     try:
-        logger.debug(f"Fetching project by ID: {project_id} (skip_enrichment={skip_enrichment})")
-
         response = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id",
             headers={"Authorization": f"Bearer {token}"},
@@ -918,8 +1009,6 @@ def api_call_fetch_delta_table_info(data_collection_id: str, token: str) -> dict
         Delta table information or None if not found
     """
     try:
-        logger.debug(f"Fetching delta table info for data collection: {data_collection_id}")
-
         response = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{data_collection_id}",
             headers={"Authorization": f"Bearer {token}"},
@@ -973,7 +1062,7 @@ def api_call_create_project(project_data: dict[str, Any], token: str) -> dict[st
 
         if response.status_code == 200:
             result = response.json()
-            logger.info(f"Project created successfully: {result.get('message', 'No message')}")
+            logger.debug(f"Project created successfully: {result.get('message', 'No message')}")
             return result
         else:
             error_msg = f"Failed to create project: {response.status_code} - {response.text}"
@@ -1017,7 +1106,7 @@ def api_call_update_project(project_data: dict[str, Any], token: str) -> dict[st
 
         if response.status_code == 200:
             result = response.json()
-            logger.info(f"Project updated successfully: {result.get('message', 'No message')}")
+            logger.debug(f"Project updated successfully: {result.get('message', 'No message')}")
             return result
         else:
             error_msg = f"Failed to update project: {response.status_code} - {response.text}"
@@ -1081,6 +1170,122 @@ def api_call_delete_project(project_id: str, token: str) -> dict[str, Any] | Non
         return {"success": False, "message": f"Network error: {str(e)}", "status_code": 500}
 
 
+def _validate_upload_file(file_contents: str, max_size_mb: float = 5.0) -> tuple[bytes, str | None]:
+    """
+    Validate and decode base64 file contents.
+
+    Args:
+        file_contents: Base64 encoded file contents (with data URI prefix).
+        max_size_mb: Maximum allowed file size in megabytes.
+
+    Returns:
+        Tuple of (decoded_bytes, error_message). If validation succeeds,
+        error_message is None. If validation fails, decoded_bytes is empty.
+    """
+    import base64
+
+    try:
+        _, content_string = file_contents.split(",")
+        decoded = base64.b64decode(content_string)
+        file_size = len(decoded)
+
+        max_size = int(max_size_mb * 1024 * 1024)
+        if file_size > max_size:
+            return (
+                b"",
+                f"File size ({file_size / (1024 * 1024):.1f}MB) exceeds {max_size_mb}MB limit",
+            )
+        return (decoded, None)
+    except Exception as e:
+        return (b"", f"Invalid file contents: {str(e)}")
+
+
+def _build_polars_kwargs(
+    file_format: str,
+    separator: str,
+    custom_separator: str | None,
+    compression: str,
+    has_header: bool,
+) -> dict[str, Any]:
+    """
+    Build polars read configuration based on file parameters.
+
+    Args:
+        file_format: File format (csv, tsv, parquet, etc.).
+        separator: Field separator for delimited files.
+        custom_separator: Custom separator if separator="custom".
+        compression: Compression format (none, gzip, zip, bz2).
+        has_header: Whether file has header row.
+
+    Returns:
+        Dictionary of polars kwargs for reading the file.
+    """
+    polars_kwargs: dict[str, Any] = {}
+
+    if file_format in ["csv", "tsv"]:
+        # Determine separator
+        if separator == "custom" and custom_separator:
+            polars_kwargs["separator"] = custom_separator
+        elif separator == "\t":
+            polars_kwargs["separator"] = "\t"
+        elif separator in [",", ";", "|"]:
+            polars_kwargs["separator"] = separator
+        else:
+            polars_kwargs["separator"] = "," if file_format == "csv" else "\t"
+
+        # Header handling
+        polars_kwargs["has_header"] = has_header
+
+    # Add compression if specified
+    if compression != "none":
+        polars_kwargs["compression"] = compression
+
+    return polars_kwargs
+
+
+def _get_permission_ids_for_level(
+    permissions: dict[str, Any], level: str, user_id_str: str
+) -> bool:
+    """
+    Check if a user has permission at the specified level.
+
+    Args:
+        permissions: Project permissions dictionary.
+        level: Permission level ("owner", "editor", or "viewer").
+        user_id_str: User ID as string.
+
+    Returns:
+        bool: True if user has permission at the specified level.
+    """
+    owner_ids = [
+        str(owner.get("id", owner.get("_id", ""))) for owner in permissions.get("owners", [])
+    ]
+
+    if level == "owner":
+        return user_id_str in owner_ids
+
+    editor_ids = [
+        str(editor.get("id", editor.get("_id", ""))) for editor in permissions.get("editors", [])
+    ]
+
+    if level == "editor":
+        return user_id_str in owner_ids or user_id_str in editor_ids
+
+    # level == "viewer"
+    viewer_ids = [
+        str(viewer.get("id", viewer.get("_id", "")))
+        for viewer in permissions.get("viewers", [])
+        if isinstance(viewer, dict)
+    ]
+    has_wildcard = "*" in permissions.get("viewers", [])
+    return (
+        user_id_str in owner_ids
+        or user_id_str in editor_ids
+        or user_id_str in viewer_ids
+        or has_wildcard
+    )
+
+
 @validate_call(validate_return=True)
 def api_call_create_data_collection(
     name: str,
@@ -1125,7 +1330,6 @@ def api_call_create_data_collection(
         Response with success/failure status and details
     """
     try:
-        import base64
         import os
         import shutil
         import tempfile
@@ -1148,27 +1352,12 @@ def api_call_create_data_collection(
             WorkflowEngine,
         )
 
-        logger.info(f"Creating data collection: {name}")
+        logger.debug(f"Creating data collection: {name}")
 
-        # Validate file size (5MB limit)
-        try:
-            _, content_string = file_contents.split(",")
-            decoded = base64.b64decode(content_string)
-            file_size = len(decoded)
-
-            max_size = 5 * 1024 * 1024  # 5MB
-            if file_size > max_size:
-                return {
-                    "success": False,
-                    "message": f"File size ({file_size / (1024 * 1024):.1f}MB) exceeds 5MB limit",
-                    "status_code": 400,
-                }
-        except Exception as e:
-            return {
-                "success": False,
-                "message": f"Invalid file contents: {str(e)}",
-                "status_code": 400,
-            }
+        # Validate and decode file contents
+        decoded, error = _validate_upload_file(file_contents, max_size_mb=5.0)
+        if error:
+            return {"success": False, "message": error, "status_code": 400}
 
         # Get user information from token first
         current_user = api_call_fetch_user_from_token(token)
@@ -1198,28 +1387,12 @@ def api_call_create_data_collection(
             with open(temp_file_path, "wb") as f:
                 f.write(decoded)
 
-            logger.info(f"Saved uploaded file to: {temp_file_path}")
+            logger.debug(f"Saved uploaded file to: {temp_file_path}")
 
-            # Build polars kwargs based on user selections
-            polars_kwargs = {}
-
-            if file_format in ["csv", "tsv"]:
-                # Determine separator
-                if separator == "custom" and custom_separator:
-                    polars_kwargs["separator"] = custom_separator
-                elif separator == "\t":
-                    polars_kwargs["separator"] = "\t"
-                elif separator in [",", ";", "|"]:
-                    polars_kwargs["separator"] = separator
-                else:
-                    polars_kwargs["separator"] = "," if file_format == "csv" else "\t"
-
-                # Header handling
-                polars_kwargs["has_header"] = has_header
-
-            # Add compression if specified
-            if compression != "none":
-                polars_kwargs["compression"] = compression
+            # Build polars kwargs using helper function
+            polars_kwargs = _build_polars_kwargs(
+                file_format, separator, custom_separator, compression, has_header
+            )
 
             # Create data collection configuration
             dc_table_config = DCTableConfig(
@@ -1245,7 +1418,7 @@ def api_call_create_data_collection(
                 config=dc_config,
             )
 
-            logger.info(f"Created data collection: {data_collection}")
+            logger.debug(f"Created data collection: {data_collection}")
 
             # Create a workflow to contain this data collection
             workflow_config = WorkflowConfig()
@@ -1332,10 +1505,10 @@ def api_call_create_data_collection(
                     "status_code": 500,
                 }
 
-            logger.info("Data collection added to project successfully!")
+            logger.debug("Data collection added to project successfully!")
 
             # Process the data collection using existing CLI infrastructure
-            logger.info("Starting data collection processing...")
+            logger.debug("Starting data collection processing...")
 
             # First scan the files
             scan_result = process_data_collection_helper(
@@ -1372,7 +1545,7 @@ def api_call_create_data_collection(
                     "status_code": 500,
                 }
 
-            logger.info("Data collection created and processed successfully!")
+            logger.debug("Data collection created and processed successfully!")
 
             return {
                 "success": True,
@@ -1418,13 +1591,13 @@ def api_call_edit_data_collection_name(
         headers = {"Authorization": f"Bearer {token}"}
         data = {"new_name": new_name}
 
-        logger.info(f"Updating data collection name: {data_collection_id} -> {new_name}")
+        logger.debug(f"Updating data collection name: {data_collection_id} -> {new_name}")
 
         response = httpx.put(url, headers=headers, json=data, timeout=30.0)
         response.raise_for_status()
 
         result = response.json()
-        logger.info(f"Data collection name updated successfully: {result}")
+        logger.debug(f"Data collection name updated successfully: {result}")
         return {"success": True, "message": "Data collection name updated successfully"}
 
     except httpx.HTTPStatusError as e:
@@ -1519,7 +1692,7 @@ def api_call_overwrite_data_collection(
     try:
         # Create temporary directory for file processing
         temp_dir = tempfile.mkdtemp()
-        logger.info(f"Created temporary directory: {temp_dir}")
+        logger.debug(f"Created temporary directory: {temp_dir}")
 
         # Decode and save the uploaded file
         file_data = base64.b64decode(file_contents.split(",")[1])
@@ -1545,7 +1718,7 @@ def api_call_overwrite_data_collection(
             )
             headers = {"Authorization": f"Bearer {token}"}
 
-            logger.info(f"Fetching data collection specs from: {specs_url}")
+            logger.debug(f"Fetching data collection specs from: {specs_url}")
             response = httpx.get(specs_url, headers=headers, timeout=30.0)
             response.raise_for_status()
 
@@ -1863,53 +2036,12 @@ def api_call_check_project_permission(
             logger.debug("Public project - viewer permission granted")
             return True
 
-        # Get permissions from project
+        # Get permissions from project and check using helper function
         permissions = project.get("permissions", {})
         user_id_str = str(current_user.id)
-
-        # Check based on required permission level
-        if required_permission == "owner":
-            # Only owners can perform owner-level actions
-            owner_ids = [
-                str(owner.get("id", owner.get("_id", "")))
-                for owner in permissions.get("owners", [])
-            ]
-            has_permission = user_id_str in owner_ids
-
-        elif required_permission == "editor":
-            # Editors and owners can perform editor-level actions
-            owner_ids = [
-                str(owner.get("id", owner.get("_id", "")))
-                for owner in permissions.get("owners", [])
-            ]
-            editor_ids = [
-                str(editor.get("id", editor.get("_id", "")))
-                for editor in permissions.get("editors", [])
-            ]
-            has_permission = user_id_str in owner_ids or user_id_str in editor_ids
-
-        else:  # viewer
-            # Viewers, editors, and owners can perform viewer-level actions
-            owner_ids = [
-                str(owner.get("id", owner.get("_id", "")))
-                for owner in permissions.get("owners", [])
-            ]
-            editor_ids = [
-                str(editor.get("id", editor.get("_id", "")))
-                for editor in permissions.get("editors", [])
-            ]
-            viewer_ids = [
-                str(viewer.get("id", viewer.get("_id", "")))
-                for viewer in permissions.get("viewers", [])
-                if isinstance(viewer, dict)
-            ]
-            has_wildcard = "*" in permissions.get("viewers", [])
-            has_permission = (
-                user_id_str in owner_ids
-                or user_id_str in editor_ids
-                or user_id_str in viewer_ids
-                or has_wildcard
-            )
+        has_permission = _get_permission_ids_for_level(
+            permissions, required_permission, user_id_str
+        )
 
         if has_permission:
             logger.debug(
@@ -1941,8 +2073,6 @@ def api_call_fetch_multiqc_report(data_collection_id: str, token: str) -> dict[s
         MultiQC report metadata or None if not found
     """
     try:
-        logger.debug(f"Fetching MultiQC report for data collection: {data_collection_id}")
-
         response = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/multiqc/{data_collection_id}",
             headers={"Authorization": f"Bearer {token}"},
