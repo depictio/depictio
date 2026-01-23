@@ -348,11 +348,78 @@ jobs:
             exit 1
           }
 
+          # Debug: Capture backend/frontend state BEFORE waiting for celery
+          echo ""
+          echo "=============================="
+          echo "🔍 PRE-CELERY DEBUG: Backend & Frontend State"
+          echo "=============================="
+          echo "📊 All pods status before celery wait:"
+          kubectl get pods -l "release=${RELEASE_NAME}" -o wide
+
+          BACKEND_POD_PRE=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-backend" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          FRONTEND_POD_PRE=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-frontend" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+
+          if [ -n "$BACKEND_POD_PRE" ]; then
+            echo ""
+            echo "📋 Backend logs (last 100 lines):"
+            kubectl logs $BACKEND_POD_PRE --tail=100 || echo "❌ Could not get backend logs"
+          fi
+
+          if [ -n "$FRONTEND_POD_PRE" ]; then
+            echo ""
+            echo "📋 Frontend logs (last 100 lines):"
+            kubectl logs $FRONTEND_POD_PRE --tail=100 || echo "❌ Could not get frontend logs"
+          fi
+
+          # Check celery worker init containers status
+          echo ""
+          echo "📊 Celery worker pod status:"
+          kubectl get pods -l "release=${RELEASE_NAME},app=celery-worker" -o wide || echo "No celery pods found yet"
+
+          CELERY_POD_PRE=$(kubectl get pods -l "release=${RELEASE_NAME},app=celery-worker" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$CELERY_POD_PRE" ]; then
+            echo ""
+            echo "📋 Celery worker pod describe:"
+            kubectl describe pod $CELERY_POD_PRE
+            echo ""
+            echo "📋 Celery worker init container logs:"
+            for container in fix-permissions-celery wait-for-mongo wait-for-redis wait-for-backend wait-for-api-key; do
+              echo "--- Init container: $container ---"
+              kubectl logs $CELERY_POD_PRE -c $container 2>/dev/null || echo "  (not available or not started)"
+            done
+            echo ""
+            echo "📋 Celery worker main container logs:"
+            kubectl logs $CELERY_POD_PRE -c celery-worker 2>/dev/null || echo "  (not available or not started)"
+          fi
+          echo "=============================="
+
           echo "⏳ Waiting for celery-worker pods to be ready..."
           kubectl wait --for=condition=ready pod -l "release=${RELEASE_NAME},app=celery-worker" --timeout=300s || {
             echo "❌ Celery worker pods failed to be ready"
+            echo ""
+            echo "=============================="
+            echo "🔍 POST-FAILURE DEBUG"
+            echo "=============================="
             echo "📊 Celery worker pod details:"
             kubectl describe pods -l "release=${RELEASE_NAME},app=celery-worker"
+            echo ""
+            echo "📋 Celery init container logs after failure:"
+            CELERY_POD_FAIL=$(kubectl get pods -l "release=${RELEASE_NAME},app=celery-worker" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+            if [ -n "$CELERY_POD_FAIL" ]; then
+              for container in fix-permissions-celery wait-for-mongo wait-for-redis wait-for-backend wait-for-api-key; do
+                echo "--- Init container: $container ---"
+                kubectl logs $CELERY_POD_FAIL -c $container 2>/dev/null || echo "  (not available)"
+              done
+              echo ""
+              echo "📋 Celery main container logs:"
+              kubectl logs $CELERY_POD_FAIL -c celery-worker 2>/dev/null || echo "  (not available)"
+            fi
+            echo ""
+            echo "📋 Backend logs at failure time:"
+            kubectl logs $BACKEND_POD_PRE --tail=50 2>/dev/null || echo "  (not available)"
+            echo ""
+            echo "📋 Frontend logs at failure time:"
+            kubectl logs $FRONTEND_POD_PRE --tail=50 2>/dev/null || echo "  (not available)"
             exit 1
           }
 
@@ -418,9 +485,35 @@ jobs:
           echo "=============================="
           kubectl logs $FRONTEND_POD --previous --all-containers=true 2>/dev/null || echo "ℹ️  No previous frontend container logs available"
 
+          # Find and log celery worker pod
+          echo ""
+          echo "🔍 Finding celery-worker pod for logging..."
+          CELERY_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=celery-worker" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$CELERY_POD" ]; then
+            echo "✅ Celery worker pod: $CELERY_POD"
+
+            echo ""
+            echo "🔍 Celery Worker Pod Detailed Status:"
+            kubectl describe pod $CELERY_POD | grep -A 10 "Conditions:"
+
+            echo ""
+            echo "=============================="
+            echo "📋 CELERY WORKER POD LOGS (FULL)"
+            echo "=============================="
+            kubectl logs $CELERY_POD --all-containers=true || echo "❌ Could not get celery worker logs"
+
+            echo ""
+            echo "=============================="
+            echo "📋 CELERY WORKER INIT CONTAINER LOGS"
+            echo "=============================="
+            kubectl logs $CELERY_POD --previous --all-containers=true 2>/dev/null || echo "ℹ️  No previous celery worker container logs available"
+          else
+            echo "⚠️  No celery worker pod found"
+          fi
+
           echo ""
           echo "🔍 Pod Container Status Details:"
-          kubectl get pods $BACKEND_POD $FRONTEND_POD -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{range .status.containerStatuses[*]}  Container: {.name} - Ready: {.ready} - State: {.state}{"\n"}{end}{"\n"}{end}'
+          kubectl get pods $BACKEND_POD $FRONTEND_POD $CELERY_POD -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{range .status.containerStatuses[*]}  Container: {.name} - Ready: {.ready} - State: {.state}{"\n"}{end}{"\n"}{end}' 2>/dev/null || kubectl get pods $BACKEND_POD $FRONTEND_POD -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{range .status.containerStatuses[*]}  Container: {.name} - Ready: {.ready} - State: {.state}{"\n"}{end}{"\n"}{end}'
 
           echo ""
           echo "=============================="
@@ -443,12 +536,24 @@ jobs:
           kubectl get configmap ${RELEASE_NAME}-frontend-config -o yaml 2>/dev/null || echo "❌ Frontend configmap not found"
 
           echo ""
+          echo "📋 Celery ConfigMap Contents:"
+          kubectl get configmap ${RELEASE_NAME}-celery-config -o yaml 2>/dev/null || echo "❌ Celery configmap not found"
+
+          echo ""
           echo "📋 Backend Pod Environment Variables:"
           kubectl exec $BACKEND_POD -- env | sort | grep -E "(DEPICTIO|MONGO|MINIO)" || echo "❌ Could not get backend env vars"
 
           echo ""
           echo "📋 Frontend Pod Environment Variables:"
           kubectl exec $FRONTEND_POD -- env | sort | grep -E "(DEPICTIO|MONGO|MINIO)" || echo "❌ Could not get frontend env vars"
+
+          echo ""
+          echo "📋 Celery Worker Pod Environment Variables:"
+          if [ -n "$CELERY_POD" ]; then
+            kubectl exec $CELERY_POD -- env | sort | grep -E "(DEPICTIO|MONGO|MINIO|CELERY|REDIS)" || echo "❌ Could not get celery env vars"
+          else
+            echo "⚠️  No celery worker pod available"
+          fi
 
           echo ""
           echo "=============================="
