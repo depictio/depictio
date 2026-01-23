@@ -6,18 +6,18 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.6.0-b8</summary>
+<summary>Click to expand the changelog for 0.6.0-b9</summary>
 
 ### Changes 📜
 
-#### Bug Fixes 🐛
+#### New Features ✨
 
-* fix: notify docs after Docker build completes [61a1b6fa]
+* feat: add EMBL self-hosted deployment workflow [cd3382f2]
 
 #### Other Changes 📝
 
-* Bump version: 0.6.0-b7 → 0.6.0-b8 [69d4e78a]
-* Update CHANGELOG.md for v0.6.0-b7 [e6c02560]
+* Bump version: 0.6.0-b8 → 0.6.0-b9 [30b5855d]
+* Update CHANGELOG.md for v0.6.0-b8 [c119d278]
 
 
 </details>
@@ -26,21 +26,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ecessary updates [a02143b7]
-* feat: Implement dynamic dropdowns with callback for adding filters in the dashboard [f87fdb2e]
-* feat: Allow duplicate outputs in joins selection info callback for enhanced data handling [97e4e5d8]
-* feat: Optimize performance by conditionally disabling animations in loading and theme components [96ebcc4e]
-* feat: Add redis dependency for improved caching support [b5de59fe]
-* feat: Implement async and sync versions of interactive component updates and enhance dashboard rendering with parallel processing [10ef563b]
-* feat: Add callback to update figure theme based on current theme selection [95a8377a]
-* feat: Add async wrappers for background callbacks in card, figure, interactive, table, and text components [4270e7a7]
-* feat: Add Celery application for background task processing with health check task [61a08915]
-* feat: Update redis_password field to allow None value for optional configuration [a526158e]
-* feat: Update Redis image version and add Celery worker service to Docker Compose [8acb2a6a]
-* feat: Add run_celery_worker.sh script and enhance run_dash.sh and run_fastapi.sh with worker count information [6431e245]
-* feat: Add Celery integration for background task processing and optimize server configurations [1b80668e]
-* feat: Implement figure caching and performance optimizations for rendering and data retrieval [d2930ff8]
-* feat: Implement performance optimizations with conditional loading spinners and logging for card, interactive, and table components [1b2849aa]
+ers and logging for card, interactive, and table components [1b2849aa]
 * feat: Implement bulk pre-fetching of component data for performance optimization [e5a30f71]
 * feat: Optimize component update process by skipping rebuilds for non-interactive components [15ea04b7]
 * feat: Enhance component data caching and implement batch fetching for performance optimization [97458def]
