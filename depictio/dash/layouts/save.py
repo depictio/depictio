@@ -17,8 +17,8 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import (
     api_call_get_dashboard,
     api_call_save_dashboard,
-    api_call_screenshot_dashboard,
 )
+from depictio.dash.celery_app import generate_dashboard_screenshot
 
 
 def validate_and_clean_orphaned_layouts(stored_layout_data, stored_metadata):
@@ -222,10 +222,10 @@ def register_callbacks_save_lite(app):
         )
 
         if success:
-            # Generate screenshot after successful save
-            screenshot_success = api_call_screenshot_dashboard(dashboard_id)
-            if not screenshot_success:
-                logger.warning(f"Failed to generate screenshot for dashboard {dashboard_id}")
+            # Trigger screenshot generation in background (fire-and-forget)
+            # User gets immediate feedback, screenshot happens asynchronously
+            generate_dashboard_screenshot.delay(dashboard_id)
+            logger.debug(f"Screenshot task queued for dashboard {dashboard_id}")
         else:
             logger.error(f"Failed to save dashboard {dashboard_id}")
 
