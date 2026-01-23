@@ -340,7 +340,3 @@ def register_ui_callbacks(app):
         }
 
         return updated_metadata
-
-    logger.info(
-        "✅ Figure UI callbacks registered (parameter interface + state-based dict_kwargs updater + metadata sync)"
-    )

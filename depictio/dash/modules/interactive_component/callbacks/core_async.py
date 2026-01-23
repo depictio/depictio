@@ -202,11 +202,6 @@ def register_async_rendering_callback(app):
                         "size_bytes": -1,
                     }
 
-        logger.info(
-            f"🚀 BATCH INTERACTIVE RENDER START - {len(trigger_data_list)} components "
-            f"(delta_locations: {len(delta_locations)})"
-        )
-
         # SECURITY: Extract access_token once (shared)
         access_token = local_data.get("access_token") if local_data else None
         if not access_token:
@@ -310,10 +305,7 @@ def register_async_rendering_callback(app):
                 all_metadata.append({})
                 all_stored_metadata.append({})
 
-        batch_duration = (time.time() - batch_start) * 1000
-        logger.info(
-            f"✅ BATCH INTERACTIVE RENDER COMPLETE - {len(all_components)} components in {batch_duration:.1f}ms"
-        )
+        (time.time() - batch_start) * 1000
 
         return all_components, all_metadata, all_stored_metadata
 
@@ -399,8 +391,6 @@ def build_select_component(
     icon_name = trigger_data.get("icon_name", "bx:slider-alt")
     title_size = trigger_data.get("title_size", "md")
     color = trigger_data.get("color") or trigger_data.get("custom_color")
-
-    logger.info(f"SELECT COMPONENT: '{title or column_name}' (type={component_type})")
 
     title_element = _create_component_title(
         title, column_name, component_type, icon_name, title_size, color
@@ -552,8 +542,6 @@ def build_slider_component(
     icon_name = trigger_data.get("icon_name", "bx:slider-alt")
     title_size_param = trigger_data.get("title_size", "md")
 
-    logger.info(f"SLIDER COMPONENT: '{title or column_name}' (type={component_type})")
-
     title_element = _create_component_title(
         title, column_name, component_type, icon_name, title_size_param, color
     )
@@ -690,8 +678,6 @@ def build_datepicker_component(
     title = trigger_data.get("title")
     icon_name = trigger_data.get("icon_name", "bx:calendar")
     title_size_param = trigger_data.get("title_size", "md")
-
-    logger.info(f"DATEPICKER COMPONENT: '{title or column_name}'")
 
     title_element = _create_component_title(
         title, column_name, "DateRangePicker", icon_name, title_size_param, color

@@ -119,7 +119,6 @@ def format_mark_label(value):
     Returns:
         str or None: Formatted label as a string, or None if formatting fails.
     """
-    logger.debug(f"Formatting mark label for value '{value}'")
     try:
         if not isinstance(value, int | float):
             raise TypeError(f"Value {value} is not a number.")
@@ -139,7 +138,6 @@ def format_mark_label(value):
                 # Ensure at least one decimal place if it's not a whole number
                 if "." not in label and value != int(value):
                     label = f"{value:.1f}"
-        logger.debug(f"Formatted label: {label}")
         return label
     except Exception as e:
         logger.error(f"Error formatting mark label for value '{value}': {e}")
@@ -224,10 +222,6 @@ def generate_equally_spaced_marks(min_val, max_val, marks_count=2, use_log_scale
 
                     marks[pos] = format_mark_label(original_pos)  # Use original value for label
 
-        logger.info(
-            f"Generated {len(marks)} equally spaced marks ({'log' if use_log_scale else 'linear'})"
-        )
-        logger.info(f"Equally spaced marks: {marks}")
         return marks
 
     except Exception as e:
@@ -252,18 +246,13 @@ def generate_log_marks(min_val, max_val, data_min, data_max, tolerance=0.5):
         dict: A dictionary where keys are positions on the slider and values are formatted labels.
     """
     try:
-        logger.debug(f"Generating log marks with min_val={min_val}, max_val={max_val}")
-        logger.debug(f"Data min: {data_min}, Data max: {data_max}")
-
         # Calculate the exponent range with improved logic
         min_exp = math.floor(min_val)
         max_exp = math.ceil(max_val)
-        logger.debug(f"Exponent range: {min_exp} to {max_exp}")
 
         # Check if this is a small range that needs special handling
         range_span = max_exp - min_exp
         is_small_range = range_span <= 1
-        logger.debug(f"Range span: {range_span}, is_small_range: {is_small_range}")
 
         marks = {}
 
@@ -273,36 +262,27 @@ def generate_log_marks(min_val, max_val, data_min, data_max, tolerance=0.5):
 
         marks[min_log_pos] = format_mark_label(data_min)
         marks[max_log_pos] = format_mark_label(data_max)
-        logger.debug(f"Added required min mark: {min_log_pos} -> {data_min}")
-        logger.debug(f"Added required max mark: {max_log_pos} -> {data_max}")
 
         for exp in range(min_exp, max_exp + 1):
             # Calculate the original value at this exponent
             original_value = 10**exp
-            logger.debug(f"Original value at 10^{exp}: {original_value}")
 
             # Position on the slider (log-transformed space)
             pos = math.log10(original_value)
-            logger.debug(f"Position on slider: {pos}")
 
             # Skip if outside data range
             if original_value < data_min or original_value > data_max:
-                logger.debug(f"Skipping {original_value} as it's outside data range")
                 continue
 
             # Check if this mark is too close to boundaries
             too_close_min = abs(original_value - data_min) / data_min < tolerance
             too_close_max = abs(original_value - data_max) / data_max < tolerance
 
-            logger.debug(f"Too close to data_min: {too_close_min}")
-            logger.debug(f"Too close to data_max: {too_close_max}")
-
             # Skip if too close to boundaries (unless it's exactly the boundary or small range)
             if not is_small_range and (
                 (too_close_min and original_value != data_min)
                 or (too_close_max and original_value != data_max)
             ):
-                logger.debug(f"Skipping {original_value} as it's too close to data boundaries")
                 continue
 
             # Ensure that pos is within the slider's range
@@ -311,13 +291,11 @@ def generate_log_marks(min_val, max_val, data_min, data_max, tolerance=0.5):
                 if label:
                     # Use float position instead of int for better precision
                     marks[pos] = label
-                    logger.debug(f"Added logarithmic mark: pos={pos}, label={label}")
                 else:
                     logger.warning(f"Label for value {original_value} is None. Skipping.")
 
         # Add intermediate marks for better granularity if we have few marks
         if len(marks) < 4:  # Need at least 4 marks for good coverage
-            logger.debug("Adding intermediate marks for better granularity")
             # Add marks at 2x and 5x intervals within each order of magnitude
             for exp in range(min_exp, max_exp + 1):
                 for multiplier in [2, 5]:
@@ -328,13 +306,9 @@ def generate_log_marks(min_val, max_val, data_min, data_max, tolerance=0.5):
                             label = format_mark_label(intermediate_value)
                             if label:
                                 marks[pos] = label
-                                logger.info(
-                                    f"Added intermediate logarithmic mark: pos={pos}, label={label}"
-                                )
 
         # If still too few marks for small ranges, add more intermediate points
         if len(marks) < 3 and is_small_range:
-            logger.debug("Adding extra marks for very small log range")
             # Add more granular marks for small ranges
             for exp in range(min_exp, max_exp + 1):
                 for multiplier in [1.5, 3, 7]:  # Additional multipliers
@@ -345,11 +319,7 @@ def generate_log_marks(min_val, max_val, data_min, data_max, tolerance=0.5):
                             label = format_mark_label(intermediate_value)
                             if label:
                                 marks[pos] = label
-                                logger.info(
-                                    f"Added extra logarithmic mark for small range: pos={pos}, label={label}"
-                                )
 
-        logger.info(f"Final generated log marks: {marks}")
         return marks
 
     except Exception as e:
@@ -370,9 +340,6 @@ def get_default_state(interactive_component_type, column_name, cols_json, unique
     Returns:
         dict: Default state information for the component
     """
-    logger.debug(
-        f"Generating default state for {interactive_component_type} on column {column_name}"
-    )
 
     if interactive_component_type == "RangeSlider":
         # For range sliders, default state is [min_value, max_value]
@@ -383,7 +350,6 @@ def get_default_state(interactive_component_type, column_name, cols_json, unique
 
             if min_val is not None and max_val is not None:
                 default_range = [min_val, max_val]
-                logger.debug(f"Range slider default state: {default_range}")
                 return {
                     "type": "range",
                     "min_value": min_val,
@@ -405,9 +371,6 @@ def get_default_state(interactive_component_type, column_name, cols_json, unique
         default_options = unique_values if unique_values else []
         default_value = None  # None means "All" / no selection
 
-        logger.debug(
-            f"Select component default state: {default_value} (options: {len(default_options)})"
-        )
         return {
             "type": "select",
             "options": default_options,
@@ -416,7 +379,6 @@ def get_default_state(interactive_component_type, column_name, cols_json, unique
 
     elif interactive_component_type == "Switch":
         # For switches, default is typically False
-        logger.debug("Switch default state: False")
         return {
             "type": "boolean",
             "default_value": False,
@@ -437,7 +399,6 @@ def get_default_state(interactive_component_type, column_name, cols_json, unique
                     max_date = str(max_date.date() if callable(max_date.date) else max_date)
 
                 default_range = [min_date, max_date]
-                logger.debug(f"Date range picker default state: {default_range}")
                 return {
                     "type": "date_range",
                     "min_date": min_date,
@@ -511,15 +472,11 @@ def get_valid_min_max(df, column_name, cols_json):
     # Validate and round max_value
     max_value = validate_and_round(max_value, "Max")
 
-    logger.info(f"Initial Min value: {min_value} (Type: {type(min_value)})")
-    logger.info(f"Initial Max value: {max_value} (Type: {type(max_value)})")
-
     # If min_value is invalid, compute it from the DataFrame
     if min_value is None:
         computed_min = df[column_name].replace([np.inf, -np.inf], np.nan).dropna().min()
         if pd.notnull(computed_min):
             min_value = round(float(computed_min), 2)
-            logger.info(f"Min value set from DataFrame: {min_value}")
         else:
             # Define a default min_value if DataFrame min is not available
             min_value = 0.0
@@ -532,7 +489,6 @@ def get_valid_min_max(df, column_name, cols_json):
         computed_max = df[column_name].replace([np.inf, -np.inf], np.nan).dropna().max()
         if pd.notnull(computed_max):
             max_value = round(float(computed_max), 2)
-            logger.info(f"Max value set from DataFrame: {max_value}")
         else:
             # Define a default max_value if DataFrame max is not available
             max_value = 1.0
@@ -546,9 +502,6 @@ def get_valid_min_max(df, column_name, cols_json):
             f"Min value ({min_value}) is greater than Max value ({max_value}). Swapping values."
         )
         min_value, max_value = max_value, min_value
-
-    logger.info(f"Final Min value: {min_value} (Type: {type(min_value)})")
-    logger.info(f"Final Max value: {max_value} (Type: {type(max_value)})")
 
     return min_value, max_value
 
@@ -565,7 +518,6 @@ def is_highly_skewed(series, threshold=1.0):
         bool: True if skewness is greater than the threshold, else False.
     """
     skewness = series.skew()
-    logger.info(f"Skewness of '{series.name}': {skewness}")
     return abs(skewness) > threshold
 
 
@@ -582,10 +534,8 @@ def apply_log_transformation(series, shift=1e-6):
         float: The shift applied to the data (0 if no shift was needed).
     """
     min_val = series.min()
-    logger.info(f"Minimum value of '{series.name}': {min_val}")
     if min_val < 0:
         shift_amount = abs(min_val) + shift
-        logger.info(f"Shifting data by {shift_amount} to handle non-positive values.")
         transformed_series = np.log10(series + shift_amount)
         return transformed_series, shift_amount
     else:
@@ -627,10 +577,6 @@ def _build_select_component(
     Returns:
         The constructed DMC component (Select, MultiSelect, SegmentedControl, or Text for errors).
     """
-    logger.debug(
-        f"Select component: column={column_name}, df.shape={df.shape}, "
-        f"column_present={column_name in df.columns}"
-    )
 
     # Check if column exists before processing
     if column_name not in df.columns:
@@ -648,15 +594,9 @@ def _build_select_component(
                 if val not in data:
                     data.append(val)
             data = sorted(data)
-            logger.debug(
-                f"MultiSelect {index}: Added preserved values {value} to empty options, final data: {data}"
-            )
         elif interactive_component_type in ["Select", "SegmentedControl"] and value not in data:
             data.append(value)
             data = sorted(data)
-            logger.debug(
-                f"{interactive_component_type} {index}: Added preserved value '{value}' to empty options, final data: {data}"
-            )
 
     # Prepare kwargs for all component types
     component_kwargs = {
@@ -679,7 +619,6 @@ def _build_select_component(
     elif interactive_component_type == "SegmentedControl":
         # For SegmentedControl, explicitly set value to None for no selection
         component_kwargs["value"] = None
-        logger.debug(f"SegmentedControl component {index}: No initial selection (value=None)")
 
     # Apply custom color styling
     if color:
@@ -760,14 +699,8 @@ def _process_single_select_value(value, data: list, index: str, component_type: 
             return None
         else:
             value = str(value) if value is not None else None
-            logger.debug(
-                f"{component_type} component {index}: Converted value to string: '{value}'"
-            )
 
     if value and value in data:
-        logger.debug(
-            f"{component_type} component {index}: Preserved value '{value}' (available in options)"
-        )
         return value
     elif value:
         logger.warning(
@@ -792,15 +725,11 @@ def _process_multiselect_value(value, data: list, index: str) -> list | None:
     if not isinstance(value, list):
         if isinstance(value, (tuple, set)):
             value = list(value)
-            logger.debug(f"MultiSelect component {index}: Converted {type(value).__name__} to list")
         else:
             value = [str(value)]
-            logger.debug(f"MultiSelect component {index}: Wrapped single value in list: {value}")
 
     # Convert all values to strings
     value = [str(v) for v in value if v is not None]
-    logger.debug(f"MultiSelect component {index}: Converted values to strings: {value}")
-    logger.debug(f"MultiSelect component {index}: Preserved value '{value}'")
     return value
 
 
@@ -843,15 +772,9 @@ def _build_slider_component(
     Returns:
         The constructed DMC Slider or RangeSlider component.
     """
-    logger.info(f"Column name: {column_name}")
-    logger.info(f"Scale type: {scale}")
 
     # Convert Polars DataFrame to Pandas for processing
     df_pandas = df.to_pandas()
-    logger.debug(
-        f"Slider component: column={column_name}, df.shape={df_pandas.shape}, "
-        f"column_present={column_name in df_pandas.columns}"
-    )
 
     # Check if column exists before processing
     if column_name not in df_pandas.columns:
@@ -864,14 +787,9 @@ def _build_slider_component(
 
     # Determine scale type
     use_log_scale = scale is not None and scale == "log10"
-    if use_log_scale:
-        logger.info("User explicitly selected log10 scale")
-    else:
-        logger.info(f"Using linear scale (scale parameter: {scale})")
 
     # Apply log transformation if needed
     if use_log_scale:
-        logger.debug("Applying log transformation")
         transformed_series, _ = apply_log_transformation(df_pandas[column_name])
         df_pandas[f"{column_name}_log10"] = transformed_series
 
@@ -885,8 +803,6 @@ def _build_slider_component(
         min_value, max_value, index, value_div_type, title_size, interactive_component_type
     )
 
-    logger.info(f"DMC Slider: Using range {min_value}-{max_value}")
-
     # Set component value
     if interactive_component_type == "RangeSlider":
         _set_range_slider_value(kwargs_component, value, min_value, max_value)
@@ -896,16 +812,10 @@ def _build_slider_component(
     # Apply custom color
     if color:
         kwargs_component["color"] = color
-        logger.debug(f"DMC Slider: Applied custom color: {color}")
 
     # Generate marks
     _add_slider_marks(
         kwargs_component, min_value, max_value, marks_number, use_log_scale, df_pandas, column_name
-    )
-
-    logger.debug(
-        f"DMC Slider params: min={kwargs_component.get('min')}, max={kwargs_component.get('max')}, "
-        f"value={kwargs_component.get('value')}, marks={len(kwargs_component.get('marks', []))}"
     )
 
     interactive_component = func_name(**kwargs_component)
@@ -918,7 +828,6 @@ def _build_slider_component(
         else:
             real_value = 10**value if value is not None else value
         store_data["original_value"] = real_value
-        logger.info(f"Log scale - stored original value: {real_value}")
     else:
         store_data["original_value"] = value
 
@@ -1042,9 +951,6 @@ def _set_range_slider_value(
             or any(v is None or v == "null" or v == "None" for v in value)
         ):
             cleaned_value = [min_value, max_value]
-            logger.info(
-                f"DMC RangeSlider: Using default value [{min_value}, {max_value}] (original: {value})"
-            )
         else:
             cleaned_value = []
             for i, v in enumerate(value):
@@ -1066,7 +972,6 @@ def _set_range_slider_value(
                 cleaned_value = [cleaned_value[1], cleaned_value[0]]
 
         kwargs_component["value"] = cleaned_value
-        logger.info(f"DMC RangeSlider: Set value: {cleaned_value}")
 
     except Exception as e:
         logger.error(f"DMC RangeSlider: Exception: {e}")
@@ -1090,17 +995,13 @@ def _set_slider_value(kwargs_component: dict, value, min_value: float, max_value
             or (isinstance(value, float) and math.isnan(value))
         ):
             cleaned_value = (min_value + max_value) / 2
-            logger.info(
-                f"DMC Slider: Using middle of range as default: {cleaned_value} (original: {value})"
-            )
         else:
             cleaned_value = float(value)
             cleaned_value = max(min_value, min(max_value, cleaned_value))
-            logger.info(f"DMC Slider: Cleaned value from {value} to {cleaned_value}")
 
         kwargs_component["value"] = cleaned_value
-    except (ValueError, TypeError) as e:
-        logger.info(f"DMC Slider: Conversion failed ({e})")
+    except (ValueError, TypeError):
+        pass
 
 
 def _add_slider_marks(
@@ -1126,15 +1027,10 @@ def _add_slider_marks(
     """
     effective_marks_number = marks_number if marks_number and marks_number > 0 else 2
 
-    logger.info(
-        f"Generating {effective_marks_number} marks for DMC slider (requested: {marks_number})"
-    )
-
     if use_log_scale:
         marks_dict = generate_log_marks(
             min_value, max_value, df_pandas[column_name].min(), df_pandas[column_name].max()
         )
-        logger.info("Using specialized log marks function for better power-of-10 display")
     else:
         marks_dict = generate_equally_spaced_marks(
             min_value, max_value, marks_count=effective_marks_number, use_log_scale=False
@@ -1148,15 +1044,13 @@ def _add_slider_marks(
                 tolerance = 1e-9
                 if (min_value - tolerance) <= mark_val <= (max_value + tolerance):
                     dmc_marks.append({"value": mark_val, "label": str(label)})
-                    logger.debug(f"Added DMC mark: {mark_val} -> {label}")
                 else:
-                    logger.debug(f"Mark {mark_val} outside range [{min_value}, {max_value}]")
+                    pass
             except (ValueError, TypeError) as e:
                 logger.warning(f"Skipping invalid mark: {mark_value} -> {label}, error: {e}")
 
         if dmc_marks:
             kwargs_component["marks"] = dmc_marks
-            logger.debug(f"DMC marks created: {len(dmc_marks)} marks")
         else:
             logger.warning("No valid DMC marks created")
     else:
@@ -1193,15 +1087,9 @@ def _build_date_range_picker_component(
     Returns:
         The constructed DMC DatePickerInput component.
     """
-    logger.info(f"Column name: {column_name}")
-    logger.debug("Building DateRangePicker component")
 
     # Convert Polars DataFrame to Pandas for processing
     df_pandas = df.to_pandas()
-    logger.debug(
-        f"DateRangePicker: column={column_name}, df.shape={df_pandas.shape}, "
-        f"column_present={column_name in df_pandas.columns}"
-    )
 
     # Check if column exists before processing
     if column_name not in df_pandas.columns:
@@ -1230,8 +1118,6 @@ def _build_date_range_picker_component(
     # Convert to Python date objects (DMC requires date, not datetime)
     min_date_py = min_date.date()
     max_date_py = max_date.date()
-
-    logger.info(f"Date range: {min_date_py} to {max_date_py}")
 
     # Prepare kwargs for DMC DatePickerInput
     kwargs_component = {
@@ -1262,13 +1148,11 @@ def _build_date_range_picker_component(
             value[1] = max(min_date_py, min(max_date_py, value[1]))
 
             kwargs_component["value"] = value
-            logger.info(f"Preserved date range value: {value}")
         except Exception as e:
             logger.warning(f"Failed to parse date range value {value}: {e}")
             kwargs_component["value"] = [min_date_py, max_date_py]
     else:
         kwargs_component["value"] = [min_date_py, max_date_py]
-        logger.info(f"Using default date range: [{min_date_py}, {max_date_py}]")
 
     # Apply custom color if specified
     if color:
@@ -1278,7 +1162,6 @@ def _build_date_range_picker_component(
             "label": {"color": color},
         }
         kwargs_component["styles"] = {**existing_styles, **color_styles}
-        logger.debug(f"Applied custom color: {color}")
 
     interactive_component = func_name(**kwargs_component)
 
@@ -1291,7 +1174,6 @@ def _build_date_range_picker_component(
         "max_date": str(max_date_py),
         "default_range": [str(min_date_py), str(max_date_py)],
     }
-    logger.debug(f"Updated default_state for DateRangePicker: {store_data['default_state']}")
 
     return interactive_component
 
@@ -1320,9 +1202,6 @@ def _build_boolean_component(
     Returns:
         The constructed DMC Checkbox or Switch component.
     """
-    logger.debug(f"Boolean component: {interactive_component_type}")
-    logger.debug(f"Value: {value}")
-    logger.debug(f"Value type: {type(value)}")
 
     kwargs = {"persistence_type": "local"}
 
@@ -1432,7 +1311,6 @@ def _build_frame_mode_component(
     Returns:
         dmc.Paper: Frame with placeholder component and trigger stores.
     """
-    logger.debug(f"Build frame mode: creating placeholder for interactive {index}")
 
     component_with_loader = html.Div(
         id={"type": f"{value_div_type}-container", "index": str(index)},
@@ -1464,10 +1342,6 @@ def _build_frame_mode_component(
             "parent_index": parent_index,
             "stepper": stepper,
         },
-    )
-
-    logger.debug(
-        f"Trigger store created: index={index}, column={column_name}, type={interactive_component_type}"
     )
 
     metadata_store = dcc.Store(id={"type": "interactive-metadata", "index": str(index)}, data={})
@@ -1530,9 +1404,6 @@ def _load_data_for_component(
     """
     # For categorical components, always load unfiltered data for options
     if interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
-        logger.info(
-            f"Interactive component {index}: Loading unfiltered data for options (type: {interactive_component_type})"
-        )
         if not wf_id or not dc_id:
             logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
             return pl.DataFrame({})
@@ -1555,9 +1426,6 @@ def _load_data_for_component(
             )
 
     elif df is None:
-        logger.info(
-            f"Interactive component {index}: Loading delta table for {wf_id}:{dc_id} (no pre-loaded df)"
-        )
         if not wf_id or not dc_id:
             logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
             return pl.DataFrame({})
@@ -1578,9 +1446,6 @@ def _load_data_for_component(
             )
 
     else:
-        logger.debug(
-            f"Interactive component {index}: Using pre-loaded DataFrame (shape: {df.shape})"
-        )
         return df
 
 
@@ -1629,10 +1494,8 @@ def _build_component_title(
 
     if color:
         title_style["color"] = color
-        logger.debug(f"Applied custom color: {color}")
     else:
-        logger.debug("Using Mantine's native theming for title")
-
+        pass
     icon_props = {
         "icon": icon_name,
         "width": int(title_size) if title_size.isdigit() else 20,
@@ -1685,9 +1548,6 @@ def _extract_unique_values(df, column_name, interactive_component_type):
             unique_vals_list = list(unique_vals)
 
         unique_values = [str(val) for val in unique_vals_list if val is not None][:100]
-        logger.debug(
-            f"Generated {len(unique_values)} unique values for {interactive_component_type}"
-        )
         return unique_values
     except Exception as e:
         logger.warning(f"Failed to extract unique values for {column_name}: {e}")
@@ -1760,12 +1620,8 @@ def build_interactive(**kwargs):
     cols_json = None
     if init_data and "column_specs" in init_data and str(dc_id) in init_data["column_specs"]:
         cols_json = init_data["column_specs"][str(dc_id)]
-        logger.info(
-            f"INTERACTIVE OPTIMIZATION: init_data available with {len(init_data.get('column_specs', {}))} column_specs"
-        )
     else:
-        logger.debug("init_data not available (edit mode or stepper mode)")
-
+        pass
     # Default icon mapping
     DEFAULT_ICONS = {
         "Select": "mdi:form-select",
@@ -1808,11 +1664,6 @@ def build_interactive(**kwargs):
             stepper=stepper,
             value_div_type=value_div_type,
         )
-
-    logger.debug(
-        f"Building {interactive_component_type} for column_type={column_type}, "
-        f"init_data={'available' if init_data else 'not available'}"
-    )
 
     # Validate required parameters are not None
     if interactive_component_type is None:
@@ -1863,14 +1714,6 @@ def build_interactive(**kwargs):
         "custom_color": color,
         "icon_name": icon_name,
     }
-
-    logger.debug(f"Interactive component {index}: store_data: {store_data}")
-    logger.info(
-        f"Interactive component {index}: column_type={column_type}, interactive_component_type={interactive_component_type}"
-    )
-    logger.info(
-        f"Interactive component {index}: available agg_functions keys: {list(agg_functions.keys())}"
-    )
 
     # Load data
     df = _load_data_for_component(
@@ -1950,14 +1793,10 @@ def build_interactive(**kwargs):
         color=color,
     )
 
-    logger.info(f"Interactive - original value: {value}")
     if interactive_component_type in ["Slider", "RangeSlider"]:
-        logger.info(
-            f"Interactive - component type: {interactive_component_type} (component value logged above)"
-        )
+        pass
     else:
-        logger.info(f"Interactive - component value: {value}")
-
+        pass
     # Extract unique values and generate default state
     unique_values = _extract_unique_values(df, column_name, interactive_component_type)
 
@@ -1966,12 +1805,8 @@ def build_interactive(**kwargs):
             interactive_component_type, column_name, cols_json, unique_values
         )
         store_data["default_state"] = default_state
-        logger.debug(f"Added default_state to {interactive_component_type}: {default_state}")
     else:
-        logger.debug(
-            f"default_state already set, preserving existing: {store_data['default_state']}"
-        )
-
+        pass
     store_component = dcc.Store(
         id={"type": "interactive-stored-metadata", "index": str(store_index)},
         data=store_data,
@@ -2114,15 +1949,9 @@ async def build_interactive_async(**kwargs):
     """
     Async wrapper for build_interactive function - async functionality disabled, calls sync version.
     """
-    logger.info(
-        f"ASYNC INTERACTIVE: Building interactive component (using sync) - Index: {kwargs.get('index', 'UNKNOWN')}"
-    )
 
     # Call the synchronous build_interactive function
     # In the future, this could run in a thread pool if needed for true parallelism
     result = build_interactive(**kwargs)
 
-    logger.info(
-        f"ASYNC INTERACTIVE: Interactive component built successfully - Index: {kwargs.get('index', 'UNKNOWN')}"
-    )
     return result

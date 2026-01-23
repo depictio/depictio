@@ -951,8 +951,6 @@ def register_callbacks_users_management(app) -> None:
     # Google OAuth callbacks - only register if enabled in settings
     if settings.auth.google_oauth_enabled:
         register_google_oauth_callbacks(app)
-    else:
-        logger.debug("🔐 Google OAuth disabled - skipping OAuth callback registration")
 
 
 # Add Google OAuth callback handler for when user returns from Google

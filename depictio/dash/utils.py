@@ -96,7 +96,6 @@ def _get_cached_component_data(cache_key: str) -> Optional[Any]:
     if current_time - cached_item["timestamp"] > COMPONENT_CACHE_TTL_SECONDS:
         del _component_data_cache[cache_key]
         _cache_stats["misses"] += 1
-        logger.debug(f"⏰ Cache expired for component: {cache_key}")
         return None
 
     # Update access tracking
@@ -152,7 +151,6 @@ def clear_component_cache():
     """Clear all cached component data."""
     _component_data_cache.clear()
     _cache_stats.update({"hits": 0, "misses": 0, "evictions": 0, "total_requests": 0})
-    logger.info("🧹 Cleared component data cache")
 
 
 def bulk_get_component_data(component_ids: list, dashboard_id: str, TOKEN: str) -> dict:
@@ -185,8 +183,6 @@ def bulk_get_component_data(component_ids: list, dashboard_id: str, TOKEN: str) 
 
     # Fetch uncached components in bulk
     if uncached_ids:
-        logger.debug(f"📡 BULK API: Fetching {len(uncached_ids)} uncached components")
-
         # Make bulk API request
         bulk_url = f"{API_BASE_URL}/depictio/api/v1/dashboards/bulk_component_data/{dashboard_id}"
         payload = {"component_ids": uncached_ids}
@@ -269,9 +265,6 @@ def get_component_data(input_id, dashboard_id, TOKEN, _bulk_data=None):
         return cached_data
 
     # Use the individual fetching function
-    logger.info(
-        f"📡 INDIVIDUAL FETCH: Fetching component data for {input_id} (no bulk/cache available)"
-    )
     return get_component_data_individual(input_id, dashboard_id, TOKEN)
 
 
@@ -320,7 +313,6 @@ def list_workflows(token: str | None = None):
 
     # Check cache first
     if cache_key in _workflows_cache:
-        logger.debug("Using cached workflows list")
         return _workflows_cache[cache_key]
 
     headers = {"Authorization": f"Bearer {token}"}
@@ -332,7 +324,6 @@ def list_workflows(token: str | None = None):
 
     # Cache the result
     _workflows_cache[cache_key] = workflows_json
-    logger.debug("Cached workflows list")
 
     return workflows_json
 
@@ -466,7 +457,6 @@ def get_result_dc_for_workflow(workflow_id: str, TOKEN: str | None) -> str | Non
                 result_dc_id = next(iter(workflow_joins.keys()))
                 return result_dc_id
             else:
-                logger.debug(f"No pre-computed joins found for workflow {workflow_id}")
                 return None
         else:
             logger.warning(
@@ -541,7 +531,6 @@ def resolve_link_values(
         return None
 
     if not filter_values:
-        logger.debug("Empty filter values - skipping link resolution")
         return None
 
     # Generate cache key
@@ -554,7 +543,6 @@ def resolve_link_values(
     if use_cache and cache_key in _link_resolution_cache:
         cached = _link_resolution_cache[cache_key]
         if time.time() - cached.get("timestamp", 0) < LINK_RESOLUTION_CACHE_TTL_SECONDS:
-            logger.debug(f"Link resolution cache hit for {source_dc_id} -> {target_dc_id}")
             return cached.get("data")
         else:
             # Cache expired
@@ -578,11 +566,6 @@ def resolve_link_values(
 
         if response.status_code == 200:
             result = response.json()
-            logger.info(
-                f"Link resolution success: {len(filter_values)} source values -> "
-                f"{result.get('match_count', 0)} resolved values "
-                f"(resolver: {result.get('resolver_used', 'unknown')})"
-            )
 
             # Cache result
             if use_cache:
@@ -595,10 +578,6 @@ def resolve_link_values(
 
         elif response.status_code == 404:
             # No link found - this is expected for some DC combinations
-            logger.debug(
-                f"No link found from {source_dc_id} to {target_dc_id} "
-                f"(may need to create link or use direct filtering)"
-            )
             return None
 
         else:
@@ -647,9 +626,6 @@ def get_multiqc_sample_mappings(
 
         if response.status_code == 200:
             mappings = response.json()
-            logger.info(
-                f"Fetched {len(mappings)} aggregated sample mappings for MultiQC DC {dc_id}"
-            )
             return mappings
         else:
             logger.warning(
@@ -699,7 +675,6 @@ def get_links_for_target_dc(
             links = response.json()
             return links
         else:
-            logger.debug(f"No links found for target DC {target_dc_id}")
             return []
 
     except Exception as e:
@@ -741,7 +716,6 @@ def get_links_for_source_dc(
             links = response.json()
             return links
         else:
-            logger.debug(f"No links found for source DC {source_dc_id}")
             return []
 
     except Exception as e:
@@ -752,7 +726,6 @@ def get_links_for_source_dc(
 def clear_link_resolution_cache():
     """Clear the link resolution cache."""
     _link_resolution_cache.clear()
-    logger.info("Cleared link resolution cache")
 
 
 def enrich_interactive_components_with_metadata(
@@ -806,16 +779,7 @@ def enrich_interactive_components_with_metadata(
                     "metadata": full_metadata,
                 }
             )
-        else:
-            logger.debug(
-                f"No metadata found for interactive component "
-                f"{index[:8] if index else 'unknown'}..."
-            )
 
-    logger.debug(
-        f"Enriched {len(enriched_components)}/{len(lightweight_components)} "
-        "interactive components with metadata"
-    )
     return enriched_components
 
 
@@ -945,9 +909,6 @@ def _fetch_columns_with_lru_cache(
     Returns:
         defaultdict with column specifications
     """
-    logger.info(
-        f"🔍 LRU CACHE MISS: Fetching specs for DC {data_collection_id} from WF {workflow_id}"
-    )
 
     if workflow_id is None or data_collection_id is None:
         logger.error("workflow_id or data_collection_id is None")
@@ -955,7 +916,6 @@ def _fetch_columns_with_lru_cache(
 
     # Check if this is a joined data collection ID
     if isinstance(data_collection_id, str) and "--" in data_collection_id:
-        logger.info(f"Handling joined data collection specs for: {data_collection_id}")
         # For joined data collections, we need to get the combined column specs
         # by loading the actual joined DataFrame and extracting its schema
         try:
@@ -997,9 +957,6 @@ def _fetch_columns_with_lru_cache(
                     "dtype": dtype,
                 }
 
-            logger.info(
-                f"✅ LRU CACHED: Generated specs for joined DC {data_collection_id} ({len(reformat_cols)} columns)"
-            )
             return reformat_cols
 
         except Exception as e:
@@ -1022,9 +979,6 @@ def _fetch_columns_with_lru_cache(
             reformat_cols[c["name"]]["description"] = c["description"]
             reformat_cols[c["name"]]["specs"] = c["specs"]
 
-        logger.info(
-            f"✅ LRU CACHED: Fetched specs for regular DC {data_collection_id} ({len(reformat_cols)} columns)"
-        )
         return reformat_cols
     else:
         logger.error(f"Error getting columns for {data_collection_id}: {response.text}")
@@ -1060,11 +1014,7 @@ def analyze_structure(struct, depth=0):
     """
 
     if isinstance(struct, list):
-        logger.info("  " * depth + f"Depth {depth} Type: List with {len(struct)} elements")
         for idx, child in enumerate(struct):
-            logger.info(
-                "  " * depth + f"Element {idx} ID: {child.get('props', {}).get('id', None)}"
-            )
             analyze_structure(child, depth=depth + 1)
         return
 
@@ -1074,23 +1024,17 @@ def analyze_structure(struct, depth=0):
 
     # Extracting id if available
 
-    id_value = struct.get("props", {}).get("id", None)
+    struct.get("props", {}).get("id", None)
     children = struct.get("props", {}).get("children", None)
 
     # Printing the id value
-    logger.info("  " * depth + f"Depth {depth} ID: {id_value}")
 
     if isinstance(children, dict):
-        logger.info("  " * depth + f"Depth {depth} Type: Dict")
         # Recursive call
         analyze_structure(children, depth=depth + 1)
 
     elif isinstance(children, list):
-        logger.info("  " * depth + f"Depth {depth} Type: List with {len(children)} elements")
         for idx, child in enumerate(children):
-            logger.info(
-                "  " * depth + f"Element {idx} ID: {child.get('props', {}).get('id', None)}"
-            )
             # Recursive call
             analyze_structure(child, depth=depth + 1)
 
@@ -1112,8 +1056,7 @@ def analyze_structure_and_get_deepest_type(
     """
 
     if print:
-        logger.info(f"Analyzing level: {depth}")  # Debug print
-
+        pass
     # Update the maximum depth and deepest type if the current depth is greater
     current_type = None
     if isinstance(struct, dict):
@@ -1121,28 +1064,20 @@ def analyze_structure_and_get_deepest_type(
         if isinstance(id_value, dict) and id_value.get("type") != "stored-metadata-component":
             current_type = id_value.get("type")
             if print:
-                logger.info(
-                    f"Found component of type: {current_type} at depth: {depth}"
-                )  # Debug print
-
+                pass
     if depth > max_depth:
         max_depth = depth
         deepest_type = current_type
         if print:
-            logger.info(
-                f"Updated max_depth to {max_depth} with deepest_type: {deepest_type}"
-            )  # Debug print
+            pass
     elif depth == max_depth and current_type is not None:
         deepest_type = current_type
         if print:
-            logger.info(
-                f"Updated deepest_type to {deepest_type} at same max_depth: {max_depth}"
-            )  # Debug print
-
+            pass
     if isinstance(struct, list):
         for child in struct:
             if print:
-                logger.info(f"Descending into list at depth: {depth}")  # Debug print
+                pass
             max_depth, deepest_type = analyze_structure_and_get_deepest_type(
                 child, depth=depth + 1, max_depth=max_depth, deepest_type=deepest_type
             )
@@ -1150,7 +1085,7 @@ def analyze_structure_and_get_deepest_type(
         children = struct.get("props", {}).get("children", None)
         if isinstance(children, list | dict):
             if print:
-                logger.info(f"Descending into dict at depth: {depth}")  # Debug print
+                pass
             max_depth, deepest_type = analyze_structure_and_get_deepest_type(
                 children,
                 depth=depth + 1,

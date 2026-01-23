@@ -22,8 +22,6 @@ from typing import Any, Optional
 import dash_mantine_components as dmc
 from dash import dcc
 
-from depictio.api.v1.configs.logging_init import logger
-
 
 def create_shared_stores():
     """
@@ -150,8 +148,6 @@ def create_app_shell(
         ...     show_sidebar=True,
         ... )
     """
-    logger.debug(f"Creating AppShell for {app_name} app")
-
     # Create shared stores
     stores = create_shared_stores()
 
@@ -236,8 +232,6 @@ def create_minimal_app_shell(
         ...     show_header=True,
         ... )
     """
-    logger.debug(f"Creating minimal AppShell for {app_name} app")
-
     # Import dashboard viewer sidebar (tabs only, no navigation links)
     from depictio.dash.layouts.sidebar import create_dashboard_viewer_sidebar
     from depictio.dash.layouts.tab_modal import create_tab_modal

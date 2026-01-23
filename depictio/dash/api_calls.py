@@ -215,7 +215,6 @@ def api_call_fetch_user_from_token(token: str) -> User | None:
 
     # Cache miss - make API call
     _cache_stats["misses"] += 1
-    logger.debug(f"CACHE MISS: user_token - fetching from API (cache_size={len(_user_cache)})")
 
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token",
@@ -228,7 +227,6 @@ def api_call_fetch_user_from_token(token: str) -> User | None:
         return None
 
     user_data = response.json()
-    logger.debug(f"User data fetched from API: {user_data.get('email', 'No email found')}")
 
     if not user_data:
         return None

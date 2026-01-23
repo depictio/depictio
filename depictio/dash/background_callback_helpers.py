@@ -11,8 +11,6 @@ and is not controlled by this configuration.
 
 import os
 
-from depictio.api.v1.configs.logging_init import logger
-
 # Read the environment variable once at module load
 _USE_BACKGROUND_CALLBACKS = os.getenv("DEPICTIO_CELERY_ENABLED", "false").lower() == "true"
 
@@ -77,15 +75,4 @@ def log_background_callback_status(component_type: str, callback_name: str):
 
 
 # Log overall background callback status at module load
-if _USE_BACKGROUND_CALLBACKS:
-    logger.info(
-        "✅ DASHBOARD VIEW MODE: Background callbacks ENABLED (DEPICTIO_CELERY_ENABLED=true)"
-    )
-    logger.info("   Dashboard view/edit will use background callbacks for: card, figure, table")
-    logger.debug("   Design mode ALWAYS uses background callbacks (not affected by this setting)")
-else:
-    logger.info(
-        "🚫 DASHBOARD VIEW MODE: Background callbacks DISABLED (DEPICTIO_CELERY_ENABLED=false)"
-    )
-    logger.info("   Dashboard view/edit will run callbacks synchronously")
-    logger.debug("   Design mode ALWAYS uses background callbacks (not affected by this setting)")
+# Background callback status determined by DEPICTIO_CELERY_ENABLED environment variable

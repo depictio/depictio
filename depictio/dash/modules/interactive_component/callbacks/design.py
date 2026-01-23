@@ -642,7 +642,4 @@ def register_interactive_design_callbacks(app) -> None:
             }
         )
 
-        logger.debug(f"Updated stored metadata: {current_metadata}")
         return current_metadata
-
-    logger.debug("Interactive design callbacks registered")

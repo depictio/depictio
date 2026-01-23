@@ -206,10 +206,7 @@ def register_sidebar_callbacks(app) -> None:
     from depictio.dash.layouts.tab_modal import register_tab_modal_callbacks
 
     register_tab_callbacks(app)
-    logger.debug("SIDEBAR: Tab callbacks registered")
-
     register_tab_modal_callbacks(app)
-    logger.debug("SIDEBAR: Tab modal callbacks registered")
 
     # Inject JavaScript to handle the resize when sidebar state changes
     # app.clientside_callback(

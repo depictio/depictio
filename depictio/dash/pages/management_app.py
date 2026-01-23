@@ -407,7 +407,6 @@ def register_feature_callbacks(app):
     register_callbacks_dashboards_management(app)
 
     # Projects management callbacks
-    logger.debug("    📁 Registering projects management callbacks")
     from depictio.dash.layouts.projects import (
         register_projects_callbacks,
         register_workflows_callbacks,
@@ -417,7 +416,6 @@ def register_feature_callbacks(app):
     register_workflows_callbacks(app)
 
     # Profile callbacks
-    logger.debug("    👤 Registering profile callbacks")
     from depictio.dash.layouts.profile import register_profile_callbacks
 
     register_profile_callbacks(app)
@@ -428,7 +426,6 @@ def register_feature_callbacks(app):
     register_admin_callbacks(app)
 
     # Tokens management callbacks
-    logger.debug("    🔑 Registering tokens management callbacks")
     from depictio.dash.layouts.tokens_management import register_tokens_management_callbacks
 
     register_tokens_management_callbacks(app)

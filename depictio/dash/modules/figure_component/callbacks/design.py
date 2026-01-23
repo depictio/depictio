@@ -522,9 +522,5 @@ def register_design_callbacks(app):
             logger.error(f"Error during code execution: {e}", exc_info=True)
             return error_with_details("Error", "Unexpected error", str(e))
 
-    logger.info(
-        "✅ Figure design callbacks registered (mode toggle + code generation + code examples + columns info + theme + execute)"
-    )
-
 
 # Note: Live preview callback will be added in Phase 2B after testing pre-populate

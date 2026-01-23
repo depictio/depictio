@@ -47,7 +47,6 @@ def _get_theme_template(theme: str) -> str:
     if not theme or theme == {} or theme == "{}":
         theme = "light"
 
-    logger.info(f"Using theme: {theme} for Plotly template")
     # Use mantine templates provided by dmc.add_figure_templates()
     return "mantine_dark" if theme == "dark" else "mantine_light"
 
@@ -330,7 +329,6 @@ def _check_figure_cache(cache_key: str) -> tuple[Any, dict, bool]:
     Returns:
         Tuple of (cached_figure, cached_data_info, cache_hit)
     """
-    import time
 
     _clean_figure_cache()
     if cache_key in _figure_result_cache:
@@ -342,9 +340,6 @@ def _check_figure_cache(cache_key: str) -> tuple[Any, dict, bool]:
             # Old format - just figure and timestamp
             cached_figure, timestamp = cached_result
             cached_data_info = _init_data_info()
-        logger.info(
-            f"FIGURE CACHE HIT: Using cached figure (saved {int((time.time() - timestamp) * 1000)}ms ago)"
-        )
         return cached_figure, cached_data_info, True
     return None, _init_data_info(), False
 
@@ -425,7 +420,6 @@ def _parse_json_parameters(cleaned_kwargs: dict, df: pl.DataFrame, mode: str) ->
         # Try JSON parsing
         try:
             cleaned_kwargs[param_name] = json.loads(param_value)
-            logger.debug(f"Parsed JSON parameter {param_name}")
             continue
         except json.JSONDecodeError:
             pass
@@ -439,14 +433,12 @@ def _parse_json_parameters(cleaned_kwargs: dict, df: pl.DataFrame, mode: str) ->
                 if evaluated is not None:
                     cleaned_kwargs[param_name] = evaluated
                     continue
-            logger.debug(f"Skipping complex Python expression for {param_name}")
             del cleaned_kwargs[param_name]
             continue
 
         # Fallback to ast.literal_eval
         try:
             cleaned_kwargs[param_name] = ast.literal_eval(param_value)
-            logger.debug(f"Parsed Python literal parameter {param_name}")
         except (ValueError, SyntaxError) as e:
             logger.warning(f"Invalid parameter format for {param_name}: {param_value} - {e}")
             del cleaned_kwargs[param_name]
@@ -474,7 +466,6 @@ def _resolve_color_palette(param_value: str) -> list | None:
     for module in color_modules:
         if hasattr(module, param_value):
             color_sequence = getattr(module, param_value)
-            logger.debug(f"Resolved Plotly color '{param_value}' to {len(color_sequence)} colors")
             return color_sequence
 
     return None
@@ -498,7 +489,6 @@ def _evaluate_code_mode_parameter(param_name: str, param_value: str, df: pl.Data
         temp_params = {param_name: param_value}
         evaluated_params = evaluate_params_in_context(temp_params, df)
         if param_name in evaluated_params:
-            logger.info(f"Evaluated code mode parameter {param_name}")
             return evaluated_params[param_name]
     except Exception as e:
         logger.warning(f"Failed to evaluate code mode parameter {param_name}: {e}")
@@ -538,7 +528,6 @@ def _convert_style_parameters(cleaned_kwargs: dict, df: pl.DataFrame) -> dict:
         if dash_value in VALID_DASH_STYLES:
             cleaned_kwargs["line_dash_sequence"] = [dash_value]
             del cleaned_kwargs["line_dash"]
-            logger.debug(f"Converted line_dash style '{dash_value}' to sequence")
         elif dash_value not in df.columns:
             logger.warning(f"line_dash value '{dash_value}' is not valid. Removing.")
             del cleaned_kwargs["line_dash"]
@@ -549,7 +538,6 @@ def _convert_style_parameters(cleaned_kwargs: dict, df: pl.DataFrame) -> dict:
         if symbol_value in VALID_SYMBOL_STYLES:
             cleaned_kwargs["symbol_sequence"] = [symbol_value]
             del cleaned_kwargs["symbol"]
-            logger.debug(f"Converted symbol style '{symbol_value}' to sequence")
         elif symbol_value not in df.columns:
             logger.warning(f"symbol value '{symbol_value}' is not valid. Removing.")
             del cleaned_kwargs["symbol"]
@@ -574,7 +562,6 @@ def _validate_required_params(
         Tuple of (is_valid, error_figure_or_none)
     """
     if skip_validation:
-        logger.debug(f"CODE MODE: Skipping parameter validation for {visu_type}")
         return True, None
 
     required_params = _get_required_parameters(visu_type.lower())
@@ -615,7 +602,6 @@ def _handle_hierarchical_chart(
     # Filter out non-leaf rows
     if "path" in cleaned_kwargs and cleaned_kwargs["path"]:
         path_columns = cleaned_kwargs["path"]
-        original_rows = df.height
 
         for col in path_columns:
             if col in df.columns:
@@ -624,10 +610,6 @@ def _handle_hierarchical_chart(
                     & (pl.col(col) != "")
                     & (pl.col(col).str.strip_chars() != "")
                 )
-
-        filtered_rows = original_rows - df.height
-        if filtered_rows > 0:
-            logger.info(f"Filtered {filtered_rows} non-leaf rows from {visu_type} data")
 
     # Handle empty parents parameter
     if "parents" in cleaned_kwargs and cleaned_kwargs["parents"] == "":
@@ -662,12 +644,8 @@ def _extract_manual_color_params(
     if visu_type.lower() in ["box", "violin", "strip"] and "color" not in cleaned_kwargs:
         if "color_discrete_map" in cleaned_kwargs:
             manual_color_map = cleaned_kwargs.pop("color_discrete_map")
-            logger.info("Extracted color_discrete_map for manual application")
         if "color_discrete_sequence" in cleaned_kwargs:
             manual_color_sequence = cleaned_kwargs.pop("color_discrete_sequence")
-            logger.info("Extracted color_discrete_sequence for manual application")
-    elif "color_discrete_map" in cleaned_kwargs:
-        logger.info("Keeping color_discrete_map in kwargs for Plotly")
 
     return manual_color_map, manual_color_sequence
 
@@ -805,7 +783,6 @@ def _recreate_box_violin_with_colors(
     # Update axis configuration
     _configure_box_violin_axes(figure, orientation, unique_categories)
 
-    logger.debug(f"Recreated {len(unique_categories)} {visu_type} traces with colors")
     return figure
 
 
@@ -916,7 +893,6 @@ def _finalize_figure(
     if "marginal_x" in cleaned_kwargs or "marginal_y" in cleaned_kwargs:
         figure.update_xaxes(matches=None)
         figure.update_yaxes(matches=None)
-        logger.debug("Disabled axis matches for marginal plot")
 
     # Apply responsive sizing
     figure.update_layout(
@@ -1064,8 +1040,6 @@ def render_figure(
     if cache_hit:
         return cached_figure, cached_data_info
 
-    logger.info(f"FIGURE CACHE MISS: Generating new {visu_type} figure")
-
     if force_full_data:
         logger.warning(f"FORCE FULL DATA: Bypassing {cutoff:,} point sampling limit")
 
@@ -1086,9 +1060,6 @@ def render_figure(
     # Apply theme template
     if not dict_kwargs.get("template"):
         dict_kwargs["template"] = _get_theme_template(theme)
-        logger.debug(f"Applied theme-based template: {dict_kwargs['template']}")
-
-    logger.debug(f"Rendering {visu_type} figure, data shape: {df.shape}")
 
     # Handle empty data
     if df is None or df.is_empty():
@@ -1116,7 +1087,6 @@ def render_figure(
         if value is not None and value != "" and param != "template"
     ]
     if not valid_plot_params and not is_clustering:
-        logger.info(f"No valid plotting parameters for {visu_type}")
         return _create_theme_aware_figure(
             dict_kwargs.get("template"),
             title=f"Select columns to create {visu_type} plot",
@@ -1145,7 +1115,6 @@ def render_figure(
                 # Convert Polars DataFrame to Pandas for customizations that need it
                 pandas_df = df.to_pandas() if df is not None and not df.is_empty() else None
                 figure = apply_customizations(figure, customizations, df=pandas_df)
-                logger.debug(f"Applied {len(customizations)} customization categories to figure")
             except ImportError as e:
                 logger.warning(f"Could not import customizations module: {e}")
             except Exception as e:
@@ -1215,10 +1184,8 @@ def _render_standard_figure(
     data_info["was_sampled"] = was_sampled
 
     # Generate figure
-    logger.info(f"Calling Plotly {plot_function.__name__} with {plot_df.height:,} rows")
-    plot_start = time.time()
+    time.time()
     figure = plot_function(plot_df, **cleaned_kwargs)
-    logger.info(f"Plotly function took {(time.time() - plot_start) * 1000:.0f}ms")
 
     # Apply manual colors to box/violin plots
     figure = _apply_box_violin_colors(
@@ -1399,11 +1366,6 @@ def analyze_figure_structure(fig: Any, dict_kwargs: dict, visu_type: str) -> dic
         "has_facets": any(k in parameter_mapping for k in ["facet_row", "facet_col"]),
     }
 
-    logger.debug(
-        f"Analyzed figure structure: {summary['traces']} traces, "
-        f"types: {summary['types']}, color: {summary['has_color']}"
-    )
-
     return {
         "original_data": original_data,
         "parameter_mapping": parameter_mapping,
@@ -1480,15 +1442,8 @@ def extract_columns_from_preprocessing(
 
         # Filter to only columns that exist in source data (if provided)
         if df_columns:
-            original_count = len(columns)
+            len(columns)
             columns = {col for col in columns if col in df_columns}
-            logger.debug(
-                f"Filtered columns from {original_count} to {len(columns)} based on available columns"
-            )
-
-        logger.info(
-            f"✅ Extracted {len(columns)} source columns from preprocessing: {sorted(columns)}"
-        )
 
     except Exception as e:
         logger.error(f"❌ Failed to parse preprocessing code: {e}")
@@ -1532,7 +1487,6 @@ def extract_needed_columns(
     if code_content:
         from .code_mode import analyze_constrained_code
 
-        logger.debug("Code mode detected: analyzing preprocessing for source columns")
         analysis = analyze_constrained_code(code_content)
 
         if analysis["has_preprocessing"]:
@@ -1542,9 +1496,6 @@ def extract_needed_columns(
             )
 
             if preprocessing_cols:
-                logger.info(
-                    f"✅ CODE MODE: Using {len(preprocessing_cols)} source columns from preprocessing: {sorted(preprocessing_cols)}"
-                )
                 columns.update(preprocessing_cols)
 
                 # ESSENTIAL COLUMNS: Always include these for code mode
@@ -1556,23 +1507,16 @@ def extract_needed_columns(
                 # JOIN COLUMNS: CRITICAL - include all join columns for joined DCs
                 if join_columns:
                     columns.update(join_columns)
-                    logger.debug(
-                        f"Added {len(join_columns)} join columns to projection: {join_columns}"
-                    )
 
                 # Return early - preprocessing columns are sufficient
                 result = sorted([col for col in columns if col is not None and col != ""])
-                logger.info(
-                    f"📊 CODE MODE PROJECTION: {len(result)} columns for data loading: {result}"
-                )
                 return result
             else:
                 logger.warning(
                     "⚠️ CODE MODE: Failed to extract columns from preprocessing, falling back to figure params"
                 )
         else:
-            logger.debug("CODE MODE: No preprocessing, extracting from figure params")
-
+            pass
     # STANDARD EXTRACTION: Extract from figure parameters (non-code mode or no preprocessing)
     columns = set()
 
@@ -1639,12 +1583,9 @@ def extract_needed_columns(
     # 7. JOIN COLUMNS: CRITICAL - include all join columns for joined DCs
     if join_columns:
         columns.update(join_columns)
-        logger.debug(f"Added {len(join_columns)} join columns to projection: {join_columns}")
 
     # Filter out None values and return sorted list
     result = sorted([col for col in columns if col is not None and col != ""])
-
-    logger.debug(f"Extracted {len(result)} needed columns for data loading: {result}")
 
     return result
 
@@ -1757,15 +1698,6 @@ def detect_parameter_changes(old_params: dict, new_params: dict, visu_type: str)
     if old_params.get("visu_type") != new_params.get("visu_type"):
         changes["requires_full_rerender"] = True
 
-    logger.debug(
-        f"Parameter changes detected: "
-        f"categorical={len(changes['categorical_changes'])}, "
-        f"continuous={len(changes['continuous_changes'])}, "
-        f"axis={len(changes['axis_changes'])}, "
-        f"layout={len(changes['layout_changes'])}, "
-        f"full_rerender={changes['requires_full_rerender']}"
-    )
-
     return changes
 
 
@@ -1813,7 +1745,6 @@ def patch_layout_parameter(patch: Any, param_name: str, new_value: Any) -> Any:
     elif param_name == "log_z":
         patch["layout"]["zaxis"]["type"] = "log" if new_value else "linear"
 
-    logger.debug(f"Patched layout parameter: {param_name} = {new_value}")
     return patch
 
 
@@ -1856,10 +1787,6 @@ def patch_continuous_parameter(
             elif param_name == "line_width":
                 patch["data"][i]["line"]["width"] = new_value
 
-    logger.debug(
-        f"Patched continuous parameter: {param_name} = {new_value} "
-        f"(traces: {trace_indices or 'all'})"
-    )
     return patch
 
 
@@ -1899,12 +1826,10 @@ def patch_axis_parameter(
                 elif param_name == "z":
                     patched_fig["data"][i]["z"] = df[new_value].to_list()
 
-                logger.debug(f"Patched trace {i} axis {param_name} with column {new_value}")
             except Exception as e:
                 logger.error(f"Failed to patch trace {i} axis {param_name}: {e}")
                 continue
 
-    logger.info(f"Patched axis parameter: {param_name} → {new_value}")
     return patched_fig
 
 
@@ -1926,10 +1851,7 @@ def _should_defer_umap_computation(df: pl.DataFrame, context: str = "unknown") -
     should_defer = data_size > threshold
 
     if should_defer:
-        logger.info(
-            f"📄 UMAP computation deferred: {data_size} rows > {threshold} threshold (context: {context})"
-        )
-
+        pass
     return should_defer
 
 
@@ -2018,7 +1940,6 @@ def validate_parameters(visu_type: str, parameters: Dict[str, Any]) -> Dict[str,
         # Filter to valid parameters only
         cleaned = {k: v for k, v in parameters.items() if k in valid_params and v is not None}
 
-        logger.info(f"Validated parameters for {visu_type}: {list(cleaned.keys())}")
         return cleaned
 
     except Exception as e:
@@ -2057,7 +1978,7 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
     dict_kwargs = kwargs.get("dict_kwargs", {})
     wf_id = kwargs.get("wf_id")
     dc_id = kwargs.get("dc_id")
-    theme = kwargs.get("theme", "light")
+    kwargs.get("theme", "light")
     mode = kwargs.get("mode", "ui")
     code_content = kwargs.get("code_content", "")
 
@@ -2066,14 +1987,9 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         logger.warning(f"Expected dict for dict_kwargs, got {type(dict_kwargs)}: {dict_kwargs}")
         dict_kwargs = {}
 
-    logger.debug(f"Building figure component {index} (visu_type: {visu_type}, theme: {theme})")
-
     # CRITICAL DEBUG: Log kwargs for code mode figures
     if mode == "code":
-        logger.info(f"   mode={mode}, code_len={len(code_content)}")
-        logger.info(f"   code_content present in kwargs: {'code_content' in kwargs}")
-        logger.info(f"   Full kwargs keys: {kwargs.keys()}")
-
+        pass
     # Phase 1: Create simple skeleton structure that will be populated by callback
     # The batch rendering callback in callbacks/core.py handles all data loading and figure generation
 
@@ -2204,12 +2120,8 @@ def design_figure(
     initial_mode = "ui"  # Default to UI mode
     if component_data and component_data.get("mode") == "code":
         initial_mode = "code"
-        logger.info(
-            f"🔧 Setting initial mode to CODE for component {id['index']} based on stored metadata"
-        )
     else:
-        logger.debug(f"🔧 Setting initial mode to UI for component {id['index']}")
-
+        pass
     # Extract index handling dict pattern-matching IDs
     if isinstance(id, dict):
         actual_index = id.get("index", id)
@@ -2525,8 +2437,6 @@ def build_figure_design_ui(**kwargs) -> html.Div:
     dict_kwargs = kwargs.get("dict_kwargs", {})
     columns = kwargs.get("columns", [])
 
-    logger.debug(f"Building design UI for figure {index} (visu_type: {visu_type})")
-
     if not columns:
         logger.warning(f"No columns provided for figure {index} design UI")
         return html.Div(
@@ -2772,16 +2682,10 @@ async def build_figure_async(**kwargs):
     """
     Async wrapper for build_figure function - async functionality disabled, calls sync version.
     """
-    logger.info(
-        f"🔄 ASYNC FIGURE: Building figure component (using sync) - Index: {kwargs.get('index', 'UNKNOWN')}"
-    )
 
     # Call the synchronous build_figure function
     result = build_figure(**kwargs)
 
-    logger.info(
-        f"✅ ASYNC FIGURE: Figure component built successfully - Index: {kwargs.get('index', 'UNKNOWN')}"
-    )
     return result
 
 

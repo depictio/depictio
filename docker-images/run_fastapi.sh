@@ -28,14 +28,17 @@ if [ "$DEV_MODE_LOWER" = "true" ]; then
     #     --use-colors
 else
     # Production mode with workers
+    # Use Gunicorn with Uvicorn workers for proper preloading (avoids duplicate initialization logs)
     export DEPICTIO_DEV_MODE=false
     echo "🚀 Running FastAPI in production mode on $FASTAPI_HOST:$FASTAPI_PORT with $FASTAPI_WORKERS workers"
-    uvicorn \
+    gunicorn \
         depictio.api.main:app \
-        --host "$FASTAPI_HOST" \
-        --port "$FASTAPI_PORT" \
+        --bind "$FASTAPI_HOST:$FASTAPI_PORT" \
         --workers "$FASTAPI_WORKERS" \
-        --timeout-keep-alive 5 \
-        --log-level info \
-        --access-log
+        --worker-class uvicorn.workers.UvicornWorker \
+        --timeout 120 \
+        --keep-alive 5 \
+        --preload \
+        --access-logfile - \
+        --error-logfile -
 fi

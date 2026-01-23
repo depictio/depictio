@@ -358,40 +358,12 @@ def get_build_functions() -> dict:
     """
     import functools
 
-    from depictio.api.v1.configs.logging_init import logger
-
-    # Track build counts globally (persists across all builds until reset)
-    build_counts = {}
-
-    def reset_counts():
-        """Clear all build counts - call this at start of each dashboard render"""
-        build_counts.clear()
-
     def wrap_build_function(component_type, original_func):
-        """Wrapper to log and track build function executions"""
+        """Wrapper for build function executions"""
 
         @functools.wraps(original_func)
         def wrapper(**kwargs):
-            # Get component identifier
-            component_id = kwargs.get("index", "unknown")
-
-            # Create unique key for this component
-            key = f"{component_type}:{component_id}"
-
-            # Increment build count
-            build_counts[key] = build_counts.get(key, 0) + 1
-            count = build_counts[key]
-
-            # Log execution with count
-            logger.error(f"🔨 BUILD [{count}x] {component_type.upper()} - Index: {component_id}")
-
-            # Call original build function
-            result = original_func(**kwargs)
-
-            # Log completion
-            logger.error(f"✅ BUILT [{count}x] {component_type.upper()} - Index: {component_id}")
-
-            return result
+            return original_func(**kwargs)
 
         return wrapper
 
@@ -401,9 +373,6 @@ def get_build_functions() -> dict:
         for component_type, metadata in COMPONENT_METADATA.items()
         if "build_function" in metadata
     }
-
-    # Attach reset function
-    wrapped_functions["_reset_counts"] = reset_counts
 
     return wrapped_functions
 

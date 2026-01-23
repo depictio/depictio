@@ -340,10 +340,6 @@ def _load_dcs_parallel(
                 metadata=metadata_to_pass,
                 TOKEN=access_token,
             )
-            logger.debug(
-                f"   Parallel load: {dc_id[:8]} "
-                f"({data.height:,} rows x {data.width} cols, projected: {len(required_columns)} cols)"
-            )
             return load_key, data
         except Exception as e:
             logger.error(f"   Parallel load failed: {dc_id[:8]}: {e}", exc_info=True)
@@ -413,7 +409,6 @@ def _process_code_mode_figure(
         theme_template = f"mantine_{current_theme}"
         fig.update_layout(template=theme_template)
 
-    logger.debug(f"[{task_id}] Code execution successful (visu_type: {detected_visu_type})")
     return True, fig, detected_visu_type
 
 
@@ -444,7 +439,6 @@ def _process_single_figure(
     """
     task_id = f"{batch_task_id}-{figure_index}"
     component_id = trigger_id.get("index", "unknown")[:8] if trigger_id else "unknown"
-    figure_start_time = time.time()
 
     try:
         if not trigger_data or not isinstance(trigger_data, dict):
@@ -455,10 +449,6 @@ def _process_single_figure(
         visu_type = trigger_data.get("visu_type", "scatter")
         dict_kwargs = trigger_data.get("dict_kwargs", {})
         code_content = trigger_data.get("code_content", "")
-
-        logger.debug(
-            f"[{task_id}] Figure params: mode={mode}, visu_type={visu_type}, dict_kwargs={dict_kwargs}"
-        )
 
         load_key = figure_to_load_key.get(figure_index)
         if not load_key or load_key not in dc_cache:
@@ -482,9 +472,6 @@ def _process_single_figure(
                 dict_kwargs=dict_kwargs,
                 theme=current_theme,
             )
-
-        figure_duration = (time.time() - figure_start_time) * 1000
-        logger.debug(f"[{task_id}] Figure rendered in {figure_duration:.1f}ms")
 
         if isinstance(fig, go.Figure):
             fig_dict = json.loads(fig.to_json())
@@ -855,7 +842,6 @@ def _create_figure_from_data(
 
             # Skip *_map parameters that are strings (malformed data) - Plotly expects dicts
             if k.endswith("_map") and isinstance(v, str):
-                logger.debug(f"Skipping malformed parameter {k}='{v}' (expected dict, got string)")
                 continue
 
             # Keep boolean parameters (including False values)

@@ -378,10 +378,8 @@ def detect_metric_theme(column_name: str) -> str:
     # Check each theme's patterns
     for theme, patterns in theme_patterns.items():
         if any(pattern in column_lower for pattern in patterns):
-            logger.debug(f"Auto-detected theme '{theme}' for column '{column_name}'")
             return theme
 
-    logger.debug(f"No specific theme detected for column '{column_name}', using default")
     return "default"
 
 
@@ -398,12 +396,10 @@ def get_reference_value_from_cols_json(cols_json, column_name, aggregation):
         float or None: Reference value if available in cols_json, None otherwise
     """
     if not cols_json or column_name not in cols_json:
-        logger.debug(f"Column '{column_name}' not found in cols_json")
         return None
 
     column_specs = cols_json[column_name].get("specs", {})
     if not column_specs:
-        logger.debug(f"No specs found for column '{column_name}' in cols_json")
         return None
 
     # Map aggregation names to cols_json field names
@@ -425,7 +421,6 @@ def get_reference_value_from_cols_json(cols_json, column_name, aggregation):
     # Get the corresponding field name in cols_json
     cols_json_field = aggregation_mapping.get(aggregation)
     if not cols_json_field:
-        logger.debug(f"Aggregation '{aggregation}' not available in cols_json mapping")
         return None
 
     # Extract the value
@@ -433,7 +428,6 @@ def get_reference_value_from_cols_json(cols_json, column_name, aggregation):
     if reference_value is not None:
         return reference_value
     else:
-        logger.debug(f"Field '{cols_json_field}' not found in column specs for '{column_name}'")
         return None
 
 
@@ -470,8 +464,6 @@ def compute_value(data, column_name, aggregation, cols_json=None, has_filters=Fa
     Returns:
         Aggregated value
     """
-    logger.debug(f"Computing value for {column_name} with {aggregation} (filters={has_filters})")
-
     # OPTIMIZATION 1: Try pre-computed statistics first (only when no filters active)
     if not has_filters and cols_json:
         reference_value = get_reference_value_from_cols_json(cols_json, column_name, aggregation)
@@ -493,8 +485,6 @@ def compute_value(data, column_name, aggregation, cols_json=None, has_filters=Fa
         mode_series = data_pd[column_name].mode()
         if not mode_series.empty:
             new_value = mode_series.iloc[0]
-            logger.debug(f"Computed mode: {new_value}")
-            logger.debug(f"Type of mode value: {type(new_value)}")
         else:
             new_value = None
             logger.warning("No mode found; returning None")
@@ -503,12 +493,10 @@ def compute_value(data, column_name, aggregation, cols_json=None, has_filters=Fa
             # Polars native range computation
             col = data[column_name]
             new_value = col.max() - col.min()
-            logger.debug(f"Computed range (Polars): {new_value}")
         else:
             series = data[column_name]
             if pd.api.types.is_numeric_dtype(series):
                 new_value = series.max() - series.min()
-                logger.debug(f"Computed range: {new_value} (Type: {type(new_value)})")
             else:
                 logger.error(
                     f"Range aggregation is not supported for non-numeric column '{column_name}'."
@@ -536,7 +524,6 @@ def compute_value(data, column_name, aggregation, cols_json=None, has_filters=Fa
                 return None
 
             try:
-                logger.debug(f"Applying Polars aggregation '{polars_agg}'")
                 col = data[column_name]
 
                 # Use Polars expression API
@@ -562,9 +549,6 @@ def compute_value(data, column_name, aggregation, cols_json=None, has_filters=Fa
                     logger.error(f"Unhandled Polars aggregation: {polars_agg}")
                     new_value = None
 
-                logger.debug(
-                    f"Computed {aggregation} ({polars_agg}) [Polars]: {new_value} (Type: {type(new_value)})"
-                )
             except Exception as e:
                 logger.error(f"Polars aggregation '{polars_agg}' failed: {e}")
                 new_value = None
@@ -583,18 +567,13 @@ def compute_value(data, column_name, aggregation, cols_json=None, has_filters=Fa
                 return None
             else:
                 try:
-                    logger.debug(f"Applying aggregation function '{pandas_agg}'")
                     new_value = data[column_name].agg(pandas_agg)
-                    logger.debug(
-                        f"Computed {aggregation} ({pandas_agg}): {new_value} (Type: {type(new_value)})"
-                    )
                 except AttributeError as e:
                     logger.error(f"Aggregation function '{pandas_agg}' failed: {e}")
                     new_value = None
 
         if isinstance(new_value, np.float64):
             new_value = round(new_value, 4)
-            logger.debug(f"New value rounded: {new_value}")
 
     return new_value
 
@@ -640,14 +619,12 @@ def _resolve_card_styles(
         resolved_title = title_color or theme_config["text_color"]
         resolved_icon = icon_name or theme_config["icon"]
         resolved_icon_color = icon_color or theme_config["icon_color"]
-        logger.debug(f"Using metric theme '{metric_theme}' for column '{column_name}'")
     else:
         # No theme - use individual parameters with DMC defaults
         resolved_bg = background_color
         resolved_title = title_color
         resolved_icon = icon_name or "mdi:chart-line"
         resolved_icon_color = icon_color
-        logger.debug(f"Using DMC theme-compliant styling for column '{column_name}'")
 
     return {
         "background_color": resolved_bg,
@@ -1019,11 +996,6 @@ def build_card(**kwargs):
     - {"type": "card-comparison", "index": component_id} - Shows filter comparison
     - {"type": "card-metadata", "index": component_id} - Stores reference data
     """
-    logger.info(
-        f"BUILD CARD CALLED - Index: {kwargs.get('index', 'UNKNOWN')}, "
-        f"Stepper: {kwargs.get('stepper', False)}"
-    )
-
     # Extract parameters
     index = kwargs.get("index")
     title = kwargs.get("title", "Default Title")
@@ -1038,7 +1010,7 @@ def build_card(**kwargs):
     color = kwargs.get("color", None)
     parent_index = kwargs.get("parent_index", None)
     metric_theme = kwargs.get("metric_theme", None)
-    init_data = kwargs.get("init_data", None)
+    kwargs.get("init_data", None)
 
     # Style parameters (convert empty strings to None for DMC compliance)
     background_color = kwargs.get("background_color") or None
@@ -1048,12 +1020,6 @@ def build_card(**kwargs):
     title_font_size = kwargs.get("title_font_size", "md")
     value_font_size = kwargs.get("value_font_size", "xl")
 
-    if init_data:
-        logger.info(
-            f"CARD OPTIMIZATION: init_data available with "
-            f"{len(init_data.get('column_specs', {}))} column_specs"
-        )
-
     # Resolve styles from theme and individual parameters
     styles = _resolve_card_styles(
         column_name, metric_theme, background_color, title_color, icon_name, icon_color
@@ -1062,8 +1028,6 @@ def build_card(**kwargs):
     # Handle stepper mode index
     if stepper and not str(index).endswith("-tmp"):
         index = f"{index}-tmp"
-
-    logger.debug(f"Creating card structure for index: {index}")
 
     # Determine store indices
     if stepper:
@@ -1385,14 +1349,8 @@ async def build_card_async(**kwargs):
     """
     Async wrapper for build_card function - async functionality disabled, calls sync version.
     """
-    logger.info(
-        f"🔄 ASYNC CARD: Building card component (using sync) - Index: {kwargs.get('index', 'UNKNOWN')}"
-    )
 
     # Call the synchronous build_card function
     result = build_card(**kwargs)
 
-    logger.info(
-        f"✅ ASYNC CARD: Card component built successfully - Index: {kwargs.get('index', 'UNKNOWN')}"
-    )
     return result

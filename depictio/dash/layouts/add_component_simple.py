@@ -16,9 +16,6 @@ from depictio.api.v1.configs.logging_init import logger
 
 def register_add_component_simple_callback(app):
     """Register the component creation navigation callback."""
-    logger.info("=" * 80)
-    logger.info(f"   App name: {app.config.get('name', 'Unknown')}")
-    logger.info("=" * 80)
 
     @app.callback(
         Output("url", "pathname", allow_duplicate=True),

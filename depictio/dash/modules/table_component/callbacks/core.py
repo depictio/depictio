@@ -69,7 +69,6 @@ def build_interactive_metadata_mapping(
         if i < len(interactive_metadata_list):
             index = meta_id["index"]
             metadata_by_index[index] = interactive_metadata_list[i]
-            logger.debug(f"Mapped metadata for interactive component {index}")
 
     return metadata_by_index
 
@@ -107,11 +106,6 @@ def enrich_interactive_components(
         interactive_values.get("interactive_components_values", []) if interactive_values else []
     )
 
-    logger.debug(
-        f"Enrichment starting - {len(lightweight_components)} lightweight components, "
-        f"{len(metadata_by_index)} metadata entries available"
-    )
-
     for component in lightweight_components:
         index = component.get("index")
         value = component.get("value")
@@ -129,12 +123,6 @@ def enrich_interactive_components(
                 "metadata": full_metadata,
             }
             interactive_components_dict[index] = enriched_component
-
-            logger.debug(
-                f"Enriched component {index}: DC={full_metadata.get('dc_id')}, "
-                f"Column={full_metadata.get('column_name')}, "
-                f"Type={full_metadata.get('interactive_component_type')}"
-            )
         else:
             logger.warning(f"Component {index} has value but no metadata - skipping")
 
@@ -229,7 +217,6 @@ def load_data_with_interactive_filters(
         df = load_deltatable_lite(
             ObjectId(workflow_id), ObjectId(data_collection_id), metadata=None, TOKEN=TOKEN
         )
-        logger.debug(f"Loaded unjoined table data (shape: {df.shape})")
         return df
 
 
@@ -257,30 +244,25 @@ def _load_compatible_dc_data(
     """
     try:
         if result_dc_id:
-            logger.debug("Loading pre-computed joined table with interactive filters")
             df = load_deltatable_lite(
                 ObjectId(workflow_id),
                 ObjectId(result_dc_id),
                 metadata=list(interactive_components_dict.values()),
                 TOKEN=TOKEN,
             )
-            logger.debug(f"Successfully loaded FILTERED data from result DC (shape: {df.shape})")
         else:
-            logger.debug("No joins - loading single DC with interactive filters")
             df = load_deltatable_lite(
                 ObjectId(workflow_id),
                 ObjectId(data_collection_id),
                 metadata=list(interactive_components_dict.values()),
                 TOKEN=TOKEN,
             )
-            logger.debug(f"Successfully loaded FILTERED single DC (shape: {df.shape})")
         return df
     except Exception as interactive_error:
         logger.error(f"Loading data failed: {str(interactive_error)}")
         df = load_deltatable_lite(
             ObjectId(workflow_id), ObjectId(data_collection_id), metadata=None, TOKEN=TOKEN
         )
-        logger.debug("Fallback: Loaded unfiltered data")
         return df
 
 
@@ -306,23 +288,19 @@ def _load_data_without_interactive_filters(
         result_dc_id = get_result_dc_for_workflow(workflow_id, TOKEN)
 
         if result_dc_id:
-            logger.debug("Table has pre-computed join - loading result DC")
             df = load_deltatable_lite(
                 ObjectId(workflow_id), ObjectId(result_dc_id), metadata=None, TOKEN=TOKEN
             )
-            logger.debug(f"Successfully loaded joined table data (shape: {df.shape})")
         else:
             df = load_deltatable_lite(
                 ObjectId(workflow_id), ObjectId(data_collection_id), metadata=None, TOKEN=TOKEN
             )
-            logger.debug(f"Successfully loaded single table data (shape: {df.shape})")
         return df
     except Exception as join_error:
         logger.warning(f"Error checking table joins: {str(join_error)}")
         df = load_deltatable_lite(
             ObjectId(workflow_id), ObjectId(data_collection_id), metadata=None, TOKEN=TOKEN
         )
-        logger.debug(f"Fallback: Loaded single table data (shape: {df.shape})")
         return df
 
 
@@ -349,23 +327,18 @@ def apply_ag_grid_filters(df: pl.DataFrame, filter_model: dict[str, Any]) -> pl.
     if not filter_model:
         return df
 
-    logger.debug(f"Applying {len(filter_model)} AG Grid filters")
-
     for col, filter_def in filter_model.items():
         try:
             if "operator" in filter_def:
                 if filter_def["operator"] == "AND":
                     df = apply_ag_grid_filter(df, filter_def["condition1"], col)
                     df = apply_ag_grid_filter(df, filter_def["condition2"], col)
-                    logger.debug(f"Applied AND filter to column {col}")
                 else:
                     df1 = apply_ag_grid_filter(df, filter_def["condition1"], col)
                     df2 = apply_ag_grid_filter(df, filter_def["condition2"], col)
                     df = pl.concat([df1, df2]).unique()
-                    logger.debug(f"Applied OR filter to column {col}")
             else:
                 df = apply_ag_grid_filter(df, filter_def, col)
-                logger.debug(f"Applied simple filter to column {col}")
         except Exception as e:
             logger.warning(f"Failed to apply filter for column {col}: {e}")
             continue
@@ -396,18 +369,12 @@ def create_synthetic_request(triggered_by_interactive: bool) -> dict[str, Any]:
         - filterModel: empty
         - sortModel: empty
     """
-    if triggered_by_interactive:
-        logger.debug("Interactive component changed - processing data immediately")
-    else:
-        logger.debug("INITIAL LOAD: Creating synthetic request for first page")
-
     request = {
         "startRow": 0,
         "endRow": 100,
         "filterModel": {},
         "sortModel": [],
     }
-    logger.debug("Created synthetic request to load initial data")
     return request
 
 
@@ -438,9 +405,6 @@ def prepare_dataframe_for_aggrid(
     if any("." in col for col in partial_df.columns):
         column_mapping = {col: col.replace(".", "_") for col in partial_df.columns if "." in col}
         partial_df = partial_df.rename(column_mapping)
-        logger.debug(
-            f"Renamed {len(column_mapping)} columns for AgGrid: {list(column_mapping.keys())}"
-        )
 
     partial_df = partial_df.with_columns(
         pl.Series("ID", range(start_row, start_row + len(partial_df)))
@@ -483,11 +447,7 @@ def log_interactive_filter_success(
 
 def _log_interactive_values_debug(interactive_values: dict[str, Any] | None) -> None:
     """Log debug information about interactive component values."""
-    if interactive_values and "interactive_components_values" in interactive_values:
-        components_count = len(interactive_values["interactive_components_values"])
-        logger.debug(f"Table: {components_count} interactive components detected")
-    else:
-        logger.debug("Table: No interactive values")
+    pass  # Logging removed for production
 
 
 def _log_pagination_request(
@@ -724,7 +684,6 @@ def load_table_data_with_filters(
     Returns:
         Filtered and sorted Polars DataFrame ready for display or export.
     """
-    logger.debug("load_table_data_with_filters: Loading table data")
 
     # Step 1: Build metadata mapping and enrich interactive components
     metadata_by_index = build_interactive_metadata_mapping(
@@ -741,7 +700,6 @@ def load_table_data_with_filters(
     df = load_data_with_interactive_filters(
         workflow_id, data_collection_id, stored_metadata, interactive_components_dict, TOKEN
     )
-    logger.debug(f"Loaded initial dataset: {df.shape[0]} rows, {df.shape[1]} columns")
 
     # Step 4: Apply AG Grid filters
     if filter_model:
@@ -749,9 +707,7 @@ def load_table_data_with_filters(
 
     # Step 5: Apply AG Grid sorting
     if sort_model:
-        logger.debug(f"Applying sorting: {[(s['colId'], s['sort']) for s in sort_model]}")
         df = apply_ag_grid_sorting(df, sort_model)
-        logger.debug("Sorting applied successfully")
 
     return df
 
@@ -813,10 +769,7 @@ def register_core_callbacks(app):
             "interactive-values-store" in str(trigger["prop_id"]) for trigger in ctx.triggered
         )
 
-        logger.debug(f"Infinite scroll callback triggered - {ctx.triggered}")
         _log_interactive_values_debug(interactive_values)
-        logger.debug(f"Request: {request}")
-        logger.debug(f"Triggered by: {ctx.triggered_id if ctx.triggered else 'Unknown'}")
 
         # Validate inputs
         if not local_store or not stored_metadata:

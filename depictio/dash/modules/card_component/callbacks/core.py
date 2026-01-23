@@ -99,10 +99,6 @@ def _enrich_filters_with_metadata(
         else:
             logger.warning(f"No metadata found for component {index[:8]}... - skipping")
 
-    logger.debug(
-        f"Enriched {len(enriched_components)}/{len(lightweight_components)} components with metadata"
-    )
-
     return enriched_components
 
 
@@ -223,10 +219,6 @@ def _load_data_collections_parallel(
                 ObjectId(dc_id),
                 metadata=metadata_to_pass,
                 TOKEN=access_token,
-            )
-            logger.debug(
-                f"   Parallel load: {dc_id[:8]}...{filters_hash} "
-                f"({data.height:,} rows x {data.width} cols)"
             )
             return load_key, data
         except Exception as e:
@@ -451,7 +443,6 @@ def _load_data_for_card(
                 ]
                 combined_metadata.extend(active_filters)
 
-        logger.debug(f"Loading result DC {result_dc_id} with {len(combined_metadata)} filters")
         data = load_deltatable_lite(
             ObjectId(wf_id),
             ObjectId(result_dc_id),
@@ -460,12 +451,10 @@ def _load_data_for_card(
             select_columns=None,
         )
 
-        logger.debug(f"Loaded result DC: {data.height:,} rows x {data.width} columns")
         return data
 
     if use_link_path and link_resolved_filter:
         # LINK-DC PATH: Use link-resolved filter to load card's DC
-        logger.debug("LINK-DC FILTERING: Loading card DC with link-resolved filter")
 
         data = load_deltatable_lite(
             ObjectId(wf_id),
@@ -475,7 +464,6 @@ def _load_data_for_card(
             select_columns=None,
         )
 
-        logger.debug(f"Loaded via link resolution: {data.height:,} rows x {data.width} columns")
         return data
 
     # SAME-DC PATH: Use cached data or fall back to synchronous load
@@ -492,10 +480,8 @@ def _load_data_for_card(
         active_filters = [
             c for c in relevant_filters if c.get("value") not in [None, [], "", False]
         ]
-        logger.debug(f"SAME-DC filtering - applying {len(active_filters)} active filters")
         metadata_to_pass = active_filters
     else:
-        logger.debug("SAME-DC clearing filters - loading ALL unfiltered data")
         metadata_to_pass = []
 
     logger.warning(f"Cache miss for card {card_index} - loading synchronously: {wf_id}:{dc_id}")
@@ -507,7 +493,6 @@ def _load_data_for_card(
         TOKEN=access_token,
     )
 
-    logger.debug(f"Loaded {data.height:,} rows x {data.width} columns")
     return data
 
 
@@ -815,11 +800,6 @@ def register_core_callbacks(app):
                             "delta_location": dc["delta_location"],
                             "size_bytes": -1,
                         }
-            logger.debug(f"Using {len(delta_locations)} delta locations from project metadata")
-        else:
-            logger.debug(
-                "No project metadata available - load_deltatable_lite will fetch locations"
-            )
 
         # Process all cards
         all_values = []
@@ -843,7 +823,6 @@ def register_core_callbacks(app):
                 formatted_value = str(reference_value) if reference_value is not None else "N/A"
                 all_values.append(formatted_value)
                 all_metadata.append(metadata_to_use)
-                logger.debug(f"  Card {i + 1}/{len(trigger_data_list)}: {component_id} - cached")
                 continue
 
             # Skip if trigger not ready
@@ -1237,10 +1216,6 @@ def _process_single_card(
 
         # Check for active filters
         has_active_filters = _has_active_filter_values(metadata_list)
-        if has_active_filters:
-            logger.debug("Active filters detected - loading filtered data")
-        else:
-            logger.debug("No active filters - loading ALL unfiltered data")
 
         # Determine filtering path (joined, link, or same-DC)
         use_joined_path, result_dc_id, use_link_path, link_resolved_filter, filters_by_dc = (
@@ -1352,23 +1327,6 @@ def _check_card_early_exit_conditions(
         )
         metadata_to_use = initial_metadata if initial_metadata else stored_metadata
         reference_value = metadata_to_use.get("reference_value") if metadata_to_use else None
-
-        # Log debug info
-        logger.debug(f"CARD PATCH DEBUG - Component: {component_id}")
-        logger.debug(f"   initial_metadata type: {type(initial_metadata)}")
-        logger.debug(
-            f"   initial_metadata keys: {initial_metadata.keys() if initial_metadata else 'N/A'}"
-        )
-        logger.debug(f"   stored_metadata type: {type(stored_metadata)}")
-        logger.debug(
-            f"   stored_metadata has reference_value: "
-            f"{stored_metadata.get('reference_value') if stored_metadata else 'N/A'}"
-        )
-        logger.debug(
-            f"   reference_value (using {'initial' if initial_metadata else 'stored'}): "
-            f"{reference_value}"
-        )
-        logger.debug(f"   has_been_patched: {has_been_patched}")
 
         if not modified_components and not has_been_patched:
             # Race condition check: reference_value must be populated before first patch

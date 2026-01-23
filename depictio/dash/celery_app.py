@@ -6,7 +6,6 @@ Integrated with FastAPI backend for dashboard component generation.
 from celery import Celery
 
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.configs.logging_init import logger
 
 # Create Celery app with configuration from settings
 
@@ -52,10 +51,8 @@ def health_check(self):
 #   - Background callbacks are registered when app modules wire up their callbacks
 #   - Celery workers discover tasks through the apps, not through this module
 
-logger.info(
-    "   - Background callbacks will be registered by flask_dispatcher.py when apps are created"
-)
-logger.info("   - Management, Viewer, and Editor apps each have their own callback registry")
+# Background callbacks are registered by flask_dispatcher.py when apps are created
+# Management, Viewer, and Editor apps each have their own callback registry
 
 
 # Auto-discovery of tasks on app start

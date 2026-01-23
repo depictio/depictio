@@ -1667,7 +1667,6 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
 
     def generate_dashboard_view_response(dashboards, store_data_list, current_userbase, user_data):
         dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
-        logger.debug(f"dashboards: {dashboards}")
         current_user = api_call_fetch_user_from_token(user_data["access_token"])
         dashboards_view = create_homepage_view(
             dashboards, current_userbase.id, user_data["access_token"], current_user

@@ -236,10 +236,6 @@ def register_consolidated_api_callbacks(app):
     #
     #     return cached_project
 
-    logger.info(
-        "✅ CONSOLIDATED API: consolidated_project_data callback disabled (see comments above)"
-    )
-
     # Dashboard initialization data callback (Cache 1: Dashboard metadata)
     @app.callback(
         Output("dashboard-init-data", "data"),

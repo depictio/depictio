@@ -855,7 +855,6 @@ class ParameterInspector:
 
         # Cache the result
         self._parameter_cache[func_name] = parameters
-        logger.info(f"Discovered {len(parameters)} parameters for {func_name}")
 
         return parameters
 
@@ -1026,7 +1025,6 @@ def discover_all_visualizations() -> Dict[str, VisualizationDefinition]:
 
     for func_name in functions:
         if func_name in _DISABLED_VISUALIZATIONS:
-            logger.debug(f"Skipping disabled visualization: {func_name}")
             continue
 
         try:
@@ -1040,9 +1038,6 @@ def discover_all_visualizations() -> Dict[str, VisualizationDefinition]:
 
             viz_def.group = get_visualization_group(func_name)
             visualizations[func_name] = viz_def
-            logger.debug(
-                f"Created visualization definition for {func_name} in group {viz_def.group}"
-            )
 
         except Exception as e:
             logger.warning(f"Failed to create definition for {func_name}: {e}")

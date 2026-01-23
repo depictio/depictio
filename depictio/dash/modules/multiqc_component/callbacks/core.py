@@ -545,8 +545,6 @@ def patch_multiqc_figures(
 def register_core_callbacks(app):
     """Register core rendering callbacks for MultiQC component."""
 
-    logger.debug("Registering MultiQC core callbacks...")
-
     # ============================================================================
     # CALLBACK 0: Render MultiQC Plot from Trigger (VIEW MODE)
     # ============================================================================
@@ -1428,7 +1426,3 @@ def register_core_callbacks(app):
         except Exception as e:
             logger.error(f"Error patching MultiQC plot: {e}", exc_info=True)
             return dash.no_update
-
-    logger.info(
-        "✅ MultiQC core callbacks registered (6 callbacks: view mode + 4 design mode + 1 interactive patching)"
-    )
