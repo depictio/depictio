@@ -1,0 +1,181 @@
+# Test MultiQC Data Collection Configuration
+name: "TREC x TARA - Pollution impact"
+project_type: "advanced"
+workflows:
+  - name: "ampliseq"
+    version: "2.14.0"
+    engine:
+      name: "nextflow"
+      version: "24.10.4"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/ampliseq"
+    data_location:
+      structure: "sequencing-runs"
+      runs_regex: "run_*"
+      locations:
+        - ../api/v1/configs/projects/reference/ampliseq
+    data_collections:
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report data"
+        config:
+          type: "MultiQC"
+      - data_collection_tag: "metadata"
+        description: "Sample & Sites metadata table for MultiQC integration"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: single
+            scan_parameters:
+              filename: "../api/v1/configs/projects/reference/ampliseq/merged_metadata.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              try_parse_dates: true
+            columns_description:
+              "sample": "Sample identifier matching MultiQC sample names"
+              "name": "ID combined with habitat"
+              # "habitat": "Habitat type of the sample"
+              "condition": "Experimental condition (e.g., control, pollution)"
+              "time": "Time point of sampling"
+              "condition_detailed": "Detailed condition information"
+              # "collection_date": "Sample collection date"
+              "site_alias": "Site alias identifier"
+              "site_locality": "Locality description of the sampling site"
+              "site_date_start": "Start date of sampling at the site"
+              "Temperature": "Water temperature (°C)"
+              "Salinity": "Salinity (PSU)"
+              "Turbidity": "Turbidity (NTU)"
+          join:
+            on_columns: ["sample"]
+            how: "inner"
+            with_dc: ["multiqc_data"]
+      # - data_collection_tag: "site_metadata"
+      #   description: "Site metadata table"
+      #   config:
+      #     type: "Table"
+      #     metatype: "Metadata"
+      #     scan:
+      #       mode: "single"
+      #       scan_parameters:
+      #         filename: "../api/v1/configs/projects/reference/ampliseq/site_metadata.tsv"
+      #     dc_specific_properties:
+      #       format: "TSV"
+      #       polars_kwargs:
+      #         separator: "\t"
+      #         try_parse_dates: true
+      #       columns_description:
+      #         "site_alias": "Site alias identifier"
+      #         # "latitude": "Latitude of the sampling site"
+      #         # "longitude": "Longitude of the sampling site"
+      #         # "country": "Country of the sampling site"
+      #         "site_locality": "Locality description of the sampling site"
+      #         "site_date_start": "Start date of sampling at the site"
+      #         "Temperature": "Water temperature (°C)"
+      #         "Salinity": "Salinity (PSU)"
+      #         "Turbidity": "Turbidity (NTU)"
+      #     join:
+      #       on_columns: ["site_alias"]
+      #       how: "inner"
+      #       with_dc: ["sample_metadata"]
+      - data_collection_tag: "alpha_rarefaction"
+        description: "Alpha rarefaction data"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "../api/v1/configs/projects/reference/ampliseq/faith_pd_long.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "sample": "Sample identifier"
+              "depth": "Sequencing depth"
+              "iter": "Iteration number"
+              "faith_pd": "Faith's Phylogenetic Diversity"
+          join:
+            on_columns: ["sample"]
+            how: "inner"
+            with_dc: ["metadata", "multiqc_data"]
+      - data_collection_tag: "taxonomy_composition"
+        description: "Taxonomic composition data"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "../api/v1/configs/projects/reference/ampliseq/taxonomy_long.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "sample": "Sample identifier"
+              "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
+              "count": "Raw count of sequences assigned to this taxonomy in the sample"
+              "habitat": "Habitat type of the sample"
+          join:
+            on_columns: ["sample"]
+            how: "inner"
+            with_dc: ["metadata"]
+      - data_collection_tag: "ancom_volcano"
+        description: "ANCOM differential abundance results"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "../api/v1/configs/projects/reference/ampliseq/ancom_volcano.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "id": "ASV identifier"
+              "taxonomy": "Taxonomic classification (Kingdom;Phylum)"
+              "Kingdom": "Kingdom classification"
+              "Phylum": "Phylum classification"
+              "W": "W statistic from ANCOM analysis"
+              "clr": "Centered log-ratio value"
+          # join:
+          #   on_columns: ["id"]
+          #   how: "inner"
+          #   with_dc: ["taxonomy_composition", "sample_metadata", "multiqc_data"]
+      # - data_collection_tag: "sample_qc_metrics"
+      #   description: "Per-sample quality control metrics and statistics"
+      #   config:
+      #     type: "Table"
+      #     metatype: "Aggregate"
+      #     scan:
+      #       mode: "recursive"
+      #       scan_parameters:
+      #         regex_config:
+      #           pattern: "sample_qc_metrics.csv"
+      #     dc_specific_properties:
+      #       format: "CSV"
+      #       polars_kwargs:
+      #         separator: ","
+      #       columns_description:
+      #         "sample": "Sample identifier"
+      #         "cell_id": "Individual cell or cellular compartment identifier"
+      #         "total_reads": "Total number of reads for this cell"
+      #         "mapped_reads": "Number of successfully mapped reads"
+      #         "mapping_rate": "Percentage of reads mapped to reference"
+      #         "duplicate_rate": "Percentage of duplicate reads"
+      #         "mean_coverage": "Mean genome coverage depth"
+      #         "median_insert_size": "Median insert size for paired-end reads"
+      #         "gc_content": "GC content percentage"
+      #         "q30_rate": "Percentage of bases with quality score >= 30"
+      #         "mean_quality": "Mean base quality score"
+      #     join:
+      #       on_columns: ["sample"]
+      #       how: "inner"
+      #       with_dc: ["sample_metadata", "multiqc_data"]
