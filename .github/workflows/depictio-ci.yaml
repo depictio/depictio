@@ -748,24 +748,24 @@ jobs:
 
           # Validate project config
           depictio-cli --verbose config validate-project-config \
-            --project-config-path ../api/v1/configs/projects/init/iris/project.yaml \
+            --project-config-path ../projects/init/iris/project.yaml \
             --CLI-config-path admin_config.yaml
 
           # Sync project to server
           depictio-cli --verbose config sync-project-config-to-server \
             --update \
-            --project-config-path ../api/v1/configs/projects/init/iris/project.yaml \
+            --project-config-path ../projects/init/iris/project.yaml \
             --CLI-config-path admin_config.yaml
 
           # Scan and process data
           depictio-cli --verbose data scan \
             --sync-files --rescan-folders \
-            --project-config-path ../api/v1/configs/projects/init/iris/project.yaml \
+            --project-config-path ../projects/init/iris/project.yaml \
             --CLI-config-path admin_config.yaml
 
           depictio-cli --verbose data process \
             --overwrite \
-            --project-config-path ../api/v1/configs/projects/init/iris/project.yaml \
+            --project-config-path ../projects/init/iris/project.yaml \
             --CLI-config-path admin_config.yaml
 
       - name: Verify Iris integration from CLI
@@ -850,31 +850,31 @@ jobs:
 
           # Validate project config
           depictio-cli --verbose config validate-project-config \
-            --project-config-path ../api/v1/configs/projects/reference/penguins/project.yaml \
+            --project-config-path ../projects/reference/penguins/project.yaml \
             --CLI-config-path admin_config.yaml
 
           # Sync project to server
           depictio-cli --verbose config sync-project-config-to-server \
             --update \
-            --project-config-path ../api/v1/configs/projects/reference/penguins/project.yaml \
+            --project-config-path ../projects/reference/penguins/project.yaml \
             --CLI-config-path admin_config.yaml
 
           # Scan and process data
           depictio-cli --verbose data scan \
             --sync-files --rescan-folders \
-            --project-config-path ../api/v1/configs/projects/reference/penguins/project.yaml \
+            --project-config-path ../projects/reference/penguins/project.yaml \
             --CLI-config-path admin_config.yaml
 
           depictio-cli --verbose data process \
             --overwrite \
-            --project-config-path ../api/v1/configs/projects/reference/penguins/project.yaml \
+            --project-config-path ../projects/reference/penguins/project.yaml \
             --CLI-config-path admin_config.yaml
 
           # Test full pipeline run
-          sed -i 's/name: "Palmer Penguins Species Comparison"/name: "Palmer Penguins Species Comparison - RUN"/g' ../api/v1/configs/projects/reference/penguins/project.yaml
+          sed -i 's/name: "Palmer Penguins Species Comparison"/name: "Palmer Penguins Species Comparison - RUN"/g' ../projects/reference/penguins/project.yaml
           depictio-cli run \
             --CLI-config-path admin_config.yaml \
-            --project-config-path ../api/v1/configs/projects/reference/penguins/project.yaml
+            --project-config-path ../projects/reference/penguins/project.yaml
 
       - name: Verify Penguin integration
         run: |
