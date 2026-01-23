@@ -302,6 +302,54 @@ The codebase uses Astral's `ty` type checker for static type analysis and mainta
 - `helm-charts/depictio/`: Kubernetes deployment manifests
 - `.env`: Environment variables (create from examples in dev/)
 
+## Helm Chart Maintenance
+
+When adding new services or features that require Kubernetes deployment (e.g., Celery workers, new microservices), update the Helm chart accordingly:
+
+1. **values.yaml**: Add configuration section for the new service (image, replicas, resources, env vars)
+2. **templates/deployments.yaml**: Add Deployment/StatefulSet with init containers, volumes, and security context
+3. **templates/configmaps.yaml**: Add ConfigMap for service-specific environment variables
+4. **Validate**: Run `helm lint helm-charts/depictio` and `helm template test helm-charts/depictio` to verify
+
+## Environment Documentation Generation
+
+The project includes an auto-generation script to keep environment variable documentation in sync with the source code.
+
+### Generation Script
+
+```bash
+# Generate both .env.complete.example and docs/installation/env-reference.md
+python scripts/generate_env_docs.py
+
+# Generate only .env.complete.example
+python scripts/generate_env_docs.py --env-only
+
+# Generate only documentation
+python scripts/generate_env_docs.py --docs-only
+```
+
+### Generated Files
+
+- **`.env.complete.example`**: Complete env file with all ~160 variables organized by config class
+- **`docs/installation/env-reference.md`**: Markdown documentation for depictio-docs (auto-copied)
+
+### Pre-Release Checklist
+
+Before creating a release, ensure the env documentation is up-to-date:
+
+1. Run `python scripts/generate_env_docs.py`
+2. Verify `.env.complete.example` includes any new settings
+3. Copy `env-reference.md` to depictio-docs if not auto-generated there
+4. Commit both files with the release
+
+### Source of Truth
+
+The generation script parses `depictio/api/v1/configs/settings_models.py` which is the single source of truth for all configuration options. When adding new settings:
+
+1. Add fields to the appropriate config class in `settings_models.py`
+2. Include `description` in the `Field()` for documentation
+3. Run the generation script to update documentation
+
 ## Documentation Workflow
 
 When finishing a PR that adds new features or makes significant changes:

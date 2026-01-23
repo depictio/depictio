@@ -161,3 +161,58 @@ data:
   DEPICTIO_MINIO_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
   DEPICTIO_MINIO_SERVICE_PORT: {{ .Values.minio.env.DEPICTIO_MINIO_SERVICE_PORT | default "9000" | quote }}
   {{- end }}
+
+---
+# Celery Worker ConfigMap
+{{- if .Values.celery.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-celery-config
+  namespace: {{ .Release.Namespace }}
+data:
+  DEPICTIO_CONTEXT: "server"
+  DEPICTIO_DEV_MODE: {{ .Values.backend.env.DEPICTIO_DEV_MODE | quote }}
+  DEPICTIO_LOGGING_VERBOSITY_LEVEL: {{ .Values.backend.env.DEPICTIO_LOGGING_VERBOSITY_LEVEL | quote }}
+  DEPICTIO_CELERY_WORKERS: {{ .Values.celery.env.DEPICTIO_CELERY_WORKERS | quote }}
+  DEPICTIO_CELERY_ENABLED: {{ .Values.celery.env.DEPICTIO_CELERY_ENABLED | quote }}
+
+  # Redis/Celery broker settings
+  {{- if .Values.redis.enabled }}
+  DEPICTIO_CELERY_BROKER_HOST: {{ printf "%s-redis" .Release.Name | quote }}
+  DEPICTIO_CELERY_BROKER_PORT: {{ .Values.backend.env.DEPICTIO_CELERY_BROKER_PORT | default "6379" | quote }}
+  DEPICTIO_CELERY_BROKER_DB: {{ .Values.backend.env.DEPICTIO_CELERY_BROKER_DB | default "1" | quote }}
+  DEPICTIO_CELERY_RESULT_BACKEND_HOST: {{ printf "%s-redis" .Release.Name | quote }}
+  DEPICTIO_CELERY_RESULT_BACKEND_PORT: {{ .Values.backend.env.DEPICTIO_CELERY_RESULT_BACKEND_PORT | default "6379" | quote }}
+  DEPICTIO_CELERY_RESULT_BACKEND_DB: {{ .Values.backend.env.DEPICTIO_CELERY_RESULT_BACKEND_DB | default "2" | quote }}
+  DEPICTIO_CACHE_REDIS_HOST: {{ printf "%s-redis" .Release.Name | quote }}
+  DEPICTIO_CACHE_REDIS_PORT: {{ .Values.backend.env.DEPICTIO_CACHE_REDIS_PORT | default "6379" | quote }}
+  DEPICTIO_CACHE_REDIS_DB: {{ .Values.backend.env.DEPICTIO_CACHE_REDIS_DB | default "0" | quote }}
+  DEPICTIO_CACHE_ENABLE_REDIS_CACHE: {{ .Values.backend.env.DEPICTIO_CACHE_ENABLE_REDIS_CACHE | default "true" | quote }}
+  {{- else }}
+  DEPICTIO_CACHE_ENABLE_REDIS_CACHE: "false"
+  {{- end }}
+
+  # Service settings
+  DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo" .Release.Name | quote }}
+  DEPICTIO_MONGODB_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_MONGODB_SERVICE_PORT | quote }}
+  DEPICTIO_FASTAPI_SERVICE_NAME: {{ printf "%s-depictio-backend" .Release.Name | quote }}
+  DEPICTIO_FASTAPI_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_FASTAPI_SERVICE_PORT | quote }}
+  DEPICTIO_FASTAPI_PUBLIC_URL: {{ include "depictio.apiUrlWithProtocol" . | quote }}
+  DEPICTIO_DASH_SERVICE_NAME: {{ printf "%s-depictio-frontend" .Release.Name | quote }}
+  DEPICTIO_DASH_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_DASH_SERVICE_PORT | quote }}
+
+  # MinIO/S3 configuration
+  DEPICTIO_MINIO_ROOT_USER: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_USER | default "minio" | quote }}
+  DEPICTIO_MINIO_ROOT_PASSWORD: {{ .Values.minio.env.DEPICTIO_MINIO_ROOT_PASSWORD | default "minio123" | quote }}
+  DEPICTIO_MINIO_BUCKET: {{ .Values.minio.env.DEPICTIO_MINIO_BUCKET | default "depictio-bucket" | quote }}
+  {{- if not .Values.minio.enabled }}
+  DEPICTIO_MINIO_PUBLIC_URL: {{ .Values.minio.env.DEPICTIO_MINIO_PUBLIC_URL | quote }}
+  DEPICTIO_MINIO_EXTERNAL_SERVICE: "true"
+  {{- else }}
+  DEPICTIO_MINIO_PUBLIC_URL: {{ include "depictio.minioUrlWithProtocol" . | quote }}
+  DEPICTIO_MINIO_EXTERNAL_SERVICE: "false"
+  DEPICTIO_MINIO_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
+  DEPICTIO_MINIO_SERVICE_PORT: {{ .Values.minio.env.DEPICTIO_MINIO_SERVICE_PORT | default "9000" | quote }}
+  {{- end }}
+{{- end }}
