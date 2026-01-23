@@ -339,44 +339,99 @@ jobs:
             monitor_elapsed=$((monitor_elapsed + 30))
           done
 
-          # Final comprehensive log dump before moving to connectivity tests
           echo ""
-          echo "=============================="
-          echo "📋 FINAL STATE BEFORE CONNECTIVITY TESTS"
-          echo "=============================="
-          echo "📊 All pods:"
+          echo "📊 Final pod status:"
           kubectl get pods -l "release=${RELEASE_NAME}" -o wide
 
           echo ""
-          echo "📋 Backend full logs:"
+          echo "✅ Resource propagation monitoring complete"
+
+      - name: Backend Logs
+        if: always()
+        run: |
+          RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
+          echo "📋 Backend Pod Logs"
+          echo "===================="
+
           BACKEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-backend" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
           if [ -n "$BACKEND_POD" ]; then
-            kubectl logs $BACKEND_POD --tail=200 || echo "❌ Could not get backend logs"
+            echo "Pod: $BACKEND_POD"
+            echo ""
+            echo "--- Pod Status ---"
+            kubectl get pod $BACKEND_POD -o wide
+            echo ""
+            echo "--- Pod Describe (Events) ---"
+            kubectl describe pod $BACKEND_POD | grep -A 50 "Events:" || echo "No events"
+            echo ""
+            echo "--- Init Container Logs ---"
+            for container in update-iris-configs copy-screenshot-file wait-for-mongo wait-for-minio wait-for-redis verify-config-storage; do
+              echo "=== $container ==="
+              kubectl logs $BACKEND_POD -c $container 2>/dev/null || echo "  (not available)"
+            done
+            echo ""
+            echo "--- Main Container Logs ---"
+            kubectl logs $BACKEND_POD -c depictio-backend 2>/dev/null || echo "  (not available)"
+          else
+            echo "❌ Backend pod not found"
           fi
 
-          echo ""
-          echo "📋 Frontend full logs:"
+      - name: Frontend Logs
+        if: always()
+        run: |
+          RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
+          echo "📋 Frontend Pod Logs"
+          echo "===================="
+
           FRONTEND_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=depictio-frontend" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
           if [ -n "$FRONTEND_POD" ]; then
-            kubectl logs $FRONTEND_POD --tail=200 || echo "❌ Could not get frontend logs"
+            echo "Pod: $FRONTEND_POD"
+            echo ""
+            echo "--- Pod Status ---"
+            kubectl get pod $FRONTEND_POD -o wide
+            echo ""
+            echo "--- Pod Describe (Events) ---"
+            kubectl describe pod $FRONTEND_POD | grep -A 50 "Events:" || echo "No events"
+            echo ""
+            echo "--- Init Container Logs ---"
+            for container in fix-permissions-frontend verify-config-storage wait-for-backend wait-for-backend-startup wait-for-api-key wait-for-redis; do
+              echo "=== $container ==="
+              kubectl logs $FRONTEND_POD -c $container 2>/dev/null || echo "  (not available)"
+            done
+            echo ""
+            echo "--- Main Container Logs ---"
+            kubectl logs $FRONTEND_POD -c depictio-frontend 2>/dev/null || echo "  (not available)"
+          else
+            echo "❌ Frontend pod not found"
           fi
 
-          echo ""
-          echo "📋 Celery worker full logs:"
+      - name: Celery Worker Logs
+        if: always()
+        run: |
+          RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
+          echo "📋 Celery Worker Pod Logs"
+          echo "========================="
+
           CELERY_POD=$(kubectl get pods -l "release=${RELEASE_NAME},app=celery-worker" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
           if [ -n "$CELERY_POD" ]; then
-            echo "Init containers:"
+            echo "Pod: $CELERY_POD"
+            echo ""
+            echo "--- Pod Status ---"
+            kubectl get pod $CELERY_POD -o wide
+            echo ""
+            echo "--- Pod Describe (Events) ---"
+            kubectl describe pod $CELERY_POD | grep -A 50 "Events:" || echo "No events"
+            echo ""
+            echo "--- Init Container Logs ---"
             for container in fix-permissions-celery wait-for-mongo wait-for-redis wait-for-backend wait-for-api-key; do
-              echo "--- $container ---"
+              echo "=== $container ==="
               kubectl logs $CELERY_POD -c $container 2>/dev/null || echo "  (not available)"
             done
             echo ""
-            echo "Main container:"
-            kubectl logs $CELERY_POD -c celery-worker 2>/dev/null || echo "  (not started)"
+            echo "--- Main Container Logs ---"
+            kubectl logs $CELERY_POD -c celery-worker 2>/dev/null || echo "  (not available)"
+          else
+            echo "❌ Celery worker pod not found"
           fi
-
-          echo ""
-          echo "✅ Resource propagation monitoring complete"
 
       - name: Test Inter-Service Connectivity
         run: |
