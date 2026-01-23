@@ -348,7 +348,7 @@ def register_interactive_design_callbacks(app) -> None:
         prevent_initial_call=True,
     )
     def update_aggregation_options(
-        column_value, workflow_id, data_collection_id, edit_context, id, local_data
+        column_value, edit_context, workflow_id, data_collection_id, id, local_data
     ):
         """
         Populate method dropdown based on selected column type.
@@ -358,9 +358,9 @@ def register_interactive_design_callbacks(app) -> None:
 
         Args:
             column_value: Selected column name.
-            workflow_id: Workflow ID (from stepper or edit context).
-            data_collection_id: Data collection ID (from stepper or edit context).
             edit_context: Edit page context (used in edit mode).
+            workflow_id: Workflow ID (from stepper State).
+            data_collection_id: Data collection ID (from stepper State).
             id: Component ID dict.
             local_data: Local store data containing access token.
 
