@@ -6,72 +6,23 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.6.0-b5</summary>
+<summary>Click to expand the changelog for 0.6.0-b7</summary>
 
 ### Changes 📜
 
-#### New Features ✨
-
-* feat: add gunicorn config with token masking in access logs [e22778d9]
-
-#### Bug Fixes 🐛
-
-* fix: add root logger to gunicorn config and use standard access formatter [65e7ca61]
-* fix: use default text color for slider marks instead of dimmed [a59f9802]
-* fix: use dmc.Text for slider mark labels for dark mode support [d2a0d765]
-* fix: make slider mark labels visible in dark mode [38fdb44c]
-* fix: correct parameter order in update_aggregation_options callback [c114b5ec]
-* fix: add type check for edit_context before calling .get() [17e034c7]
-* fix: change workflow/dc from Input to State in interactive callback [0bf8ca0a]
-* fix: prevent input-dropdown-column callback from firing before component exists [99e9579e]
-* fix: restore screenshot trigger and update accordion selectors for DMC 2.0+ [cae52478]
-* fix: add fallback on non-200 status in _check_deltatables [adf75978]
-* fix: add type ignore for dynamic kwargs in header.py [d743d6b2]
-* fix: use relative path resolution for test YAML config [8327c12b]
-* fix: remove test for non-existent _load_joined_deltatable function [07967070]
-* fix: remove mock for non-existent format_pydantic function in test [39f9b617]
-
 #### Improvements 🚀
 
-* refactor: clean up verbose logs in table, text, and multiqc components [ebb6c18e]
-* refactor: clean up stepper verbose logs and add guards for None values [0a62c5af]
-* refactor: clean up logging and fix edit-page-context error [f2b4ff63]
-* refactor: remove verbose debug/info logs for cleaner output [7ceea3de]
-
-#### Chores 🧹
-
-* ci: use content-based hash for Docker image tags [aa9da340]
-
-#### Documentation Updates 📚
-
-* docs: add key features to README [2550b686]
+* refactor: move API docs workflow to depictio-docs repo [037df501]
 
 #### Other Changes 📝
 
-* Bump version: 0.6.0-b4 → 0.6.0-b5 [2378700f]
-* Bump version: 0.6.0-b4 → 0.6.0-b4 [ab8e0dc9]
-* fix(e2e): handle viewer user access restrictions in permissions test [e2c06764]
-* ci(helm): add separate log steps for backend, frontend, celery [2dcabb14]
-* Revert docs: add key features to README [8619fd64]
-* ci(helm): switch to uv-based Dockerfile for faster builds [8afa0a36]
-* fix(docker): copy VERSION file to Docker images [3a837664]
-* ci(helm): move Celery debugging to upstream monitoring step [778d2bdb]
-* ci(helm): add comprehensive Celery worker debugging [b793fc52]
-* feat(docs): add automated OpenAPI spec extraction for documentation [0173ecc4]
-* refactor(dash): remove verbose runtime logs from frontend callbacks [af750d3f]
-* ci(helm): add Celery worker validation to test-build-push workflow [d36df38c]
-* fix(auth): make triangle background animations visible immediately [6370fc53]
-* feat(helm): add Celery worker deployment for background task processing [c702296c]
-* refactor(dash): clean up logging and remove legacy code [92613ed7]
-* refactor(dash): comprehensive code simplification and modularization [bbf8395e]
-* feat(docker): add healthchecks and restart policies for production readiness [89e8522a]
-* refactor(dash): simplify figure and table component callbacks [b83ecf0d]
-* refactor(dash): extract helpers and fix type safety [04925c78]
-* refactor(dash): simplify code and add comprehensive docstrings [44dee8c7]
-* Update CHANGELOG.md for v0.6.0-b4 [7ae92266]
-* Bump version: 0.6.0-b3 → 0.6.0-b4 [b212f110]
-* fix(tests): remove test file for deleted join functions [c5c6fad8]
-* refactor(api): simplify code and fix ty errors [ae9d5f21]
+* Bump version: 0.6.0-b6 → 0.6.0-b7 [1e88518a]
+* feat(dash): add fullscreen mode for figure components [0fe66bd8]
+* fix(ci): add tag push trigger to update-api-docs workflow [25856c56]
+* perf(save): move screenshot generation to background Celery task [81ce338d]
+* refactor(save): remove 700+ lines of commented backup code [ea91dbb6]
+* Update CHANGELOG.md for v0.6.0-b5 [bf0c4805]
+* Bump version: 0.6.0-b4 → 0.6.0-b5 [72ed264d]
 
 
 </details>
@@ -80,69 +31,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ecessary triggers [e80e57d2]
-* refactor: Simplify header visibility management by converting to clientside callback and removing performance debug logs [243d10c2]
-* refactor: Move theme callbacks to clientside for improved responsiveness and logging [54409c11]
-* refactor: Enhance token management with caching for purge and validity checks to reduce API calls [696748d1]
-
-#### Chores 🧹
-
-* chore: ampliseq def refmt [bee2b8c8]
-* chore: Refactor MultiQC exploration notebook and add metadata for tools [ae3856c1]
-* chore: ampliseq def refmt [03cc2d49]
-* chore: Refactor MultiQC exploration notebook and add metadata for tools [0e3ff7e1]
-
-#### Other Changes 📝
-
-* Bump version: 0.4.0 → 0.5.0 [5c0d1a54]
-* Refactor tests and update configurations [04627153]
-* Update CLAUDE.md [dc8fd65c]
-* Fix shellcheck warnings in run_dash.sh [bba11bae]
-* Add MultiQC Metadata Loader and Refactor Table Implementation [63467d5f]
-* Add MultiQC API exploration notebook for data analysis and visualization [bd02ad59]
-* Update CHANGELOG.md for v0.4.0 [098c2c1a]
-* Bump version: 0.4.0-b3 → 0.4.0 [1b0aedf2]
-* Refactor tests and update configurations [3ad89be6]
-* Update CLAUDE.md [a6447810]
-* Fix shellcheck warnings in run_dash.sh [ba44f3ef]
-* Add MultiQC Metadata Loader and Refactor Table Implementation [73788294]
-* Add MultiQC API exploration notebook for data analysis and visualization [2287a929]
-* Update CHANGELOG.md for v0.4.0-b3 [6529adfb]
-* Bump version: 0.4.0-b2 → 0.4.0-b3 [a1539860]
-* Initiial MultiQC data extraction and reporting modules [1365ef48]
-
-
-</details>
-
-### Documentation 📖
-
-For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
-
-ecessary triggers [e80e57d2]
-* refactor: Simplify header visibility management by converting to clientside callback and removing performance debug logs [243d10c2]
-* refactor: Move theme callbacks to clientside for improved responsiveness and logging [54409c11]
-* refactor: Enhance token management with caching for purge and validity checks to reduce API calls [696748d1]
-
-#### Other Changes 📝
-
-* Bump version: 0.4.0-b3 → 0.4.0 [cbeb06ac]
-* Update CHANGELOG.md for v0.4.0-b3 [6529adfb]
-* Bump version: 0.4.0-b2 → 0.4.0-b3 [a1539860]
-* Initiial MultiQC data extraction and reporting modules [1365ef48]
-
-
-</details>
-
-### Documentation 📖
-
-For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
-
-ecessary state management to improve performance and maintainability [558a611b]
-* refactor: Remove unused layout CSS import to streamline styles [db7bf11c]
-* refactor: Enhance logging in load_deltatable_lite for better debugging and monitoring of DataFrame sizes [64313e1e]
-* refactor: Clean up imports and comment out size attribute for badges in dashboard management [c8182960]
-* refactor: Remove unused CSS for slider components to streamline styles and improve maintainability [77f544e9]
-* refactor: Update component button configurations to streamline functionality and remove unnecessary reset button [dd437f42]
+ecessary reset button [dd437f42]
 * refactor: Handle multiple components returned from design functions in modal body [1896704f]
 * refactor: Enhance offcanvas toggle functionality to manage footer visibility and page class updates [4da1d168]
 * refactor: Enhance logging for schema validation in interactive components and add border option in Paper component [172178e5]
