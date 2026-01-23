@@ -380,7 +380,11 @@ def register_interactive_design_callbacks(app) -> None:
         TOKEN = local_data["access_token"]
 
         # In edit mode, get workflow/dc IDs from edit context
-        if edit_context and (not workflow_id or not data_collection_id):
+        if (
+            edit_context
+            and isinstance(edit_context, dict)
+            and (not workflow_id or not data_collection_id)
+        ):
             component_data = edit_context.get("component_data", {})
             if component_data:
                 workflow_id = workflow_id or component_data.get("wf_id")
