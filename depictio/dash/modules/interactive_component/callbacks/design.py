@@ -337,9 +337,11 @@ def register_interactive_design_callbacks(app) -> None:
         Output({"type": "input-dropdown-method", "index": MATCH}, "data"),
         [
             Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
-            Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
-            Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             Input("edit-page-context", "data"),
+        ],
+        [
+            State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             State({"type": "input-dropdown-method", "index": MATCH}, "id"),
             State("local-store", "data"),
         ],
