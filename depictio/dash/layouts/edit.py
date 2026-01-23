@@ -243,6 +243,7 @@ def _create_component_buttons(
     create_duplicate_button,
     create_reset_button,
     create_export_button,
+    create_fullscreen_button,
     create_alignment_button=None,
     create_metadata_button=None,
     create_partial_data_warning_button=None,
@@ -281,9 +282,9 @@ def _create_component_buttons(
         "figure": {
             "orientation": "vertical",
             "edit_only": ["drag", "duplicate", "edit", "remove"],
-            "view_accessible": ["metadata"],
+            "view_accessible": ["fullscreen", "metadata"],
             "scatter_edit_only": ["partial_data", "drag", "duplicate", "edit", "remove"],
-            "scatter_view_accessible": ["metadata", "reset"],
+            "scatter_view_accessible": ["fullscreen", "metadata", "reset"],
         },
         "interactive": {
             "orientation": "horizontal",
@@ -347,6 +348,9 @@ def _create_component_buttons(
         "reset": create_reset_button,
         "export": create_export_button,
     }
+
+    # Add fullscreen button
+    button_functions["fullscreen"] = create_fullscreen_button
 
     # Add alignment button only if the function is provided
     if create_alignment_button is not None:
@@ -569,6 +573,18 @@ def enable_box_edit_mode(
             size="sm",
             radius=0,  # Remove border radius
             children=DashIconify(icon="mdi:download", width=16, color="white"),
+            n_clicks=0,  # Required for callback to trigger properly
+        )
+
+    def create_fullscreen_button():
+        """Create fullscreen toggle button for figure component."""
+        return dmc.ActionIcon(
+            id={"type": "chart-fullscreen-btn", "index": f"{btn_index}"},
+            color="indigo",
+            variant="filled",
+            size="sm",
+            radius=0,  # Remove border radius
+            children=DashIconify(icon="mdi:fullscreen", width=16, color="white"),
             n_clicks=0,  # Required for callback to trigger properly
         )
 
@@ -874,6 +890,7 @@ def enable_box_edit_mode(
         create_duplicate_button,
         create_reset_button,
         create_export_button,
+        create_fullscreen_button,
         create_alignment_button,
         create_metadata_button,
         partial_data_button_func,

@@ -11,7 +11,6 @@ This module handles:
 from typing import Any
 
 from dash import MATCH, Input, Output, State, html
-from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
 
@@ -32,45 +31,87 @@ def register_fullscreen_callbacks(app: Any) -> None:
             console.log('🖥️ Fullscreen button clicked:', n_clicks, 'Button ID:', button_id);
 
             if (!n_clicks || n_clicks === 0) {
+                console.log('🖥️ No clicks yet, skipping');
                 return window.dash_clientside.no_update;
             }
 
-            const buttonIdStr = JSON.stringify(button_id);
-            const button = document.querySelector(`[id='${buttonIdStr}']`);
+            // Extract the index from the button_id object
+            const componentIndex = button_id.index;
+            console.log('🖥️ Component index:', componentIndex);
+
+            // Find all buttons with type "chart-fullscreen-btn" and match by index
+            // Dash renders pattern-matching IDs as JSON strings in the id attribute
+            const allButtons = document.querySelectorAll('button[id*="chart-fullscreen-btn"]');
+            console.log('🖥️ Found', allButtons.length, 'fullscreen buttons');
+
+            let button = null;
+            for (let btn of allButtons) {
+                const btnIdStr = btn.getAttribute('id');
+                try {
+                    const btnId = JSON.parse(btnIdStr);
+                    if (btnId.index === componentIndex) {
+                        button = btn;
+                        break;
+                    }
+                } catch (e) {
+                    // Skip if not valid JSON
+                    continue;
+                }
+            }
+
             if (!button) {
-                console.error('🖥️ Button not found:', button_id);
+                console.error('🖥️ Button not found for index:', componentIndex);
                 return window.dash_clientside.no_update;
             }
 
-            console.log('🖥️ Button found:', button);
+            console.log('🖥️ Button element found:', button);
 
-            // Navigate up the DOM to find the figure container
-            let container = button.parentElement;
-            while (container && !container.classList.contains('figure-container') && container.tagName !== 'BODY') {
-                container = container.parentElement;
-            }
-
-            if (!container || container.tagName === 'BODY') {
-                // Fallback - look for any parent that could be the chart container
-                container = button.parentElement;
-            }
-
-            // Also find the react-grid-item parent for grid layout support
+            // Find the react-grid-item parent (button is now in ActionIconGroup in edit mode)
             let gridItem = button.closest('.react-grid-item');
 
-            // Toggle fullscreen
-            if (container.classList.contains('chart-fullscreen')) {
+            if (!gridItem) {
+                console.error('🖥️ Could not find react-grid-item parent');
+                // Try finding it differently - maybe we're in a different structure
+                gridItem = button.closest('[id^="box-"]');
+                if (!gridItem) {
+                    console.error('🖥️ Still could not find grid item');
+                    return window.dash_clientside.no_update;
+                }
+            }
+
+            console.log('🖥️ Grid item found:', gridItem);
+
+            // Find the figure container within the grid item
+            // Priority: figure-container > dashboard-component-hover > content div
+            let container = gridItem.querySelector('.figure-container');
+
+            if (!container) {
+                console.log('🖥️ No .figure-container, trying .dashboard-component-hover');
+                container = gridItem.querySelector('.dashboard-component-hover');
+            }
+
+            if (!container) {
+                console.log('🖥️ No .dashboard-component-hover, trying content div');
+                container = gridItem.querySelector('[id^="content-"]');
+            }
+
+            if (!container) {
+                console.error('🖥️ Could not find any suitable container');
+                return window.dash_clientside.no_update;
+            }
+
+            console.log('🖥️ Container found:', container.className, container.id);
+
+            // Toggle fullscreen - apply to gridItem for true fullscreen
+            if (gridItem.classList.contains('chart-fullscreen')) {
                 // Exit fullscreen
                 console.log('Exiting fullscreen');
-                container.classList.remove('chart-fullscreen');
+                gridItem.classList.remove('chart-fullscreen');
+                gridItem.classList.remove('fullscreen-active');
                 document.body.classList.remove('fullscreen-mode');
 
-                if (gridItem) {
-                    gridItem.classList.remove('fullscreen-active');
-                }
-
                 // Reset all styles to original state
-                container.style.cssText = container.getAttribute('data-original-style') || '';
+                gridItem.style.cssText = gridItem.getAttribute('data-original-style') || '';
 
                 // Reset body overflow
                 document.body.style.overflow = '';
@@ -81,8 +122,8 @@ def register_fullscreen_callbacks(app: Any) -> None:
 
                 graphs.forEach((graph, index) => {
                     // Get stored original dimensions
-                    const storedWidth = container.getAttribute(`data-graph-${index}-width`);
-                    const storedHeight = container.getAttribute(`data-graph-${index}-height`);
+                    const storedWidth = gridItem.getAttribute(`data-graph-${index}-width`);
+                    const storedHeight = gridItem.getAttribute(`data-graph-${index}-height`);
 
                     console.log(`Restoring graph ${index} to stored size:`, storedWidth, 'x', storedHeight);
 
@@ -119,8 +160,8 @@ def register_fullscreen_callbacks(app: Any) -> None:
                 // Clean up stored dimensions after a delay
                 setTimeout(() => {
                     graphs.forEach((_, index) => {
-                        container.removeAttribute(`data-graph-${index}-width`);
-                        container.removeAttribute(`data-graph-${index}-height`);
+                        gridItem.removeAttribute(`data-graph-${index}-width`);
+                        gridItem.removeAttribute(`data-graph-${index}-height`);
                     });
                 }, 500);
 
@@ -129,32 +170,33 @@ def register_fullscreen_callbacks(app: Any) -> None:
                 console.log('Entering fullscreen');
 
                 // Store original styles AND graph dimensions before modifying
-                container.setAttribute('data-original-style', container.style.cssText);
+                gridItem.setAttribute('data-original-style', gridItem.style.cssText);
 
                 // Store current graph dimensions
                 const graphs = container.querySelectorAll('.js-plotly-plot');
                 graphs.forEach((graph, index) => {
                     const rect = graph.getBoundingClientRect();
-                    container.setAttribute(`data-graph-${index}-width`, rect.width);
-                    container.setAttribute(`data-graph-${index}-height`, rect.height);
+                    gridItem.setAttribute(`data-graph-${index}-width`, rect.width);
+                    gridItem.setAttribute(`data-graph-${index}-height`, rect.height);
                     console.log(`Storing graph ${index} current size before fullscreen:`, rect.width, 'x', rect.height);
                 });
 
-                container.classList.add('chart-fullscreen');
+                // Apply fullscreen to gridItem (not container) to break out of grid layout
+                gridItem.classList.add('chart-fullscreen');
+                gridItem.classList.add('fullscreen-active');
                 document.body.classList.add('fullscreen-mode');
 
-                if (gridItem) {
-                    gridItem.classList.add('fullscreen-active');
-                }
-
-                container.style.position = 'fixed';
-                container.style.top = '0';
-                container.style.left = '0';
-                container.style.width = '100vw';
-                container.style.height = '100vh';
-                container.style.zIndex = '9999';
-                container.style.backgroundColor = 'var(--app-bg-color, #ffffff)';
-                container.style.padding = '20px';
+                // Apply fullscreen styles to gridItem
+                gridItem.style.position = 'fixed';
+                gridItem.style.top = '0';
+                gridItem.style.left = '0';
+                gridItem.style.width = '100vw';
+                gridItem.style.height = '100vh';
+                gridItem.style.zIndex = '9999';
+                gridItem.style.backgroundColor = 'var(--app-bg-color, #ffffff)';
+                gridItem.style.padding = '20px';
+                gridItem.style.margin = '0';
+                gridItem.style.transform = 'none';  // Override grid transform
 
                 document.body.style.overflow = 'hidden';
 
@@ -208,41 +250,15 @@ def register_fullscreen_callbacks(app: Any) -> None:
 
 def create_fullscreen_button(chart_index: str) -> html.Button:
     """
-    Create a fullscreen button for a chart component.
+    DEPRECATED: This function is no longer used.
 
-    Args:
-        chart_index: Index of the chart component
+    Fullscreen buttons are now created in depictio.dash.layouts.edit.py as part of
+    the component action icon group (alongside edit, remove, metadata buttons).
 
-    Returns:
-        html.Button: Fullscreen button component
+    This function is kept for backwards compatibility but should not be called.
     """
-    return html.Button(
-        DashIconify(icon="mdi:fullscreen", width=18),
-        id={"type": "chart-fullscreen-btn", "index": chart_index},
-        n_clicks=0,
-        style={
-            "position": "absolute",
-            "top": "8px",
-            "right": "8px",
-            "background": "rgba(0, 0, 0, 0.7)",
-            "color": "white",
-            "border": "none",
-            "borderRadius": "4px",
-            "padding": "5px",
-            "cursor": "pointer",
-            "fontSize": "16px",
-            "boxShadow": "0 2px 4px rgba(0,0,0,0.1)",
-            "zIndex": "1000",
-            "display": "flex",
-            "alignItems": "center",
-            "justifyContent": "center",
-            "width": "32px",
-            "height": "32px",
-            "opacity": "0",
-            "transition": "opacity 0.2s ease",
-        },
-        className="chart-fullscreen-btn",
-    )
+    # Return empty div - button is created in edit.py now
+    return html.Div()
 
 
 def get_fullscreen_css() -> str:

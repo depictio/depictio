@@ -2,54 +2,11 @@
    FIGURE COMPONENT FULLSCREEN MODE
    ============================================================================= */
 
-/* Chart fullscreen button - hidden by default, visible on paper hover */
-.chart-fullscreen-btn {
-    opacity: 0 !important;
-    transition: opacity 0.2s ease !important;
-}
+/* Chart fullscreen button - no special styling needed, uses DMC ActionIcon styles */
+/* Button is now part of the ActionIconGroup in edit.py and inherits group styling */
 
-/* Show button when hovering over the figure container */
-.figure-container:hover .chart-fullscreen-btn {
-    opacity: 1 !important;
-}
-
-/* Also show on react-grid-item hover (for grid layouts) */
-.react-grid-item:hover .chart-fullscreen-btn {
-    opacity: 1 !important;
-}
-
-/* Always show button when in fullscreen mode */
-.chart-fullscreen .chart-fullscreen-btn {
-    opacity: 1 !important;
-    background: rgba(0, 0, 0, 0.8) !important;
-}
-
-/* Button styling */
-button[id*="chart-fullscreen-btn"] {
-    position: absolute !important;
-    top: 8px !important;
-    right: 8px !important;
-    z-index: 1000 !important;
-    background: rgba(0, 0, 0, 0.7) !important;
-    color: white !important;
-    border: none !important;
-    border-radius: 4px !important;
-    width: 32px !important;
-    height: 32px !important;
-    cursor: pointer !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    padding: 0 !important;
-    transition: all 0.2s ease !important;
-}
-
-button[id*="chart-fullscreen-btn"]:hover {
-    background: rgba(0, 0, 0, 0.9) !important;
-    transform: scale(1.05) !important;
-}
-
-/* Style the active fullscreen figure component */
+/* Style the active fullscreen figure component - applied to grid item */
+.react-grid-item.chart-fullscreen,
 .chart-fullscreen {
     position: fixed !important;
     top: 0 !important;
@@ -64,6 +21,7 @@ button[id*="chart-fullscreen-btn"]:hover {
     max-width: none !important;
     max-height: none !important;
     padding: 20px !important;
+    margin: 0 !important;
     display: flex !important;
     flex-direction: column !important;
     overflow: hidden !important;
@@ -76,20 +34,8 @@ button[id*="chart-fullscreen-btn"]:hover {
     flex: 1 !important;
 }
 
-/* Enhance fullscreen button visibility in fullscreen mode */
-.chart-fullscreen button[id*="chart-fullscreen-btn"] {
-    background: rgba(0, 0, 0, 0.9) !important;
-    color: white !important;
-    border: 2px solid rgba(255, 255, 255, 0.4) !important;
-    width: 40px !important;
-    height: 40px !important;
-}
-
-.chart-fullscreen button[id*="chart-fullscreen-btn"]:hover {
-    background: rgba(255, 255, 255, 0.1) !important;
-    border-color: rgba(255, 255, 255, 0.6) !important;
-    transform: scale(1.1) !important;
-}
+/* Fullscreen button maintains its DMC ActionIcon appearance - no special styling needed */
+/* The button inherits ActionIconGroup styles consistently in both normal and fullscreen modes */
 
 /* Hide all grid items when in fullscreen mode except the active one */
 body.fullscreen-mode .react-grid-item:not(.fullscreen-active) {
