@@ -920,9 +920,6 @@ def _build_slider_kwargs(
             "track": {
                 "minWidth": "50px",
             },
-            "markLabel": {
-                "color": "var(--mantine-color-text)",
-            },
         },
     }
 
@@ -1046,7 +1043,12 @@ def _add_slider_marks(
                 mark_val = float(mark_value)
                 tolerance = 1e-9
                 if (min_value - tolerance) <= mark_val <= (max_value + tolerance):
-                    dmc_marks.append({"value": mark_val, "label": str(label)})
+                    dmc_marks.append(
+                        {
+                            "value": mark_val,
+                            "label": dmc.Text(str(label), size="xs", c="dimmed"),
+                        }
+                    )
                 else:
                     pass
             except (ValueError, TypeError) as e:
