@@ -1046,7 +1046,7 @@ def _add_slider_marks(
                     dmc_marks.append(
                         {
                             "value": mark_val,
-                            "label": dmc.Text(str(label), size="xs", c="dimmed"),
+                            "label": dmc.Text(str(label), size="xs"),
                         }
                     )
                 else:
