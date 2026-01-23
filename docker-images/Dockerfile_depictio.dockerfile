@@ -74,6 +74,7 @@ RUN /opt/conda/envs/depictio/bin/pip install psutil
 COPY ./docker-images/run_dash.sh /app/run_dash.sh
 COPY ./docker-images/run_fastapi.sh /app/run_fastapi.sh
 COPY ./pyproject.toml /app/pyproject.toml
+COPY ./VERSION /app/VERSION
 COPY ./depictio /app/depictio
 
 # Change ownership of the scripts and app directory to the non-root user
