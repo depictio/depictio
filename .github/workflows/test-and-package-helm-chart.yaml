@@ -5,13 +5,13 @@ on:
     branches: [ main ]
     paths:
       - "helm-charts/depictio/**"
-      - "docker-images/Dockerfile_depictio.dockerfile"
+      - "docker-images/Dockerfile_depictio_uv.dockerfile"
       - ".github/workflows/test-and-package-helm-chart.yaml"
   pull_request:
     branches: [ main ]
     paths:
       - "helm-charts/depictio/**"
-      - "docker-images/Dockerfile_depictio.dockerfile"
+      - "docker-images/Dockerfile_depictio_uv.dockerfile"
       - ".github/workflows/test-and-package-helm-chart.yaml"
   workflow_dispatch:
 
@@ -96,7 +96,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: docker-images/Dockerfile_depictio.dockerfile
+          file: docker-images/Dockerfile_depictio_uv.dockerfile
           platforms: linux/amd64
           push: true
           load: false
