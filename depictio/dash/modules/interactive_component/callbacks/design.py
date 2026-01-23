@@ -343,7 +343,7 @@ def register_interactive_design_callbacks(app) -> None:
             State({"type": "input-dropdown-method", "index": MATCH}, "id"),
             State("local-store", "data"),
         ],
-        prevent_initial_call=False,
+        prevent_initial_call=True,
     )
     def update_aggregation_options(
         column_value, workflow_id, data_collection_id, edit_context, id, local_data
