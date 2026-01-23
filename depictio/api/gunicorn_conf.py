@@ -10,7 +10,7 @@ access_log_format = '%(h)s "%(m)s %(U)s" %(s)s %(b)s'
 errorlog = "-"
 loglevel = "info"
 
-# Uvicorn log config - disable Uvicorn's access logging (we'll use middleware)
+# Uvicorn log config
 logconfig_dict = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -20,7 +20,7 @@ logconfig_dict = {
             "fmt": "%(levelprefix)s %(message)s",
         },
         "access": {
-            "()": "depictio.api.logging_config.MaskedAccessFormatter",
+            "()": "uvicorn.logging.AccessFormatter",
             "fmt": '%(levelprefix)s %(client_addr)s - "%(request_line)s" %(status_code)s',
         },
     },
@@ -35,6 +35,10 @@ logconfig_dict = {
             "class": "logging.StreamHandler",
             "stream": "ext://sys.stdout",
         },
+    },
+    "root": {
+        "handlers": ["default"],
+        "level": "INFO",
     },
     "loggers": {
         "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
