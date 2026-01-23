@@ -431,7 +431,6 @@ def get_reference_value_from_cols_json(cols_json, column_name, aggregation):
     # Extract the value
     reference_value = column_specs.get(cols_json_field)
     if reference_value is not None:
-        logger.debug(f"Found reference value for {column_name}.{aggregation}: {reference_value}")
         return reference_value
     else:
         logger.debug(f"Field '{cols_json_field}' not found in column specs for '{column_name}'")
@@ -477,7 +476,6 @@ def compute_value(data, column_name, aggregation, cols_json=None, has_filters=Fa
     if not has_filters and cols_json:
         reference_value = get_reference_value_from_cols_json(cols_json, column_name, aggregation)
         if reference_value is not None:
-            logger.debug(f"✅ Using pre-computed value: {reference_value} (saved computation)")
             return reference_value
 
     # OPTIMIZATION 2: Use Polars native operations (avoid pandas conversion)
@@ -601,6 +599,329 @@ def compute_value(data, column_name, aggregation, cols_json=None, has_filters=Fa
     return new_value
 
 
+# ============================================================================
+# BUILD_CARD HELPER FUNCTIONS
+# ============================================================================
+
+
+def _resolve_card_styles(
+    column_name: str | None,
+    metric_theme: str | None,
+    background_color: str | None,
+    title_color: str | None,
+    icon_name: str | None,
+    icon_color: str | None,
+) -> dict:
+    """
+    Resolve card styling from theme and individual parameters.
+
+    Args:
+        column_name: Column name for auto-theme detection
+        metric_theme: Explicit metric theme name
+        background_color: Explicit background color
+        title_color: Explicit title color
+        icon_name: Explicit icon name
+        icon_color: Explicit icon color
+
+    Returns:
+        Dictionary with resolved style values
+    """
+    # Auto-detect theme if not provided and no individual styles set
+    if not metric_theme and not any([background_color, title_color, icon_name]):
+        if column_name:
+            metric_theme = detect_metric_theme(column_name)
+        else:
+            metric_theme = "default"
+
+    # Extract styles from theme if metric_theme is provided
+    if metric_theme and metric_theme != "default":
+        theme_config = METRIC_THEMES.get(metric_theme, METRIC_THEMES["default"])
+        resolved_bg = background_color or theme_config["background"]
+        resolved_title = title_color or theme_config["text_color"]
+        resolved_icon = icon_name or theme_config["icon"]
+        resolved_icon_color = icon_color or theme_config["icon_color"]
+        logger.debug(f"Using metric theme '{metric_theme}' for column '{column_name}'")
+    else:
+        # No theme - use individual parameters with DMC defaults
+        resolved_bg = background_color
+        resolved_title = title_color
+        resolved_icon = icon_name or "mdi:chart-line"
+        resolved_icon_color = icon_color
+        logger.debug(f"Using DMC theme-compliant styling for column '{column_name}'")
+
+    return {
+        "background_color": resolved_bg,
+        "title_color": resolved_title,
+        "icon_name": resolved_icon,
+        "icon_color": resolved_icon_color,
+        "metric_theme": metric_theme,
+    }
+
+
+def _create_card_stores(
+    index: str,
+    store_index: str,
+    data_index: str,
+    wf_id: str | None,
+    dc_id: str | None,
+    title: str,
+    column_name: str | None,
+    column_type: str | None,
+    aggregation: str | None,
+    value: any,
+    parent_index: str | None,
+    styles: dict,
+    color: str | None,
+    stepper: bool,
+    title_font_size: str,
+    value_font_size: str,
+    project_id: str | None = None,
+) -> tuple:
+    """
+    Create the store components for card metadata and triggering.
+
+    Args:
+        project_id: Project ID for cross-DC link resolution
+
+    Returns:
+        Tuple of (store_component, trigger_store, metadata_store, metadata_initial_store)
+    """
+    # Component metadata store (for dashboard save/restore)
+    store_component = dcc.Store(
+        id={
+            "type": "stored-metadata-component",
+            "index": str(store_index),
+        },
+        data={
+            "index": str(data_index),
+            "component_type": "card",
+            "title": title,
+            "wf_id": wf_id,
+            "dc_id": dc_id,
+            "project_id": project_id,  # For cross-DC link resolution
+            "aggregation": aggregation,
+            "column_type": column_type,
+            "column_name": column_name,
+            "value": value,
+            "parent_index": parent_index,
+            "metric_theme": styles["metric_theme"],
+            "background_color": styles["background_color"],
+            "title_color": styles["title_color"],
+            "icon_name": styles["icon_name"],
+            "icon_color": styles["icon_color"],
+            "title_font_size": title_font_size,
+            "value_font_size": value_font_size,
+        },
+    )
+
+    # Trigger store - initiates async rendering
+    trigger_store = dcc.Store(
+        id={
+            "type": "card-trigger",
+            "index": str(index),
+        },
+        data={
+            "wf_id": wf_id,
+            "dc_id": dc_id,
+            "column_name": column_name,
+            "column_type": column_type,
+            "aggregation": aggregation,
+            "title": title,
+            "color": color,
+            "stepper": stepper,
+            "metric_theme": styles["metric_theme"],
+            "background_color": styles["background_color"],
+            "title_color": styles["title_color"],
+            "icon_name": styles["icon_name"],
+            "icon_color": styles["icon_color"],
+            "title_font_size": title_font_size,
+            "value_font_size": value_font_size,
+        },
+    )
+
+    # Metadata store - for callbacks (reference values, etc.)
+    metadata_store = dcc.Store(
+        id={
+            "type": "card-metadata",
+            "index": str(index),
+        },
+        data={},
+    )
+
+    # Initial metadata store - for render callback
+    metadata_initial_store = dcc.Store(
+        id={
+            "type": "card-metadata-initial",
+            "index": str(index),
+        },
+        data={},
+    )
+
+    return store_component, trigger_store, metadata_store, metadata_initial_store
+
+
+def _create_icon_overlay(icon_name: str, icon_color: str | None) -> list:
+    """
+    Create the icon overlay component for the card.
+
+    Args:
+        icon_name: Icon name from Iconify
+        icon_color: Optional icon color
+
+    Returns:
+        List containing the icon overlay group
+    """
+    icon_style = {
+        "opacity": "0.3",
+        "position": "absolute",
+        "right": "10px",
+        "top": "10px",
+    }
+
+    dashiconify_kwargs = {
+        "icon": icon_name,
+        "width": 40,
+        "style": icon_style.copy(),
+    }
+    if icon_color:
+        dashiconify_kwargs["style"]["color"] = icon_color
+
+    return [
+        dmc.Group(
+            [DashIconify(**dashiconify_kwargs)],
+            style={"position": "relative"},
+        )
+    ]
+
+
+def _create_card_content(
+    index: str,
+    card_title: str,
+    display_value: any,
+    styles: dict,
+    title_font_size: str,
+    value_font_size: str,
+    stores: tuple,
+) -> list:
+    """
+    Create the card content including title, value, and comparison containers.
+
+    Args:
+        index: Component index
+        card_title: Display title for the card
+        display_value: Value to display (or loading skeleton)
+        styles: Resolved style dictionary
+        title_font_size: Font size for title
+        value_font_size: Font size for value
+        stores: Tuple of store components
+
+    Returns:
+        List of card content components
+    """
+    store_component, trigger_store, metadata_store, metadata_initial_store = stores
+
+    # Create icon overlay
+    icon_overlay = _create_icon_overlay(styles["icon_name"], styles["icon_color"])
+
+    # Build title text kwargs
+    title_text_kwargs = {
+        "children": card_title,
+        "size": title_font_size,
+        "fw": "bold",
+        "style": {"margin": "0", "marginLeft": "-2px"},
+    }
+    if styles["title_color"]:
+        title_text_kwargs["c"] = styles["title_color"]
+
+    # Build value text style
+    value_text_style = {"margin": "0", "marginLeft": "-2px"}
+    if styles["title_color"]:
+        value_text_style["color"] = styles["title_color"]
+
+    return [
+        *icon_overlay,
+        dmc.Text(**title_text_kwargs),
+        dmc.Text(
+            display_value,
+            size=value_font_size,
+            fw="bold",
+            id={
+                "type": "card-value",
+                "index": str(index),
+            },
+            style=value_text_style,
+        ),
+        # Comparison container - populated by patching callback
+        dmc.Group(
+            [],
+            id={
+                "type": "card-comparison",
+                "index": str(index),
+            },
+            gap="xs",
+            align="center",
+            justify="flex-start",
+            style={"margin": "0", "marginLeft": "-2px"},
+        ),
+        store_component,
+        trigger_store,
+        metadata_store,
+        metadata_initial_store,
+    ]
+
+
+def _build_card_component(
+    index: str,
+    card_content: list,
+    background_color: str | None,
+) -> dmc.Card:
+    """
+    Build the final DMC Card component with proper styling.
+
+    Args:
+        index: Component index
+        card_content: List of card content components
+        background_color: Background color (None for DMC theme)
+
+    Returns:
+        DMC Card component
+    """
+    has_custom_styling = background_color is not None
+    card_radius = "8px" if has_custom_styling else "sm"
+    card_padding = "1rem" if has_custom_styling else "xs"
+
+    card_section_kwargs = {
+        "children": card_content,
+        "bdrs": card_radius,
+        "p": card_padding,
+        "style": {
+            "height": "100%",
+            "display": "flex",
+            "flexDirection": "column",
+            "justifyContent": "center",
+        },
+    }
+    if background_color:
+        card_section_kwargs["bg"] = background_color
+
+    card_style = {
+        "boxSizing": "content-box",
+        "height": "100%",
+        "minHeight": "120px",
+    }
+
+    return dmc.Card(
+        children=[dmc.CardSection(**card_section_kwargs)],
+        withBorder=True,
+        shadow="sm",
+        style=card_style,
+        id={
+            "type": "card",
+            "index": str(index),
+        },
+    )
+
+
 def build_card_frame(index, children=None, show_border=False):
     if not children:
         return dmc.Paper(
@@ -698,11 +1019,12 @@ def build_card(**kwargs):
     - {"type": "card-comparison", "index": component_id} - Shows filter comparison
     - {"type": "card-metadata", "index": component_id} - Stores reference data
     """
-    # DUPLICATION TRACKING: Log card component builds
     logger.info(
-        f"🔍 BUILD CARD CALLED - Index: {kwargs.get('index', 'UNKNOWN')}, Stepper: {kwargs.get('stepper', False)}"
+        f"BUILD CARD CALLED - Index: {kwargs.get('index', 'UNKNOWN')}, "
+        f"Stepper: {kwargs.get('stepper', False)}"
     )
 
+    # Extract parameters
     index = kwargs.get("index")
     title = kwargs.get("title", "Default Title")
     wf_id = kwargs.get("wf_id")
@@ -710,30 +1032,15 @@ def build_card(**kwargs):
     column_name = kwargs.get("column_name")
     column_type = kwargs.get("column_type")
     aggregation = kwargs.get("aggregation")
-    v = kwargs.get("value")  # Legacy support - may still be provided
+    v = kwargs.get("value")
     build_frame = kwargs.get("build_frame", False)
     stepper = kwargs.get("stepper", False)
     color = kwargs.get("color", None)
-    # SECURITY: access_token removed - no longer stored in component metadata
     parent_index = kwargs.get("parent_index", None)
     metric_theme = kwargs.get("metric_theme", None)
-
-    # DASHBOARD OPTIMIZATION: Extract init_data for API call elimination
     init_data = kwargs.get("init_data", None)
-    logger.debug(f"Init data provided: {init_data is not None}")
 
-    # REFACTORING: cols_json and dc_config no longer stored in component metadata
-    # Callbacks access these directly from dashboard-init-data store via State input
-    # This eliminates per-component data duplication and reduces payload size
-    if init_data:
-        logger.info(
-            f"📡 CARD OPTIMIZATION: init_data available with {len(init_data.get('column_specs', {}))} column_specs"
-        )
-    else:
-        logger.debug("⚠️  init_data not available (edit mode or stepper mode)")
-
-    # New individual style parameters
-    # Convert empty strings to None for DMC theme compliance
+    # Style parameters (convert empty strings to None for DMC compliance)
     background_color = kwargs.get("background_color") or None
     title_color = kwargs.get("title_color") or None
     icon_name = kwargs.get("icon_name", None)
@@ -741,51 +1048,24 @@ def build_card(**kwargs):
     title_font_size = kwargs.get("title_font_size", "md")
     value_font_size = kwargs.get("value_font_size", "xl")
 
-    # Backward compatibility: Auto-detect theme if not provided and no individual styles set
-    # Only auto-detect if we don't have explicit style parameters
-    if not metric_theme and not any([background_color, title_color, icon_name]):
-        if column_name:
-            metric_theme = detect_metric_theme(column_name)
-        else:
-            metric_theme = "default"
+    if init_data:
+        logger.info(
+            f"CARD OPTIMIZATION: init_data available with "
+            f"{len(init_data.get('column_specs', {}))} column_specs"
+        )
 
-    # Extract styles from theme if metric_theme is provided (backward compatibility)
-    # Otherwise use individual parameters with DMC theme-aware defaults
-    if metric_theme and metric_theme != "default":
-        theme_config = METRIC_THEMES.get(metric_theme, METRIC_THEMES["default"])
-        # Use individual parameters if provided, otherwise fall back to theme
-        background_color = background_color or theme_config["background"]
-        title_color = title_color or theme_config["text_color"]
-        icon_name = icon_name or theme_config["icon"]
-        icon_color = icon_color or theme_config["icon_color"]
-        logger.debug(f"Using metric theme '{metric_theme}' for column '{column_name}'")
-    else:
-        # No theme - use individual parameters with DMC defaults (None = auto-theme)
-        # DMC compliance: None values let DMC theme system handle colors automatically
-        background_color = background_color  # None or user-specified
-        title_color = title_color  # None or user-specified
-        icon_name = icon_name or "mdi:chart-line"
-        icon_color = icon_color  # None or user-specified
-        logger.debug(f"Using DMC theme-compliant styling for column '{column_name}'")
+    # Resolve styles from theme and individual parameters
+    styles = _resolve_card_styles(
+        column_name, metric_theme, background_color, title_color, icon_name, icon_color
+    )
 
-    if stepper:
-        # Defensive check: only append -tmp if not already present
-        if not str(index).endswith("-tmp"):
-            index = f"{index}-tmp"
-
-    # SIMPLE SKELETON APPROACH: Build actual component with skeleton placeholder
-    # No progressive loading - component renders with skeleton, callback populates it
-    # Removed early return that was showing separate placeholder spinner
-
-    # PATTERN-MATCHING ARCHITECTURE: All data loading and value computation moved to callbacks
-    # This function only creates the UI structure - values populate asynchronously via:
-    # - render_card_value_background() for initial values
-    # - patch_card_with_filters() for filter updates
-    # - update_card_theme() for theme changes
+    # Handle stepper mode index
+    if stepper and not str(index).endswith("-tmp"):
+        index = f"{index}-tmp"
 
     logger.debug(f"Creating card structure for index: {index}")
 
-    # Metadata management
+    # Determine store indices
     if stepper:
         store_index = index
         data_index = index.replace("-tmp", "") if index else "unknown"
@@ -793,89 +1073,25 @@ def build_card(**kwargs):
         store_index = index.replace("-tmp", "") if index else "unknown"
         data_index = store_index
 
-    # Component metadata store (for dashboard save/restore)
-    store_component = dcc.Store(
-        id={
-            "type": "stored-metadata-component",
-            "index": str(store_index),
-        },
-        data={
-            "index": str(data_index),
-            "component_type": "card",
-            "title": title,
-            "wf_id": wf_id,
-            "dc_id": dc_id,
-            "project_id": kwargs.get("project_id"),  # For cross-DC link resolution
-            # REFACTORING: dc_config removed - available via dashboard-init-data
-            "aggregation": aggregation,
-            "column_type": column_type,
-            "column_name": column_name,
-            "value": v,  # Legacy support - may be None for new pattern-matching cards
-            "parent_index": parent_index,
-            "metric_theme": metric_theme,  # Deprecated, kept for backward compatibility
-            # New individual style fields
-            "background_color": background_color,
-            "title_color": title_color,
-            "icon_name": icon_name,
-            "icon_color": icon_color,
-            "title_font_size": title_font_size,
-            "value_font_size": value_font_size,
-        },
-    )
-
-    # PATTERN-MATCHING: Trigger store - initiates async rendering
-    # This store triggers the render_card_value_background callback
-    #
-    # NOTE: Progressive loading components create their own empty trigger Store
-    # via progressive_loading_component.py:136-139. This trigger Store is used
-    # for non-progressive components (stepper mode, direct builds).
-    trigger_store = dcc.Store(
-        id={
-            "type": "card-trigger",
-            "index": str(index),
-        },
-        data={
-            "wf_id": wf_id,
-            "dc_id": dc_id,
-            "column_name": column_name,
-            "column_type": column_type,
-            "aggregation": aggregation,
-            "title": title,
-            "color": color,
-            # SECURITY: access_token removed - accessed from local-store in callbacks
-            "stepper": stepper,
-            "metric_theme": metric_theme,  # Deprecated, kept for backward compatibility
-            # New individual style fields
-            "background_color": background_color,
-            "title_color": title_color,
-            "icon_name": icon_name,
-            "icon_color": icon_color,
-            "title_font_size": title_font_size,
-            "value_font_size": value_font_size,
-            # REFACTORING: cols_json and dc_config removed from component stores
-            # Callbacks access dashboard-init-data store directly via State input
-        },
-    )
-
-    # PATTERN-MATCHING: Metadata store - for callbacks (reference values, etc.)
-    metadata_store = dcc.Store(
-        id={
-            "type": "card-metadata",
-            "index": str(index),
-        },
-        data={},  # Populated by patch callback with has_been_patched flag
-    )
-
-    # PATTERN-MATCHING: Initial metadata store - for render callback
-    # CRITICAL: Separate store to avoid Dash background callback bug with allow_duplicate=True
-    # This store is written ONLY by render_card_value_background (contains reference_value)
-    # Patch callback reads from this store to get reference_value
-    metadata_initial_store = dcc.Store(
-        id={
-            "type": "card-metadata-initial",
-            "index": str(index),
-        },
-        data={},  # Populated by render callback with reference_value
+    # Create store components (includes project_id for cross-DC link resolution)
+    stores = _create_card_stores(
+        index=index,
+        store_index=store_index,
+        data_index=data_index,
+        wf_id=wf_id,
+        dc_id=dc_id,
+        title=title,
+        column_name=column_name,
+        column_type=column_type,
+        aggregation=aggregation,
+        value=v,
+        parent_index=parent_index,
+        styles=styles,
+        color=color,
+        stepper=stepper,
+        title_font_size=title_font_size,
+        value_font_size=value_font_size,
+        project_id=kwargs.get("project_id"),
     )
 
     # Create card title
@@ -883,148 +1099,39 @@ def build_card(**kwargs):
         agg_display = aggregation.title()
     else:
         agg_display = str(aggregation).title() if aggregation else "Unknown"
-
     card_title = title if title else f"{agg_display} of {column_name}"
 
-    # PATTERN-MATCHING ARCHITECTURE: Create card with placeholder content
-    # Actual values will be populated by render_card_value_background callback
-    # Comparison text will be added by patch_card_with_filters callback
-
-    # Use legacy value if provided (for backward compatibility), otherwise show loading skeleton
-    # Simple skeleton loader that will be replaced by callback
+    # Create display value (legacy value or loading skeleton)
     if v is not None:
         display_value = str(v)
     else:
         display_value = html.Span(
-            dmc.Loader(type="dots", size="lg"), style={"textAlign": "center", "padding": "10px"}
+            dmc.Loader(type="dots", size="lg"),
+            style={"textAlign": "center", "padding": "10px"},
         )
 
-    # Add icon overlay (always show icon now, not just for themed cards)
-    # Build icon style (no color - DashIconify uses direct color prop)
-    icon_style = {
-        "opacity": "0.3",
-        "position": "absolute",
-        "right": "10px",
-        "top": "10px",
-    }
+    # Create card content
+    card_content = _create_card_content(
+        index=index,
+        card_title=card_title,
+        display_value=display_value,
+        styles=styles,
+        title_font_size=title_font_size,
+        value_font_size=value_font_size,
+        stores=stores,
+    )
 
-    # Build DashIconify kwargs conditionally - apply color via CSS style to prevent browser freeze
-    dashiconify_kwargs = {
-        "icon": icon_name,
-        "width": 40,
-        "style": icon_style.copy(),  # Copy to avoid mutating the original dict
-    }
-    if icon_color:
-        dashiconify_kwargs["style"]["color"] = icon_color
-
-    icon_overlay_component = [
-        dmc.Group(
-            [
-                DashIconify(**dashiconify_kwargs),
-            ],
-            style={"position": "relative"},
-        )
-    ]
-
-    # Build text components with conditional color props (DMC compliance)
-    # Only set 'c' prop if title_color is specified, otherwise let DMC theme handle it
-    title_text_kwargs = {
-        "children": card_title,
-        "size": title_font_size,
-        "fw": "bold",
-        "style": {"margin": "0", "marginLeft": "-2px"},
-    }
-    if title_color:
-        title_text_kwargs["c"] = title_color
-
-    value_text_style = {"margin": "0", "marginLeft": "-2px"}
-    if title_color:
-        value_text_style["color"] = title_color
-
-    card_content = [
-        *icon_overlay_component,  # Unpack the list here
-        dmc.Text(**title_text_kwargs),
-        dmc.Text(
-            display_value,
-            size=value_font_size,
-            fw="bold",
-            id={
-                "type": "card-value",
-                "index": str(index),
-            },
-            style=value_text_style,
-        ),
-        # PATTERN-MATCHING: Comparison container - populated by patching callback
-        dmc.Group(
-            [],
-            id={
-                "type": "card-comparison",
-                "index": str(index),
-            },
-            gap="xs",
-            align="center",
-            justify="flex-start",
-            style={"margin": "0", "marginLeft": "-2px"},
-        ),
-        # Legacy metadata store (for dashboard save/restore)
-        store_component,
-        # Pattern-matching stores (for async rendering)
-        trigger_store,
-        metadata_store,
-        metadata_initial_store,  # Separate store for render callback (avoids allow_duplicate bug)
-    ]
-    # Removed the conditional insert as icon_overlay_component is now unpacked directly
-
-    # Create the modern card body using DMC Card component
-    # When in stepper mode without frame, use minimal styling to avoid double box
-    # Determine card styling based on whether it's a custom styled card
-    # DMC compliance: Only set bg if background_color is specified (not None)
-    has_custom_styling = background_color is not None
-    card_radius = "8px" if has_custom_styling else "sm"
-    card_padding = "1rem" if has_custom_styling else "xs"
-
-    # Build CardSection kwargs conditionally (DMC compliance)
-    card_section_kwargs = {
-        "children": card_content,
-        "bdrs": card_radius,
-        "p": card_padding,
-        "style": {
-            "height": "100%",
-            "display": "flex",
-            "flexDirection": "column",
-            "justifyContent": "center",
-        },
-    }
-    # Only set bg prop if background_color is specified (DMC theme compliance)
-    if background_color:
-        card_section_kwargs["bg"] = background_color
-
-    # Build the card component with standard styling
-    card_style = {
-        "boxSizing": "content-box",
-        "height": "100%",
-        "minHeight": "120px",
-    }
-
-    new_card_body = dmc.Card(
-        children=[dmc.CardSection(**card_section_kwargs)],
-        withBorder=True,
-        shadow="sm",
-        style=card_style,
-        id={
-            "type": "card",
-            "index": str(index),
-        },
+    # Build the card component
+    new_card_body = _build_card_component(
+        index=index,
+        card_content=card_content,
+        background_color=styles["background_color"],
     )
 
     if not build_frame:
-        # Return single component (not wrapped in list) for consistency
-        # The callback output 'children' can accept single component or list
         return new_card_body
     else:
-        # Build the card frame with LoadingOverlay for both dashboard and stepper modes
-        card_component = build_card_frame(index=index, children=new_card_body, show_border=stepper)
-        return card_component
+        return build_card_frame(index=index, children=new_card_body, show_border=stepper)
 
 
 # List of all the possible aggregation methods for each data type

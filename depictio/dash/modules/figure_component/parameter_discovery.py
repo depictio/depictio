@@ -23,7 +23,25 @@ from .models import (
 
 
 class ParameterInspector:
-    """Inspects Plotly Express functions to discover parameters dynamically."""
+    """Inspects Plotly Express functions to discover parameters dynamically.
+
+    This class provides automatic parameter discovery for Plotly Express functions,
+    enabling dynamic creation of UI controls for visualization configuration. It
+    maintains knowledge bases for core, common, and advanced parameters with their
+    metadata (types, descriptions, options, constraints).
+
+    Key features:
+    - Automatic function signature inspection with caching
+    - Parameter type inference from annotations and naming patterns
+    - Categorization into core/common/advanced/specific groups
+    - Special handling for specific visualization types (violin, sunburst, etc.)
+
+    Attributes:
+        CORE_PARAMETERS: Essential parameters (x, y, z, color) for most plots.
+        COMMON_PARAMETERS: Widely shared parameters (title, template, hover, etc.).
+        ADVANCED_PARAMETERS: Expert-level parameters (log scales, faceting, etc.).
+        TYPE_MAPPING: Maps Python types to ParameterType enum values.
+    """
 
     # Core parameters that are essential for most visualizations
     CORE_PARAMETERS = {
@@ -311,92 +329,122 @@ class ParameterInspector:
             logger.warning(f"Function {func_name} not found in plotly.express")
             return None
 
-    def infer_parameter_type(self, param: inspect.Parameter) -> ParameterType:
-        """Infer parameter type from function signature.
+    # Regex patterns for column-type parameters
+    _COLUMN_PATTERNS = [
+        "^x$",
+        "^y$",
+        "^z$",
+        "^color$",
+        "^size$",
+        "^symbol$",
+        "^text$",
+        "hover_name",
+        "^parent",
+        "^ids",
+        "facet_row$",
+        "facet_col$",  # But not facet_col_wrap, facet_col_spacing
+        "animation_frame",
+        "animation_group",
+    ]
+
+    # Keywords indicating boolean parameters
+    _BOOLEAN_KEYWORDS = ["log_", "show_", "is_", "has_", "cumulative", "notched", "markers"]
+
+    # Keywords indicating numeric parameters
+    _NUMERIC_KEYWORDS = ["size", "opacity", "nbins"]
+
+    # Parameter names that should be SELECT type
+    _SELECT_PARAMS = {
+        "orientation",
+        "barmode",
+        "histnorm",
+        "points",
+        "violinmode",
+        "line_shape",
+        "trendline",
+        "marginal_x",
+        "marginal_y",
+    }
+
+    # Keywords indicating multi-select parameters
+    _MULTISELECT_KEYWORDS = ["hover_data", "custom_data"]
+
+    def _get_type_from_annotation(self, annotation: Any) -> Optional[ParameterType]:
+        """Extract parameter type from type annotation.
 
         Args:
-            param: Function parameter
+            annotation: The type annotation from the function signature.
 
         Returns:
-            Inferred parameter type
+            The inferred ParameterType or None if not determinable.
         """
-        # Check annotation first
-        if param.annotation != inspect.Parameter.empty:
-            annotation = param.annotation
+        # Handle Union types (like Optional[str])
+        if hasattr(annotation, "__origin__") and annotation.__origin__ is Union:
+            for arg in annotation.__args__:
+                if arg is not type(None):
+                    annotation = arg
+                    break
 
-            # Handle Union types (like Optional[str])
-            if hasattr(annotation, "__origin__"):
-                if annotation.__origin__ is Union:
-                    # Get the first non-None type
-                    for arg in annotation.__args__:
-                        if arg is not type(None):
-                            annotation = arg
-                            break
+        return self.TYPE_MAPPING.get(annotation)
 
-            # Map to our parameter types
-            if annotation in self.TYPE_MAPPING:
-                return self.TYPE_MAPPING[annotation]
+    def _infer_type_from_name(self, param_name: str) -> ParameterType:
+        """Infer parameter type from parameter name patterns.
 
-        # Fallback: infer from parameter name patterns
-        param_name = param.name.lower()
+        Args:
+            param_name: The lowercase parameter name.
 
-        # Column-like parameters (be more specific to avoid false positives)
-        column_patterns = [
-            "^x$",
-            "^y$",
-            "^z$",
-            "^color$",
-            "^size$",
-            "^symbol$",
-            "^text$",
-            "hover_name",
-            "^parent",
-            "^ids",
-            "facet_row$",
-            "facet_col$",  # But not facet_col_wrap, facet_col_spacing
-            "animation_frame",
-            "animation_group",
-        ]
+        Returns:
+            The inferred ParameterType based on naming conventions.
+        """
         import re
 
-        if any(re.search(pattern, param_name) for pattern in column_patterns):
+        # Check column patterns
+        if any(re.search(pattern, param_name) for pattern in self._COLUMN_PATTERNS):
             return ParameterType.COLUMN
 
-        # Boolean parameters
-        if any(
-            keyword in param_name
-            for keyword in ["log_", "show_", "is_", "has_", "cumulative", "notched", "markers"]
-        ):
+        # Check boolean patterns
+        if any(keyword in param_name for keyword in self._BOOLEAN_KEYWORDS):
             return ParameterType.BOOLEAN
 
-        # Numeric parameters (excluding width and height which we want to disable)
-        if any(
-            keyword in param_name for keyword in ["size", "opacity", "nbins"]
-        ) and param_name not in ["width", "height"]:
+        # Check numeric patterns (excluding width/height)
+        if any(keyword in param_name for keyword in self._NUMERIC_KEYWORDS) and param_name not in [
+            "width",
+            "height",
+        ]:
             if "size" in param_name and "max" in param_name:
                 return ParameterType.INTEGER
             return ParameterType.FLOAT if "opacity" in param_name else ParameterType.INTEGER
 
-        # Select parameters (based on known options)
-        if param_name in [
-            "orientation",
-            "barmode",
-            "histnorm",
-            "points",
-            "violinmode",
-            "line_shape",
-            "trendline",
-            "marginal_x",
-            "marginal_y",
-        ]:
+        # Check select parameters
+        if param_name in self._SELECT_PARAMS:
             return ParameterType.SELECT
 
-        # Multi-select parameters (these will be handled specially in the component builder)
-        if any(keyword in param_name for keyword in ["hover_data", "custom_data"]):
+        # Check multi-select patterns
+        if any(keyword in param_name for keyword in self._MULTISELECT_KEYWORDS):
             return ParameterType.MULTI_SELECT
 
-        # Default to string
         return ParameterType.STRING
+
+    def infer_parameter_type(self, param: inspect.Parameter) -> ParameterType:
+        """Infer parameter type from function signature.
+
+        First attempts to determine type from the parameter's type annotation,
+        then falls back to name-based pattern matching.
+
+        Args:
+            param: Function parameter from inspect.signature().
+
+        Returns:
+            Inferred parameter type for UI control generation.
+        """
+        # Try annotation first
+        if param.annotation != inspect.Parameter.empty:
+            inferred = self._get_type_from_annotation(param.annotation)
+            if inferred is not None:
+                return inferred
+
+        # Fallback to name-based inference
+        return self._infer_type_from_name(param.name.lower())
 
     def categorize_parameter(self, param_name: str, func_name: str) -> ParameterCategory:
         """Categorize a parameter based on its name and function context.
@@ -923,75 +971,74 @@ def get_visualization_group(func_name: str) -> VisualizationGroup:
         return VisualizationGroup.SPECIALIZED
 
 
+# Icon mapping for visualization types
+_VISUALIZATION_ICONS: Dict[str, str] = {
+    "scatter": "mdi:chart-scatter-plot",
+    "line": "mdi:chart-line",
+    "bar": "mdi:chart-bar",
+    "histogram": "mdi:chart-histogram",
+    "box": "mdi:chart-box-outline",
+    "violin": "mdi:violin",
+    "pie": "mdi:chart-pie",
+    "sunburst": "mdi:chart-donut",
+    "treemap": "mdi:view-grid",
+    "funnel": "mdi:filter",
+    "area": "mdi:chart-areaspline",
+    "density_contour": "mdi:chart-scatter-plot",
+    "density_heatmap": "mdi:grid",
+    "imshow": "mdi:grid",
+    "strip": "mdi:chart-scatter-plot",
+    "parallel_coordinates": "mdi:chart-line-variant",
+    "parallel_categories": "mdi:chart-sankey",
+    "umap": "mdi:scatter-plot",
+}
+
+# Visualizations temporarily disabled from the UI
+_DISABLED_VISUALIZATIONS: set[str] = {
+    "ecdf",
+    "funnel_area",
+    "icicle",
+    "parallel_categories",
+    "parallel_coordinates",
+    "strip",
+    "umap",
+    "pie",
+    "sunburst",
+    "timeline",
+    "treemap",
+}
+
+
 def discover_all_visualizations() -> Dict[str, VisualizationDefinition]:
     """Discover all available visualizations dynamically.
 
+    Inspects Plotly Express to find available plotting functions, creates
+    visualization definitions with appropriate parameters, icons, and groupings.
+    Custom visualizations (e.g., UMAP) are also included.
+
     Returns:
-        Dictionary mapping function names to visualization definitions
+        Dictionary mapping function names to visualization definitions.
     """
-    # Icon mapping for common visualization types
-    ICON_MAPPING = {
-        "scatter": "mdi:chart-scatter-plot",
-        "line": "mdi:chart-line",
-        "bar": "mdi:chart-bar",
-        "histogram": "mdi:chart-histogram",
-        "box": "mdi:chart-box-outline",
-        "violin": "mdi:violin",
-        "pie": "mdi:chart-pie",
-        "sunburst": "mdi:chart-donut",
-        "treemap": "mdi:view-grid",
-        "funnel": "mdi:filter",
-        "area": "mdi:chart-areaspline",
-        "density_contour": "mdi:chart-scatter-plot",
-        "density_heatmap": "mdi:grid",
-        "imshow": "mdi:grid",
-        "strip": "mdi:chart-scatter-plot",
-        "parallel_coordinates": "mdi:chart-line-variant",
-        "parallel_categories": "mdi:chart-sankey",
-        # Clustering visualizations
-        "umap": "mdi:scatter-plot",
-    }
-
     functions = get_available_plotly_functions()
-
-    # Add custom clustering functions
-    functions.extend(["umap"])
-
-    # Disabled visualizations (temporarily removed from dropdown)
-    disabled_visualizations = {
-        "ecdf",
-        "funnel_area",
-        "icicle",
-        "parallel_categories",
-        "parallel_coordinates",
-        "strip",
-        "umap",  # Disabled UMAP visualization
-        "pie",  # Disabled pie charts
-        "sunburst",  # Disabled sunburst charts
-        "timeline",  # Disabled timeline charts
-        "treemap",  # Disabled treemap charts
-    }
+    functions.extend(["umap"])  # Add custom clustering functions
 
     visualizations = {}
 
     for func_name in functions:
-        # Skip disabled visualizations
-        if func_name in disabled_visualizations:
+        if func_name in _DISABLED_VISUALIZATIONS:
             logger.debug(f"Skipping disabled visualization: {func_name}")
             continue
+
         try:
             if func_name == "umap":
-                # Create custom UMAP visualization definition
                 viz_def = create_umap_visualization_definition()
             else:
-                # Create standard Plotly visualization definition
                 viz_def = parameter_inspector.create_visualization_definition(
-                    func_name=func_name, icon=ICON_MAPPING.get(func_name, "mdi:chart-line")
+                    func_name=func_name,
+                    icon=_VISUALIZATION_ICONS.get(func_name, "mdi:chart-line"),
                 )
 
-            # Set the visualization group
             viz_def.group = get_visualization_group(func_name)
-
             visualizations[func_name] = viz_def
             logger.debug(
                 f"Created visualization definition for {func_name} in group {viz_def.group}"

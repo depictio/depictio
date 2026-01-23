@@ -29,7 +29,7 @@ def convert_model_to_dict(model: BaseModel, exclude_none: bool = False) -> dict:
         model: The Pydantic model to convert
         exclude_none: If True, fields with None values will be excluded
     """
-    return convert_objectid_to_str(model.model_dump(exclude_none=exclude_none))  # type: ignore[no-any-return]
+    return convert_objectid_to_str(model.model_dump(exclude_none=exclude_none))
 
 
 @validate_call

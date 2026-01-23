@@ -306,6 +306,632 @@ def _get_figure_cache_key(
     return hashlib.md5(cache_str.encode()).hexdigest()
 
 
+# ============================================================================
+# RENDER_FIGURE HELPER FUNCTIONS
+# ============================================================================
+
+
+def _init_data_info() -> dict:
+    """Initialize the data info dictionary for tracking data counts."""
+    return {
+        "total_data_count": 0,
+        "displayed_data_count": 0,
+        "was_sampled": False,
+    }
+
+
+def _check_figure_cache(cache_key: str) -> tuple[Any, dict, bool]:
+    """
+    Check if a figure is cached and return it if available.
+
+    Args:
+        cache_key: The cache key to look up
+
+    Returns:
+        Tuple of (cached_figure, cached_data_info, cache_hit)
+    """
+    import time
+
+    _clean_figure_cache()
+    if cache_key in _figure_result_cache:
+        cached_result = _figure_result_cache[cache_key]
+        # Handle both old format (just figure) and new format (figure, data_info, timestamp)
+        if isinstance(cached_result, tuple) and len(cached_result) == 3:
+            cached_figure, cached_data_info, timestamp = cached_result
+        else:
+            # Old format - just figure and timestamp
+            cached_figure, timestamp = cached_result
+            cached_data_info = _init_data_info()
+        logger.info(
+            f"FIGURE CACHE HIT: Using cached figure (saved {int((time.time() - timestamp) * 1000)}ms ago)"
+        )
+        return cached_figure, cached_data_info, True
+    return None, _init_data_info(), False
+
+
+def _clean_figure_parameters(dict_kwargs: dict, df: pl.DataFrame, mode: str) -> dict:
+    """
+    Clean and parse figure parameters, handling JSON strings and color sequences.
+
+    Args:
+        dict_kwargs: Raw parameter dictionary
+        df: DataFrame for context in code mode evaluation
+        mode: Component mode ('ui' or 'code')
+
+    Returns:
+        Cleaned parameter dictionary
+    """
+    # Parameters that can legitimately be empty strings
+    keep_empty_string_params = {
+        "parents",
+        "names",
+        "ids",
+        "hover_name",
+        "hover_data",
+        "custom_data",
+    }
+
+    cleaned_kwargs = {}
+    for k, v in dict_kwargs.items():
+        if v is not None:
+            if (
+                v != ""
+                and v != []
+                or (k in keep_empty_string_params and v == "")
+                or isinstance(v, bool)
+            ):
+                cleaned_kwargs[k] = v
+
+    # Parse JSON string parameters
+    cleaned_kwargs = _parse_json_parameters(cleaned_kwargs, df, mode)
+
+    return cleaned_kwargs
+
+
+def _parse_json_parameters(cleaned_kwargs: dict, df: pl.DataFrame, mode: str) -> dict:
+    """
+    Parse JSON string parameters that Plotly expects as Python objects.
+
+    Args:
+        cleaned_kwargs: Parameter dictionary to parse
+        df: DataFrame for context in code mode evaluation
+        mode: Component mode ('ui' or 'code')
+
+    Returns:
+        Parameter dictionary with parsed JSON values
+    """
+    json_params = [
+        "color_discrete_map",
+        "color_discrete_sequence",
+        "color_continuous_scale",
+        "category_orders",
+        "labels",
+        "path",
+    ]
+
+    for param_name in json_params:
+        if param_name not in cleaned_kwargs or not isinstance(cleaned_kwargs[param_name], str):
+            continue
+
+        param_value = cleaned_kwargs[param_name]
+
+        # Try to resolve Plotly named color palettes
+        if param_name in ["color_discrete_sequence", "color_continuous_scale"]:
+            resolved = _resolve_color_palette(param_value)
+            if resolved is not None:
+                cleaned_kwargs[param_name] = resolved
+                continue
+
+        # Try JSON parsing
+        try:
+            cleaned_kwargs[param_name] = json.loads(param_value)
+            logger.debug(f"Parsed JSON parameter {param_name}")
+            continue
+        except json.JSONDecodeError:
+            pass
+
+        # Check for complex Python expressions
+        if any(
+            pattern in param_value for pattern in ["(", ".", "sorted", "unique", "to_list", "df["]
+        ):
+            if mode == "code" and df is not None:
+                evaluated = _evaluate_code_mode_parameter(param_name, param_value, df)
+                if evaluated is not None:
+                    cleaned_kwargs[param_name] = evaluated
+                    continue
+            logger.debug(f"Skipping complex Python expression for {param_name}")
+            del cleaned_kwargs[param_name]
+            continue
+
+        # Fallback to ast.literal_eval
+        try:
+            cleaned_kwargs[param_name] = ast.literal_eval(param_value)
+            logger.debug(f"Parsed Python literal parameter {param_name}")
+        except (ValueError, SyntaxError) as e:
+            logger.warning(f"Invalid parameter format for {param_name}: {param_value} - {e}")
+            del cleaned_kwargs[param_name]
+
+    return cleaned_kwargs
+
+
+def _resolve_color_palette(param_value: str) -> list | None:
+    """
+    Resolve a Plotly named color palette to its color list.
+
+    Args:
+        param_value: Name of the color palette
+
+    Returns:
+        List of colors if found, None otherwise
+    """
+    color_modules = [
+        px.colors.qualitative,
+        px.colors.sequential,
+        px.colors.diverging,
+        px.colors.cyclical,
+    ]
+
+    for module in color_modules:
+        if hasattr(module, param_value):
+            color_sequence = getattr(module, param_value)
+            logger.debug(f"Resolved Plotly color '{param_value}' to {len(color_sequence)} colors")
+            return color_sequence
+
+    return None
+
+
+def _evaluate_code_mode_parameter(param_name: str, param_value: str, df: pl.DataFrame) -> Any:
+    """
+    Evaluate a parameter expression in code mode context.
+
+    Args:
+        param_name: Name of the parameter
+        param_value: Expression string to evaluate
+        df: DataFrame for context
+
+    Returns:
+        Evaluated value or None if evaluation fails
+    """
+    try:
+        from depictio.dash.modules.figure_component.code_mode import evaluate_params_in_context
+
+        temp_params = {param_name: param_value}
+        evaluated_params = evaluate_params_in_context(temp_params, df)
+        if param_name in evaluated_params:
+            logger.info(f"Evaluated code mode parameter {param_name}")
+            return evaluated_params[param_name]
+    except Exception as e:
+        logger.warning(f"Failed to evaluate code mode parameter {param_name}: {e}")
+    return None
+
+
+def _convert_style_parameters(cleaned_kwargs: dict, df: pl.DataFrame) -> dict:
+    """
+    Convert line_dash and symbol style literals to sequence parameters.
+
+    Args:
+        cleaned_kwargs: Parameter dictionary
+        df: DataFrame to check column existence
+
+    Returns:
+        Updated parameter dictionary
+    """
+    VALID_DASH_STYLES = ["solid", "dot", "dash", "longdash", "dashdot", "longdashdot"]
+    VALID_SYMBOL_STYLES = [
+        "circle",
+        "square",
+        "diamond",
+        "cross",
+        "x",
+        "triangle-up",
+        "triangle-down",
+        "triangle-left",
+        "triangle-right",
+        "pentagon",
+        "hexagon",
+        "star",
+    ]
+
+    # Handle line_dash parameter
+    if "line_dash" in cleaned_kwargs:
+        dash_value = cleaned_kwargs["line_dash"]
+        if dash_value in VALID_DASH_STYLES:
+            cleaned_kwargs["line_dash_sequence"] = [dash_value]
+            del cleaned_kwargs["line_dash"]
+            logger.debug(f"Converted line_dash style '{dash_value}' to sequence")
+        elif dash_value not in df.columns:
+            logger.warning(f"line_dash value '{dash_value}' is not valid. Removing.")
+            del cleaned_kwargs["line_dash"]
+
+    # Handle symbol parameter
+    if "symbol" in cleaned_kwargs:
+        symbol_value = cleaned_kwargs["symbol"]
+        if symbol_value in VALID_SYMBOL_STYLES:
+            cleaned_kwargs["symbol_sequence"] = [symbol_value]
+            del cleaned_kwargs["symbol"]
+            logger.debug(f"Converted symbol style '{symbol_value}' to sequence")
+        elif symbol_value not in df.columns:
+            logger.warning(f"symbol value '{symbol_value}' is not valid. Removing.")
+            del cleaned_kwargs["symbol"]
+
+    return cleaned_kwargs
+
+
+def _validate_required_params(
+    visu_type: str, cleaned_kwargs: dict, df: pl.DataFrame, theme: str, skip_validation: bool
+) -> tuple[bool, Any]:
+    """
+    Validate that required parameters are present for the visualization type.
+
+    Args:
+        visu_type: Visualization type
+        cleaned_kwargs: Cleaned parameter dictionary
+        df: DataFrame for column reference
+        theme: Theme for error figure
+        skip_validation: Whether to skip validation
+
+    Returns:
+        Tuple of (is_valid, error_figure_or_none)
+    """
+    if skip_validation:
+        logger.debug(f"CODE MODE: Skipping parameter validation for {visu_type}")
+        return True, None
+
+    required_params = _get_required_parameters(visu_type.lower())
+
+    # Smart validation for plots that can work with either X or Y
+    if required_params == ["x"] and visu_type.lower() in ["bar", "line", "scatter", "area"]:
+        if "x" not in cleaned_kwargs and "y" not in cleaned_kwargs:
+            logger.warning(f"Missing required parameters for {visu_type}: need either X or Y")
+            title = f"Please select X or Y column to create {visu_type} plot"
+            return False, _create_theme_aware_figure(_get_theme_template(theme), title=title)
+    else:
+        missing_params = [param for param in required_params if param not in cleaned_kwargs]
+        if missing_params:
+            logger.warning(f"Missing required parameters for {visu_type}: {missing_params}")
+            title = f"Please select {', '.join(missing_params).upper()} column(s) to create {visu_type} plot"
+            return False, _create_theme_aware_figure(_get_theme_template(theme), title=title)
+
+    return True, None
+
+
+def _handle_hierarchical_chart(
+    visu_type: str, cleaned_kwargs: dict, df: pl.DataFrame
+) -> pl.DataFrame:
+    """
+    Handle special processing for hierarchical charts (sunburst, treemap).
+
+    Args:
+        visu_type: Visualization type
+        cleaned_kwargs: Parameter dictionary
+        df: DataFrame to filter
+
+    Returns:
+        Filtered DataFrame
+    """
+    if visu_type.lower() not in ["sunburst", "treemap"]:
+        return df
+
+    # Filter out non-leaf rows
+    if "path" in cleaned_kwargs and cleaned_kwargs["path"]:
+        path_columns = cleaned_kwargs["path"]
+        original_rows = df.height
+
+        for col in path_columns:
+            if col in df.columns:
+                df = df.filter(
+                    (pl.col(col).is_not_null())
+                    & (pl.col(col) != "")
+                    & (pl.col(col).str.strip_chars() != "")
+                )
+
+        filtered_rows = original_rows - df.height
+        if filtered_rows > 0:
+            logger.info(f"Filtered {filtered_rows} non-leaf rows from {visu_type} data")
+
+    # Handle empty parents parameter
+    if "parents" in cleaned_kwargs and cleaned_kwargs["parents"] == "":
+        cleaned_kwargs["parents"] = None
+
+    # Validate column existence
+    for param_name, column_name in cleaned_kwargs.items():
+        if param_name in ["values", "names", "ids", "parents", "color"] and column_name:
+            if column_name not in df.columns:
+                logger.warning(f"Column '{column_name}' not found for parameter '{param_name}'")
+                cleaned_kwargs[param_name] = None
+
+    return df
+
+
+def _extract_manual_color_params(
+    visu_type: str, cleaned_kwargs: dict
+) -> tuple[dict | None, list | None]:
+    """
+    Extract color parameters for manual application in box/violin plots.
+
+    Args:
+        visu_type: Visualization type
+        cleaned_kwargs: Parameter dictionary (will be modified)
+
+    Returns:
+        Tuple of (manual_color_map, manual_color_sequence)
+    """
+    manual_color_map = None
+    manual_color_sequence = None
+
+    if visu_type.lower() in ["box", "violin", "strip"] and "color" not in cleaned_kwargs:
+        if "color_discrete_map" in cleaned_kwargs:
+            manual_color_map = cleaned_kwargs.pop("color_discrete_map")
+            logger.info("Extracted color_discrete_map for manual application")
+        if "color_discrete_sequence" in cleaned_kwargs:
+            manual_color_sequence = cleaned_kwargs.pop("color_discrete_sequence")
+            logger.info("Extracted color_discrete_sequence for manual application")
+    elif "color_discrete_map" in cleaned_kwargs:
+        logger.info("Keeping color_discrete_map in kwargs for Plotly")
+
+    return manual_color_map, manual_color_sequence
+
+
+def _apply_sampling(
+    df: pl.DataFrame, cutoff: int, cleaned_kwargs: dict, force_full_data: bool
+) -> tuple[pl.DataFrame, bool]:
+    """
+    Apply sampling to large datasets if needed.
+
+    Args:
+        df: Input DataFrame
+        cutoff: Maximum data points before sampling
+        cleaned_kwargs: Parameters for cache key generation
+        force_full_data: Whether to bypass sampling
+
+    Returns:
+        Tuple of (sampled_or_full_df, was_sampled)
+    """
+    if df.height <= cutoff or force_full_data:
+        return df, False
+
+    cache_key = f"{id(df)}_{cutoff}_{hash(str(cleaned_kwargs))}"
+
+    if cache_key not in _sampling_cache:
+        sampled_df = df.sample(n=cutoff, seed=0)
+        _sampling_cache[cache_key] = sampled_df
+    else:
+        sampled_df = _sampling_cache[cache_key]
+
+    return sampled_df, True
+
+
+def _apply_box_violin_colors(
+    figure: Any,
+    visu_type: str,
+    cleaned_kwargs: dict,
+    df: pl.DataFrame,
+    manual_color_map: dict | None,
+    manual_color_sequence: list | None,
+) -> Any:
+    """
+    Apply custom colors to box/violin plots without a color parameter.
+
+    Args:
+        figure: Plotly figure to modify
+        visu_type: Visualization type
+        cleaned_kwargs: Parameter dictionary
+        df: DataFrame for data extraction
+        manual_color_map: Color map by category
+        manual_color_sequence: Color sequence
+
+    Returns:
+        Modified figure
+    """
+    if visu_type.lower() not in ["box", "violin", "strip"]:
+        return figure
+    if "color" in cleaned_kwargs:
+        return figure
+    if not manual_color_map and not manual_color_sequence:
+        return figure
+
+    # Validate color sources
+    if not (
+        (isinstance(manual_color_sequence, (list, tuple)) and len(manual_color_sequence) > 0)
+        or (isinstance(manual_color_map, dict) and len(manual_color_map) > 0)
+    ):
+        return figure
+
+    # Single trace case - need to recreate with individual traces
+    if len(figure.data) == 1:
+        return _recreate_box_violin_with_colors(
+            figure, visu_type, cleaned_kwargs, df, manual_color_map, manual_color_sequence
+        )
+    else:
+        # Multiple traces - apply one color per trace
+        return _apply_colors_to_multiple_traces(figure, manual_color_map, manual_color_sequence)
+
+
+def _recreate_box_violin_with_colors(
+    figure: Any,
+    visu_type: str,
+    cleaned_kwargs: dict,
+    df: pl.DataFrame,
+    color_map: dict | None,
+    color_sequence: list | None,
+) -> Any:
+    """
+    Recreate box/violin plot with individual colored traces.
+
+    Args:
+        figure: Original figure
+        visu_type: Visualization type
+        cleaned_kwargs: Parameter dictionary
+        df: DataFrame
+        color_map: Color map by category
+        color_sequence: Color sequence
+
+    Returns:
+        New figure with colored traces
+    """
+
+    orientation = cleaned_kwargs.get("orientation", "v")
+    categorical_column = cleaned_kwargs.get("x") if orientation == "v" else cleaned_kwargs.get("y")
+    numeric_column = cleaned_kwargs.get("y") if orientation == "v" else cleaned_kwargs.get("x")
+
+    if not categorical_column or categorical_column not in df.columns:
+        return figure
+    if not isinstance(numeric_column, str):
+        return figure
+
+    # Get category order
+    category_orders = cleaned_kwargs.get("category_orders", {})
+    if isinstance(category_orders, dict) and categorical_column in category_orders:
+        unique_categories = category_orders[categorical_column]
+    else:
+        unique_categories = df.get_column(categorical_column).unique(maintain_order=True).to_list()
+
+    # Clear existing traces and recreate
+    figure.data = []
+
+    for i, category in enumerate(unique_categories):
+        category_data = df.filter(pl.col(categorical_column) == category)
+        values = category_data.get_column(numeric_column).to_list()
+
+        # Determine color
+        color = _get_category_color(str(category), i, color_map, color_sequence)
+
+        # Create trace
+        trace = _create_box_violin_trace(
+            visu_type, orientation, values, category, color, cleaned_kwargs
+        )
+        figure.add_trace(trace)
+
+    # Update axis configuration
+    _configure_box_violin_axes(figure, orientation, unique_categories)
+
+    logger.debug(f"Recreated {len(unique_categories)} {visu_type} traces with colors")
+    return figure
+
+
+def _get_category_color(
+    category: str, index: int, color_map: dict | None, color_sequence: list | None
+) -> str:
+    """Get color for a category from map or sequence."""
+    if color_map and category in color_map:
+        return color_map[category]
+    elif color_sequence:
+        return color_sequence[index % len(color_sequence)]
+    else:
+        return px.colors.qualitative.Plotly[index % 10]
+
+
+def _create_box_violin_trace(
+    visu_type: str,
+    orientation: str,
+    values: list,
+    category: Any,
+    color: str,
+    cleaned_kwargs: dict,
+) -> Any:
+    """Create a box or violin trace with specified parameters."""
+    import plotly.graph_objects as go
+
+    category_str = str(category)
+    position_data = [category_str] * len(values)
+
+    if visu_type.lower() == "box":
+        base_params = {
+            "name": category_str,
+            "marker_color": color,
+            "boxmean": cleaned_kwargs.get("boxmean"),
+            "notched": cleaned_kwargs.get("notched", False),
+            "boxpoints": cleaned_kwargs.get("points"),
+            "showlegend": False,
+        }
+        if orientation == "v":
+            return go.Box(y=values, x=position_data, **base_params)
+        else:
+            return go.Box(x=values, y=position_data, **base_params)
+    else:  # violin
+        base_params = {
+            "name": category_str,
+            "marker_color": color,
+            "showlegend": False,
+        }
+        if orientation == "v":
+            return go.Violin(y=values, x=position_data, **base_params)
+        else:
+            return go.Violin(x=values, y=position_data, **base_params)
+
+
+def _configure_box_violin_axes(figure: Any, orientation: str, categories: list) -> None:
+    """Configure axes for box/violin plots with proper category ordering."""
+    category_array = [str(c) for c in categories]
+
+    if orientation == "v":
+        figure.update_xaxes(type="category", categoryorder="array", categoryarray=category_array)
+    else:
+        figure.update_yaxes(type="category", categoryorder="array", categoryarray=category_array)
+
+    figure.update_layout(boxmode="overlay")
+
+
+def _apply_colors_to_multiple_traces(
+    figure: Any, color_map: dict | None, color_sequence: list | None
+) -> Any:
+    """Apply colors to multiple existing traces."""
+    for i, trace in enumerate(figure.data):
+        trace_name = trace.name if hasattr(trace, "name") else None
+        applied_color = None
+
+        if color_map and trace_name and str(trace_name) in color_map:
+            applied_color = color_map[str(trace_name)]
+        elif color_sequence:
+            applied_color = color_sequence[i % len(color_sequence)]
+
+        if applied_color:
+            try:
+                if hasattr(trace, "marker"):
+                    trace["marker"]["color"] = applied_color
+                if hasattr(trace, "line"):
+                    trace["line"]["color"] = applied_color
+            except (TypeError, KeyError):
+                pass
+
+    return figure
+
+
+def _finalize_figure(
+    figure: Any, cleaned_kwargs: dict, selected_point: dict | None, df: pl.DataFrame
+) -> Any:
+    """
+    Apply final configuration to the figure.
+
+    Args:
+        figure: Plotly figure
+        cleaned_kwargs: Parameter dictionary
+        selected_point: Optional point to highlight
+        df: DataFrame
+
+    Returns:
+        Finalized figure
+    """
+    # Fix marginal plot axis constraints
+    if "marginal_x" in cleaned_kwargs or "marginal_y" in cleaned_kwargs:
+        figure.update_xaxes(matches=None)
+        figure.update_yaxes(matches=None)
+        logger.debug("Disabled axis matches for marginal plot")
+
+    # Apply responsive sizing
+    figure.update_layout(
+        autosize=True,
+        margin=dict(l=40, r=40, t=40, b=40),
+        height=None,
+    )
+
+    # Highlight selected point
+    if selected_point and "x" in cleaned_kwargs and "y" in cleaned_kwargs:
+        _highlight_selected_point(figure, df, cleaned_kwargs, selected_point)
+
+    return figure
+
+
 def validate_figure_component_metadata(metadata: dict) -> tuple[bool, str]:
     """
     Validate figure component metadata to prevent empty components.
@@ -410,14 +1036,9 @@ def render_figure(
     Returns:
         Tuple of (Plotly figure object, data_info dict with counts)
     """
-    # PERFORMANCE OPTIMIZATION: Check figure result cache first
+    import time
 
-    # Initialize data counts - will be populated during rendering
-    data_info = {
-        "total_data_count": 0,
-        "displayed_data_count": 0,
-        "was_sampled": False,
-    }
+    data_info = _init_data_info()
 
     # Safety check: ensure df is not None
     if df is None:
@@ -432,710 +1053,87 @@ def render_figure(
         )
         return error_div, data_info
 
-    # Generate cache key from all inputs
+    # Generate cache key and check cache
     df_hash = str(hash(str(df.hash_rows()) if df is not None and not df.is_empty() else "empty"))
     selected_point_clean = selected_point or {}
-
     cache_key = _get_figure_cache_key(
         dict_kwargs, visu_type, df_hash, cutoff, selected_point_clean, theme, customizations
     )
 
-    # PERFORMANCE OPTIMIZATION: Check figure result cache first
-    import time
-
-    _clean_figure_cache()
-    if cache_key in _figure_result_cache:
-        cached_result = _figure_result_cache[cache_key]
-        # Handle both old format (just figure) and new format (figure, data_info, timestamp)
-        if isinstance(cached_result, tuple) and len(cached_result) == 3:
-            cached_figure, cached_data_info, timestamp = cached_result
-        else:
-            # Old format - just figure and timestamp
-            cached_figure, timestamp = cached_result
-            # Create default data_info for old cached entries
-            cached_data_info = {
-                "total_data_count": 0,
-                "displayed_data_count": 0,
-                "was_sampled": False,
-            }
-        logger.info(
-            f"🚀 FIGURE CACHE HIT: Using cached figure for {visu_type} (saved {int((time.time() - timestamp) * 1000)}ms ago)"
-        )
+    cached_figure, cached_data_info, cache_hit = _check_figure_cache(cache_key)
+    if cache_hit:
         return cached_figure, cached_data_info
 
-    logger.info(f"📊 FIGURE CACHE MISS: Generating new {visu_type} figure")
+    logger.info(f"FIGURE CACHE MISS: Generating new {visu_type} figure")
 
-    # Log when full data loading is forced
     if force_full_data:
-        logger.warning(
-            f"🔓 FORCE FULL DATA: Bypassing {cutoff:,} point sampling limit - will load all data!"
-        )
+        logger.warning(f"FORCE FULL DATA: Bypassing {cutoff:,} point sampling limit")
 
-    # Check if it's a clustering visualization
+    # Validate and normalize visualization type
     is_clustering = visu_type.lower() in ["umap"]
-
-    # Validate visualization type
     if not is_clustering and visu_type.lower() not in PLOTLY_FUNCTIONS:
         logger.warning(f"Unknown visualization type: {visu_type}, falling back to scatter")
         visu_type = "scatter"
 
-    # Smart UMAP computation deferral based on context and data size
+    # Handle UMAP deferral
     if is_clustering and df is not None and not df.is_empty():
-        # Determine context from various signals
-        context = "unknown"
-        if selected_point is None:
-            context = "dashboard_restore"  # Likely dashboard loading
-        elif selected_point:
-            context = "interactive"  # User-initiated action
-
-        # Use context-aware decision making
+        context = "dashboard_restore" if selected_point is None else "interactive"
         if _should_defer_umap_computation(df, context):
             placeholder = _create_umap_placeholder(df, dict_kwargs, theme)
-            # UMAP placeholder - set data info with actual counts
             data_info["total_data_count"] = df.height
-            data_info["displayed_data_count"] = 0  # Not computed yet
-            data_info["was_sampled"] = False
             return placeholder, data_info
 
-    # Add theme-appropriate template using Mantine-compatible themes
-    # Apply theme template if no template is specified, if template is None, or if template is empty
-    template_value = dict_kwargs.get("template")
-    if not template_value:  # This handles None, empty string, and missing key cases
+    # Apply theme template
+    if not dict_kwargs.get("template"):
         dict_kwargs["template"] = _get_theme_template(theme)
-        logger.info(f"Applied theme-based template: {dict_kwargs['template']} for theme: {theme}")
-    else:
-        logger.info(f"Using existing template: {template_value}")
+        logger.debug(f"Applied theme-based template: {dict_kwargs['template']}")
 
-    logger.info("=== FIGURE RENDER DEBUG ===")
-    logger.info(f"Visualization: {visu_type}")
-    logger.warning(f"🎨 THEME: {theme} -> TEMPLATE: {dict_kwargs.get('template')}")
-    logger.info(f"Data shape: {df.shape if df is not None else 'None'}")
-    logger.info(f"Selected point: {selected_point is not None}")
-    logger.info(f"Parameters: {list(dict_kwargs.keys())}")
-    logger.debug(f"Full dict_kwargs: {dict_kwargs}")  # Reduced to debug level
-    logger.debug(
-        f"Boolean parameters in dict_kwargs: {[(k, v, type(v)) for k, v in dict_kwargs.items() if isinstance(v, bool)]}"
-    )
+    logger.debug(f"Rendering {visu_type} figure, data shape: {df.shape}")
 
-    # Handle empty or invalid data
+    # Handle empty data
     if df is None or df.is_empty():
         logger.warning("Empty or invalid dataframe, creating empty figure")
-        empty_fig = _create_theme_aware_figure(
-            dict_kwargs.get("template", _get_theme_template(theme))
-        )
-        return empty_fig, data_info
+        return _create_theme_aware_figure(dict_kwargs.get("template")), data_info
 
-    # Clean parameters - remove None values and problematic empty strings
-    # Keep certain parameters that can legitimately be empty strings (like parents for hierarchical charts)
-    keep_empty_string_params = {
-        "parents",
-        "names",
-        "ids",
-        "hover_name",
-        "hover_data",
-        "custom_data",
-    }
-    cleaned_kwargs = {}
-    for k, v in dict_kwargs.items():
-        if v is not None:
-            # Keep the parameter if it's not empty, or if it's in the allowed empty string list
-            # Also keep boolean parameters (including False values)
-            if (
-                v != ""
-                and v != []
-                or (k in keep_empty_string_params and v == "")
-                or isinstance(v, bool)
-            ):
-                cleaned_kwargs[k] = v
+    # Clean and parse parameters
+    cleaned_kwargs = _clean_figure_parameters(dict_kwargs, df, mode)
+    cleaned_kwargs = _convert_style_parameters(cleaned_kwargs, df)
 
-    # Parse JSON string parameters that Plotly expects as Python objects
-    json_params = [
-        "color_discrete_map",
-        "color_discrete_sequence",
-        "color_continuous_scale",
-        "category_orders",
-        "labels",
-        "path",  # For sunburst/treemap hierarchical visualizations
-    ]
-    for param_name in json_params:
-        if param_name in cleaned_kwargs and isinstance(cleaned_kwargs[param_name], str):
-            # Special handling for color sequences/scales: check for Plotly named color palettes
-            if param_name in ["color_discrete_sequence", "color_continuous_scale"]:
-                param_value = cleaned_kwargs[param_name]
-                # Try to get named color sequence from px.colors.qualitative (discrete)
-                if hasattr(px.colors.qualitative, param_value):
-                    color_sequence = getattr(px.colors.qualitative, param_value)
-                    cleaned_kwargs[param_name] = color_sequence
-                    logger.debug(
-                        f"Resolved Plotly qualitative color '{param_value}' to {len(color_sequence)} colors"
-                    )
-                    continue
-                # Also check px.colors.sequential for sequential/continuous color scales
-                elif hasattr(px.colors.sequential, param_value):
-                    color_sequence = getattr(px.colors.sequential, param_value)
-                    cleaned_kwargs[param_name] = color_sequence
-                    logger.debug(
-                        f"Resolved Plotly sequential color '{param_value}' to {len(color_sequence)} colors"
-                    )
-                    continue
-                # Also check px.colors.diverging for diverging color scales
-                elif hasattr(px.colors.diverging, param_value):
-                    color_sequence = getattr(px.colors.diverging, param_value)
-                    cleaned_kwargs[param_name] = color_sequence
-                    logger.debug(
-                        f"Resolved Plotly diverging color '{param_value}' to {len(color_sequence)} colors"
-                    )
-                    continue
-                # Also check px.colors.cyclical for cyclical color scales
-                elif hasattr(px.colors.cyclical, param_value):
-                    color_sequence = getattr(px.colors.cyclical, param_value)
-                    cleaned_kwargs[param_name] = color_sequence
-                    logger.debug(
-                        f"Resolved Plotly cyclical color '{param_value}' to {len(color_sequence)} colors"
-                    )
-                    continue
-
-            try:
-                # First try JSON parsing
-                parsed_value = json.loads(cleaned_kwargs[param_name])
-                cleaned_kwargs[param_name] = parsed_value
-                logger.debug(f"Parsed JSON parameter {param_name}: {cleaned_kwargs[param_name]}")
-            except json.JSONDecodeError:
-                # Check if this looks like a complex Python expression (contains function calls)
-                param_value = cleaned_kwargs[param_name]
-                if any(
-                    pattern in param_value
-                    for pattern in ["(", ".", "sorted", "unique", "to_list", "df["]
-                ):
-                    if mode == "code" and df is not None:
-                        # In code mode, try to evaluate the expression with df available
-                        try:
-                            from depictio.dash.modules.figure_component.code_mode import (
-                                evaluate_params_in_context,
-                            )
-
-                            temp_params = {param_name: param_value}
-                            evaluated_params = evaluate_params_in_context(temp_params, df)
-                            if param_name in evaluated_params:
-                                cleaned_kwargs[param_name] = evaluated_params[param_name]
-                                logger.info(
-                                    f"Evaluated code mode parameter {param_name}: {param_value} -> {evaluated_params[param_name]}"
-                                )
-                                continue
-                        except Exception as e:
-                            logger.warning(
-                                f"Failed to evaluate code mode parameter {param_name}: {e}"
-                            )
-
-                    logger.info(
-                        f"Skipping complex Python expression for {param_name}: {param_value}"
-                    )
-                    # Remove complex expressions that can't be safely evaluated
-                    del cleaned_kwargs[param_name]
-                    continue
-
-                try:
-                    # Fallback to ast.literal_eval for simple Python literal expressions
-                    parsed_value = ast.literal_eval(param_value)
-                    cleaned_kwargs[param_name] = parsed_value
-                    logger.debug(
-                        f"Parsed Python literal parameter {param_name}: {cleaned_kwargs[param_name]}"
-                    )
-                except (ValueError, SyntaxError) as e:
-                    logger.warning(
-                        f"Invalid parameter format for {param_name}: {param_value} - {e}"
-                    )
-                    # Remove invalid parameter to avoid Plotly errors
-                    del cleaned_kwargs[param_name]
-
-    # PERFORMANCE OPTIMIZATION: Reduce verbose logging in production
-    logger.debug("=== CLEANED PARAMETERS DEBUG ===")
-    logger.debug(f"Original dict_kwargs: {dict_kwargs}")
-    logger.debug(f"Cleaned kwargs: {cleaned_kwargs}")
-    logger.debug(
-        f"Boolean parameters in cleaned_kwargs: {[(k, v, type(v)) for k, v in cleaned_kwargs.items() if isinstance(v, bool)]}"
+    # Validate required parameters
+    is_valid, error_fig = _validate_required_params(
+        visu_type, cleaned_kwargs, df, theme, skip_validation
     )
+    if not is_valid:
+        return error_fig, data_info
 
-    # PARAMETER CONVERSION: Handle line_dash and symbol parameters
-    # These parameters can be either:
-    # 1. A column name (for categorical grouping by dash/symbol)
-    # 2. A style literal (for uniform styling)
-    # When a style literal is provided, convert to _sequence parameter
-    VALID_DASH_STYLES = ["solid", "dot", "dash", "longdash", "dashdot", "longdashdot"]
-    VALID_SYMBOL_STYLES = [
-        "circle",
-        "square",
-        "diamond",
-        "cross",
-        "x",
-        "triangle-up",
-        "triangle-down",
-        "triangle-left",
-        "triangle-right",
-        "pentagon",
-        "hexagon",
-        "star",
-    ]
+    # Handle hierarchical charts
+    df = _handle_hierarchical_chart(visu_type, cleaned_kwargs, df)
 
-    # Handle line_dash parameter conversion
-    if "line_dash" in cleaned_kwargs:
-        dash_value = cleaned_kwargs["line_dash"]
-        if dash_value in VALID_DASH_STYLES:
-            # Convert style literal to line_dash_sequence for uniform styling
-            cleaned_kwargs["line_dash_sequence"] = [dash_value]
-            del cleaned_kwargs["line_dash"]
-            logger.debug(
-                f"Converted line_dash style '{dash_value}' to line_dash_sequence for uniform styling"
-            )
-        elif dash_value not in df.columns:
-            # Invalid column name - remove to avoid Plotly error
-            logger.warning(
-                f"line_dash value '{dash_value}' is not a valid column or style. Removing parameter."
-            )
-            del cleaned_kwargs["line_dash"]
-        # else: valid column name, keep as-is for categorical grouping
-
-    # Handle symbol parameter conversion (same pattern as line_dash)
-    if "symbol" in cleaned_kwargs:
-        symbol_value = cleaned_kwargs["symbol"]
-        if symbol_value in VALID_SYMBOL_STYLES:
-            # Convert style literal to symbol_sequence for uniform styling
-            cleaned_kwargs["symbol_sequence"] = [symbol_value]
-            del cleaned_kwargs["symbol"]
-            logger.debug(
-                f"Converted symbol style '{symbol_value}' to symbol_sequence for uniform styling"
-            )
-        elif symbol_value not in df.columns:
-            # Invalid column name - remove to avoid Plotly error
-            logger.warning(
-                f"symbol value '{symbol_value}' is not a valid column or style. Removing parameter."
-            )
-            del cleaned_kwargs["symbol"]
-        # else: valid column name, keep as-is for categorical grouping
-
-    # Check if required parameters are missing for the visualization type (skip in code mode)
-    if not skip_validation:
-        required_params = _get_required_parameters(visu_type.lower())
-
-        # Smart validation: For most plots, allow either X or Y (not require both)
-        if required_params == ["x"] and visu_type.lower() in ["bar", "line", "scatter", "area"]:
-            # These plots can work with either X or Y, check if at least one is present
-            if "x" not in cleaned_kwargs and "y" not in cleaned_kwargs:
-                logger.warning(
-                    f"Missing required parameters for {visu_type}: need either X or Y. Available columns: {df.columns}"
-                )
-                title = f"Please select X or Y column to create {visu_type} plot"
-                validation_fig = _create_theme_aware_figure(
-                    dict_kwargs.get("template", _get_theme_template(theme)), title=title
-                )
-                return validation_fig, data_info
-        else:
-            # Standard validation for specific requirements (pie: values, box: y, etc.)
-            missing_params = [param for param in required_params if param not in cleaned_kwargs]
-            if missing_params:
-                logger.warning(
-                    f"Missing required parameters for {visu_type}: {missing_params}. Available columns: {df.columns}"
-                )
-                title = f"Please select {', '.join(missing_params).upper()} column(s) to create {visu_type} plot"
-                validation_fig = _create_theme_aware_figure(
-                    dict_kwargs.get("template", _get_theme_template(theme)), title=title
-                )
-                return validation_fig, data_info
-    else:
-        logger.info(f"🚀 CODE MODE: Skipping parameter validation for {visu_type}")
-
-    # Special handling for hierarchical charts (sunburst, treemap)
-    if visu_type.lower() in ["sunburst", "treemap"]:
-        # Filter out non-leaf rows (rows with empty hierarchy values)
-        if "path" in cleaned_kwargs and cleaned_kwargs["path"]:
-            path_columns = cleaned_kwargs["path"]
-            original_rows = df.height
-
-            # Filter out rows where any path column is empty/null
-            for col in path_columns:
-                if col in df.columns:
-                    df = df.filter(
-                        (pl.col(col).is_not_null())
-                        & (pl.col(col) != "")
-                        & (pl.col(col).str.strip_chars() != "")
-                    )
-
-            filtered_rows = original_rows - df.height
-            if filtered_rows > 0:
-                logger.info(
-                    f"🌳 Filtered {filtered_rows} non-leaf rows from {visu_type} data (empty hierarchy values)"
-                )
-
-        # Ensure parents parameter is handled correctly
-        if "parents" in cleaned_kwargs and cleaned_kwargs["parents"] == "":
-            # Empty string is valid for root-level hierarchical charts
-            cleaned_kwargs["parents"] = None
-
-        # Validate that columns exist in the dataframe
-        for param_name, column_name in cleaned_kwargs.items():
-            if param_name in ["values", "names", "ids", "parents", "color"] and column_name:
-                if column_name not in df.columns:
-                    logger.warning(
-                        f"Column '{column_name}' not found in dataframe for parameter '{param_name}'"
-                    )
-                    # Remove invalid column reference
-                    cleaned_kwargs[param_name] = None
-
-    # Early check: if no valid plotting parameters are provided, return empty figure
+    # Early check for valid parameters
     valid_plot_params = [
         param
         for param, value in cleaned_kwargs.items()
         if value is not None and value != "" and param != "template"
     ]
-
     if not valid_plot_params and not is_clustering:
-        logger.info(f"No valid plotting parameters for {visu_type}, returning empty figure")
-        empty_params_fig = _create_theme_aware_figure(
-            dict_kwargs.get("template", _get_theme_template(theme)),
+        logger.info(f"No valid plotting parameters for {visu_type}")
+        return _create_theme_aware_figure(
+            dict_kwargs.get("template"),
             title=f"Select columns to create {visu_type} plot",
-        )
-        return empty_params_fig, data_info
+        ), data_info
 
     try:
         if is_clustering:
-            # Handle clustering visualizations (e.g., UMAP)
-            clustering_function = get_clustering_function(visu_type.lower())
-
-            # Handle large datasets with sampling for clustering
-            if df.height > cutoff and not force_full_data:
-                cache_key = f"{id(df)}_{cutoff}_{hash(str(cleaned_kwargs))}"
-
-                if cache_key not in _sampling_cache:
-                    sampled_df = df.sample(n=cutoff, seed=0).to_pandas()
-                    _sampling_cache[cache_key] = sampled_df
-                    logger.info(
-                        f"Cached sampled data for clustering: {cutoff} points from {df.height}"
-                    )
-                else:
-                    sampled_df = _sampling_cache[cache_key]
-                    logger.info(f"Using cached sampled data for clustering: {cutoff} points")
-
-                figure = clustering_function(sampled_df, **cleaned_kwargs)
-            else:
-                # Use full dataset
-                # pandas_df = df.to_pandas()
-                figure = clustering_function(df, **cleaned_kwargs)
+            figure = _render_clustering_figure(
+                df, visu_type, cleaned_kwargs, cutoff, force_full_data
+            )
         else:
-            # Handle standard Plotly visualizations
-            plot_function = PLOTLY_FUNCTIONS[visu_type.lower()]
-
-            # PRE-PROCESSING: For box/violin plots without 'color' param, extract color params
-            # to handle manually in post-processing (Plotly Express ignores them without 'color')
-            manual_color_map = None
-            manual_color_sequence = None
-
-            if visu_type.lower() in ["box", "violin", "strip"] and "color" not in cleaned_kwargs:
-                # Extract color parameters that will be applied manually
-                if "color_discrete_map" in cleaned_kwargs:
-                    manual_color_map = cleaned_kwargs.pop("color_discrete_map")
-                    logger.info(
-                        f"🎨 Extracted color_discrete_map for manual application: {len(manual_color_map)} colors - {list(manual_color_map.keys())}"
-                    )
-                if "color_discrete_sequence" in cleaned_kwargs:
-                    manual_color_sequence = cleaned_kwargs.pop("color_discrete_sequence")
-                    logger.info(
-                        f"🎨 Extracted color_discrete_sequence for manual application: {len(manual_color_sequence)} colors"
-                    )
-            else:
-                # For plots WITH color parameter, color_discrete_map should be used by Plotly
-                if "color_discrete_map" in cleaned_kwargs:
-                    logger.info(
-                        f"🎨 Keeping color_discrete_map in kwargs for Plotly: {len(cleaned_kwargs['color_discrete_map'])} colors - {list(cleaned_kwargs['color_discrete_map'].keys())}"
-                    )
-
-            # Track data counts for partial data warning
-            data_info["total_data_count"] = df.height
-
-            # Handle large datasets with sampling
-            if df.height > cutoff and not force_full_data:
-                cache_key = f"{id(df)}_{cutoff}_{hash(str(cleaned_kwargs))}"
-
-                if cache_key not in _sampling_cache:
-                    sampled_df = df.sample(n=cutoff, seed=0)
-                    _sampling_cache[cache_key] = sampled_df
-                    logger.info(f"Cached sampled data: {cutoff} points from {df.height}")
-                else:
-                    sampled_df = _sampling_cache[cache_key]
-                    logger.info(f"Using cached sampled data: {cutoff} points")
-
-                # Track sampling info
-                data_info["displayed_data_count"] = sampled_df.height
-                data_info["was_sampled"] = True
-
-                logger.info("=== CALLING PLOTLY FUNCTION (SAMPLED DATA) ===")
-                logger.info(f"Function: {plot_function.__name__}")
-                logger.warning(f"🚨 SAMPLED DATA SIZE: {sampled_df.shape[0]:,} rows")
-                logger.warning(
-                    f"📊 DATA COUNTS: {data_info['displayed_data_count']:,} displayed / {data_info['total_data_count']:,} total"
-                )
-
-                # PERFORMANCE: Time the Plotly function call
-                import time
-
-                plot_start = time.time()
-                figure = plot_function(sampled_df, **cleaned_kwargs)
-                plot_end = time.time()
-                logger.warning(f"🕐 PLOTLY FUNCTION TIME: {(plot_end - plot_start) * 1000:.0f}ms")
-            else:
-                # Use full dataset - no sampling
-                data_info["displayed_data_count"] = df.height
-                data_info["was_sampled"] = False
-
-                logger.info("=== CALLING PLOTLY FUNCTION ===")
-                logger.info(f"Function: {plot_function.__name__}")
-                logger.info(f"Parameters: {cleaned_kwargs}")
-                logger.info(
-                    f"Boolean params: {[(k, v) for k, v in cleaned_kwargs.items() if isinstance(v, bool)]}"
-                )
-                figure = plot_function(df, **cleaned_kwargs)
-
-            # POST-PROCESSING: Apply color_discrete_sequence OR color_discrete_map to box/violin plots
-            # When colors are provided WITHOUT a color parameter, manually apply colors
-            # This avoids the spacing/grouping issues that occur when using color parameter
-            if (
-                visu_type.lower() in ["box", "violin", "strip"]
-                and (manual_color_sequence or manual_color_map)
-                and "color" not in cleaned_kwargs
-            ):
-                color_map = manual_color_map
-                color_sequence = manual_color_sequence
-                # Validate that we have at least one color source
-                if (isinstance(color_sequence, (list, tuple)) and len(color_sequence) > 0) or (
-                    isinstance(color_map, dict) and len(color_map) > 0
-                ):
-                    # When no color param is used, px creates ONE trace with multiple boxes
-                    # We need to color each box individually, not the trace as a whole
-                    if len(figure.data) == 1:
-                        trace = figure.data[0]
-                        # Determine which axis has categorical data (boxes)
-                        # For vertical: x is categorical, y is numeric
-                        # For horizontal: y is categorical, x is numeric
-                        orientation = cleaned_kwargs.get("orientation", "v")
-                        categorical_column = (
-                            cleaned_kwargs.get("x")
-                            if orientation == "v"
-                            else cleaned_kwargs.get("y")
-                        )
-
-                        if categorical_column and categorical_column in df.columns:
-                            # Check if user specified category_orders for this column
-                            category_orders = cleaned_kwargs.get("category_orders", {})
-                            if (
-                                isinstance(category_orders, dict)
-                                and categorical_column in category_orders
-                            ):
-                                # Use user-specified order
-                                unique_categories = category_orders[categorical_column]
-                                logger.debug(
-                                    f"Using user-specified category order for '{categorical_column}': {unique_categories}"
-                                )
-                            else:
-                                # Preserve order of first appearance to ensure consistent category ordering
-                                unique_categories = (
-                                    df.get_column(categorical_column)
-                                    .unique(maintain_order=True)
-                                    .to_list()
-                                )
-                                logger.debug(
-                                    f"Using dataframe order for '{categorical_column}': {unique_categories}"
-                                )
-                            num_boxes = len(unique_categories)
-
-                            # WORKAROUND: Box plots don't support color arrays in a single trace
-                            # Solution: Recreate with individual traces (one per category)
-                            if visu_type.lower() in ["box", "violin"]:
-                                import plotly.graph_objects as go
-
-                                # Get original parameters
-                                numeric_column = (
-                                    cleaned_kwargs.get("y")
-                                    if orientation == "v"
-                                    else cleaned_kwargs.get("x")
-                                )
-
-                                # Type guard: ensure numeric_column is a string
-                                if isinstance(numeric_column, str):
-                                    # Clear existing traces
-                                    figure.data = []
-
-                                    # Create one trace per category with its own color
-                                    for i, category in enumerate(unique_categories):
-                                        # Filter data for this category
-                                        category_data = df.filter(
-                                            pl.col(categorical_column) == category
-                                        )
-                                        values = category_data.get_column(numeric_column).to_list()
-
-                                        # Determine color: use color_map if available, else color_sequence
-                                        category_str = str(category)
-                                        if color_map:
-                                            logger.debug(
-                                                f"🎨 Looking for color for '{category_str}' in color_map keys: {list(color_map.keys())}"
-                                            )
-                                            if category_str in color_map:
-                                                color = color_map[category_str]
-                                                logger.debug(
-                                                    f"✅ Found color for '{category_str}': {color}"
-                                                )
-                                            else:
-                                                # Fallback to default if not in map
-                                                color = px.colors.qualitative.Plotly[i % 10]
-                                                logger.warning(
-                                                    f"⚠️ Category '{category_str}' not found in color_map, using default color"
-                                                )
-                                        elif color_sequence:
-                                            color = color_sequence[i % len(color_sequence)]
-                                        else:
-                                            # Fallback to default plotly color
-                                            color = px.colors.qualitative.Plotly[i % 10]
-
-                                        # Create box/violin trace with explicit positioning
-                                        if visu_type.lower() == "box":
-                                            box_params = {
-                                                "name": str(category),
-                                                "marker_color": color,
-                                                "boxmean": cleaned_kwargs.get("boxmean"),
-                                                "notched": cleaned_kwargs.get("notched", False),
-                                                "boxpoints": cleaned_kwargs.get(
-                                                    "points"
-                                                ),  # all, outliers, suspectedoutliers, False
-                                                "showlegend": False,
-                                            }
-                                            if orientation == "v":
-                                                trace_obj = go.Box(
-                                                    y=values,
-                                                    x=[str(category)]
-                                                    * len(values),  # Explicit x position
-                                                    **box_params,
-                                                )
-                                            else:
-                                                trace_obj = go.Box(
-                                                    x=values,
-                                                    y=[str(category)]
-                                                    * len(values),  # Explicit y position
-                                                    **box_params,
-                                                )
-                                        else:  # violin
-                                            if orientation == "v":
-                                                trace_obj = go.Violin(
-                                                    y=values,
-                                                    x=[str(category)] * len(values),
-                                                    name=str(category),
-                                                    marker_color=color,
-                                                    showlegend=False,
-                                                )
-                                            else:
-                                                trace_obj = go.Violin(
-                                                    x=values,
-                                                    y=[str(category)] * len(values),
-                                                    name=str(category),
-                                                    marker_color=color,
-                                                    showlegend=False,
-                                                )
-
-                                        figure.add_trace(trace_obj)
-
-                                    # Ensure categorical axis maintains order and minimize gaps
-                                    if orientation == "v":
-                                        figure.update_xaxes(
-                                            type="category",
-                                            categoryorder="array",
-                                            categoryarray=[str(c) for c in unique_categories],
-                                        )
-                                    else:
-                                        figure.update_yaxes(
-                                            type="category",
-                                            categoryorder="array",
-                                            categoryarray=[str(c) for c in unique_categories],
-                                        )
-
-                                    # Use overlay mode to minimize spacing (like px.box with color param)
-                                    figure.update_layout(
-                                        boxmode="overlay",  # Overlay mode for compact positioning
-                                    )
-
-                                    color_source = (
-                                        "color_discrete_map"
-                                        if color_map
-                                        else "color_discrete_sequence"
-                                    )
-                                    logger.debug(
-                                        f"Recreated {num_boxes} {visu_type} traces using {color_source}, preserving order, minimal spacing"
-                                    )
-                            elif visu_type.lower() == "strip":
-                                # Strip plots: set single color (limitation without color param)
-                                if color_sequence:
-                                    try:
-                                        if hasattr(trace, "marker"):
-                                            trace["marker"]["color"] = color_sequence[0]
-                                        logger.debug(
-                                            "Applied first color from sequence to strip plot (single trace limitation)"
-                                        )
-                                    except (TypeError, KeyError) as e:
-                                        logger.debug(
-                                            f"Could not update trace marker color (trace may be immutable): {e}"
-                                        )
-                    else:
-                        # Multiple traces: apply one color per trace
-                        for i, trace in enumerate(figure.data):
-                            trace_name = trace.name if hasattr(trace, "name") else None
-                            # Try color_map first (by trace name), then color_sequence
-                            applied_color = None
-                            if color_map and trace_name and str(trace_name) in color_map:
-                                applied_color = color_map[str(trace_name)]
-                                try:
-                                    if hasattr(trace, "marker"):
-                                        trace["marker"]["color"] = applied_color
-                                except (TypeError, KeyError) as e:
-                                    logger.debug(f"Could not update trace marker color: {e}")
-                            elif color_sequence:
-                                color_idx = i % len(color_sequence)
-                                applied_color = color_sequence[color_idx]
-                                try:
-                                    if hasattr(trace, "marker"):
-                                        trace["marker"]["color"] = applied_color
-                                except (TypeError, KeyError) as e:
-                                    logger.debug(f"Could not update trace marker color: {e}")
-                            # Also update line color for consistency
-                            if hasattr(trace, "line") and applied_color:
-                                try:
-                                    trace["line"]["color"] = applied_color
-                                except (TypeError, KeyError) as e:
-                                    logger.debug(f"Could not update trace line color: {e}")
-                        if color_map:
-                            color_source = f"color_discrete_map ({len(color_map)} colors)"
-                        elif color_sequence:
-                            color_source = f"color_discrete_sequence ({len(color_sequence)} colors)"
-                        else:
-                            color_source = "default colors"
-                        logger.debug(f"Applied {color_source} to {len(figure.data)} traces")
-
-        # Fix for marginal plots: Disable axis matches to prevent infinite loop warnings
-        # When using marginal_x and marginal_y, Plotly Express creates conflicting axis constraints
-        if "marginal_x" in cleaned_kwargs or "marginal_y" in cleaned_kwargs:
-            # Disable matches on all axes to prevent infinite loop warnings
-            figure.update_xaxes(matches=None)
-            figure.update_yaxes(matches=None)
-            logger.debug(
-                "Disabled axis matches for marginal plot to prevent infinite loop warnings"
+            figure, data_info = _render_standard_figure(
+                df, visu_type, cleaned_kwargs, cutoff, force_full_data, data_info
             )
 
-        # Apply responsive sizing - let mantine templates handle colors
-        figure.update_layout(
-            autosize=True,
-            margin=dict(l=40, r=40, t=40, b=40),
-            height=None,  # Let container control height
-            # Don't override background colors - let mantine templates handle them
-        )
-
-        # Highlight selected point if provided
-        if selected_point and "x" in cleaned_kwargs and "y" in cleaned_kwargs:
-            _highlight_selected_point(figure, df, cleaned_kwargs, selected_point)
+        # Finalize figure
+        figure = _finalize_figure(figure, cleaned_kwargs, selected_point, df)
 
         # Apply post-rendering customizations if provided
         if customizations:
@@ -1147,36 +1145,87 @@ def render_figure(
                 # Convert Polars DataFrame to Pandas for customizations that need it
                 pandas_df = df.to_pandas() if df is not None and not df.is_empty() else None
                 figure = apply_customizations(figure, customizations, df=pandas_df)
-                logger.info(f"Applied {len(customizations)} customization categories to figure")
+                logger.debug(f"Applied {len(customizations)} customization categories to figure")
             except ImportError as e:
                 logger.warning(f"Could not import customizations module: {e}")
             except Exception as e:
                 logger.error(f"Error applying customizations: {e}", exc_info=True)
 
-        # PERFORMANCE OPTIMIZATION: Cache the generated figure with data info
+        # Cache the result
         _figure_result_cache[cache_key] = (figure, data_info, time.time())
-        logger.info(
-            f"💾 FIGURE CACHE STORED: Cached {visu_type} figure with data counts for future use"
-        )
-        logger.info(
-            f"📊 FINAL DATA COUNTS: {data_info['displayed_data_count']:,} displayed / {data_info['total_data_count']:,} total (sampled: {data_info['was_sampled']})"
-        )
 
         return figure, data_info
 
     except Exception as e:
         logger.error(f"Error creating figure: {e}")
-        # Return fallback figure
         fallback_figure = _create_theme_aware_figure(
             dict_kwargs.get("template", _get_theme_template(theme)),
             title=f"Error: {str(e)}",
         )
-
-        # Cache the fallback figure to avoid repeated errors with default data info
         _figure_result_cache[cache_key] = (fallback_figure, data_info, time.time())
-        logger.info("💾 FALLBACK CACHE STORED: Cached error figure")
-
         return fallback_figure, data_info
+
+
+def _render_clustering_figure(
+    df: pl.DataFrame,
+    visu_type: str,
+    cleaned_kwargs: dict,
+    cutoff: int,
+    force_full_data: bool,
+) -> Any:
+    """Render a clustering visualization (e.g., UMAP)."""
+    clustering_function = get_clustering_function(visu_type.lower())
+
+    if df.height > cutoff and not force_full_data:
+        sampling_cache_key = f"{id(df)}_{cutoff}_{hash(str(cleaned_kwargs))}"
+        if sampling_cache_key not in _sampling_cache:
+            sampled_df = df.sample(n=cutoff, seed=0).to_pandas()
+            _sampling_cache[sampling_cache_key] = sampled_df
+        else:
+            sampled_df = _sampling_cache[sampling_cache_key]
+        return clustering_function(sampled_df, **cleaned_kwargs)
+    else:
+        return clustering_function(df, **cleaned_kwargs)
+
+
+def _render_standard_figure(
+    df: pl.DataFrame,
+    visu_type: str,
+    cleaned_kwargs: dict,
+    cutoff: int,
+    force_full_data: bool,
+    data_info: dict,
+) -> tuple[Any, dict]:
+    """Render a standard Plotly visualization."""
+    import time
+
+    plot_function = PLOTLY_FUNCTIONS[visu_type.lower()]
+
+    # Extract manual color params for box/violin plots
+    manual_color_map, manual_color_sequence = _extract_manual_color_params(
+        visu_type, cleaned_kwargs
+    )
+
+    # Track data counts
+    data_info["total_data_count"] = df.height
+
+    # Apply sampling if needed
+    plot_df, was_sampled = _apply_sampling(df, cutoff, cleaned_kwargs, force_full_data)
+    data_info["displayed_data_count"] = plot_df.height
+    data_info["was_sampled"] = was_sampled
+
+    # Generate figure
+    logger.info(f"Calling Plotly {plot_function.__name__} with {plot_df.height:,} rows")
+    plot_start = time.time()
+    figure = plot_function(plot_df, **cleaned_kwargs)
+    logger.info(f"Plotly function took {(time.time() - plot_start) * 1000:.0f}ms")
+
+    # Apply manual colors to box/violin plots
+    figure = _apply_box_violin_colors(
+        figure, visu_type, cleaned_kwargs, df, manual_color_map, manual_color_sequence
+    )
+
+    return figure, data_info
 
 
 def _create_umap_placeholder(df: pl.DataFrame, dict_kwargs: Dict[str, Any], theme: str) -> Any:
@@ -2017,11 +2066,10 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         logger.warning(f"Expected dict for dict_kwargs, got {type(dict_kwargs)}: {dict_kwargs}")
         dict_kwargs = {}
 
-    logger.info(f"Building figure component {index} (visu_type: {visu_type}, theme: {theme})")
+    logger.debug(f"Building figure component {index} (visu_type: {visu_type}, theme: {theme})")
 
     # CRITICAL DEBUG: Log kwargs for code mode figures
     if mode == "code":
-        logger.info(f"🔍 BUILD_FIGURE: Code mode component {index}")
         logger.info(f"   mode={mode}, code_len={len(code_content)}")
         logger.info(f"   code_content present in kwargs: {'code_content' in kwargs}")
         logger.info(f"   Full kwargs keys: {kwargs.keys()}")
@@ -2160,9 +2208,7 @@ def design_figure(
             f"🔧 Setting initial mode to CODE for component {id['index']} based on stored metadata"
         )
     else:
-        logger.info(f"🔧 Setting initial mode to UI for component {id['index']}")
-
-    logger.info(f"🔧 FINAL INITIAL MODE: {initial_mode}")
+        logger.debug(f"🔧 Setting initial mode to UI for component {id['index']}")
 
     # Extract index handling dict pattern-matching IDs
     if isinstance(id, dict):
@@ -2479,7 +2525,7 @@ def build_figure_design_ui(**kwargs) -> html.Div:
     dict_kwargs = kwargs.get("dict_kwargs", {})
     columns = kwargs.get("columns", [])
 
-    logger.info(f"Building design UI for figure {index} (visu_type: {visu_type})")
+    logger.debug(f"Building design UI for figure {index} (visu_type: {visu_type})")
 
     if not columns:
         logger.warning(f"No columns provided for figure {index} design UI")
@@ -2668,33 +2714,46 @@ def _create_info_badges(
     return html.Div()
 
 
-def create_stepper_figure_button(n, disabled=False):
-    """Create the stepper figure button.
+def create_stepper_figure_button(n: int, disabled: bool | None = None) -> tuple:
+    """Create the stepper figure button and associated store.
+
+    Creates the button used in the component type selection step of the stepper
+    to add a figure component to the dashboard.
 
     Args:
-        n: Button index
-        disabled: Whether button is disabled
+        n: Button index for unique identification.
+        disabled: Override enabled state. If None, uses component metadata.
 
     Returns:
-        Button and store components
+        Tuple containing (button, store) components.
     """
+    from depictio.dash.component_metadata import (
+        get_component_color,
+        get_dmc_button_color,
+        is_enabled,
+    )
     from depictio.dash.utils import UNSELECTED_STYLE
 
-    button = dbc.Col(
-        dmc.Button(
-            "Figure",
-            id={
-                "type": "btn-option",
-                "index": n,
-                "value": "Figure",
-            },
-            n_clicks=0,
-            style=UNSELECTED_STYLE,
-            size="xl",
-            color="grape",
-            leftSection=DashIconify(icon="mdi:graph-box", color="white"),
-            disabled=disabled,
-        )
+    if disabled is None:
+        disabled = not is_enabled("figure")
+
+    dmc_color = get_dmc_button_color("figure")
+    hex_color = get_component_color("figure")
+
+    button = dmc.Button(
+        "Figure",
+        id={
+            "type": "btn-option",
+            "index": n,
+            "value": "Figure",
+        },
+        n_clicks=0,
+        style={**UNSELECTED_STYLE, "fontSize": "26px"},
+        size="xl",
+        variant="outline",
+        color=dmc_color,
+        leftSection=DashIconify(icon="mdi:graph-box", color=hex_color),
+        disabled=disabled,
     )
     store = dcc.Store(
         id={

@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -72,17 +72,13 @@ def get_test_config():
 @pytest.fixture
 def test_yaml_path():
     """Path to the test YAML configuration file."""
-    from depictio import BASE_PATH
-
-    return os.path.join(
-        BASE_PATH,
-        "depictio",
-        "api",
-        "v1",
-        "configs",
-        "iris_dataset",
-        "initial_project.yaml",
-    )
+    # Navigate from this test file to the config file
+    # test file: depictio/tests/api/v1/endpoints/projects_endpoints/test_utils.py
+    # config: depictio/api/v1/configs/iris_dataset/initial_project.yaml
+    this_file = Path(__file__)
+    depictio_root = this_file.parent.parent.parent.parent.parent.parent  # Go up to depictio/
+    config_path = depictio_root / "api" / "v1" / "configs" / "iris_dataset" / "initial_project.yaml"
+    return str(config_path)
 
 
 @pytest.fixture

@@ -6,18 +6,30 @@ from fastapi import HTTPException
 from pydantic import EmailStr, validate_call
 
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.configs.logging_init import format_pydantic, logger
+from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.utils import create_access_token
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.users import TokenBase, TokenBeanie, TokenData, UserBeanie
 
 
 async def _create_permanent_token(user: UserBeanie) -> TokenBeanie:
-    """Create a permanent token for a user."""
+    """Create a permanent token for a user.
+
+    Raises:
+        HTTPException: If user ID is not set
+    """
+    if user.id is None:
+        raise HTTPException(status_code=500, detail="User ID is not set")
+
+    # Convert user.id to PyObjectId for TokenData
+    user_id_pyobj = PyObjectId(str(user.id))
+    # Also need PydanticObjectId for TokenBeanie.user_id
+    user_id_pydantic = PydanticObjectId(str(user.id))
+
     token_data = TokenData(
-        sub=user.id,  # type: ignore[invalid-argument-type]
+        sub=user_id_pyobj,
         name="anonymous_permanent_token",
-        token_lifetime="permanent",  # type: ignore[invalid-argument-type]
+        token_lifetime="permanent",
     )
     access_token, _ = await create_access_token(token_data, expiry_hours=24 * 365)
     token = TokenBeanie(
@@ -27,7 +39,7 @@ async def _create_permanent_token(user: UserBeanie) -> TokenBeanie:
         refresh_expire_datetime=datetime.max,
         name=token_data.name,
         token_lifetime="permanent",
-        user_id=user.id,  # type: ignore[invalid-argument-type]
+        user_id=user_id_pydantic,
         logged_in=True,
     )
     await token.save()
@@ -56,6 +68,7 @@ async def _create_temporary_user(
 
     Args:
         expiry_hours: Number of hours until the user expires (default: 24)
+        expiry_minutes: Additional minutes until the user expires (default: 0)
 
     Returns:
         The created temporary UserBeanie object
@@ -63,23 +76,16 @@ async def _create_temporary_user(
     import secrets
     import uuid
 
-    # Generate a unique temporary email
     temp_id = str(uuid.uuid4())[:8]
     temp_email = f"temp_user_{temp_id}@depictio.temp"
-
-    # Set expiration time
     expiration_time = datetime.now() + timedelta(hours=expiry_hours, minutes=expiry_minutes)
 
     logger.info(f"Creating temporary user with email: {temp_email}, expires at: {expiration_time}")
 
-    # Generate a random password for the temporary user
     temp_password = secrets.token_urlsafe(32)
     hashed_password = _hash_password(temp_password)
-
-    # Create current timestamp
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # Create new temporary UserBeanie
     user_beanie = UserBeanie(
         id=PyObjectId(),
         email=temp_email,
@@ -92,9 +98,8 @@ async def _create_temporary_user(
         last_login=current_time,
     )
 
-    # Save to database
     await user_beanie.create()
-    logger.info(f"Temporary user created with id: {user_beanie.id}, expires at: {expiration_time}")
+    logger.info(f"Temporary user created with id: {user_beanie.id}")
 
     return user_beanie
 
@@ -181,16 +186,14 @@ async def _cleanup_expired_temporary_users() -> dict:
         {"is_temporary": True, "expiration_time": {"$lte": current_time}}
     ).to_list()
 
-    cleanup_results = {
-        "expired_users_found": len(expired_users),
-        "users_deleted": 0,
-        "tokens_deleted": 0,
-        "projects_deleted": 0,
-        "dashboards_deleted": 0,
-        "deltatables_deleted": 0,
-        "files_deleted": 0,
-        "errors": [],
-    }
+    # Use separate counters for proper typing
+    users_deleted = 0
+    tokens_deleted = 0
+    projects_deleted = 0
+    dashboards_deleted = 0
+    deltatables_deleted = 0
+    files_deleted = 0
+    errors: list[str] = []
 
     for user in expired_users:
         try:
@@ -220,7 +223,7 @@ async def _cleanup_expired_temporary_users() -> dict:
             for project in user_projects:
                 try:
                     await project.delete()
-                    cleanup_results["projects_deleted"] += 1
+                    projects_deleted += 1
                 except Exception as e:
                     logger.warning(f"Failed to delete project {project.name}: {e}")
 
@@ -240,7 +243,7 @@ async def _cleanup_expired_temporary_users() -> dict:
                                 f"Failed to delete deltatable {deltatable.get('_id')}: {e}"
                             )
 
-                cleanup_results["deltatables_deleted"] += deltatables_count
+                deltatables_deleted += deltatables_count
             except Exception as e:
                 logger.debug(f"Deltatables collection not available: {e}")
 
@@ -257,7 +260,7 @@ async def _cleanup_expired_temporary_users() -> dict:
                     except Exception as e:
                         logger.warning(f"Failed to delete dashboard {dashboard.get('_id')}: {e}")
 
-                cleanup_results["dashboards_deleted"] += dashboards_count
+                dashboards_deleted += dashboards_count
             except Exception as e:
                 logger.debug(f"Dashboards collection not available: {e}")
 
@@ -274,9 +277,7 @@ async def _cleanup_expired_temporary_users() -> dict:
                     except Exception as e:
                         logger.warning(f"Failed to delete file {file_doc.get('_id')}: {e}")
 
-                cleanup_results["files_deleted"] = (
-                    cleanup_results.get("files_deleted", 0) + files_count
-                )
+                files_deleted += files_count
             except Exception as e:
                 logger.debug(f"Files collection not available: {e}")
 
@@ -284,11 +285,11 @@ async def _cleanup_expired_temporary_users() -> dict:
             user_tokens = await TokenBeanie.find({"user_id": user.id}).to_list()
             for token in user_tokens:
                 await token.delete()
-                cleanup_results["tokens_deleted"] += 1
+                tokens_deleted += 1
 
             # 6. Delete the user
             await user.delete()
-            cleanup_results["users_deleted"] += 1
+            users_deleted += 1
 
             logger.info(
                 f"Deleted expired temporary user: {user.email} (expired at: {user.expiration_time}) "
@@ -299,8 +300,18 @@ async def _cleanup_expired_temporary_users() -> dict:
         except Exception as e:
             error_msg = f"Failed to delete user {user.email}: {str(e)}"
             logger.error(error_msg)
-            cleanup_results["errors"].append(error_msg)
+            errors.append(error_msg)
 
+    cleanup_results = {
+        "expired_users_found": len(expired_users),
+        "users_deleted": users_deleted,
+        "tokens_deleted": tokens_deleted,
+        "projects_deleted": projects_deleted,
+        "dashboards_deleted": dashboards_deleted,
+        "deltatables_deleted": deltatables_deleted,
+        "files_deleted": files_deleted,
+        "errors": errors,
+    }
     logger.info(f"Cleanup completed: {cleanup_results}")
     return cleanup_results
 
@@ -316,37 +327,17 @@ async def _async_fetch_user_from_token(token: str) -> UserBeanie | None:
     Returns:
         The UserBeanie object if found, None otherwise
     """
-    # Validate input
-    if not isinstance(token, str):
-        logger.debug("Invalid token format")
+    if not isinstance(token, str) or not token:
         return None
 
-    logger.debug(
-        f"Fetching user from token {token[:10]}..."
-    )  # Only log part of the token for security
-
-    if not token:
-        logger.debug("Empty token provided")
-        return None
-
-    # Find the token in the TokenBeanie collection
     token_doc = await TokenBeanie.find_one({"access_token": token})
-
     if not token_doc:
-        logger.debug(f"No token found matching {token[:10]}...")
         return None
 
-    # Get the user_id from the token and find the corresponding user
-    user_id = token_doc.user_id
-    user = await UserBeanie.get(user_id)
-
+    user = await UserBeanie.get(token_doc.user_id)
     if not user:
-        logger.debug(f"Token exists but no matching user found with ID {user_id}")
+        logger.debug(f"Token exists but no matching user found with ID {token_doc.user_id}")
         return None
-
-    # Fetch linked documents if needed
-    # await user.fetch_all_links()
-    # logger.debug(f"User fetched from token: {user.id}")
 
     return user
 
@@ -358,31 +349,19 @@ async def _async_fetch_user_from_email(email: EmailStr) -> UserBeanie | None:
 
     Args:
         email: The email address to look up
-        return_tokens: Whether to include tokens in the response (only long-lived tokens if True)
 
     Returns:
         The UserBeanie object if found, None otherwise
     """
-    # Find the user by email
-    user = await UserBeanie.find_one({"email": email})
-
-    if not user:
-        logger.debug(f"No user found with email {email}")
-        return None
-
-    # Fetch linked documents
-    logger.debug(f"User fetched from email: {user}")
-    return user
+    return await UserBeanie.find_one({"email": email})
 
 
 @validate_call(validate_return=True)
 async def _async_fetch_user_from_id(user_id: PydanticObjectId) -> UserBeanie:
-    logger.debug(f"Fetching user from ID: {user_id}")
+    """Fetch a user by their ID."""
     user = await UserBeanie.find_one({"_id": user_id})
     if not user:
-        logger.debug(f"No user found with ID {user_id}")
         raise HTTPException(status_code=404, detail="User not found")
-    logger.debug(f"User fetched from ID: {user}")
     return user
 
 
@@ -402,18 +381,11 @@ async def _check_if_token_is_valid(token: TokenBase) -> dict:
             "action": str  # "valid", "refresh", "logout"
         }
     """
-    logger.debug(f"Checking token: {token.access_token[:10]}...")
-
-    # Find token document in database
     token_doc = await TokenBeanie.find_one(
-        {
-            "access_token": token.access_token,
-            "user_id": token.user_id,
-        }
+        {"access_token": token.access_token, "user_id": token.user_id}
     )
 
     if not token_doc:
-        logger.debug("Token not found in database")
         return {
             "access_valid": False,
             "refresh_valid": False,
@@ -422,23 +394,15 @@ async def _check_if_token_is_valid(token: TokenBase) -> dict:
         }
 
     current_time = datetime.now()
-
-    # Check access token expiry
     access_valid = token_doc.expire_datetime > current_time
-
-    # Check refresh token expiry
     refresh_valid = token_doc.refresh_expire_datetime > current_time
 
-    logger.debug(f"Access token valid: {access_valid}")
-    logger.debug(f"Refresh token valid: {refresh_valid}")
-
-    # Determine action
     if access_valid:
-        action = "valid"  # Continue normally
+        action = "valid"
     elif refresh_valid:
-        action = "refresh"  # Access expired but can refresh
+        action = "refresh"
     else:
-        action = "logout"  # Both expired, force re-login
+        action = "logout"
 
     return {
         "access_valid": access_valid,
@@ -452,13 +416,13 @@ async def _check_if_token_is_valid(token: TokenBase) -> dict:
 async def _purge_expired_tokens(user) -> dict[str, bool | int]:
     """
     Purge expired tokens for a user.
+
     Args:
-        user_id: The user ID to purge tokens for
+        user: The user to purge tokens for
+
     Returns:
         A dictionary with success status and deleted count
     """
-
-    # Delete the expired tokens - delete many
     outdated_tokens = await TokenBeanie.find(
         {"user_id": user.id, "refresh_expire_datetime": {"$lt": datetime.now()}}
     ).to_list()
@@ -466,13 +430,7 @@ async def _purge_expired_tokens(user) -> dict[str, bool | int]:
     for token in outdated_tokens:
         await token.delete()
 
-    logger.debug(f"Deleted {len(outdated_tokens)} expired tokens")
-
-    # Return success status
-    return {
-        "success": True,
-        "deleted_count": len(outdated_tokens),
-    }
+    return {"success": True, "deleted_count": len(outdated_tokens)}
 
 
 @validate_call(validate_return=True)
@@ -480,24 +438,18 @@ async def _list_tokens(
     user_id: PydanticObjectId | None = None,
     token_lifetime: str | None = None,
 ) -> list[TokenBeanie]:
+    """List tokens for a user with optional lifetime filter."""
     if token_lifetime not in ["short-lived", "long-lived", "permanent", None]:
         raise HTTPException(
             status_code=400,
             detail="Invalid token_lifetime. Must be 'short-lived', 'long-lived', or 'permanent'.",
         )
 
-    query = {
-        "user_id": user_id,
-        "expire_datetime": {"$gt": datetime.now()},
-    }
-
+    query = {"user_id": user_id, "expire_datetime": {"$gt": datetime.now()}}
     if token_lifetime:
         query["token_lifetime"] = token_lifetime
 
-    cli_configs = await TokenBeanie.find_many(query).to_list()
-    logger.debug(f"CLI configs nb: {len(cli_configs)}")
-
-    return cli_configs
+    return await TokenBeanie.find_many(query).to_list()
 
 
 @validate_call(validate_return=True)
@@ -564,11 +516,9 @@ async def _delete_token(token_id: PydanticObjectId) -> bool:
     """
     token = await TokenBeanie.get(token_id)
     if not token:
-        logger.debug(f"No token found with ID {token_id}")
         return False
 
     await token.delete()
-    logger.debug(f"Token with ID {token_id} deleted")
     return True
 
 
@@ -584,24 +534,16 @@ async def _edit_password(user_id: PydanticObjectId, new_password: str) -> bool:
     Returns:
         bool: True if the password was updated successfully, False otherwise
     """
-    # Get the user from the database
     user = await UserBeanie.get(user_id)
     if not user:
         logger.error(f"User with ID {user_id} not found")
         return False
 
-    # Update the password
     user.password = new_password
 
-    # Save the user to the database
     try:
         await user.save()
         logger.info(f"Password updated successfully for user with email {user.email}")
-
-        # Fetch and log the updated user for verification
-        updated_user = await UserBeanie.find_one({"email": user.email})
-        logger.info(f"Show updated user from database: {updated_user}")
-
         return True
     except Exception as e:
         logger.error(f"Failed to update password: {e}")
@@ -610,9 +552,7 @@ async def _edit_password(user_id: PydanticObjectId, new_password: str) -> bool:
 
 @validate_call(validate_return=True)
 async def _add_token(token_data: TokenData) -> TokenBeanie:
-    email = token_data.sub
-    logger.info(f"Adding token for user {email}.")
-    logger.info(f"Token: {format_pydantic(token_data)}")
+    """Add a new token for a user."""
     if token_data.token_lifetime == "permanent":
         access_token, _ = await create_access_token(token_data, expiry_hours=24 * 365)
         refresh_token = ""
@@ -660,15 +600,12 @@ async def _add_token(token_data: TokenData) -> TokenBeanie:
     )
 
     await TokenBeanie.save(token)
-
-    logger.info(f"Token created for user {email}.")
-
     return token
 
 
 @validate_call(validate_return=True)
 def _verify_password(stored_hash: str, password: str) -> bool:
-    # Verify the password against the stored hash
+    """Verify the password against the stored hash."""
     return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
 
 
@@ -676,28 +613,25 @@ def _verify_password(stored_hash: str, password: str) -> bool:
 async def _check_password(email: str, password: str) -> bool:
     """
     Check if the provided password matches the stored password for the user.
+
     Args:
-        email (str): The email of the user.
-        password (str): The password to verify.
+        email: The email of the user.
+        password: The password to verify.
+
     Returns:
         bool: True if the password matches, False otherwise.
     """
-    logger.info(f"Checking password for user {email}.")
     user = await _async_fetch_user_from_email(email)
-    logger.debug(f"User found: {user.email if user else 'None'}")
-    if user:
-        if _verify_password(user.password, password):
-            return True
+    if user and _verify_password(user.password, password):
+        return True
     return False
 
 
 @validate_call(validate_return=True)
 def _hash_password(password: str) -> str:
-    # Generate a salt
+    """Hash a password using bcrypt."""
     salt = bcrypt.gensalt()
-    # Hash the password with the salt
     hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
-    # Return the hashed password
     return hashed.decode("utf-8")
 
 
@@ -722,29 +656,21 @@ async def _create_user_in_db(
     Returns:
         The created UserBeanie object if successful
     """
-    logger.info(f"Creating user with email: {email}")
-
-    # Check if the user already exists
     search_query = {"email": email}
     if id:
         search_query["_id"] = id
     existing_user = await UserBeanie.find_one(search_query)
 
     if existing_user:
-        logger.warning(f"User {email} already exists in the database")
         return {
             "success": False,
             "message": "User already exists",
-            "user": existing_user,  # The CustomJSONResponse will handle serialization
+            "user": existing_user,
         }
 
-    # Hash the password
     hashed_password = _hash_password(password)
-
-    # Create current timestamp
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # Create new UserBeanie
     user_beanie = UserBeanie(
         id=id if id else PyObjectId(),
         email=email,
@@ -753,12 +679,9 @@ async def _create_user_in_db(
         is_anonymous=is_anonymous,
         registration_date=current_time,
         last_login=current_time,
-        # groups=[group],
     )
 
-    # Save to database
     await user_beanie.create()
-    logger.info(f"User created with id: {user_beanie.id}")
 
     return {
         "success": True,

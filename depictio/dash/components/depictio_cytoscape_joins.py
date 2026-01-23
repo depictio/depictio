@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
 """
-Depictio Cytoscape Joins Component
+Depictio Cytoscape Joins Component.
 
 A module for integrating data collection joins visualization directly into Depictio's
 existing Dash application. This creates reusable components that can be embedded
 into the project data collections management interface.
+
+Key Features:
+    - Network graph visualization of data collection relationships
+    - Interactive node/edge selection with detail panels
+    - Theme-aware styling (light/dark modes)
+    - Support for different join types (inner, left, right, outer)
 """
+
+from typing import Any
 
 import dash_cytoscape as cyto
 import dash_mantine_components as dmc
@@ -15,7 +23,9 @@ from dash_iconify import DashIconify
 from depictio.dash.colors import colors
 
 
-def create_joins_visualization_section(elements=None, theme="light"):
+def create_joins_visualization_section(
+    elements: list[dict[str, Any]] | None = None, theme: str = "light"
+) -> dmc.Stack:
     """
     Create a complete joins visualization section for Depictio.
 
@@ -231,15 +241,22 @@ def create_joins_visualization_section(elements=None, theme="light"):
     )
 
 
-def get_depictio_cytoscape_stylesheet(theme="light"):
+def get_depictio_cytoscape_stylesheet(theme: str = "light") -> list[dict[str, Any]]:
     """
-    Get Depictio-themed cytoscape stylesheet.
+    Get Depictio-themed cytoscape stylesheet with full styling for all elements.
+
+    This function generates a comprehensive stylesheet that includes:
+    - Data collection background boxes with dynamic sizing
+    - Column node styling (regular and join columns)
+    - Join edge styling for different join types (inner, left, right, outer)
+    - Hover and selection effects
+    - Theme-specific color schemes
 
     Args:
-        theme: "light" or "dark" theme
+        theme: Color theme - "light" or "dark".
 
     Returns:
-        List of cytoscape style dictionaries
+        List of cytoscape selector/style dictionaries.
     """
     # Use Depictio color palette
     if theme == "light":
@@ -518,12 +535,16 @@ def get_depictio_cytoscape_stylesheet(theme="light"):
     ]
 
 
-def generate_sample_elements():
+def generate_sample_elements() -> list[dict[str, Any]]:
     """
-    Generate sample elements using the better layout from the original prototype.
+    Generate sample Cytoscape elements for testing and demonstration.
+
+    Creates a sample dataset with three data collections (Users, Departments,
+    Projects) showing different join relationships and column configurations.
+    The generated layout includes proper positioning and edge routing.
 
     Returns:
-        List of cytoscape elements
+        List of cytoscape element dictionaries with nodes and edges.
     """
     # Sample data collections with various column name lengths
     sample_data_collections = [
@@ -731,15 +752,22 @@ def generate_sample_elements():
     return elements
 
 
-def create_selection_details_content(selected_data):
+def create_selection_details_content(
+    selected_data: list[dict[str, Any]] | None,
+) -> dmc.Text | dmc.Stack:
     """
-    Create content for the selection details panel.
+    Create content for the selection details panel based on selected element.
+
+    Renders different detail views based on the selected element type:
+    - Column nodes: Shows column name, type, and parent data collection
+    - Data collection: Shows name and ID
+    - Join edges: Shows join type, source, and target columns
 
     Args:
-        selected_data: Selected node or edge data
+        selected_data: List of selected node/edge data dictionaries from Cytoscape.
 
     Returns:
-        Dash component showing selection details
+        A DMC component displaying the selection details.
     """
     if not selected_data:
         return dmc.Text("Click on a node or edge to see details", c="gray", size="sm")
@@ -811,13 +839,15 @@ def create_selection_details_content(selected_data):
     return dmc.Text("Unknown element type", c="gray", size="sm")
 
 
-# Callback functions that can be registered in the main app
-def register_joins_callbacks(app):
+def register_joins_callbacks(app) -> None:
     """
-    Register all callbacks for the joins visualization.
+    Register all callbacks for the joins visualization component.
+
+    This registers callbacks that handle user interaction with the Cytoscape
+    graph, including selection events for nodes and edges.
 
     Args:
-        app: Dash application instance
+        app: The Dash application instance.
     """
     from dash import Input, Output, callback
 

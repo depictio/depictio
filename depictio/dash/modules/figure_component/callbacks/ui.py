@@ -73,7 +73,7 @@ def register_ui_callbacks(app):
         logger.info(f"Workflow: {workflow}")
         logger.info(f"Data collection: {data_collection}")
 
-        logger.info("Fetching available columns for data collection...")
+        logger.debug("Fetching available columns for data collection...")
         logger.info(f"Workflow ID: {workflow}")
         logger.info(f"Data Collection ID: {data_collection}")
 
@@ -81,7 +81,6 @@ def register_ui_callbacks(app):
         try:
             columns_json = get_columns_from_data_collection(workflow, data_collection, TOKEN)
             columns = list(columns_json.keys())
-            logger.info(f"✓ Loaded {len(columns)} columns from data collection")
         except Exception as e:
             logger.error(f"Failed to get columns: {e}")
             columns = []
@@ -125,7 +124,7 @@ def register_ui_callbacks(app):
             parameters_to_load = current_dict_kwargs or {}
 
             if parameters_to_load:
-                logger.info(f"Loading parameters into state: {parameters_to_load}")
+                logger.debug(f"Loading parameters into state: {parameters_to_load}")
                 for param_name, value in parameters_to_load.items():
                     state.set_parameter_value(param_name, value)
 
@@ -136,7 +135,6 @@ def register_ui_callbacks(app):
             # Build the complete accordion interface
             accordion = accordion_builder.build_full_accordion(viz_def, state)
 
-            logger.info("✅ Successfully built parameter interface")
             return accordion
 
         except Exception as e:
@@ -204,7 +202,6 @@ def register_ui_callbacks(app):
         # Get the parameter name that was actually changed
         triggered_param = triggered_id_dict.get("type", "").replace("param-", "")
 
-        logger.info(f"📝 PARAMETER CHANGED for component {component_index}")
         logger.info(f"   Parameter: {triggered_param}")
 
         # Get state from state manager
@@ -288,7 +285,6 @@ def register_ui_callbacks(app):
         from ..state_manager import state_manager
 
         component_index = trigger_id["index"]
-        logger.info(f"📝 UPDATING dict_kwargs for component {component_index}")
 
         # Get state from state manager
         state = state_manager.get_state(component_index)
@@ -308,8 +304,6 @@ def register_ui_callbacks(app):
                 # Include non-empty values
                 updated_kwargs[param_name] = param_value
 
-        logger.info(f"📝 Updated dict_kwargs from state (filtered): {updated_kwargs}")
-
         return updated_kwargs
 
     # Callback to sync dict_kwargs into stored-metadata-component for saving
@@ -328,22 +322,8 @@ def register_ui_callbacks(app):
     )
     def sync_dict_kwargs_to_metadata(dict_kwargs, visu_type, mode, code_content, current_metadata):
         """Sync dict_kwargs, visu_type, mode, and code_content to stored-metadata-component for saving."""
-        ctx = dash.callback_context
-        triggered_input = ctx.triggered[0]["prop_id"] if ctx.triggered else "unknown"
-
-        logger.info("=" * 80)
-        logger.info(f"🔄 SYNC CALLBACK TRIGGERED by: {triggered_input}")
-
         if not current_metadata:
-            logger.warning("⚠️ SYNC: No current_metadata - preventing update")
             raise dash.exceptions.PreventUpdate
-
-        logger.info(f"🔄 Syncing metadata for component {current_metadata.get('index')}")
-        logger.info(f"   dict_kwargs: {dict_kwargs}")
-        logger.info(f"   visu_type: {visu_type}")
-        logger.info(f"   mode: {mode}")
-        logger.info(f"   code_content length: {len(code_content) if code_content else 0}")
-        logger.info(f"   code_content type: {type(code_content)}")
 
         # Determine effective mode and code content
         effective_mode = mode or "ui"
@@ -358,8 +338,6 @@ def register_ui_callbacks(app):
             "mode": effective_mode,
             "code_content": effective_code_content,
         }
-
-        logger.info(f"✅ Metadata updated: {updated_metadata}")
 
         return updated_metadata
 

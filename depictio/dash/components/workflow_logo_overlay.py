@@ -69,7 +69,6 @@ def create_workflow_logo_overlay(
     Returns:
         Dash html.Div containing logo image or empty div
     """
-    logger.info(f"🎨 LOGO OVERLAY: Called with project_data type: {type(project_data)}")
 
     if not project_data or not isinstance(project_data, dict):
         logger.warning("🎨 LOGO OVERLAY: No project_data or not a dict")
@@ -77,7 +76,6 @@ def create_workflow_logo_overlay(
 
     # Extract workflows from project data
     workflows = project_data.get("workflows", [])
-    logger.info(f"🎨 LOGO OVERLAY: Found {len(workflows) if workflows else 0} workflows")
 
     if not workflows or not isinstance(workflows, list):
         logger.warning("🎨 LOGO OVERLAY: No workflows or not a list")
@@ -91,7 +89,6 @@ def create_workflow_logo_overlay(
 
     # Get workflow tag
     workflow_tag = first_workflow.get("workflow_tag")
-    logger.info(f"🎨 LOGO OVERLAY: Extracted workflow_tag: {workflow_tag}")
 
     if not workflow_tag:
         logger.warning("🎨 LOGO OVERLAY: No workflow_tag found")
@@ -99,7 +96,6 @@ def create_workflow_logo_overlay(
 
     # Get logo path
     logo_path = get_workflow_logo_path(workflow_tag, theme)
-    logger.info(f"🎨 LOGO OVERLAY: Logo path resolved to: {logo_path}")
 
     if not logo_path:
         logger.warning(f"🎨 LOGO OVERLAY: No logo path for workflow_tag: {workflow_tag}")

@@ -1,3 +1,17 @@
+"""
+Sidebar layout and callbacks for Depictio application.
+
+This module provides:
+- Management app sidebar with navigation links (Dashboards, Projects, Admin, About)
+- Dashboard viewer sidebar with tab-based navigation between dashboard views
+- Standardized sidebar footer with theme controls and server status
+- Clientside callbacks for responsive UI updates
+
+The sidebar adapts based on context:
+- Management app: Shows main navigation links
+- Dashboard viewer: Shows dashboard-specific tabs and back navigation
+"""
+
 import dash
 import dash_mantine_components as dmc
 from dash import ALL, Input, Output, State, dcc, html
@@ -169,16 +183,33 @@ def create_static_navbar_content():
     ]
 
 
-def register_sidebar_callbacks(app):
+def register_sidebar_callbacks(app) -> None:
+    """
+    Register all sidebar-related callbacks for the application.
+
+    This includes:
+    - Tab navigation callbacks (for dashboard viewer)
+    - Favicon visibility based on sidebar collapse state
+    - Navbar collapse state management for dashboard pages
+    - Sidebar link active state highlighting
+    - Server status polling and display
+    - Admin link visibility based on user permissions
+    - Avatar rendering from user session data
+
+    Most callbacks are implemented clientside for instant UI response.
+
+    Args:
+        app: The Dash application instance.
+    """
     # Import and register tab callbacks
     from depictio.dash.layouts.tab_callbacks import register_tab_callbacks
     from depictio.dash.layouts.tab_modal import register_tab_modal_callbacks
 
     register_tab_callbacks(app)
-    logger.info("✅ SIDEBAR: Tab callbacks registered")
+    logger.debug("SIDEBAR: Tab callbacks registered")
 
     register_tab_modal_callbacks(app)
-    logger.info("✅ SIDEBAR: Tab modal callbacks registered")
+    logger.debug("SIDEBAR: Tab modal callbacks registered")
 
     # Inject JavaScript to handle the resize when sidebar state changes
     # app.clientside_callback(
@@ -470,7 +501,6 @@ def register_sidebar_callbacks(app):
 
     #     # GUARD 1: Skip if no valid cache data exists
     #     if not server_status or "status" not in server_status:
-    #         logger.debug("🔴 GUARD 1: No valid cache data - preventing update")
     #         raise dash.exceptions.PreventUpdate
 
     #     # GUARD 2: Skip if server status hasn't changed AND element already has content
@@ -485,7 +515,6 @@ def register_sidebar_callbacks(app):
     #         and _last_server_status_state["status"] == current_status
     #         and _last_server_status_state["version"] == current_version
     #     ):
-    #         logger.info(
     #             f"🔴 GUARD 2: Status unchanged ({current_status}, {current_version}) and element has content - preventing update"
     #         )
     #         raise dash.exceptions.PreventUpdate
@@ -600,7 +629,6 @@ def register_sidebar_callbacks(app):
 
             user = api_call_fetch_user_from_token(local_data.get("access_token"))
             if user and user.is_admin:
-                logger.debug(f"✅ Showing admin link for admin user: {user.email}")
                 return {"padding": "20px"}
             else:
                 logger.debug(
@@ -711,7 +739,6 @@ def create_dashboard_viewer_sidebar():
     Returns:
         list: Sidebar children with empty tabs container and footer
     """
-    logger.info("🏗️ Creating dashboard viewer sidebar with tab container")
 
     from depictio.dash.colors import colors
 
@@ -732,7 +759,6 @@ def create_dashboard_viewer_sidebar():
             )
         ],
     )
-    logger.info("✅ Created sidebar-tabs with sidebar-tabs-list")
 
     # Create "Back to Dashboards" navigation link for top of sidebar
     back_to_dashboards = html.Div(

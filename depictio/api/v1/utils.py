@@ -6,105 +6,108 @@ from pathlib import PosixPath
 import numpy as np
 
 from depictio import BASE_PATH
-from depictio.api.v1.configs.logging_init import logger
 from depictio.models.models.data_collections import DataCollection
 from depictio.models.models.files import File
 from depictio.models.models.workflows import WorkflowConfig, WorkflowRun
 
 
-async def clean_screenshots():
+async def clean_screenshots() -> dict[str, bool | str]:
     """
-    Clean up screenshots directory if it exists.
+    Clean up orphaned screenshot files from the screenshots directory.
+
+    Removes screenshot files that no longer correspond to dashboards in the database.
+
+    Returns:
+        Dictionary with success status and message.
     """
     screenshots_dir = os.path.join(BASE_PATH, "dash", "static", "screenshots")
 
-    # Get list of all dashboards in DB
+    if not os.path.exists(screenshots_dir):
+        return {"success": False, "message": "Screenshots directory does not exist"}
+
     from depictio.api.v1.db import dashboards_collection
 
-    # project to only retrieve the _id field
     dashboards = dashboards_collection.find({}, {"_id": 1})
-    # Get all dashboards
-    dashboards_list = dashboards.to_list(length=None)
-    # Get all dashboard IDs
-    dashboard_ids = [str(dashboard["_id"]) for dashboard in dashboards_list]
+    dashboard_ids = {str(dashboard["_id"]) for dashboard in dashboards.to_list(length=None)}
 
-    if os.path.exists(screenshots_dir):
-        for filename in os.listdir(screenshots_dir):
-            if filename.endswith(".png"):
-                file_path = os.path.join(screenshots_dir, filename)
-                logger.debug(f"Checking file: {file_path}")
-                # Extract the dashboard ID from the filename
-                dashboard_id = filename.split(".")[0]
-                # Check if the dashboard ID is in the list of dashboard IDs
-                if dashboard_id not in dashboard_ids:
-                    logger.debug(
-                        f"Dashboard ID {dashboard_id} not found in DB. Removing file: {file_path}"
-                    )
-                    try:
-                        os.remove(file_path)
-                        logger.debug(f"Removed file: {file_path}")
-                    except Exception as e:
-                        logger.debug(f"Error removing file {file_path}: {e}")
-    else:
-        logger.debug(f"Directory {screenshots_dir} does not exist.")
-        return {"success": False, "message": "No project found in the database"}
+    for filename in os.listdir(screenshots_dir):
+        if not filename.endswith(".png"):
+            continue
+
+        dashboard_id = filename.split(".")[0]
+        if dashboard_id in dashboard_ids:
+            continue
+
+        file_path = os.path.join(screenshots_dir, filename)
+        try:
+            os.remove(file_path)
+        except OSError:
+            pass
+
     return {"success": True, "message": "Screenshots cleaned up"}
 
 
-# FIXME: update model & function using a list of dict instead of a dict
 def construct_full_regex(files_regex, regex_config):
     """
     Construct the full regex using the wildcards defined in the config.
+
+    Args:
+        files_regex: Base regex pattern with placeholders.
+        regex_config: Configuration containing wildcard definitions.
+
+    Returns:
+        Full regex pattern with wildcards replaced by their regex patterns.
     """
     for wildcard in regex_config.wildcards:
-        logger.debug(f"Wildcard: {wildcard}")
-        placeholder = f"{{{wildcard.name}}}"  # e.g. {date}
+        placeholder = f"{{{wildcard.name}}}"
         regex_pattern = wildcard.wildcard_regex
         files_regex = files_regex.replace(placeholder, f"({regex_pattern})")
-        logger.debug(f"Files Regex: {files_regex}")
     return files_regex
 
 
 def regex_match(root, file, full_regex, data_collection):
-    # Normalize the regex pattern to match both types of path separators
+    """
+    Match a file against a regex pattern.
+
+    Args:
+        root: Directory path containing the file.
+        file: Filename to match.
+        full_regex: Regex pattern to use for matching.
+        data_collection: Data collection configuration with regex type.
+
+    Returns:
+        Tuple of (matched: bool, match_result: re.Match | None).
+    """
     normalized_regex = full_regex.replace("/", "\\/")
-    logger.debug(
-        f"Root: {root}, File: {file}, Full Regex: {full_regex}, Data Collection type: {data_collection.config.regex.type.lower()}"  # type: ignore[unresolved-attribute]
-    )
-    # If regex pattern is file-based, match the file name directly
-    if data_collection.config.regex.type.lower() == "file-based":  # type: ignore[unresolved-attribute]
-        if re.match(normalized_regex, file):
-            logger.debug(f"Matched file - file-based: {file}")
-            return True, re.match(normalized_regex, file)
-    # elif data_collection.config.regex.type.lower() == "path-based":
-    #     # If regex pattern is path-based, match the full path
-    #     file_location = os.path.join(root, file)
-    #     if re.match(normalized_regex, file_location):
-    #         return True, re.match(normalized_regex, file)
+    if data_collection.config.regex.type.lower() == "file-based":
+        match = re.match(normalized_regex, file)
+        if match:
+            return True, match
     return False, None
 
 
 def scan_files(run_location: str, run_id: str, data_collection: DataCollection) -> list[File]:
     """
     Scan the files for a given workflow.
+
+    Args:
+        run_location: Directory path to scan for files.
+        run_id: Identifier for the workflow run.
+        data_collection: Data collection configuration with regex patterns.
+
+    Returns:
+        List of File instances matching the regex pattern.
+
+    Raises:
+        ValueError: If run_location does not exist or is not a directory.
     """
-    # Get the workflow's parent_runs_location
-
-    logger.debug(f"Scanning files in {run_location}")
-
     if not os.path.exists(run_location):
         raise ValueError(f"The directory '{run_location}' does not exist.")
     if not os.path.isdir(run_location):
         raise ValueError(f"'{run_location}' is not a directory.")
 
-    file_list = list()
+    file_list: list[File] = []
 
-    logger.debug(f"Data Collection: {data_collection}")
-    logger.debug(f"Regex Pattern: {data_collection.config.regex.pattern}")  # type: ignore[unresolved-attribute]
-    logger.debug(f"Wildcards: {data_collection.config.regex.wildcards}")  # type: ignore[unresolved-attribute]
-
-    # Construct the full regex using the wildcards defined in the config
-    full_regex = None
     if data_collection.config.regex.wildcards:  # type: ignore[unresolved-attribute]
         full_regex = construct_full_regex(
             data_collection.config.regex.pattern,  # type: ignore[unresolved-attribute]
@@ -113,54 +116,40 @@ def scan_files(run_location: str, run_id: str, data_collection: DataCollection) 
     else:
         full_regex = data_collection.config.regex.pattern  # type: ignore[unresolved-attribute]
 
-    logger.debug(f"Full Regex: {full_regex}")
-
-    # Scan the files
-    for root, dirs, files in os.walk(run_location):
+    for root, _dirs, files in os.walk(run_location):
         for file in files:
             match, result = regex_match(root, file, full_regex, data_collection)
-            if match:
-                file_location = os.path.join(root, file)
-                filename = file
-                creation_time_float = os.path.getctime(file_location)
-                modification_time_float = os.path.getmtime(file_location)
+            if not match:
+                continue
 
-                # Convert the float values to datetime objects
-                creation_time_dt = datetime.fromtimestamp(creation_time_float)
-                modification_time_dt = datetime.fromtimestamp(modification_time_float)
+            file_location = os.path.join(root, file)
+            creation_time_dt = datetime.fromtimestamp(os.path.getctime(file_location))
+            modification_time_dt = datetime.fromtimestamp(os.path.getmtime(file_location))
 
-                # Convert the datetime objects to ISO formatted strings
-                creation_time_iso = creation_time_dt.strftime("%Y-%m-%d %H:%M:%S")
-                modification_time_iso = modification_time_dt.strftime("%Y-%m-%d %H:%M:%S")
+            file_instance = File(  # type: ignore[unknown-argument]
+                filename=file,
+                file_location=file_location,
+                creation_time=creation_time_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                modification_time=modification_time_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                data_collection=data_collection,  # type: ignore[unknown-argument]
+                run_id=run_id,
+            )
 
-                file_instance = File(  # type: ignore[unknown-argument]
-                    filename=filename,
-                    file_location=file_location,
-                    creation_time=creation_time_iso,
-                    modification_time=modification_time_iso,
-                    data_collection=data_collection,  # type: ignore[unknown-argument]
-                    run_id=run_id,
-                )
-                logger.debug(f"File Instance: {file_instance}")
+            if (
+                data_collection.config.regex.wildcards  # type: ignore[unresolved-attribute]
+                and data_collection.config.type == "JBrowse2"
+            ):
+                wildcards_list = [
+                    {
+                        "name": wildcard.name,
+                        "value": result.group(j),
+                        "wildcard_regex": wildcard.wildcard_regex,
+                    }
+                    for j, wildcard in enumerate(data_collection.config.regex.wildcards, start=1)  # type: ignore[unresolved-attribute]
+                ]
+                file_instance.wildcards = wildcards_list  # type: ignore[unresolved-attribute]
 
-                if (
-                    data_collection.config.regex.wildcards  # type: ignore[unresolved-attribute]
-                    and data_collection.config.type == "JBrowse2"
-                ):
-                    wildcards_list = list()
-                    for j, wildcard in enumerate(data_collection.config.regex.wildcards, start=1):  # type: ignore[unresolved-attribute]
-                        wildcards_list.append(
-                            {
-                                "name": wildcard.name,
-                                "value": result.group(j),
-                                "wildcard_regex": wildcard.wildcard_regex,
-                            }
-                        )
-                    file_instance.wildcards = wildcards_list  # type: ignore[unresolved-attribute]
-
-                file_list.append(file_instance)
-
-    logger.debug(f"File List: {file_list}")
+            file_list.append(file_instance)
     return file_list
 
 
@@ -172,67 +161,51 @@ def scan_runs(
 ) -> list[WorkflowRun]:
     """
     Scan the runs for a given workflow.
-    """
 
+    Args:
+        parent_runs_location: Parent directory containing workflow runs.
+        workflow_config: Workflow configuration with runs_regex pattern.
+        data_collection: Data collection configuration.
+        workflow_id: Identifier for the workflow.
+
+    Returns:
+        List of WorkflowRun instances matching the runs_regex pattern.
+
+    Raises:
+        ValueError: If parent_runs_location does not exist or is not a directory.
+    """
     if not os.path.exists(parent_runs_location):
         raise ValueError(f"The directory '{parent_runs_location}' does not exist.")
     if not os.path.isdir(parent_runs_location):
         raise ValueError(f"'{parent_runs_location}' is not a directory.")
 
-    runs = list()
+    runs: list[WorkflowRun] = []
 
     for run in os.listdir(parent_runs_location):
-        if os.path.isdir(os.path.join(parent_runs_location, run)):
-            if re.match(workflow_config.runs_regex, run):  # type: ignore[unresolved-attribute]
-                run_location = os.path.join(parent_runs_location, run)
-                files = scan_files(
-                    run_location=run_location,
-                    run_id=run,
-                    data_collection=data_collection,
-                )
-                execution_time = datetime.fromtimestamp(os.path.getctime(run_location))
+        run_location = os.path.join(parent_runs_location, run)
+        if not os.path.isdir(run_location):
+            continue
+        if not re.match(workflow_config.runs_regex, run):  # type: ignore[unresolved-attribute]
+            continue
 
-                workflow_run = WorkflowRun(  # type: ignore[missing-argument,invalid-argument-type,unknown-argument]
-                    workflow_id=workflow_id,  # type: ignore[invalid-argument-type]
-                    run_tag=run,
-                    files=files,  # type: ignore[unknown-argument]
-                    workflow_config=workflow_config,  # type: ignore[unknown-argument]
-                    run_location=run_location,
-                    execution_time=execution_time,  # type: ignore[unknown-argument]
-                    execution_profile=None,  # type: ignore[unknown-argument]
-                )
-                runs.append(workflow_run)
+        files = scan_files(
+            run_location=run_location,
+            run_id=run,
+            data_collection=data_collection,
+        )
+        execution_time = datetime.fromtimestamp(os.path.getctime(run_location))
+
+        workflow_run = WorkflowRun(  # type: ignore[missing-argument,invalid-argument-type,unknown-argument]
+            workflow_id=workflow_id,  # type: ignore[invalid-argument-type]
+            run_tag=run,
+            files=files,  # type: ignore[unknown-argument]
+            workflow_config=workflow_config,  # type: ignore[unknown-argument]
+            run_location=run_location,
+            execution_time=execution_time,  # type: ignore[unknown-argument]
+            execution_profile=None,  # type: ignore[unknown-argument]
+        )
+        runs.append(workflow_run)
     return runs
-
-
-# def populate_database(config_path: str, workflow_id: str, data_collection_id: str) -> List[WorkflowRun]:
-#     """
-#     Populate the database with files for a given workflow.
-#     """
-#     config_data = get_config(config_path)
-#     config = validate_config(config_data, RootConfig)
-#     validated_config = validate_all_workflows(config)
-
-#     config_dict = {f"{e.workflow_id}": e for e in validated_config.workflows}
-
-#     if workflow_id not in config_dict:
-#         raise ValueError(f"Workflow '{workflow_id}' not found in the config file.")
-
-#     if workflow_id is None:
-#         raise ValueError("Please provide a workflow name.")
-
-#     workflow = config_dict[workflow_id]
-#     workflow.runs = {}
-#     data_collection = workflow.data_collections[data_collection_id]
-
-#     runs_and_content = scan_runs(
-#         parent_runs_location=workflow.config.parent_runs_location,
-#         workflow_config=workflow.config,
-#         data_collection=data_collection,
-#         workflow_id=workflow_id,
-#     )
-
-#     return runs_and_content
 
 
 def serialize_for_mongo(data):
@@ -252,9 +225,9 @@ def serialize_for_mongo(data):
 
 def numpy_to_python(value):
     """Converts numpy data types to native Python data types."""
-    if isinstance(value, np.int64 | np.int32 | np.int16 | np.int8):
+    if isinstance(value, (np.int64, np.int32, np.int16, np.int8)):
         return int(value)
-    elif isinstance(value, np.float64 | np.float32 | np.float16):
+    elif isinstance(value, (np.float64, np.float32, np.float16)):
         return float(value)
     elif isinstance(value, np.bool_):
         return bool(value)

@@ -107,7 +107,6 @@ def register_callbacks(app):
     Args:
         app (dash.Dash): Viewer app instance
     """
-    logger.info("🔥 VIEWER APP: Registering callbacks")
 
     # 1. Main routing callback
     register_routing_callback(app)
@@ -115,7 +114,6 @@ def register_callbacks(app):
     # 1.5. Cache population callbacks (consolidated API)
     from depictio.dash.layouts.consolidated_api import register_consolidated_api_callbacks
 
-    logger.info("  📦 Registering consolidated API cache population callbacks")
     register_consolidated_api_callbacks(app)
 
     # 2. Component rendering callbacks
@@ -124,13 +122,10 @@ def register_callbacks(app):
     # 2.5. Theme system callbacks
     from depictio.dash.simple_theme import register_simple_theme_system
 
-    logger.info("  🎨 Registering theme system callbacks")
     register_simple_theme_system(app)
 
     # 3. Header callbacks (minimal)
     register_header_callbacks(app)
-
-    logger.info("✅ VIEWER APP: All callbacks registered (~30 callbacks)")
 
 
 def register_routing_callback(app):
@@ -140,7 +135,6 @@ def register_routing_callback(app):
     Extracts dashboard ID from pathname and loads dashboard data.
     Handles authentication via shared localStorage.
     """
-    logger.info("  📋 Registering main routing callback")
 
     @app.callback(
         Output("page-content", "children"),
@@ -179,7 +173,6 @@ def register_routing_callback(app):
         Returns:
             tuple: (page_content, header_content, pathname, local_data)
         """
-        logger.info(f"🔄 VIEWER ROUTING: pathname={pathname}")
         logger.info(f"   Triggered by: {ctx.triggered_id}")
 
         # CRITICAL FIX: When triggered by local-store update (not URL change),
@@ -194,8 +187,6 @@ def register_routing_callback(app):
 
         # Validate authentication
         updated_local_data, is_authenticated, reason = validate_and_refresh_token(local_data)
-
-        logger.info(f"🔐 AUTH STATUS: is_authenticated={is_authenticated}, reason={reason}")
 
         # Handle unauthenticated users - redirect to management app /auth
         if not is_authenticated:
@@ -228,7 +219,6 @@ def register_routing_callback(app):
             return error_content, html.Div(), pathname, updated_local_data
 
         # Load dashboard data
-        logger.info(f"📊 Loading dashboard: {dashboard_id}")
         content, header_content = load_and_render_dashboard(
             dashboard_id=dashboard_id,
             local_data=updated_local_data,
@@ -244,7 +234,6 @@ def register_routing_callback(app):
             )
             return content, header_content, no_update, updated_local_data
 
-        logger.info(f"📤 VIEWER ROUTING RETURNING - pathname: {pathname}")
         return content, header_content, pathname, updated_local_data
 
 
@@ -398,7 +387,6 @@ def register_component_callbacks(app):
     Args:
         app: Dash app instance
     """
-    logger.info("  📋 Registering component rendering callbacks")
 
     # Register card component callbacks
     from depictio.dash.modules.card_component.callbacks import register_callbacks_card_component
@@ -431,8 +419,6 @@ def register_component_callbacks(app):
 
     register_callbacks_multiqc_component(app)
 
-    logger.info("  ✅ Component rendering callbacks registered")
-
 
 def register_header_callbacks(app):
     """
@@ -451,7 +437,6 @@ def register_header_callbacks(app):
     Args:
         app: Dash app instance
     """
-    logger.info("  📋 Registering minimal header callbacks")
 
     # Register minimal header callbacks (no edit mode)
     from depictio.dash.layouts.header import register_callbacks_header
@@ -478,5 +463,3 @@ def register_header_callbacks(app):
         Input("url", "pathname"),
         prevent_initial_call="initial_duplicate",
     )
-
-    logger.info("  ✅ Header callbacks registered")

@@ -104,7 +104,6 @@ def _get_cached_component_data(cache_key: str) -> Optional[Any]:
     cached_item["last_access"] = current_time
 
     _cache_stats["hits"] += 1
-    logger.debug(f"🚀 CACHE HIT: component {cache_key} (accessed {cached_item['access_count']}x)")
     return cached_item["data"]
 
 
@@ -125,7 +124,6 @@ def _cache_component_data(cache_key: str, data: Any):
 
         del _component_data_cache[evict_key]
         _cache_stats["evictions"] += 1
-        logger.debug(f"🗑️  Evicted cached component: {evict_key}")
 
     # Cache the data
     _component_data_cache[cache_key] = {
@@ -134,7 +132,6 @@ def _cache_component_data(cache_key: str, data: Any):
         "last_access": current_time,
         "access_count": 1,
     }
-    logger.debug(f"💾 CACHED: component {cache_key}")
 
 
 def get_component_cache_stats() -> dict:
@@ -170,7 +167,6 @@ def bulk_get_component_data(component_ids: list, dashboard_id: str, TOKEN: str) 
     Returns:
         Dict mapping component_id -> component_data
     """
-    logger.info(f"🚀 BATCH FETCH: Getting {len(component_ids)} components in one request")
 
     # Check enhanced cache for each component first
     results = {}
@@ -189,7 +185,7 @@ def bulk_get_component_data(component_ids: list, dashboard_id: str, TOKEN: str) 
 
     # Fetch uncached components in bulk
     if uncached_ids:
-        logger.info(f"📡 BULK API: Fetching {len(uncached_ids)} uncached components")
+        logger.debug(f"📡 BULK API: Fetching {len(uncached_ids)} uncached components")
 
         # Make bulk API request
         bulk_url = f"{API_BASE_URL}/depictio/api/v1/dashboards/bulk_component_data/{dashboard_id}"
@@ -209,7 +205,6 @@ def bulk_get_component_data(component_ids: list, dashboard_id: str, TOKEN: str) 
                     _cache_component_data(cache_key, component_data)
                     results[input_id] = component_data
 
-                logger.info(f"✅ BULK SUCCESS: Cached {len(bulk_data)} components")
             else:
                 logger.warning(
                     f"❌ BULK FAILED: {response.status_code}, falling back to individual requests"
@@ -229,7 +224,6 @@ def bulk_get_component_data(component_ids: list, dashboard_id: str, TOKEN: str) 
 
 def get_component_data_individual(input_id, dashboard_id, TOKEN):
     """Original individual component data fetching (used as fallback)."""
-    logger.debug(f"📡 INDIVIDUAL: Fetching component data for {input_id}")
 
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/dashboards/get_component_data/{dashboard_id}/{input_id}",
@@ -265,7 +259,6 @@ def get_component_data(input_id, dashboard_id, TOKEN, _bulk_data=None):
 
     # PERFORMANCE OPTIMIZATION: Use pre-fetched bulk data if available
     if _bulk_data is not None:
-        logger.info(f"🚀 BULK HIT: Using pre-fetched data for component {input_id}")
         return _bulk_data
 
     # Check enhanced cache first
@@ -273,7 +266,6 @@ def get_component_data(input_id, dashboard_id, TOKEN, _bulk_data=None):
     cached_data = _get_cached_component_data(cache_key)
 
     if cached_data is not None:
-        logger.debug(f"📦 CACHED: Component data cache hit for {input_id}")
         return cached_data
 
     # Use the individual fetching function
@@ -331,7 +323,6 @@ def list_workflows(token: str | None = None):
         logger.debug("Using cached workflows list")
         return _workflows_cache[cache_key]
 
-    logger.debug("Fetching workflows from API")
     headers = {"Authorization": f"Bearer {token}"}
 
     workflows = httpx.get(
@@ -385,7 +376,6 @@ def return_wf_tag_from_id(workflow_id: ObjectId, TOKEN: str | None = None):
 @functools.lru_cache(maxsize=256)
 def _fetch_wf_tag_with_lru_cache(workflow_id_str: str, TOKEN: str, token_hash: int):
     """Internal LRU-cached function for fetching workflow tags."""
-    logger.debug(f"🔍 LRU CACHE MISS: Fetching workflow tag for {workflow_id_str}")
 
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/workflows/get_tag_from_id/{workflow_id_str}",
@@ -393,7 +383,6 @@ def _fetch_wf_tag_with_lru_cache(workflow_id_str: str, TOKEN: str, token_hash: i
     )
     if response.status_code == 200:
         result = response.json()
-        logger.debug(f"✅ LRU CACHED: Workflow tag for {workflow_id_str} = {result}")
         return result
     else:
         logger.error(f"No workflow found for ID {workflow_id_str}")
@@ -427,7 +416,6 @@ def return_dc_tag_from_id(
 @functools.lru_cache(maxsize=256)
 def _fetch_dc_tag_with_lru_cache(data_collection_id_str: str, TOKEN: str, token_hash: int):
     """Internal LRU-cached function for fetching data collection tags."""
-    logger.debug(f"🔍 LRU CACHE MISS: Fetching DC tag for {data_collection_id_str}")
 
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/datacollections/get_tag_from_id/{data_collection_id_str}",
@@ -435,7 +423,6 @@ def _fetch_dc_tag_with_lru_cache(data_collection_id_str: str, TOKEN: str, token_
     )
     if response.status_code == 200:
         result = response.json()
-        logger.debug(f"✅ LRU CACHED: DC tag for {data_collection_id_str} = {result}")
         return result
     else:
         logger.error(f"No data collection found for ID {data_collection_id_str}")
@@ -477,7 +464,6 @@ def get_result_dc_for_workflow(workflow_id: str, TOKEN: str | None) -> str | Non
             if workflow_joins:
                 # Return first result DC (extend for multiple joins if needed)
                 result_dc_id = next(iter(workflow_joins.keys()))
-                logger.info(f"✅ Found pre-computed join result DC: {result_dc_id}")
                 return result_dc_id
             else:
                 logger.debug(f"No pre-computed joins found for workflow {workflow_id}")
@@ -711,7 +697,6 @@ def get_links_for_target_dc(
 
         if response.status_code == 200:
             links = response.json()
-            logger.debug(f"Found {len(links)} links for target DC {target_dc_id}")
             return links
         else:
             logger.debug(f"No links found for target DC {target_dc_id}")
@@ -754,7 +739,6 @@ def get_links_for_source_dc(
 
         if response.status_code == 200:
             links = response.json()
-            logger.debug(f"Found {len(links)} links from source DC {source_dc_id}")
             return links
         else:
             logger.debug(f"No links found for source DC {source_dc_id}")

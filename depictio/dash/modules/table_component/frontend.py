@@ -1,31 +1,39 @@
 """
-DEPRECATED: View mode callbacks have been moved to callbacks/core.py
+Table component frontend module (design and filtering utilities).
 
-This file now maintains only design/edit callbacks temporarily for backward compatibility.
-These will be migrated to callbacks/design.py and callbacks/edit.py in a future PR.
+This module provides design mode UI functions and AG Grid filtering utilities
+for the table component. View mode callbacks have been moved to callbacks/core.py.
 
 For view mode functionality (infinite scroll, filtering, theme switching), use:
-    from depictio.dash.modules.table_component.callbacks import register_callbacks_table_component
+    from depictio.dash.modules.table_component.callbacks import (
+        register_callbacks_table_component
+    )
+
+Functions:
+    apply_ag_grid_filter: Apply AG Grid filter to a Polars DataFrame.
+    apply_ag_grid_sorting: Apply AG Grid sorting to a Polars DataFrame.
+    design_table: Create table design UI for the stepper.
+    create_stepper_table_button: Create the button for adding table components.
+
+Constants:
+    OPERATORS: Mapping of AG Grid filter operators to Polars operations.
 """
 
-# Import necessary libraries
 import dash_mantine_components as dmc
 import polars as pl
 from dash import dcc, html
 from dash_iconify import DashIconify
 
-# Depictio imports
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import (
+    get_component_color,
     get_dmc_button_color,
     is_enabled,
 )
 from depictio.dash.modules.table_component.utils import build_table_frame
 from depictio.dash.utils import UNSELECTED_STYLE
 
-# TODO: interactivity when selecting table rows
-
-# AG Grid filter operators mapping to Polars operations
+# AG Grid filter operators mapping to Polars comparison operations
 OPERATORS = {
     "greaterThanOrEqual": "ge",
     "lessThanOrEqual": "le",
@@ -36,115 +44,166 @@ OPERATORS = {
 }
 
 
-def apply_ag_grid_filter(df: pl.DataFrame, filter_model: dict, col: str) -> pl.DataFrame:
+def _apply_string_filter(df: pl.DataFrame, col: str, filter_type: str, value: str) -> pl.DataFrame:
+    """Apply string-based filter operations.
+
+    Args:
+        df: Input DataFrame.
+        col: Column name to filter on.
+        filter_type: Type of string filter (contains, startsWith, etc.).
+        value: Value to filter by.
+
+    Returns:
+        Filtered DataFrame.
     """
-    Apply AG Grid filter to a Polars DataFrame.
+    if filter_type == "contains":
+        return df.filter(pl.col(col).str.contains(value, literal=False))
+    if filter_type == "notContains":
+        return df.filter(~pl.col(col).str.contains(value, literal=False))
+    if filter_type == "startsWith":
+        return df.filter(pl.col(col).str.starts_with(value))
+    if filter_type == "notStartsWith":
+        return df.filter(~pl.col(col).str.starts_with(value))
+    if filter_type == "endsWith":
+        return df.filter(pl.col(col).str.ends_with(value))
+    if filter_type == "notEndsWith":
+        return df.filter(~pl.col(col).str.ends_with(value))
+    return df
+
+
+def _apply_numeric_filter(df: pl.DataFrame, col: str, operator: str, value: float) -> pl.DataFrame:
+    """Apply numeric comparison filter operations.
+
+    Args:
+        df: Input DataFrame.
+        col: Column name to filter on.
+        operator: Comparison operator (eq, ne, lt, le, gt, ge).
+        value: Value to compare against.
+
+    Returns:
+        Filtered DataFrame.
+    """
+    if operator == "eq":
+        return df.filter(pl.col(col) == value)
+    if operator == "ne":
+        return df.filter(pl.col(col) != value)
+    if operator == "lt":
+        return df.filter(pl.col(col) < value)
+    if operator == "le":
+        return df.filter(pl.col(col) <= value)
+    if operator == "gt":
+        return df.filter(pl.col(col) > value)
+    if operator == "ge":
+        return df.filter(pl.col(col) >= value)
+    return df
+
+
+def apply_ag_grid_filter(df: pl.DataFrame, filter_model: dict, col: str) -> pl.DataFrame:
+    """Apply AG Grid filter to a Polars DataFrame.
+
+    Supports various filter types including text filters (contains, startsWith,
+    endsWith), numeric comparisons, date ranges, and set filters.
+
     Based on dash-ag-grid documentation examples.
+
+    Args:
+        df: Input Polars DataFrame.
+        filter_model: AG Grid filter model dictionary containing filter type,
+            filter values, and filter parameters.
+        col: Column name to apply the filter to.
+
+    Returns:
+        Filtered DataFrame. Returns original DataFrame if filter fails.
     """
     try:
+        # Extract filter criteria
+        crit1 = None
+        crit2 = None
+
         if "filter" in filter_model:
             if filter_model["filterType"] == "date":
                 crit1 = filter_model["dateFrom"]
-                if "dateTo" in filter_model:
-                    crit2 = filter_model["dateTo"]
+                crit2 = filter_model.get("dateTo")
             else:
                 crit1 = filter_model["filter"]
-                if "filterTo" in filter_model:
-                    crit2 = filter_model["filterTo"]
+                crit2 = filter_model.get("filterTo")
 
         if "type" in filter_model:
             filter_type = filter_model["type"]
 
-            if filter_type == "contains":
-                df = df.filter(pl.col(col).str.contains(crit1, literal=False))
-            elif filter_type == "notContains":
-                df = df.filter(~pl.col(col).str.contains(crit1, literal=False))
-            elif filter_type == "startsWith":
-                df = df.filter(pl.col(col).str.starts_with(crit1))
-            elif filter_type == "notStartsWith":
-                df = df.filter(~pl.col(col).str.starts_with(crit1))
-            elif filter_type == "endsWith":
-                df = df.filter(pl.col(col).str.ends_with(crit1))
-            elif filter_type == "notEndsWith":
-                df = df.filter(~pl.col(col).str.ends_with(crit1))
-            elif filter_type == "inRange":
-                if filter_model["filterType"] == "date":
-                    # Handle date range filtering
-                    df = df.filter(pl.col(col).is_between(crit1, crit2))
-                else:
-                    df = df.filter(pl.col(col).is_between(crit1, crit2))
-            elif filter_type == "blank":
-                df = df.filter(pl.col(col).is_null())
-            elif filter_type == "notBlank":
-                df = df.filter(pl.col(col).is_not_null())
-            else:
-                # Handle numeric comparisons
-                if filter_type in OPERATORS:
-                    op = OPERATORS[filter_type]
-                    if op == "eq":
-                        df = df.filter(pl.col(col) == crit1)
-                    elif op == "ne":
-                        df = df.filter(pl.col(col) != crit1)
-                    elif op == "lt":
-                        df = df.filter(pl.col(col) < crit1)
-                    elif op == "le":
-                        df = df.filter(pl.col(col) <= crit1)
-                    elif op == "gt":
-                        df = df.filter(pl.col(col) > crit1)
-                    elif op == "ge":
-                        df = df.filter(pl.col(col) >= crit1)
+            # Handle string filters
+            if filter_type in [
+                "contains",
+                "notContains",
+                "startsWith",
+                "notStartsWith",
+                "endsWith",
+                "notEndsWith",
+            ]:
+                return _apply_string_filter(df, col, filter_type, crit1)
 
-        elif filter_model["filterType"] == "set":
+            # Handle range filter
+            if filter_type == "inRange":
+                return df.filter(pl.col(col).is_between(crit1, crit2))
+
+            # Handle null checks
+            if filter_type == "blank":
+                return df.filter(pl.col(col).is_null())
+            if filter_type == "notBlank":
+                return df.filter(pl.col(col).is_not_null())
+
+            # Handle numeric comparisons
+            if filter_type in OPERATORS:
+                return _apply_numeric_filter(df, col, OPERATORS[filter_type], crit1)
+
+        elif filter_model.get("filterType") == "set":
             # Handle set filter (multi-select)
-            df = df.filter(pl.col(col).cast(pl.Utf8).is_in(filter_model["values"]))
+            return df.filter(pl.col(col).cast(pl.Utf8).is_in(filter_model["values"]))
 
     except Exception as e:
         logger.warning(f"Failed to apply filter for column {col}: {e}")
-        # Return original dataframe if filter fails
-        pass
 
     return df
 
 
 def apply_ag_grid_sorting(df: pl.DataFrame, sort_model: list) -> pl.DataFrame:
-    """
-    Apply AG Grid sorting to a Polars DataFrame.
+    """Apply AG Grid sorting to a Polars DataFrame.
+
+    Args:
+        df: Input Polars DataFrame.
+        sort_model: List of sort specifications, each containing 'colId' and 'sort'
+            (either 'asc' or 'desc').
+
+    Returns:
+        Sorted DataFrame. Returns original DataFrame if sorting fails.
     """
     if not sort_model:
         return df
 
     try:
-        # Apply sorting - Polars uses descending parameter differently
         df = df.sort(
             [sort["colId"] for sort in sort_model],
             descending=[sort["sort"] == "desc" for sort in sort_model],
         )
-
         logger.debug(f"Applied sorting: {[(s['colId'], s['sort']) for s in sort_model]}")
-
     except Exception as e:
         logger.warning(f"Failed to apply sorting: {e}")
 
     return df
 
 
-# ============================================================================
-# Design Mode UI Functions (TODO: Move to design_ui.py in future PR)
-# ============================================================================
+def design_table(id: dict) -> html.Div:
+    """Create table design UI for the stepper interface.
 
-
-def design_table(id):
-    """
-    Create table design UI (stepper step 3).
-
-    Tables have minimal design options - just display the table preview directly
-    based on WF/DC selection from step 2. No button needed.
+    Tables have minimal design options - they display directly based on the
+    workflow/data collection selection from step 2. No additional configuration
+    button is needed.
 
     Args:
-        id: Component ID dict with 'index' key
+        id: Component ID dict containing the 'index' key.
 
     Returns:
-        html.Div: Container with table preview area
+        html.Div containing the table preview area.
     """
     return html.Div(
         html.Div(
@@ -157,26 +216,26 @@ def design_table(id):
     )
 
 
-def create_stepper_table_button(n, disabled=None):
-    """
-    Create the stepper table button
+def create_stepper_table_button(n: int, disabled: bool | None = None) -> tuple:
+    """Create the stepper table button and associated store.
+
+    Creates the button used in the component type selection step of the stepper
+    to add a table component to the dashboard.
 
     Args:
-        n (_type_): _description_
-        disabled (bool, optional): Override enabled state. If None, uses metadata.
-    """
+        n: Button index for unique identification.
+        disabled: Override enabled state. If None, uses component metadata.
 
-    # Use metadata enabled field if disabled not explicitly provided
+    Returns:
+        Tuple containing (button, store) components.
+    """
     if disabled is None:
         disabled = not is_enabled("table")
 
-    from depictio.dash.component_metadata import get_component_color
-
     dmc_color = get_dmc_button_color("table")
-    hex_color = get_component_color("table")  # This returns the hex color from colors.py
+    hex_color = get_component_color("table")
     logger.info(f"Table button DMC color: {dmc_color}, hex color: {hex_color}")
 
-    # Create the table button with outline variant and larger text
     button = dmc.Button(
         "Table",
         id={
@@ -192,6 +251,7 @@ def create_stepper_table_button(n, disabled=None):
         leftSection=DashIconify(icon="octicon:table-24", color=hex_color),
         disabled=disabled,
     )
+
     store = dcc.Store(
         id={
             "type": "store-btn-option",

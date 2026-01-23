@@ -381,8 +381,6 @@ def handle_position_change(
     button_type = triggered_id["type"]
     component_index = str(triggered_id["index"])  # Convert to string for comparison
 
-    logger.info(f"🔄 Position change triggered: {button_type} for component {component_index}")
-
     # The stored_metadata_list_all is from ALL State - it's a list of all metadata dicts
     if not stored_metadata_list_all:
         logger.warning("Empty stored_metadata_list_all")
@@ -394,7 +392,6 @@ def handle_position_change(
     # PRE-PROCESS: Compute panel metadata from component_type for ALL components
     # This is critical because stored-metadata-component stores don't contain panel fields
     # They are computed during rendering in restore_dashboard.py
-    logger.info("🔧 PRE-PROCESSING: Computing panel metadata from component_type")
     for comp in stored_metadata:
         comp_type = comp.get("component_type")
 
@@ -586,16 +583,18 @@ def handle_position_change(
     # 1. position-metadata-store: triggers clientside callback (CSS order changes)
     # 2. stored-metadata-component stores: keeps metadata in sync for subsequent moves
     # Components stay mounted → state preserved (filters, zoom, selections, etc.)
-    logger.info(f"✅ Returning updated metadata to both outputs ({len(new_metadata)} components)")
     return new_metadata, new_metadata
 
 
-def register_position_clientside_callback(app):
+def register_position_clientside_callback(app) -> None:
     """
     Register clientside callback for lightweight position updates.
 
     This callback applies CSS order/grid changes to components without
     triggering React re-renders, preserving component state.
+
+    Args:
+        app: The Dash application instance.
     """
     app.clientside_callback(
         """
@@ -648,5 +647,3 @@ def register_position_clientside_callback(app):
         Input("position-metadata-store", "data"),
         prevent_initial_call=True,
     )
-
-    logger.info("✅ Clientside position update callback registered")

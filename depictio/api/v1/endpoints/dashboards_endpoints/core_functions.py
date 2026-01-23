@@ -1,13 +1,11 @@
 from bson import ObjectId
 
-from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection, projects_collection
 from depictio.models.models.base import convert_objectid_to_str
 
 
 def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_tabs=False):
-    logger.info("Loading dashboards from MongoDB with project-based permissions")
-
+    """Load dashboards from MongoDB with project-based permissions."""
     projection = {
         "_id": 1,
         "dashboard_id": 1,
@@ -78,11 +76,5 @@ def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_ta
 
         dashboards = list(dashboards_collection.find(query, projection))
 
-    if not dashboards:
-        logger.warning("No dashboards found.")
-        dashboards = []
-
-    # turn mongodb ObjectId to string
     dashboards = [convert_objectid_to_str(dashboard) for dashboard in dashboards]
-
     return {"dashboards": dashboards, "success": True}

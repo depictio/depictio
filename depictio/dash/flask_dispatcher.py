@@ -1,12 +1,28 @@
 """
 Flask dispatcher module for multi-app Depictio architecture.
 
-This module creates and manages three independent Dash applications:
-1. Management App (/) - Auth, dashboards, projects, admin
-2. Viewer App (/dashboard/) - Read-only dashboard viewing
-3. Editor App (/dashboard-edit/) - Dashboard editing and component builder
+This module creates and manages three independent Dash applications mounted
+on a shared Flask server. Each app has its own callback registry for true
+isolation, preventing callback conflicts between different parts of the
+application.
 
-Each app has its own callback registry for true isolation.
+Applications:
+    Management App (/): Authentication, dashboards, projects, admin
+    Viewer App (/dashboard/): Read-only dashboard viewing
+    Editor App (/dashboard-edit/): Dashboard editing and component builder
+
+Key Functions:
+    create_shared_dash_config: Create shared configuration for all Dash apps
+    configure_flask_server: Configure Flask with orjson and static folders
+    create_management_app: Create the Management Dash app
+    create_viewer_app: Create the Dashboard Viewer Dash app
+    create_editor_app: Create the Dashboard Editor Dash app
+    create_multi_app_dispatcher: Create Flask server with all Dash applications
+    serve_screenshots: Serve dashboard screenshot thumbnails
+
+Module-level Execution:
+    On import, this module creates all apps and wires up their layouts
+    and callbacks. The 'application' variable is exported for WSGI compatibility.
 """
 
 import os
@@ -24,6 +40,35 @@ os.environ["DEPICTIO_CONTEXT"] = "server"
 from depictio.models.utils import get_depictio_context
 
 DEPICTIO_CONTEXT = get_depictio_context()
+
+# Shared HTML index template with favicon for all Dash apps
+# Used because include_assets_files=False means we manually specify CSS and favicon
+DASH_INDEX_STRING = """
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        <link rel="icon" type="image/x-icon" href="/assets/images/icons/favicon.ico">
+        {%css%}
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+"""
+
+# Shared external stylesheets for all Dash apps
+EXTERNAL_STYLESHEETS = [
+    {"href": "https://fonts.googleapis.com/icon?family=Material+Icons", "rel": "stylesheet"},
+    "/assets/css/app.css",
+    "/assets/dock-animation.css",
+]
 
 
 def create_shared_dash_config():
@@ -50,16 +95,12 @@ def create_shared_dash_config():
 
     # Setup background callback manager - Always configure Celery for Editor app
     # The Celery worker container is started conditionally via Docker Compose profile
-    logger.info("🔧 FLASK DISPATCHER: Setting up Celery manager for Editor app...")
     background_callback_manager = None
 
     try:
         from depictio.dash.celery_app import celery_app
 
         background_callback_manager = dash.CeleryManager(celery_app)
-        logger.info("✅ FLASK DISPATCHER: Celery background callback manager configured")
-        logger.info("   Note: Celery worker must be running for design mode to work")
-        logger.info("   Start worker with: docker compose --profile celery up")
     except Exception as e:
         logger.error(f"❌ FLASK DISPATCHER: Failed to setup Celery manager: {e}")
         logger.warning("⚠️  FLASK DISPATCHER: Design mode will not work without Celery!")
@@ -68,13 +109,16 @@ def create_shared_dash_config():
     return assets_folder, background_callback_manager, dev_mode
 
 
-def configure_flask_server(server: Flask, dash_root_path: str):
+def configure_flask_server(server: Flask, dash_root_path: str) -> None:
     """
     Configure Flask server with orjson, static folders, and logging.
 
+    Sets up Flask to use orjson for JSON serialization (10-16x faster),
+    configures static folder for assets, and applies custom logging.
+
     Args:
-        server: Flask server instance
-        dash_root_path: Path to dash package root
+        server: Flask server instance to configure.
+        dash_root_path: Path to the dash package root directory.
     """
     # Configure Flask's logger to use custom logging settings
     server.logger.handlers = logger.handlers  # type: ignore
@@ -99,7 +143,6 @@ def configure_flask_server(server: Flask, dash_root_path: str):
                 return orjson.loads(s)
 
         server.json = OrjsonProvider(server)
-        logger.info("✅ FLASK DISPATCHER: Configured Flask to use orjson (10-16x faster)")
     except ImportError:
         logger.warning("⚠️  FLASK DISPATCHER: orjson not available, using standard json")
 
@@ -109,71 +152,39 @@ def configure_flask_server(server: Flask, dash_root_path: str):
     assets_folder = os.path.join(dash_root_path, "assets")
     server.static_folder = assets_folder  # type: ignore
     server.static_url_path = "/assets"  # type: ignore
-    logger.info(
-        f"✅ FLASK DISPATCHER: Configured Flask to serve assets at /assets/ from {assets_folder}"
-    )
 
 
 def create_management_app(
     server: Flask, assets_folder: str, background_callback_manager, dev_mode: bool
-):
+) -> dash.Dash:
     """
-    Create the Management Dash app (/, /auth, /dashboards, /projects, /profile, /admin).
+    Create the Management Dash app.
+
+    Creates the main management app serving routes: /, /auth, /dashboards,
+    /projects, /profile, /admin, /cli_configs, and /about.
 
     Args:
-        server: Flask server instance
-        assets_folder: Path to assets folder
-        background_callback_manager: Celery background callback manager (unused - no background callbacks)
-        dev_mode: Whether in development mode
+        server: Flask server instance to mount the app on.
+        assets_folder: Path to assets folder for static files.
+        background_callback_manager: Celery background callback manager
+            (unused for Management app - no background callbacks).
+        dev_mode: Whether to enable development mode features.
 
     Returns:
-        dash.Dash: Management app instance
+        Configured Dash application instance for management.
     """
     # Management app doesn't use background callbacks - pass None
     app_management = dash.Dash(
         __name__,
         server=server,
         url_base_pathname="/",
-        external_stylesheets=[
-            # Google Material Icons
-            {
-                "href": "https://fonts.googleapis.com/icon?family=Material+Icons",
-                "rel": "stylesheet",
-            },
-            # Main application CSS (imports all modular CSS including fonts)
-            "/assets/css/app.css",
-            # Legacy dock animation (standalone)
-            "/assets/dock-animation.css",
-        ],
+        external_stylesheets=EXTERNAL_STYLESHEETS,
         suppress_callback_exceptions=True,
         title="Depictio - Management",
-        # Assets served by Flask at /assets/ (shared across all apps)
-        # When False, CSS and favicon must be manually specified
         include_assets_files=False,
-        background_callback_manager=None,  # No background callbacks in management app
+        background_callback_manager=None,
     )
-
-    # Manually add favicon link since include_assets_files=False
-    # Dash expects filesystem path in _favicon, so we inject the link tag directly
-    app_management.index_string = """
-    <!DOCTYPE html>
-    <html>
-        <head>
-            {%metas%}
-            <title>{%title%}</title>
-            <link rel="icon" type="image/x-icon" href="/assets/images/icons/favicon.ico">
-            {%css%}
-        </head>
-        <body>
-            {%app_entry%}
-            <footer>
-                {%config%}
-                {%scripts%}
-                {%renderer%}
-            </footer>
-        </body>
-    </html>
-    """
+    app_management.index_string = DASH_INDEX_STRING
 
     # Integrate Google Analytics
     integrate_google_analytics(app_management, title="Depictio - Management")
@@ -188,70 +199,40 @@ def create_management_app(
         dev_tools_ui=True, dev_tools_serve_dev_bundles=True, dev_tools_hot_reload=dev_mode
     )
 
-    logger.info("✅ FLASK DISPATCHER: Created Management app at /")
     return app_management
 
 
 def create_viewer_app(
     server: Flask, assets_folder: str, background_callback_manager, dev_mode: bool
-):
+) -> dash.Dash:
     """
-    Create the Dashboard Viewer Dash app (/dashboard/{id}).
+    Create the Dashboard Viewer Dash app.
+
+    Creates the read-only viewer app serving routes: /dashboard/{id}.
+    Uses background callbacks when Celery is enabled for improved performance.
 
     Args:
-        server: Flask server instance
-        assets_folder: Path to assets folder
-        background_callback_manager: Celery background callback manager (or None)
-        dev_mode: Whether in development mode
+        server: Flask server instance to mount the app on.
+        assets_folder: Path to assets folder for static files.
+        background_callback_manager: Celery background callback manager,
+            or None if Celery is not available.
+        dev_mode: Whether to enable development mode features.
 
     Returns:
-        dash.Dash: Viewer app instance
+        Configured Dash application instance for dashboard viewing.
     """
-    # Viewer uses background callbacks only when Celery enabled (via use_background_callbacks())
-    # If Celery not available, callbacks run synchronously
+    # Viewer uses background callbacks only when Celery enabled
     app_viewer = dash.Dash(
         __name__,
         server=server,
         url_base_pathname="/dashboard/",
-        external_stylesheets=[
-            # Google Material Icons
-            {
-                "href": "https://fonts.googleapis.com/icon?family=Material+Icons",
-                "rel": "stylesheet",
-            },
-            # Main application CSS (imports all modular CSS including fonts)
-            "/assets/css/app.css",
-            # Legacy dock animation (standalone)
-            "/assets/dock-animation.css",
-        ],
+        external_stylesheets=EXTERNAL_STYLESHEETS,
         suppress_callback_exceptions=True,
         title="Depictio - Dashboard",
-        # Assets served by Flask at /assets/ (shared across all apps)
-        # When False, CSS and favicon must be manually specified
         include_assets_files=False,
         background_callback_manager=background_callback_manager,
     )
-
-    # Manually add favicon link since include_assets_files=False
-    app_viewer.index_string = """
-    <!DOCTYPE html>
-    <html>
-        <head>
-            {%metas%}
-            <title>{%title%}</title>
-            <link rel="icon" type="image/x-icon" href="/assets/images/icons/favicon.ico">
-            {%css%}
-        </head>
-        <body>
-            {%app_entry%}
-            <footer>
-                {%config%}
-                {%scripts%}
-                {%renderer%}
-            </footer>
-        </body>
-    </html>
-    """
+    app_viewer.index_string = DASH_INDEX_STRING
 
     # Integrate Google Analytics
     integrate_google_analytics(app_viewer, title="Depictio - Dashboard Viewer")
@@ -266,70 +247,41 @@ def create_viewer_app(
         dev_tools_ui=True, dev_tools_serve_dev_bundles=True, dev_tools_hot_reload=dev_mode
     )
 
-    logger.info("✅ FLASK DISPATCHER: Created Viewer app at /dashboard/")
     return app_viewer
 
 
 def create_editor_app(
     server: Flask, assets_folder: str, background_callback_manager, dev_mode: bool
-):
+) -> dash.Dash:
     """
-    Create the Dashboard Editor Dash app (/dashboard-edit/{id}, /component/{id}/build).
+    Create the Dashboard Editor Dash app.
+
+    Creates the editor app serving routes: /dashboard-edit/{id} and
+    /component/{id}/build. Requires background callbacks for figure
+    design mode stepper functionality.
 
     Args:
-        server: Flask server instance
-        assets_folder: Path to assets folder
-        background_callback_manager: Celery background callback manager (or None)
-        dev_mode: Whether in development mode
+        server: Flask server instance to mount the app on.
+        assets_folder: Path to assets folder for static files.
+        background_callback_manager: Celery background callback manager,
+            required for design mode to function properly.
+        dev_mode: Whether to enable development mode features.
 
     Returns:
-        dash.Dash: Editor app instance
+        Configured Dash application instance for dashboard editing.
     """
-    # CRITICAL: Editor app needs background callbacks for figure design mode (stepper)
-    # Uses Celery manager (must be enabled via DEPICTIO_CELERY_ENABLED=true)
+    # Editor app needs background callbacks for figure design mode (stepper)
     app_editor = dash.Dash(
         __name__,
         server=server,
         url_base_pathname="/dashboard-edit/",
-        external_stylesheets=[
-            # Google Material Icons
-            {
-                "href": "https://fonts.googleapis.com/icon?family=Material+Icons",
-                "rel": "stylesheet",
-            },
-            # Main application CSS (imports all modular CSS including fonts)
-            "/assets/css/app.css",
-            # Legacy dock animation (standalone)
-            "/assets/dock-animation.css",
-        ],
+        external_stylesheets=EXTERNAL_STYLESHEETS,
         suppress_callback_exceptions=True,
         title="Depictio - Dashboard Editor",
-        # Assets served by Flask at /assets/ (shared across all apps)
-        # When False, CSS and favicon must be manually specified
         include_assets_files=False,
         background_callback_manager=background_callback_manager,
     )
-
-    # Manually add favicon link since include_assets_files=False
-    app_editor.index_string = """
-    <!DOCTYPE html>
-    <html>
-        <head>
-            {%metas%}
-            <title>{%title%}</title>
-            <link rel="icon" type="image/x-icon" href="/assets/images/icons/favicon.ico">
-            {%css%}
-        </head>
-        <body>
-            {%app_entry%}
-            <footer>
-                {%config%}
-                {%scripts%}
-                {%renderer%}
-            </footer>
-        </body>
-    </html>
-    """
+    app_editor.index_string = DASH_INDEX_STRING
 
     # Integrate Google Analytics
     integrate_google_analytics(app_editor, title="Depictio - Dashboard Editor")
@@ -344,21 +296,20 @@ def create_editor_app(
         dev_tools_ui=True, dev_tools_serve_dev_bundles=True, dev_tools_hot_reload=dev_mode
     )
 
-    logger.info("✅ FLASK DISPATCHER: Created Editor app at /dashboard-edit/")
     return app_editor
 
 
-def create_multi_app_dispatcher():
+def create_multi_app_dispatcher() -> tuple:
     """
-    Create Flask server with four independent Dash applications.
+    Create Flask server with three independent Dash applications.
+
+    Initializes the multi-app architecture by creating a Flask server and
+    mounting three independent Dash applications (management, viewer, editor).
+    Configures shared assets, orjson serialization, and background callbacks.
 
     Returns:
-        tuple: (server, app_management, app_viewer, app_editor, dev_mode)
+        A tuple containing (server, app_management, app_viewer, app_editor, dev_mode).
     """
-    logger.info("=" * 80)
-    logger.info("🚀 FLASK DISPATCHER: Initializing multi-app architecture")
-    logger.info("=" * 80)
-
     # Create Flask server
     server = Flask(__name__)
 
@@ -378,20 +329,6 @@ def create_multi_app_dispatcher():
     app_viewer = create_viewer_app(server, assets_folder, background_callback_manager, dev_mode)
     app_editor = create_editor_app(server, assets_folder, background_callback_manager, dev_mode)
 
-    logger.info("=" * 80)
-    logger.info("✅ FLASK DISPATCHER: Multi-app initialization complete")
-    logger.info("=" * 80)
-    logger.info("📊 Management App: http://localhost:8050/")
-    logger.info("👁️  Viewer App:     http://localhost:8050/dashboard/<id>/")
-    logger.info("✏️  Editor App:     http://localhost:8050/dashboard-edit/<id>/")
-    logger.info("🔧 Builder:        http://localhost:8050/component/<dashboard_id>/build/")
-    logger.info("=" * 80)
-    logger.info("🔐 Callback Isolation:")
-    logger.info("   - app_management: Auth, dashboards, projects, admin (~70 callbacks)")
-    logger.info("   - app_viewer: Read-only dashboard viewing (~30 callbacks)")
-    logger.info("   - app_editor: Editing, design UI, component builder (~65 callbacks)")
-    logger.info("=" * 80)
-
     return server, app_management, app_viewer, app_editor, dev_mode
 
 
@@ -403,42 +340,37 @@ server, app_management, app_viewer, app_editor, dev_mode = create_multi_app_disp
 # This restores the /static/screenshots/ endpoint that was removed when we
 # changed Flask's static_folder to point to assets/ directory
 @server.route("/static/screenshots/<path:filename>")
-def serve_screenshots(filename):
-    """Serve dashboard screenshot thumbnails from static/screenshots/ directory."""
+def serve_screenshots(filename: str):
+    """
+    Serve dashboard screenshot thumbnails from static/screenshots/ directory.
+
+    This endpoint restores the /static/screenshots/ route that was removed
+    when Flask's static_folder was changed to point to assets/ directory.
+
+    Args:
+        filename: Name of the screenshot file to serve.
+
+    Returns:
+        The screenshot file from the static/screenshots/ directory.
+    """
     screenshots_folder = os.path.join(os.path.dirname(__file__), "static", "screenshots")
     return send_from_directory(screenshots_folder, filename)
 
 
-logger.info("✅ FLASK DISPATCHER: Registered /static/screenshots/ route for dashboard thumbnails")
-
-
 # Register layouts and callbacks from separate modules
-logger.info("==" * 40)
-logger.info("🔌 FLASK DISPATCHER: Wiring up app modules")
-logger.info("==" * 40)
 
 # Wire up Management App
-logger.info("📊 Wiring Management App...")
 app_management.layout = management_app.layout
 management_app.register_callbacks(app_management)
-logger.info("✅ Management App wired up")
 
 # Wire up Viewer App
-logger.info("👁️  Wiring Viewer App...")
 app_viewer.layout = dashboard_viewer.layout
 dashboard_viewer.register_callbacks(app_viewer)
-logger.info("✅ Viewer App wired up")
 
 
 # Wire up Editor App
-logger.info("✏️  Wiring Editor App...")
 app_editor.layout = dashboard_editor.layout
 dashboard_editor.register_callbacks(app_editor)
-logger.info("✅ Editor App wired up")
-
-logger.info("==" * 40)
-logger.info("✅ FLASK DISPATCHER: All apps wired up")
-logger.info("==" * 40)
 
 # Export for WSGI compatibility (used by wsgi.py and production deployments)
 application = server

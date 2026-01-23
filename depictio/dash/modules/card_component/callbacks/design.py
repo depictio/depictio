@@ -1,12 +1,15 @@
 """
-Card Component - Design/Edit Mode Callbacks
+Card Component - Design/Edit Mode Callbacks.
 
 This module contains callbacks that are only needed when editing or designing cards.
 These callbacks are lazy-loaded when entering edit mode to reduce initial app startup time.
 
-Callbacks:
-- pre_populate_card_settings_for_edit: Pre-fill design form in edit mode
-- design_card_body: Live preview of card with design changes
+Functions:
+    register_design_callbacks: Register all design/edit mode callbacks
+
+Callbacks Registered:
+    pre_populate_card_settings_for_edit: Pre-fill design form in edit mode
+    design_card_body: Live preview of card with design changes
 """
 
 import dash_mantine_components as dmc
@@ -24,8 +27,140 @@ from depictio.dash.utils import (
 )
 
 
-def register_design_callbacks(app):
-    """Register design/edit mode callbacks for card component."""
+def _extract_dashboard_and_component_ids(
+    pathname: str, pattern_id: dict
+) -> tuple[str | None, str | None]:
+    """
+    Extract dashboard_id and component_id from URL pathname.
+
+    Args:
+        pathname: Current URL pathname.
+        pattern_id: Component ID dictionary from pattern-matching.
+
+    Returns:
+        Tuple of (dashboard_id, input_id).
+    """
+    path_parts = pathname.split("/")
+    if "/component/add/" in pathname or "/component/edit/" in pathname:
+        dashboard_id = path_parts[2]
+        input_id = str(pattern_id["index"])
+    else:
+        dashboard_id = path_parts[-1]
+        input_id = None
+    return dashboard_id, input_id
+
+
+def _create_columns_description_table(cols_json: dict) -> dmc.Table:
+    """
+    Create a DMC Table showing column names and descriptions.
+
+    Args:
+        cols_json: Dictionary mapping column names to their metadata.
+
+    Returns:
+        dmc.Table component displaying columns and descriptions.
+    """
+    table_rows = []
+    for col_name, col_info in cols_json.items():
+        if col_info.get("description") is not None:
+            table_rows.append(
+                dmc.TableTr(
+                    [
+                        dmc.TableTd(
+                            col_name,
+                            style={"textAlign": "center", "fontSize": "11px", "maxWidth": "150px"},
+                        ),
+                        dmc.TableTd(
+                            col_info["description"],
+                            style={"textAlign": "center", "fontSize": "11px", "maxWidth": "150px"},
+                        ),
+                    ]
+                )
+            )
+
+    return dmc.Table(
+        [
+            dmc.TableThead(
+                [
+                    dmc.TableTr(
+                        [
+                            dmc.TableTh(
+                                "Column",
+                                style={
+                                    "textAlign": "center",
+                                    "fontSize": "11px",
+                                    "fontWeight": "bold",
+                                },
+                            ),
+                            dmc.TableTh(
+                                "Description",
+                                style={
+                                    "textAlign": "center",
+                                    "fontSize": "11px",
+                                    "fontWeight": "bold",
+                                },
+                            ),
+                        ]
+                    )
+                ]
+            ),
+            dmc.TableTbody(table_rows),
+        ],
+        striped="odd",
+        withTableBorder=True,
+    )
+
+
+def _create_aggregation_description(column_type: str, aggregation_value: str) -> html.Div:
+    """
+    Create an aggregation description tooltip badge.
+
+    Args:
+        column_type: Data type of the column.
+        aggregation_value: Selected aggregation method.
+
+    Returns:
+        html.Div containing the aggregation description badge.
+    """
+    return html.Div(
+        children=[
+            html.Hr(),
+            dmc.Tooltip(
+                children=dmc.Badge(
+                    children="Aggregation description",
+                    leftSection=DashIconify(icon="mdi:information", color="white", width=20),
+                    color="gray",
+                    radius="lg",
+                ),
+                label=agg_functions[str(column_type)]["card_methods"][aggregation_value][
+                    "description"
+                ],
+                multiline=True,
+                w=300,
+                transitionProps={"name": "pop", "duration": 300},
+                withinPortal=False,
+                withArrow=True,
+                openDelay=500,
+                closeDelay=500,
+                color="gray",
+            ),
+        ]
+    )
+
+
+def register_design_callbacks(app) -> None:
+    """
+    Register design/edit mode callbacks for card component.
+
+    Registers two callbacks:
+        1. pre_populate_card_settings_for_edit: Pre-fills the design form
+           with existing card settings when entering edit mode.
+        2. design_card_body: Updates the card preview in real-time as
+           the user modifies design settings.
+
+    Args:
+        app: Dash application instance to register callbacks on.
+    """
 
     # Pre-populate card settings in edit mode (edit page, not stepper)
     @app.callback(
@@ -50,11 +185,13 @@ def register_design_callbacks(app):
         the card_id matches the component being edited in the edit page.
 
         Args:
-            edit_context: Edit page context with component data
-            card_id: Card component ID from the design form
+            edit_context: Edit page context containing component_data and component_id.
+            card_id: Card component ID dictionary from the design form.
 
         Returns:
-            Tuple of pre-populated values for all card settings
+            Tuple of (title, column_name, aggregation, background_color,
+            title_color, icon_name, title_font_size) or no_update for all
+            if conditions not met.
         """
         import dash
 
@@ -93,7 +230,6 @@ def register_design_callbacks(app):
                 dash.no_update,
             )
 
-        logger.info(f"🎨 PRE-POPULATING card settings for component {card_id['index']}")
         logger.info(f"   Title: {component_data.get('title')}")
         logger.info(f"   Column: {component_data.get('column_name')}")
         logger.info(f"   Aggregation: {component_data.get('aggregation')}")
@@ -145,45 +281,38 @@ def register_design_callbacks(app):
         pathname,
     ):
         """
-        Callback to update card body based on the selected column and aggregation.
-        Creates live preview of card with design changes.
+        Update card body based on selected column and aggregation.
+
+        Creates a live preview of the card with design changes. Fetches
+        column information from the data collection and builds the card
+        component with the specified styling parameters.
+
+        Args:
+            input_value: Card title text.
+            column_name: Selected data column name.
+            aggregation_value: Selected aggregation method.
+            background_color: Card background color (hex).
+            title_color: Card title text color (hex).
+            icon_name: Selected icon identifier.
+            title_font_size: Font size for the card title.
+            wf_id: Workflow ID from hidden select.
+            dc_id: Data collection ID from hidden select.
+            id: Component ID dictionary for pattern-matching.
+            local_data: Local storage data with authentication token.
+            pathname: Current URL pathname.
+
+        Returns:
+            Tuple of (card_body, aggregation_description, columns_description).
         """
 
-        input_id = str(id["index"])
-
-        logger.info(f"input_id: {input_id}")
-        logger.info(f"pathname: {pathname}")
-
-        logger.info(f"input_value: {input_value}")
-        logger.info(f"column_name: {column_name}")
-        logger.info(f"aggregation_value: {aggregation_value}")
-        logger.info(f"background_color: {background_color}")
-        logger.info(f"title_color: {title_color}")
-        logger.info(f"icon_name: {icon_name}")
-        logger.info(f"title_font_size: {title_font_size}")
+        logger.info(f"Design card body - column: {column_name}, aggregation: {aggregation_value}")
 
         if not local_data:
             return ([], None, None)
 
         TOKEN = local_data["access_token"]
-        logger.info(f"TOKEN: {TOKEN}")
-
-        # Extract dashboard_id and component_id from pathname
-        # URL formats:
-        #   /dashboard/{dashboard_id}/component/add/{component_id}
-        #   /dashboard/{dashboard_id}/component/edit/{component_id}
-        #   /dashboard/{dashboard_id} (regular dashboard)
-        path_parts = pathname.split("/")
-        if "/component/add/" in pathname or "/component/edit/" in pathname:
-            dashboard_id = path_parts[2]  # Dashboard ID at index 2
-            # Use component_id from pattern-matched ID
-            input_id = str(id["index"])
-        else:
-            dashboard_id = path_parts[-1]  # Fallback for regular dashboard URLs
-            input_id = None  # Regular dashboard - no specific component context
-
-        logger.info(f"dashboard_id: {dashboard_id}")
-        logger.info(f"input_id (for component data fetch): {input_id}")
+        dashboard_id, input_id = _extract_dashboard_and_component_ids(pathname, id)
+        logger.info(f"dashboard_id: {dashboard_id}, input_id: {input_id}")
 
         # Fetch component data if we have an input_id
         component_data = None
@@ -218,69 +347,9 @@ def register_design_callbacks(app):
 
         logger.info(f"component_data: {component_data}")
 
-        headers = {
-            "Authorization": f"Bearer {TOKEN}",
-        }
-
-        # Get the columns from the selected data collection
+        headers = {"Authorization": f"Bearer {TOKEN}"}
         cols_json = get_columns_from_data_collection(wf_id, dc_id, TOKEN)
-        logger.info(f"cols_json: {cols_json}")
-
-        data_columns_df = [
-            {"column": c, "description": cols_json[c]["description"]}
-            for c in cols_json
-            if cols_json[c]["description"] is not None
-        ]
-
-        # Create DMC Table instead of DataTable for better theming
-        table_rows = []
-        for row in data_columns_df:
-            table_rows.append(
-                dmc.TableTr(
-                    [
-                        dmc.TableTd(
-                            row["column"],
-                            style={"textAlign": "center", "fontSize": "11px", "maxWidth": "150px"},
-                        ),
-                        dmc.TableTd(
-                            row["description"],
-                            style={"textAlign": "center", "fontSize": "11px", "maxWidth": "150px"},
-                        ),
-                    ]
-                )
-            )
-
-        columns_description_df = dmc.Table(
-            [
-                dmc.TableThead(
-                    [
-                        dmc.TableTr(
-                            [
-                                dmc.TableTh(
-                                    "Column",
-                                    style={
-                                        "textAlign": "center",
-                                        "fontSize": "11px",
-                                        "fontWeight": "bold",
-                                    },
-                                ),
-                                dmc.TableTh(
-                                    "Description",
-                                    style={
-                                        "textAlign": "center",
-                                        "fontSize": "11px",
-                                        "fontWeight": "bold",
-                                    },
-                                ),
-                            ]
-                        )
-                    ]
-                ),
-                dmc.TableTbody(table_rows),
-            ],
-            striped="odd",
-            withTableBorder=True,
-        )
+        columns_description_df = _create_columns_description_table(cols_json)
 
         # If any of the input values are None, return an empty list
         if column_name is None or aggregation_value is None or wf_id is None or dc_id is None:
@@ -295,36 +364,8 @@ def register_design_callbacks(app):
                 logger.info(f"aggregation_value: {aggregation_value}")
                 logger.info(f"input_value: {input_value}")
 
-        # Get the type of the selected column
         column_type = cols_json[column_name]["type"]
-
-        aggregation_description = html.Div(
-            children=[
-                html.Hr(),
-                dmc.Tooltip(
-                    children=dmc.Badge(
-                        children="Aggregation description",
-                        leftSection=DashIconify(icon="mdi:information", color="white", width=20),
-                        color="gray",
-                        radius="lg",
-                    ),
-                    label=agg_functions[str(column_type)]["card_methods"][aggregation_value][
-                        "description"
-                    ],
-                    multiline=True,
-                    w=300,
-                    transitionProps={
-                        "name": "pop",
-                        "duration": 300,
-                    },
-                    withinPortal=False,
-                    withArrow=True,
-                    openDelay=500,
-                    closeDelay=500,
-                    color="gray",
-                ),
-            ]
-        )
+        aggregation_description = _create_aggregation_description(column_type, aggregation_value)
 
         # Initialize relevant_metadata to empty list (defensive programming)
         relevant_metadata = []

@@ -92,7 +92,6 @@ def register_figure_edit_callback(app):
             str: Redirect pathname to dashboard after save
         """
         logger.info("=" * 80)
-        logger.info("🚀 FIGURE EDIT SAVE CALLBACK TRIGGERED")
         logger.info(f"   ctx.triggered_id: {ctx.triggered_id}")
         logger.info(f"   btn_clicks: {btn_clicks}")
 
@@ -104,7 +103,6 @@ def register_figure_edit_callback(app):
         component_id = edit_context["component_id"]
         component_data = edit_context["component_data"]
 
-        logger.info(f"💾 FIGURE EDIT SAVE - Component: {component_id}")
         logger.info(f"   Dashboard: {dashboard_id}")
         logger.info(f"   Component type: {component_data.get('component_type')}")
 
@@ -157,7 +155,7 @@ def register_figure_edit_callback(app):
                 # Remove parameter if explicitly set to None
                 del dict_kwargs[key]
 
-        logger.info(f"   Updated dict_kwargs keys: {list(dict_kwargs.keys())}")
+        logger.debug(f"   Updated dict_kwargs keys: {list(dict_kwargs.keys())}")
         logger.info(f"   Parameters: {dict_kwargs}")
 
         # Build complete component metadata
@@ -169,7 +167,7 @@ def register_figure_edit_callback(app):
             "last_updated": datetime.now().isoformat(),
         }
 
-        logger.info(f"   Final metadata keys: {list(updated_metadata.keys())}")
+        logger.debug(f"   Final metadata keys: {list(updated_metadata.keys())}")
 
         # Get access token
         TOKEN = local_store["access_token"]
@@ -183,5 +181,3 @@ def register_figure_edit_callback(app):
         redirect_url = save_figure_to_dashboard(dashboard_id, updated_metadata, TOKEN, app_prefix)
 
         return redirect_url
-
-    logger.info("✅ Figure edit save callback registered")

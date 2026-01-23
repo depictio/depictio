@@ -87,7 +87,6 @@ def validate_and_refresh_token(local_data: Optional[Dict]) -> Tuple[Optional[Dic
 
         # Check if we already have valid local_data (e.g. temporary user session)
         if local_data and local_data.get("access_token") and local_data.get("logged_in"):
-            logger.debug("SHARED_AUTH: Found existing session data in local store")
             return local_data, True, "existing_session"
 
         # Fetch anonymous user session

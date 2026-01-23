@@ -8,6 +8,7 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import projects_collection, runs_collection
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
+from depictio.models.models.users import User
 from depictio.models.models.workflows import WorkflowRun
 
 # Define the router
@@ -15,7 +16,7 @@ runs_endpoint_router = APIRouter()
 
 
 @runs_endpoint_router.get("/list/{workflow_id}")
-async def list_runs(workflow_id: str, current_user: str = Depends(get_current_user)):
+async def list_runs(workflow_id: str, current_user: User = Depends(get_current_user)):
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
     if not workflow_id:
@@ -43,13 +44,11 @@ async def list_runs(workflow_id: str, current_user: str = Depends(get_current_us
 
 
 @runs_endpoint_router.get("/get/{run_id}", response_model=WorkflowRun)
-async def get_run(run_id: PyObjectId, current_user: str = Depends(get_current_user)):
+async def get_run(run_id: PyObjectId, current_user: User = Depends(get_current_user)):
     query = {
         "_id": run_id,
         "$or": [
-            {
-                "permissions.owners._id": current_user.id  # type: ignore[possibly-unbound-attribute]
-            },  # User is an owner
+            {"permissions.owners._id": current_user.id},  # User is an owner
             {"permissions.owners.is_admin": True},  # User is an admin
         ],
     }
@@ -64,7 +63,7 @@ async def get_run(run_id: PyObjectId, current_user: str = Depends(get_current_us
 
 
 @runs_endpoint_router.delete("/delete/{run_id}")
-async def delete_run(run_id: str, current_user: str = Depends(get_current_user)):
+async def delete_run(run_id: str, current_user: User = Depends(get_current_user)):
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
     if not run_id:
@@ -97,7 +96,6 @@ async def delete_run(run_id: str, current_user: str = Depends(get_current_user))
 
 
 class UpsertWorkflowRunBatchRequest(BaseModel):
-    runs: list[dict]
     runs: list[WorkflowRun]
     update: bool = False
 
@@ -106,15 +104,13 @@ class UpsertWorkflowRunBatchRequest(BaseModel):
 async def create_run(
     payload: UpsertWorkflowRunBatchRequest, current_user=Depends(get_current_user)
 ):
-    # return
+    """Create or update workflow runs in batch."""
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
 
     if not payload.runs:
         raise HTTPException(status_code=400, detail="Run is required to create it.")
 
-    # assert all runs share the same workflow ID
-    # payload.runs = [WorkflowRun.from_mongo(run) for run in payload.runs]
     workflow_id = payload.runs[0].workflow_id
     for run in payload.runs:
         if run.workflow_id != workflow_id:
@@ -122,13 +118,9 @@ async def create_run(
                 status_code=400, detail="All runs must belong to the same workflow."
             )
 
-    # assert all runs have unique run_tag
     run_tags = {run.run_tag for run in payload.runs}
     if len(run_tags) != len(payload.runs):
         raise HTTPException(status_code=400, detail="All runs must have unique run_tag.")
-
-    # logger.info(f"Current user: {current_user}")
-    # logger.info(f"Files: {payload.files}")
 
     user_oid = ObjectId(current_user.id)
     # Check if there is a project that contains the workflow.
@@ -158,26 +150,18 @@ async def create_run(
 
     operations = []
     for run in payload.runs:
-        logger.info(f"Upserting run: {run.run_tag}")
         run_obj = run
-        run_data = run.mongo()  # run_data is a dict representation of the run
+        run_data = run.mongo()
 
-        # Query the existing document (if it exists) to extract its current scan_results:
         existing_doc = runs_collection.find_one({"_id": run_obj.id}, {"scan_results": 1})
         existing_scan_results = existing_doc.get("scan_results", []) if existing_doc else []
 
-        # Compute only the new scan results:
-        # (This assumes that a simple equality comparison between dicts is sufficient.
-        # You might need to customize this if the dicts differ only in field order or extra fields.)
         new_scan_results = [
             sr for sr in run_data.get("scan_results", []) if sr not in existing_scan_results
         ]
 
         if run_obj.run_tag in existing_run_tags:
-            logger.info(f"Run with run_tag '{run_obj.run_tag}' already exists.")
             if payload.update:
-                logger.info(f"Updating run: {run_obj.run_tag}")
-                # Remove scan_results from the data that we use for a $set update.
                 set_data = {k: v for k, v in run_data.items() if k != "scan_results"}
                 op = UpdateOne(
                     {"_id": run_obj.id},
@@ -187,15 +171,8 @@ async def create_run(
                     },
                 )
             else:
-                logger.info(
-                    f"Skipping run: {run_obj.run_tag}. If you want to update, set 'update' to True."
-                )
-
+                continue
         else:
-            # If the run does not exist, you might decide to insert it or handle it differently.
-            # For example, you could add an InsertOne operation here.
-            # For now, we'll just skip it.
-            logger.info(f"Run with run_tag '{run_obj.run_tag}' does not exist. Creating it.")
             op = UpdateOne(
                 {"_id": run_obj.id},
                 {"$set": run_data},
@@ -204,27 +181,24 @@ async def create_run(
 
         operations.append(op)
 
+    if not operations:
+        return {"inserted_count": 0, "existing_count": len(payload.runs)}
+
     try:
-        # Perform the bulk upsert
         result = runs_collection.bulk_write(operations, ordered=False)
 
         if payload.update:
-            # When update=True, some files might be updated and some inserted.
             return {
                 "matched_count": result.matched_count,
                 "modified_count": result.modified_count,
                 "upserted_count": result.upserted_count,
             }
         else:
-            # When update=False, only new runs are inserted. Existing ones are not modified.
-            inserted_count = result.upserted_count  # Count of newly inserted files
+            inserted_count = result.upserted_count
             existing_count = len(payload.runs) - inserted_count
-            if existing_count > 0:
-                logger.error(f"{existing_count} runs(s) already exist and were not updated.")
             return {
                 "inserted_count": inserted_count,
                 "existing_count": existing_count,
             }
     except BulkWriteError as bwe:
-        # Return detailed bulk write error information
         raise HTTPException(status_code=500, detail=bwe.details)

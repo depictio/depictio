@@ -135,8 +135,8 @@ class ProjectResponse(Project):
     """
 
     # Override to use permissive response models
-    workflows: list[WorkflowResponse] = []  # type: ignore[assignment]
-    data_collections: list[DataCollectionResponse] = []  # type: ignore[assignment]
+    workflows: list[WorkflowResponse] = []
+    data_collections: list[DataCollectionResponse] = []
 
     model_config = ConfigDict(extra="allow")
 

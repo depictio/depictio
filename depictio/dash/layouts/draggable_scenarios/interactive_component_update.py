@@ -1,3 +1,36 @@
+"""
+Interactive component filtering and data update logic for Depictio dashboards.
+
+This module handles the dynamic filtering and re-rendering of dashboard components
+when interactive filter components (dropdowns, sliders, text inputs, etc.) are
+modified. It processes filter values and applies them to data frames, then
+rebuilds the affected components.
+
+Key Functions:
+    - apply_dropdowns: Filter data by dropdown/select component selections
+    - apply_textinput: Filter data by text input pattern matching
+    - apply_sliders: Filter data by slider/range slider values
+    - apply_boolean: Filter data by checkbox/switch boolean values
+    - filter_data: Route filtering to appropriate handler based on column type
+    - render_raw_children: Build and wrap a single component with edit controls
+    - update_interactive_component_sync: Main entry point for component updates
+
+Data Flow:
+    1. Interactive component values change
+    2. Filters are applied to relevant DataFrames (from Delta tables)
+    3. Components are rebuilt using helpers_mapping functions
+    4. Components are wrapped with edit mode controls
+    5. Updated components are returned for rendering
+
+The module supports multiple component types:
+    - figure: Charts and graphs (Plotly)
+    - card: Statistic/KPI cards
+    - table: Data tables
+    - interactive: Filter components themselves
+    - jbrowse: Genomic browser visualization
+    - multiqc: Quality control report visualization
+"""
+
 import collections
 from typing import Any
 
@@ -15,8 +48,20 @@ from depictio.dash.modules.jbrowse_component.utils import (
 from depictio.dash.utils import get_result_dc_for_workflow
 
 
-def apply_dropdowns(df, n_dict):
-    # if there is a filter applied, filter the df
+def apply_dropdowns(df: pd.DataFrame, n_dict: dict[str, Any]) -> pd.DataFrame:
+    """
+    Filter DataFrame by dropdown/select component selection.
+
+    Applies isin() filter for Select, MultiSelect, and SegmentedControl components.
+    Handles both single string values and lists of values.
+
+    Args:
+        df: Source DataFrame to filter.
+        n_dict: Filter dictionary with 'value' and 'metadata' containing column_name.
+
+    Returns:
+        Filtered DataFrame.
+    """
     if n_dict["value"] is not None:
         # if the value is a string, convert it to a list
         n_dict["value"] = (
@@ -29,8 +74,20 @@ def apply_dropdowns(df, n_dict):
     return df
 
 
-def apply_textinput(df, n_dict):
-    # if the value is not an empty string, filter the df
+def apply_textinput(df: pd.DataFrame, n_dict: dict[str, Any]) -> pd.DataFrame:
+    """
+    Filter DataFrame by text input pattern matching.
+
+    Uses pandas str.contains() with regex support for pattern matching.
+    Empty values are handled gracefully (na=False).
+
+    Args:
+        df: Source DataFrame to filter.
+        n_dict: Filter dictionary with 'value' (regex pattern) and 'metadata'.
+
+    Returns:
+        Filtered DataFrame.
+    """
     if n_dict["value"] != "":
         # filter the df based on the input value using pandas str.contains method
         df = df[
@@ -45,8 +102,20 @@ def apply_textinput(df, n_dict):
     return df
 
 
-def apply_sliders(df, n_dict):
-    # if the interactive component is a RangeSlider
+def apply_sliders(df: pd.DataFrame, n_dict: dict[str, Any]) -> pd.DataFrame:
+    """
+    Filter DataFrame by slider or range slider values.
+
+    For RangeSlider: Filters to rows where column value is within [min, max] range.
+    For Slider: Filters to rows where column value equals the selected value.
+
+    Args:
+        df: Source DataFrame to filter.
+        n_dict: Filter dictionary with 'value' (single or [min, max]) and 'metadata'.
+
+    Returns:
+        Filtered DataFrame.
+    """
     if n_dict["metadata"]["interactive_component_type"] == "RangeSlider":
         # filter the df based on the selected range
         df = df[
@@ -60,8 +129,19 @@ def apply_sliders(df, n_dict):
     return df
 
 
-def apply_boolean(df, n_dict):
-    # if the interactive component is a Checkbox or Switch
+def apply_boolean(df: pd.DataFrame, n_dict: dict[str, Any]) -> pd.DataFrame:
+    """
+    Filter DataFrame by boolean checkbox or switch values.
+
+    Handles string-to-boolean conversion for values like "true", "1", "yes", "on".
+
+    Args:
+        df: Source DataFrame to filter.
+        n_dict: Filter dictionary with boolean 'value' and 'metadata'.
+
+    Returns:
+        Filtered DataFrame.
+    """
     if n_dict["metadata"]["interactive_component_type"] in ["Checkbox", "Switch"]:
         # filter the df based on the boolean value
         value = n_dict["value"]
@@ -72,12 +152,24 @@ def apply_boolean(df, n_dict):
     return df
 
 
-def filter_data(new_df, n_dict):
+def filter_data(new_df: pd.DataFrame, n_dict: dict[str, Any]) -> pd.DataFrame:
     """
-    Filter the data based on the interactive component type and the selected value
+    Filter DataFrame based on interactive component type and selected value.
+
+    Routes to appropriate filter function based on column_type:
+    - object: apply_dropdowns or apply_textinput
+    - int64/float64: apply_sliders
+    - bool: apply_boolean
+
+    Args:
+        new_df: Source DataFrame to filter.
+        n_dict: Filter dictionary containing 'value' and 'metadata' with
+               column_type and interactive_component_type.
+
+    Returns:
+        Filtered DataFrame.
     """
     pd.set_option("display.max_columns", None)
-    # logger.info(f"n_dict - {n_dict}")
 
     # Handles the case of the object type
     if n_dict["metadata"]["column_type"] == "object":
@@ -120,7 +212,23 @@ def filter_data(new_df, n_dict):
 #     return load_deltatable_lite(wf_dc[0], wf_dc[1], interactive_components, TOKEN)
 
 
-def process_joins(wf, wf_dc, joins, interactive_components, TOKEN):
+def process_joins(wf: str, wf_dc: tuple, joins: list, interactive_components: list, TOKEN: str):
+    """
+    Process data collection joins and yield DataFrames for each involved collection.
+
+    Joins multiple Delta tables and yields the joined DataFrame for each
+    participating data collection ID.
+
+    Args:
+        wf: Workflow ID.
+        wf_dc: Tuple of (workflow_id, data_collection_id).
+        joins: List of join specifications.
+        interactive_components: List of interactive component filter values.
+        TOKEN: Access token for API authentication.
+
+    Yields:
+        Tuples of ((workflow_id, data_collection_id), joined_dataframe).
+    """
     join_df = join_deltatables_dev(wf, joins, interactive_components, TOKEN)
     for join in joins:
         for join_id in join:
@@ -130,7 +238,18 @@ def process_joins(wf, wf_dc, joins, interactive_components, TOKEN):
     yield wf_dc, join_df
 
 
-def group_interactive_components(interactive_components_dict):
+def group_interactive_components(
+    interactive_components_dict: dict[str, Any],
+) -> dict[tuple[str, str], list]:
+    """
+    Group interactive components by their workflow and data collection IDs.
+
+    Args:
+        interactive_components_dict: Dictionary of interactive components keyed by index.
+
+    Returns:
+        Dictionary with (wf_id, dc_id) tuples as keys and lists of components as values.
+    """
     grouped = collections.defaultdict(list)
     for v in interactive_components_dict.values():
         grouped[v["metadata"]["wf_id"], v["metadata"]["dc_id"]].append(v)
@@ -186,7 +305,6 @@ def render_raw_children(
     # )
 
     # Log the addition of 'jbrowse' children
-    # logger.info(f"Added 'jbrowse' children. Total children so far: {len(children)}")
 
     # Process non-'jbrowse' components
     comp_type = component.get("component_type")
@@ -195,7 +313,7 @@ def render_raw_children(
     # Button values like "MultiQC" need to be converted to "multiqc" for the metadata
     comp_type_lower = comp_type.lower() if comp_type else None
 
-    logger.info(f"Processing component type: {comp_type} (mapped to: {comp_type_lower})")
+    logger.debug(f"Processing component type: {comp_type} (mapped to: {comp_type_lower})")
 
     # Update interactive components
     if comp_type == "interactive":
@@ -236,9 +354,7 @@ def render_raw_children(
 
     # Log specific component types
     # if comp_type == "figure":
-    #     logger.info(f"Processing figure component: {component}")
     # if comp_type == "card":
-    #     logger.info(f"Processing card component: {component}")
 
     # Add theme to component if it's a figure
     component["theme"] = theme
@@ -262,7 +378,7 @@ def render_raw_children(
 
     # Enable edit mode on the native component (no JSON conversion needed)
     try:
-        logger.info(f"Processing {comp_type} component as native Dash component")
+        logger.debug(f"Processing {comp_type} component as native Dash component")
 
         # Pass the native component directly to enable_box_edit_mode
         # This preserves dcc.Loading wrappers and eliminates JSON conversion overhead
@@ -293,26 +409,43 @@ def render_raw_children(
 
     # Append the processed child
     children.append(child)
-    # logger.info(f"Child added: {child}")
 
-    logger.info(f"Total children rendered: {len(children)}")
+    logger.debug(f"Total children rendered: {len(children)}")
     logger.info(f"Child indexes: {indexes}")
 
     return child, index
 
 
 def update_interactive_component_sync(
-    stored_metadata_raw,
-    interactive_components_dict,
-    current_draggable_children,
-    switch_state,
-    TOKEN,
-    dashboard_id,
-    theme="light",  # Add theme parameter with default
-):
+    stored_metadata_raw: list[dict[str, Any]],
+    interactive_components_dict: dict[str, Any],
+    current_draggable_children: list,
+    switch_state: bool,
+    TOKEN: str,
+    dashboard_id: str,
+    theme: str = "light",
+) -> list:
+    """
+    Update dashboard components based on interactive filter selections.
+
+    Main entry point for re-rendering components when interactive filters change.
+    Loads data from pre-computed joins or Delta tables, applies filters, and
+    rebuilds all affected components.
+
+    Args:
+        stored_metadata_raw: List of component metadata dictionaries.
+        interactive_components_dict: Dictionary of interactive component values and metadata.
+        current_draggable_children: Current list of rendered components.
+        switch_state: Edit mode toggle state.
+        TOKEN: Access token for API authentication.
+        dashboard_id: Dashboard identifier.
+        theme: Color theme ("light" or "dark").
+
+    Returns:
+        List of updated rendered component children.
+    """
     children = list()
 
-    # logger.info(f"interactive_components_dict - {interactive_components_dict}")
     interactive_components_dict_for_logging = [
         {
             "index": k,
@@ -348,13 +481,10 @@ def update_interactive_component_sync(
 
         # stored_metadata = sorted(stored_metadata, key=lambda x: x["index"])
         # Filter stored_metadata based on the workflow id
-        # logger.info(f"wf - {wf}")
-        # logger.info(f"stored_metadata_raw - {stored_metadata_raw}")
         stored_metadata = [v for v in stored_metadata_raw if v.get("wf_id") == wf]
         # stored_metadata_interactive_components = [
         #     e for e in stored_metadata if e["component_type"] in ["interactive"]
         # ]
-        # logger.info(f"stored_metadata - {stored_metadata}")
         # stored_metadata_table_components = [
         #     e
         #     for e in stored_metadata
@@ -370,7 +500,7 @@ def update_interactive_component_sync(
 
         try:
             # Fetch workflow data to get all data collections
-            logger.info(f"Fetching workflow data for wf={wf} to build dc_type_mapping")
+            logger.debug(f"Fetching workflow data for wf={wf} to build dc_type_mapping")
             response = httpx.get(
                 f"{API_BASE_URL}/depictio/api/v1/workflows/get/from_id",
                 params={"workflow_id": wf},
@@ -381,7 +511,7 @@ def update_interactive_component_sync(
             if response.status_code == 200:
                 workflow_data = response.json()
                 data_collections = workflow_data.get("data_collections", [])
-                logger.info(f"Found {len(data_collections)} data collections in workflow {wf}")
+                logger.debug(f"Found {len(data_collections)} data collections in workflow {wf}")
                 for dc in data_collections:
                     dc_id = str(dc.get("_id"))
                     config = dc.get("config", {})
@@ -409,13 +539,13 @@ def update_interactive_component_sync(
                     dc_type_mapping[dc_id] = "table"
                     logger.debug(f"Mapped {dc_id} -> table (from component type)")
 
-        logger.info(f"DC type mapping (before loading pre-computed join): {dc_type_mapping}")
+        logger.debug(f"DC type mapping (before loading pre-computed join): {dc_type_mapping}")
 
         # MIGRATED: Load pre-computed join result DC
         result_dc_id = get_result_dc_for_workflow(wf, TOKEN)
 
         if result_dc_id:
-            logger.info(f"Loading pre-computed join for workflow {wf}: {result_dc_id}")
+            logger.debug(f"Loading pre-computed join for workflow {wf}: {result_dc_id}")
 
             # Convert interactive_components_dict to metadata list for filtering
             metadata_list = (
@@ -429,7 +559,7 @@ def update_interactive_component_sync(
                 ObjectId(wf), ObjectId(result_dc_id), metadata=metadata_list, TOKEN=TOKEN
             )
 
-            logger.info(f"Loaded pre-computed join for workflow {wf} (shape: {merged_df.shape})")
+            logger.debug(f"Loaded pre-computed join for workflow {wf} (shape: {merged_df.shape})")
 
             # Store the merged dataframe
             # For compatibility, store it with a simple key
@@ -440,7 +570,6 @@ def update_interactive_component_sync(
 
         for e in stored_metadata:
             if e["component_type"] == "jbrowse":
-                # logger.info(f"build_jbrowse_df_mapping_dict - access_token: {TOKEN}")
                 build_jbrowse_df_mapping_dict(
                     stored_metadata, df_dict_processed[wf], access_token=TOKEN
                 )
@@ -461,47 +590,31 @@ def update_interactive_component_sync(
     #     if component["component_type"] in ["jbrowse"]:
     #         children.append(child)
     #     elif component["component_type"] == "interactive":
-    #         logger.info(f"Interactive CHILD - {child}")
-    #         logger.info(f"Interactive CHILD keys - {child.keys()}")
 
     #         try:
     #             level1 = child["props"]
-    #             logger.info(f"Level 1 props: {level1}")
 
     #             level2 = level1["children"][1]
-    #             logger.info(f"Level 2 children[1]: {level2}")
 
     #             level3 = level2["props"]
-    #             logger.info(f"Level 3 props: {level3}")
 
     #             level4 = level3["children"]["props"]
-    #             logger.info(f"Level 4 children.props: {level4}")
 
     #             level5 = level4["children"]["props"]
-    #             logger.info(f"Level 5 children.props: {level5}")
 
     #             level6 = level5["children"]["props"]
-    #             logger.info(f"Level 6 children.props: {level6}")
 
     #             level7 = level6["children"][2]["props"]["data"]["value"]
-    #             logger.info(f"Level 7 data.value: {level7}")
 
     #             # Now perform the assignment
     #             child["props"]["children"][1]["props"]["children"]["props"]["children"]["props"]["children"][2]["props"]["data"]["value"] = interactive_components_dict[component["index"]]["value"]
 
     #         except KeyError as e:
-    #             logger.error(f"KeyError encountered: {e}")
     #             # Handle the error or re-raise with more context
     #             raise
 
-    #         logger.info(f"Interactive CHILD after update - {child}")
-
-    # logger.info(f"df_dict_processed - {df_dict_processed}")
-
     # Add or update the non-interactive components
     for component in stored_metadata:
-        logger.info(f"DEBUG - interactive_component_update - Processing component: {component}")
-
         if component["component_type"] not in ["jbrowse", "multiqc"]:
             # retrieve the key from df_dict_processed based on the wf_id and dc_id, checking which join encompasses the dc_id
             for key, df in df_dict_processed[component["wf_id"]].items():
@@ -529,7 +642,6 @@ def update_interactive_component_sync(
             # Add theme to component if it's a figure
             # if component["component_type"] == "figure":
             component["theme"] = theme
-            # logger.info(f"GRAPH COMPONENT - {component}")
 
             # Debug: Log component data for text components before calling helper
             if component["component_type"] == "text":
@@ -557,7 +669,6 @@ def update_interactive_component_sync(
                     )
             # Debug: Log card component info if needed
             # if component["component_type"] == "card":
-            #     logger.debug(f"Card component type: {type(child)}")
 
             # Process component as native Dash component (no JSON conversion)
             # try:
@@ -577,7 +688,6 @@ def update_interactive_component_sync(
                 logger.info(f"DEBUG text component {child.id} with content: {child}")
 
             # except Exception as e:
-            #     logger.error(
             #         f"Error processing {component['component_type']} component (line 460 path): {e}"
             #     )
             #     # Fallback to prevent dashboard failure
@@ -649,8 +759,5 @@ def update_interactive_component_sync(
             )
 
             children.append(child)
-        # logger.info(f"ITERATIVE - len(children) - {len(children)}")
 
-    # logger.info(f"Len children - {len(children)}")
-    # logger.info(f"Children - {children}")
     return children

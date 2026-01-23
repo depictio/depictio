@@ -69,7 +69,6 @@ def register_multiqc_edit_callback(app):
             PreventUpdate: If no valid trigger or missing data
         """
         logger.info("=" * 80)
-        logger.info("🚀 MULTIQC EDIT SAVE CALLBACK TRIGGERED")
         logger.info(f"   ctx.triggered_id: {ctx.triggered_id}")
         logger.info(f"   btn_clicks: {btn_clicks}")
 
@@ -88,7 +87,6 @@ def register_multiqc_edit_callback(app):
         component_id = edit_context["component_id"]
         component_data = edit_context["component_data"]
 
-        logger.info(f"💾 MULTIQC EDIT SAVE - Component: {component_id}")
         logger.info(f"   Dashboard: {dashboard_id}")
         logger.info(f"   Component type: {component_data.get('component_type')}")
 
@@ -137,7 +135,7 @@ def register_multiqc_edit_callback(app):
             "last_updated": datetime.now().isoformat(),
         }
 
-        logger.info(f"   Final metadata keys: {list(updated_metadata.keys())}")
+        logger.debug(f"   Final metadata keys: {list(updated_metadata.keys())}")
 
         # Get access token
         TOKEN = local_store["access_token"]
@@ -152,12 +150,9 @@ def register_multiqc_edit_callback(app):
         # Use shared save helper
         redirect_url = save_multiqc_to_dashboard(dashboard_id, updated_metadata, TOKEN, app_prefix)
 
-        logger.info(f"✅ MULTIQC EDIT SAVE - Redirecting to {redirect_url}")
         logger.info("=" * 80)
 
         return redirect_url
-
-    logger.info("✅ MultiQC edit save callback registered")
 
 
 __all__ = ["register_multiqc_edit_callback"]

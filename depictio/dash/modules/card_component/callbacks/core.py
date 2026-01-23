@@ -11,23 +11,585 @@ Callbacks:
 - patch_card_with_filters: Update card value when filters change
 """
 
+from __future__ import annotations
+
+import concurrent.futures
+import hashlib
+import json
+import time
+import uuid
+from typing import TYPE_CHECKING, Any
+
 import dash
-from dash import ALL, MATCH, Input, Output, State
+from bson import ObjectId
+from dash import ALL, MATCH, Input, Output, State, no_update
 
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.dash.background_callback_helpers import (
     log_background_callback_status,
     should_use_background_for_component,
 )
-from depictio.dash.modules.card_component.utils import agg_functions
+from depictio.dash.modules.card_component.utils import (
+    agg_functions,
+    compute_value,
+    get_adaptive_trend_colors,
+)
 from depictio.dash.utils import (
     get_columns_from_data_collection,
     get_component_data,
+    get_result_dc_for_workflow,
     resolve_link_values,
 )
 
+if TYPE_CHECKING:
+    import polars as pl
+
 # Use centralized background callback configuration
 USE_BACKGROUND_CALLBACKS = should_use_background_for_component("card")
+
+
+def _enrich_filters_with_metadata(
+    filters_data: dict[str, Any] | None,
+    interactive_metadata_list: list[dict[str, Any]],
+    interactive_metadata_ids: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    Enrich lightweight filter store data with full metadata from interactive components.
+
+    This function combines the lightweight filter values (index + value only) with
+    their full metadata (column_name, dc_id, component_type, etc.) from the
+    interactive-stored-metadata stores.
+
+    Args:
+        filters_data: Lightweight filter data containing interactive_components_values
+        interactive_metadata_list: Full metadata from all interactive component stores
+        interactive_metadata_ids: IDs of all interactive component metadata stores
+
+    Returns:
+        List of enriched component dicts with index, value, and full metadata
+    """
+    # Create index -> metadata mapping
+    metadata_by_index: dict[str, dict[str, Any]] = {}
+    if interactive_metadata_list and interactive_metadata_ids:
+        for i, meta_id in enumerate(interactive_metadata_ids):
+            if i < len(interactive_metadata_list):
+                index = meta_id["index"]
+                metadata_by_index[index] = interactive_metadata_list[i]
+
+    # Enrich lightweight store data with full metadata
+    lightweight_components = (
+        filters_data.get("interactive_components_values", []) if filters_data else []
+    )
+
+    enriched_components: list[dict[str, Any]] = []
+    for component in lightweight_components:
+        index = component.get("index")
+        value = component.get("value")
+        full_metadata = metadata_by_index.get(index, {})
+
+        if full_metadata:
+            enriched_components.append(
+                {
+                    "index": index,
+                    "value": value,
+                    "metadata": full_metadata,
+                }
+            )
+        else:
+            logger.warning(f"No metadata found for component {index[:8]}... - skipping")
+
+    logger.debug(
+        f"Enriched {len(enriched_components)}/{len(lightweight_components)} components with metadata"
+    )
+
+    return enriched_components
+
+
+def _build_dc_load_registry(
+    trigger_data_list: list[dict[str, Any] | None],
+    filters_data: dict[str, Any],
+) -> tuple[dict[tuple[str, str, str], list[dict[str, Any]]], dict[int, tuple[str, str, str]]]:
+    """
+    Build registry of unique data collection loads for parallel execution.
+
+    Scans all cards to identify unique (workflow_id, dc_id, filters_hash) combinations
+    to avoid redundant data loading when multiple cards share the same data source
+    and filter configuration.
+
+    Args:
+        trigger_data_list: List of card trigger data containing wf_id, dc_id
+        filters_data: Enriched filter data with interactive_components_values
+
+    Returns:
+        Tuple of:
+        - dc_load_registry: Maps (wf_id, dc_id, filters_hash) -> filter metadata list
+        - card_to_load_key: Maps card index -> load key tuple
+    """
+    dc_load_registry: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    card_to_load_key: dict[int, tuple[str, str, str]] = {}
+
+    for i, trigger_data in enumerate(trigger_data_list):
+        if not trigger_data or not isinstance(trigger_data, dict):
+            continue
+
+        wf_id = trigger_data.get("wf_id")
+        dc_id = trigger_data.get("dc_id")
+
+        if not all([wf_id, dc_id]):
+            continue
+
+        # Get filters for this card
+        card_dc_str = str(dc_id)
+        metadata_list = filters_data.get("interactive_components_values", [])
+
+        # Group filters by DC
+        filters_by_dc: dict[str, list[dict[str, Any]]] = {}
+        if metadata_list:
+            for component in metadata_list:
+                component_dc = str(component.get("metadata", {}).get("dc_id"))
+                if component_dc not in filters_by_dc:
+                    filters_by_dc[component_dc] = []
+                filters_by_dc[component_dc].append(component)
+
+        # Get relevant filters for card's DC
+        relevant_filters = filters_by_dc.get(card_dc_str, [])
+
+        # Determine if filters are active
+        has_active_filters = any(
+            c.get("value") not in [None, [], "", False] for c in relevant_filters
+        )
+
+        if has_active_filters:
+            active_filters = [
+                c for c in relevant_filters if c.get("value") not in [None, [], "", False]
+            ]
+            metadata_to_pass = active_filters
+        else:
+            metadata_to_pass = []
+
+        # Create stable hash of filters for deduplication
+        filter_signature = sorted(
+            [
+                (c.get("metadata", {}).get("column_name"), str(c.get("value")))
+                for c in metadata_to_pass
+            ]
+        )
+        filters_hash = hashlib.md5(
+            json.dumps(filter_signature, sort_keys=True).encode()
+        ).hexdigest()[:8]
+
+        load_key = (str(wf_id), str(dc_id), filters_hash)
+
+        # Register this unique load
+        if load_key not in dc_load_registry:
+            dc_load_registry[load_key] = metadata_to_pass
+
+        # Map card to its load key
+        card_to_load_key[i] = load_key
+
+    return dc_load_registry, card_to_load_key
+
+
+def _load_data_collections_parallel(
+    dc_load_registry: dict[tuple[str, str, str], list[dict[str, Any]]],
+    access_token: str,
+    batch_task_id: str,
+) -> dict[tuple[str, str, str], pl.DataFrame]:
+    """
+    Load all unique data collections in parallel using thread pool.
+
+    Executes data loading for all unique DC+filter combinations concurrently
+    to minimize total loading time. Uses up to 4 concurrent workers.
+
+    Args:
+        dc_load_registry: Maps (wf_id, dc_id, filters_hash) -> filter metadata list
+        access_token: Authentication token for API calls
+        batch_task_id: Task ID for logging correlation
+
+    Returns:
+        Cache dict mapping load_key -> loaded DataFrame
+    """
+
+    def load_single_dc(
+        load_key: tuple[str, str, str],
+        metadata_to_pass: list[dict[str, Any]],
+    ) -> tuple[tuple[str, str, str], pl.DataFrame | None]:
+        """Load a single DC with filters (thread-safe operation)."""
+        wf_id, dc_id, filters_hash = load_key
+        try:
+            data = load_deltatable_lite(
+                ObjectId(wf_id),
+                ObjectId(dc_id),
+                metadata=metadata_to_pass,
+                TOKEN=access_token,
+            )
+            logger.debug(
+                f"   Parallel load: {dc_id[:8]}...{filters_hash} "
+                f"({data.height:,} rows x {data.width} cols)"
+            )
+            return load_key, data
+        except Exception as e:
+            logger.error(f"   Parallel load failed: {dc_id[:8]}...{filters_hash}: {e}")
+            return load_key, None
+
+    dc_cache: dict[tuple[str, str, str], pl.DataFrame] = {}
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        future_to_key = {
+            executor.submit(load_single_dc, load_key, metadata): load_key
+            for load_key, metadata in dc_load_registry.items()
+        }
+
+        for future in concurrent.futures.as_completed(future_to_key):
+            load_key, data = future.result()
+            if data is not None:
+                dc_cache[load_key] = data
+
+    return dc_cache
+
+
+def _group_filters_by_dc(
+    metadata_list: list[dict[str, Any]] | None,
+    dc_configs_map: dict[str, dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    """
+    Group filter components by their data collection, filtering to table DCs only.
+
+    Groups interactive filter components by their associated data collection ID,
+    excluding non-table DC types (MultiQC, JBrowse2) that don't support filtering.
+
+    Args:
+        metadata_list: List of enriched filter component metadata
+        dc_configs_map: Map of dc_id -> dc_config with type information
+
+    Returns:
+        Dict mapping dc_id (str) -> list of filter components for that DC
+    """
+    filters_by_dc: dict[str, list[dict[str, Any]]] = {}
+
+    if metadata_list:
+        for component in metadata_list:
+            component_dc = str(component.get("metadata", {}).get("dc_id"))
+            if component_dc not in filters_by_dc:
+                filters_by_dc[component_dc] = []
+            filters_by_dc[component_dc].append(component)
+
+    # Filter to table DCs only
+    filters_by_dc_table_only: dict[str, list[dict[str, Any]]] = {}
+    for dc_key, dc_filters in filters_by_dc.items():
+        if dc_filters:
+            component_dc_config = dc_configs_map.get(str(dc_key), {})
+            dc_type = component_dc_config.get("type", "table")
+            if dc_type == "table":
+                filters_by_dc_table_only[dc_key] = dc_filters
+
+    return filters_by_dc_table_only
+
+
+def _determine_filtering_path(
+    card_dc_str: str,
+    filters_by_dc: dict[str, list[dict[str, Any]]],
+    wf_id: str,
+    access_token: str,
+    stored_metadata: dict[str, Any] | None = None,
+    has_active_filters: bool = False,
+) -> tuple[bool, str | None, bool, dict[str, Any] | None, dict[str, list[dict[str, Any]]]]:
+    """
+    Determine whether to use joined-DC, link-DC, or same-DC filtering path.
+
+    Analyzes filter distribution across DCs and checks for pre-computed join
+    results or DC links to determine the optimal filtering strategy.
+
+    Path priority:
+    1. Joined-DC: Pre-computed join result exists
+    2. Link-DC: No pre-computed join, but DC link exists
+    3. Same-DC: No pre-computed join or link - use card DC only
+
+    Args:
+        card_dc_str: String ID of the card's data collection
+        filters_by_dc: Dict mapping dc_id -> list of filters
+        wf_id: Workflow ID for join result lookup
+        access_token: Authentication token for API calls
+        stored_metadata: Card metadata containing project_id for link resolution
+        has_active_filters: Whether any filters have non-empty values
+
+    Returns:
+        Tuple of:
+        - use_joined_path: Whether to use joined-DC path
+        - result_dc_id: ID of pre-computed join result (if available)
+        - use_link_path: Whether to use link-based resolution
+        - link_resolved_filter: Synthetic filter from link resolution (if available)
+        - filters_by_dc: Potentially modified filters dict (fallback to card DC only)
+    """
+    has_filters_for_card_dc = card_dc_str in filters_by_dc
+
+    # Determine if we need to perform a join
+    needs_join = False
+    if not has_filters_for_card_dc and len(filters_by_dc) > 0:
+        needs_join = True
+
+    # Check for pre-computed join result DC
+    result_dc_id = get_result_dc_for_workflow(wf_id, access_token)
+
+    # Determine the filtering path
+    use_joined_path = needs_join and result_dc_id is not None
+    use_link_path = False
+    link_resolved_filter: dict[str, Any] | None = None
+
+    # If needs join but no pre-computed join, try link resolution
+    if needs_join and not use_joined_path and has_active_filters:
+        project_id = stored_metadata.get("project_id") if stored_metadata else None
+
+        if project_id:
+            # Collect filter values from other DCs
+            for filter_dc_id, filter_components in filters_by_dc.items():
+                if filter_dc_id != card_dc_str:
+                    for comp in filter_components:
+                        filter_value = comp.get("value")
+                        filter_column = comp.get("metadata", {}).get("column_name")
+
+                        if filter_value and filter_column:
+                            filter_values = (
+                                filter_value if isinstance(filter_value, list) else [filter_value]
+                            )
+
+                            # Try link resolution
+                            resolved = resolve_link_values(
+                                project_id=project_id,
+                                source_dc_id=filter_dc_id,
+                                source_column=filter_column,
+                                filter_values=filter_values,
+                                target_dc_id=card_dc_str,
+                                token=access_token,
+                            )
+
+                            if resolved and resolved.get("resolved_values"):
+                                use_link_path = True
+                                target_column = resolved.get("target_column", filter_column)
+                                link_resolved_filter = {
+                                    "metadata": {
+                                        "column_name": target_column,
+                                        "dc_id": card_dc_str,
+                                        "interactive_component_type": "MultiSelect",
+                                    },
+                                    "value": resolved["resolved_values"],
+                                }
+                                break  # Use first successful resolution
+
+                    if use_link_path:
+                        break
+
+            if not use_link_path:
+                logger.warning("Link resolution failed - no link found or no matches")
+        else:
+            logger.warning("No project_id in stored_metadata - cannot use link resolution")
+
+    # If filters on multiple DCs but no join config and no link, fall back to SAME-DC
+    if len(filters_by_dc) > 1 and not use_joined_path and not use_link_path:
+        logger.warning(
+            f"Filters on {len(filters_by_dc)} DCs but no join config or link - "
+            f"falling back to SAME-DC filtering (card DC only)"
+        )
+        if card_dc_str in filters_by_dc:
+            filters_by_dc = {card_dc_str: filters_by_dc[card_dc_str]}
+        else:
+            filters_by_dc = {}
+
+    return use_joined_path, result_dc_id, use_link_path, link_resolved_filter, filters_by_dc
+
+
+def _load_data_for_card(
+    use_joined_path: bool,
+    result_dc_id: str | None,
+    filters_by_dc: dict[str, list[dict[str, Any]]],
+    has_active_filters: bool,
+    wf_id: str,
+    dc_id: str,
+    card_dc_str: str,
+    card_index: int,
+    card_to_load_key: dict[int, tuple[str, str, str]],
+    dc_cache: dict[tuple[str, str, str], pl.DataFrame],
+    access_token: str,
+    use_link_path: bool = False,
+    link_resolved_filter: dict[str, Any] | None = None,
+) -> pl.DataFrame:
+    """
+    Load data for a card using joined-DC, link-DC, or same-DC path.
+
+    Handles three filtering paths:
+    - Joined-DC: Loads pre-computed join result with combined filters
+    - Link-DC: Uses link-resolved filter to load card's DC
+    - Same-DC: Uses cached data or falls back to synchronous load
+
+    Args:
+        use_joined_path: Whether to use joined-DC path
+        result_dc_id: ID of pre-computed join result (if using joined path)
+        filters_by_dc: Dict mapping dc_id -> list of filters
+        has_active_filters: Whether any filters have non-empty values
+        wf_id: Workflow ID
+        dc_id: Data collection ID
+        card_dc_str: String ID of the card's data collection
+        card_index: Index of card in batch
+        card_to_load_key: Map of card index to load key
+        dc_cache: Pre-loaded data cache
+        access_token: Authentication token
+        use_link_path: Whether to use link-based resolution
+        link_resolved_filter: Synthetic filter from link resolution
+
+    Returns:
+        Loaded DataFrame with filters applied
+    """
+    if use_joined_path:
+        # JOINED-DC PATH: Load pre-computed join result DC
+        # Combine all filters from all DCs
+        combined_metadata: list[dict[str, Any]] = []
+        for dc_key, dc_filters in filters_by_dc.items():
+            if has_active_filters:
+                active_filters = [
+                    c for c in dc_filters if c.get("value") not in [None, [], "", False]
+                ]
+                combined_metadata.extend(active_filters)
+
+        logger.debug(f"Loading result DC {result_dc_id} with {len(combined_metadata)} filters")
+        data = load_deltatable_lite(
+            ObjectId(wf_id),
+            ObjectId(result_dc_id),
+            metadata=combined_metadata if combined_metadata else None,
+            TOKEN=access_token,
+            select_columns=None,
+        )
+
+        logger.debug(f"Loaded result DC: {data.height:,} rows x {data.width} columns")
+        return data
+
+    if use_link_path and link_resolved_filter:
+        # LINK-DC PATH: Use link-resolved filter to load card's DC
+        logger.debug("LINK-DC FILTERING: Loading card DC with link-resolved filter")
+
+        data = load_deltatable_lite(
+            ObjectId(wf_id),
+            ObjectId(dc_id),
+            metadata=[link_resolved_filter],
+            TOKEN=access_token,
+            select_columns=None,
+        )
+
+        logger.debug(f"Loaded via link resolution: {data.height:,} rows x {data.width} columns")
+        return data
+
+    # SAME-DC PATH: Use cached data or fall back to synchronous load
+    load_key = card_to_load_key.get(card_index)
+
+    if load_key and load_key in dc_cache:
+        data = dc_cache[load_key]
+        return data
+
+    # Cache miss - fallback to synchronous load
+    relevant_filters = filters_by_dc.get(card_dc_str, [])
+
+    if has_active_filters:
+        active_filters = [
+            c for c in relevant_filters if c.get("value") not in [None, [], "", False]
+        ]
+        logger.debug(f"SAME-DC filtering - applying {len(active_filters)} active filters")
+        metadata_to_pass = active_filters
+    else:
+        logger.debug("SAME-DC clearing filters - loading ALL unfiltered data")
+        metadata_to_pass = []
+
+    logger.warning(f"Cache miss for card {card_index} - loading synchronously: {wf_id}:{dc_id}")
+
+    data = load_deltatable_lite(
+        ObjectId(wf_id),
+        ObjectId(dc_id),
+        metadata=metadata_to_pass,
+        TOKEN=access_token,
+    )
+
+    logger.debug(f"Loaded {data.height:,} rows x {data.width} columns")
+    return data
+
+
+def _format_card_value(value: Any) -> tuple[str, float | None]:
+    """
+    Format a computed card value for display.
+
+    Args:
+        value: Raw computed value (numeric or None)
+
+    Returns:
+        Tuple of (formatted_string, numeric_value or None)
+    """
+    try:
+        if value is not None:
+            formatted = str(round(float(value), 4))
+            numeric = float(value)
+            return formatted, numeric
+        return "N/A", None
+    except (ValueError, TypeError):
+        return "Error", None
+
+
+def _create_comparison_components(
+    reference_value: float | None,
+    current_val: float | None,
+    trend_colors: dict[str, str],
+) -> list[Any]:
+    """
+    Create trend comparison UI components showing change from reference.
+
+    Builds visual comparison indicator showing percentage change between
+    the current filtered value and the unfiltered reference value.
+
+    Args:
+        reference_value: Original unfiltered value
+        current_val: Current filtered value
+        trend_colors: Dict with 'positive', 'negative', 'neutral' color values
+
+    Returns:
+        List of Dash components (icon + text) for the comparison, or empty list
+    """
+    if reference_value is None or current_val is None:
+        return []
+
+    try:
+        import dash_mantine_components as dmc
+        from dash_iconify import DashIconify
+
+        ref_val = float(reference_value)
+
+        if ref_val != 0:
+            change_pct = ((current_val - ref_val) / ref_val) * 100
+            if change_pct > 0:
+                comparison_text = f"+{change_pct:.1f}% vs unfiltered ({ref_val})"
+                comparison_color = trend_colors["positive"]
+                comparison_icon = "mdi:trending-up"
+            elif change_pct < 0:
+                comparison_text = f"{change_pct:.1f}% vs unfiltered ({ref_val})"
+                comparison_color = trend_colors["negative"]
+                comparison_icon = "mdi:trending-down"
+            else:
+                comparison_text = f"Same as unfiltered ({ref_val})"
+                comparison_color = trend_colors["neutral"]
+                comparison_icon = "mdi:trending-neutral"
+        else:
+            comparison_text = f"Reference: {ref_val}"
+            comparison_color = trend_colors["neutral"]
+            comparison_icon = "mdi:information-outline"
+
+        return [
+            DashIconify(icon=comparison_icon, width=14, color=comparison_color),
+            dmc.Text(
+                comparison_text,
+                size="xs",
+                fw="normal",
+                style={"margin": "0", "color": comparison_color},
+            ),
+        ]
+    except (ValueError, TypeError) as e:
+        logger.warning(f"Error creating comparison: {e}")
+        return []
 
 
 def register_core_callbacks(app):
@@ -82,13 +644,6 @@ def register_core_callbacks(app):
         """
         Callback to update aggregation dropdown options based on the selected column
         """
-        logger.info("=== CARD AGGREGATION OPTIONS CALLBACK START ===")
-        logger.info(f"column_name: {column_name}")
-        logger.info(f"wf_tag: {wf_tag}")
-        logger.info(f"dc_tag: {dc_tag}")
-        logger.info(f"component_id: {component_id}")
-        logger.info(f"local_data available: {local_data is not None}")
-        logger.info(f"pathname: {pathname}")
 
         if not local_data:
             logger.error("No local_data available!")
@@ -99,9 +654,6 @@ def register_core_callbacks(app):
         # If workflow/dc tags are missing, try to get from component data (edit mode or pre-population)
         if not wf_tag or not dc_tag:
             input_id = str(component_id["index"])
-            logger.info(
-                f"Missing wf/dc tags - fetching component data for component_id: {input_id}"
-            )
 
             # Extract dashboard_id from pathname
             # URL formats: /dashboard/{id}/component/add/{uuid} or /dashboard/{id}/component/edit/{uuid}
@@ -117,12 +669,6 @@ def register_core_callbacks(app):
             if component_data:
                 wf_tag = component_data.get("wf_id")
                 dc_tag = component_data.get("dc_id")
-                logger.info(f"Retrieved from component_data - wf_tag: {wf_tag}, dc_tag: {dc_tag}")
-
-        index = str(component_id["index"])
-        logger.info(f"index: {index}")
-        logger.info(f"Final wf_tag: {wf_tag}")
-        logger.info(f"Final dc_tag: {dc_tag}")
 
         # If any essential parameters are None, return empty list
         if not wf_tag or not dc_tag:
@@ -131,15 +677,11 @@ def register_core_callbacks(app):
             )
             return []
 
-        # If column_name is None, return empty list (but still log the attempt)
+        # If column_name is None, return empty list
         if not column_name:
-            logger.info(
-                "Column name is None - returning empty list (this is normal on initial load)"
-            )
             return []
 
         # ✅ CACHE OPTIMIZATION: Get columns from project-metadata-store (no API call)
-        logger.info("Extracting columns from project-metadata-store cache...")
         cols_json = None
 
         if not project_metadata:
@@ -160,7 +702,6 @@ def register_core_callbacks(app):
                             last_agg = dc.get("last_aggregation", {})
                             cols_json = last_agg.get("column_specs") or last_agg.get("columns")
                             if cols_json:
-                                logger.info("✅ Extracted column_specs from cache (no API call)")
                                 break
                     if cols_json:
                         break
@@ -170,8 +711,6 @@ def register_core_callbacks(app):
                 # Fallback to API call
                 TOKEN = local_data["access_token"]
                 cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
-
-        logger.info(f"cols_json keys: {list(cols_json.keys()) if cols_json else 'None'}")
 
         # Check if cols_json is valid and contains the column
         if not cols_json:
@@ -190,7 +729,6 @@ def register_core_callbacks(app):
 
         # Get the type of the selected column
         column_type = cols_json[column_name]["type"]
-        logger.info(f"column_type: {column_type}")
 
         # Get the aggregation functions available for the selected column type
         if str(column_type) not in agg_functions:
@@ -199,12 +737,9 @@ def register_core_callbacks(app):
             return []
 
         agg_functions_tmp_methods = agg_functions[str(column_type)]["card_methods"]
-        logger.info(f"agg_functions_tmp_methods: {agg_functions_tmp_methods}")
 
         # Create a list of options for the dropdown
         options = [{"label": k, "value": k} for k in agg_functions_tmp_methods.keys()]
-        logger.info(f"Final options to return: {options}")
-        logger.info("=== CARD AGGREGATION OPTIONS CALLBACK END ===")
 
         return options
 
@@ -214,7 +749,8 @@ def register_core_callbacks(app):
         Input({"type": "card-dropdown-column", "index": MATCH}, "value"),
         prevent_initial_call=True,
     )
-    def reset_aggregation_value(column_name):
+    def reset_aggregation_value(column_name: str | None) -> None:
+        """Reset aggregation dropdown value when column selection changes."""
         return None
 
     # OPTION A: Batch rendering - Process ALL cards in single callback (700ms total instead of 9×700ms)
@@ -248,8 +784,6 @@ def register_core_callbacks(app):
         Instead of 9 callbacks × 700ms = 6.3s, this processes all cards in one callback = 700ms total.
         Backend work is parallelized internally, Dash framework overhead happens once instead of 9x.
         """
-        import time
-        import uuid
 
         from bson import ObjectId
         from dash import no_update
@@ -257,14 +791,8 @@ def register_core_callbacks(app):
         from depictio.api.v1.deltatables_utils import load_deltatable_lite
         from depictio.dash.modules.card_component.utils import compute_value
 
-        batch_start = time.time()
-        task_id = str(uuid.uuid4())[:8]
-
-        logger.info(f"[{task_id}] 🚀 BATCH CARD RENDER START - {len(trigger_data_list)} cards")
-
         # Early exit checks
         if not trigger_data_list or not any(trigger_data_list):
-            logger.info("No triggers ready yet")
             return [no_update] * len(trigger_data_list), [no_update] * len(trigger_data_list)
 
         # Extract auth token
@@ -306,7 +834,6 @@ def register_core_callbacks(app):
                 stored_metadata_ids,
             )
         ):
-            card_start = time.time()
             component_id = trigger_id.get("index", "unknown")[:8] if trigger_id else "unknown"
 
             # Idempotency check
@@ -387,22 +914,10 @@ def register_core_callbacks(app):
                 all_values.append(formatted_value)
                 all_metadata.append(metadata)
 
-                card_duration = (time.time() - card_start) * 1000
-                logger.info(
-                    f"  Card {i + 1}/{len(trigger_data_list)}: {component_id} - {formatted_value} ({card_duration:.1f}ms)"
-                )
-
             except Exception as e:
-                logger.error(
-                    f"  Card {i + 1}/{len(trigger_data_list)}: {component_id} - Error: {e}"
-                )
+                logger.error(f"Card {i + 1}: {component_id} - Error: {e}")
                 all_values.append("Error")
                 all_metadata.append({"error": str(e)})
-
-        batch_duration = (time.time() - batch_start) * 1000
-        logger.info(
-            f"[{task_id}] ✅ BATCH RENDER COMPLETE - {len(all_values)} cards in {batch_duration:.1f}ms"
-        )
 
         return all_values, all_metadata
 
@@ -474,6 +989,8 @@ def register_core_callbacks(app):
 
             # Slider value is single number, compare against range
             # Default is typically max value or midpoint
+            if current_value is None:
+                return False
             default_value = default_range[1]  # Use max as default
             return round(float(current_value), 2) == round(float(default_value), 2)
 
@@ -523,7 +1040,12 @@ def register_core_callbacks(app):
         BATCH FILTERING: Process all card filter updates in single callback.
 
         Triggers when interactive filters change. Applies filters to data for ALL cards
-        simultaneously, reducing N×700ms to 1×700ms.
+        simultaneously, reducing N x 700ms to 1 x 700ms.
+
+        This function coordinates several phases:
+        1. Enrichment: Combines lightweight filter values with full metadata
+        2. Parallel Loading: Pre-loads unique DC+filter combinations concurrently
+        3. Per-Card Processing: Computes filtered values and comparisons for each card
 
         Args:
             filters_data: Interactive filter values (lightweight: index + value only)
@@ -538,241 +1060,41 @@ def register_core_callbacks(app):
             local_data: Local store data (access_token)
 
         Returns:
-            tuple: Lists of (formatted_values, comparison_components, loading_visible, metadata)
+            tuple: Lists of (formatted_values, comparison_components, metadata)
         """
-        # RE-ENABLED: Interactive filtering now active with batch rendering optimization
-        import time
-        import uuid
-
-        from bson import ObjectId
-        from dash import callback_context as ctx
-        from dash import no_update
-
-        from depictio.api.v1.deltatables_utils import load_deltatable_lite
-        from depictio.dash.modules.card_component.utils import (
-            compute_value,
-            get_adaptive_trend_colors,
-        )
 
         # Generate batch task correlation ID and start timing
         batch_task_id = str(uuid.uuid4())[:8]
-        batch_start_time = time.time()
 
-        # Log batch callback execution
-        triggered_by = ctx.triggered_id if ctx.triggered else "initial"
-        logger.info(
-            f"[{batch_task_id}] 🚀 CARD PATCH BATCH START - {len(trigger_ids)} cards, Triggered by: {triggered_by}"
-        )
-
-        # ===========================================================================
-        # DEBUG LOGGING: Trace callback state for troubleshooting
-        # ===========================================================================
-        logger.info(f"[{batch_task_id}] 📊 CARD PATCH STATE:")
-        logger.info(
-            f"[{batch_task_id}]   - filters_data: {bool(filters_data)} "
-            f"({len(filters_data.get('interactive_components_values', [])) if filters_data else 0} components)"
-        )
-        logger.info(
-            f"[{batch_task_id}]   - interactive_metadata_list: "
-            f"{len(interactive_metadata_list) if interactive_metadata_list else 0} items"
-        )
-        logger.info(
-            f"[{batch_task_id}]   - interactive_metadata_ids: "
-            f"{len(interactive_metadata_ids) if interactive_metadata_ids else 0} items"
-        )
-
-        # DEFENSIVE CHECK: Handle dashboards with no interactive components
-        # When no interactive components exist, dash.ALL resolves to empty list
+        # Handle dashboards with no interactive components (dash.ALL resolves to empty list)
         if not interactive_metadata_list or not interactive_metadata_ids:
-            logger.info(
-                f"[{batch_task_id}] ⚠️ NO INTERACTIVE METADATA - preventing update "
-                "(interactive-stored-metadata stores may not be populated yet)"
-            )
             raise dash.exceptions.PreventUpdate
 
-        # SHARED SETUP: Reconstruct full metadata ONCE for all cards (cache optimization)
-        logger.info(f"[{batch_task_id}] 🔍 Enriching lightweight store data with full metadata")
-
-        # Create index → metadata mapping
-        metadata_by_index = {}
-        if interactive_metadata_list and interactive_metadata_ids:
-            for i, meta_id in enumerate(interactive_metadata_ids):
-                if i < len(interactive_metadata_list):
-                    index = meta_id["index"]
-                    metadata_by_index[index] = interactive_metadata_list[i]
-
-        # Enrich lightweight store data with full metadata
-        lightweight_components = (
-            filters_data.get("interactive_components_values", []) if filters_data else []
+        # Phase 1: Enrich lightweight store data with full metadata (shared for all cards)
+        enriched_components = _enrich_filters_with_metadata(
+            filters_data, interactive_metadata_list, interactive_metadata_ids
         )
-
-        enriched_components = []
-        for component in lightweight_components:
-            index = component.get("index")
-            value = component.get("value")
-            full_metadata = metadata_by_index.get(index, {})
-
-            if full_metadata:
-                enriched_components.append(
-                    {
-                        "index": index,
-                        "value": value,
-                        "metadata": full_metadata,  # Full metadata from interactive-stored-metadata
-                    }
-                )
-            else:
-                logger.warning(
-                    f"[{batch_task_id}] ⚠️ No metadata found for component {index[:8] if index else 'unknown'}... - skipping"
-                )
-
-        logger.info(
-            f"[{batch_task_id}] ✅ Enriched {len(enriched_components)}/{len(lightweight_components)} components with metadata"
-        )
-
-        # Replace filters_data with enriched version (shared for all cards)
         filters_data = {"interactive_components_values": enriched_components}
 
-        # SHARED: Extract access_token from local-store (used by all cards)
+        # Extract access_token from local-store
         access_token = local_data.get("access_token") if local_data else None
         if not access_token:
             logger.error("No access_token available in local-store")
-            # Return errors for all cards (no overlay output - handled by clientside)
             num_cards = len(trigger_ids)
-            return (
-                ["Auth Error"] * num_cards,
-                [[]] * num_cards,
-                [{}] * num_cards,
-            )
+            return (["Auth Error"] * num_cards, [[]] * num_cards, [{}] * num_cards)
 
-        # Initialize result lists for batch processing (no overlays - handled by clientside)
-        all_values = []
-        all_comparisons = []
-        all_metadata = []
-
-        # ⭐ OPTIMIZATION: Pre-load unique DC+filter combinations in parallel
-        # Scan all cards to identify unique data loads, then execute in parallel
-        logger.info(f"[{batch_task_id}] 📊 Analyzing {len(trigger_ids)} cards for parallel loading")
-
-        import concurrent.futures
-        import hashlib
-        import json
-
-        # Step 1: Build index of unique DC loads
-        dc_load_registry = {}  # Key: (wf_id, dc_id, filters_hash) -> filters metadata
-        card_to_load_key = {}  # Map: card_index -> load_key
-
-        for i, trigger_data in enumerate(trigger_data_list):
-            if not trigger_data or not isinstance(trigger_data, dict):
-                continue
-
-            wf_id = trigger_data.get("wf_id")
-            dc_id = trigger_data.get("dc_id")
-
-            if not all([wf_id, dc_id]):
-                continue
-
-            # Get filters for this card
-            card_dc_str = str(dc_id)
-            metadata_list = filters_data.get("interactive_components_values", [])
-
-            # Group filters by DC
-            filters_by_dc = {}
-            if metadata_list:
-                for component in metadata_list:
-                    component_dc = str(component.get("metadata", {}).get("dc_id"))
-                    if component_dc not in filters_by_dc:
-                        filters_by_dc[component_dc] = []
-                    filters_by_dc[component_dc].append(component)
-
-            # Get relevant filters for card's DC
-            relevant_filters = filters_by_dc.get(card_dc_str, [])
-
-            # Determine if filters are active
-            has_active_filters = any(
-                c.get("value") not in [None, [], "", False] for c in relevant_filters
-            )
-
-            if has_active_filters:
-                active_filters = [
-                    c for c in relevant_filters if c.get("value") not in [None, [], "", False]
-                ]
-                metadata_to_pass = active_filters
-            else:
-                metadata_to_pass = []
-
-            # Create stable hash of filters for deduplication
-            # Use column_name + value pairs, sorted for consistency
-            filter_signature = sorted(
-                [
-                    (c.get("metadata", {}).get("column_name"), str(c.get("value")))
-                    for c in metadata_to_pass
-                ]
-            )
-            filters_hash = hashlib.md5(
-                json.dumps(filter_signature, sort_keys=True).encode()
-            ).hexdigest()[:8]
-
-            load_key = (str(wf_id), str(dc_id), filters_hash)
-
-            # Register this unique load
-            if load_key not in dc_load_registry:
-                dc_load_registry[load_key] = metadata_to_pass
-
-            # Map card to its load key
-            card_to_load_key[i] = load_key
-
-        logger.info(
-            f"[{batch_task_id}] 📊 Found {len(dc_load_registry)} unique DC loads "
-            f"for {len(card_to_load_key)} cards"
+        # Phase 2: Pre-load unique DC+filter combinations in parallel
+        dc_load_registry, card_to_load_key = _build_dc_load_registry(
+            trigger_data_list, filters_data
         )
 
-        # Step 2: Load all unique DCs in parallel
-        dc_cache = {}  # Cache: load_key -> DataFrame
+        dc_cache = _load_data_collections_parallel(dc_load_registry, access_token, batch_task_id)
 
-        def load_single_dc(load_key, metadata_to_pass):
-            """Load a single DC with filters (thread-safe operation)."""
-            wf_id, dc_id, filters_hash = load_key
-            try:
-                data = load_deltatable_lite(
-                    ObjectId(wf_id),
-                    ObjectId(dc_id),
-                    metadata=metadata_to_pass,
-                    TOKEN=access_token,
-                )
-                logger.debug(
-                    f"   ✅ Parallel load: {dc_id[:8]}...{filters_hash} "
-                    f"({data.height:,} rows × {data.width} cols)"
-                )
-                return load_key, data
-            except Exception as e:
-                logger.error(f"   ❌ Parallel load failed: {dc_id[:8]}...{filters_hash}: {e}")
-                return load_key, None
+        # Phase 3: Process each card
+        all_values: list[Any] = []
+        all_comparisons: list[Any] = []
+        all_metadata: list[dict[str, Any]] = []
 
-        # Execute parallel loads (max 4 concurrent workers)
-        parallel_start = time.time()
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-            # Submit all load tasks
-            future_to_key = {
-                executor.submit(load_single_dc, load_key, metadata): load_key
-                for load_key, metadata in dc_load_registry.items()
-            }
-
-            # Collect results as they complete
-            for future in concurrent.futures.as_completed(future_to_key):
-                load_key, data = future.result()
-                if data is not None:
-                    dc_cache[load_key] = data
-
-        parallel_duration = (time.time() - parallel_start) * 1000
-        cache_hit_rate = len(dc_cache) / len(dc_load_registry) * 100 if dc_load_registry else 0
-        dedup_ratio = len(card_to_load_key) / len(dc_load_registry) if dc_load_registry else 1
-        logger.info(
-            f"[{batch_task_id}] ⚡ Parallel loading complete: "
-            f"{len(dc_cache)}/{len(dc_load_registry)} DCs loaded in {parallel_duration:.1f}ms "
-            f"(dedup: {dedup_ratio:.1f}x, success: {cache_hit_rate:.0f}%)"
-        )
-
-        # BATCH PROCESSING: Process each card in the loop
         for i, (
             initial_metadata,
             patch_metadata,
@@ -788,536 +1110,298 @@ def register_core_callbacks(app):
                 trigger_ids,
             )
         ):
-            # Generate per-card task ID
-            task_id = f"{batch_task_id}-{i}"
-            component_id = trigger_id.get("index", "unknown")[:8] if trigger_id else "unknown"
-            card_start_time = time.time()
-
-            try:
-                logger.debug(
-                    f"[{task_id}] Processing card {i + 1}/{len(trigger_ids)}: {component_id}"
-                )
-
-                # ⭐ OPTIMIZATION: Detect if any user interaction has occurred
-                # Check each component individually against its stored default_state
-                if enriched_components:
-                    # Find components that differ from their defaults
-                    modified_components = [
-                        comp for comp in enriched_components if not is_default_value(comp)
-                    ]
-
-                    # Check if this is the first patch or a subsequent one
-                    has_been_patched = (
-                        patch_metadata.get("has_been_patched", False) if patch_metadata else False
-                    )
-
-                    # FALLBACK: Use stored_metadata if initial_metadata is empty (happens during re-renders)
-                    metadata_to_use = initial_metadata if initial_metadata else stored_metadata
-                    reference_value = (
-                        metadata_to_use.get("reference_value") if metadata_to_use else None
-                    )
-
-                    # DEBUG: Log metadata state to diagnose race condition
-                    logger.debug(f"🔍 CARD PATCH DEBUG - Component: {component_id}")
-                    logger.debug(f"   initial_metadata type: {type(initial_metadata)}")
-                    logger.debug(
-                        f"   initial_metadata keys: {initial_metadata.keys() if initial_metadata else 'N/A'}"
-                    )
-                    logger.debug(f"   stored_metadata type: {type(stored_metadata)}")
-                    logger.debug(
-                        f"   stored_metadata has reference_value: {stored_metadata.get('reference_value') if stored_metadata else 'N/A'}"
-                    )
-                    logger.debug(
-                        f"   reference_value (using {'initial' if initial_metadata else 'stored'}): {reference_value}"
-                    )
-                    logger.debug(f"   has_been_patched: {has_been_patched}")
-
-                    # ⭐ OPTIMIZATION DISABLED: "All at defaults" check removed
-                    # REASON: This optimization blocked legitimate reset actions - when users clicked "Reset",
-                    # filters returned to defaults but cards didn't refresh because this check prevented
-                    # the patch callback from executing. The store update optimization was already removed
-                    # for the same reason in core_interactivity.py. Cards should refresh whenever filter
-                    # values change, regardless of whether the new values are defaults or not.
-                    # REMOVED: Lines that checked if all values are at defaults and blocked card patches
-                    # SEE: Git history for original implementation if needed
-
-                    if not modified_components and not has_been_patched:
-                        # RACE CONDITION CHECK: Ensure reference_value is populated before first patch
-                        # If metadata exists but reference_value is None, render_card_value_background hasn't completed yet
-                        if reference_value is None:
-                            duration_ms = (time.time() - card_start_time) * 1000
-                            logger.debug(
-                                "🔍 CARD PATCH: First patch triggered but reference_value not ready - deferring (returning no_update)"
-                            )
-                            logger.info(
-                                f"[{task_id}] ✅ CARD PATCH COMPLETE - Component: {component_id} - Duration: {duration_ms:.2f}ms (reference not ready)"
-                            )
-
-                            # Append no_update for this card
-                            all_values.append(no_update)
-                            all_comparisons.append(no_update)
-                            all_metadata.append(no_update)
-                            continue
-
-                        logger.debug(
-                            f"🔍 CARD PATCH: First patch with default values - allowing to initialize card data "
-                            f"(components: {[c.get('metadata', {}).get('column_name', 'unknown') for c in enriched_components]})"
-                        )
-                    else:
-                        logger.debug(
-                            f"🔍 CARD PATCH: Detected user interaction on {len(modified_components)}/{len(enriched_components)} filters "
-                            f"(modified: {[c.get('metadata', {}).get('column_name', 'unknown') for c in modified_components]})"
-                        )
-
-                # Check if metadata (from any source) and trigger_data are properly populated
-                # FALLBACK: Use stored_metadata if initial_metadata is empty (happens during re-renders)
-                metadata_for_patch = initial_metadata if initial_metadata else stored_metadata
-                if metadata_for_patch is None or trigger_data is None:
-                    duration_ms = (time.time() - card_start_time) * 1000
-                    logger.info(
-                        f"[{task_id}] ✅ CARD PATCH COMPLETE - Component: {component_id} - Duration: {duration_ms:.2f}ms (metadata/trigger not ready)"
-                    )
-                    all_values.append("...")
-                    all_comparisons.append([])
-                    all_metadata.append({})
-                    continue
-
-                # Check if metadata has been populated by render_card_value_background
-                reference_value = metadata_for_patch.get("reference_value")
-                if reference_value is None:
-                    duration_ms = (time.time() - card_start_time) * 1000
-                    logger.info(
-                        f"[{task_id}] ✅ CARD PATCH COMPLETE - Component: {component_id} - Duration: {duration_ms:.2f}ms (reference value not ready)"
-                    )
-                    all_values.append("...")
-                    all_comparisons.append([])
-                    all_metadata.append({})
-                    continue
-
-                # Extract parameters
-                wf_id = trigger_data.get("wf_id")
-                dc_id = trigger_data.get("dc_id")
-                column_name = trigger_data.get("column_name")
-                aggregation = trigger_data.get("aggregation")
-                reference_value = metadata_for_patch.get("reference_value")
-
-                # Skip patching for dummy/random cards (no data source)
-                if not all([wf_id, dc_id, column_name, aggregation]):
-                    duration_ms = (time.time() - card_start_time) * 1000
-                    # Return current value formatted consistently with initial render
-                    current_value = metadata_for_patch.get("reference_value")
-                    if current_value is not None:
-                        try:
-                            formatted_value = str(round(float(current_value), 4))
-                        except (ValueError, TypeError):
-                            formatted_value = str(current_value)
-                    else:
-                        formatted_value = "N/A"
-
-                    logger.info(
-                        f"[{task_id}] ✅ CARD PATCH COMPLETE - Component: {component_id} - Duration: {duration_ms:.2f}ms (no data source)"
-                    )
-                    all_values.append(formatted_value)
-                    all_comparisons.append([])
-                    all_metadata.append({})
-                    continue
-
-                # Extract interactive components from filters_data
-                # filters_data format: {"interactive_components_values": [component1, component2, ...]}
-                metadata_list = (
-                    filters_data.get("interactive_components_values") if filters_data else None
-                )
-
-                # MULTI-DC SUPPORT: Group filters by DC to detect cross-DC filtering scenarios
-                filters_by_dc = {}
-                if metadata_list:
-                    for component in metadata_list:
-                        component_dc = str(component.get("metadata", {}).get("dc_id"))
-                        if component_dc not in filters_by_dc:
-                            filters_by_dc[component_dc] = []
-                        filters_by_dc[component_dc].append(component)
-
-                # CRITICAL FIX: Filter out non-table DCs (MultiQC, JBrowse2) from filters_by_dc
-                # REFACTORING: Extract dc_configs from dashboard-init-data (centralized store)
-                dc_configs_map = {}
-                if dashboard_init_data and "dc_configs" in dashboard_init_data:
-                    dc_configs_map = dashboard_init_data.get("dc_configs", {})
-
-                filters_by_dc_table_only = {}
-                for dc_key, dc_filters in filters_by_dc.items():
-                    if dc_filters:  # Has filters, check DC type
-                        # Get dc_config from centralized dashboard-init-data
-                        component_dc_config = dc_configs_map.get(str(dc_key), {})
-                        dc_type = component_dc_config.get("type", "table")
-                        if dc_type == "table":
-                            filters_by_dc_table_only[dc_key] = dc_filters
-                filters_by_dc = filters_by_dc_table_only
-
-                # Check if card's DC is MultiQC/JBrowse2 - if so, skip filtering entirely
-                # REFACTORING: Extract dc_config from dashboard-init-data (centralized store)
-                dc_config = {}
-                if dashboard_init_data and "dc_configs" in dashboard_init_data:
-                    dc_config = dashboard_init_data.get("dc_configs", {}).get(str(dc_id), {})
-
-                card_dc_type = dc_config.get("type", "table")
-                if card_dc_type in ["multiqc", "jbrowse2"]:
-                    duration_ms = (time.time() - card_start_time) * 1000
-                    # Return reference value with no comparison
-                    if reference_value is not None:
-                        try:
-                            formatted_value = str(round(float(reference_value), 4))
-                        except (ValueError, TypeError):
-                            formatted_value = str(reference_value)
-                    else:
-                        formatted_value = "N/A"
-                    logger.info(
-                        f"[{task_id}] ✅ CARD PATCH COMPLETE - Component: {component_id} - Duration: {duration_ms:.2f}ms (non-table DC type)"
-                    )
-                    all_values.append(formatted_value)
-                    all_comparisons.append([])
-                    all_metadata.append({})
-                    continue
-
-                # Determine if filters have active (non-empty) values
-                has_active_filters = False
-                if metadata_list:
-                    for component in metadata_list:
-                        value = component.get("value")
-                        if value is not None and value != [] and value != "" and value is not False:
-                            has_active_filters = True
-                            break
-
-                if has_active_filters:
-                    logger.info("🔍 Active filters detected - loading filtered data")
-                else:
-                    logger.info("🔄 No active filters - loading ALL unfiltered data")
-
-                # AUTO-DETECT: Determine if we need to join DCs
-                # Two scenarios:
-                # 1. Same-DC: Card's DC has filters → Apply filters directly
-                # 2. Joined-DC: Card's DC is joined with DC(s) that have filters → Join needed
-                card_dc_str = str(dc_id)
-                has_filters_for_card_dc = card_dc_str in filters_by_dc
-
-                # Determine if we need to perform a join
-                needs_join = False
-                if not has_filters_for_card_dc and len(filters_by_dc) > 0:
-                    # Filters are on different DC(s) - need to join with card DC
-                    needs_join = True
-                    logger.info("🔍 Filters on different DC(s), join required")
-
-                logger.info(f"🔍 Card DC: {card_dc_str}")
-                logger.info(f"🔍 Has filters for card DC: {has_filters_for_card_dc}")
-                logger.info(f"🔍 Needs join: {needs_join}")
-                logger.info(f"🔍 Filters on {len(filters_by_dc)} DC(s)")
-
-                from depictio.api.v1.deltatables_utils import load_deltatable_lite
-                from depictio.dash.utils import get_result_dc_for_workflow
-
-                # MIGRATED: Check for pre-computed join result DC
-                result_dc_id = get_result_dc_for_workflow(wf_id, access_token)
-
-                # Determine the filtering path
-                # JOINED-DC: Pre-computed join result exists
-                # LINK-DC: No pre-computed join, but DC link exists
-                # SAME-DC: No pre-computed join - use card DC only
-                use_joined_path = needs_join and result_dc_id is not None
-                use_link_path = False
-                link_resolved_filter = None
-
-                # If needs join but no pre-computed join, try link resolution
-                if needs_join and not use_joined_path and has_active_filters:
-                    # Get project_id from stored_metadata for link resolution
-                    project_id = stored_metadata.get("project_id") if stored_metadata else None
-
-                    if project_id:
-                        logger.info(
-                            f"🔗 Attempting LINK-BASED RESOLUTION for card (project_id={project_id})"
-                        )
-
-                        # Collect filter values from other DCs
-                        for filter_dc_id, filter_components in filters_by_dc.items():
-                            if filter_dc_id != card_dc_str:
-                                for comp in filter_components:
-                                    filter_value = comp.get("value")
-                                    filter_column = comp.get("metadata", {}).get("column_name")
-
-                                    if filter_value and filter_column:
-                                        filter_values = (
-                                            filter_value
-                                            if isinstance(filter_value, list)
-                                            else [filter_value]
-                                        )
-
-                                        # Try link resolution
-                                        resolved = resolve_link_values(
-                                            project_id=project_id,
-                                            source_dc_id=filter_dc_id,
-                                            source_column=filter_column,
-                                            filter_values=filter_values,
-                                            target_dc_id=card_dc_str,
-                                            token=access_token,
-                                        )
-
-                                        if resolved and resolved.get("resolved_values"):
-                                            use_link_path = True
-                                            # Create a synthetic filter for the card's DC
-                                            # using the resolved values on the target column
-                                            target_column = resolved.get(
-                                                "target_column", filter_column
-                                            )
-                                            link_resolved_filter = {
-                                                "metadata": {
-                                                    "column_name": target_column,
-                                                    "dc_id": card_dc_str,
-                                                    # Required by process_metadata_and_filter
-                                                    "interactive_component_type": "MultiSelect",
-                                                },
-                                                "value": resolved["resolved_values"],
-                                            }
-                                            logger.info(
-                                                f"✅ Link resolution success: {len(filter_values)} values -> "
-                                                f"{len(resolved['resolved_values'])} resolved values "
-                                                f"(resolver: {resolved.get('resolver_used', 'unknown')})"
-                                            )
-                                            break  # Use first successful resolution
-
-                                if use_link_path:
-                                    break
-
-                        if not use_link_path:
-                            logger.warning("⚠️ Link resolution failed - no link found or no matches")
-                    else:
-                        logger.warning(
-                            "⚠️ No project_id in stored_metadata - cannot use link resolution"
-                        )
-
-                # If filters on multiple DCs but no join config and no link, fall back to SAME-DC
-                if len(filters_by_dc) > 1 and not use_joined_path and not use_link_path:
-                    logger.warning(
-                        f"⚠️ Filters on {len(filters_by_dc)} DCs but no join config or link - "
-                        f"falling back to SAME-DC filtering (card DC only)"
-                    )
-                    # Keep only card DC filters
-                    if card_dc_str in filters_by_dc:
-                        filters_by_dc = {card_dc_str: filters_by_dc[card_dc_str]}
-                    else:
-                        filters_by_dc = {}
-
-                if use_joined_path:
-                    # MIGRATED: JOINED-DC PATH - Load pre-computed join result DC
-                    logger.info(
-                        f"🔗 JOINED-DC FILTERING: Loading pre-computed join result DC "
-                        f"with filters from {len(filters_by_dc)} DC(s)"
-                    )
-
-                    # Combine all filters from all DCs into a single metadata list
-                    combined_metadata = []
-                    for dc_key, dc_filters in filters_by_dc.items():
-                        if has_active_filters:
-                            # Filter out components with empty values
-                            active_filters = [
-                                c for c in dc_filters if c.get("value") not in [None, [], "", False]
-                            ]
-                            logger.info(f"📂 DC {dc_key}: {len(active_filters)} active filters")
-                            combined_metadata.extend(active_filters)
-                        else:
-                            logger.info(f"📂 DC {dc_key}: No filters (clearing)")
-
-                    # Load pre-computed result DC with combined filters
-                    logger.info(
-                        f"🔗 Loading result DC {result_dc_id} with {len(combined_metadata)} filters"
-                    )
-                    data = load_deltatable_lite(
-                        ObjectId(wf_id),
-                        ObjectId(result_dc_id),
-                        metadata=combined_metadata if combined_metadata else None,
-                        TOKEN=access_token,
-                        select_columns=None,  # Load all columns
-                    )
-
-                    logger.info(f"📊 Loaded result DC: {data.height:,} rows × {data.width} columns")
-
-                elif use_link_path and link_resolved_filter:
-                    # LINK-DC PATH: Use link-resolved filter to load card's DC
-                    logger.info("🔗 LINK-DC FILTERING: Loading card DC with link-resolved filter")
-
-                    # Load card's DC with the link-resolved filter
-                    data = load_deltatable_lite(
-                        ObjectId(wf_id),
-                        ObjectId(dc_id),
-                        metadata=[link_resolved_filter],
-                        TOKEN=access_token,
-                        select_columns=None,
-                    )
-
-                    logger.info(
-                        f"📊 Loaded via link resolution: {data.height:,} rows × {data.width} columns"
-                    )
-
-                else:
-                    # SAME-DC PATH: Card's DC has filters, apply them directly
-                    # ⚡ OPTIMIZATION: Use pre-loaded data from parallel cache
-                    load_key = card_to_load_key.get(i)
-
-                    if load_key and load_key in dc_cache:
-                        # Cache hit - use pre-loaded DataFrame
-                        data = dc_cache[load_key]
-                        logger.info(
-                            f"⚡ SAME-DC (cached): {dc_id[:8]}... "
-                            f"({data.height:,} rows × {data.width} cols)"
-                        )
-                    else:
-                        # Cache miss - fallback to synchronous load
-                        # This should be rare (only for cards skipped during pre-scan)
-                        relevant_filters = filters_by_dc.get(card_dc_str, [])
-
-                        if has_active_filters:
-                            # Filter out components with empty values
-                            active_filters = [
-                                c
-                                for c in relevant_filters
-                                if c.get("value") not in [None, [], "", False]
-                            ]
-                            logger.info(
-                                f"📄 SAME-DC filtering - applying {len(active_filters)} active filters to card DC"
-                            )
-                            metadata_to_pass = active_filters
-                        else:
-                            # Clearing filters - load ALL unfiltered data
-                            logger.info("📄 SAME-DC clearing filters - loading ALL unfiltered data")
-                            metadata_to_pass = []
-
-                        logger.warning(
-                            f"⚠️ Cache miss for card {i} - loading synchronously: {wf_id}:{dc_id}"
-                        )
-
-                        data = load_deltatable_lite(
-                            ObjectId(wf_id),
-                            ObjectId(dc_id),
-                            metadata=metadata_to_pass,
-                            TOKEN=access_token,
-                        )
-
-                        logger.info(f"📊 Loaded {data.height:,} rows × {data.width} columns")
-
-                logger.debug("Loaded filtered data")
-
-                # Get column specs for optimization
-                cols_json = {}
-                if dashboard_init_data and "column_specs" in dashboard_init_data:
-                    cols_json = dashboard_init_data.get("column_specs", {}).get(str(dc_id), {})
-
-                # Compute new value on filtered data
-                # has_filters=True because this callback only triggers on filter changes
-                compute_start = time.time()
-                current_value = compute_value(
-                    data,
-                    column_name,
-                    aggregation,
-                    cols_json=cols_json,
-                    has_filters=has_active_filters,
-                )
-                compute_duration = (time.time() - compute_start) * 1000
-                logger.info(
-                    f"[{task_id}] ⏱️  Computation: {compute_duration:.1f}ms "
-                    f"({aggregation} on {column_name}, result={current_value})"
-                )
-
-                # Format current value
-                try:
-                    if current_value is not None:
-                        formatted_value = str(round(float(current_value), 4))
-                        current_val = float(current_value)
-                    else:
-                        formatted_value = "N/A"
-                        current_val = None
-                except (ValueError, TypeError):
-                    formatted_value = "Error"
-                    current_val = None
-
-                # Get adaptive trend colors based on card background
-                # Convert empty string to None for proper handling
-                background_color = trigger_data.get("background_color") or None
-                trend_colors = get_adaptive_trend_colors(background_color)
-                logger.debug(
-                    f"Using adaptive trend colors for background '{background_color}': {trend_colors}"
-                )
-
-                # Create comparison components
-                comparison_components = []
-                if reference_value is not None and current_val is not None:
-                    try:
-                        import dash_mantine_components as dmc
-                        from dash_iconify import DashIconify
-
-                        ref_val = float(reference_value)
-
-                        # Calculate percentage change
-                        if ref_val != 0:
-                            change_pct = ((current_val - ref_val) / ref_val) * 100
-                            if change_pct > 0:
-                                comparison_text = f"+{change_pct:.1f}% vs unfiltered ({ref_val})"
-                                comparison_color = trend_colors["positive"]
-                                comparison_icon = "mdi:trending-up"
-                            elif change_pct < 0:
-                                comparison_text = f"{change_pct:.1f}% vs unfiltered ({ref_val})"
-                                comparison_color = trend_colors["negative"]
-                                comparison_icon = "mdi:trending-down"
-                            else:
-                                comparison_text = f"Same as unfiltered ({ref_val})"
-                                comparison_color = trend_colors["neutral"]
-                                comparison_icon = "mdi:trending-neutral"
-                        else:
-                            comparison_text = f"Reference: {ref_val}"
-                            comparison_color = trend_colors["neutral"]
-                            comparison_icon = "mdi:information-outline"
-
-                        # Build comparison UI
-                        comparison_components = [
-                            DashIconify(icon=comparison_icon, width=14, color=comparison_color),
-                            dmc.Text(
-                                comparison_text,
-                                size="xs",
-                                c=comparison_color,
-                                fw="normal",
-                                style={"margin": "0"},
-                            ),
-                        ]
-                    except (ValueError, TypeError) as e:
-                        logger.warning(f"Error creating comparison: {e}")
-
-                duration_ms = (time.time() - card_start_time) * 1000
-                logger.info(f"✅ CARD PATCH: Value updated successfully: {formatted_value}")
-                logger.info(
-                    f"[{task_id}] ✅ CARD PATCH COMPLETE - Component: {component_id} - Duration: {duration_ms:.2f}ms (success)"
-                )
-
-                # Update metadata to mark card as patched
-                # Start from patch_metadata (may have previous state), add has_been_patched flag
-                updated_metadata = patch_metadata.copy() if patch_metadata else {}
-                updated_metadata["has_been_patched"] = True
-
-                # Append results for this card
-                all_values.append(formatted_value)
-                all_comparisons.append(comparison_components)
-                all_metadata.append(updated_metadata)
-
-            except Exception as e:
-                duration_ms = (time.time() - card_start_time) * 1000
-                logger.error(f"❌ CARD PATCH: Error applying filters: {e}", exc_info=True)
-                logger.error(
-                    f"[{task_id}] ✅ CARD PATCH COMPLETE - Component: {component_id} - Duration: {duration_ms:.2f}ms (error)"
-                )
-                # Append error results for this card
-                all_values.append("Error")
-                all_comparisons.append([])
-                all_metadata.append({})
-
-        # BATCH COMPLETE: Log and return all results (overlays handled by clientside callbacks)
-        batch_duration_ms = (time.time() - batch_start_time) * 1000
-        logger.info(
-            f"[{batch_task_id}] ✅ CARD PATCH BATCH COMPLETE - {len(trigger_ids)} cards in {batch_duration_ms:.1f}ms"
-        )
+            result = _process_single_card(
+                card_index=i,
+                batch_task_id=batch_task_id,
+                total_cards=len(trigger_ids),
+                initial_metadata=initial_metadata,
+                patch_metadata=patch_metadata,
+                stored_metadata=stored_metadata,
+                trigger_data=trigger_data,
+                trigger_id=trigger_id,
+                enriched_components=enriched_components,
+                filters_data=filters_data,
+                dashboard_init_data=dashboard_init_data,
+                card_to_load_key=card_to_load_key,
+                dc_cache=dc_cache,
+                access_token=access_token,
+                is_default_value_func=is_default_value,
+            )
+            all_values.append(result[0])
+            all_comparisons.append(result[1])
+            all_metadata.append(result[2])
 
         return all_values, all_comparisons, all_metadata
+
+
+def _process_single_card(
+    card_index: int,
+    batch_task_id: str,
+    total_cards: int,
+    initial_metadata: dict[str, Any] | None,
+    patch_metadata: dict[str, Any] | None,
+    stored_metadata: dict[str, Any] | None,
+    trigger_data: dict[str, Any] | None,
+    trigger_id: dict[str, Any] | None,
+    enriched_components: list[dict[str, Any]],
+    filters_data: dict[str, Any],
+    dashboard_init_data: dict[str, Any] | None,
+    card_to_load_key: dict[int, tuple[str, str, str]],
+    dc_cache: dict[tuple[str, str, str], Any],
+    access_token: str,
+    is_default_value_func: Any,
+) -> tuple[Any, Any, dict[str, Any]]:
+    """
+    Process a single card in the batch filtering operation.
+
+    Handles all the logic for computing filtered values and comparisons for one card,
+    including early exits for various edge cases (metadata not ready, non-table DC types,
+    missing data source, etc.).
+
+    Args:
+        card_index: Index of the card in the batch
+        batch_task_id: Correlation ID for logging
+        total_cards: Total number of cards in batch
+        initial_metadata: Initial card metadata (has reference_value)
+        patch_metadata: Card patch metadata (has has_been_patched)
+        stored_metadata: Fallback metadata from database
+        trigger_data: Card trigger data with wf_id, dc_id, column_name, aggregation
+        trigger_id: Card trigger ID for logging
+        enriched_components: List of enriched filter components
+        filters_data: Dict with interactive_components_values
+        dashboard_init_data: Dashboard initialization data
+        card_to_load_key: Map of card index to load key
+        dc_cache: Pre-loaded data cache
+        access_token: Authentication token
+        is_default_value_func: Function to check if component value is at default
+
+    Returns:
+        Tuple of (formatted_value, comparison_components, updated_metadata)
+    """
+    task_id = f"{batch_task_id}-{card_index}"
+    component_id = trigger_id.get("index", "unknown")[:8] if trigger_id else "unknown"
+    card_start_time = time.time()
+
+    try:
+        # Check for user interaction and race conditions
+        early_exit = _check_card_early_exit_conditions(
+            enriched_components=enriched_components,
+            initial_metadata=initial_metadata,
+            patch_metadata=patch_metadata,
+            stored_metadata=stored_metadata,
+            trigger_data=trigger_data,
+            component_id=component_id,
+            task_id=task_id,
+            card_start_time=card_start_time,
+            is_default_value_func=is_default_value_func,
+        )
+        if early_exit is not None:
+            return early_exit
+
+        # Get metadata for patch operations (early_exit check guarantees these are not None)
+        metadata_for_patch = initial_metadata if initial_metadata else stored_metadata
+        assert metadata_for_patch is not None
+        assert trigger_data is not None
+
+        # Extract parameters
+        wf_id = trigger_data.get("wf_id")
+        dc_id = trigger_data.get("dc_id")
+        column_name = trigger_data.get("column_name")
+        aggregation = trigger_data.get("aggregation")
+        reference_value = metadata_for_patch.get("reference_value")
+
+        # Skip patching for dummy/random cards (no data source)
+        if not all([wf_id, dc_id, column_name, aggregation]):
+            formatted_value, _ = _format_card_value(metadata_for_patch.get("reference_value"))
+            return formatted_value, [], {}
+
+        # At this point wf_id and dc_id are guaranteed to be non-None
+        wf_id_str = str(wf_id)
+        dc_id_str = str(dc_id)
+
+        # Get dc_configs for type checking
+        dc_configs_map: dict[str, dict[str, Any]] = {}
+        if dashboard_init_data and "dc_configs" in dashboard_init_data:
+            dc_configs_map = dashboard_init_data.get("dc_configs", {})
+
+        # Check if card's DC is non-table type (skip filtering)
+        dc_config = dc_configs_map.get(dc_id_str, {})
+        card_dc_type = dc_config.get("type", "table")
+        if card_dc_type in ["multiqc", "jbrowse2"]:
+            formatted_value, _ = _format_card_value(reference_value)
+            return formatted_value, [], {}
+
+        # Group filters by DC and filter to table-only
+        metadata_list = filters_data.get("interactive_components_values")
+        filters_by_dc = _group_filters_by_dc(metadata_list, dc_configs_map)
+
+        # Check for active filters
+        has_active_filters = _has_active_filter_values(metadata_list)
+        if has_active_filters:
+            logger.debug("Active filters detected - loading filtered data")
+        else:
+            logger.debug("No active filters - loading ALL unfiltered data")
+
+        # Determine filtering path (joined, link, or same-DC)
+        use_joined_path, result_dc_id, use_link_path, link_resolved_filter, filters_by_dc = (
+            _determine_filtering_path(
+                dc_id_str,
+                filters_by_dc,
+                wf_id_str,
+                access_token,
+                stored_metadata=stored_metadata,
+                has_active_filters=has_active_filters,
+            )
+        )
+
+        # Load data using appropriate path
+        data = _load_data_for_card(
+            use_joined_path=use_joined_path,
+            result_dc_id=result_dc_id,
+            filters_by_dc=filters_by_dc,
+            has_active_filters=has_active_filters,
+            wf_id=wf_id_str,
+            dc_id=dc_id_str,
+            card_dc_str=dc_id_str,
+            card_index=card_index,
+            card_to_load_key=card_to_load_key,
+            dc_cache=dc_cache,
+            access_token=access_token,
+            use_link_path=use_link_path,
+            link_resolved_filter=link_resolved_filter,
+        )
+
+        # Get column specs for optimization
+        cols_json: dict[str, Any] = {}
+        if dashboard_init_data and "column_specs" in dashboard_init_data:
+            cols_json = dashboard_init_data.get("column_specs", {}).get(dc_id_str, {})
+
+        # Compute new value on filtered data
+        current_value = compute_value(
+            data, column_name, aggregation, cols_json=cols_json, has_filters=has_active_filters
+        )
+
+        # Format current value
+        formatted_value, current_val = _format_card_value(current_value)
+
+        # Get adaptive trend colors and create comparison
+        background_color = trigger_data.get("background_color") or None
+        trend_colors = get_adaptive_trend_colors(background_color)
+
+        comparison_components = _create_comparison_components(
+            reference_value, current_val, trend_colors
+        )
+
+        # Update metadata to mark card as patched
+        updated_metadata = patch_metadata.copy() if patch_metadata else {}
+        updated_metadata["has_been_patched"] = True
+
+        return formatted_value, comparison_components, updated_metadata
+
+    except Exception as e:
+        duration_ms = (time.time() - card_start_time) * 1000
+        logger.error(f"CARD PATCH: Error applying filters: {e}", exc_info=True)
+        logger.error(
+            f"[{task_id}] CARD PATCH COMPLETE - Component: {component_id} - "
+            f"Duration: {duration_ms:.2f}ms (error)"
+        )
+        return "Error", [], {}
+
+
+def _check_card_early_exit_conditions(
+    enriched_components: list[dict[str, Any]],
+    initial_metadata: dict[str, Any] | None,
+    patch_metadata: dict[str, Any] | None,
+    stored_metadata: dict[str, Any] | None,
+    trigger_data: dict[str, Any] | None,
+    component_id: str,
+    task_id: str,
+    card_start_time: float,
+    is_default_value_func: Any,
+) -> tuple[Any, Any, Any] | None:
+    """
+    Check for early exit conditions in card processing.
+
+    Handles various scenarios where card processing should return early:
+    - First patch with default values but reference not ready (race condition)
+    - Metadata or trigger data not ready
+    - Reference value not populated yet
+
+    Args:
+        enriched_components: List of enriched filter components
+        initial_metadata: Initial card metadata
+        patch_metadata: Card patch metadata
+        stored_metadata: Fallback metadata from database
+        trigger_data: Card trigger data
+        component_id: Component ID for logging
+        task_id: Task ID for logging
+        card_start_time: Start time for duration calculation
+        is_default_value_func: Function to check if component value is at default
+
+    Returns:
+        Early exit result tuple if should exit, None to continue processing
+    """
+    if enriched_components:
+        # Find components that differ from their defaults
+        modified_components = [
+            comp for comp in enriched_components if not is_default_value_func(comp)
+        ]
+
+        has_been_patched = (
+            patch_metadata.get("has_been_patched", False) if patch_metadata else False
+        )
+        metadata_to_use = initial_metadata if initial_metadata else stored_metadata
+        reference_value = metadata_to_use.get("reference_value") if metadata_to_use else None
+
+        # Log debug info
+        logger.debug(f"CARD PATCH DEBUG - Component: {component_id}")
+        logger.debug(f"   initial_metadata type: {type(initial_metadata)}")
+        logger.debug(
+            f"   initial_metadata keys: {initial_metadata.keys() if initial_metadata else 'N/A'}"
+        )
+        logger.debug(f"   stored_metadata type: {type(stored_metadata)}")
+        logger.debug(
+            f"   stored_metadata has reference_value: "
+            f"{stored_metadata.get('reference_value') if stored_metadata else 'N/A'}"
+        )
+        logger.debug(
+            f"   reference_value (using {'initial' if initial_metadata else 'stored'}): "
+            f"{reference_value}"
+        )
+        logger.debug(f"   has_been_patched: {has_been_patched}")
+
+        if not modified_components and not has_been_patched:
+            # Race condition check: reference_value must be populated before first patch
+            if reference_value is None:
+                return no_update, no_update, no_update
+
+    # Check if metadata and trigger_data are properly populated
+    metadata_for_patch = initial_metadata if initial_metadata else stored_metadata
+    if metadata_for_patch is None or trigger_data is None:
+        return "...", [], {}
+
+    # Check if reference_value has been populated
+    if metadata_for_patch.get("reference_value") is None:
+        return "...", [], {}
+
+    return None
+
+
+def _has_active_filter_values(metadata_list: list[dict[str, Any]] | None) -> bool:
+    """
+    Check if any filters have active (non-empty) values.
+
+    Args:
+        metadata_list: List of filter component metadata
+
+    Returns:
+        True if at least one filter has a non-empty value
+    """
+    if not metadata_list:
+        return False
+
+    for component in metadata_list:
+        value = component.get("value")
+        if value is not None and value != [] and value != "" and value is not False:
+            return True
+    return False

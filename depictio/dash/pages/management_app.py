@@ -1,15 +1,9 @@
 """
 Management App for multi-app Depictio architecture.
 
-This module provides the main management Dash app that handles:
-- Authentication (/auth)
-- Dashboard management (/dashboards)
-- Project management (/projects)
-- User profile (/profile)
-- Admin panel (/admin)
-- Token management (/cli_configs)
-- About page (/about)
-- Project-specific pages (/project/{id}/permissions, /project/{id}/data)
+This module provides the main management Dash app that handles authentication,
+dashboard management, project management, user profile, admin panel, and
+token management.
 
 Routes:
     / - Redirects to /dashboards
@@ -22,6 +16,15 @@ Routes:
     /about - About page
     /project/{id}/permissions - Project permissions management
     /project/{id}/data - Project data collections management
+
+Functions:
+    create_management_layout: Create the complete layout with AppShell
+    layout: Module-level layout function for flask_dispatcher.py
+    register_callbacks: Register all callbacks for the Management App
+    register_routing_callback: Register main routing callback
+    route_authenticated_user: Route authenticated users to appropriate pages
+    register_layout_callbacks: Register core layout callbacks
+    register_feature_callbacks: Register all feature-specific callbacks
 """
 
 import dash_mantine_components as dmc
@@ -58,26 +61,18 @@ from depictio.dash.layouts.shared_app_shell import create_app_shell
 from depictio.dash.layouts.sidebar import create_static_navbar_content
 
 
-def create_management_layout():
+def _create_management_additional_stores() -> list:
     """
-    Create layout for Management App.
+    Create additional dcc.Store components specific to Management App.
 
     Returns:
-        dmc.MantineProvider: Complete layout with AppShell, stores, and routing
+        List of Dash components for analytics tracking, notifications,
+        drawer modals, and hidden callback utility elements.
     """
-    # Create main content placeholder
-    main_content = html.Div(id="page-content")
-
-    # Create additional stores specific to Management App
-    # Note: project-cache and theme-relay-store are already in create_shared_stores()
-    additional_stores = [
-        # Analytics tracking
+    return [
         create_analytics_tracker(),
-        # Theme detection trigger
         html.Div(id="theme-detection-trigger", style={"display": "none"}),
-        # Admin notifications
         dmc.NotificationContainer(id="notification-container"),
-        # Drawer for modals
         dmc.Drawer(
             title="",
             id="drawer-simple",
@@ -87,21 +82,32 @@ def create_management_layout():
             overlayProps={"overlayOpacity": 0.1},
             children=[],
         ),
-        # Hidden output divs for clientside callbacks
         html.Div(id="dummy-plotly-output", style={"display": "none"}),
         html.Div(id="dummy-resize-output", style={"display": "none"}),
         html.Div(id="admin-password-warning-trigger", style={"display": "none"}),
     ]
 
-    # Get header and sidebar from existing modules
-    # Note: Header content will be set dynamically by routing callback
+
+def create_management_layout():
+    """
+    Create layout for Management App.
+
+    Creates the complete layout including the AppShell structure with header,
+    sidebar, main content area, notification containers, and hidden utility
+    components for clientside callbacks.
+
+    Returns:
+        dmc.MantineProvider: Complete layout with AppShell, stores, and routing.
+    """
+    main_content = html.Div(id="page-content")
+    additional_stores = _create_management_additional_stores()
+
     header_content = create_default_header("Depictio")
     sidebar_content = dmc.AppShellNavbar(  # type: ignore[unresolved-attribute]
         children=create_static_navbar_content(),
         id="app-shell-navbar-content",
     )
 
-    # Create AppShell layout
     layout = create_app_shell(
         app_name="Depictio - Management",
         main_content=main_content,
@@ -128,23 +134,22 @@ def register_callbacks(app):
     """
     Register all callbacks for Management App.
 
-    NO LAZY-LOADING: Since we're using separate apps, each app loads all its
-    callbacks upfront. This simplifies architecture and provides true isolation.
+    No lazy-loading is used since we're using separate apps. Each app loads
+    all its callbacks upfront for architecture simplicity and true isolation.
 
-    Management app includes (~70 callbacks):
-    - Routing and authentication (1 callback)
-    - Header and layout (8 callbacks)
-    - Auth/login (5 callbacks)
-    - Dashboards management (15 callbacks)
-    - Projects management (12 callbacks)
-    - Profile management (8 callbacks)
-    - Admin panel (15 callbacks)
-    - Tokens management (6 callbacks)
+    The Management App includes approximately 70 callbacks covering:
+        - Routing and authentication (1 callback)
+        - Header and layout (8 callbacks)
+        - Auth/login (5 callbacks)
+        - Dashboards management (15 callbacks)
+        - Projects management (12 callbacks)
+        - Profile management (8 callbacks)
+        - Admin panel (15 callbacks)
+        - Tokens management (6 callbacks)
 
     Args:
-        app (dash.Dash): Management app instance
+        app: Dash application instance for the Management App.
     """
-    logger.info("🔥 MANAGEMENT APP: Registering all callbacks upfront")
 
     # 1. Main routing callback
     register_routing_callback(app)
@@ -155,25 +160,22 @@ def register_callbacks(app):
     # 2.5. Theme system callbacks
     from depictio.dash.simple_theme import register_simple_theme_system
 
-    logger.info("  🎨 Registering theme system callbacks")
     register_simple_theme_system(app)
 
     # 3. Feature-specific callbacks (all loaded upfront)
     register_feature_callbacks(app)
-
-    logger.info("✅ MANAGEMENT APP: All callbacks registered (~70 callbacks)")
 
 
 def register_routing_callback(app):
     """
     Register main routing callback for Management App.
 
-    Handles:
-    - Authentication validation and token refresh
-    - Page routing based on pathname
-    - Header updates based on current page
+    This callback handles authentication validation, token refresh, page routing
+    based on pathname, and header updates based on the current page.
+
+    Args:
+        app: Dash application instance to register the callback on.
     """
-    logger.info("  📋 Registering main routing callback")
 
     @app.callback(
         Output("page-content", "children"),
@@ -200,15 +202,12 @@ def register_routing_callback(app):
         Returns:
             tuple: (page_content, header, pathname, local_data)
         """
-        logger.info(f"🔄 MANAGEMENT ROUTING: pathname={pathname}")
 
         # Extract theme
         theme = extract_theme_from_store(theme_store)
 
         # Validate authentication and refresh token if needed
         updated_local_data, is_authenticated, reason = validate_and_refresh_token(local_data)
-
-        logger.info(f"🔐 AUTH STATUS: is_authenticated={is_authenticated}, reason={reason}")
 
         # Handle unauthenticated users
         if not is_authenticated:
@@ -254,13 +253,17 @@ def route_authenticated_user(
     """
     Route authenticated users to appropriate pages.
 
+    Determines the correct page content and header based on the URL pathname.
+    Handles special routes like admin (requires admin privileges), project
+    permissions, and data collections management.
+
     Args:
-        pathname: URL pathname
-        local_data: User authentication data
-        theme: Current theme (light/dark)
+        pathname: URL pathname to route.
+        local_data: User authentication data containing access token.
+        theme: Current theme ('light' or 'dark'). Defaults to 'light'.
 
     Returns:
-        tuple: (page_content, header_content)
+        tuple: A tuple of (page_content, header_content) components.
     """
     access_token = get_access_token_from_local_data(local_data)
 
@@ -270,88 +273,75 @@ def route_authenticated_user(
     # Check if user is anonymous
     is_anonymous = hasattr(user, "is_anonymous") and user.is_anonymous
 
-    # Route based on pathname
-    if pathname == "/dashboards":
+    # Helper for default dashboards page
+    def dashboards_page():
         create_button = return_create_dashboard_button(user.email, is_anonymous=is_anonymous)
         header = create_header_with_button("Dashboards", create_button)
         content = create_dashboards_management_layout()
         return content, header
 
-    elif pathname == "/projects":
+    # Route based on pathname
+    if pathname == "/dashboards":
+        return dashboards_page()
+
+    if pathname == "/projects":
         create_button = return_create_project_button(user.email, is_anonymous=is_anonymous)
         header = create_header_with_button("Projects", create_button)
         content = create_projects_layout()
         return content, header
 
-    elif pathname == "/profile":
+    if pathname == "/profile":
         header = create_default_header("Profile")
         content = create_profile_layout()
         return content, header
 
-    elif pathname == "/admin":
-        # Check if user is admin
+    if pathname == "/admin":
         if not user.is_admin:
-            # Redirect non-admin users to dashboards
             logger.warning(f"Non-admin user {user.email} attempted to access /admin")
-            create_button = return_create_dashboard_button(user.email, is_anonymous=is_anonymous)
-            header = create_header_with_button("Dashboards", create_button)
-            content = create_dashboards_management_layout()
-            return content, header
+            return dashboards_page()
 
         header = create_admin_header("Admin")
         admin_content = html.Div(id="admin-management-content")
         return admin_content, header
 
-    elif pathname == "/cli_configs":
+    if pathname == "/cli_configs":
         header = create_default_header("Depictio-CLI configs Management")
         content = create_tokens_management_layout()
         return content, header
 
-    elif pathname == "/about":
+    if pathname == "/about":
         from depictio.dash.layouts.about import layout as about_layout
 
         header = create_default_header("About")
         return about_layout, header
 
-    elif pathname.startswith("/project/") and pathname.endswith("/permissions"):
+    if pathname.startswith("/project/") and pathname.endswith("/permissions"):
         header = create_default_header("Project Permissions Manager")
         return projectwise_user_management_layout, header
 
-    elif pathname.startswith("/project/") and pathname.endswith("/data"):
+    if pathname.startswith("/project/") and pathname.endswith("/data"):
         header = create_default_header("Project Data Collections Manager")
         return project_data_collections_layout, header
 
-    elif pathname == "/auth":
-        # Already authenticated, redirect to dashboards
+    if pathname == "/auth":
         logger.info("Authenticated user accessing /auth, redirecting to /dashboards")
-        create_button = return_create_dashboard_button(user.email, is_anonymous=is_anonymous)
-        header = create_header_with_button("Dashboards", create_button)
-        content = create_dashboards_management_layout()
-        return content, header
+        return dashboards_page()
 
-    else:
-        # Fallback to dashboards for unrecognized routes
-        logger.info(f"Unrecognized route {pathname}, redirecting to /dashboards")
-        create_button = return_create_dashboard_button(user.email, is_anonymous=is_anonymous)
-        header = create_header_with_button("Dashboards", create_button)
-        content = create_dashboards_management_layout()
-        return content, header
+    # Fallback to dashboards for unrecognized routes
+    logger.info(f"Unrecognized route {pathname}, redirecting to /dashboards")
+    return dashboards_page()
 
 
 def register_layout_callbacks(app):
     """
     Register core layout callbacks for Management App.
 
-    Includes:
-    - Header navigation and interactions
-    - Sidebar burger menu (if needed)
-    - Theme switching clientside callbacks
-    - Auth page body class management
+    Registers callbacks for header navigation, sidebar interactions, theme
+    switching, and auth page body class management.
 
     Args:
-        app: Dash app instance
+        app: Dash application instance to register callbacks on.
     """
-    logger.info("  📋 Registering core layout callbacks")
 
     # Register header callbacks (navigation, modals, etc.)
     from depictio.dash.layouts.header import register_callbacks_header
@@ -384,39 +374,32 @@ def register_layout_callbacks(app):
         prevent_initial_call="initial_duplicate",
     )
 
-    logger.info("  ✅ Core layout callbacks registered")
-
 
 def register_feature_callbacks(app):
     """
     Register all feature-specific callbacks for Management App.
 
     All callbacks are registered upfront (no lazy-loading) since we're using
-    separate apps for true isolation.
-
-    Includes:
-    - Authentication (login, register, OAuth)
-    - Dashboards management (CRUD operations, sharing)
-    - Projects management (CRUD operations, permissions)
-    - Profile management (settings, tokens)
-    - Admin panel (users, groups, analytics)
-    - Tokens management (CLI configs)
-    - Project data collections management (workflows, data collections, joins)
-    - Project permissions management (user roles, public/private toggle)
+    separate apps for true isolation. This function registers callbacks for:
+        - Authentication (login, register, OAuth)
+        - Dashboards management (CRUD operations, sharing)
+        - Projects management (CRUD operations, permissions)
+        - Profile management (settings, tokens)
+        - Admin panel (users, groups, analytics)
+        - Tokens management (CLI configs)
+        - Project data collections management
+        - Project permissions management
 
     Args:
-        app: Dash app instance
+        app: Dash application instance to register callbacks on.
     """
-    logger.info("  📋 Registering feature-specific callbacks")
 
     # Auth callbacks
-    logger.info("    🔐 Registering authentication callbacks")
     from depictio.dash.layouts.users_management import register_callbacks_users_management
 
     register_callbacks_users_management(app)
 
     # Dashboards management callbacks
-    logger.info("    📊 Registering dashboards management callbacks")
     from depictio.dash.layouts.dashboards_management import (
         register_callbacks_dashboards_management,
     )
@@ -424,7 +407,7 @@ def register_feature_callbacks(app):
     register_callbacks_dashboards_management(app)
 
     # Projects management callbacks
-    logger.info("    📁 Registering projects management callbacks")
+    logger.debug("    📁 Registering projects management callbacks")
     from depictio.dash.layouts.projects import (
         register_projects_callbacks,
         register_workflows_callbacks,
@@ -434,25 +417,23 @@ def register_feature_callbacks(app):
     register_workflows_callbacks(app)
 
     # Profile callbacks
-    logger.info("    👤 Registering profile callbacks")
+    logger.debug("    👤 Registering profile callbacks")
     from depictio.dash.layouts.profile import register_profile_callbacks
 
     register_profile_callbacks(app)
 
     # Admin callbacks
-    logger.info("    ⚙️  Registering admin callbacks")
     from depictio.dash.layouts.admin_management import register_admin_callbacks
 
     register_admin_callbacks(app)
 
     # Tokens management callbacks
-    logger.info("    🔑 Registering tokens management callbacks")
+    logger.debug("    🔑 Registering tokens management callbacks")
     from depictio.dash.layouts.tokens_management import register_tokens_management_callbacks
 
     register_tokens_management_callbacks(app)
 
     # Project data collections callbacks
-    logger.info("    📊 Registering project data collections callbacks")
     from depictio.dash.layouts.project_data_collections import (
         register_project_data_collections_callbacks,
     )
@@ -460,11 +441,8 @@ def register_feature_callbacks(app):
     register_project_data_collections_callbacks(app)
 
     # Project permissions callbacks
-    logger.info("    🔒 Registering project permissions callbacks")
     from depictio.dash.layouts.projectwise_user_management import (
         register_projectwise_user_management_callbacks,
     )
 
     register_projectwise_user_management_callbacks(app)
-
-    logger.info("  ✅ All feature callbacks registered")

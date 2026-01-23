@@ -338,11 +338,11 @@ class WorkflowResponse(Workflow):
     """
 
     # Override required fields to be optional for API responses
-    name: str | None = None  # type: ignore[assignment]
-    engine: WorkflowEngine | None = None  # type: ignore[assignment]
-    data_location: WorkflowDataLocation | None = None  # type: ignore[assignment]
+    name: str | None = None
+    engine: WorkflowEngine | None = None
+    data_location: WorkflowDataLocation | None = None
 
     # Override to use permissive DataCollectionResponse
-    data_collections: list[DataCollectionResponse] = []  # type: ignore[assignment]
+    data_collections: list[DataCollectionResponse] = []
 
     model_config = ConfigDict(extra="allow")

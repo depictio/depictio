@@ -50,7 +50,6 @@ def register_table_edit_callback(app):
             PreventUpdate: If no valid trigger or missing data
         """
         logger.info("=" * 80)
-        logger.info("🚀 TABLE EDIT SAVE CALLBACK TRIGGERED")
         logger.info(f"   ctx.triggered_id: {ctx.triggered_id}")
         logger.info(f"   btn_clicks: {btn_clicks}")
 
@@ -69,7 +68,6 @@ def register_table_edit_callback(app):
         component_id = edit_context["component_id"]
         component_data = edit_context["component_data"]
 
-        logger.info(f"💾 TABLE EDIT SAVE - Component: {component_id}")
         logger.info(f"   Dashboard: {dashboard_id}")
         logger.info(f"   Component type: {component_data.get('component_type')}")
 
@@ -97,9 +95,6 @@ def register_table_edit_callback(app):
 
             cols_json = get_columns_from_data_collection(wf_id, dc_id, TOKEN)
 
-            logger.info(f"   ✓ Fetched DC specs: {dc_specs.get('collection_name', 'unknown')}")
-            logger.info(f"   ✓ Fetched columns: {len(cols_json)} columns")
-
         except Exception as e:
             logger.error(f"❌ TABLE EDIT SAVE - Failed to fetch DC data: {e}")
             raise PreventUpdate
@@ -116,7 +111,7 @@ def register_table_edit_callback(app):
             "last_updated": datetime.now().isoformat(),
         }
 
-        logger.info("   Updated metadata keys: " + str(list(updated_metadata.keys())))
+        logger.debug("   Updated metadata keys: " + str(list(updated_metadata.keys())))
 
         # Detect app prefix from current URL
         app_prefix = "dashboard"  # default to viewer
@@ -128,9 +123,6 @@ def register_table_edit_callback(app):
         # Use shared save helper
         redirect_url = save_table_to_dashboard(dashboard_id, updated_metadata, TOKEN, app_prefix)
 
-        logger.info(f"✅ TABLE EDIT SAVE - Redirecting to {redirect_url}")
         logger.info("=" * 80)
 
         return redirect_url
-
-    logger.info("✅ Table edit save callback registered")

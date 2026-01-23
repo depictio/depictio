@@ -1,3 +1,15 @@
+"""Admin management module for system administration dashboard.
+
+This module provides administrative interfaces for managing:
+- Users (list, delete, promote to admin)
+- Groups (list, create, delete, manage membership)
+- Dashboards (list, view details)
+- Projects (list all system projects)
+- Analytics (system usage metrics)
+
+Admin-only access is enforced at the API level.
+"""
+
 import datetime
 
 import dash
@@ -11,14 +23,12 @@ from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, api_create_group
 from depictio.dash.layouts.layouts_toolbox import create_delete_confirmation_modal
-
-# register_delete_confirmation_modal_callbacks,
 from depictio.dash.layouts.projects import render_project_item
 from depictio.models.models.dashboards import DashboardData
 from depictio.models.models.projects import Project
 from depictio.models.models.users import GroupUI, UserBase, UserBaseUI
 
-# Define styles and colors
+# Default card styling for admin panels
 card_styles = {
     "boxShadow": "0 4px 6px rgba(0, 0, 0, 0.1)",
     "borderRadius": "8px",
@@ -27,7 +37,18 @@ card_styles = {
 }
 
 
-def render_dashboardwise_layout(dashboard):
+def render_dashboardwise_layout(dashboard: dict) -> dmc.Accordion:
+    """Render an accordion layout for a single dashboard.
+
+    Displays dashboard details including ID, owner, viewers, component count,
+    and last saved timestamp.
+
+    Args:
+        dashboard: Raw dashboard dictionary from MongoDB.
+
+    Returns:
+        Accordion component with dashboard details.
+    """
     dashboard = DashboardData.from_mongo(dashboard)
 
     logger.info(f"Dashboard: {dashboard}")
@@ -187,8 +208,17 @@ def render_dashboardwise_layout(dashboard):
 
 @validate_call
 def render_groupwise_layout(group: GroupUI, all_users: list) -> dmc.Accordion:
-    """
-    Render the layout for a group.
+    """Render an accordion layout for a single group.
+
+    Displays group details including ID, member list, and action buttons
+    (delete, save). Admin and users groups have restricted actions.
+
+    Args:
+        group: GroupUI model instance.
+        all_users: List of all users for the user transfer interface.
+
+    Returns:
+        Accordion component with group details and management controls.
     """
 
     logger.info(f"Group: {group}")
@@ -389,9 +419,16 @@ def render_groupwise_layout(group: GroupUI, all_users: list) -> dmc.Accordion:
 
 @validate_call
 def render_userwise_layout(user: UserBaseUI) -> dmc.Accordion:
-    """
-    Render the layout for a user.
+    """Render an accordion layout for a single user.
 
+    Displays user details including ID, registration date, last login,
+    account status, verification status, and admin controls.
+
+    Args:
+        user: UserBaseUI model instance.
+
+    Returns:
+        Accordion component with user details and management controls.
     """
 
     logger.info(f"User: {user}")
@@ -643,9 +680,16 @@ def render_userwise_layout(user: UserBaseUI) -> dmc.Accordion:
 
 @validate_call
 def fetch_projects_for_admin(token: str) -> list[Project]:
-    """
-    Fetch all projects using the existing get_all_projects endpoint.
-    For admin users, this will return all projects in the system.
+    """Fetch all projects in the system for admin view.
+
+    Uses the standard projects endpoint which returns all projects
+    for admin users (bypassing normal permission filtering).
+
+    Args:
+        token: JWT authentication token with admin privileges.
+
+    Returns:
+        List of all Project instances in the system.
     """
     url = f"{API_BASE_URL}/depictio/api/v1/projects/get/all"
 
@@ -658,11 +702,21 @@ def fetch_projects_for_admin(token: str) -> list[Project]:
     return projects
 
 
-# Override the render_project_item function to show owner email instead of "Owned"
-def admin_render_project_item(project: Project, current_user: UserBase, token: str):
-    """
-    Modified version of render_project_item that shows the owner's email instead of "Owned".
-    All badges are blue as requested.
+def admin_render_project_item(
+    project: Project, current_user: UserBase, token: str
+) -> dmc.AccordionItem:
+    """Render a project item with admin-specific display.
+
+    Wraps the standard render_project_item with admin_UI=True flag
+    to show owner email instead of "Owned" badge.
+
+    Args:
+        project: Project model instance.
+        current_user: Current admin user.
+        token: JWT authentication token.
+
+    Returns:
+        AccordionItem component for the project.
     """
     # Get the original project item
     project_item = render_project_item(project, current_user, admin_UI=True, token=token)
@@ -670,7 +724,19 @@ def admin_render_project_item(project: Project, current_user: UserBase, token: s
     return project_item
 
 
-def register_admin_callbacks(app):
+def register_admin_callbacks(app) -> None:
+    """Register callbacks for admin management interface.
+
+    Callbacks registered:
+    - open_user_delete_modal: Toggle user deletion confirmation
+    - open_group_delete_modal: Toggle group deletion confirmation
+    - add_group: Handle group creation
+    - create_admin_management_content: Render tab content (users/groups/dashboards/projects/analytics)
+
+    Args:
+        app: Dash application instance.
+    """
+
     @app.callback(
         Output({"type": "user-delete-confirmation-modal", "index": MATCH}, "opened"),
         Input({"type": "delete-user-button", "index": MATCH}, "n_clicks"),
@@ -872,7 +938,6 @@ def register_admin_callbacks(app):
             logger.info("\n GROUPS \n")
 
             # if delete_group_clicks:
-            #     logger.info(f"Delete group button clicked: {delete_group_ids}")
             #     # retrieve group id by cross-referencing the button id
 
             #     for button_id, n_click_index in zip(
@@ -880,44 +945,29 @@ def register_admin_callbacks(app):
             #     ):
             #         if n_click_index:
             #             group_id = button_id["index"]
-            #             logger.info(f"Deleting group: {group_id}")
             #             response = httpx.delete(
             #                 f"{API_BASE_URL}/depictio/api/v1/auth/delete_group/{group_id}",
             #                 headers={
             #                     "Authorization": f"Bearer {local_data['access_token']}"
             #                 },
             #             )
-            #             logger.info(f"Response: {response}")
             #             if response.status_code == 200:
-            #                 logger.info(f"Successfully deleted group: {group_id}")
             #             else:
-            #                 logger.error(f"Error deleting group: {response.json()}")
             #                 return html.P(
             #                     "Error deleting group. Please try again later."
             #                 ), {"display": "none"}
 
             # if "save-group-users-button" in trigger_id:
-            #     logger.info("SAVE GROUP USERS BUTTON CLICKED")
-            #     logger.info(
             #         f"Save group users button clicked clicks: {save_group_users_clicks}"
             #     )
-            #     logger.info(f"Save group users button clicked: {save_group_users_ids}")
-            #     logger.info(f"Transferlist values: {transferlist_values}")
             #     trigger_id_index = eval(trigger_id)["index"]
-            #     logger.info(f"Trigger ID: {trigger_id}")
-            #     logger.info(f"Trigger ID index: {trigger_id_index}")
             #     # start at 1 to skip the first value which corresponds to admin group
             #     for transfert_list_value, save_id in zip(
             #         transferlist_values[1:], save_group_users_ids
             #     ):
-            #         logger.info(f"save_id['index']: {save_id['index']}")
-            #         logger.info(f"Trigger ID index: {trigger_id_index}")
             #         if str(save_id["index"]) == str(trigger_id_index):
-            #             logger.info(f"Transferlist value: {transfert_list_value}")
-            #             logger.info(f"Group ID: {trigger_id_index}")
             #             all_users = transfert_list_value[0]
             #             group_users = transfert_list_value[1]
-            #             logger.info(f"Group users: {group_users}")
 
             #             group_id = trigger_id_index
             #             # group_users = transfert_list_value[1]
@@ -928,7 +978,6 @@ def register_admin_callbacks(app):
             #                 {"email": user["label"], "id": str(user["value"])}
             #                 for user in group_users
             #             ]
-            #             logger.info(f"Group users: {group_users}")
             #             api_update_group_in_users(
             #                 group_id,
             #                 {"users": group_users},
@@ -960,20 +1009,16 @@ def register_admin_callbacks(app):
 
             #     all_users = reponse_all_users.json()
             #     all_users = [UserBase.from_mongo(user) for user in all_users]
-            #     logger.info(f"Users: {all_users}")
             # else:
-            #     logger.error(f"Error fetching users: {reponse_all_users.json()}")
             #     all_users = []
 
             # response = httpx.get(
             #     f"{API_BASE_URL}/depictio/api/v1/auth/get_all_groups_including_users",
             #     headers={"Authorization": f"Bearer {local_data['access_token']}"},
             # )
-            # logger.info(f"Response: {response}")
 
             # if response.status_code == 200:
             #     groups = response.json()
-            #     logger.info(f"Groups: {groups}")
             #     groupwise_layouts = [
             #         render_groupwise_layout(GroupUI.from_mongo(group), all_users)
             #         for group in groups
@@ -984,7 +1029,6 @@ def register_admin_callbacks(app):
             #         # [add_group_button, modal, html.Div(groupwise_layouts)]
             #     )
             # else:
-            #     logger.error(f"Error fetching groups: {response.json()}")
             #     content = html.P("Error fetching groups. Please try again later.")
 
             # return content, {"display": "block"}

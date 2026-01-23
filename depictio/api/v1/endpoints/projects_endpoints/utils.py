@@ -1,14 +1,11 @@
 from bson import ObjectId
-from fastapi import APIRouter, HTTPException
+from fastapi import HTTPException
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import projects_collection
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.projects import Project, ProjectResponse
 from depictio.models.models.users import User
-
-# Define the router
-projects_endpoint_router = APIRouter()
 
 
 # Core functions
@@ -87,7 +84,6 @@ def _async_get_project_from_name(
     return project
 
 
-# @validate_call(validate_return=True)
 async def _helper_create_project_beanie(project: Project, original_ids: dict | None = None) -> dict:
     """Helper function to create a project in the database.
 
@@ -107,57 +103,41 @@ async def _helper_create_project_beanie(project: Project, original_ids: dict | N
     Returns:
         dict: Project creation result with project details
     """
-
-    # Check if the project already exists
     existing_project = projects_collection.find_one({"name": project.name})
-    logger.debug(f"Existing project: {existing_project}")
     if existing_project:
         raise HTTPException(
             status_code=400,
             detail=f"Project with name '{project.name}' already exists.",
         )
 
-    # Use project.mongo() to ensure all nested 'id' fields are converted to '_id'
-    logger.debug(f"Project before conversion: {project}")
     mongo_project = project.mongo()
-    logger.debug(f"Mongo project: {mongo_project}")
 
-    # CRITICAL: Restore static IDs from YAML in the MongoDB document dict
+    # Restore static IDs from YAML in the MongoDB document dict
     # This ensures IDs are preserved across multiple K8s instances sharing the same S3 bucket
     if original_ids:
-        from bson import ObjectId
-
-        # Restore project ID if provided
         if original_ids.get("project"):
             original_project_id = original_ids["project"]
             current_project_id = str(mongo_project.get("_id", ""))
             if current_project_id != original_project_id:
                 logger.warning(
-                    f"Restoring project ID in mongo_project dict: {current_project_id} -> {original_project_id}"
+                    f"Restoring project ID: {current_project_id} -> {original_project_id}"
                 )
                 mongo_project["_id"] = ObjectId(original_project_id)
-            else:
-                logger.debug(f"Project ID already correct: {original_project_id}")
 
-        # Restore workflow and data collection IDs
         if "workflows" in original_ids and "workflows" in mongo_project:
             for wf_idx, wf_ids in original_ids["workflows"].items():
                 if wf_idx < len(mongo_project["workflows"]):
                     workflow = mongo_project["workflows"][wf_idx]
 
-                    # Restore workflow ID
                     if wf_ids.get("id"):
                         original_wf_id = wf_ids["id"]
                         current_wf_id = str(workflow.get("_id", ""))
                         if current_wf_id != original_wf_id:
                             logger.warning(
-                                f"Restoring workflow[{wf_idx}] ID in mongo_project dict: {current_wf_id} -> {original_wf_id}"
+                                f"Restoring workflow[{wf_idx}] ID: {current_wf_id} -> {original_wf_id}"
                             )
                             workflow["_id"] = ObjectId(original_wf_id)
-                        else:
-                            logger.debug(f"Workflow[{wf_idx}] ID already correct: {original_wf_id}")
 
-                    # Restore data collection IDs
                     if "data_collections" in wf_ids and "data_collections" in workflow:
                         for dc_idx, dc_id in wf_ids["data_collections"].items():
                             if dc_idx < len(workflow["data_collections"]):
@@ -165,22 +145,12 @@ async def _helper_create_project_beanie(project: Project, original_ids: dict | N
                                 current_dc_id = str(dc.get("_id", ""))
                                 if current_dc_id != dc_id:
                                     logger.warning(
-                                        f"Restoring data_collection[{wf_idx},{dc_idx}] ID in mongo_project dict: {current_dc_id} -> {dc_id}"
+                                        f"Restoring DC[{wf_idx},{dc_idx}] ID: {current_dc_id} -> {dc_id}"
                                     )
                                     dc["_id"] = ObjectId(dc_id)
-                                else:
-                                    logger.debug(
-                                        f"DataCollection[{wf_idx},{dc_idx}] ID already correct: {dc_id}"
-                                    )
 
-        logger.info(
-            "Static IDs successfully restored in mongo_project dict before database insertion"
-        )
-
-    # Save the project to the database using PyMongo's insert_one
     result = projects_collection.insert_one(mongo_project)
 
-    # Only update the project's id if it wasn't already set (preserve static IDs from YAML)
     if project.id is None:
         project.id = result.inserted_id
 
@@ -426,8 +396,6 @@ async def get_project_with_delta_locations(project_id: PyObjectId, current_user:
         {"$project": {"project_doc": 0}},
     ]
 
-    logger.info(f"📡 Fetching project {project_id} with delta_locations (optimized query)")
-
     try:
         result = list(projects_collection.aggregate(pipeline))
     except Exception as e:
@@ -440,12 +408,4 @@ async def get_project_with_delta_locations(project_id: PyObjectId, current_user:
             detail="Project not found or access denied.",
         )
 
-    project = result[0]
-    project = convert_objectid_to_str(project)
-
-    logger.info(
-        f"✅ Project {project_id} fetched with delta_locations for "
-        f"{len(project.get('workflows', []))} workflows"
-    )
-
-    return project
+    return convert_objectid_to_str(result[0])

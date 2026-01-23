@@ -27,7 +27,6 @@ def register_component_loading_callback(app, component_type: str):
         app: Dash application instance
         component_type: Type of component to load ("figure", "card", "interactive")
     """
-    logger.info(f"⚡ PHASE 5B: Registering incremental loading callback for {component_type}")
 
     # Get build function for this component type
     build_functions = get_build_functions()
@@ -74,8 +73,6 @@ def register_component_loading_callback(app, component_type: str):
         # CRITICAL FIX: Use "index" key consistently (changed from "uuid")
         triggered_index = trigger_id.get("index")
 
-        logger.info(f"⚡ PROGRESSIVE LOADING: Loading {component_type} component {triggered_index}")
-
         # Build output list
         # CRITICAL FIX: We must preserve the dcc.Store component when replacing container children
         # Container structure: [placeholder, dcc.Interval, dcc.Store]
@@ -91,8 +88,6 @@ def register_component_loading_callback(app, component_type: str):
 
             # Only build the component that was triggered
             if container_index == triggered_index and n_intervals and n_intervals > 0:
-                logger.info(f"⚡ PROGRESSIVE LOADING: Building {component_type} {container_index}")
-
                 try:
                     # Build the actual component
                     component = build_function(**metadata)
@@ -143,8 +138,6 @@ def register_component_loading_callback(app, component_type: str):
 
         return outputs
 
-    logger.info(f"⚡ PHASE 5B: Incremental loading callback for {component_type} registered")
-
 
 def register_deferred_initialization_callback(app, component_type: str):
     """
@@ -162,7 +155,6 @@ def register_deferred_initialization_callback(app, component_type: str):
         app: Dash application instance
         component_type: Type of component to initialize ("figure", "card", "interactive")
     """
-    logger.info(f"⚡ PHASE 5C: Registering deferred initialization callback for {component_type}")
 
     @app.callback(
         Output({"type": f"{component_type}-trigger", "index": ALL}, "data"),
@@ -219,5 +211,3 @@ def register_deferred_initialization_callback(app, component_type: str):
                 outputs.append(no_update)
 
         return outputs
-
-    logger.info(f"⚡ PHASE 5C: Deferred initialization callback for {component_type} registered")

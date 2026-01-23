@@ -54,8 +54,6 @@ def create_theme_controls():
 def register_simple_theme_system(app):
     """Register the simplified DMC-native theme management system."""
 
-    from depictio.api.v1.configs.logging_init import logger
-
     dmc.add_figure_templates()  # type: ignore[unresolved-attribute]
 
     # Move theme callbacks to clientside for instant response
@@ -306,5 +304,3 @@ def register_simple_theme_system(app):
     #     Input("theme-store", "data"),
     #     prevent_initial_call=True,
     # )
-
-    logger.info("🔥 THEME SYSTEM: Simple DMC-native theme system registered")

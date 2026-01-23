@@ -61,10 +61,6 @@ def register_render_callbacks(app):
             raise dash.exceptions.PreventUpdate
 
         logger.info("=" * 80)
-        logger.info("🎨 RENDER: Generating figure preview")
-        logger.info(f"📊 Component ID: {graph_id.get('index', 'unknown')}")
-        logger.info(f"📈 Visualization type: {visu_type}")
-        logger.info(f"🔧 Parameters: {dict_kwargs}")
         logger.info(f"📁 Workflow: {workflow}")
         logger.info(f"📁 Data Collection: {data_collection}")
         logger.info("=" * 80)
@@ -85,14 +81,11 @@ def register_render_callbacks(app):
                 return {}
 
             # Load data
-            logger.info(f"📥 Loading data from workflow {wf_id}, collection {dc_id}")
             df = load_deltatable_lite(workflow_id=wf_id, data_collection_id=dc_id, TOKEN=TOKEN)
 
             if df is None or df.height == 0:
                 logger.warning("🚫 RENDER: No data loaded")
                 return {}
-
-            logger.info(f"✓ Loaded {df.height} rows × {len(df.columns)} columns")
 
             # Extract theme from theme_data
             current_theme = "light"  # Default
@@ -100,10 +93,8 @@ def register_render_callbacks(app):
                 current_theme = theme_data.get("theme", "light")
             elif isinstance(theme_data, str):
                 current_theme = theme_data
-            logger.info(f"🎨 Using theme: {current_theme}")
 
             # Render figure
-            logger.info(f"🎨 Rendering {visu_type} visualization")
             try:
                 figure, trace_metadata = render_figure(
                     dict_kwargs=dict_kwargs or {},
@@ -111,8 +102,6 @@ def register_render_callbacks(app):
                     df=df,
                     theme=current_theme,
                 )
-                logger.info("✅ RENDER: Figure generated successfully")
-                logger.info("✅ RENDER: Returning figure to callback output")
                 return figure
             except Exception as render_error:
                 logger.error(f"❌ RENDER: render_figure failed: {render_error}")
@@ -140,5 +129,3 @@ def register_render_callbacks(app):
                     ],
                 },
             }
-
-    logger.info("✅ Figure render callbacks registered (preview rendering)")

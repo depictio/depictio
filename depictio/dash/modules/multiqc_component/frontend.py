@@ -1,3 +1,18 @@
+"""Frontend components and callbacks for MultiQC dashboard integration.
+
+This module provides Dash components and callbacks for displaying and interacting
+with MultiQC quality control reports. It includes:
+
+- Stepper button creation for component selection
+- MultiQC component design and layout
+- Interactive filtering and sample-based patching of plots
+- Dashboard restoration with background rendering
+- Theme-aware styling with dark/light mode support
+
+The module integrates with pre-computed joins for efficient cross-table filtering
+and supports real-time updates based on interactive component selections.
+"""
+
 import copy
 from typing import Any, Optional
 
@@ -15,14 +30,47 @@ from depictio.dash.modules.multiqc_component.utils import get_multiqc_reports_fo
 from depictio.dash.utils import UNSELECTED_STYLE
 
 
-def create_stepper_multiqc_button(n, disabled=None):
-    """
-    Create the stepper MultiQC button
+def _create_error_figure(title: str, message: str, font_size: int = 16) -> dict:
+    """Create a Plotly figure displaying an error message.
+
     Args:
-        n (_type_): The index for the button
-        disabled (bool, optional): Override enabled state. If None, uses metadata.
+        title: The title for the figure layout.
+        message: The error message to display as an annotation.
+        font_size: Font size for the error message.
+
     Returns:
-        tuple: (button, store) components
+        A Plotly figure dict with the error displayed as a centered annotation.
+    """
+    return {
+        "data": [],
+        "layout": {
+            "title": title,
+            "xaxis": {"visible": False},
+            "yaxis": {"visible": False},
+            "annotations": [
+                {
+                    "text": message,
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x": 0.5,
+                    "y": 0.5,
+                    "showarrow": False,
+                    "font": {"size": font_size, "color": "red"},
+                }
+            ],
+        },
+    }
+
+
+def create_stepper_multiqc_button(n: int, disabled: Optional[bool] = None) -> tuple:
+    """Create the stepper MultiQC button for component selection.
+
+    Args:
+        n: The index for the button, used in component IDs.
+        disabled: Override enabled state. If None, uses metadata configuration.
+
+    Returns:
+        Tuple of (button, store) Dash components for the MultiQC option.
     """
     # Use metadata enabled field if disabled not explicitly provided
     if disabled is None:
@@ -75,9 +123,29 @@ def create_stepper_multiqc_button(n, disabled=None):
     return button, store
 
 
-def design_multiqc(id, workflow_id=None, data_collection_id=None, local_data=None, **kwargs):
-    """
-    Design MultiQC component with orange styling.
+def design_multiqc(
+    id: Any,
+    workflow_id: Optional[str] = None,
+    data_collection_id: Optional[str] = None,
+    local_data: Optional[dict] = None,
+    **kwargs: Any,
+) -> dmc.Paper:
+    """Design MultiQC component with orange styling.
+
+    Creates the full MultiQC visualization component including header, status alert,
+    control panel with module/plot/dataset selectors, plot container, and hidden
+    stores for state management.
+
+    Args:
+        id: Component ID, can be a string or dict (from stepper context).
+        workflow_id: Associated workflow identifier.
+        data_collection_id: Associated data collection identifier.
+        local_data: Local data containing access tokens and other config.
+        **kwargs: Additional options including selected_module, selected_plot,
+            and selected_dataset for initial state.
+
+    Returns:
+        DMC Paper component containing the complete MultiQC visualization.
     """
     logger.info(f"Designing MultiQC component with id: {id}")
     logger.info(f"Workflow ID: {workflow_id}, Data Collection ID: {data_collection_id}")
@@ -482,17 +550,19 @@ def design_multiqc_from_model(component: MultiQCDashboardComponent) -> dmc.Paper
     return multiqc_content
 
 
-def expand_canonical_samples_to_variants(canonical_samples, sample_mappings):
-    """
-    Expand canonical sample IDs to all their MultiQC variants using stored mappings.
+def expand_canonical_samples_to_variants(
+    canonical_samples: list[str], sample_mappings: dict[str, list[str]]
+) -> list[str]:
+    """Expand canonical sample IDs to all their MultiQC variants using stored mappings.
 
     Args:
-        canonical_samples: List of canonical sample IDs from external metadata (e.g., ['SRR10070130'])
+        canonical_samples: List of canonical sample IDs from external metadata
+            (e.g., ['SRR10070130']).
         sample_mappings: Dictionary mapping canonical IDs to variants
-                        (e.g., {'SRR10070130': ['SRR10070130', 'SRR10070130_1', ...]})
+            (e.g., {'SRR10070130': ['SRR10070130', 'SRR10070130_1', ...]}).
 
     Returns:
-        List of all sample variants to filter MultiQC plots
+        List of all sample variants to filter MultiQC plots.
     """
     if not sample_mappings:
         logger.warning("No sample mappings available - returning canonical samples as-is")
@@ -519,30 +589,167 @@ def expand_canonical_samples_to_variants(canonical_samples, sample_mappings):
     return expanded_samples
 
 
-def get_samples_from_metadata_filter(
-    workflow_id, metadata_dc_id, join_column, interactive_components_dict, token
-):
-    """
-    Get sample names from filtered metadata table.
+def _filter_date_column(
+    df: pl.DataFrame, column_name: str, filter_values: list, comp_metadata: dict
+) -> pl.DataFrame:
+    """Apply date filtering to a Polars DataFrame column.
 
     Args:
-        workflow_id: Workflow ID
-        metadata_dc_id: Metadata data collection ID
-        join_column: Column name containing sample identifiers (e.g., 'sample')
-        interactive_components_dict: Filters to apply {component_index: {value, metadata}}
-        token: Auth token
+        df: The DataFrame to filter.
+        column_name: Name of the date column to filter.
+        filter_values: List of date values to filter by.
+        comp_metadata: Component metadata containing default_state.
 
     Returns:
-        List of canonical sample names that match the filters (not expanded to variants)
+        Filtered DataFrame.
     """
     from datetime import datetime
 
+    # Check if this is the default range (no actual filtering needed)
+    default_state = comp_metadata.get("default_state", {})
+    default_range = default_state.get("default_range")
+
+    if default_range and filter_values == default_range:
+        logger.debug(
+            f"Date filter '{column_name}' at default range {default_range} - "
+            "skipping (not an active filter)"
+        )
+        return df
+
+    # Try parsing filter values as Python date objects
+    try:
+        parsed_dates = [datetime.strptime(str(v), "%Y-%m-%d").date() for v in filter_values]
+        df = df.filter(pl.col(column_name).is_in(parsed_dates))
+        logger.debug(f"After filtering: {df.shape[0]} rows remaining (Date parsing)")
+        return df
+    except Exception as e:
+        logger.warning(f"Failed to filter Date column '{column_name}' with date parsing: {e}")
+
+    # Fallback to string casting with explicit date format
+    try:
+        string_values = [str(v) for v in filter_values]
+        df = df.filter(pl.col(column_name).dt.strftime("%Y-%m-%d").is_in(string_values))
+        logger.info(f"After filtering: {df.shape[0]} rows remaining (Date as formatted string)")
+        return df
+    except Exception as e2:
+        logger.error(
+            f"All Date filtering methods failed on '{column_name}': {e2}. Skipping filter."
+        )
+        return df
+
+
+def _filter_range_column(
+    df: pl.DataFrame, column_name: str, filter_values: list, comp_metadata: dict
+) -> pl.DataFrame:
+    """Apply range filtering to a Polars DataFrame column.
+
+    Args:
+        df: The DataFrame to filter.
+        column_name: Name of the column to filter.
+        filter_values: Two-element list [min, max] for range filtering.
+        comp_metadata: Component metadata containing default_state.
+
+    Returns:
+        Filtered DataFrame.
+    """
+    default_state = comp_metadata.get("default_state", {})
+    default_range = default_state.get("default_range")
+
+    if default_range and filter_values == default_range:
+        logger.debug(
+            f"Range filter '{column_name}' at default range {default_range} - "
+            "skipping (not an active filter)"
+        )
+        return df
+
+    min_val, max_val = filter_values[0], filter_values[1]
+    logger.debug(f"Applying range filter: {min_val} <= {column_name} <= {max_val}")
+
+    try:
+        df = df.filter((pl.col(column_name) >= min_val) & (pl.col(column_name) <= max_val))
+        logger.info(f"After filtering: {df.shape[0]} rows remaining (range filter)")
+    except Exception as e:
+        logger.error(f"Range filtering failed on '{column_name}': {e}. Skipping filter.")
+
+    return df
+
+
+def _filter_discrete_column(
+    df: pl.DataFrame, column_name: str, filter_values: list
+) -> pl.DataFrame:
+    """Apply discrete value filtering to a Polars DataFrame column.
+
+    Args:
+        df: The DataFrame to filter.
+        column_name: Name of the column to filter.
+        filter_values: List of values to match.
+
+    Returns:
+        Filtered DataFrame.
+    """
+    logger.debug(f"Applying discrete filter: {column_name} in {filter_values}")
+
+    try:
+        df = df.filter(df[column_name].is_in(filter_values))
+        logger.info(f"After filtering: {df.shape[0]} rows remaining (discrete filter)")
+        return df
+    except Exception as e:
+        logger.warning(f"Direct filtering failed on '{column_name}': {e}")
+
+    # Fallback: try string casting for type safety
+    try:
+        string_values = [str(v) for v in filter_values]
+        df = df.filter(df[column_name].cast(pl.String).is_in(string_values))
+        logger.info(f"After filtering: {df.shape[0]} rows remaining (string casting fallback)")
+        return df
+    except Exception as e2:
+        logger.error(f"All filtering methods failed on '{column_name}': {e2}. Skipping filter.")
+        return df
+
+
+def _is_range_filter(filter_values: Any) -> bool:
+    """Check if filter values represent a range filter.
+
+    Args:
+        filter_values: The filter values to check.
+
+    Returns:
+        True if this is a two-element numeric list (range filter).
+    """
+    return (
+        isinstance(filter_values, list)
+        and len(filter_values) == 2
+        and all(isinstance(v, (int, float)) for v in filter_values)
+    )
+
+
+def get_samples_from_metadata_filter(
+    workflow_id: str,
+    metadata_dc_id: str,
+    join_column: str,
+    interactive_components_dict: dict,
+    token: str,
+) -> list[str]:
+    """Get sample names from filtered metadata table.
+
+    Loads the metadata table and applies all interactive component filters
+    to determine which samples should be displayed.
+
+    Args:
+        workflow_id: Workflow ID.
+        metadata_dc_id: Metadata data collection ID.
+        join_column: Column name containing sample identifiers (e.g., 'sample').
+        interactive_components_dict: Filters to apply {component_index: {value, metadata}}.
+        token: Auth token for data access.
+
+    Returns:
+        List of canonical sample names that match the filters (not expanded to variants).
+    """
     from bson import ObjectId
 
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
-    # Load metadata table
-    logger.info(f"Loading metadata table {metadata_dc_id}")
+    logger.debug(f"Loading metadata table {metadata_dc_id}")
     df = load_deltatable_lite(
         workflow_id=ObjectId(workflow_id),
         data_collection_id=ObjectId(metadata_dc_id),
@@ -554,7 +761,7 @@ def get_samples_from_metadata_filter(
         logger.warning("Metadata table is empty")
         return []
 
-    logger.info(f"Loaded metadata table with columns: {df.columns}")
+    logger.debug(f"Loaded metadata table with columns: {df.columns}")
     logger.info(f"Metadata table shape: {df.shape}")
 
     # Apply filters from interactive components
@@ -563,112 +770,18 @@ def get_samples_from_metadata_filter(
         column_name = comp_metadata.get("column_name")
         filter_values = comp_data.get("value", [])
 
-        if column_name and filter_values and column_name in df.columns:
-            logger.info(f"Filtering {column_name} = {filter_values}")
+        if not (column_name and filter_values and column_name in df.columns):
+            continue
 
-            # Get column dtype to handle type-specific filtering
-            column_dtype = df[column_name].dtype
+        logger.info(f"Filtering {column_name} = {filter_values}")
+        column_dtype = df[column_name].dtype
 
-            # Strategy 1: Handle Date/Datetime columns by parsing filter values as dates
-            if column_dtype in (pl.Date, pl.Datetime):
-                # Check if this is the default range (no actual filtering needed)
-                default_state = comp_metadata.get("default_state", {})
-                default_range = default_state.get("default_range")
-
-                # If filter_values equals default_range, skip filtering
-                if default_range and filter_values == default_range:
-                    logger.debug(
-                        f"Date filter '{column_name}' at default range {default_range} - "
-                        "skipping (not an active filter)"
-                    )
-                    continue  # Skip to next component - no filtering for this column
-
-                # Otherwise, apply the date filter (user has changed from default)
-                try:
-                    # Parse string filter values as Python date objects (format: YYYY-MM-DD)
-                    # Polars can compare Date columns directly with Python date objects
-                    parsed_dates = [
-                        datetime.strptime(str(v), "%Y-%m-%d").date() for v in filter_values
-                    ]
-                    # Filter using native Date comparison with Python date objects
-                    df = df.filter(pl.col(column_name).is_in(parsed_dates))
-                    logger.info(f"After filtering: {df.shape[0]} rows remaining (Date parsing)")
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to filter Date column '{column_name}' with date parsing: {e}"
-                    )
-                    # Fallback to string casting with explicit date format
-                    try:
-                        # Cast Date to string format YYYY-MM-DD to match filter values
-                        string_values = [str(v) for v in filter_values]
-                        # Use dt.strftime to ensure consistent date string format
-                        df = df.filter(
-                            pl.col(column_name).dt.strftime("%Y-%m-%d").is_in(string_values)
-                        )
-                        logger.info(
-                            f"After filtering: {df.shape[0]} rows remaining (Date as formatted string)"
-                        )
-                    except Exception as e2:
-                        logger.error(
-                            f"All Date filtering methods failed on '{column_name}': {e2}. Skipping filter."
-                        )
-
-            # Strategy 2: For non-Date columns, detect range vs discrete filtering
-            else:
-                # Check if this is a range filter (2-element numeric list from RangeSlider)
-                is_range_filter = (
-                    isinstance(filter_values, list)
-                    and len(filter_values) == 2
-                    and all(isinstance(v, (int, float)) for v in filter_values)
-                )
-
-                if is_range_filter:
-                    # Check if this is the default range (no actual filtering needed)
-                    default_state = comp_metadata.get("default_state", {})
-                    default_range = default_state.get("default_range")
-
-                    # If filter_values equals default_range, skip filtering
-                    if default_range and filter_values == default_range:
-                        logger.debug(
-                            f"Range filter '{column_name}' at default range {default_range} - "
-                            "skipping (not an active filter)"
-                        )
-                        continue  # Skip to next component - no filtering for this column
-
-                    # Range filtering: filter rows WHERE column BETWEEN min AND max
-                    min_val, max_val = filter_values[0], filter_values[1]
-                    logger.info(f"Applying range filter: {min_val} <= {column_name} <= {max_val}")
-                    try:
-                        df = df.filter(
-                            (pl.col(column_name) >= min_val) & (pl.col(column_name) <= max_val)
-                        )
-                        logger.info(f"After filtering: {df.shape[0]} rows remaining (range filter)")
-                    except Exception as e:
-                        logger.error(
-                            f"Range filtering failed on '{column_name}': {e}. Skipping filter."
-                        )
-                else:
-                    # Discrete value filtering: use .is_in() for exact matches
-                    logger.info(f"Applying discrete filter: {column_name} in {filter_values}")
-                    try:
-                        df = df.filter(df[column_name].is_in(filter_values))
-                        logger.info(
-                            f"After filtering: {df.shape[0]} rows remaining (discrete filter)"
-                        )
-                    except Exception as e:
-                        logger.warning(f"Direct filtering failed on '{column_name}': {e}")
-                        # Fallback: try string casting for type safety (e.g., int vs string mismatch)
-                        try:
-                            string_values = [str(v) for v in filter_values]
-                            df = df.filter(df[column_name].cast(pl.String).is_in(string_values))
-                            logger.info(
-                                f"After filtering: {df.shape[0]} rows remaining (string casting fallback)"
-                            )
-                        except Exception as e2:
-                            logger.error(
-                                f"All filtering methods failed on '{column_name}': {e2}. Skipping filter."
-                            )
-                            # Skip this filter and continue with unfiltered data for this column
+        if column_dtype in (pl.Date, pl.Datetime):
+            df = _filter_date_column(df, column_name, filter_values, comp_metadata)
+        elif _is_range_filter(filter_values):
+            df = _filter_range_column(df, column_name, filter_values, comp_metadata)
+        else:
+            df = _filter_discrete_column(df, column_name, filter_values)
 
     # Extract sample names from join column
     if join_column not in df.columns:
@@ -703,7 +816,7 @@ def create_sample_filter_patch(selected_samples, metadata=None):
     if not selected_samples:
         return None
 
-    logger.info(f"Creating sample filter patch for {len(selected_samples)} selected samples")
+    logger.debug(f"Creating sample filter patch for {len(selected_samples)} selected samples")
 
     # Create a patch that will update trace visibility
     # Note: We can't determine trace types without the figure, so we need to use
@@ -720,18 +833,240 @@ def create_sample_filter_patch(selected_samples, metadata=None):
     return patch
 
 
-def patch_multiqc_figures(figures, selected_samples, metadata=None, trace_metadata=None):
-    """
-    Apply sample filtering to MultiQC figures based on interactive selections.
+def _sample_matches_fuzzy(y_sample: str, selected_samples_set: set[str]) -> bool:
+    """Check if a heatmap Y-axis sample matches any selected sample.
+
+    Supports fuzzy matching for sample variants:
+    - Direct match
+    - y_sample is canonical and variants are selected (e.g., "SRR123" matches "SRR123_1")
+    - y_sample is variant and canonical is selected (e.g., "SRR123_1" matches "SRR123")
 
     Args:
-        figures: List of Plotly figure objects to patch
-        selected_samples: List of selected sample names for filtering
-        metadata: Optional metadata dictionary with plot information
-        trace_metadata: Original trace metadata with x, y, z arrays and orientation
+        y_sample: The sample name from the heatmap Y-axis.
+        selected_samples_set: Set of selected sample names.
 
     Returns:
-        List of patched figure objects
+        True if the sample should be included based on fuzzy matching.
+    """
+    if y_sample in selected_samples_set:
+        return True
+
+    for selected in selected_samples_set:
+        # y_sample is canonical, selected is variant
+        if selected.startswith(y_sample + "_") or selected.startswith(y_sample + "-"):
+            return True
+        # y_sample is variant, selected is canonical
+        if y_sample.startswith(selected + "_") or y_sample.startswith(selected + "-"):
+            return True
+
+    return False
+
+
+def _get_filtered_indices_for_bar(
+    sample_axis: list,
+    value_axis: list,
+    selected_samples: list[str],
+) -> list[int]:
+    """Get filtered indices for bar chart based on sample selection.
+
+    Args:
+        sample_axis: The axis containing sample names (X for vertical, Y for horizontal).
+        value_axis: The corresponding value axis.
+        selected_samples: List of selected sample names.
+
+    Returns:
+        List of indices to keep after filtering.
+    """
+    return [
+        idx
+        for idx, sample in enumerate(sample_axis)
+        if sample in selected_samples
+        and idx < len(value_axis)
+        and str(value_axis[idx]).lower() != "nan"
+        and value_axis[idx] is not None
+    ]
+
+
+def _patch_bar_trace(
+    patched_fig: dict,
+    trace_idx: int,
+    original_x: list,
+    original_y: list,
+    orientation: str,
+    selected_samples: list[str],
+) -> None:
+    """Patch a bar chart trace with filtered sample data.
+
+    Args:
+        patched_fig: The figure dict to patch (modified in place).
+        trace_idx: Index of the trace to patch.
+        original_x: Original X-axis data.
+        original_y: Original Y-axis data.
+        orientation: Bar orientation ('h' for horizontal, 'v' for vertical).
+        selected_samples: List of selected sample names.
+    """
+    if orientation == "h":
+        # Horizontal bars: samples in Y-axis
+        if not (original_y and original_x):
+            return
+        filtered_indices = _get_filtered_indices_for_bar(original_y, original_x, selected_samples)
+        if filtered_indices:
+            new_y = [original_y[idx] for idx in filtered_indices]
+            new_x = [original_x[idx] for idx in filtered_indices]
+            patched_fig["data"][trace_idx]["y"] = (
+                tuple(new_y) if isinstance(original_y, tuple) else new_y
+            )
+            patched_fig["data"][trace_idx]["x"] = (
+                tuple(new_x) if isinstance(original_x, tuple) else new_x
+            )
+            patched_fig["data"][trace_idx]["visible"] = True
+            logger.info(f"      Filtered horizontal bar chart: {len(new_y)} samples")
+        else:
+            patched_fig["data"][trace_idx]["visible"] = False
+            logger.debug("      No valid data after filtering - hiding trace")
+    else:
+        # Vertical bars: samples in X-axis
+        if not (original_x and original_y):
+            return
+        filtered_indices = _get_filtered_indices_for_bar(original_x, original_y, selected_samples)
+        if filtered_indices:
+            new_x = [original_x[idx] for idx in filtered_indices]
+            new_y = [original_y[idx] for idx in filtered_indices]
+            patched_fig["data"][trace_idx]["x"] = (
+                tuple(new_x) if isinstance(original_x, tuple) else new_x
+            )
+            patched_fig["data"][trace_idx]["y"] = (
+                tuple(new_y) if isinstance(original_y, tuple) else new_y
+            )
+            patched_fig["data"][trace_idx]["visible"] = True
+            logger.info(f"      Filtered vertical bar chart: {len(new_x)} samples")
+        else:
+            patched_fig["data"][trace_idx]["visible"] = False
+            logger.debug("      No valid data after filtering - hiding trace")
+
+
+def _patch_heatmap_trace(
+    fig: dict,
+    trace_idx: int,
+    original_x: list,
+    original_y: list,
+    original_z: list,
+    selected_samples: list[str],
+) -> Optional[dict]:
+    """Patch a heatmap trace with filtered sample data.
+
+    Args:
+        fig: The original figure dict.
+        trace_idx: Index of the trace to patch.
+        original_x: Original X-axis data.
+        original_y: Original Y-axis data.
+        original_z: Original Z-axis data (2D array).
+        selected_samples: List of selected sample names.
+
+    Returns:
+        A new figure dict with filtered heatmap, or None if no data matches.
+    """
+    if not (original_y and original_z):
+        if original_y and not original_z:
+            logger.error("      Heatmap has Y data but no Z data in trace metadata - cannot filter")
+        return None
+
+    logger.info(
+        f"      DEBUG: selected_samples: {list(selected_samples)[:5]}... "
+        f"(total: {len(selected_samples)})"
+    )
+
+    selected_samples_set = set(selected_samples)
+    filtered_indices = [
+        idx
+        for idx, sample in enumerate(original_y)
+        if _sample_matches_fuzzy(sample, selected_samples_set)
+    ]
+
+    logger.info(
+        f"      DEBUG: Matched samples after fuzzy matching: "
+        f"{len(filtered_indices)}/{len(original_y)}"
+    )
+
+    if not filtered_indices:
+        logger.warning("      No valid data after filtering - hiding heatmap")
+        return None
+
+    # Build filtered figure
+    full_fig = copy.deepcopy(fig)
+    new_y = [original_y[idx] for idx in filtered_indices]
+    new_z = [original_z[idx] for idx in filtered_indices]
+
+    full_fig["data"][trace_idx]["y"] = tuple(new_y) if isinstance(original_y, tuple) else new_y
+    full_fig["data"][trace_idx]["z"] = tuple(new_z) if isinstance(original_z, tuple) else new_z
+
+    if original_x:
+        full_fig["data"][trace_idx]["x"] = (
+            tuple(original_x) if isinstance(original_x, tuple) else original_x
+        )
+
+    # Configure Y-axis for proper display
+    if "layout" in full_fig and "yaxis" in full_fig["layout"]:
+        full_fig["layout"]["yaxis"].pop("tickvals", None)
+        full_fig["layout"]["yaxis"].pop("ticktext", None)
+        full_fig["layout"]["yaxis"]["type"] = "category"
+
+    logger.info(
+        f"      Heatmap rebuilt from trace metadata: {len(new_y)} samples, {len(new_z)} Z-rows"
+    )
+    return full_fig
+
+
+def _get_trace_data(trace: dict, original_traces: list, trace_idx: int) -> tuple:
+    """Extract original trace data from metadata or current trace.
+
+    Args:
+        trace: Current trace dict.
+        original_traces: List of original trace metadata dicts.
+        trace_idx: Index of the trace.
+
+    Returns:
+        Tuple of (original_x, original_y, original_z, orientation).
+    """
+    if trace_idx < len(original_traces):
+        trace_info = original_traces[trace_idx]
+        original_x = trace_info.get("original_x", [])
+        original_y = trace_info.get("original_y", [])
+        original_z = trace_info.get("original_z", [])
+        orientation = trace_info.get("orientation", "v")
+        logger.debug(
+            f"    Trace {trace_idx}: Using stored original data - "
+            f"x_len={len(original_x)}, y_len={len(original_y)}, orientation={orientation}"
+        )
+    else:
+        original_x = trace.get("x", [])
+        original_y = trace.get("y", [])
+        original_z = trace.get("z", [])
+        orientation = trace.get("orientation", "v")
+        logger.debug(f"    Trace {trace_idx}: Using current trace data (no stored metadata)")
+
+    return original_x, original_y, original_z, orientation
+
+
+def patch_multiqc_figures(
+    figures: list[dict],
+    selected_samples: list[str],
+    metadata: Optional[dict] = None,
+    trace_metadata: Optional[dict] = None,
+) -> list[dict]:
+    """Apply sample filtering to MultiQC figures based on interactive selections.
+
+    Supports filtering bar charts, heatmaps, and scatter/line plots based on
+    selected sample names.
+
+    Args:
+        figures: List of Plotly figure objects to patch.
+        selected_samples: List of selected sample names for filtering.
+        metadata: Optional metadata dictionary with plot information.
+        trace_metadata: Original trace metadata with x, y, z arrays and orientation.
+
+    Returns:
+        List of patched figure objects.
     """
     if not figures or not selected_samples:
         return figures
@@ -739,231 +1074,44 @@ def patch_multiqc_figures(figures, selected_samples, metadata=None, trace_metada
     logger.info(f"Patching MultiQC figures with {len(selected_samples)} selected samples")
     patched_figures = []
 
+    original_traces = []
+    if trace_metadata and "original_data" in trace_metadata:
+        original_traces = trace_metadata["original_data"]
+        logger.debug(f"  Using stored trace metadata with {len(original_traces)} traces")
+
     for fig_idx, fig in enumerate(figures):
-        logger.info(f"Processing figure {fig_idx}")
+        logger.debug(f"Processing figure {fig_idx}")
         patched_fig = copy.deepcopy(fig)
         figure_replaced = False
-
-        # Get all samples from metadata if available
-        all_samples = metadata.get("samples", []) if metadata else []
-        if not all_samples:
-            # Fallback: try to extract samples from figure data
-            all_samples = []
-            for trace in fig.get("data", []):
-                if "x" in trace and isinstance(trace["x"], (list, tuple)):
-                    all_samples.extend(trace["x"])
-                if "y" in trace and isinstance(trace["y"], (list, tuple)):
-                    all_samples.extend(trace["y"])
-            all_samples = list(set(all_samples))
-
-        logger.info(f"  Figure has {len(all_samples)} total samples")
-        logger.info(f"  Selected samples: {selected_samples}")
-
-        # Get original trace data from metadata (critical for proper patching)
-        original_traces = []
-        if trace_metadata and "original_data" in trace_metadata:
-            original_traces = trace_metadata["original_data"]
-            logger.debug(f"  Using stored trace metadata with {len(original_traces)} traces")
 
         for i, trace in enumerate(patched_fig.get("data", [])):
             trace_type = trace.get("type", "").lower()
             trace_name = trace.get("name", "")
-
-            # Get original data from trace metadata if available, otherwise use current trace
-            if i < len(original_traces):
-                trace_info = original_traces[i]
-                original_x = trace_info.get("original_x", [])
-                original_y = trace_info.get("original_y", [])
-                original_z = trace_info.get("original_z", [])
-                orientation = trace_info.get("orientation", "v")
-                logger.debug(
-                    f"    Trace {i}: Using stored original data - "
-                    f"x_len={len(original_x)}, y_len={len(original_y)}, orientation={orientation}"
-                )
-            else:
-                # Fallback to current trace data
-                original_x = trace.get("x", [])
-                original_y = trace.get("y", [])
-                original_z = trace.get("z", [])
-                orientation = trace.get("orientation", "v")
-                logger.debug(f"    Trace {i}: Using current trace data (no stored metadata)")
-
             logger.info(f"    Trace {i}: type='{trace_type}', name='{trace_name}'")
 
-            # Method 1: Handle bar charts - check orientation to determine sample axis
+            original_x, original_y, original_z, orientation = _get_trace_data(
+                trace, original_traces, i
+            )
+
             if trace_type == "bar":
-                logger.debug(f"      Processing bar plot with orientation '{orientation}'")
-                if orientation == "h":
-                    # Horizontal bars: samples are in Y-axis
-                    if original_y and original_x:
-                        # Filter from original data based on selected samples AND valid X values
-                        filtered_indices = [
-                            idx
-                            for idx, sample in enumerate(original_y)
-                            if sample in selected_samples
-                            and idx < len(original_x)
-                            and str(original_x[idx]).lower() != "nan"
-                            and original_x[idx] is not None
-                        ]
-                        if filtered_indices:
-                            new_y = [original_y[idx] for idx in filtered_indices]
-                            new_x = [original_x[idx] for idx in filtered_indices]
-                            patched_fig["data"][i]["y"] = (
-                                tuple(new_y) if isinstance(original_y, tuple) else new_y
-                            )
-                            patched_fig["data"][i]["x"] = (
-                                tuple(new_x) if isinstance(original_x, tuple) else new_x
-                            )
-                            patched_fig["data"][i]["visible"] = True
-                            logger.info(
-                                f"      Filtered horizontal bar chart: {len(new_y)} samples"
-                            )
-                        else:
-                            patched_fig["data"][i]["visible"] = False
-                            logger.debug("      No valid data after filtering - hiding trace")
-                else:
-                    # Vertical bars: samples are in X-axis
-                    if original_x and original_y:
-                        # Filter from original data based on selected samples AND valid Y values
-                        filtered_indices = [
-                            idx
-                            for idx, sample in enumerate(original_x)
-                            if sample in selected_samples
-                            and idx < len(original_y)
-                            and str(original_y[idx]).lower() != "nan"
-                            and original_y[idx] is not None
-                        ]
-                        if filtered_indices:
-                            new_x = [original_x[idx] for idx in filtered_indices]
-                            new_y = [original_y[idx] for idx in filtered_indices]
-                            patched_fig["data"][i]["x"] = (
-                                tuple(new_x) if isinstance(original_x, tuple) else new_x
-                            )
-                            patched_fig["data"][i]["y"] = (
-                                tuple(new_y) if isinstance(original_y, tuple) else new_y
-                            )
-                            patched_fig["data"][i]["visible"] = True
-                            logger.info(f"      Filtered vertical bar chart: {len(new_x)} samples")
-                        else:
-                            patched_fig["data"][i]["visible"] = False
-                            logger.debug("      No valid data after filtering - hiding trace")
+                _patch_bar_trace(
+                    patched_fig, i, original_x, original_y, orientation, selected_samples
+                )
 
-            # Method 2: Handle heatmaps - Return full figure (Patch doesn't handle Y-axis properly)
             elif trace_type == "heatmap":
-                logger.info("      Processing heatmap - using full figure replacement")
-                if original_y and original_z:
-                    # DIAGNOSTIC: Log sample names and filtering details
-                    logger.info(
-                        f"      DEBUG: original_y samples: {original_y[:5]}... (total: {len(original_y)})"
-                    )
-                    logger.info(
-                        f"      DEBUG: selected_samples: {list(selected_samples)[:5]}... (total: {len(selected_samples)})"
-                    )
+                logger.debug("      Processing heatmap - using full figure replacement")
+                full_fig = _patch_heatmap_trace(
+                    fig, i, original_x, original_y, original_z, selected_samples
+                )
+                if full_fig:
+                    patched_figures.append(full_fig)
+                    figure_replaced = True
+                    break
+                else:
+                    patched_fig["data"][i]["visible"] = original_y and not original_z
 
-                    # Convert selected_samples to a set for faster lookup
-                    selected_samples_set = set(selected_samples)
-
-                    # CRITICAL FIX: Heatmaps may use canonical names while selected_samples has variants
-                    # Check if Y-axis sample name is either:
-                    # 1. Directly in selected_samples (exact match)
-                    # 2. A prefix match for any selected sample (e.g., "SRR10070130" matches "SRR10070130_1")
-                    # 3. Any selected sample is a variant of the Y-axis sample
-                    def sample_matches(y_sample, selected_set):
-                        """Check if a heatmap Y-axis sample should be included based on selected samples."""
-                        # Direct match
-                        if y_sample in selected_set:
-                            return True
-
-                        # Check if y_sample is a canonical name and any variants are selected
-                        # e.g., y_sample="SRR10070130" matches selected="SRR10070130_1" or "SRR10070130_2"
-                        for selected in selected_set:
-                            if selected.startswith(y_sample + "_") or selected.startswith(
-                                y_sample + "-"
-                            ):
-                                return True
-
-                        # Check if any selected sample is the canonical form of y_sample
-                        # e.g., y_sample="SRR10070130_1" matches selected="SRR10070130"
-                        for selected in selected_set:
-                            if y_sample.startswith(selected + "_") or y_sample.startswith(
-                                selected + "-"
-                            ):
-                                return True
-
-                        return False
-
-                    # Always filter from original data (even when restoring all samples)
-                    # CRITICAL: We must rebuild from trace_metadata, not copy current_figure
-                    # because current_figure may be in a filtered state from previous operations
-                    filtered_indices = [
-                        idx
-                        for idx, sample in enumerate(original_y)
-                        if sample_matches(sample, selected_samples_set)
-                    ]
-
-                    logger.info(
-                        f"      DEBUG: Matched samples after fuzzy matching: {len(filtered_indices)}/{len(original_y)}"
-                    )
-                    if filtered_indices:
-                        matched_samples = [original_y[idx] for idx in filtered_indices[:5]]
-                        logger.info(f"      DEBUG: First 5 matched Y samples: {matched_samples}")
-                    logger.info(
-                        f"      Filtering heatmap: {len(filtered_indices)}/{len(original_y)} samples selected"
-                    )
-
-                    if filtered_indices:
-                        # Start from current figure structure but rebuild data from original trace metadata
-                        full_fig = copy.deepcopy(fig)
-
-                        # Rebuild Y-axis from original metadata (filtered)
-                        new_y = [original_y[idx] for idx in filtered_indices]
-                        full_fig["data"][i]["y"] = (
-                            tuple(new_y) if isinstance(original_y, tuple) else new_y
-                        )
-
-                        # CRITICAL FIX: Rebuild Z-data from ORIGINAL trace metadata (not current figure)
-                        # This ensures Y and Z dimensions match after filtering
-                        new_z = [original_z[idx] for idx in filtered_indices]
-                        full_fig["data"][i]["z"] = (
-                            tuple(new_z) if isinstance(original_z, tuple) else new_z
-                        )
-
-                        # Restore original X-axis (typically doesn't need filtering for heatmaps)
-                        if original_x:
-                            full_fig["data"][i]["x"] = (
-                                tuple(original_x) if isinstance(original_x, tuple) else original_x
-                            )
-
-                        # Ensure proper heatmap axis configuration
-                        if "layout" in full_fig and "yaxis" in full_fig["layout"]:
-                            # Clear any pre-set tickvals/ticktext that might override the y data
-                            if "tickvals" in full_fig["layout"]["yaxis"]:
-                                del full_fig["layout"]["yaxis"]["tickvals"]
-                            if "ticktext" in full_fig["layout"]["yaxis"]:
-                                del full_fig["layout"]["yaxis"]["ticktext"]
-                            # Ensure y-axis shows all ticks
-                            full_fig["layout"]["yaxis"]["type"] = "category"
-
-                        logger.info(
-                            f"      ✅ Heatmap rebuilt from trace metadata: {len(new_y)} samples, "
-                            f"{len(new_z)} Z-rows"
-                        )
-                        patched_figures.append(full_fig)
-                        figure_replaced = True
-                        break  # Skip normal patch processing for this figure
-                    else:
-                        logger.warning("      No valid data after filtering - hiding heatmap")
-                        patched_fig["data"][i]["visible"] = False
-                elif original_y and not original_z:
-                    logger.error(
-                        "      Heatmap has Y data but no Z data in trace metadata - cannot filter"
-                    )
-                    patched_fig["data"][i]["visible"] = True  # Keep visible with original data
-
-            # Method 3: Handle other plot types (scatter, line, etc.)
             else:
-                # For scatter plots and others, check if trace name matches a sample
-                # Show trace only if its name matches one of the selected samples
+                # Scatter, line, and other plot types
                 trace_matches_selected = any(sample in trace_name for sample in selected_samples)
                 patched_fig["data"][i]["visible"] = trace_matches_selected
                 logger.info(
@@ -971,7 +1119,6 @@ def patch_multiqc_figures(figures, selected_samples, metadata=None, trace_metada
                     f"(matches selected samples: {trace_matches_selected})"
                 )
 
-        # Only append the patched figure if we didn't replace it with a full figure
         if not figure_replaced:
             patched_figures.append(patched_fig)
 
@@ -1328,7 +1475,6 @@ def register_callbacks_multiqc_component(app):
         patch = Patch()
         patch.layout.template = template
 
-        logger.info(f"🎨 MultiQC THEME PATCH: Applied {template_name} (theme_data: {theme_data})")
         return patch
 
     # NOTE: VIEW MODE rendering callback (render_multiqc_from_trigger) has been moved to
@@ -1336,86 +1482,3 @@ def register_callbacks_multiqc_component(app):
     # The callback handles:
     # - Input: multiqc-trigger
     # - Output: multiqc-graph (figure) + multiqc-trace-metadata (data)
-
-    # # Early exit if basic requirements not met
-    # if not selected_module or not selected_plot or not s3_locations or not interactive_values:
-    #     return dash.no_update
-
-    # # Check if this workflow has joins configured
-    # workflow_id = stored_metadata.get("workflow_id") if stored_metadata else None
-    # if not workflow_id:
-    #     return dash.no_update
-
-    # # Get authentication token
-    # token = local_data.get("access_token") if local_data else None
-    # if not token:
-    #     logger.warning("No access token available for MultiQC patching")
-    #     return dash.no_update
-
-    # try:
-    #     # Check for joins in this workflow
-    #     joins_dict = return_joins_dict(workflow_id, [stored_metadata], token)
-    #     if not joins_dict:
-    #         logger.info("No joins configured for workflow - skipping MultiQC patching")
-    #         return dash.no_update
-
-    #     logger.info(f"MultiQC patching triggered by interactive values: {interactive_values}")
-    #     logger.info(f"Joins detected for workflow {workflow_id}: {joins_dict}")
-
-    #     # Extract selected samples from interactive values
-    #     # Interactive values structure: {dc_id: {column: [selected_values]}}
-    #     selected_samples = []
-    #     for dc_filters in interactive_values.values():
-    #         for column_name, selected_values in dc_filters.items():
-    #             # Look for sample-related columns (common names)
-    #             if column_name.lower() in ["sample", "sample_id", "sample_name", "samples"]:
-    #                 selected_samples.extend(selected_values)
-
-    #     if not selected_samples:
-    #         logger.info(
-    #             "No sample selections found in interactive values - using original plot"
-    #         )
-    #         return dash.no_update
-
-    #     logger.info(f"Found {len(selected_samples)} selected samples for filtering")
-
-    #     # Create the original plot
-    #     fig = create_multiqc_plot(
-    #         s3_locations=s3_locations,
-    #         module=selected_module,
-    #         plot=selected_plot,
-    #         dataset_id=selected_dataset,
-    #     )
-
-    #     # Apply patching to filter the plot
-    #     patched_figures = patch_multiqc_figures([fig], selected_samples, metadata)
-
-    #     # Return the patched plot
-    #     if patched_figures:
-    #         return dcc.Graph(
-    #             figure=patched_figures[0],
-    #             style={"height": "500px"},
-    #             config={"displayModeBar": True, "responsive": True},
-    #         )
-    #     else:
-    #         return dmc.Center(
-    #             [dmc.Text("No data available after filtering", c="gray")],
-    #             style={"height": "400px"},
-    #         )
-
-    # except Exception as e:
-    #     logger.error(f"Error patching MultiQC plot: {e}")
-    #     # Return original plot on error
-    #     try:
-    #         fig = create_multiqc_plot(
-    #             s3_locations=s3_locations,
-    #             module=selected_module,
-    #             plot=selected_plot,
-    #             dataset_id=selected_dataset,
-    #         )
-    #         return dcc.Graph(figure=fig, style={"height": "500px"})
-    #     except Exception:
-    #         return dmc.Center(
-    #             [dmc.Text("Error loading plot", c="red")],
-    #             style={"height": "400px"},
-    #         )

@@ -23,6 +23,7 @@ from depictio.api.v1.endpoints.auth_endpoints.utils import (
     validate_oauth_state,
 )
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _add_token
+from depictio.models.models.base import PyObjectId
 from depictio.models.models.google_oauth import (
     GoogleOAuthLoginResponse,
     GoogleOAuthResponse,
@@ -131,7 +132,11 @@ async def google_oauth_callback(
         logger.info(f"Creating authentication token for user: {user.id}")
         token_name = f"google_oauth_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-        token_data_obj = TokenData(name=token_name, token_lifetime="short-lived", sub=user.id)
+        if user.id is None:
+            raise HTTPException(status_code=500, detail="User ID is not set")
+        # Convert user.id to PyObjectId for TokenData
+        user_id = PyObjectId(str(user.id))
+        token_data_obj = TokenData(name=token_name, token_lifetime="short-lived", sub=user_id)
 
         auth_token = await _add_token(token_data_obj)
 

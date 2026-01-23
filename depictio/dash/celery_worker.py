@@ -26,18 +26,15 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.celery_app import celery_app
 
 logger.info("=" * 80)
-logger.info("🔧 CELERY WORKER: Initializing task discovery...")
 logger.info("=" * 80)
 
 # Import flask_dispatcher to trigger app creation and callback registration
 # This imports celery_app (circular but safe because celery_app is already loaded above)
 # and creates the three Dash apps with background callbacks registered
-logger.info("🔧 CELERY WORKER: Importing flask_dispatcher for task discovery...")
 
 try:
     from depictio.dash.flask_dispatcher import app_editor, app_management, app_viewer
 
-    logger.info("✅ CELERY WORKER: Flask dispatcher imported successfully")
     logger.info("   - Management app (no background tasks): %s", app_management)
     logger.info("   - Viewer app (lite, with background tasks): %s", app_viewer)
     logger.info("   - Editor app (full, with background tasks): %s", app_editor)
@@ -53,11 +50,10 @@ try:
     ]
 
     logger.info("=" * 80)
-    logger.info("✅ CELERY WORKER: Task registration complete")
     logger.info("=" * 80)
-    logger.info(f"   Total tasks registered: {len(registered_tasks)}")
+    logger.debug(f"   Total tasks registered: {len(registered_tasks)}")
     logger.info(f"   Background callback tasks: {len(background_callback_tasks)}")
-    logger.info("   Background tasks from: Viewer app (data loading) + Editor app (full)")
+    logger.debug("   Background tasks from: Viewer app (data loading) + Editor app (full)")
     logger.info("=" * 80)
 
     if background_callback_tasks:

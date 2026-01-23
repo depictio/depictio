@@ -39,11 +39,75 @@ from dash import Input, Output, State, no_update
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 
+# Cache TTL constants (in seconds)
+DASHBOARD_CACHE_TTL = 600  # 10 minutes
+PROJECT_CACHE_TTL = 600  # 10 minutes
+
+
+def _is_cache_valid(
+    cached_data: dict | None, cache_key_field: str, expected_key: str, ttl: int
+) -> bool:
+    """
+    Check if cached data is still valid.
+
+    Args:
+        cached_data: Cached data dictionary with timestamp and cache key.
+        cache_key_field: Field name containing the cache key (e.g., '_id').
+        expected_key: Expected cache key value.
+        ttl: Time-to-live in seconds.
+
+    Returns:
+        True if cache is valid (same key and within TTL), False otherwise.
+    """
+    if not cached_data:
+        return False
+
+    current_time = time.time()
+    cache_timestamp = cached_data.get("timestamp", 0)
+    cache_age = current_time - cache_timestamp
+
+    # Navigate to nested field if needed (e.g., "dashboard._id" or "project._id")
+    cached_key = cached_data
+    for field in cache_key_field.split("."):
+        if isinstance(cached_key, dict):
+            cached_key = cached_key.get(field)
+        else:
+            cached_key = None
+            break
+
+    return str(cached_key) == str(expected_key) and cache_age < ttl
+
+
+def _extract_dashboard_id(pathname: str) -> str | None:
+    """
+    Extract dashboard_id from URL pathname.
+
+    Args:
+        pathname: URL pathname (e.g., '/dashboard/abc123' or '/dashboard-edit/abc123').
+
+    Returns:
+        Dashboard ID string, or None if extraction fails.
+    """
+    if not pathname:
+        return None
+
+    try:
+        if "/dashboard-edit/" in pathname:
+            dashboard_id = pathname.split("/dashboard-edit/")[1].split("/")[0]
+        elif "/dashboard/" in pathname:
+            dashboard_id = pathname.split("/dashboard/")[1].split("/")[0]
+        else:
+            return None
+
+        if not dashboard_id or dashboard_id in ("dashboard", "dashboard-edit"):
+            return None
+        return dashboard_id
+    except (IndexError, ValueError):
+        return None
+
 
 def register_consolidated_api_callbacks(app):
     """Register consolidated API callbacks to reduce redundant requests."""
-
-    logger.info("🔧 CONSOLIDATED API: Registering async callback for non-blocking HTTP requests...")
 
     # DISABLED: This callback was causing double updates to project-metadata-store during normal dashboard load.
     # The populate_project_metadata_from_dashboard callback (line 280) provides the same functionality with
@@ -86,34 +150,27 @@ def register_consolidated_api_callbacks(app):
     #     NOTE: Server status is now handled entirely by clientside callback (sidebar.py)
     #     """
     #
-    #     logger.info(
     #         f"🚀 CONSOLIDATED CALLBACK TRIGGERED!!! - pathname: {pathname}, local_store: {bool(local_store)}"
     #     )
-    #     logger.info(
     #         f"🚀 CONSOLIDATED CALLBACK: local_store keys: {list(local_store.keys()) if local_store and isinstance(local_store, dict) else 'None or not dict'}"
     #     )
     #
     #     ctx = callback_context
     #     if ctx.triggered:
-    #         logger.info(f"🔧 CONSOLIDATED CALLBACK TRIGGER: {ctx.triggered[0]['prop_id']}")
-    #         logger.info(
     #             f"🔧 CONSOLIDATED CALLBACK: All triggers: {[t['prop_id'] for t in ctx.triggered]}"
     #         )
     #
     #         # Only accept local-store changes (periodic status checks now clientside)
     #         trigger_id = ctx.triggered[0]["prop_id"]
     #         if trigger_id != "local-store.data":
-    #             logger.info(f"🔧 CONSOLIDATED CALLBACK: Unexpected trigger {trigger_id}, skipping")
     #             return cached_project
     #
     #     # Skip auth page
     #     if pathname == "/auth":
-    #         logger.info("🔧 CONSOLIDATED CALLBACK: Skipping auth page")
     #         return no_update
     #
     #     # Check if we have a valid token
     #     if not local_store or not local_store.get("access_token"):
-    #         logger.info("🔧 CONSOLIDATED CALLBACK: No token found, returning None")
     #         return None
     #
     #     access_token = local_store["access_token"]
@@ -133,21 +190,15 @@ def register_consolidated_api_callbacks(app):
     #
     #     # If nothing needs updating, return cached data
     #     if not update_project:
-    #         logger.info("🔧 CONSOLIDATED CALLBACK: Using cached project data, no updates needed")
     #         return cached_project
     #
-    #     logger.info("🔄 Consolidated API: Updating project data")
     #     if update_project:
-    #         logger.info(
     #             f"🔄 Consolidated API: Will fetch project data for dashboard {dashboard_id}"
     #         )
-    #     logger.info("🔧 CONSOLIDATED CALLBACK: About to start async tasks")
-    #     logger.info("🚀 ASYNC MODE ENABLED: Using httpx.AsyncClient for non-blocking I/O")
     #
     #     async def fetch_project_data(token, dashboard_id):
     #         """Fetch project data with async HTTP client."""
     #         try:
-    #             logger.info("🔄 Consolidated API: Fetching project data (async)")
     #
     #             async with httpx.AsyncClient(timeout=5) as client:
     #                 response = await client.get(
@@ -163,11 +214,9 @@ def register_consolidated_api_callbacks(app):
     #                         "timestamp": current_time,
     #                     }
     #                 else:
-    #                     logger.warning(f"Project fetch failed with status {response.status_code}")
     #                     return None
     #
     #         except Exception as e:
-    #             logger.error(f"❌ Consolidated API: Failed to fetch project data: {e}")
     #             return None
     #
     #     # Execute async tasks with await
@@ -178,17 +227,13 @@ def register_consolidated_api_callbacks(app):
     #             project_result = await fetch_project_data(access_token, dashboard_id)
     #             if project_result:
     #                 new_project_data = project_result
-    #                 logger.info(f"✅ Consolidated API: Project data cached - {dashboard_id}")
     #         except Exception as e:
-    #             logger.error(f"❌ Project fetch exception: {e}")
     #
     #     if update_project:
-    #         logger.info(
     #             f"🔧 CONSOLIDATED CALLBACK: Returning updated data - project: {bool(new_project_data)}"
     #         )
     #         return new_project_data
     #
-    #     logger.info("🔧 CONSOLIDATED CALLBACK: No tasks executed, returning cached data")
     #     return cached_project
 
     logger.info(
@@ -216,46 +261,24 @@ def register_consolidated_api_callbacks(app):
         - Contains: Dashboard + stored_metadata (all components) + permissions
         - Session storage: Persists across page refreshes
         """
-        # Only process dashboard URLs (viewer and editor apps)
-        if not pathname or ("/dashboard/" not in pathname and "/dashboard-edit/" not in pathname):
+        dashboard_id = _extract_dashboard_id(pathname)
+        if not dashboard_id:
             return no_update
 
-        # Extract dashboard_id from pathname
-        try:
-            # Handle both /dashboard/{id} and /dashboard-edit/{id} formats
-            if "/dashboard-edit/" in pathname:
-                dashboard_id = pathname.split("/dashboard-edit/")[1].split("/")[0]
-            else:
-                dashboard_id = pathname.split("/dashboard/")[1].split("/")[0]
-
-            if not dashboard_id or dashboard_id in ("dashboard", "dashboard-edit"):
-                return no_update
-        except (IndexError, ValueError):
-            logger.warning(f"Failed to extract dashboard_id from pathname: {pathname}")
-            return no_update
-
-        # Check authentication
         if not local_store or not local_store.get("access_token"):
-            logger.info("🔧 DASHBOARD-INIT: No token found, skipping")
+            return no_update
+
+        if _is_cache_valid(
+            cached_dashboard_data, "dashboard._id", dashboard_id, DASHBOARD_CACHE_TTL
+        ):
+            cache_age = time.time() - cached_dashboard_data.get("timestamp", 0)
+            logger.info(
+                f"🔧 DASHBOARD-INIT: Using cached data for {dashboard_id} (age: {cache_age:.1f}s)"
+            )
             return no_update
 
         access_token = local_store["access_token"]
-        current_time = time.time()
-
-        # Check if cache is still valid (reuse same dashboard data, 10 min cache)
-        if cached_dashboard_data:
-            cached_dashboard_id = cached_dashboard_data.get("dashboard", {}).get("_id")
-            cache_timestamp = cached_dashboard_data.get("timestamp", 0)
-            cache_age = current_time - cache_timestamp
-
-            # If same dashboard and cache < 10 minutes, use cache
-            if str(cached_dashboard_id) == str(dashboard_id) and cache_age < 600:
-                logger.info(
-                    f"🔧 DASHBOARD-INIT: Using cached data for {dashboard_id} (age: {cache_age:.1f}s)"
-                )
-                return no_update
-
-        logger.info(f"📡 DASHBOARD-INIT: Fetching dashboard metadata for {dashboard_id}")
+        logger.debug(f"📡 DASHBOARD-INIT: Fetching dashboard metadata for {dashboard_id}")
 
         try:
             async with httpx.AsyncClient(timeout=10) as client:
@@ -264,32 +287,17 @@ def register_consolidated_api_callbacks(app):
                     headers={"Authorization": f"Bearer {access_token}"},
                 )
 
-                if response.status_code == 200:
-                    init_data = response.json()
-
-                    # Add cache metadata
-                    cached_data = {
-                        **init_data,
-                        "timestamp": current_time,
-                    }
-
-                    component_count = len(init_data.get("dashboard", {}).get("stored_metadata", []))
-                    logger.info(
-                        f"✅ DASHBOARD-INIT: Cached dashboard metadata with {component_count} components"
-                    )
-
-                    return cached_data
-                else:
-                    logger.warning(
-                        f"❌ DASHBOARD-INIT: Failed to fetch dashboard metadata: {response.status_code}"
-                    )
+                if response.status_code != 200:
+                    logger.warning(f"❌ DASHBOARD-INIT: Failed to fetch: {response.status_code}")
                     return no_update
 
-        except Exception as e:
-            logger.error(f"❌ DASHBOARD-INIT: Exception while fetching dashboard metadata: {e}")
-            return no_update
+                init_data = response.json()
+                cached_data = {**init_data, "timestamp": time.time()}
+                return cached_data
 
-    logger.info("✅ CONSOLIDATED API: Dashboard-init-data callback registered successfully!")
+        except Exception as e:
+            logger.error(f"❌ DASHBOARD-INIT: Exception while fetching: {e}")
+            return no_update
 
     # Project metadata callback (Cache 2: Project + delta_locations)
     @app.callback(
@@ -318,33 +326,22 @@ def register_consolidated_api_callbacks(app):
         if not dashboard_init_data:
             return no_update
 
-        # Extract project_id from dashboard init data
         project_id = dashboard_init_data.get("project_id")
         if not project_id:
             logger.warning("❌ PROJECT-METADATA: No project_id in dashboard-init-data")
             return no_update
 
-        # Check authentication
         if not local_store or not local_store.get("access_token"):
-            logger.info("🔧 PROJECT-METADATA: No token found, skipping")
+            return no_update
+
+        if _is_cache_valid(cached_project, "project._id", project_id, PROJECT_CACHE_TTL):
+            cache_age = time.time() - cached_project.get("timestamp", 0)
+            logger.info(
+                f"🔧 PROJECT-METADATA: Using cached data for project {project_id} (age: {cache_age:.1f}s)"
+            )
             return no_update
 
         access_token = local_store["access_token"]
-        current_time = time.time()
-
-        # Check if cache is still valid (same project, 10 min cache)
-        if cached_project:
-            cached_project_id = cached_project.get("project", {}).get("_id")
-            cache_timestamp = cached_project.get("timestamp", 0)
-            cache_age = current_time - cache_timestamp
-
-            # If same project and cache < 10 minutes, use cache
-            if str(cached_project_id) == str(project_id) and cache_age < 600:
-                logger.info(
-                    f"🔧 PROJECT-METADATA: Using cached data for project {project_id} (age: {cache_age:.1f}s)"
-                )
-                return no_update
-
         logger.info(
             f"📡 PROJECT-METADATA: Fetching project metadata with delta_locations for {project_id}"
         )
@@ -357,36 +354,18 @@ def register_consolidated_api_callbacks(app):
                     headers={"Authorization": f"Bearer {access_token}"},
                 )
 
-                if response.status_code == 200:
-                    project_data = response.json()
-
-                    # Cache with metadata
-                    cached_data = {
-                        "project": project_data,
-                        "cache_key": f"project_{project_id}",
-                        "timestamp": current_time,
-                    }
-
-                    # Count delta_locations for logging
-                    delta_count = 0
-                    for wf in project_data.get("workflows", []):
-                        for dc in wf.get("data_collections", []):
-                            if dc.get("delta_location"):
-                                delta_count += 1
-
-                    logger.info(
-                        f"✅ PROJECT-METADATA: Cached project with {delta_count} delta_locations (MongoDB $lookup join)"
-                    )
-
-                    return cached_data
-                else:
-                    logger.warning(
-                        f"❌ PROJECT-METADATA: Failed to fetch project: {response.status_code}"
-                    )
+                if response.status_code != 200:
+                    logger.warning(f"❌ PROJECT-METADATA: Failed to fetch: {response.status_code}")
                     return no_update
 
-        except Exception as e:
-            logger.error(f"❌ PROJECT-METADATA: Exception while fetching project: {e}")
-            return no_update
+                project_data = response.json()
+                cached_data = {
+                    "project": project_data,
+                    "cache_key": f"project_{project_id}",
+                    "timestamp": time.time(),
+                }
+                return cached_data
 
-    logger.info("✅ CONSOLIDATED API: Project-metadata-store callback registered successfully!")
+        except Exception as e:
+            logger.error(f"❌ PROJECT-METADATA: Exception while fetching: {e}")
+            return no_update

@@ -70,7 +70,6 @@ def register_card_edit_callback(app):
             str: Redirect pathname to dashboard after save
         """
         logger.info("=" * 80)
-        logger.info("🚀 CARD EDIT SAVE CALLBACK TRIGGERED")
         logger.info(f"   ctx.triggered_id: {ctx.triggered_id}")
         logger.info(f"   btn_clicks: {btn_clicks}")
 
@@ -84,7 +83,6 @@ def register_card_edit_callback(app):
         component_id = edit_context["component_id"]
         component_data = edit_context["component_data"]
 
-        logger.info(f"💾 CARD EDIT SAVE - Component: {component_id}")
         logger.info(f"   Dashboard: {dashboard_id}")
         logger.info(f"   Component type: {component_data.get('component_type')}")
         logger.info(
@@ -115,13 +113,13 @@ def register_card_edit_callback(app):
             "last_updated": datetime.now().isoformat(),
         }
 
-        logger.info(f"   Updated title: {updated_metadata['title']}")
-        logger.info(f"   Updated column: {updated_metadata['column_name']}")
-        logger.info(f"   Updated aggregation: {updated_metadata['aggregation']}")
-        logger.info(f"   Updated background_color: {updated_metadata['background_color']}")
-        logger.info(f"   Updated title_color: {updated_metadata['title_color']}")
-        logger.info(f"   Updated icon: {updated_metadata['icon_name']}")
-        logger.info(f"   Updated font_size: {updated_metadata['title_font_size']}")
+        logger.debug(f"   Updated title: {updated_metadata['title']}")
+        logger.debug(f"   Updated column: {updated_metadata['column_name']}")
+        logger.debug(f"   Updated aggregation: {updated_metadata['aggregation']}")
+        logger.debug(f"   Updated background_color: {updated_metadata['background_color']}")
+        logger.debug(f"   Updated title_color: {updated_metadata['title_color']}")
+        logger.debug(f"   Updated icon: {updated_metadata['icon_name']}")
+        logger.debug(f"   Updated font_size: {updated_metadata['title_font_size']}")
 
         # Get access token
         TOKEN = local_store["access_token"]
@@ -135,5 +133,3 @@ def register_card_edit_callback(app):
         redirect_url = save_card_to_dashboard(dashboard_id, updated_metadata, TOKEN, app_prefix)
 
         return redirect_url
-
-    logger.info("✅ Card edit save callback registered")

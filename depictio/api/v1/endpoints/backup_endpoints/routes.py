@@ -1,9 +1,11 @@
 import json
 import os
 from datetime import datetime
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from pymongo.collection import Collection
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -55,41 +57,17 @@ async def _create_mongodb_backup(current_user: User) -> dict:
     collections_backed_up = []
 
     # Define collections to backup with their exclusion criteria
+    # NOTE: Tokens excluded from backup/restore to avoid circular dependency issues
     collections_config = {
-        "users": {
-            "collection": users_collection,
-            "exclude_filter": {"is_temporary": True},  # Exclude temporary users
-            "name": "users",
-        },
-        # NOTE: Tokens excluded from backup/restore to avoid circular dependency issues
-        "projects": {
-            "collection": projects_collection,
-            "exclude_filter": {},  # Include all projects
-            "name": "projects",
-        },
-        "dashboards": {
-            "collection": dashboards_collection,
-            "exclude_filter": {},  # We'll filter dashboards owned by temp users
-            "name": "dashboards",
-        },
-        "data_collections": {
-            "collection": data_collections_collection,
-            "exclude_filter": {},
-            "name": "data_collections",
-        },
-        "workflows": {
-            "collection": workflows_collection,
-            "exclude_filter": {},
-            "name": "workflows",
-        },
-        "files": {"collection": files_collection, "exclude_filter": {}, "name": "files"},
-        "deltatables": {
-            "collection": deltatables_collection,
-            "exclude_filter": {},
-            "name": "deltatables",
-        },
-        "runs": {"collection": runs_collection, "exclude_filter": {}, "name": "runs"},
-        "groups": {"collection": groups_collection, "exclude_filter": {}, "name": "groups"},
+        "users": {"collection": users_collection, "exclude_filter": {"is_temporary": True}},
+        "projects": {"collection": projects_collection, "exclude_filter": {}},
+        "dashboards": {"collection": dashboards_collection, "exclude_filter": {}},
+        "data_collections": {"collection": data_collections_collection, "exclude_filter": {}},
+        "workflows": {"collection": workflows_collection, "exclude_filter": {}},
+        "files": {"collection": files_collection, "exclude_filter": {}},
+        "deltatables": {"collection": deltatables_collection, "exclude_filter": {}},
+        "runs": {"collection": runs_collection, "exclude_filter": {}},
+        "groups": {"collection": groups_collection, "exclude_filter": {}},
     }
 
     # First, get list of temporary user IDs to exclude their resources
@@ -98,12 +76,11 @@ async def _create_mongodb_backup(current_user: User) -> dict:
 
     logger.info(f"Found {len(temp_user_ids)} temporary users to exclude")
 
-    # Backup each collection
     for collection_name, config in collections_config.items():
-        logger.info(f"Backing up collection: {collection_name}")
-
-        # Apply base exclusion filter
-        base_filter = config["exclude_filter"].copy()
+        # Extract collection with proper type for type checker
+        collection = cast(Collection[dict[str, Any]], config["collection"])
+        exclude_filter = cast(dict[str, Any], config["exclude_filter"])
+        base_filter = exclude_filter.copy()
 
         # For dashboards, exclude those owned by temporary users
         if collection_name == "dashboards" and temp_user_ids:
@@ -112,10 +89,10 @@ async def _create_mongodb_backup(current_user: User) -> dict:
         # Get all documents (applying exclusions)
         if base_filter:
             # Count excluded documents
-            excluded_count = config["collection"].count_documents(
+            excluded_count = collection.count_documents(
                 {
                     "$or": [
-                        config["exclude_filter"],
+                        exclude_filter,
                         {"permissions.owners._id": {"$in": temp_user_ids}}
                         if collection_name == "dashboards"
                         else {},
@@ -124,33 +101,22 @@ async def _create_mongodb_backup(current_user: User) -> dict:
             )
             excluded_documents += excluded_count
 
-            # Get documents that are NOT excluded
             if collection_name == "dashboards" and temp_user_ids:
-                # Special handling for dashboards
                 documents = list(
-                    config["collection"].find(
-                        {
-                            "$and": [
-                                {"permissions.owners._id": {"$nin": temp_user_ids}},
-                                # Add any other exclusions if needed
-                            ]
-                        }
-                    )
+                    collection.find({"permissions.owners._id": {"$nin": temp_user_ids}})
                 )
             else:
                 # For other collections, use the normal exclude filter
                 exclude_conditions = []
-                if config["exclude_filter"]:
-                    exclude_conditions.append(config["exclude_filter"])
+                if exclude_filter:
+                    exclude_conditions.append(exclude_filter)
 
                 if exclude_conditions:
-                    # Get documents that DON'T match the exclusion criteria
-                    documents = list(config["collection"].find({"$nor": exclude_conditions}))
+                    documents = list(collection.find({"$nor": exclude_conditions}))
                 else:
-                    documents = list(config["collection"].find({}))
+                    documents = list(collection.find({}))
         else:
-            # No exclusions for this collection
-            documents = list(config["collection"].find({}))
+            documents = list(collection.find({}))
 
         # Convert ObjectIds and DBRef objects to strings for JSON serialization
         for i, doc in enumerate(documents):
@@ -160,19 +126,14 @@ async def _create_mongodb_backup(current_user: User) -> dict:
         total_documents += len(documents)
         collections_backed_up.append(collection_name)
 
-        logger.info(f"Backed up {len(documents)} documents from {collection_name}")
-
-    # Generate backup metadata
     timestamp = datetime.now()
-    timestamp_str = timestamp.strftime("%Y%m%d_%H%M%S")
-    backup_id = timestamp_str
+    backup_id = timestamp.strftime("%Y%m%d_%H%M%S")
 
-    # Create backup structure
     mongodb_backup = {
         "backup_metadata": {
             "timestamp": timestamp.isoformat(),
             "created_by": current_user.email,
-            "depictio_version": "0.1.0",  # TODO: Get from actual version
+            "depictio_version": "0.1.0",
             "total_documents": total_documents,
             "excluded_documents": excluded_documents,
             "collections": collections_backed_up,
@@ -249,22 +210,18 @@ async def create_backup(
         else:
             enhanced_backup = mongodb_backup
 
-        # Server-side backup configuration
-        BACKUP_DIR = settings.backup.backup_path
-        os.makedirs(BACKUP_DIR, exist_ok=True)
+        backup_dir = settings.backup.backup_path
+        os.makedirs(backup_dir, exist_ok=True)
 
-        # Generate backup filename with timestamp
-        timestamp_str = mongodb_backup["backup_metadata"]["backup_id"]
-        backup_filename = f"depictio_backup_{timestamp_str}.json"
-        backup_path = os.path.join(BACKUP_DIR, backup_filename)
+        backup_id_str = mongodb_backup["backup_metadata"]["backup_id"]
+        backup_filename = f"depictio_backup_{backup_id_str}.json"
+        backup_path = os.path.join(backup_dir, backup_filename)
 
-        # Write backup to server-side file
         with open(backup_path, "w") as backup_file:
             json.dump(enhanced_backup, backup_file, indent=2, default=str)
 
         logger.info(f"Backup created successfully: {backup_filename}")
 
-        # Prepare response
         response_data = {
             "success": True,
             "message": "Backup created successfully"
@@ -351,16 +308,14 @@ async def list_backups(
         )
 
     try:
-        BACKUP_DIR = settings.backup.backup_path
-        logger.info(f"Listing backups in directory: {BACKUP_DIR}")
-
-        if not os.path.exists(BACKUP_DIR):
+        backup_dir = settings.backup.backup_path
+        if not os.path.exists(backup_dir):
             return BackupListResponse(success=True, backups=[], count=0)
 
         backup_files = []
-        for filename in os.listdir(BACKUP_DIR):
+        for filename in os.listdir(backup_dir):
             if filename.startswith("depictio_backup_") and filename.endswith(".json"):
-                file_path = os.path.join(BACKUP_DIR, filename)
+                file_path = os.path.join(backup_dir, filename)
                 file_stat = os.stat(file_path)
 
                 # Extract backup ID from filename
@@ -451,22 +406,18 @@ async def validate_backup(
 
 
 def _convert_complex_objects_to_strings(obj):
-    """
-    Enhanced converter that handles DBRef objects and other MongoDB types.
-    """
+    """Convert DBRef and ObjectId to strings for JSON serialization."""
     from bson import DBRef, ObjectId
 
     if isinstance(obj, DBRef):
-        # Convert DBRef to just the ObjectId string
         return str(obj.id)
-    elif isinstance(obj, ObjectId):
+    if isinstance(obj, ObjectId):
         return str(obj)
-    elif isinstance(obj, dict):
+    if isinstance(obj, dict):
         return {key: _convert_complex_objects_to_strings(value) for key, value in obj.items()}
-    elif isinstance(obj, list):
+    if isinstance(obj, list):
         return [_convert_complex_objects_to_strings(item) for item in obj]
-    else:
-        return obj
+    return obj
 
 
 @backup_endpoint_router.post("/restore", response_model=BackupRestoreResponse)
@@ -492,9 +443,9 @@ async def restore_backup(
     )
 
     try:
-        BACKUP_DIR = settings.backup.backup_path
+        backup_dir = settings.backup.backup_path
         backup_filename = f"depictio_backup_{request.backup_id}.json"
-        backup_path = os.path.join(BACKUP_DIR, backup_filename)
+        backup_path = os.path.join(backup_dir, backup_filename)
 
         if not os.path.exists(backup_path):
             return BackupRestoreResponse(
@@ -503,7 +454,6 @@ async def restore_backup(
                 errors=[f"Backup file does not exist: {backup_filename}"],
             )
 
-        # Load backup data
         with open(backup_path, "r") as f:
             backup_data = json.load(f)
 
@@ -516,10 +466,9 @@ async def restore_backup(
 
         data_section = backup_data["data"]
 
-        # Define collection mappings (tokens excluded)
+        # Tokens excluded to avoid circular dependency
         collection_map = {
             "users": users_collection,
-            # "tokens": tokens_collection,  # Excluded to avoid circular dependency
             "projects": projects_collection,
             "dashboards": dashboards_collection,
             "data_collections": data_collections_collection,
@@ -530,18 +479,13 @@ async def restore_backup(
             "groups": groups_collection,
         }
 
-        # Determine which collections to restore
-        if request.collections:
-            collections_to_restore = request.collections
-        else:
-            collections_to_restore = list(data_section.keys())
+        collections_to_restore = request.collections or list(data_section.keys())
 
         restored_collections = {}
         total_restored = 0
         errors = []
 
         if request.dry_run:
-            # Dry run - just report what would be restored
             for collection_name in collections_to_restore:
                 if collection_name not in data_section:
                     errors.append(f"Collection '{collection_name}' not found in backup")
@@ -562,7 +506,6 @@ async def restore_backup(
                 errors=errors,
             )
 
-        # Actual restore
         for collection_name in collections_to_restore:
             if collection_name not in data_section:
                 errors.append(f"Collection '{collection_name}' not found in backup")
@@ -575,8 +518,6 @@ async def restore_backup(
             try:
                 collection = collection_map[collection_name]
                 documents = data_section[collection_name]
-
-                # Convert string IDs back to ObjectIds
                 from bson import ObjectId
 
                 for doc in documents:
@@ -585,37 +526,21 @@ async def restore_backup(
                     if "_id" in doc and isinstance(doc["_id"], str):
                         doc["_id"] = ObjectId(doc["_id"])
 
-                # Insert backup data - simpler, safer approach
                 if documents:
                     try:
-                        # Clear existing collection first (but only if we have data to restore)
-                        delete_result = collection.delete_many({})
-                        logger.info(
-                            f"Cleared {delete_result.deleted_count if hasattr(delete_result, 'deleted_count') else 'unknown'} existing documents from {collection_name}"
-                        )
-
-                        # Insert all backup data
-                        insert_result = collection.insert_many(documents)
-                        logger.info(
-                            f"Inserted {len(insert_result.inserted_ids) if hasattr(insert_result, 'inserted_ids') else len(documents)} documents to {collection_name}"
-                        )
+                        collection.delete_many({})
+                        collection.insert_many(documents)
                     except Exception as e:
                         logger.error(f"Failed to restore {collection_name}: {e}")
-                        raise e  # Re-raise to be caught by outer try-catch
+                        raise
                 else:
-                    # If no documents to restore, still clear the collection
-                    delete_result = collection.delete_many({})
-                    logger.info(
-                        f"Cleared {delete_result.deleted_count if hasattr(delete_result, 'deleted_count') else 'unknown'} documents from empty collection {collection_name}"
-                    )
+                    collection.delete_many({})
 
                 restored_collections[collection_name] = {
                     "count": len(documents),
                     "status": "restored",
                 }
                 total_restored += len(documents)
-
-                logger.info(f"Restored {len(documents)} documents to {collection_name}")
 
             except Exception as e:
                 error_msg = f"Failed to restore {collection_name}: {str(e)}"

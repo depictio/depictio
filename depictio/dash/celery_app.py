@@ -9,9 +9,6 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 
 # Create Celery app with configuration from settings
-logger.info("🔧 CELERY SETUP: Initializing Celery app...")
-logger.info(f"🔧 CELERY BROKER: {settings.celery.broker_url}")
-logger.info(f"🔧 CELERY BACKEND: {settings.celery.result_backend_url}")
 
 celery_app = Celery(
     __name__,
@@ -27,8 +24,6 @@ celery_app = Celery(
 #     result_expires=7200,
 #     broker_connection_retry_on_startup=True,
 # )
-
-logger.info(f"✅ CELERY: App configured successfully with queue '{settings.celery.default_queue}'")
 
 
 # Health check task for monitoring
@@ -57,7 +52,6 @@ def health_check(self):
 #   - Background callbacks are registered when app modules wire up their callbacks
 #   - Celery workers discover tasks through the apps, not through this module
 
-logger.info("✅ CELERY: Celery app ready for background callbacks")
 logger.info(
     "   - Background callbacks will be registered by flask_dispatcher.py when apps are created"
 )
@@ -66,5 +60,4 @@ logger.info("   - Management, Viewer, and Editor apps each have their own callba
 
 # Auto-discovery of tasks on app start
 if __name__ == "__main__":
-    logger.info("🚀 CELERY: Starting worker directly...")
     celery_app.start()

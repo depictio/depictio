@@ -41,7 +41,6 @@ def register_edit_component_simple_callback(app):
 
         # EARLY EXIT: Don't process on component add pages
         if current_pathname and "/component/add/" in current_pathname:
-            logger.info("🔒 On component add page - skipping edit button callback")
             raise PreventUpdate
 
         # Log for debugging URL redirection issues
@@ -64,7 +63,6 @@ def register_edit_component_simple_callback(app):
         # Extract component_id from triggered button
         if isinstance(ctx.triggered_id, dict) and ctx.triggered_id.get("type") == "edit_box_button":
             component_id = ctx.triggered_id.get("index")
-            logger.info(f"📝 EDIT BUTTON - Component ID: {component_id}")
         else:
             logger.warning("⚠️ Edit button callback triggered by non-edit_box_button element")
             raise PreventUpdate
@@ -96,8 +94,5 @@ def register_edit_component_simple_callback(app):
         logger.info(
             f"✏️ NAVIGATE TO EDIT STEPPER - Dashboard: {dashboard_id}, Component: {component_id}"
         )
-        logger.info(f"  🔗 URL: {edit_url}")
 
         return edit_url
-
-    logger.info("✅ Component editing navigation callback registered")

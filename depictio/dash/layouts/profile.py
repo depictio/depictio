@@ -1,3 +1,25 @@
+"""
+User profile page layout and callbacks for Depictio.
+
+This module provides the user profile page including:
+- User avatar and information display
+- Password editing functionality with validation
+- Logout functionality
+- Upgrade from anonymous to temporary user (for unauthenticated mode)
+- CLI configurations page link
+
+Features:
+    - Two-column layout with avatar and user information
+    - Password modal with old/new/confirm password validation
+    - Support for temporary user upgrades in unauthenticated mode
+    - Session expiry information display
+
+The layout uses Dash Mantine Components (dmc) for consistent styling with
+the rest of the application.
+"""
+
+from typing import Any
+
 import dash
 import dash_mantine_components as dmc
 from dash import Input, Output, State, dcc, html
@@ -16,7 +38,7 @@ from depictio.dash.api_calls import (
     api_call_fetch_user_from_token,
     api_call_upgrade_to_temporary_user,
 )
-from depictio.dash.colors import colors  # Import our color palette
+from depictio.dash.colors import colors
 from depictio.dash.layouts.layouts_toolbox import create_edit_password_modal
 
 # Define consistent theme elements
@@ -293,18 +315,146 @@ layout = dmc.Container(
 )
 
 
-def register_profile_callbacks(app):
+def _create_password_error_response(
+    message: str,
+    old_error: bool = False,
+    new_error: bool = False,
+    confirm_error: bool = False,
+) -> tuple:
+    """
+    Create a standardized error response for password validation.
+
+    Args:
+        message: Error message to display.
+        old_error: Whether to mark old password field as error.
+        new_error: Whether to mark new password field as error.
+        confirm_error: Whether to mark confirm password field as error.
+
+    Returns:
+        Tuple of callback outputs for the password modal.
+    """
+    return (
+        True,  # Keep modal open
+        message,
+        {"display": "block", "color": colors["pink"]},
+        old_error,
+        new_error,
+        confirm_error,
+        dash.no_update,
+        dash.no_update,
+        dash.no_update,
+    )
+
+
+def _create_password_success_response(message: str) -> tuple:
+    """
+    Create a success response for password change.
+
+    Args:
+        message: Success message to display.
+
+    Returns:
+        Tuple of callback outputs with cleared form fields.
+    """
+    return (
+        True,  # Keep modal open to show success
+        message,
+        {"display": "block", "color": colors["green"]},
+        False,
+        False,
+        False,
+        "",  # Clear old password
+        "",  # Clear new password
+        "",  # Clear confirm password
+    )
+
+
+def _validate_password_fields(
+    old_password: str | None,
+    new_password: str | None,
+    confirm_new_password: str | None,
+    current_user_email: str,
+    access_token: str,
+) -> tuple | None:
+    """
+    Validate password fields and attempt password change if valid.
+
+    Args:
+        old_password: Current password entered by user.
+        new_password: New password entered by user.
+        confirm_new_password: Confirmation of new password.
+        current_user_email: Email of the current user for password verification.
+        access_token: User's access token for API call.
+
+    Returns:
+        Tuple of callback outputs, or None if validation passes without issues.
+    """
+    # Check all fields are filled
+    if not old_password or not new_password or not confirm_new_password:
+        return _create_password_error_response(
+            "Please fill all fields",
+            old_error=True,
+            new_error=True,
+            confirm_error=True,
+        )
+
+    # Verify old password
+    if not _check_password(current_user_email, old_password):
+        return _create_password_error_response("Old password is incorrect", old_error=True)
+
+    # Check passwords match
+    if new_password != confirm_new_password:
+        return _create_password_error_response(
+            "Passwords do not match", new_error=True, confirm_error=True
+        )
+
+    # Check new password is different
+    if new_password == old_password:
+        return _create_password_error_response(
+            "New password cannot be the same as old password",
+            new_error=True,
+            confirm_error=True,
+        )
+
+    # Attempt to change password
+    response = api_call_edit_password(old_password, new_password, access_token)
+
+    if response["success"]:
+        return _create_password_success_response("Password updated successfully")
+    else:
+        return _create_password_error_response(
+            "Error updating password - please try again",
+            old_error=True,
+            new_error=True,
+            confirm_error=True,
+        )
+
+
+def register_profile_callbacks(app: dash.Dash) -> None:
+    """
+    Register all callbacks for the user profile page.
+
+    Registers callbacks for:
+    - Password editing modal and validation
+    - User information display
+    - Logout functionality
+    - Upgrade to temporary user functionality
+
+    Args:
+        app: The Dash application instance.
+    """
+
     @app.callback(
         enrich_Output("save-password", "n_clicks"),
         enrich_Input("edit-password-modal-listener", "n_events"),
         enrich_State("edit-password-modal-listener", "event"),
     )
-    def trigger_save_on_enter(n_events, e):
+    def trigger_save_on_enter(n_events: int, e: dict[str, Any] | None) -> int:
+        """Trigger save button click when Enter key is pressed in modal."""
         if e is None or e["key"] != "Enter":
             raise PreventUpdate()
-        return 1  # Simulate a click on the save button
+        return 1
 
-    # Callback to edit user password
     @app.callback(
         [
             Output("edit-password-modal", "opened"),
@@ -339,179 +489,40 @@ def register_profile_callbacks(app):
         confirm_new_password,
         local_data,
     ):
-        ctx = dash.callback_context
+        """
+        Handle password editing modal interactions.
 
+        Routes to appropriate handler based on which input triggered the callback.
+        Validates password fields and handles password change API calls.
+        """
+        ctx = dash.callback_context
         triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
         logger.info(f"triggered_id: {triggered_id}")
 
+        # Check for valid local data
         if not local_data or "access_token" not in local_data:
-            return (
-                False,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-            )
+            return (False,) + (dash.no_update,) * 8
 
         current_user = api_call_fetch_user_from_token(local_data["access_token"])
 
-        if triggered_id == "old-password":
-            if _check_password(current_user.email, old_password):
-                return (
-                    True,
-                    "Old password is correct",
-                    {"display": "none"},
-                    False,
-                    dash.no_update,
-                    dash.no_update,
-                )
-            else:
-                return (
-                    True,
-                    "Old password is incorrect",
-                    {"display": "block", "color": colors["pink"]},
-                    True,
-                    dash.no_update,
-                    dash.no_update,
-                )
-
-        elif triggered_id == "new-password":
-            return (
-                is_open,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-            )
-
-        elif triggered_id == "confirm-new-password":
-            if new_password != confirm_new_password:
-                return (
-                    True,
-                    "Passwords do not match",
-                    {"display": "block", "color": colors["pink"]},
-                )
-            else:
-                return (
-                    is_open,
-                    dash.no_update,
-                    dash.no_update,
-                    dash.no_update,
-                    dash.no_update,
-                    dash.no_update,
-                )
-
-        elif triggered_id == "save-password":
-            if not old_password or not new_password or not confirm_new_password:
-                return (
-                    True,
-                    "Please fill all fields",
-                    {"display": "block", "color": colors["pink"]},
-                    True,
-                    True,
-                    True,
-                    dash.no_update,
-                    dash.no_update,
-                    dash.no_update,
-                )
-            if _check_password(current_user.email, old_password):
-                if new_password != confirm_new_password:
-                    return (
-                        True,
-                        "Passwords do not match",
-                        {"display": "block", "color": colors["pink"]},
-                        False,
-                        True,
-                        True,
-                        dash.no_update,
-                        dash.no_update,
-                        dash.no_update,
-                    )
-                elif new_password == old_password:
-                    return (
-                        True,
-                        "New password cannot be the same as old password",
-                        {"display": "block", "color": colors["pink"]},
-                        False,
-                        True,
-                        True,
-                        dash.no_update,
-                        dash.no_update,
-                        dash.no_update,
-                    )
-                else:
-                    response = api_call_edit_password(
-                        old_password,
-                        new_password,
-                        local_data["access_token"],
-                    )
-                    if response["success"]:
-                        return (
-                            True,
-                            "Password updated successfully",
-                            {"display": "block", "color": colors["green"]},
-                            False,
-                            False,
-                            False,
-                            "",
-                            "",
-                            "",
-                        )
-                    else:
-                        return (
-                            True,
-                            "Error updating password - please try again",
-                            {"display": "block", "color": colors["pink"]},
-                            True,
-                            True,
-                            True,
-                            dash.no_update,
-                            dash.no_update,
-                            dash.no_update,
-                        )
-            else:
-                return (
-                    True,
-                    "Old password is incorrect",
-                    {"display": "block", "color": colors["pink"]},
-                    True,
-                    dash.no_update,
-                    dash.no_update,
-                    dash.no_update,
-                    dash.no_update,
-                    dash.no_update,
-                )
-
-        elif triggered_id == "edit-password":
+        # Handle edit password button - open modal
+        if triggered_id == "edit-password":
             logger.info("Edit password triggered")
-            return (
-                True,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
+            return (True,) + (dash.no_update,) * 8
+
+        # Handle save password button
+        if triggered_id == "save-password":
+            return _validate_password_fields(
+                old_password,
+                new_password,
+                confirm_new_password,
+                current_user.email,
+                local_data["access_token"],
             )
 
-        else:
-            return (
-                is_open,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-            )
+        # Default - keep current state
+        return (is_open,) + (dash.no_update,) * 8
 
-    # Callback to populate user information based on email
     @app.callback(
         [
             Output("avatar-placeholder", "children"),
@@ -521,6 +532,13 @@ def register_profile_callbacks(app):
         [State("local-store", "data"), Input("url", "pathname")],
     )
     def populate_user_info(local_data, pathname):
+        """
+        Populate user avatar and information display.
+
+        Fetches user data from the API and renders the avatar with initials
+        and a list of user metadata (email, ID, registration date, etc.).
+        Also determines visibility of the upgrade-to-temporary button.
+        """
         logger.info(f"URL pathname: {pathname}")
         logger.info(f"session_data: {local_data}")
         if local_data is None or "access_token" not in local_data:
@@ -612,6 +630,7 @@ def register_profile_callbacks(app):
         prevent_initial_call=True,
     )
     def logout_user_callback(n_clicks):
+        """Handle logout button click - clear session and redirect to auth page."""
         logger.info(f"Logout button clicked: {n_clicks}")
         if n_clicks is None:
             return dash.no_update, dash.no_update
