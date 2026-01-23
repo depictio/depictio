@@ -22,6 +22,17 @@ venv/
 wf_data/
 
 # -----------------------------
+# Exclude Tests (not needed in production image)
+# -----------------------------
+depictio/tests/
+tests/
+*.test.js
+*.spec.js
+cypress/
+pytest.ini
+conftest.py
+
+# -----------------------------
 # Exclude Hidden Directories and Files
 # -----------------------------
 .depictio/

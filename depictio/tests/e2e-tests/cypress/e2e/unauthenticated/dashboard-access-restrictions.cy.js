@@ -44,7 +44,7 @@ describe('Unauthenticated Mode - Dashboard Access Restrictions', () => {
       .parents('.mantine-Card-root')
       .within(() => {
         // Open Dashboard Actions accordion first to reveal the buttons
-        cy.get('[data-accordion-control="true"]').contains('Actions').click()
+        cy.get('.mantine-Accordion-control').contains('Actions').click()
         cy.wait(500)
 
         // Now check that View button is enabled
@@ -124,7 +124,7 @@ describe('Unauthenticated Mode - Dashboard Access Restrictions', () => {
         .parents('.mantine-Card-root')
         .within(() => {
           // Open Dashboard Actions accordion
-          cy.get('[data-accordion-control="true"]').contains('Actions').click()
+          cy.get('.mantine-Accordion-control').contains('Actions').click()
           cy.wait(500)
 
           // Click the View button

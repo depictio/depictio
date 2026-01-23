@@ -66,7 +66,7 @@ Cypress.Commands.add('checkDashboardButtons', (dashboardTitle, expectedStates) =
     .parents('.mantine-Card-root')
     .within(() => {
       // Open Dashboard Actions accordion first to reveal buttons
-      cy.get('[data-accordion-control="true"]').contains('Dashboard Actions').click()
+      cy.get('.mantine-Accordion-control').contains('Dashboard Actions').click()
       cy.wait(500)
 
       // Check View button

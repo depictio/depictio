@@ -286,14 +286,25 @@ jobs:
         id: image-info
         run: |
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+
+          # Generate content-based hash from files that affect the Docker build
+          # Excludes tests/ to avoid rebuilding when only tests change
+          DOCKER_HASH=$(find depictio -type f \( -name "*.py" -o -name "*.js" -o -name "*.css" -o -name "*.html" \) \
+            ! -path "depictio/tests/*" | sort | xargs cat 2>/dev/null | sha256sum | cut -c1-12)
+          # Also include key config files
+          CONFIG_HASH=$(cat pyproject.toml uv.lock docker-images/Dockerfile_depictio_uv.dockerfile .dockerignore 2>/dev/null | sha256sum | cut -c1-12)
+          CONTENT_HASH="${DOCKER_HASH}-${CONFIG_HASH}"
+
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            TAG="pr-${{ github.event.number }}-${{ github.sha }}"
+            TAG="pr-${{ github.event.number }}-${CONTENT_HASH}"
           else
-            TAG="main-${{ github.sha }}"
+            TAG="main-${CONTENT_HASH}"
           fi
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "repo=${REPO_LOWER}" >> $GITHUB_OUTPUT
           echo "full-image=ghcr.io/${REPO_LOWER}:${TAG}" >> $GITHUB_OUTPUT
+          echo "📦 Docker content hash: ${CONTENT_HASH}"
+          echo "🏷️ Image tag: ${TAG}"
 
       - name: Check if rebuild needed
         id: check-rebuild
