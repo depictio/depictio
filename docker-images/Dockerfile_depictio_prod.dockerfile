@@ -75,7 +75,7 @@ COPY --from=builder --chown=depictio:depictio /app/.venv /app/.venv
 
 # Copy application code
 COPY --chown=depictio:depictio depictio ./depictio/
-COPY --chown=depictio:depictio pyproject.toml ./
+COPY --chown=depictio:depictio pyproject.toml VERSION ./
 
 # Copy scripts
 COPY --chown=depictio:depictio docker-images/run_dash.sh /app/run_dash.sh

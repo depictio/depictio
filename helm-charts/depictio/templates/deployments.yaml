@@ -806,3 +806,188 @@ spec:
             path: /app
             type: Directory
         {{- end }}
+---
+# Celery Worker Deployment (background task processing)
+{{- if .Values.celery.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-celery-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: celery-worker
+spec:
+  replicas: {{ .Values.celery.replicas }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+      app: celery-worker
+      project: {{ .Values.project.slug }}
+      type: app
+  template:
+    metadata:
+      labels:
+        release: {{ .Release.Name }}
+        app: celery-worker
+        project: {{ .Values.project.slug }}
+        type: app
+    spec:
+      securityContext:
+        {{- toYaml .Values.celery.podSecurityContext | nindent 8 }}
+      initContainers:
+        # STEP 0: Fix permissions for mounted volumes
+        - name: fix-permissions-celery
+          image: busybox:1.35
+          command: ["/bin/sh"]
+          args:
+          - -c
+          - |
+            echo "Fixing permissions for celery worker mounted volumes..."
+            mkdir -p /app/depictio/keys
+            mkdir -p /app/depictio/.depictio
+            mkdir -p /tmp/depictio-uploads
+            chown -R 1000:2000 /app/depictio/keys
+            chown -R 1000:2000 /app/depictio/.depictio
+            chown -R 1000:2000 /tmp/depictio-uploads
+            chmod -R 775 /app/depictio/keys
+            chmod -R 775 /app/depictio/.depictio
+            chmod -R 775 /tmp/depictio-uploads
+            echo "Celery worker PVC permissions fixed!"
+          volumeMounts:
+            - name: depictio-keys
+              mountPath: /app/depictio/keys
+            - name: depictio-config
+              mountPath: /app/depictio/.depictio
+            - name: depictio-uploads
+              mountPath: /tmp/depictio-uploads
+          securityContext:
+            {{- toYaml .Values.celery.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
+        # STEP 1: Wait for MongoDB
+        - name: wait-for-mongo
+          image: busybox:1.35
+          command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-mongo {{ .Values.mongo.service.port }}; do echo "Waiting for mongo..."; sleep 2; done']
+          securityContext:
+            {{- toYaml .Values.celery.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
+        # STEP 2: Wait for Redis
+        {{- if .Values.redis.enabled }}
+        - name: wait-for-redis
+          image: busybox:1.35
+          command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-redis {{ .Values.redis.service.port }}; do echo "Waiting for redis..."; sleep 2; done']
+          securityContext:
+            {{- toYaml .Values.celery.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
+        {{- end }}
+        # STEP 3: Wait for backend service to be available
+        - name: wait-for-backend
+          image: busybox:1.35
+          command: ['sh', '-c']
+          args:
+            - |
+              echo "Waiting for backend service..."
+              timeout=300
+              elapsed=0
+              while [ $elapsed -lt $timeout ]; do
+                if nc -z {{ .Release.Name }}-depictio-backend {{ .Values.backend.service.httpPort }}; then
+                  echo "Backend service is available"
+                  exit 0
+                fi
+                echo "Backend not ready... (${elapsed}s/${timeout}s)"
+                sleep 5
+                elapsed=$((elapsed + 5))
+              done
+              echo "Timeout waiting for backend"
+              exit 1
+          securityContext:
+            {{- toYaml .Values.celery.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
+        # STEP 4: Verify API key files are available
+        - name: wait-for-api-key
+          image: busybox:1.35
+          command: ['sh', '-c']
+          args:
+            - |
+              echo "Waiting for API key files..."
+              timeout=120
+              elapsed=0
+              while [ $elapsed -lt $timeout ]; do
+                if [ -f /app/depictio/keys/api_internal_key.pem ]; then
+                  echo "API key file found"
+                  exit 0
+                fi
+                echo "Waiting for key file... (${elapsed}s/${timeout}s)"
+                sleep 3
+                elapsed=$((elapsed + 3))
+              done
+              echo "API key file not found"
+              exit 1
+          securityContext:
+            {{- toYaml .Values.celery.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
+          volumeMounts:
+            - name: depictio-keys
+              mountPath: /app/depictio/keys
+      containers:
+        - name: celery-worker
+          image: "{{ .Values.celery.image.repository | default .Values.backend.image.repository }}:{{ .Values.celery.image.tag | default .Values.backend.image.tag }}"
+          imagePullPolicy: {{ .Values.celery.image.pullPolicy | default .Values.backend.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.celery.securityContext | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-celery-config
+          env:
+            {{- if .Values.minio.enabled }}
+            - name: DEPICTIO_MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-depictio-secrets
+                  key: MINIO_ROOT_USER
+            - name: DEPICTIO_MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-depictio-secrets
+                  key: MINIO_ROOT_PASSWORD
+            {{- end }}
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          command:
+            - "/app/run_celery_worker.sh"
+          resources:
+            {{- toYaml .Values.celery.resources | nindent 12 }}
+          volumeMounts:
+            - name: depictio-keys
+              mountPath: /app/depictio/keys
+            - name: depictio-config
+              mountPath: /app/depictio/.depictio
+            - name: depictio-uploads
+              mountPath: /tmp/depictio-uploads
+            {{- if .Values.local_development }}
+            - name: depictio-source
+              mountPath: /app
+            {{- end }}
+      volumes:
+        - name: depictio-keys
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-depictio-keys-pvc
+        - name: depictio-config
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-depictio-config-pvc
+        - name: depictio-uploads
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-depictio-uploads-pvc
+        {{- if .Values.local_development }}
+        - name: depictio-source
+          hostPath:
+            path: /app
+            type: Directory
+        {{- end }}
+{{- end }}
