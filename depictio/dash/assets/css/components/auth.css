@@ -103,29 +103,48 @@ body.auth-page .mantine-AppShell-header {
 }
 
 /* Auth-specific triangle animation classes
-   Base .triangle-particle styles and size classes are defined in animations.css */
+   Base .triangle-particle styles and size classes are defined in animations.css
+   Using individual properties so inline animationDelay can work */
 .triangle-anim-1 {
-    animation: triangleFloat 8s infinite linear !important;
+    animation-name: triangleFloat !important;
+    animation-duration: 8s !important;
+    animation-iteration-count: infinite !important;
+    animation-timing-function: ease-in-out !important;
 }
 
 .triangle-anim-2 {
-    animation: triangleDrift 9s infinite linear !important;
+    animation-name: triangleDrift !important;
+    animation-duration: 9s !important;
+    animation-iteration-count: infinite !important;
+    animation-timing-function: ease-in-out !important;
 }
 
 .triangle-anim-3 {
-    animation: trianglePulse 7s infinite linear !important;
+    animation-name: trianglePulse !important;
+    animation-duration: 7s !important;
+    animation-iteration-count: infinite !important;
+    animation-timing-function: ease-in-out !important;
 }
 
 .triangle-anim-4 {
-    animation: triangleRotate 10s infinite linear !important;
+    animation-name: triangleRotate !important;
+    animation-duration: 10s !important;
+    animation-iteration-count: infinite !important;
+    animation-timing-function: ease-in-out !important;
 }
 
 .triangle-anim-5 {
-    animation: triangleOrbit 8.5s infinite linear !important;
+    animation-name: triangleOrbit !important;
+    animation-duration: 8.5s !important;
+    animation-iteration-count: infinite !important;
+    animation-timing-function: ease-in-out !important;
 }
 
 .triangle-anim-6 {
-    animation: triangleWave 9.5s infinite linear !important;
+    animation-name: triangleWave !important;
+    animation-duration: 9.5s !important;
+    animation-iteration-count: infinite !important;
+    animation-timing-function: ease-in-out !important;
 }
 
 /* =============================================================================
