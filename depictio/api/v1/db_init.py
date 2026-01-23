@@ -25,7 +25,7 @@ from depictio.models.utils import get_config
 async def create_initial_project(admin_user: UserBeanie, token_payload: dict | None) -> dict | None:
     """Create initial demo project with static IDs for K8s consistency."""
     project_yaml_path = os.path.join(
-        os.path.dirname(__file__), "configs", "projects", "init", "iris", "project.yaml"
+        os.path.dirname(__file__), "..", "..", "projects", "init", "iris", "project.yaml"
     )
     project_config = get_config(project_yaml_path)
     project_config["yaml_config_path"] = project_yaml_path
@@ -160,7 +160,7 @@ async def create_initial_dashboard(admin_user: UserBeanie) -> dict | None:
     from depictio.api.v1.db import dashboards_collection
 
     dashboard_json_path = os.path.join(
-        os.path.dirname(__file__), "configs", "projects", "init", "iris", "dashboard.json"
+        os.path.dirname(__file__), "..", "..", "projects", "init", "iris", "dashboard.json"
     )
     # Load the dashboard configuration from the JSON file
     from bson import json_util

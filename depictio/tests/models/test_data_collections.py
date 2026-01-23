@@ -375,7 +375,7 @@ class TestDataCollectionIntegration:
         mock_exists.return_value = True  # Simulate file exists
 
         # Path to the actual YAML file
-        yaml_file_path = "depictio/api/v1/configs/projects/init/iris/project.yaml"
+        yaml_file_path = "depictio/projects/init/iris/project.yaml"
 
         # Parse YAML
         with open(yaml_file_path) as file:
@@ -399,7 +399,7 @@ class TestDataCollectionIntegration:
         assert isinstance(data_collection.config.scan.scan_parameters, ScanSingle)
         assert (
             data_collection.config.scan.scan_parameters.filename  # type: ignore[union-attr]
-            == "/app/depictio/api/v1/configs/projects/init/iris/data/iris.csv"
+            == "/app/depictio/projects/init/iris/data/iris.csv"
         )
 
         # Assert DC specific properties
@@ -416,7 +416,7 @@ class TestDataCollectionIntegration:
         mock_exists.return_value = True  # Simulate file exists
 
         # Load the actual YAML file
-        yaml_file_path = "depictio/api/v1/configs/projects/init/iris/project.yaml"
+        yaml_file_path = "depictio/projects/init/iris/project.yaml"
 
         with open(yaml_file_path) as file:
             project_config = yaml.safe_load(file)
@@ -439,7 +439,7 @@ class TestDataCollectionIntegration:
         mock_context.return_value = "server"
 
         # Load the actual YAML file
-        yaml_file_path = "depictio/api/v1/configs/projects/init/iris/project.yaml"
+        yaml_file_path = "depictio/projects/init/iris/project.yaml"
 
         with open(yaml_file_path) as file:
             project_config = yaml.safe_load(file)
@@ -456,5 +456,5 @@ class TestDataCollectionIntegration:
         assert data_collection.config.type == "table"
         assert (
             data_collection.config.scan.scan_parameters.filename  # type: ignore[union-attr]
-            == "/app/depictio/api/v1/configs/projects/init/iris/data/iris.csv"
+            == "/app/depictio/projects/init/iris/data/iris.csv"
         )

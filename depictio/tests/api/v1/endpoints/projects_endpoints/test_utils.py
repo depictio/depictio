@@ -1,4 +1,3 @@
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -72,13 +71,12 @@ def get_test_config():
 @pytest.fixture
 def test_yaml_path():
     """Path to the test YAML configuration file."""
+    import os
+
     from depictio import BASE_PATH
 
     return os.path.join(
         BASE_PATH,
-        "api",
-        "v1",
-        "configs",
         "projects",
         "init",
         "iris",
