@@ -63,11 +63,20 @@ def create_standalone_html(
         card_title = html_escape.escape(str(card.get("title", "Metric")))
         card_value = html_escape.escape(str(card.get("value", "N/A")))
         card_subtitle = html_escape.escape(str(card.get("subtitle", "")))
+        background_color = card.get("background_color", "#ffffff")
+        title_color = card.get("title_color", "#000000")
+        icon_name = card.get("icon_name", "mdi:chart-line")
+        icon_color = card.get("icon_color", "#339af0")
+        title_font_size = card.get("title_font_size", "12px")
+        value_font_size = card.get("value_font_size", "32px")
 
         cards_html += f"""
-        <div class="metric-card">
-            <div class="metric-title">{card_title}</div>
-            <div class="metric-value">{card_value}</div>
+        <div class="metric-card" style="background-color: {background_color};">
+            <div class="metric-header">
+                <iconify-icon icon="{icon_name}" style="color: {icon_color}; font-size: 24px;"></iconify-icon>
+                <div class="metric-title" style="color: {title_color}; font-size: {title_font_size};">{card_title}</div>
+            </div>
+            <div class="metric-value" style="font-size: {value_font_size};">{card_value}</div>
             {f'<div class="metric-subtitle">{card_subtitle}</div>' if card_subtitle else ""}
         </div>
         """
@@ -104,6 +113,7 @@ def create_standalone_html(
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{html_escape.escape(title)}</title>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
     <style>
         :root {{
             --primary-color: #339af0;
@@ -169,12 +179,21 @@ def create_standalone_html(
             padding: 20px;
             border-radius: 12px;
             box-shadow: var(--shadow);
-            text-align: center;
-            transition: transform 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
         }}
 
         .metric-card:hover {{
             transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }}
+
+        .metric-header {{
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }}
 
         .metric-title {{
@@ -183,19 +202,20 @@ def create_standalone_html(
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: var(--text-muted);
-            margin-bottom: 8px;
+            flex: 1;
         }}
 
         .metric-value {{
             font-size: 2rem;
             font-weight: 700;
             color: var(--primary-color);
-            margin-bottom: 4px;
+            line-height: 1.2;
         }}
 
         .metric-subtitle {{
             font-size: 0.85rem;
             color: var(--text-muted);
+            margin-top: -4px;
         }}
 
         .charts-grid {{
@@ -380,6 +400,7 @@ def extract_charts_from_stored_metadata(
     stored_metadata: list[dict[str, Any]],
     figure_map: dict[str, dict[str, Any]] | None = None,
     card_value_map: dict[str, Any] | None = None,
+    card_comparison_map: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """
     Extract chart data and card data from stored metadata.
@@ -391,6 +412,7 @@ def extract_charts_from_stored_metadata(
         stored_metadata: List of component metadata dictionaries
         figure_map: Dictionary mapping component indices to rendered figure data
         card_value_map: Dictionary mapping component indices to rendered card values
+        card_comparison_map: Dictionary mapping component indices to comparison/trend info
 
     Returns:
         tuple: (charts_json, cards_data) - Lists of chart JSON and card data
@@ -402,6 +424,8 @@ def extract_charts_from_stored_metadata(
         figure_map = {}
     if card_value_map is None:
         card_value_map = {}
+    if card_comparison_map is None:
+        card_comparison_map = {}
 
     for component in stored_metadata:
         component_type = component.get("component_type", "")
@@ -438,10 +462,39 @@ def extract_charts_from_stored_metadata(
             if isinstance(card_value, (int, float)):
                 card_value = f"{card_value:,.2f}"
 
+            # Extract comparison/trend info
+            comparison_text = ""
+            comparison_data = card_comparison_map.get(component_index)
+            if comparison_data:
+                # Comparison data can be a string or list of components
+                if isinstance(comparison_data, str):
+                    comparison_text = comparison_data
+                elif isinstance(comparison_data, list):
+                    # Extract text from Dash components if present
+                    for item in comparison_data:
+                        if isinstance(item, dict) and "props" in item:
+                            children = item.get("props", {}).get("children", "")
+                            if children:
+                                comparison_text += str(children) + " "
+
+            # Extract styling from metadata
+            background_color = component.get("background_color", "#ffffff")
+            title_color = component.get("title_color", "#000000")
+            icon_name = component.get("icon_name", "mdi:chart-line")
+            icon_color = component.get("icon_color", "#339af0")
+            title_font_size = component.get("title_font_size", "12px")
+            value_font_size = component.get("value_font_size", "32px")
+
             card_info = {
                 "title": component.get("title", "Metric"),
                 "value": str(card_value),
-                "subtitle": "",  # Cards don't have subtitle in current implementation
+                "subtitle": comparison_text.strip(),
+                "background_color": background_color,
+                "title_color": title_color,
+                "icon_name": icon_name,
+                "icon_color": icon_color,
+                "title_font_size": title_font_size,
+                "value_font_size": value_font_size,
             }
             cards_data.append(card_info)
 
@@ -477,6 +530,8 @@ def register_export_callbacks(app: Any) -> None:
             State({"type": "figure-graph", "index": ALL}, "id"),
             State({"type": "card-value", "index": ALL}, "children"),
             State({"type": "card-value", "index": ALL}, "id"),
+            State({"type": "card-comparison", "index": ALL}, "children"),
+            State({"type": "card-comparison", "index": ALL}, "id"),
         ],
         prevent_initial_call=True,
     )
@@ -490,6 +545,8 @@ def register_export_callbacks(app: Any) -> None:
         figure_ids: list[dict[str, Any]],
         card_values: list[Any],
         card_ids: list[dict[str, Any]],
+        card_comparisons: list[Any],
+        card_comparison_ids: list[dict[str, Any]],
     ) -> list[dict[str, Any] | None]:
         """
         Export the current dashboard state as a standalone HTML file.
@@ -551,14 +608,31 @@ def register_export_callbacks(app: Any) -> None:
             logger.info(f"Stored metadata count: {len(stored_metadata or [])}")
             logger.info(f"Interactive metadata count: {len(interactive_metadata or [])}")
 
+            # Log component types in metadata
+            component_types = {}
+            for component in all_metadata:
+                comp_type = component.get("component_type", "unknown")
+                comp_idx = component.get("index", "unknown")
+                component_types[comp_type] = component_types.get(comp_type, 0) + 1
+                logger.info(f"Metadata component: type={comp_type}, index={comp_idx}")
+
+            logger.info(f"Component type counts: {component_types}")
+
             # Create a mapping of component indices to figure data
             figure_map = {}
-            for fig_id, fig_data in zip(figure_ids, figure_data):
-                if fig_id and fig_data:
+            logger.info(f"Received {len(figure_data)} figure data items from State")
+            for i, (fig_id, fig_data) in enumerate(zip(figure_ids, figure_data)):
+                logger.info(f"Figure {i}: id={fig_id}, has_data={bool(fig_data)}")
+                if fig_id:
                     index = fig_id.get("index")
                     if index:
-                        figure_map[str(index)] = fig_data
-                        logger.info(f"Mapped figure index: {index}")
+                        if fig_data and isinstance(fig_data, dict) and fig_data.get("data"):
+                            figure_map[str(index)] = fig_data
+                            logger.info(f"✓ Mapped figure index: {index} (has data)")
+                        else:
+                            logger.warning(
+                                f"✗ Skipping figure index: {index} (empty or invalid data)"
+                            )
 
             logger.info(f"Found {len(figure_map)} rendered figures: {list(figure_map.keys())}")
 
@@ -575,9 +649,22 @@ def register_export_callbacks(app: Any) -> None:
                 f"Found {len(card_value_map)} rendered cards: {list(card_value_map.keys())}"
             )
 
+            # Create a mapping of component indices to card comparison info
+            card_comparison_map = {}
+            for comp_id, comp_value in zip(card_comparison_ids, card_comparisons):
+                if comp_id:
+                    index = comp_id.get("index")
+                    if index:
+                        card_comparison_map[str(index)] = comp_value
+                        logger.info(f"Mapped card comparison index: {index}, value: {comp_value}")
+
+            logger.info(
+                f"Found {len(card_comparison_map)} card comparisons: {list(card_comparison_map.keys())}"
+            )
+
             # Extract charts and cards from metadata
             charts_json, cards_data = extract_charts_from_stored_metadata(
-                all_metadata, figure_map, card_value_map
+                all_metadata, figure_map, card_value_map, card_comparison_map
             )
 
             # Generate HTML content
