@@ -7,6 +7,7 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import (
     api_call_get_dashboard,
     api_call_save_dashboard,
+    api_call_screenshot_dashboard,
 )
 
 
@@ -269,6 +270,12 @@ def register_callbacks_save_lite(app):
 
         if success:
             logger.info(f"✅ SAVE: Successfully saved dashboard {dashboard_id}")
+            # Generate screenshot after successful save
+            screenshot_success = api_call_screenshot_dashboard(dashboard_id)
+            if screenshot_success:
+                logger.info(f"📸 Screenshot generated for dashboard {dashboard_id}")
+            else:
+                logger.warning(f"⚠️ Failed to generate screenshot for dashboard {dashboard_id}")
         else:
             logger.error(f"❌ SAVE: Failed to save dashboard {dashboard_id}")
 
