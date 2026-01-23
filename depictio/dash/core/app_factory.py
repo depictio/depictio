@@ -35,14 +35,12 @@ def create_dash_app():
 
     # Setup background callback manager - Always configure Celery
     # The Celery worker container is started conditionally via Docker Compose profile
-    logger.info("🔧 DASH: Setting up Celery manager...")
     background_callback_manager = None
 
     try:
         from depictio.dash.celery_app import celery_app
 
         background_callback_manager = dash.CeleryManager(celery_app)
-        logger.info("✅ DASH: Celery background callback manager configured")
         logger.info("   Note: Celery worker must be running for design mode to work")
         logger.info("   Start worker with: docker compose --profile celery up")
     except Exception as e:

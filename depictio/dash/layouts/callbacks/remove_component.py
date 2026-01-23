@@ -141,8 +141,6 @@ def register_remove_component_callback(app):
 
             panel_name = "right"
 
-        logger.info(f"🗑️  Removing component {component_id} from {panel_name} panel")
-
         # 5. Save to database (remove metadata + update layout)
         dashboard_data = api_call_get_dashboard(dashboard_id, TOKEN)
 
@@ -162,8 +160,6 @@ def register_remove_component_callback(app):
 
         # Save
         api_call_save_dashboard(dashboard_id, dashboard_data, TOKEN)
-
-        logger.info(f"✅ Successfully removed component {component_id} and saved to database")
 
         # Return updated layouts AND items (4 outputs total - must stay synchronized)
         return updated_left_layout, updated_right_layout, updated_left_items, updated_right_items

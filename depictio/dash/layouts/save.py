@@ -41,7 +41,6 @@ def validate_and_clean_orphaned_layouts(stored_layout_data, stored_metadata):
     valid_component_ids = {
         str(meta.get("index")) for meta in stored_metadata if meta.get("index") is not None
     }
-    logger.info(f"🔍 LAYOUT VALIDATION - Valid component IDs from metadata: {valid_component_ids}")
 
     cleaned_layout_data = []
     orphaned_layouts = []
@@ -152,7 +151,7 @@ def register_callbacks_save_lite(app):
 
         # Skip if on stepper page
         if pathname and "/component/add/" in pathname:
-            logger.info("Skipping save on stepper page")
+            logger.debug("Skipping save on stepper page")
             raise dash.exceptions.PreventUpdate
 
         # 2. Extract dashboard_id and token
@@ -169,7 +168,6 @@ def register_callbacks_save_lite(app):
         logger.info(f"Captured {len(interactive_metadata)} interactive metadata entries")
 
         # DEBUG: Log what's in each metadata source
-        logger.info("📊 STORED METADATA (from stored-metadata-component):")
         for idx, meta in enumerate(stored_metadata):
             mode_info = (
                 f"mode={meta.get('mode', 'N/A')}" if meta.get("component_type") == "figure" else ""
@@ -189,7 +187,6 @@ def register_callbacks_save_lite(app):
             if meta.get("component_type") == "figure" and meta.get("mode") == "code":
                 logger.info(f"  🔍 FULL CODE MODE METADATA: {meta}")
 
-        logger.info("📊 INTERACTIVE METADATA (from interactive-stored-metadata):")
         for idx, meta in enumerate(interactive_metadata):
             logger.info(f"  [{idx}] index={meta.get('index')}, type={meta.get('component_type')}")
 
@@ -205,7 +202,6 @@ def register_callbacks_save_lite(app):
         logger.info(f"Total metadata entries to save: {len(all_metadata)}")
 
         # DEBUG: Log interactive metadata to understand why left panel is empty
-        logger.info(f"📊 Interactive metadata count: {len(interactive_metadata)}")
         for idx, meta in enumerate(interactive_metadata):
             logger.info(
                 f"  Interactive [{idx}]: index={meta.get('index')}, "
@@ -231,14 +227,12 @@ def register_callbacks_save_lite(app):
         left_panel_saved_data = None
         if left_panel_layouts and len(left_panel_layouts) > 0 and left_panel_layouts[0]:
             left_panel_saved_data = left_panel_layouts[0]
-            logger.info(f"📐 LEFT: Captured {len(left_panel_saved_data)} layout items from grid")
         else:
             logger.warning("⚠️ LEFT: No layout data captured from grid - using metadata only")
 
         right_panel_saved_data = None
         if right_panel_layouts and len(right_panel_layouts) > 0 and right_panel_layouts[0]:
             right_panel_saved_data = right_panel_layouts[0]
-            logger.info(f"📐 RIGHT: Captured {len(right_panel_saved_data)} layout items from grid")
         else:
             logger.warning("⚠️ RIGHT: No layout data captured from grid - using metadata only")
 
@@ -263,27 +257,22 @@ def register_callbacks_save_lite(app):
         # 5. Validate with Pydantic model
         try:
             DashboardData.from_mongo(dashboard_dict)
-            logger.info("✅ DashboardData Pydantic validation passed")
         except Exception as e:
             logger.error(f"❌ Pydantic validation failed: {e}")
             raise dash.exceptions.PreventUpdate
 
         # 6. LOG what would be saved (API call disabled for debugging)
         logger.info("=" * 80)
-        logger.info("📝 SAVE DATA PREVIEW (API CALL DISABLED)")
         logger.info("=" * 80)
         logger.info(f"Dashboard ID: {dashboard_id}")
         logger.info(f"Total metadata entries: {len(all_metadata)}")
         logger.info(f"Left panel layout items: {len(left_panel_layout)}")
         logger.info(f"Right panel layout items: {len(right_panel_layout)}")
         logger.info("")
-        logger.info("📊 LEFT PANEL LAYOUT DATA:")
         logger.info(json.dumps(left_panel_layout, indent=2))
         logger.info("")
-        logger.info("📊 RIGHT PANEL LAYOUT DATA:")
         logger.info(json.dumps(right_panel_layout, indent=2))
         logger.info("")
-        logger.info("📊 METADATA SUMMARY:")
         for idx, meta in enumerate(all_metadata):
             logger.info(
                 f"  [{idx}] Component: {meta.get('index')}, "
@@ -293,7 +282,6 @@ def register_callbacks_save_lite(app):
         logger.info("=" * 80)
 
         # Save to database via API
-        logger.info("💾 SAVE: Calling API to persist dashboard data")
         success = api_call_save_dashboard(
             dashboard_id,
             dashboard_dict,
@@ -443,23 +431,19 @@ def register_callbacks_save(app):
 
         # GUARD: Skip if we're on the stepper page (no draggable component there)
         if pathname and "/component/add/" in pathname:
-            logger.info("🚫 SAVE CALLBACK - Skipping on stepper page (no draggable component)")
+            logger.debug("🚫 SAVE CALLBACK - Skipping on stepper page (no draggable component)")
             raise dash.exceptions.PreventUpdate
 
         # Log the first few raw metadata entries for debugging
         # if stored_metadata:
         #     for i, elem in enumerate(stored_metadata[:3]):  # Only first 3 to avoid spam
-        #         logger.info(
         #             f"📊 SAVE DEBUG - Raw metadata {i}: keys={list(elem.keys()) if elem else 'None'}"
         #         )
         #         if elem:
-        #             logger.info(
         #                 f"📊 SAVE DEBUG - Raw metadata {i}: mode={elem.get('mode', 'MISSING')}"
         #             )
-        #             logger.info(
         #                 f"📊 SAVE DEBUG - Raw metadata {i}: code_content={'YES' if elem.get('code_content') else 'NO'} ({len(elem.get('code_content', '')) if elem.get('code_content') else 0} chars)"
         #             )
-        #             logger.info(
         #                 f"📊 SAVE DEBUG - Raw metadata {i}: dict_kwargs={elem.get('dict_kwargs', 'MISSING')}"
         #             )
 
@@ -473,7 +457,6 @@ def register_callbacks_save(app):
             for elem in stored_metadata
         ]
         logger.info(f"Stored metadata for logging: {stored_metadata_for_logging}")
-        # logger.info(f"Stored complete metadata: {stored_metadata}")
 
         # Early return if user is not logged in
         if not local_store:
@@ -485,7 +468,6 @@ def register_callbacks_save(app):
 
         TOKEN = local_store["access_token"]
         # Fetch user data using API call (with caching)
-        logger.info("🔄 Save: Fetching user data from API using local-store token")
         current_user_api = api_call_fetch_user_from_token(TOKEN)
         if not current_user_api:
             logger.warning("User not found.")
@@ -576,7 +558,6 @@ def register_callbacks_save(app):
         # If so, check if live interactivity is enabled
         triggered_by_interactive = "interactive-component-value" in triggered_id
         # if triggered_by_interactive and not live_interactivity_on:
-        #     logger.info(
         #         "⏸️ NON-LIVE MODE: Interactive component value changed but live interactivity is OFF - ignoring save"
         #     )
         #     raise dash.exceptions.PreventUpdate
@@ -606,7 +587,6 @@ def register_callbacks_save(app):
                 best_metadata = metadata_list[0]
             else:
                 # Multiple entries - prioritize by completeness
-                # logger.info(
                 #     f"📊 SAVE DEBUG - Found {len(metadata_list)} duplicate entries for index {index}"
                 # )
 
@@ -646,7 +626,6 @@ def register_callbacks_save(app):
                 for i, meta in enumerate(metadata_list):
                     score = score_metadata(meta)
                     candidate_scores.append((score, i, meta))
-                    # logger.info(
                     #     f"📊 SAVE DEBUG - Candidate {i} for index {index}: score={score}, dict_kwargs={meta.get('dict_kwargs', 'MISSING')}"
                     # )
 
@@ -654,13 +633,10 @@ def register_callbacks_save(app):
                 best_metadata = max(metadata_list, key=score_metadata)
                 # best_score = score_metadata(best_metadata)
 
-                # logger.info(
                 #     f"📊 SAVE DEBUG - SELECTED metadata with score {best_score} for index {index}"
                 # )
-                # logger.info(
                 #     f"📊 SAVE DEBUG - SELECTED metadata dict_kwargs: {best_metadata.get('dict_kwargs', 'MISSING')}"
                 # )
-                # logger.info(
                 #     f"📊 SAVE DEBUG - SELECTED metadata has {len(best_metadata.get('dict_kwargs', {}))} parameters"
                 # )
 
@@ -687,10 +663,8 @@ def register_callbacks_save(app):
             unique_metadata.append(best_metadata)
             seen_indexes.add(index)
 
-        # logger.info(f"📊 SAVE DEBUG - Unique metadata: {unique_metadata}")
 
         # Summary logging of deduplication results
-        # logger.info(
         #     f"📊 SAVE DEBUG - Deduplication complete: {len(unique_metadata)} unique components"
         # )
         # components_with_dict_kwargs = sum(
@@ -709,16 +683,12 @@ def register_callbacks_save(app):
         #     if not meta.get("dict_kwargs") or len(meta.get("dict_kwargs", {})) == 0
         # ]
         # if empty_dict_kwargs_components:
-        #     logger.warning(
         #         f"📊 SAVE DEBUG - WARNING: {len(empty_dict_kwargs_components)} components have empty dict_kwargs:"
         #     )
         #     for meta in empty_dict_kwargs_components:
-        #         logger.warning(
         #             f"📊 SAVE DEBUG - Empty dict_kwargs component: index={meta.get('index')}, type={meta.get('component_type')}"
         #         )
 
-        # logger.info(f"Unique metadata: {unique_metadata}")
-        # logger.info(f"seen_indexes: {seen_indexes}")
 
         # CRITICAL FIX: Normalize all layout IDs to ensure box- prefix before processing
         # This prevents layout/metadata ID mismatches that cause component position resets
@@ -728,11 +698,10 @@ def register_callbacks_save(app):
                 if layout_id and not layout_id.startswith("box-"):
                     corrected_id = f"box-{layout_id}"
                     layout["i"] = corrected_id
-                    logger.info(f"🔧 NORMALIZED layout ID: {layout_id} → {corrected_id}")
 
         # Remove child components for edit mode
         if "btn-done-edit" in triggered_id:
-            logger.info("=== BTN-DONE-EDIT TRIGGERED - PROCESSING EDIT MODE ===")
+            logger.debug("=== BTN-DONE-EDIT TRIGGERED - PROCESSING EDIT MODE ===")
             logger.info(f"Unique metadata BEFORE filtering: {len(unique_metadata)} items")
             for i, elem in enumerate(unique_metadata):
                 logger.info(
@@ -758,7 +727,7 @@ def register_callbacks_save(app):
             )
 
             # Log all component indices for debugging
-            logger.info("=== ALL COMPONENTS BEFORE PROCESSING ===")
+            logger.debug("=== ALL COMPONENTS BEFORE PROCESSING ===")
             for i, comp in enumerate(unique_metadata):
                 logger.info(
                     f"Component {i}: index={comp.get('index')}, parent_index={comp.get('parent_index')}, type={comp.get('component_type')}, title={comp.get('title')}"
@@ -806,7 +775,7 @@ def register_callbacks_save(app):
                     components_to_remove.append(f"temp ({temp_component.get('index')})")
 
                 if components_to_remove:
-                    logger.info(f"Found components to remove: {', '.join(components_to_remove)}")
+                    logger.debug(f"Found components to remove: {', '.join(components_to_remove)}")
                 else:
                     logger.warning(
                         f"Could not find any components to remove with parent_index {parent_index}"
@@ -877,7 +846,6 @@ def register_callbacks_save(app):
                 )
                 # if "parent_index" in component:
                 #     del component["parent_index"]
-                #     logger.info(f"Removed parent_index from component {parent_index}")
 
             # Combine all components back together
             unique_metadata = non_edited_components + edited_components
@@ -885,94 +853,61 @@ def register_callbacks_save(app):
             logger.info(
                 f"Unique metadata AFTER processing: {len(unique_metadata)} items (removed {original_count - len(unique_metadata)} items)"
             )
-            # logger.debug("=== FINAL COMPONENTS AFTER PROCESSING ===")
             # for i, elem in enumerate(unique_metadata):
-            #     logger.debug(
             #         f"Final item {i}: index={elem.get('index')}, parent_index={elem.get('parent_index')}, component_type={elem.get('component_type')}, title={elem.get('title')}, aggregation={elem.get('aggregation')}"
             #     )
-            # logger.debug("=== BTN-DONE-EDIT PROCESSING COMPLETE ===")
 
         # Use draggable layout metadata if triggered by draggable
         # if "draggable" in triggered_id:
         #     unique_metadata = dashboard_data.get("stored_metadata", unique_metadata)
-        # logger.info(f"Unique metadata after using draggable layout metadata: {unique_metadata}")
 
         # Debug logging for layout data - COMPREHENSIVE TRACKING
-        # logger.debug("=" * 80)
-        # logger.debug("🔍 SAVE DEBUG - LAYOUT DATA PROCESSING START")
-        # logger.debug("=" * 80)
-        # logger.debug(f"🔍 SAVE DEBUG - stored_layout_data received: {stored_layout_data}")
-        # logger.debug(f"🔍 SAVE DEBUG - type: {type(stored_layout_data)}")
-        # logger.debug(f"🔍 SAVE DEBUG - triggered_id: {triggered_id}")
 
         # Log the complete callback context for debugging
         from dash import ctx
 
-        # logger.info(f"🔍 SAVE DEBUG - callback context triggered: {ctx.triggered}")
-        # logger.info(f"🔍 SAVE DEBUG - callback inputs_list: {ctx.inputs_list}")
 
         # Identify which callback triggered this save
         # if "duplicate-box-button" in triggered_id:
-        #     logger.info("🎯 SAVE DEBUG - TRIGGERED BY: DUPLICATE CALLBACK")
         # elif "draggable" in triggered_id:
-        #     logger.info("🎯 SAVE DEBUG - TRIGGERED BY: DRAGGABLE/GRID LAYOUT CALLBACK")
         # elif "save-button-dashboard" in triggered_id:
-        #     logger.info("🎯 SAVE DEBUG - TRIGGERED BY: SAVE BUTTON")
         # else:
-        #     logger.info(f"🎯 SAVE DEBUG - TRIGGERED BY: OTHER ({triggered_id})")
 
         # Log current layout data details
         # if stored_layout_data:
-        #     logger.info(f"🔍 SAVE DEBUG - layout data length: {len(stored_layout_data)}")
         #     for i, layout_item in enumerate(stored_layout_data):
-        #         logger.info(f"🔍 SAVE DEBUG - layout item {i}: {layout_item}")
         # else:
-        #     logger.info("🔍 SAVE DEBUG - stored_layout_data is empty or None")
 
         # Log existing dashboard layout data for comparison
         # existing_dashboard_layout = dashboard_data.get("stored_layout_data", [])
-        # logger.info(f"🔍 SAVE DEBUG - existing dashboard layout: {existing_dashboard_layout}")
         # if existing_dashboard_layout:
-        #     logger.info(f"🔍 SAVE DEBUG - existing layout length: {len(existing_dashboard_layout)}")
         #     for i, layout_item in enumerate(existing_dashboard_layout):
-        #         logger.info(f"🔍 SAVE DEBUG - existing layout item {i}: {layout_item}")
 
         # Ensure layout data is in list format - no backward compatibility
         if stored_layout_data is None:
             stored_layout_data = []
-            # logger.info("⚠️ SAVE DEBUG - stored_layout_data was None, set to empty list")
 
         # If layout data is empty but we have existing dashboard data, preserve the existing layout
         if not stored_layout_data and dashboard_data and dashboard_data.get("stored_layout_data"):
             existing_layout = dashboard_data.get("stored_layout_data")
             if isinstance(existing_layout, list):
                 stored_layout_data = existing_layout
-                # logger.info(f"🔄 SAVE DEBUG - preserved existing layout: {stored_layout_data}")
-                # logger.info(f"🔄 SAVE DEBUG - preserved layout length: {len(stored_layout_data)}")
                 # for i, layout_item in enumerate(stored_layout_data):
-                #     logger.info(f"🔄 SAVE DEBUG - preserved layout item {i}: {layout_item}")
             else:
                 logger.warning(
                     f"⚠️ SAVE DEBUG - existing layout is not a list: {type(existing_layout)}"
                 )
 
         # Validate and clean orphaned layouts before saving
-        # logger.debug("=" * 80)
-        # logger.debug("🧹 LAYOUT VALIDATION - CLEANING ORPHANED LAYOUTS")
-        # logger.debug("=" * 80)
-        # logger.debug(
         #     f"🔍 LAYOUT VALIDATION - Before cleaning: {len(stored_layout_data) if stored_layout_data else 0} layout entries"
         # )
-        # logger.info(f"🔍 LAYOUT VALIDATION - Available metadata: {len(unique_metadata)} entries")
 
         stored_layout_data = validate_and_clean_orphaned_layouts(
             stored_layout_data, unique_metadata
         )
 
-        # logger.info(
         #     f"🔍 LAYOUT VALIDATION - After cleaning: {len(stored_layout_data) if stored_layout_data else 0} layout entries"
         # )
-        # logger.info("=" * 80)
 
         updated_dashboard_data = {
             "stored_metadata": unique_metadata,
@@ -988,23 +923,13 @@ def register_callbacks_save(app):
         }
 
         # Log final layout data being prepared for database
-        # logger.debug("=" * 80)
-        # logger.debug("🔍 SAVE DEBUG - FINAL DATA PREPARATION")
-        # logger.debug("=" * 80)
         # final_layout_data = updated_dashboard_data["stored_layout_data"]
-        # logger.debug(f"🔍 SAVE DEBUG - final layout data to save: {final_layout_data}")
-        # logger.debug(f"🔍 SAVE DEBUG - final layout data type: {type(final_layout_data)}")
         # if final_layout_data:
-        #     logger.debug(f"🔍 SAVE DEBUG - final layout data length: {len(final_layout_data)}")
         #     for i, layout_item in enumerate(final_layout_data):
-        #         logger.debug(f"🔍 SAVE DEBUG - final layout item {i}: {layout_item}")
         # else:
-        #     logger.debug("🔍 SAVE DEBUG - final layout data is empty")
 
         # final_metadata = updated_dashboard_data["stored_metadata"]
-        # logger.debug(f"🔍 SAVE DEBUG - final metadata count: {len(final_metadata)}")
         # for i, meta_item in enumerate(final_metadata):
-        #     logger.debug(
         #         f"🔍 SAVE DEBUG - final metadata item {i}: index={meta_item.get('index')}, type={meta_item.get('component_type')}, title={meta_item.get('title')}"
         #     )
 
@@ -1014,7 +939,6 @@ def register_callbacks_save(app):
             # if ("apply-filters-button" in triggered_id and not live_interactivity_on) or (
             #     triggered_by_interactive and live_interactivity_on
             # ):
-            logger.info("🔄 UPDATING METADATA WITH CURRENT INTERACTIVE COMPONENT VALUES")
 
             # Get interactive components from metadata to match with values
             interactive_metadata = [
@@ -1052,27 +976,18 @@ def register_callbacks_save(app):
         dashboard_data.update(updated_dashboard_data)
 
         # Log the complete dashboard data being sent to API
-        # logger.debug("=" * 80)
-        # logger.debug("🔍 SAVE DEBUG - DATABASE SAVE PREPARATION")
-        # logger.debug("=" * 80)
         # db_layout_data = dashboard_data.get("stored_layout_data", [])
-        # logger.debug(f"🔍 SAVE DEBUG - database layout data: {db_layout_data}")
-        # logger.debug(
         #     f"🔍 SAVE DEBUG - database layout data length: {len(db_layout_data) if db_layout_data else 0}"
         # )
         # if db_layout_data:
         #     for i, layout_item in enumerate(db_layout_data):
-        #         logger.debug(f"🔍 SAVE DEBUG - database layout item {i}: {layout_item}")
 
         # db_metadata = dashboard_data.get("stored_metadata", [])
-        # logger.debug(f"🔍 SAVE DEBUG - database metadata count: {len(db_metadata)}")
         # for i, meta_item in enumerate(db_metadata):
-        #     logger.debug(
         #         f"🔍 SAVE DEBUG - database metadata item {i}: index={meta_item.get('index')}, type={meta_item.get('component_type')}, title={meta_item.get('title')}"
         #     )
 
         logger.debug("=" * 80)
-        logger.debug("🔍 SAVE DEBUG - CALLING API TO SAVE DASHBOARD")
         logger.debug("=" * 80)
 
         # Save dashboard data using API call with proper timeout
@@ -1082,11 +997,7 @@ def register_callbacks_save(app):
 
         # Log save result and verify what was actually saved
         logger.debug("=" * 80)
-        logger.debug("🔍 SAVE DEBUG - SAVE OPERATION RESULT")
         logger.debug("=" * 80)
-        logger.debug(f"🔍 SAVE DEBUG - save_success: {save_success}")
-        logger.debug(f"🔍 SAVE DEBUG - dashboard_id: {dashboard_id}")
-        logger.debug(f"🔍 SAVE DEBUG - user_id: {current_user.id}")
 
         # for each component which is interactive, show value & corrected_value
         for i, value in enumerate(interactive_component_values):
@@ -1099,36 +1010,26 @@ def register_callbacks_save(app):
                 )
         if save_success:
             # Fetch the dashboard again to verify what was actually saved
-            # logger.debug("🔍 SAVE DEBUG - Fetching saved dashboard to verify data...")
             # verified_data = api_call_get_dashboard(dashboard_id, TOKEN)
             # if verified_data:
             #     verified_layout = verified_data.get("stored_layout_data", [])
             #     verified_metadata = verified_data.get("stored_metadata", [])
 
-            #     logger.debug(
             #         f"🔍 SAVE DEBUG - verified layout data from database: {verified_layout}"
             #     )
-            #     logger.debug(
             #         f"🔍 SAVE DEBUG - verified layout count: {len(verified_layout) if verified_layout else 0}"
             #     )
             #     if verified_layout:
             #         for i, layout_item in enumerate(verified_layout):
-            #             logger.debug(f"🔍 SAVE DEBUG - verified layout item {i}: {layout_item}")
 
-            #     logger.debug(f"🔍 SAVE DEBUG - verified metadata count: {len(verified_metadata)}")
             #     for i, meta_item in enumerate(verified_metadata):
-            #         logger.debug(
             #             f"🔍 SAVE DEBUG - verified metadata item {i}: index={meta_item.get('index')}, type={meta_item.get('component_type')}, title={meta_item.get('title')}"
             #         )
             # else:
-            #     logger.error("🔍 SAVE DEBUG - Failed to fetch dashboard for verification")
             pass
         else:
             logger.error(f"Failed to save dashboard data for {dashboard_id}")
 
-        # logger.debug("=" * 80)
-        # logger.debug("🔍 SAVE DEBUG - LAYOUT DATA PROCESSING END")
-        # logger.debug("=" * 80)
 
         # Screenshot the dashboard if save button was clicked
         if n_clicks and save_success:

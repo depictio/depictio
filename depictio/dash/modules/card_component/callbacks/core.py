@@ -483,7 +483,7 @@ def _load_data_for_card(
             else:
                 logger.info(f"DC {dc_key}: No filters (clearing)")
 
-        logger.info(f"Loading result DC {result_dc_id} with {len(combined_metadata)} filters")
+        logger.debug(f"Loading result DC {result_dc_id} with {len(combined_metadata)} filters")
         data = load_deltatable_lite(
             ObjectId(wf_id),
             ObjectId(result_dc_id),
@@ -492,12 +492,12 @@ def _load_data_for_card(
             select_columns=None,
         )
 
-        logger.info(f"Loaded result DC: {data.height:,} rows x {data.width} columns")
+        logger.debug(f"Loaded result DC: {data.height:,} rows x {data.width} columns")
         return data
 
     if use_link_path and link_resolved_filter:
         # LINK-DC PATH: Use link-resolved filter to load card's DC
-        logger.info("LINK-DC FILTERING: Loading card DC with link-resolved filter")
+        logger.debug("LINK-DC FILTERING: Loading card DC with link-resolved filter")
 
         data = load_deltatable_lite(
             ObjectId(wf_id),
@@ -507,7 +507,7 @@ def _load_data_for_card(
             select_columns=None,
         )
 
-        logger.info(f"Loaded via link resolution: {data.height:,} rows x {data.width} columns")
+        logger.debug(f"Loaded via link resolution: {data.height:,} rows x {data.width} columns")
         return data
 
     # SAME-DC PATH: Use cached data or fall back to synchronous load
@@ -525,10 +525,10 @@ def _load_data_for_card(
         active_filters = [
             c for c in relevant_filters if c.get("value") not in [None, [], "", False]
         ]
-        logger.info(f"SAME-DC filtering - applying {len(active_filters)} active filters")
+        logger.debug(f"SAME-DC filtering - applying {len(active_filters)} active filters")
         metadata_to_pass = active_filters
     else:
-        logger.info("SAME-DC clearing filters - loading ALL unfiltered data")
+        logger.debug("SAME-DC clearing filters - loading ALL unfiltered data")
         metadata_to_pass = []
 
     logger.warning(f"Cache miss for card {card_index} - loading synchronously: {wf_id}:{dc_id}")
@@ -540,7 +540,7 @@ def _load_data_for_card(
         TOKEN=access_token,
     )
 
-    logger.info(f"Loaded {data.height:,} rows x {data.width} columns")
+    logger.debug(f"Loaded {data.height:,} rows x {data.width} columns")
     return data
 
 
@@ -755,7 +755,6 @@ def register_core_callbacks(app):
                             last_agg = dc.get("last_aggregation", {})
                             cols_json = last_agg.get("column_specs") or last_agg.get("columns")
                             if cols_json:
-                                logger.info("✅ Extracted column_specs from cache (no API call)")
                                 break
                     if cols_json:
                         break
@@ -855,8 +854,6 @@ def register_core_callbacks(app):
 
         batch_start = time.time()
         task_id = str(uuid.uuid4())[:8]
-
-        logger.info(f"[{task_id}] 🚀 BATCH CARD RENDER START - {len(trigger_data_list)} cards")
 
         # Early exit checks
         if not trigger_data_list or not any(trigger_data_list):
@@ -1194,7 +1191,7 @@ def register_core_callbacks(app):
             return (["Auth Error"] * num_cards, [[]] * num_cards, [{}] * num_cards)
 
         # Phase 2: Pre-load unique DC+filter combinations in parallel
-        logger.info(f"[{batch_task_id}] Analyzing {len(trigger_ids)} cards for parallel loading")
+        logger.debug(f"[{batch_task_id}] Analyzing {len(trigger_ids)} cards for parallel loading")
         dc_load_registry, card_to_load_key = _build_dc_load_registry(
             trigger_data_list, filters_data
         )
@@ -1305,8 +1302,6 @@ def _process_single_card(
     card_start_time = time.time()
 
     try:
-        logger.debug(f"[{task_id}] Processing card {card_index + 1}/{total_cards}: {component_id}")
-
         # Check for user interaction and race conditions
         early_exit = _check_card_early_exit_conditions(
             enriched_components=enriched_components,
@@ -1372,9 +1367,9 @@ def _process_single_card(
         # Check for active filters
         has_active_filters = _has_active_filter_values(metadata_list)
         if has_active_filters:
-            logger.info("Active filters detected - loading filtered data")
+            logger.debug("Active filters detected - loading filtered data")
         else:
-            logger.info("No active filters - loading ALL unfiltered data")
+            logger.debug("No active filters - loading ALL unfiltered data")
 
         # Determine filtering path (joined, link, or same-DC)
         use_joined_path, result_dc_id, use_link_path, link_resolved_filter, filters_by_dc = (
@@ -1404,8 +1399,6 @@ def _process_single_card(
             use_link_path=use_link_path,
             link_resolved_filter=link_resolved_filter,
         )
-
-        logger.debug("Loaded filtered data")
 
         # Get column specs for optimization
         cols_json: dict[str, Any] = {}
@@ -1438,7 +1431,7 @@ def _process_single_card(
         )
 
         duration_ms = (time.time() - card_start_time) * 1000
-        logger.info(f"CARD PATCH: Value updated successfully: {formatted_value}")
+        logger.debug(f"CARD PATCH: Value updated successfully: {formatted_value}")
         logger.info(
             f"[{task_id}] CARD PATCH COMPLETE - Component: {component_id} - "
             f"Duration: {duration_ms:.2f}ms (success)"

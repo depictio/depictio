@@ -137,8 +137,6 @@ def register_callbacks_stepper_part_one(app: dash.Dash) -> None:
         # latest_index = store_btn_ts.index(max(store_btn_ts))
         # component_selected = components_list[latest_index]
 
-        # logger.info(f"component_selected: {component_selected}")
-
         # workflow_id, data_collection_id = return_mongoid(
         #     workflow_tag=workflow_selection,
         #     data_collection_tag=data_collection_selection,
@@ -456,12 +454,10 @@ def register_callbacks_stepper_part_one(app: dash.Dash) -> None:
                 gap="md",
             )
             # if dc_specs["config"]["type"] == "Table":
-            #     logger.info(f"PART 1 - TOKEN: {TOKEN}")
             #     df = load_deltatable_lite(workflow_id, data_collection_id, TOKEN=TOKEN)
             #     cols = get_columns_from_data_collection(
             #         workflow_selection, data_collection_selection, TOKEN
             #     )
-            #     logger.info(f"Columns: {cols}")
             #     columnDefs = [
             #         {"field": c, "headerTooltip": f"Type: {e['type']}"}
             #         for c, e in cols.items()
@@ -624,11 +620,6 @@ def register_callbacks_stepper_part_one(app: dash.Dash) -> None:
     #     # simulate slow callback
     #     # time.sleep(2)
 
-    #     logger.debug(f"Request: {request}")
-    #     logger.debug(f"Workflow: {workflow_selection}")
-    #     logger.debug(f"Data collection: {data_collection_selection}")
-    #     logger.debug(f"Local store: {local_store}")
-
     #     if request is None:
     #         return dash.no_update
 
@@ -638,13 +629,8 @@ def register_callbacks_stepper_part_one(app: dash.Dash) -> None:
     #     TOKEN = local_store["access_token"]
 
     #     if workflow_selection is not None and data_collection_selection is not None:
-    #         logger.info(f"Workflow: {workflow_selection}")
-    #         logger.info(f"Data collection: {data_collection_selection}")
 
     #         workflow_id, data_collection_id = return_mongoid(workflow_tag=workflow_selection, data_collection_tag=data_collection_selection, TOKEN=TOKEN)
-
-    #         logger.debug(f"Workflow ID: {workflow_id}")
-    #         logger.debug(f"Data collection ID: {data_collection_id}")
 
     #         dc_specs = httpx.get(
     #             f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
@@ -653,17 +639,11 @@ def register_callbacks_stepper_part_one(app: dash.Dash) -> None:
     #             },
     #         ).json()
 
-    #         logger.debug(f"DC specs: {dc_specs}")
-
     #         if dc_specs["config"]["type"] == "Table":
     #             df = load_deltatable_lite(workflow_id, data_collection_id, TOKEN=TOKEN)
-    #             logger.debug(f"DF: {df}")
-    #             logger.debug(f"Request: {request}")
 
     #             partial = df[request["startRow"] : request["endRow"]]
-    #             logger.debug(f"Partial: {partial}")
     #             rows_response = {"rowData": partial.to_dicts(), "rowCount": df.shape[0]}
-    #             logger.debug(f"Rows response: {rows_response}")
     #             return rows_response
     #         else:
     #             return dash.no_update

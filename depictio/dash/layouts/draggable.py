@@ -60,8 +60,6 @@ def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
     dimensions = component_dimensions.get(
         child_type, {"w": 20, "h": 16}
     )  # Default 20x16 for 48-column grid with rowHeight=20
-    logger.info(f"📐 Selected dimensions: {dimensions} for {child_type}")
-    logger.info(f"📋 Existing layouts: {existing_layouts}")
 
     columns_per_row = 48  # Updated for 48-column grid
     components_per_row = columns_per_row // dimensions["w"]
@@ -116,7 +114,6 @@ def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
                 if position_available:
                     col_position = x_position
                     found_position = True
-                    logger.info(f"✅ Found available position: x={col_position}, y={y_position}")
                     break
 
             if not found_position:
@@ -126,13 +123,10 @@ def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
         if not found_position:
             col_position = 0
             y_position = max_bottom
-            logger.info(f"⬇️ Fallback: placing below all components at y={y_position}")
     else:
         # No existing components, place at origin
         col_position = 0
         y_position = 0
-
-    logger.info(f"📍 Calculated position: x={col_position}, y={y_position}")
 
     return {
         "x": col_position,
@@ -420,7 +414,6 @@ def separate_components_by_panel(stored_metadata):
         else:
             metadata["panel"] = "right"
             right_panel_components.append(metadata)
-            logger.info(f"  ➡️ RIGHT PANEL: {component_type} component {metadata.get('index')}")
 
     logger.info(
         f"📊 COMPONENT SEPARATION: {len(interactive_components)} interactive, "
@@ -449,7 +442,7 @@ def calculate_left_panel_positions(components, saved_layout_data=None):
 
     # Build lookup dict for saved positions
     saved_positions = _build_saved_positions_lookup(saved_layout_data)
-    logger.info(f"LEFT: Built saved_positions lookup with {len(saved_positions)} items")
+    logger.debug(f"LEFT: Built saved_positions lookup with {len(saved_positions)} items")
     if saved_positions:
         logger.info(f"📐 LEFT: Sample saved_positions keys: {list(saved_positions.keys())[:3]}")
 
@@ -509,7 +502,6 @@ def calculate_left_panel_positions(components, saved_layout_data=None):
         # Update current_y for next component (use y + h to stack properly)
         current_y = y + h
 
-    logger.info(f"📐 LEFT PANEL: Generated {len(layout)} positions, max_y={current_y}")
     return layout
 
 
@@ -534,7 +526,7 @@ def calculate_right_panel_positions(components, saved_layout_data=None):
 
     # Build lookup dict for saved positions
     saved_positions = _build_saved_positions_lookup(saved_layout_data)
-    logger.info(f"RIGHT: Built saved_positions lookup with {len(saved_positions)} items")
+    logger.debug(f"RIGHT: Built saved_positions lookup with {len(saved_positions)} items")
     if saved_positions:
         logger.info(f"📐 RIGHT: Sample saved_positions keys: {list(saved_positions.keys())[:3]}")
 
@@ -544,7 +536,6 @@ def calculate_right_panel_positions(components, saved_layout_data=None):
     for idx, card in enumerate(cards):
         index = card.get("index")
         component_id = str(index)
-        logger.debug(f"📐 RIGHT: Processing card {component_id}, checking if in saved_positions")
 
         # Check if we have saved position for this component
         if component_id in saved_positions:
@@ -597,8 +588,6 @@ def calculate_right_panel_positions(components, saved_layout_data=None):
         component_type = component.get("component_type", "figure")
         index = component.get("index")
         component_id = str(index)
-
-        logger.debug(f"📐 RIGHT: Processing {component_type} {component_id}")
 
         # Check if we have saved position for this component
         if component_id in saved_positions:
@@ -668,7 +657,6 @@ def register_callbacks_draggable(app: dash.Dash) -> None:
         app: The Dash application instance to register callbacks with.
     """
     # KEEPME - MODULARISE - TO EVALUATE
-    logger.info("⚠️ store_wf_dc_selection callback (duplicate/edit buttons) DISABLED for debugging")
 
     # TEMPORARILY DISABLED FOR DEBUGGING - this callback handles duplicate-box-button
     # @app.callback(
@@ -753,7 +741,7 @@ def register_callbacks_draggable(app: dash.Dash) -> None:
             )
             return components_store or dash.no_update
 
-        logger.info(f"[PERF] Metadata callback PROCESSING (triggered by: {ctx.triggered_id})")
+        logger.debug(f"[PERF] Metadata callback PROCESSING (triggered by: {ctx.triggered_id})")
 
         # PERFORMANCE OPTIMIZATION: Save original state for comparison at end
         # This enables hash-based change detection to prevent unnecessary downstream updates
@@ -771,8 +759,6 @@ def register_callbacks_draggable(app: dash.Dash) -> None:
         logger.info(f"Button done edit clicks: {btn_done_edit_clicks}")
         logger.info(f"Edit box button clicks: {edit_box_button_clicks}")
         logger.info(f"Duplicate box button clicks: {duplicate_box_button_clicks}")
-        # logger.info(f"Local store data: {local_store}")
-        # logger.info(f"Components store data before update: {components_store}")
         logger.info(f"Workflow IDs: {wf_ids}")
         logger.info(f"Data collection IDs: {dc_ids}")
         logger.info(f"Current edit parent index: {current_edit_parent_index}")
@@ -821,7 +807,7 @@ def register_callbacks_draggable(app: dash.Dash) -> None:
                         logger.info(
                             f"Component data retrieved for '{trigger_index}': {component_data}"
                         )
-                        logger.info(f"Updated wf_id_value for '{trigger_index}': {wf_id_value}")
+                        logger.debug(f"Updated wf_id_value for '{trigger_index}': {wf_id_value}")
 
                         logger.info(f"Component data: {component_data}")
             except Exception as e:
@@ -830,7 +816,7 @@ def register_callbacks_draggable(app: dash.Dash) -> None:
             # Use comp
 
             # Get the workflow tag from the ID for reference/display purposes
-            logger.info(f"Updating component '{trigger_index}' with wf_id: {wf_id_value}")
+            logger.debug(f"Updating component '{trigger_index}' with wf_id: {wf_id_value}")
             try:
                 wf_tag = return_wf_tag_from_id(workflow_id=wf_id_value, TOKEN=TOKEN)
                 components_store[trigger_index]["wf_tag"] = wf_tag
@@ -870,10 +856,9 @@ def register_callbacks_draggable(app: dash.Dash) -> None:
                             TOKEN=TOKEN,
                         )
                         dc_id_value = component_data.get("dc_id", dc_id_value)
-                        # logger.info(
                         #     f"Component data retrieved for '{trigger_index}': {component_data}"
                         # )
-                        logger.info(f"Updated dc_id_value for '{trigger_index}': {dc_id_value}")
+                        logger.debug(f"Updated dc_id_value for '{trigger_index}': {dc_id_value}")
                 dc_tag = return_dc_tag_from_id(data_collection_id=dc_id_value, TOKEN=TOKEN)
                 components_store[trigger_index]["dc_tag"] = dc_tag
                 logger.debug(
@@ -899,11 +884,10 @@ def register_callbacks_draggable(app: dash.Dash) -> None:
                 )
                 return dash.no_update
 
-            logger.info("[PERF] Metadata changed - returning updated components_store")
+            logger.debug("[PERF] Metadata changed - returning updated components_store")
         except Exception as e:
             logger.warning(f"[PERF] Failed to compare metadata: {e}, returning components_store")
 
-        # logger.debug(f"Components store data after update: {components_store}")
         return components_store
 
     # KEEPME
@@ -966,8 +950,6 @@ def register_callbacks_draggable(app: dash.Dash) -> None:
     # )
     # def update_empty_dashboard_wrapper(edit_mode_enabled, local_data, current_draggable_items):
     #     """Update draggable wrapper to show empty state messages when dashboard is empty"""
-    #     logger.info(f"🔄 update_empty_dashboard_wrapper triggered - Edit mode: {edit_mode_enabled}")
-    #     logger.info(f"🔄 Trigger: {ctx.triggered_id}, Current items: {len(current_draggable_items) if current_draggable_items else 0}")
     #     return html.Div(id="draggable")
 
     #     # Guard clause: If dashboard has stored components, always keep the draggable (don't show empty state)
@@ -978,24 +960,18 @@ def register_callbacks_draggable(app: dash.Dash) -> None:
     #     if (stored_children_data and len(stored_children_data) > 0) or (
     #         stored_layout_data and len(stored_layout_data) > 0
     #     ):
-    #         logger.info(
     #             f"Dashboard has stored components ({len(stored_children_data)} children, {len(stored_layout_data)} layouts) - keeping original draggable"
     #         )
     #         return dash.no_update
 
     #     # Also check current draggable items as secondary check
     #     if current_draggable_items and len(current_draggable_items) > 0:
-    #         logger.info("Dashboard has current draggable items, keeping original draggable")
     #         return dash.no_update
 
     #     if not local_data:
-    #         logger.info("No local data available, keeping original draggable")
     #         return dash.no_update
 
-    #     logger.info(f"Truly empty dashboard - Edit mode: {edit_mode_enabled}")
-
     #     if not edit_mode_enabled:
-    #         logger.info("🔵 Empty dashboard + Edit mode OFF - showing welcome message")
     #         # Welcome message (blue theme) - now clickable to enable edit mode
     #         welcome_message = html.Div(
     #             dmc.Center(
@@ -1055,7 +1031,6 @@ def register_callbacks_draggable(app: dash.Dash) -> None:
     #         empty_draggable = html.Div(id="draggable")
     #         return [welcome_message, empty_draggable]
     #     else:
-    #         logger.info("🧡 Empty dashboard + Edit mode ON - showing add component message")
     #         # Add component message (orange theme) - now clickable to trigger add button
     #         add_component_message = html.Div(
     #             dmc.Center(
@@ -1327,7 +1302,7 @@ def _check_data_availability(workflows: list, token: str) -> bool:
 
 def _check_deltatables(dc_ids: list[str], token: str) -> bool:
     """Check if DeltaTables exist for given data collection IDs."""
-    logger.info(f"DESIGN_DRAGGABLE: Batch checking {len(dc_ids)} deltatables")
+    logger.debug(f"DESIGN_DRAGGABLE: Batch checking {len(dc_ids)} deltatables")
     try:
         batch_response = httpx.post(
             f"{API_BASE_URL}/depictio/api/v1/deltatables/batch/exists",
@@ -1338,7 +1313,7 @@ def _check_deltatables(dc_ids: list[str], token: str) -> bool:
             batch_results = batch_response.json()
             for dc_id, result in batch_results.items():
                 if result.get("exists") and result.get("delta_table_location"):
-                    logger.info(f"Delta table found: {result['delta_table_location']}")
+                    logger.debug(f"Delta table found: {result['delta_table_location']}")
                     return True
         else:
             logger.error(f"Batch deltatable check failed: {batch_response.text}")
@@ -1360,7 +1335,7 @@ def _check_deltatables_fallback(dc_ids: list[str], token: str) -> bool:
                 headers={"Authorization": f"Bearer {token}"},
             )
             if response.status_code == 200:
-                logger.info(f"Delta table found via fallback for {dc_id}")
+                logger.debug(f"Delta table found via fallback for {dc_id}")
                 return True
         except Exception as e:
             logger.error(f"Fallback deltatable check failed for {dc_id}: {e}")
@@ -1369,7 +1344,7 @@ def _check_deltatables_fallback(dc_ids: list[str], token: str) -> bool:
 
 def _check_multiqc(dc_ids: list[str], token: str) -> bool:
     """Check if MultiQC reports exist for given data collection IDs."""
-    logger.info(f"DESIGN_DRAGGABLE: Checking {len(dc_ids)} MultiQC collections")
+    logger.debug(f"DESIGN_DRAGGABLE: Checking {len(dc_ids)} MultiQC collections")
     for dc_id in dc_ids:
         try:
             response = httpx.get(
@@ -1380,7 +1355,7 @@ def _check_multiqc(dc_ids: list[str], token: str) -> bool:
             if response.status_code == 200:
                 result = response.json()
                 if result.get("total_count", 0) > 0:
-                    logger.info(f"MultiQC reports found for data collection '{dc_id}'")
+                    logger.debug(f"MultiQC reports found for data collection '{dc_id}'")
                     return True
         except Exception as e:
             logger.error(f"MultiQC check failed for {dc_id}: {e}")
@@ -1542,7 +1517,7 @@ def _build_dual_panel_layout(
     Returns:
         html.Div with dual-panel layout
     """
-    logger.info("DUAL-PANEL MODE: Creating two-panel layout")
+    logger.debug("DUAL-PANEL MODE: Creating two-panel layout")
     logger.info(f"Received {len(init_children)} children to process")
 
     if not stored_metadata:
@@ -1707,8 +1682,6 @@ def design_draggable(
         display_style = "flex"
         core_children = []
 
-    # logger.info(f"Init layout: {init_layout}")
-
     # Ensure init_layout has the required breakpoints
     # Ensure init_layout is in list format
     if init_layout:
@@ -1736,9 +1709,6 @@ def design_draggable(
         current_layout = []
 
     # Debug logging for grid configuration
-    logger.debug("🔍 GRID DEBUG - Creating DashGridLayout with configuration:")
-    logger.debug("🔍 GRID DEBUG - rowHeight: 20")
-    logger.debug("🔍 GRID DEBUG - cols: {'lg': 48, 'md': 48, 'sm': 48, 'xs': 48, 'xxs': 48}")
     logger.debug(
         f"🔍 GRID DEBUG - current_layout items: {len(current_layout) if current_layout else 0}"
     )
@@ -1790,7 +1760,7 @@ def design_draggable(
     grid_className = "draggable-grid-container"
     if not initial_edit_mode:
         grid_className += " drag-handles-hidden"
-        logger.info("Initial load with edit mode OFF - adding .drag-handles-hidden class")
+        logger.debug("Initial load with edit mode OFF - adding .drag-handles-hidden class")
 
     draggable = dgl.DashGridLayout(
         id="draggable",

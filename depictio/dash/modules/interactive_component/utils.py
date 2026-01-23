@@ -277,8 +277,6 @@ def generate_log_marks(min_val, max_val, data_min, data_max, tolerance=0.5):
         logger.debug(f"Added required max mark: {max_log_pos} -> {data_max}")
 
         for exp in range(min_exp, max_exp + 1):
-            logger.debug(f"Processing exponent: {exp}")
-
             # Calculate the original value at this exponent
             original_value = 10**exp
             logger.debug(f"Original value at 10^{exp}: {original_value}")
@@ -313,7 +311,7 @@ def generate_log_marks(min_val, max_val, data_min, data_max, tolerance=0.5):
                 if label:
                     # Use float position instead of int for better precision
                     marks[pos] = label
-                    logger.info(f"Added logarithmic mark: pos={pos}, label={label}")
+                    logger.debug(f"Added logarithmic mark: pos={pos}, label={label}")
                 else:
                     logger.warning(f"Label for value {original_value} is None. Skipping.")
 
@@ -873,7 +871,7 @@ def _build_slider_component(
 
     # Apply log transformation if needed
     if use_log_scale:
-        logger.info("Applying log transformation")
+        logger.debug("Applying log transformation")
         transformed_series, _ = apply_log_transformation(df_pandas[column_name])
         df_pandas[f"{column_name}_log10"] = transformed_series
 
@@ -898,7 +896,7 @@ def _build_slider_component(
     # Apply custom color
     if color:
         kwargs_component["color"] = color
-        logger.info(f"DMC Slider: Applied custom color: {color}")
+        logger.debug(f"DMC Slider: Applied custom color: {color}")
 
     # Generate marks
     _add_slider_marks(
@@ -1158,7 +1156,7 @@ def _add_slider_marks(
 
         if dmc_marks:
             kwargs_component["marks"] = dmc_marks
-            logger.info(f"DMC marks created: {len(dmc_marks)} marks")
+            logger.debug(f"DMC marks created: {len(dmc_marks)} marks")
         else:
             logger.warning("No valid DMC marks created")
     else:
@@ -1196,7 +1194,7 @@ def _build_date_range_picker_component(
         The constructed DMC DatePickerInput component.
     """
     logger.info(f"Column name: {column_name}")
-    logger.info("Building DateRangePicker component")
+    logger.debug("Building DateRangePicker component")
 
     # Convert Polars DataFrame to Pandas for processing
     df_pandas = df.to_pandas()
@@ -1280,7 +1278,7 @@ def _build_date_range_picker_component(
             "label": {"color": color},
         }
         kwargs_component["styles"] = {**existing_styles, **color_styles}
-        logger.info(f"Applied custom color: {color}")
+        logger.debug(f"Applied custom color: {color}")
 
     interactive_component = func_name(**kwargs_component)
 
@@ -1293,7 +1291,7 @@ def _build_date_range_picker_component(
         "max_date": str(max_date_py),
         "default_range": [str(min_date_py), str(max_date_py)],
     }
-    logger.info(f"Updated default_state for DateRangePicker: {store_data['default_state']}")
+    logger.debug(f"Updated default_state for DateRangePicker: {store_data['default_state']}")
 
     return interactive_component
 
@@ -1631,7 +1629,7 @@ def _build_component_title(
 
     if color:
         title_style["color"] = color
-        logger.info(f"Applied custom color: {color}")
+        logger.debug(f"Applied custom color: {color}")
     else:
         logger.debug("Using Mantine's native theming for title")
 

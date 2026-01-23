@@ -225,7 +225,7 @@ def build_text(**kwargs):
     Returns:
         Component tree for inline editable text, optionally wrapped in frame.
     """
-    logger.info("Building inline editable text component")
+    logger.debug("Building inline editable text component")
 
     # Extract parameters
     index = kwargs.get("index")

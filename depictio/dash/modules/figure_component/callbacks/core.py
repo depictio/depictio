@@ -458,8 +458,6 @@ def _process_single_figure(
     figure_start_time = time.time()
 
     try:
-        logger.debug(f"[{task_id}] Processing figure {figure_index + 1}: {component_id}")
-
         if not trigger_data or not isinstance(trigger_data, dict):
             logger.warning(f"[{task_id}] Invalid trigger data for figure {component_id}")
             return _create_error_figure("Invalid trigger data", current_theme), {}
@@ -782,7 +780,7 @@ def register_core_callbacks(app):
             return [empty_fig] * num_figures, [{}] * num_figures
 
         # Phase 1: Build DC load registry
-        logger.info(f"[{batch_task_id}] Analyzing {len(trigger_ids)} figures for parallel loading")
+        logger.debug(f"[{batch_task_id}] Analyzing {len(trigger_ids)} figures for parallel loading")
 
         dc_load_registry, figure_to_load_key = _build_dc_load_registry(
             trigger_data_list,

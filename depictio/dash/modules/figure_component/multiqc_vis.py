@@ -85,7 +85,7 @@ def _check_s3_fuse_mount(s3_location: str) -> Optional[str]:
 
         for local_path in potential_paths:
             if os.path.exists(local_path):
-                logger.info(f"Found S3 FUSE mount: {s3_location} -> {local_path}")
+                logger.debug(f"Found S3 FUSE mount: {s3_location} -> {local_path}")
                 return local_path
 
     logger.debug(f"No S3 FUSE mount found for {s3_location}")
@@ -110,7 +110,7 @@ def _get_local_path_for_s3(s3_location: str, use_cache: bool = True) -> str:
         logger.debug(f"Path is already local: {s3_location}")
         return s3_location
 
-    logger.info(f"Processing S3 location: {s3_location}")
+    logger.debug(f"Processing S3 location: {s3_location}")
 
     # First, check if S3 is FUSE-mounted (most efficient)
     fuse_path = _check_s3_fuse_mount(s3_location)
@@ -133,7 +133,7 @@ def _get_local_path_for_s3(s3_location: str, use_cache: bool = True) -> str:
         # Get file info for logging
         file_info = fs.info(s3_location)
         file_size = file_info.get("size", 0)
-        logger.info(f"S3 file found - size: {file_size} bytes")
+        logger.debug(f"S3 file found - size: {file_size} bytes")
 
         # For MultiQC compatibility, we need an actual file path.
         # Since fsspec's caching doesn't reliably provide local paths,
@@ -162,11 +162,11 @@ def _get_local_path_for_s3(s3_location: str, use_cache: bool = True) -> str:
                 logger.info(f"Using cached file (size match): {cache_path}")
                 return cache_path
             else:
-                logger.info(f"Cache size mismatch ({cached_size} != {file_size}), re-downloading")
+                logger.debug(f"Cache size mismatch ({cached_size} != {file_size}), re-downloading")
                 os.remove(cache_path)
 
         # Download file to cache location
-        logger.info(f"Downloading to cache: {s3_location} -> {cache_path}")
+        logger.debug(f"Downloading to cache: {s3_location} -> {cache_path}")
         try:
             fs.get(s3_location, cache_path)
             logger.info(f"Successfully cached S3 file at: {cache_path}")
@@ -217,13 +217,13 @@ def _download_s3_file_direct(s3_location: str) -> str:
         if fs.exists(s3_location):
             file_info = fs.info(s3_location)
             file_size = file_info.get("size", "unknown")
-            logger.info(f"Downloading file of size: {file_size} bytes")
+            logger.debug(f"Downloading file of size: {file_size} bytes")
         else:
             raise FileNotFoundError(f"S3 file does not exist: {s3_location}")
 
         # Download file
         fs.get(s3_location, local_path)
-        logger.info(f"Successfully downloaded S3 file to: {local_path}")
+        logger.debug(f"Successfully downloaded S3 file to: {local_path}")
 
         return local_path
 
@@ -247,7 +247,7 @@ def get_multiqc_modules(s3_location: str, use_s3_cache: bool = True) -> List[str
     Returns:
         List of available module names
     """
-    logger.info(f"Getting MultiQC modules from: {s3_location}")
+    logger.debug(f"Getting MultiQC modules from: {s3_location}")
 
     try:
         logger.debug("Attempting to import MultiQC in get_multiqc_modules...")
@@ -271,7 +271,7 @@ def get_multiqc_modules(s3_location: str, use_s3_cache: bool = True) -> List[str
         # Get available modules
         logger.debug("Retrieving available MultiQC modules")
         modules = multiqc.list_modules()
-        logger.info(f"Found {len(modules)} MultiQC modules: {modules}")
+        logger.debug(f"Found {len(modules)} MultiQC modules: {modules}")
         return modules
 
     except Exception as e:
@@ -290,7 +290,7 @@ def get_multiqc_plots(s3_location: str, module: str, use_s3_cache: bool = True) 
     Returns:
         List of available plot names for the module
     """
-    logger.info(f"Getting MultiQC plots for module '{module}' from: {s3_location}")
+    logger.debug(f"Getting MultiQC plots for module '{module}' from: {s3_location}")
 
     try:
         import multiqc
@@ -311,7 +311,7 @@ def get_multiqc_plots(s3_location: str, module: str, use_s3_cache: bool = True) 
         all_plots = multiqc.list_plots()
         module_plots = all_plots.get(module, [])
 
-        logger.info(f"Found {len(module_plots)} plots for module {module}: {module_plots}")
+        logger.debug(f"Found {len(module_plots)} plots for module {module}: {module_plots}")
         return module_plots
 
     except Exception as e:
@@ -347,7 +347,7 @@ def get_multiqc_plots_from_metadata(metadata_plots: dict, module: str) -> List[s
                 for plot_name in plot_item.keys():
                     plot_names.append(plot_name)
 
-        logger.info(f"Found plots for module {module} from metadata: {plot_names}")
+        logger.debug(f"Found plots for module {module} from metadata: {plot_names}")
         return plot_names
 
     except Exception as e:
@@ -390,7 +390,7 @@ def get_multiqc_datasets(metadata_plots: dict, module: str, plot: str) -> List[s
                 datasets = []
                 break
 
-        logger.info(f"Found datasets for {module}/{plot}: {datasets}")
+        logger.debug(f"Found datasets for {module}/{plot}: {datasets}")
         return datasets
 
     except Exception as e:
@@ -424,7 +424,6 @@ def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = Tru
     """
     import multiqc
 
-    logger.info("📦 _get_or_parse_multiqc_logs called")
     logger.info(f"   Files: {len(s3_locations)}")
     logger.info(f"   Use S3 cache: {use_s3_cache}")
 
@@ -435,24 +434,20 @@ def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = Tru
     logger.info("   Cache instance retrieved")
 
     # Try to get cached report object (check cache OUTSIDE lock - read-only, safe)
-    logger.info("🔍 Checking for cached report...")
     cached_report = cache.get(cache_key)
 
     if cached_report is not None:
-        logger.info(f"🚀 Cache HIT for {len(s3_locations)} files")
         # ACQUIRE LOCK before modifying MultiQC global state
         with _multiqc_lock:
-            logger.info("🔒 Acquired MultiQC lock for cache restore")
             try:
                 logger.info("   Restoring cached report to multiqc.report...")
                 # Restore the ENTIRE report object
                 multiqc.report = cached_report
-                logger.info(f"✅ Restored report with {len(multiqc.report.modules)} modules")
                 logger.info("🔓 Released MultiQC lock")
                 return True
             except Exception as e:
                 logger.warning(f"⚠️ Failed to restore cached report: {e}")
-                logger.info("   Falling through to fresh parsing...")
+                logger.debug("   Falling through to fresh parsing...")
                 logger.info("🔓 Released MultiQC lock")
                 # Lock will be re-acquired below for parsing
     else:
@@ -461,23 +456,19 @@ def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = Tru
     # Cache miss - parse logs
     # ACQUIRE LOCK for parsing (modifies MultiQC global state)
     with _multiqc_lock:
-        logger.info("🔒 Acquired MultiQC lock for parsing")
-        logger.info("🔄 Resetting MultiQC state...")
         multiqc.reset()
-        logger.info("✅ MultiQC reset complete")
 
         # Parse all files
         parsed_files = 0
         for i, s3_location in enumerate(s3_locations):
-            logger.info(f"📄 Processing file {i + 1}/{len(s3_locations)}: {s3_location}")
+            logger.debug(f"📄 Processing file {i + 1}/{len(s3_locations)}: {s3_location}")
             try:
-                logger.info("   Getting local path for S3 file...")
+                logger.debug("   Getting local path for S3 file...")
                 local_file = _get_local_path_for_s3(s3_location, use_cache=use_s3_cache)
                 logger.info(f"   Local path: {local_file}")
 
-                logger.info("   Parsing with MultiQC...")
+                logger.debug("   Parsing with MultiQC...")
                 multiqc.parse_logs(local_file)
-                logger.info(f"✅ Successfully parsed file {i + 1}")
                 parsed_files += 1
 
             except Exception as e:
@@ -485,8 +476,6 @@ def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = Tru
                     f"⚠️ Error parsing file {i + 1} from {s3_location}: {e}", exc_info=True
                 )
                 continue
-
-        logger.info(f"📊 Parsed {parsed_files}/{len(s3_locations)} files")
 
         if parsed_files == 0:
             logger.error("❌ No files could be parsed")
@@ -496,7 +485,6 @@ def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = Tru
         # Cache the report in memory only (Redis can't serialize module objects)
         # The multiqc.report object contains Python modules that fail pickle serialization
         # Memory cache is sufficient since it persists for the lifetime of the Dash process
-        logger.info("💾 Caching MultiQC report (memory-only, Redis incompatible)...")
         try:
             # Use memory-only caching by bypassing Redis for this object type
             cache._memory_cache[cache_key] = {
@@ -504,11 +492,9 @@ def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = Tru
                 "cached_at": time.time(),
                 "ttl": 7200,
             }
-            logger.info(f"✅ Report cached in memory: {cache_key}")
         except Exception as e:
             logger.warning(f"⚠️ Failed to cache report: {e}")
 
-        logger.info("✅ _get_or_parse_multiqc_logs completed successfully")
         logger.info("🔓 Released MultiQC lock")
 
     return True
@@ -543,7 +529,6 @@ def create_multiqc_plot(
     import multiqc
 
     logger.info("=" * 60)
-    logger.info("📊 CREATE_MULTIQC_PLOT called")
     logger.info(f"   Module: {module}")
     logger.info(f"   Plot: {plot}")
     logger.info(f"   Dataset ID: {dataset_id}")
@@ -553,18 +538,14 @@ def create_multiqc_plot(
         logger.info(f"     [{i + 1}] {loc}")
 
     # Get cached report or parse logs (caches full MultiQC report object)
-    logger.info("🔄 Calling _get_or_parse_multiqc_logs...")
     parse_success = _get_or_parse_multiqc_logs(s3_locations, use_s3_cache=use_s3_cache)
-    logger.info(f"✅ Parse result: {parse_success}")
 
     if not parse_success:
         logger.error("❌ Failed to parse MultiQC files")
         raise ValueError("Failed to parse any MultiQC data files")
 
     # Get plot object and generate figure
-    logger.info(f"🎯 Getting plot object for {module}/{plot}...")
     plot_obj = multiqc.get_plot(module, plot)
-    logger.info(f"✅ Plot object retrieved: {type(plot_obj)}")
 
     # Type guard: ensure plot_obj has get_figure method
     if not plot_obj or not hasattr(plot_obj, "get_figure"):
@@ -572,7 +553,6 @@ def create_multiqc_plot(
         raise ValueError(f"Failed to get plot object for {module}/{plot}")
 
     # Generate figure
-    logger.info("📈 Generating figure...")
     try:
         if dataset_id:
             logger.info(f"   Using dataset_id: {dataset_id}")
@@ -580,13 +560,11 @@ def create_multiqc_plot(
         else:
             logger.info("   Using dataset_id: 0 (default)")
             fig = plot_obj.get_figure(dataset_id=0)
-        logger.info("✅ Figure generated successfully")
     except Exception as e:
         logger.error(f"❌ Error generating figure: {e}", exc_info=True)
         raise
 
     # Basic styling with theme support
-    logger.info(f"🎨 Applying theme: {theme}")
     fig.update_layout(
         title=f"{module.upper()}: {plot}",
         template=_get_theme_template(theme),
@@ -596,7 +574,6 @@ def create_multiqc_plot(
         margin=dict(t=60, l=60, r=60, b=60),
     )
 
-    logger.info(f"✅ MultiQC plot created: {len(fig.data)} traces")
     logger.info("=" * 60)
 
     return fig

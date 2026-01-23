@@ -77,7 +77,6 @@ def render_dashboard(
     import time
 
     start = time.time()
-    logger.info("⏱️ PROFILING: Starting render_dashboard")
 
     from depictio.dash.layouts.draggable import clean_stored_metadata
     from depictio.dash.layouts.edit import enable_box_edit_mode
@@ -279,7 +278,7 @@ def _build_component(child_metadata: dict, token: str) -> tuple:
     if component_type not in build_functions and component_type in DISPLAY_NAME_TO_TYPE_MAPPING:
         original_type = component_type
         component_type = DISPLAY_NAME_TO_TYPE_MAPPING[component_type]
-        logger.info(f"Converting legacy component type '{original_type}' to '{component_type}'")
+        logger.debug(f"Converting legacy component type '{original_type}' to '{component_type}'")
         child_metadata["component_type"] = component_type
 
     if component_type not in build_functions:
@@ -301,7 +300,7 @@ def _add_panel_metadata(children: list) -> None:
     Args:
         children: List of (component, type, metadata) tuples.
     """
-    logger.info("🧪 PRE-PROCESSING: Adding panel metadata before component wrapping")
+    logger.debug("🧪 PRE-PROCESSING: Adding panel metadata before component wrapping")
     interactive_count = 0
     card_count = 0
     other_count = 0
@@ -489,10 +488,8 @@ def render_dashboard_original(
     from depictio.dash.layouts.edit import enable_box_edit_mode
 
     start_time_total = time.time()
-    logger.info(f"⏱️ PROFILING: Starting render_dashboard for {dashboard_id}")
 
     num_components = len(stored_metadata) if stored_metadata else 0
-    logger.info(f"📊 RESTORE DEBUG - Raw stored_metadata count: {num_components}")
 
     # Extract init data fields
     delta_locations, column_specs, column_names, join_configs = _extract_init_data_fields(init_data)
@@ -543,7 +540,7 @@ def render_dashboard_original(
     # Process and wrap children
     processed_children = []
     for child, component_type, child_metadata in children:
-        logger.info(f"Processing child component of type {component_type}")
+        logger.debug(f"Processing child component of type {component_type}")
 
         if USE_SIMPLE_LAYOUT_FOR_TESTING:
             processed_child = _wrap_component_for_edit_mode(
@@ -615,12 +612,11 @@ def load_depictio_data_sync(
     import time
 
     start_time_total = time.time()
-    logger.info(f"⏱️ PROFILING: Starting load_depictio_data_sync for dashboard {dashboard_id}")
 
     # Ensure theme is valid
     if not theme or theme == {} or theme == "{}":
         theme = "light"
-    logger.info(f"Using theme: {theme} for dashboard rendering")
+    logger.debug(f"Using theme: {theme} for dashboard rendering")
 
     if not local_data["access_token"]:
         logger.warning("Access token not found.")
@@ -630,7 +626,6 @@ def load_depictio_data_sync(
     start_fetch = time.time()
     dashboard_data_dict = api_call_get_dashboard(dashboard_id, local_data["access_token"])
     fetch_duration_ms = (time.time() - start_fetch) * 1000
-    logger.info(f"⏱️ PROFILING: api_call_get_dashboard took {fetch_duration_ms:.1f}ms")
     if not dashboard_data_dict:
         logger.error(f"Failed to fetch dashboard data for {dashboard_id}")
         raise ValueError(f"Failed to fetch dashboard data: {dashboard_id}")
@@ -639,9 +634,6 @@ def load_depictio_data_sync(
     start_parsing = time.time()
     dashboard_data = DashboardData.from_mongo(dashboard_data_dict)
     parsing_duration_ms = (time.time() - start_parsing) * 1000
-    logger.info(f"⏱️ PROFILING: DashboardData.from_mongo took {parsing_duration_ms:.1f}ms")
-
-    # logger.info(f"load_depictio_data : {dashboard_data}")
 
     if dashboard_data:
         if not hasattr(dashboard_data, "buttons_data"):
@@ -663,7 +655,6 @@ def load_depictio_data_sync(
             start_user_fetch = time.time()
             if cached_user_data:
                 current_user = cached_user_data
-                logger.info("⏱️ PROFILING: Using cached user data (0ms)")
             else:
                 current_user = api_call_fetch_user_from_token(
                     local_data["access_token"]
@@ -687,10 +678,6 @@ def load_depictio_data_sync(
                 for e in dashboard_data.permissions.owners
             ]
             owner = current_user_id in owner_ids
-
-            # logger.info(f"Owner: {owner}")
-            # logger.info(f"Current user: {current_user_id}")
-            # logger.info(f"Dashboard owners: {owner_ids}")
 
             # Note: dashboard_data.permissions.viewers can be either dicts or UserBase objects
             viewer_ids = [
@@ -734,7 +721,7 @@ def load_depictio_data_sync(
                     edit_components_button_checked = False
 
             # Use regular dashboard rendering - progressive loading will be handled at UI level
-            logger.info("Rendering dashboard components")
+            logger.debug("Rendering dashboard components")
             # PROFILING: Measure component rendering
             start_render = time.time()
             children = render_dashboard(
@@ -747,7 +734,6 @@ def load_depictio_data_sync(
                 project_id=dashboard_data.project_id,  # Pass project_id for cross-DC link resolution
             )
             render_duration_ms = (time.time() - start_render) * 1000
-            logger.info(f"⏱️ PROFILING: render_dashboard took {render_duration_ms:.1f}ms")
 
             dashboard_data.stored_children_data = children
 
@@ -755,7 +741,6 @@ def load_depictio_data_sync(
         start_convert = time.time()
         dashboard_data = convert_model_to_dict(dashboard_data)
         convert_duration_ms = (time.time() - start_convert) * 1000
-        logger.info(f"⏱️ PROFILING: convert_model_to_dict took {convert_duration_ms:.1f}ms")
 
         total_duration_ms = (time.time() - start_time_total) * 1000
         logger.info(

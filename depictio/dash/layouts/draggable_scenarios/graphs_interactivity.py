@@ -92,7 +92,7 @@ def process_click_data(dict_graph_data, interactive_components_dict, TOKEN):
     x_value = point.get("x")
     y_value = point.get("y")
 
-    logger.info(f"Processing click data for columns: x={x_column}, y={y_column}")
+    logger.debug(f"Processing click data for columns: x={x_column}, y={y_column}")
     logger.info(f"Clicked point values: x={x_value}, y={y_value}")
 
     cols_json = get_columns_from_data_collection(
@@ -110,21 +110,21 @@ def process_click_data(dict_graph_data, interactive_components_dict, TOKEN):
         new_filters[filter_key] = _create_filter_entry(
             x_column, x_col_type, x_value, metadata, component_id
         )
-        logger.info(f"Added filter for {x_column}: {x_value}")
+        logger.debug(f"Added filter for {x_column}: {x_value}")
 
     if y_value is not None and y_column:
         filter_key = f"filter_{y_column}_{component_id}"
         new_filters[filter_key] = _create_filter_entry(
             y_column, y_col_type, y_value, metadata, component_id
         )
-        logger.info(f"Added filter for {y_column}: {y_value}")
+        logger.debug(f"Added filter for {y_column}: {y_value}")
 
     interactive_components_dict.update(new_filters)
 
     for v in interactive_components_dict.values():
         v["component_type"] = "interactive"
 
-    logger.info(f"Updated interactive_components_dict: {interactive_components_dict}")
+    logger.debug(f"Updated interactive_components_dict: {interactive_components_dict}")
     return interactive_components_dict
 
 
@@ -151,8 +151,8 @@ def process_selected_data(dict_graph_data, interactive_components_dict, TOKEN):
     x_column = dict_kwargs.get("x")
     y_column = dict_kwargs.get("y")
 
-    logger.info(f"Processing selected data with {len(points)} points.")
-    logger.info(f"Processing selected data for columns: x={x_column}, y={y_column}")
+    logger.debug(f"Processing selected data with {len(points)} points.")
+    logger.debug(f"Processing selected data for columns: x={x_column}, y={y_column}")
 
     x_values = {point.get("x") for point in points if "x" in point}
     y_values = {point.get("y") for point in points if "y" in point}
@@ -173,7 +173,7 @@ def process_selected_data(dict_graph_data, interactive_components_dict, TOKEN):
         new_filters[filter_key] = _create_filter_entry(
             x_column, x_col_type, value, metadata, filter_key, is_range=is_numerical
         )
-        logger.info(f"Added filter for {x_column}: {value}")
+        logger.debug(f"Added filter for {x_column}: {value}")
 
     if y_values and y_column:
         filter_key = f"filter_{y_column}_{uuid.uuid4()}"
@@ -182,10 +182,10 @@ def process_selected_data(dict_graph_data, interactive_components_dict, TOKEN):
         new_filters[filter_key] = _create_filter_entry(
             y_column, y_col_type, value, metadata, filter_key, is_range=is_numerical
         )
-        logger.info(f"Added filter for {y_column}: {value}")
+        logger.debug(f"Added filter for {y_column}: {value}")
 
     interactive_components_dict.update(new_filters)
-    logger.info(f"Updated interactive_components_dict: {interactive_components_dict}")
+    logger.debug(f"Updated interactive_components_dict: {interactive_components_dict}")
     return interactive_components_dict
 
 
@@ -282,7 +282,7 @@ def refresh_children_based_on_click_data(
 
         logger.info(f"Selected point: {selected_point}")
 
-        logger.info(f"Updated interactive components: {updated_interactive_components}")
+        logger.debug(f"Updated interactive components: {updated_interactive_components}")
 
         for metadata in stored_metadata:
             if metadata["index"] == ctx_triggered_prop_id_index:
@@ -293,7 +293,6 @@ def refresh_children_based_on_click_data(
         # updated_interactive_components triggers interactive-values-store update
         # Pattern-matching callbacks (cards, figures, tables) listen and update themselves
         # No need to rebuild children - return unchanged and let callbacks handle updates
-        logger.info("✅ Click data processed - pattern-matching callbacks handle component updates")
 
         return draggable_children, updated_interactive_components
 
@@ -368,7 +367,7 @@ def refresh_children_based_on_selected_data(
             dict_graph_data, interactive_components_dict, TOKEN
         )
 
-        logger.info(f"Updated interactive components: {updated_interactive_components}")
+        logger.debug(f"Updated interactive components: {updated_interactive_components}")
 
         for metadata in stored_metadata:
             if metadata["index"] == ctx_triggered_prop_id_index:

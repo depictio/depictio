@@ -202,7 +202,6 @@ def _handle_unauthenticated_mode(
     """
     # Check if we already have valid local_data (e.g. temporary user session)
     if _has_valid_session(local_data):
-        logger.debug("Found existing session data in local store - using it instead of anonymous")
         try:
             normalized_pathname = _normalize_pathname(pathname)
             return handle_authenticated_user(

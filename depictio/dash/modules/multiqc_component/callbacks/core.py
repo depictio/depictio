@@ -259,7 +259,7 @@ def get_samples_from_metadata_filter(
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
     # Load metadata table
-    logger.info(f"Loading metadata table {metadata_dc_id}")
+    logger.debug(f"Loading metadata table {metadata_dc_id}")
     df = load_deltatable_lite(
         workflow_id=ObjectId(workflow_id),
         data_collection_id=ObjectId(metadata_dc_id),
@@ -271,7 +271,7 @@ def get_samples_from_metadata_filter(
         logger.warning("Metadata table is empty")
         return []
 
-    logger.info(f"Loaded metadata table with columns: {df.columns}")
+    logger.debug(f"Loaded metadata table with columns: {df.columns}")
     logger.info(f"Metadata table shape: {df.shape}")
 
     # Apply filters from interactive components
@@ -307,7 +307,7 @@ def get_samples_from_metadata_filter(
                         datetime.strptime(str(v), "%Y-%m-%d").date() for v in filter_values
                     ]
                     df = df.filter(pl.col(column_name).is_in(parsed_dates))
-                    logger.info(f"After filtering: {df.shape[0]} rows remaining (Date parsing)")
+                    logger.debug(f"After filtering: {df.shape[0]} rows remaining (Date parsing)")
                 except Exception as e:
                     logger.warning(
                         f"Failed to filter Date column '{column_name}' with date parsing: {e}"
@@ -359,7 +359,7 @@ def get_samples_from_metadata_filter(
         return []
 
     samples = df[join_column].unique().to_list()
-    logger.info(f"Found {len(samples)} unique samples after filtering")
+    logger.debug(f"Found {len(samples)} unique samples after filtering")
     return samples
 
 
@@ -388,7 +388,7 @@ def patch_multiqc_figures(
     patched_figures = []
 
     for fig_idx, fig in enumerate(figures):
-        logger.info(f"Processing figure {fig_idx}")
+        logger.debug(f"Processing figure {fig_idx}")
         patched_fig = copy.deepcopy(fig)
 
         # Get all samples from metadata if available
@@ -545,7 +545,7 @@ def patch_multiqc_figures(
 def register_core_callbacks(app):
     """Register core rendering callbacks for MultiQC component."""
 
-    logger.info("Registering MultiQC core callbacks...")
+    logger.debug("Registering MultiQC core callbacks...")
 
     # ============================================================================
     # CALLBACK 0: Render MultiQC Plot from Trigger (VIEW MODE)
@@ -638,7 +638,7 @@ def register_core_callbacks(app):
                 f"   Trace metadata: {len(trace_metadata.get('original_data', []))} traces stored"
             )
 
-            logger.info(f"[{task_id}] MULTIQC VIEW MODE PLOT RENDERED")
+            logger.debug(f"[{task_id}] MULTIQC VIEW MODE PLOT RENDERED")
             logger.info("=" * 80)
 
             return fig, trace_metadata
@@ -696,7 +696,7 @@ def register_core_callbacks(app):
             Tuple of (metadata, data_locations, module_options, status_text).
         """
         component_index = component_id.get("index", "unknown")
-        logger.info(f"Loading MultiQC metadata for component {component_index}")
+        logger.debug(f"Loading MultiQC metadata for component {component_index}")
 
         if not wf_id or not dc_id or not local_data:
             logger.warning("Missing WF/DC or local_data")
@@ -734,7 +734,7 @@ def register_core_callbacks(app):
             modules = metadata.get("modules", [])
             module_options = [{"label": mod, "value": mod} for mod in modules]
 
-            logger.info(f"Loaded {len(modules)} modules from {len(reports)} reports")
+            logger.debug(f"Loaded {len(modules)} modules from {len(reports)} reports")
 
             return metadata, data_locations, module_options, f"{len(modules)} modules available"
 
@@ -773,7 +773,6 @@ def register_core_callbacks(app):
             - default_plot: Auto-selected first plot
             - dataset_style: Hide dataset selector (shown later if needed)
         """
-        logger.info(f"🎯 POPULATE PLOTS - Module: {selected_module}")
 
         if not selected_module or not metadata:
             return [], None, {"display": "none"}
@@ -796,7 +795,7 @@ def register_core_callbacks(app):
         # Auto-select first plot
         default_plot = plot_names[0] if plot_names else None
 
-        logger.info(f"   Found {len(plot_names)} plots for {selected_module}")
+        logger.debug(f"   Found {len(plot_names)} plots for {selected_module}")
         if default_plot:
             logger.info(f"   Auto-selecting: {default_plot}")
 
@@ -841,7 +840,6 @@ def register_core_callbacks(app):
             - default_dataset: Auto-selected first dataset
             - dataset_style: Show or hide dataset selector
         """
-        logger.info(f"🎯 CHECK DATASETS - Module: {selected_module}, Plot: {selected_plot}")
 
         if not selected_plot or not selected_module or not metadata:
             return [], None, {"display": "none"}
@@ -865,7 +863,7 @@ def register_core_callbacks(app):
         dataset_options = [{"label": ds, "value": ds} for ds in datasets]
         default_dataset = datasets[0] if datasets else None
 
-        logger.info(f"   Found {len(datasets)} datasets, auto-selecting: {default_dataset}")
+        logger.debug(f"   Found {len(datasets)} datasets, auto-selecting: {default_dataset}")
 
         return dataset_options, default_dataset, {"display": "block"}
 
@@ -926,7 +924,6 @@ def register_core_callbacks(app):
         """
         task_id = str(uuid.uuid4())[:8]
         logger.info("=" * 80)
-        logger.info(f"[{task_id}] 🎨 RENDER MULTIQC PLOT")
         logger.info(f"   Module: {selected_module}")
         logger.info(f"   Plot: {selected_plot}")
         logger.info(f"   Dataset: {selected_dataset}")
@@ -978,7 +975,7 @@ def register_core_callbacks(app):
 
             trace_metadata = analyze_multiqc_plot_structure(fig)
 
-            logger.info(f"[{task_id}] MultiQC plot rendered successfully")
+            logger.debug(f"[{task_id}] MultiQC plot rendered successfully")
 
             graph = dcc.Graph(
                 figure=fig,
@@ -1033,7 +1030,6 @@ def register_core_callbacks(app):
         # DEBUG LOGGING: Trace callback execution for troubleshooting
         # ===========================================================================
         logger.info("=" * 80)
-        logger.info("🔄 MULTIQC PATCHING CALLBACK TRIGGERED")
         logger.info("-" * 40)
 
         # Log callback inputs for debugging
@@ -1194,7 +1190,7 @@ def register_core_callbacks(app):
 
         # Early exit if no interactive components exist
         if not interactive_components_dict:
-            logger.info("No interactive components - skipping patching")
+            logger.debug("No interactive components - skipping patching")
             return dash.no_update
 
         # Check if figure has been previously filtered
@@ -1205,7 +1201,7 @@ def register_core_callbacks(app):
 
         # Early exit if no filters are active AND figure hasn't been patched before
         if not has_active_filters and not figure_was_patched:
-            logger.info("No active filters on initial load - skipping patching")
+            logger.debug("No active filters on initial load - skipping patching")
             return dash.no_update
 
         # If user is clearing filters (no active filters but was previously patched),
@@ -1251,7 +1247,7 @@ def register_core_callbacks(app):
             # project_id is passed to components during dashboard rendering
             project_id = stored_metadata.get("project_id") if stored_metadata else None
             if project_id:
-                logger.info(f"📌 Found project_id in stored_metadata: {project_id}")
+                logger.debug(f"📌 Found project_id in stored_metadata: {project_id}")
             else:
                 logger.warning(
                     "⚠️ No project_id in stored_metadata - link resolution will be skipped"
@@ -1261,8 +1257,6 @@ def register_core_callbacks(app):
             # LINK-BASED RESOLUTION PATH (fallback when no pre-computed join)
             # ============================================================================
             if use_link_resolution and project_id:
-                logger.info("🔗 Using LINK-BASED RESOLUTION for MultiQC patching")
-
                 # Collect filter values from interactive components
                 filter_values = []
                 for comp_data in interactive_components_dict.values():
@@ -1272,7 +1266,6 @@ def register_core_callbacks(app):
 
                 if not filter_values and not has_active_filters and figure_was_patched:
                     # RESET MODE: Get all samples via link resolution without filter
-                    logger.info("🔄 RESET MODE: Link resolution for all samples")
 
                     # Use link to get ALL samples (no filter - resolve with all metadata values)
                     # First try local metadata, then fetch from API as fallback
@@ -1350,7 +1343,6 @@ def register_core_callbacks(app):
 
                     from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
-                    logger.info("🔄 Loading ALL samples from metadata (no filtering)")
                     df = load_deltatable_lite(
                         workflow_id=ObjectId(workflow_id),
                         data_collection_id=ObjectId(metadata_dc_id),

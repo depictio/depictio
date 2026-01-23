@@ -144,7 +144,7 @@ def build_multiqc(**kwargs: Any):
         Dash component with MultiQC plot and metadata store
     """
 
-    logger.info(f"Building MultiQC plot component with kwargs keys: {list(kwargs.keys())}")
+    logger.debug(f"Building MultiQC plot component with kwargs keys: {list(kwargs.keys())}")
 
     # Extract required parameters
     component_id = kwargs.get("index", "multiqc-component")

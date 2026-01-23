@@ -366,7 +366,6 @@ def get_build_functions() -> dict:
     def reset_counts():
         """Clear all build counts - call this at start of each dashboard render"""
         build_counts.clear()
-        logger.info("🔄 BUILD COUNTS RESET")
 
     def wrap_build_function(component_type, original_func):
         """Wrapper to log and track build function executions"""

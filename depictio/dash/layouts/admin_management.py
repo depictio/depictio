@@ -938,7 +938,6 @@ def register_admin_callbacks(app) -> None:
             logger.info("\n GROUPS \n")
 
             # if delete_group_clicks:
-            #     logger.info(f"Delete group button clicked: {delete_group_ids}")
             #     # retrieve group id by cross-referencing the button id
 
             #     for button_id, n_click_index in zip(
@@ -946,44 +945,29 @@ def register_admin_callbacks(app) -> None:
             #     ):
             #         if n_click_index:
             #             group_id = button_id["index"]
-            #             logger.info(f"Deleting group: {group_id}")
             #             response = httpx.delete(
             #                 f"{API_BASE_URL}/depictio/api/v1/auth/delete_group/{group_id}",
             #                 headers={
             #                     "Authorization": f"Bearer {local_data['access_token']}"
             #                 },
             #             )
-            #             logger.info(f"Response: {response}")
             #             if response.status_code == 200:
-            #                 logger.info(f"Successfully deleted group: {group_id}")
             #             else:
-            #                 logger.error(f"Error deleting group: {response.json()}")
             #                 return html.P(
             #                     "Error deleting group. Please try again later."
             #                 ), {"display": "none"}
 
             # if "save-group-users-button" in trigger_id:
-            #     logger.info("SAVE GROUP USERS BUTTON CLICKED")
-            #     logger.info(
             #         f"Save group users button clicked clicks: {save_group_users_clicks}"
             #     )
-            #     logger.info(f"Save group users button clicked: {save_group_users_ids}")
-            #     logger.info(f"Transferlist values: {transferlist_values}")
             #     trigger_id_index = eval(trigger_id)["index"]
-            #     logger.info(f"Trigger ID: {trigger_id}")
-            #     logger.info(f"Trigger ID index: {trigger_id_index}")
             #     # start at 1 to skip the first value which corresponds to admin group
             #     for transfert_list_value, save_id in zip(
             #         transferlist_values[1:], save_group_users_ids
             #     ):
-            #         logger.info(f"save_id['index']: {save_id['index']}")
-            #         logger.info(f"Trigger ID index: {trigger_id_index}")
             #         if str(save_id["index"]) == str(trigger_id_index):
-            #             logger.info(f"Transferlist value: {transfert_list_value}")
-            #             logger.info(f"Group ID: {trigger_id_index}")
             #             all_users = transfert_list_value[0]
             #             group_users = transfert_list_value[1]
-            #             logger.info(f"Group users: {group_users}")
 
             #             group_id = trigger_id_index
             #             # group_users = transfert_list_value[1]
@@ -994,7 +978,6 @@ def register_admin_callbacks(app) -> None:
             #                 {"email": user["label"], "id": str(user["value"])}
             #                 for user in group_users
             #             ]
-            #             logger.info(f"Group users: {group_users}")
             #             api_update_group_in_users(
             #                 group_id,
             #                 {"users": group_users},
@@ -1026,20 +1009,16 @@ def register_admin_callbacks(app) -> None:
 
             #     all_users = reponse_all_users.json()
             #     all_users = [UserBase.from_mongo(user) for user in all_users]
-            #     logger.info(f"Users: {all_users}")
             # else:
-            #     logger.error(f"Error fetching users: {reponse_all_users.json()}")
             #     all_users = []
 
             # response = httpx.get(
             #     f"{API_BASE_URL}/depictio/api/v1/auth/get_all_groups_including_users",
             #     headers={"Authorization": f"Bearer {local_data['access_token']}"},
             # )
-            # logger.info(f"Response: {response}")
 
             # if response.status_code == 200:
             #     groups = response.json()
-            #     logger.info(f"Groups: {groups}")
             #     groupwise_layouts = [
             #         render_groupwise_layout(GroupUI.from_mongo(group), all_users)
             #         for group in groups
@@ -1050,7 +1029,6 @@ def register_admin_callbacks(app) -> None:
             #         # [add_group_button, modal, html.Div(groupwise_layouts)]
             #     )
             # else:
-            #     logger.error(f"Error fetching groups: {response.json()}")
             #     content = html.P("Error fetching groups. Please try again later.")
 
             # return content, {"display": "block"}

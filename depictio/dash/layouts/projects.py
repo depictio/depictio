@@ -226,9 +226,9 @@ def create_project_modal(opened: bool = False) -> tuple[dmc.Modal, str]:
 
 
 # Create project modal and layout at module level (similar to dashboards_management.py)
-logger.info("Creating project modal with opened=False")
+logger.debug("Creating project modal with opened=False")
 project_modal, project_modal_id = create_project_modal(opened=False)
-logger.info(f"Project modal created with ID: {project_modal_id}")
+logger.debug(f"Project modal created with ID: {project_modal_id}")
 
 # Create the main layout with modal included
 layout = html.Div(
@@ -1837,7 +1837,7 @@ def register_projects_callbacks(app) -> None:
             result = api_call_create_project(project.model_dump(), token)
 
             if result and result.get("success"):
-                logger.info(f"Project created successfully: {result.get('message')}")
+                logger.debug(f"Project created successfully: {result.get('message')}")
                 # Move to completion step
                 store_data["project_created"] = True
                 store_data["creation_message"] = result.get(
@@ -2144,7 +2144,7 @@ def register_workflows_callbacks(app) -> None:
             result = api_call_update_project(current_project_data, token)
 
             if result and result.get("success"):
-                logger.info(f"Project {project_id} updated successfully with name: {new_name}")
+                logger.debug(f"Project {project_id} updated successfully with name: {new_name}")
                 return False
             else:
                 logger.error(f"Failed to update project: {result}")

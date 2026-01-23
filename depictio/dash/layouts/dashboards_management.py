@@ -66,7 +66,7 @@ def load_dashboards_from_db(token: str) -> dict:
     Raises:
         ValueError: If token is not provided or API request fails.
     """
-    logger.info("Loading dashboards from the database")
+    logger.debug("Loading dashboards from the database")
     if not token:
         raise ValueError("Token is required to load dashboards from the database.")
 
@@ -173,7 +173,7 @@ def edit_dashboard_name(new_name: str, dashboard_id: str, dashboards: list, toke
     # Iterate over the dashboards to find the dashboard with the matching ID and update the name
     for dashboard in dashboards:
         if dashboard.dashboard_id == dashboard_id:
-            logger.info(f"Found dashboard to edit: {dashboard}")
+            logger.debug(f"Found dashboard to edit: {dashboard}")
             dashboard.title = new_name
         updated_dashboards.append(dashboard)
 
@@ -568,7 +568,6 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             else:
                 response = api_get_project_from_id(project_id=dashboard["project_id"], token=token)
                 if response.status_code == 200:
-                    # logger.debug(f"Project response: {response.json()}")
                     project = response.json()
                     project_name = project["name"]
                     project_cache[project_id_str] = project_name  # Cache for next use
@@ -1481,7 +1480,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         dashboards, modal_data, user_data, current_userbase, store_data_list
     ):
         if modal_data.get("title"):
-            logger.info("Creating new dashboard")
+            logger.debug("Creating new dashboard")
 
             dashboard_id = PyObjectId()
             # dashboard_id = generate_unique_index()
@@ -1537,7 +1536,6 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         updated_dashboards = list()
         for dashboard in dashboards:
             if str(dashboard.dashboard_id) == str(index_make_public):
-                logger.debug(f"Found dashboard to update status: {dashboard}")
                 response = httpx.post(
                     f"{API_BASE_URL}/depictio/api/v1/dashboards/toggle_public_status/{index_make_public}",
                     headers={"Authorization": f"Bearer {user_data['access_token']}"},
@@ -1603,7 +1601,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         for dashboard in dashboards:
             updated_dashboards.append(dashboard)
             if str(dashboard.dashboard_id) == str(index_duplicate):
-                logger.info(f"Found dashboard to duplicate: {dashboard}")
+                logger.debug(f"Found dashboard to duplicate: {dashboard}")
 
                 # Load full dashboard data from the database
                 dashboard_data_response = httpx.get(

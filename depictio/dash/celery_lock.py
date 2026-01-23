@@ -233,7 +233,6 @@ def callback_lock(
 
             try:
                 # Execute callback with lock held
-                logger.info(f"✅ {func_name}[{component_index}]: Executing (lock acquired)")
                 result = func_cast(*args, **kwargs)
                 return result
 

@@ -620,7 +620,7 @@ def _filter_date_column(
     try:
         parsed_dates = [datetime.strptime(str(v), "%Y-%m-%d").date() for v in filter_values]
         df = df.filter(pl.col(column_name).is_in(parsed_dates))
-        logger.info(f"After filtering: {df.shape[0]} rows remaining (Date parsing)")
+        logger.debug(f"After filtering: {df.shape[0]} rows remaining (Date parsing)")
         return df
     except Exception as e:
         logger.warning(f"Failed to filter Date column '{column_name}' with date parsing: {e}")
@@ -663,7 +663,7 @@ def _filter_range_column(
         return df
 
     min_val, max_val = filter_values[0], filter_values[1]
-    logger.info(f"Applying range filter: {min_val} <= {column_name} <= {max_val}")
+    logger.debug(f"Applying range filter: {min_val} <= {column_name} <= {max_val}")
 
     try:
         df = df.filter((pl.col(column_name) >= min_val) & (pl.col(column_name) <= max_val))
@@ -687,7 +687,7 @@ def _filter_discrete_column(
     Returns:
         Filtered DataFrame.
     """
-    logger.info(f"Applying discrete filter: {column_name} in {filter_values}")
+    logger.debug(f"Applying discrete filter: {column_name} in {filter_values}")
 
     try:
         df = df.filter(df[column_name].is_in(filter_values))
@@ -749,7 +749,7 @@ def get_samples_from_metadata_filter(
 
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
-    logger.info(f"Loading metadata table {metadata_dc_id}")
+    logger.debug(f"Loading metadata table {metadata_dc_id}")
     df = load_deltatable_lite(
         workflow_id=ObjectId(workflow_id),
         data_collection_id=ObjectId(metadata_dc_id),
@@ -761,7 +761,7 @@ def get_samples_from_metadata_filter(
         logger.warning("Metadata table is empty")
         return []
 
-    logger.info(f"Loaded metadata table with columns: {df.columns}")
+    logger.debug(f"Loaded metadata table with columns: {df.columns}")
     logger.info(f"Metadata table shape: {df.shape}")
 
     # Apply filters from interactive components
@@ -816,7 +816,7 @@ def create_sample_filter_patch(selected_samples, metadata=None):
     if not selected_samples:
         return None
 
-    logger.info(f"Creating sample filter patch for {len(selected_samples)} selected samples")
+    logger.debug(f"Creating sample filter patch for {len(selected_samples)} selected samples")
 
     # Create a patch that will update trace visibility
     # Note: We can't determine trace types without the figure, so we need to use
@@ -971,7 +971,6 @@ def _patch_heatmap_trace(
             logger.error("      Heatmap has Y data but no Z data in trace metadata - cannot filter")
         return None
 
-    logger.info(f"      DEBUG: original_y samples: {original_y[:5]}... (total: {len(original_y)})")
     logger.info(
         f"      DEBUG: selected_samples: {list(selected_samples)[:5]}... "
         f"(total: {len(selected_samples)})"
@@ -994,7 +993,6 @@ def _patch_heatmap_trace(
         return None
 
     matched_samples = [original_y[idx] for idx in filtered_indices[:5]]
-    logger.info(f"      DEBUG: First 5 matched Y samples: {matched_samples}")
     logger.info(
         f"      Filtering heatmap: {len(filtered_indices)}/{len(original_y)} samples selected"
     )
@@ -1087,7 +1085,7 @@ def patch_multiqc_figures(
         logger.debug(f"  Using stored trace metadata with {len(original_traces)} traces")
 
     for fig_idx, fig in enumerate(figures):
-        logger.info(f"Processing figure {fig_idx}")
+        logger.debug(f"Processing figure {fig_idx}")
         patched_fig = copy.deepcopy(fig)
         figure_replaced = False
 
@@ -1101,13 +1099,12 @@ def patch_multiqc_figures(
             )
 
             if trace_type == "bar":
-                logger.debug(f"      Processing bar plot with orientation '{orientation}'")
                 _patch_bar_trace(
                     patched_fig, i, original_x, original_y, orientation, selected_samples
                 )
 
             elif trace_type == "heatmap":
-                logger.info("      Processing heatmap - using full figure replacement")
+                logger.debug("      Processing heatmap - using full figure replacement")
                 full_fig = _patch_heatmap_trace(
                     fig, i, original_x, original_y, original_z, selected_samples
                 )
@@ -1483,7 +1480,6 @@ def register_callbacks_multiqc_component(app):
         patch = Patch()
         patch.layout.template = template
 
-        logger.info(f"🎨 MultiQC THEME PATCH: Applied {template_name} (theme_data: {theme_data})")
         return patch
 
     # NOTE: VIEW MODE rendering callback (render_multiqc_from_trigger) has been moved to

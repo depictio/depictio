@@ -69,7 +69,6 @@ def register_partial_data_button_callbacks(app) -> None:
     #     trigger = ctx.triggered[0]["prop_id"] if ctx.triggered else "initial"
     #     component_index = component_id.get("index", "unknown") if component_id else "unknown"
     #
-    #     logger.info(
     #         f"📊 [{component_index}] Popover update triggered by: {trigger}, data: displayed={displayed_count:,}, total={total_count:,}, sampled={was_sampled}"
     #     )
     #
@@ -92,7 +91,6 @@ def register_partial_data_button_callbacks(app) -> None:
     #         key=f"content-wrapper-{component_index}-{displayed_count}-{total_count}",
     #     )
     #
-    #     logger.info(
     #         f"📊 [{component_index}] Returning updated children to partial-data-popover-content"
     #     )
     #
@@ -114,7 +112,6 @@ def register_partial_data_button_callbacks(app) -> None:
     #     visible_style = {"display": "inline-flex", "visibility": "visible"}
     #
     #     if not metadata:
-    #         logger.info("📊 No metadata yet, keeping button hidden")
     #         return hidden_style
     #
     #     # Extract sampling information
@@ -127,7 +124,6 @@ def register_partial_data_button_callbacks(app) -> None:
     #
     #     component_index = wrapper_id.get("index", "unknown") if wrapper_id else "unknown"
     #
-    #     logger.info(
     #         f"📊 [{component_index}] Button visibility: sampled={was_sampled}, "
     #         f"displayed={displayed_count:,}, total={total_count:,}, show={should_show}"
     #     )
@@ -173,7 +169,7 @@ def _check_component_filter_activity(
     interactive_values_data = _extract_interactive_values_data(interactive_values)
 
     if not interactive_values_data:
-        logger.info("No interactive component data found")
+        logger.debug("No interactive component data found")
         return False
 
     logger.info(
@@ -195,7 +191,7 @@ def _extract_interactive_values_data(interactive_values: dict[str, Any]) -> list
     """
     if "interactive_components_values" in interactive_values:
         data = interactive_values["interactive_components_values"]
-        logger.info(f"Found interactive_components_values: {len(data)} items")
+        logger.debug(f"Found interactive_components_values: {len(data)} items")
         return data
 
     # Look for any values that might be interactive components
@@ -235,7 +231,7 @@ def _find_and_check_component(
         component_value = component_data.get("value")
         default_state = component_metadata.get("default_state", {})
 
-        logger.info(f"  Found target component {component_index}")
+        logger.debug(f"  Found target component {component_index}")
         logger.info(f"    Current value: {component_value}")
         logger.info(f"    Default state: {default_state}")
 
@@ -247,7 +243,7 @@ def _find_and_check_component(
         logger.info(f"  Is different from default: {is_different}")
         return is_different
 
-    logger.info(f"Component {component_index} not found in interactive values")
+    logger.debug(f"Component {component_index} not found in interactive values")
     return False
 
 
@@ -934,7 +930,7 @@ def enable_box_edit_mode(
     # Generate proper UUID for the draggable component (following prototype pattern)
     box_uuid = f"box-{str(btn_index)}"
 
-    logger.info(f"Creating DraggableWrapper with UUID: {box_uuid}")
+    logger.debug(f"Creating DraggableWrapper with UUID: {box_uuid}")
 
     # Create content div with embedded buttons - CSS will handle visibility based on edit mode
     # Button visibility controlled by .drag-handles-hidden CSS class (see draggable-grid.css)

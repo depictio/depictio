@@ -185,11 +185,11 @@ def register_tab_callbacks(app):
 
         # Early exits for non-applicable pages
         if pathname and ("/component/edit/" in pathname or "/component/add/" in pathname):
-            logger.info("Component page detected - skipping tab population")
+            logger.debug("Component page detected - skipping tab population")
             raise PreventUpdate
 
         if not pathname or ("/dashboard/" not in pathname and "/dashboard-edit/" not in pathname):
-            logger.info("Not on dashboard page, skipping tab population")
+            logger.debug("Not on dashboard page, skipping tab population")
             raise PreventUpdate
 
         # Extract dashboard ID and edit mode from pathname
@@ -249,7 +249,7 @@ def register_tab_callbacks(app):
                 )
 
                 if is_owner:
-                    logger.info("Adding '+ Add Tab' button to sidebar")
+                    logger.debug("Adding '+ Add Tab' button to sidebar")
                     tab_items.append(
                         dmc.TabsTab(
                             "Add Tab",
@@ -263,7 +263,7 @@ def register_tab_callbacks(app):
                         )
                     )
 
-            logger.info(f"Loaded {len(tab_items)} tabs for dashboard {dashboard_id}")
+            logger.debug(f"Loaded {len(tab_items)} tabs for dashboard {dashboard_id}")
             return tab_items, dashboard_id
 
         except PreventUpdate:
@@ -300,7 +300,6 @@ def register_tab_callbacks(app):
         if current_pathname and (
             "/component/edit/" in current_pathname or "/component/add/" in current_pathname
         ):
-            logger.info(f"🔒 Skipping tab navigation - on component page: {current_pathname}")
             raise PreventUpdate
 
         # Check if in editor app or legacy edit mode

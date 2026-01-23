@@ -665,9 +665,6 @@ def create_add_with_input_modal(
 #     trigger_button_id,
 # ):
 
-#     logger.info(f"App: {app}")
-#     logger.info(f"ID Prefix: {id_prefix}")
-#     logger.info(f"Trigger Button ID: {trigger_button_id}")
 #     # Register generic callbacks for the delete confirmation modal
 #     @app.callback(
 #         Output(

@@ -150,7 +150,6 @@ def register_callbacks(app):
     Args:
         app: Dash application instance for the Management App.
     """
-    logger.info("🔥 MANAGEMENT APP: Registering all callbacks upfront")
 
     # 1. Main routing callback
     register_routing_callback(app)
@@ -161,13 +160,10 @@ def register_callbacks(app):
     # 2.5. Theme system callbacks
     from depictio.dash.simple_theme import register_simple_theme_system
 
-    logger.info("  🎨 Registering theme system callbacks")
     register_simple_theme_system(app)
 
     # 3. Feature-specific callbacks (all loaded upfront)
     register_feature_callbacks(app)
-
-    logger.info("✅ MANAGEMENT APP: All callbacks registered (~70 callbacks)")
 
 
 def register_routing_callback(app):
@@ -180,7 +176,6 @@ def register_routing_callback(app):
     Args:
         app: Dash application instance to register the callback on.
     """
-    logger.info("  📋 Registering main routing callback")
 
     @app.callback(
         Output("page-content", "children"),
@@ -207,15 +202,12 @@ def register_routing_callback(app):
         Returns:
             tuple: (page_content, header, pathname, local_data)
         """
-        logger.info(f"🔄 MANAGEMENT ROUTING: pathname={pathname}")
 
         # Extract theme
         theme = extract_theme_from_store(theme_store)
 
         # Validate authentication and refresh token if needed
         updated_local_data, is_authenticated, reason = validate_and_refresh_token(local_data)
-
-        logger.info(f"🔐 AUTH STATUS: is_authenticated={is_authenticated}, reason={reason}")
 
         # Handle unauthenticated users
         if not is_authenticated:
@@ -350,7 +342,6 @@ def register_layout_callbacks(app):
     Args:
         app: Dash application instance to register callbacks on.
     """
-    logger.info("  📋 Registering core layout callbacks")
 
     # Register header callbacks (navigation, modals, etc.)
     from depictio.dash.layouts.header import register_callbacks_header
@@ -383,8 +374,6 @@ def register_layout_callbacks(app):
         prevent_initial_call="initial_duplicate",
     )
 
-    logger.info("  ✅ Core layout callbacks registered")
-
 
 def register_feature_callbacks(app):
     """
@@ -404,16 +393,13 @@ def register_feature_callbacks(app):
     Args:
         app: Dash application instance to register callbacks on.
     """
-    logger.info("  📋 Registering feature-specific callbacks")
 
     # Auth callbacks
-    logger.info("    🔐 Registering authentication callbacks")
     from depictio.dash.layouts.users_management import register_callbacks_users_management
 
     register_callbacks_users_management(app)
 
     # Dashboards management callbacks
-    logger.info("    📊 Registering dashboards management callbacks")
     from depictio.dash.layouts.dashboards_management import (
         register_callbacks_dashboards_management,
     )
@@ -421,7 +407,7 @@ def register_feature_callbacks(app):
     register_callbacks_dashboards_management(app)
 
     # Projects management callbacks
-    logger.info("    📁 Registering projects management callbacks")
+    logger.debug("    📁 Registering projects management callbacks")
     from depictio.dash.layouts.projects import (
         register_projects_callbacks,
         register_workflows_callbacks,
@@ -431,25 +417,23 @@ def register_feature_callbacks(app):
     register_workflows_callbacks(app)
 
     # Profile callbacks
-    logger.info("    👤 Registering profile callbacks")
+    logger.debug("    👤 Registering profile callbacks")
     from depictio.dash.layouts.profile import register_profile_callbacks
 
     register_profile_callbacks(app)
 
     # Admin callbacks
-    logger.info("    ⚙️  Registering admin callbacks")
     from depictio.dash.layouts.admin_management import register_admin_callbacks
 
     register_admin_callbacks(app)
 
     # Tokens management callbacks
-    logger.info("    🔑 Registering tokens management callbacks")
+    logger.debug("    🔑 Registering tokens management callbacks")
     from depictio.dash.layouts.tokens_management import register_tokens_management_callbacks
 
     register_tokens_management_callbacks(app)
 
     # Project data collections callbacks
-    logger.info("    📊 Registering project data collections callbacks")
     from depictio.dash.layouts.project_data_collections import (
         register_project_data_collections_callbacks,
     )
@@ -457,11 +441,8 @@ def register_feature_callbacks(app):
     register_project_data_collections_callbacks(app)
 
     # Project permissions callbacks
-    logger.info("    🔒 Registering project permissions callbacks")
     from depictio.dash.layouts.projectwise_user_management import (
         register_projectwise_user_management_callbacks,
     )
 
     register_projectwise_user_management_callbacks(app)
-
-    logger.info("  ✅ All feature callbacks registered")

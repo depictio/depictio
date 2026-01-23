@@ -37,7 +37,6 @@ def save_figure_to_dashboard(
     """
     component_id = component_metadata["index"]
 
-    logger.info(f"💾 SAVE FIGURE - Dashboard: {dashboard_id}, Component: {component_id}")
     logger.info(f"   Metadata keys: {list(component_metadata.keys())}")
     logger.info(f"   Visualization type: {component_metadata.get('visu_type')}")
     logger.info(f"   Parameters: {component_metadata.get('dict_kwargs', {}).keys()}")
@@ -64,7 +63,6 @@ def save_figure_to_dashboard(
                 # Replace existing component
                 updated_metadata_list.append(component_metadata)
                 component_found = True
-                logger.info(f"   ✓ Replaced component {component_id} in metadata")
             else:
                 # Keep other components unchanged
                 updated_metadata_list.append(meta)
@@ -72,7 +70,6 @@ def save_figure_to_dashboard(
         if not component_found:
             # Component not found - this is a new component (add flow)
             updated_metadata_list.append(component_metadata)
-            logger.info(f"   ✓ Added new component {component_id} to metadata")
 
         # Update dashboard data with modified metadata
         dashboard_data["stored_metadata"] = updated_metadata_list
@@ -86,7 +83,6 @@ def save_figure_to_dashboard(
         )
         update_response.raise_for_status()
 
-        logger.info(f"✅ SAVE FIGURE SUCCESS - Component {component_id} saved")
         logger.info(f"   API Response status: {update_response.status_code}")
 
     except Exception as e:
@@ -98,5 +94,4 @@ def save_figure_to_dashboard(
 
     # 4. Return redirect URL (preserves app context)
     redirect_url = f"/{app_prefix}/{dashboard_id}"
-    logger.info(f"🔄 Redirecting to {redirect_url}")
     return redirect_url

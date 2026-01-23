@@ -55,9 +55,8 @@ def create_skeleton_component(component_type: str) -> html.Div:
     Returns:
         dmc.Center: A skeleton loader component
     """
-    logger.info(f"Creating skeleton for component type: {component_type}")
+    logger.debug(f"Creating skeleton for component type: {component_type}")
     component_metadata = get_component_metadata(component_type)
-    # logger.info(f"Component metadata: {component_metadata}")
 
     return html.Div(
         dmc.Center(
@@ -350,7 +349,6 @@ def create_loading_progress_display(dashboard_id: str) -> html.Div:
 
     # PERFORMANCE OPTIMIZATION: Return empty div if animations disabled
     if settings.performance.disable_animations:
-        logger.info("⚡ PERFORMANCE: Loading progress display creation skipped")
         return html.Div(
             id={"type": "loading-progress-container", "dashboard": dashboard_id},
             style={"display": "none"},
@@ -446,8 +444,6 @@ def register_figure_loading_callback(app: dash.Dash) -> None:
     from depictio.dash.component_metadata import get_build_functions
     from depictio.dash.layouts.edit import enable_box_edit_mode
 
-    logger.info("⚡ PHASE 5B: Registering incremental figure loading callback")
-
     # Get figure build function
     build_functions = get_build_functions()
     figure_build_function = build_functions.get("figure")
@@ -490,8 +486,6 @@ def register_figure_loading_callback(app: dash.Dash) -> None:
         # CRITICAL FIX: Use "index" key consistently (changed from "uuid")
         triggered_index = trigger_id.get("index")
 
-        logger.info(f"⚡ PROGRESSIVE LOADING: Loading figure component {triggered_index}")
-
         # Build output list
         outputs = []
         for i, (n_intervals, metadata, container_id) in enumerate(
@@ -502,8 +496,6 @@ def register_figure_loading_callback(app: dash.Dash) -> None:
 
             # Only build the figure that was triggered
             if container_index == triggered_index and n_intervals and n_intervals > 0:
-                logger.info(f"⚡ PROGRESSIVE LOADING: Building figure {container_index}")
-
                 try:
                     # Build the actual figure component
                     figure_component = figure_build_function(**metadata)
@@ -534,8 +526,6 @@ def register_figure_loading_callback(app: dash.Dash) -> None:
 
         return outputs
 
-    logger.info("⚡ PHASE 5B: Incremental figure loading callback registered")
-
 
 def register_progressive_loading_callbacks(app: dash.Dash) -> None:
     """
@@ -553,7 +543,7 @@ def register_progressive_loading_callbacks(app: dash.Dash) -> None:
         app: The Dash application instance.
     """
 
-    logger.info("Registering simple progressive loading callbacks")
+    logger.debug("Registering simple progressive loading callbacks")
 
     # PERFORMANCE OPTIMIZATION (Phase 5B): Register callbacks to load components incrementally
     from depictio.dash.layouts.draggable_scenarios.progressive_loading_component import (
@@ -715,7 +705,6 @@ def register_progressive_loading_callbacks(app: dash.Dash) -> None:
     # Smart callback to hide loading progress when components are actually loaded
     # PERFORMANCE OPTIMIZATION: Skip loading progress if animations disabled
     if settings.performance.disable_animations:
-        logger.info("⚡ PERFORMANCE: Loading progress display disabled")
         return
 
     app.clientside_callback(
@@ -813,4 +802,4 @@ def register_progressive_loading_callbacks(app: dash.Dash) -> None:
         prevent_initial_call=True,
     )
 
-    logger.info("Progressive loading callbacks registered successfully")
+    logger.debug("Progressive loading callbacks registered successfully")

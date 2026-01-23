@@ -119,8 +119,6 @@ def render_tokens_list(tokens: list[dict[str, Any]] | None) -> dmc.Center | dmc.
     # If we have tokens, render a nicer looking list
     token_items = []
     for token in tokens:
-        # logger.info(f"Token: {token}")
-
         # Format expiration date nicer
         expiration = token["expire_datetime"]
 
@@ -761,8 +759,6 @@ def register_tokens_management_callbacks(app: dash.Dash) -> None:
         prevent_initial_call=True,
     )
     def copy_config(n_clicks, content):
-        # logger.info(f"Copying config to clipboard: {n_clicks}")
-        # logger.info(f"Content: {content}")
         if n_clicks:
             # Copy the content to the clipboard
             return content

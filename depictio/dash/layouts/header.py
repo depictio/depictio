@@ -40,7 +40,6 @@ def _check_filter_activity(interactive_values: dict | None) -> bool:
     Returns:
         True if any filter differs from its default state, False otherwise.
     """
-    # logger.debug(f"🔍 _check_filter_activity called with: {interactive_values}")
 
     if not interactive_values:
         logger.info("📭 No interactive_values provided")
@@ -51,19 +50,15 @@ def _check_filter_activity(interactive_values: dict | None) -> bool:
 
     if "interactive_components_values" in interactive_values:
         interactive_values_data = interactive_values["interactive_components_values"]
-        logger.info(f"📦 Found interactive_components_values: {len(interactive_values_data)} items")
     elif isinstance(interactive_values, dict):
         # Look for any values that might be interactive components
         for key, value in interactive_values.items():
             if isinstance(value, dict) and "value" in value:
                 interactive_values_data.append(value)
-        logger.info(f"📦 Extracted from dict structure: {len(interactive_values_data)} items")
 
     if not interactive_values_data:
-        logger.info("📭 No interactive component data found")
+        logger.debug("📭 No interactive component data found")
         return False
-
-    logger.info(f"🔍 Checking {len(interactive_values_data)} components for filter activity")
 
     for i, component_data in enumerate(interactive_values_data):
         if isinstance(component_data, dict):
@@ -71,22 +66,16 @@ def _check_filter_activity(interactive_values: dict | None) -> bool:
             component_metadata = component_data.get("metadata", {})
             default_state = component_metadata.get("default_state", {})
 
-            logger.info(f"🎛️ Component {i}: value={component_value}")
-            logger.info(f"  🎯 Default state: {default_state}")
-
             # Skip None values
             if component_value is None:
-                logger.info("  ⏭️ Skipping None value")
                 continue
 
             # Skip if no default_state available
             if not default_state:
-                logger.info("  ⚠️ No default_state available, skipping")
                 continue
 
             # Compare current value with default state
             if _is_different_from_default(component_value, default_state):
-                logger.info("  ✅ Component differs from default state - filter active!")
                 return True
             else:
                 logger.info("  ⏭️ Component matches default state")
@@ -390,7 +379,7 @@ def register_callbacks_header(app) -> None:
     Args:
         app: Dash application instance.
     """
-    logger.info("Registering header callbacks")
+    logger.debug("Registering header callbacks")
 
     # REMOVED: toggle_buttons clientside callback (replaced by URL-based edit mode)
     # Previously controlled button disabled states based on unified-edit-mode-button toggle
@@ -508,16 +497,12 @@ def register_callbacks_header(app) -> None:
 
     #     has_active_filters = _check_filter_activity(interactive_values)
 
-    #     logger.info(f"🎯 Filter activity detected: {has_active_filters}")
-
     #     if has_active_filters:
     #         # Orange filled variant with white icon when filters are active
-    #         logger.info("🟠 Setting reset button to orange with white icon (filters active)")
     #         icon = DashIconify(icon="bx:reset", width=16, color="white")
     #         return colors["orange"], "filled", icon
     #     else:
     #         # Gray subtle variant with gray icon when no filters
-    #         logger.info("⚪ Setting reset button to gray with gray icon (no filters)")
     #         icon = DashIconify(icon="bx:reset", width=16, color="gray")
     #         return "gray", "light", icon
 
@@ -532,24 +517,19 @@ def register_callbacks_header(app) -> None:
     #     """
     #     try:
     #         dashboard_id = pathname.split("/")[-1]
-    #         logger.info(f"Loading stored_metadata for dashboard_id: {dashboard_id}")
 
     #         from depictio.api.v1.db import dashboards_collection
     #         dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     #         if not dashboard:
-    #             logger.error(f"Dashboard with ID {dashboard_id} not found.")
     #             return dash.no_update
 
     #         stored_metadata = dashboard.get("stored_metadata", [])
     #         if not stored_metadata:
-    #             logger.warning(f"No stored_metadata found for dashboard_id: {dashboard_id}.")
     #             return []
 
-    #         logger.info(f"Loaded stored_metadata: {stored_metadata}")
     #         return stored_metadata
 
     #     except Exception as e:
-    #         logger.exception("Failed to load stored_metadata from MongoDB.")
     #         return dash.no_update
 
     # =============================================================================

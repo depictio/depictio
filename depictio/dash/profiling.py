@@ -101,7 +101,7 @@ class DashProfiler:
             return app
 
         try:
-            logger.info("Setting up Werkzeug ProfilerMiddleware...")
+            logger.debug("Setting up Werkzeug ProfilerMiddleware...")
 
             # Test for profiler conflicts if in safe mode
             if self.config.werkzeug_safe_mode:
@@ -278,7 +278,7 @@ def setup_profiling(app):
         logger.info("Profiling disabled. Set DEPICTIO_PROFILING_ENABLED=True to enable.")
         return app
 
-    logger.info("Setting up Dash application profiling...")
+    logger.debug("Setting up Dash application profiling...")
     profiler = get_profiler()
 
     if profiler:

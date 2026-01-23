@@ -94,7 +94,6 @@ def register_store_update_callback(app):
 
         # ⭐ DEBUG: Detailed logging for reset troubleshooting
         logger.debug("=" * 80)
-        logger.debug("🔄 STORE UPDATE CALLBACK FIRED")
         logger.debug(f"   Components count: {len(values)}")
         logger.debug(f"   Metadata count: {len(metadata_list) if metadata_list else 0}")
         logger.debug(f"   Values: {values}")
@@ -136,7 +135,6 @@ def register_store_update_callback(app):
         #         or "reset-all-filters-button" in trigger_id
         #     ):
         #         triggered_by_reset = True
-        #         logger.info(
         #             f"🔄 RESET TRIGGER: Store update triggered by reset button: {trigger_id}"
         #         )
         #
@@ -156,7 +154,6 @@ def register_store_update_callback(app):
         #     and "interactive_components_values" in previous_store_data
         # )
         # if optimization_check_triggered:
-        #     logger.debug("   ⚙️ ENTERING default value optimization check...")
         #     # Create metadata lookup by index
         #     metadata_by_index = {}
         #     try:
@@ -164,7 +161,6 @@ def register_store_update_callback(app):
         #             if i < len(metadata_list) and metadata_list[i]:
         #                 metadata_by_index[meta_id["index"]] = metadata_list[i]
         #     except Exception as e:
-        #         logger.warning(f"⚠️ Error creating metadata lookup: {e}")
         #         # Continue with normal processing if metadata lookup fails
         #
         #     if metadata_by_index:
@@ -214,22 +210,17 @@ def register_store_update_callback(app):
         #
         #             if current_component_count > prev_component_count:
         #                 # We're adding NEW components - ALLOW update to populate store fully
-        #                 logger.debug(
         #                     f"   ℹ️ Adding new components ({prev_component_count} → {current_component_count}) - allowing update despite defaults"
         #                 )
         #             else:
         #                 # Same or fewer components, all at defaults - PREVENT redundant update
         #                 elapsed_ms = (time.perf_counter() - start_time) * 1000
-        #                 logger.info(
         #                     "🚫 OPTIMIZATION: All values at defaults (preventing spurious re-render)"
         #                 )
-        #                 logger.debug(
         #                     f"   Detected {len(values)} interactive components with default values"
         #                 )
-        #                 logger.debug(
         #                     "   Preventing unnecessary store update and card loading overlay"
         #                 )
-        #                 logger.debug(f"   ⏱️ Optimization check time: {elapsed_ms:.1f}ms")
         #                 raise dash.exceptions.PreventUpdate
 
         components_values = []
@@ -283,7 +274,6 @@ def register_store_update_callback(app):
                 logger.debug("=" * 80)
                 raise dash.exceptions.PreventUpdate
             else:
-                logger.info("✅ OPTIMIZATION BYPASSED: Values changed")
                 logger.debug(f"   Previous: {prev_components}")
                 logger.debug(f"   New: {new_components}")
         elif previous_store_data is None or not previous_store_data.get(
@@ -293,7 +283,6 @@ def register_store_update_callback(app):
             # Allow store updates as soon as any component has a value for better responsiveness
             # Cards will handle partial data gracefully via idempotency checks
             if not components_values:
-                logger.debug("⏳ No components ready yet, preventing update")
                 raise dash.exceptions.PreventUpdate
 
             expected_count = len(metadata_list) if metadata_list else 0

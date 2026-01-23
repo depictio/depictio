@@ -184,7 +184,6 @@ def register_async_rendering_callback(app):
 
         # Early validation - Wait for project_metadata
         if not project_metadata or not isinstance(project_metadata, dict):
-            logger.debug("⏭️  Batch waiting for project_metadata")
             return (
                 [no_update] * len(trigger_data_list),
                 [no_update] * len(trigger_data_list),
@@ -242,7 +241,6 @@ def register_async_rendering_callback(app):
 
             # IDEMPOTENCY CHECK: If already rendered, skip
             if existing_meta and existing_meta.get("options") is not None:
-                logger.info(f"✅ [{component_type}/{index}] Already rendered, skipping")
                 all_components.append(no_update)
                 all_metadata.append(no_update)
                 all_stored_metadata.append(no_update)
@@ -306,8 +304,6 @@ def register_async_rendering_callback(app):
                 all_components.append(component)
                 all_metadata.append(metadata)
                 all_stored_metadata.append(stored_metadata)
-
-                logger.info(f"✅ [{i}] {component_type}/{index} rendered successfully")
 
             except Exception as e:
                 logger.error(f"[{i}] Interactive render error: {e}", exc_info=True)

@@ -230,7 +230,6 @@ def register_design_callbacks(app) -> None:
                 dash.no_update,
             )
 
-        logger.info(f"🎨 PRE-POPULATING card settings for component {card_id['index']}")
         logger.info(f"   Title: {component_data.get('title')}")
         logger.info(f"   Column: {component_data.get('column_name')}")
         logger.info(f"   Aggregation: {component_data.get('aggregation')}")

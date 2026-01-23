@@ -150,7 +150,7 @@ def register_design_callbacks(app):
 
         try:
             new_table = build_table(**table_kwargs)
-            logger.info("DESIGN TABLE - Preview built successfully")
+            logger.debug("DESIGN TABLE - Preview built successfully")
             logger.info("=" * 80)
             return new_table
         except Exception as e:

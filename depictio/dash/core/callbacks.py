@@ -35,7 +35,6 @@ def register_main_callback(app) -> None:
     Args:
         app: The Dash application instance.
     """
-    logger.info("🔥 REGISTERING MAIN CALLBACK for page routing and authentication")
 
     # Cache for tracking last processed state to prevent duplicate processing
     last_processed_state = {"pathname": None, "timestamp": 0, "user_state_hash": None}
@@ -108,13 +107,6 @@ def register_main_callback(app) -> None:
         trigger_id = ctx.triggered_id
         trigger_prop = ctx.triggered[0]["prop_id"] if ctx.triggered else "NONE"
 
-        logger.info(f"[PERF-4E][{call_id}] 🔥 ROUTING CALLBACK ENTRY")
-        logger.info(f"[PERF-4E][{call_id}]   pathname: {pathname}")
-        logger.info(f"[PERF-4E][{call_id}]   triggered_id: {trigger_id} (type: {type(trigger_id)})")
-        logger.info(f"[PERF-4E][{call_id}]   triggered_prop: {trigger_prop}")
-        logger.info(f"[PERF-4E][{call_id}]   local_data: {'present' if local_data else 'None'}")
-        logger.info(f"[PERF-4E][{call_id}]   theme_store: {'present' if theme_store else 'None'}")
-
         # CRITICAL OPTIMIZATION: Early return if triggered by local-store with unchanged state
         # This prevents duplicate processing when authentication updates local-store
         if trigger_id == "local-store" and pathname == last_processed_state["pathname"]:
@@ -133,7 +125,6 @@ def register_main_callback(app) -> None:
                 logger.info(
                     f"[PERF-4E][{call_id}]   time_since_last_process: {time_since_last:.1f}s"
                 )
-                logger.info(f"[PERF-4E][{call_id}]   user_state_hash: {current_hash}")
                 logger.info(
                     f"[PERF-4E][{call_id}]   total_duration: {elapsed:.0f}ms (saved ~200-400ms!)"
                 )
@@ -147,7 +138,6 @@ def register_main_callback(app) -> None:
                 logger.info(
                     f"[PERF-4E][{call_id}]   old_hash: {last_processed_state['user_state_hash']}"
                 )
-                logger.info(f"[PERF-4E][{call_id}]   new_hash: {current_hash}")
 
         # Update state including hash
         last_processed_state.update(
@@ -171,16 +161,11 @@ def register_main_callback(app) -> None:
 
         # Log callback exit with timing
         total_duration = (time.time() - start_time) * 1000
-        logger.info(f"[PERF-4E][{call_id}] 🔥 ROUTING CALLBACK EXIT")
-        logger.info(f"[PERF-4E][{call_id}]   auth_duration: {auth_duration:.0f}ms")
-        logger.info(f"[PERF-4E][{call_id}]   total_duration: {total_duration:.0f}ms")
         logger.info(
             f"[PERF-4E][{call_id}]   result: page={'<content>' if result[0] else 'None'}, header={'<header>' if result[1] else 'None'}, pathname={result[2]}"
         )
 
         return result
-
-    logger.info("🔥 MAIN CALLBACK REGISTERED SUCCESSFULLY")
 
     # Move header visibility to clientside for instant response
     # app.clientside_callback(
@@ -292,12 +277,10 @@ def register_all_callbacks(app) -> None:
     logger.warning(
         "⚠️  DEPRECATED: register_all_callbacks() called - use page-specific registration instead"
     )
-    logger.info("🔧 REGISTERING CORE CALLBACKS (routing, auth, layout)")
     register_main_callback(app)  # Page routing and authentication
     register_layout_callbacks(app)  # Header, sidebar, navigation
 
     # DEPRECATED: Component and feature callbacks now registered per app
-    logger.info("🔧 REGISTERING VIEW MODE CALLBACKS (components, dashboards)")
     register_component_callbacks(app)  # Component core rendering
     # register_feature_callbacks(app)  # REMOVED - now in page modules
 
@@ -355,15 +338,12 @@ def register_layout_callbacks(app) -> None:
     from depictio.dash.layouts.save import register_callbacks_save_lite
 
     # CORE: Header callbacks (always needed for navigation and edit mode switching)
-    logger.info("  📋 Registering header callbacks (navigation, edit mode, filters)")
     register_callbacks_header(app)  # 8 callbacks: edit mode nav, share modal, offcanvas, burger
 
     # CORE: Save callback (always needed - save button is in header)
-    logger.info("  💾 Registering save callback (minimal - metadata only)")
     register_callbacks_save_lite(app)  # Minimal save callback
 
     # CORE: Draggable grid edit mode callback (always needed - toggles action icon visibility)
-    logger.info("  🎯 Registering draggable grid edit mode callback (URL-based)")
     register_callbacks_draggable(app)  # Edit mode className toggle based on URL
 
     # NOTE: Sidebar content is static (no callbacks needed - rendered once in app_layout.py)

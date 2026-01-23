@@ -428,7 +428,7 @@ def handle_registration(
     if register_password != register_confirm_password:
         return "Passwords do not match.", True
     # response = add_user(register_email, register_password)
-    logger.info(f"Registering user with email: {register_email}")
+    logger.debug(f"Registering user with email: {register_email}")
     response = api_call_register_user(register_email, register_password)
     if not response:
         return f"Error registering user: {response.text}", True
@@ -646,7 +646,7 @@ def register_google_oauth_callbacks(app) -> None:
     Args:
         app: Dash application instance.
     """
-    logger.info("Registering Google OAuth callbacks")
+    logger.debug("Registering Google OAuth callbacks")
 
     # Google OAuth callback using server-side callback
     @app.callback(
@@ -816,16 +816,6 @@ def register_callbacks_users_management(app) -> None:
     ):
         button_id = ctx.triggered[0]["prop_id"].split(".")[0]
 
-        # logger.debug(f"Button ID: {button_id}")
-        # logger.debug(f"Current state: {current_state}")
-        # logger.debug(f"Local data: {local_data}")
-        # logger.debug(f"Modal open: {modal_open}")
-        # logger.debug(f"Login email: {login_email}")
-        # logger.debug(f"Login password: {login_password}")
-        # logger.debug(f"Register email: {register_email}")
-        # logger.debug(f"Register password: {register_password}")
-        # logger.debug(f"Register confirm password: {register_confirm_password}")
-
         # If user is already logged in, do not show the login form
         if local_data and local_data.get("logged_in", False):
             logger.info("User is already logged in.")
@@ -878,10 +868,6 @@ def register_callbacks_users_management(app) -> None:
             feedback_message, modal_open_new, session_data, local_data_new = validate_login(
                 login_email, login_password
             )
-            # logger.debug(f"Feedback message: {feedback_message}")
-            # logger.debug(f"Modal open new: {modal_open_new}")
-            # logger.debug(f"Session data: {session_data}")
-            # logger.debug(f"Local data new: {local_data_new}")
             if not modal_open_new:
                 content = render_login_form()
             else:
@@ -933,8 +919,6 @@ def register_callbacks_users_management(app) -> None:
             # else:
             #     modal_state = "register"
             content = render_register_form()
-            # logger.debug(f"Modal state: {modal_state}")
-            # logger.debug(f"Content: {content}")
 
             return (
                 True,
@@ -964,7 +948,7 @@ def register_callbacks_users_management(app) -> None:
     if settings.auth.google_oauth_enabled:
         register_google_oauth_callbacks(app)
     else:
-        logger.info("🔐 Google OAuth disabled - skipping OAuth callback registration")
+        logger.debug("🔐 Google OAuth disabled - skipping OAuth callback registration")
 
 
 # Add Google OAuth callback handler for when user returns from Google
@@ -1003,9 +987,6 @@ def register_callbacks_users_management(app) -> None:
 #     call_id = str(uuid.uuid4())[:8]
 #     start_time = time.time()
 
-#     logger.info(f"[PERF-4E][{call_id}] 🔐 OAUTH CALLBACK ENTRY (has search params)")
-#     logger.info(f"[PERF-4E][{call_id}]   search_params: {search_params[:100]}")
-#     logger.info(f"[PERF-4E][{call_id}]   local_data: {'present' if local_data else 'None'}")
 
 #     # Parse URL parameters
 #     from urllib.parse import parse_qs, urlparse
@@ -1014,26 +995,22 @@ def register_callbacks_users_management(app) -> None:
 #     parsed = urlparse(f"?{search_params}" if not search_params.startswith("?") else search_params)
 #     params = parse_qs(parsed.query)
 #     parse_duration = (time.time() - parse_start) * 1000
-#     logger.info(f"[PERF-4E][{call_id}]   URL parse: {parse_duration:.0f}ms")
 
 #     # Check if this is an OAuth callback
 #     if "code" not in params or "state" not in params:
 #         elapsed = (time.time() - start_time) * 1000
-#         logger.info(
 #             f"[PERF-4E][{call_id}] 🔐 OAUTH CALLBACK EXIT (not OAuth flow) - {elapsed:.0f}ms"
 #         )
 #         raise PreventUpdate
 
 #     code = params["code"][0]
 #     state = params["state"][0]
-#     logger.info(f"[PERF-4E][{call_id}]   OAuth code present: {code[:20]}...")
 
 #     try:
 #         # Call the OAuth callback API
 #         api_start = time.time()
 #         oauth_result = api_call_handle_google_oauth_callback(code, state)
 #         api_duration = (time.time() - api_start) * 1000
-#         logger.info(f"[PERF-4E][{call_id}]   API call: {api_duration:.0f}ms")
 
 #         if oauth_result and oauth_result.get("success"):
 #             # Extract token data and user info
@@ -1052,23 +1029,17 @@ def register_callbacks_users_management(app) -> None:
 #             }
 
 #             elapsed = (time.time() - start_time) * 1000
-#             logger.info(f"[PERF-4E][{call_id}] 🔐 OAUTH CALLBACK EXIT (success) - {elapsed:.0f}ms")
-#             logger.info(f"Google OAuth login successful for: {user_data['email']}")
 
 #             # Update session
 #             return [session_data]
 #         else:
 #             elapsed = (time.time() - start_time) * 1000
-#             logger.info(
 #                 f"[PERF-4E][{call_id}] 🔐 OAUTH CALLBACK EXIT (API failed) - {elapsed:.0f}ms"
 #             )
-#             logger.error(
 #                 f"OAuth callback failed: {oauth_result.get('message', 'Unknown error') if oauth_result else 'API call failed'}"
 #             )
 #             raise PreventUpdate
 
 #     except Exception as e:
 #         elapsed = (time.time() - start_time) * 1000
-#         logger.info(f"[PERF-4E][{call_id}] 🔐 OAUTH CALLBACK EXIT (exception) - {elapsed:.0f}ms")
-#         logger.error(f"Error handling OAuth callback: {e}")
 #         raise PreventUpdate

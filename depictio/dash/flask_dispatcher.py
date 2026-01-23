@@ -95,14 +95,12 @@ def create_shared_dash_config():
 
     # Setup background callback manager - Always configure Celery for Editor app
     # The Celery worker container is started conditionally via Docker Compose profile
-    logger.info("🔧 FLASK DISPATCHER: Setting up Celery manager for Editor app...")
     background_callback_manager = None
 
     try:
         from depictio.dash.celery_app import celery_app
 
         background_callback_manager = dash.CeleryManager(celery_app)
-        logger.info("✅ FLASK DISPATCHER: Celery background callback manager configured")
         logger.info("   Note: Celery worker must be running for design mode to work")
         logger.info("   Start worker with: docker compose --profile celery up")
     except Exception as e:
@@ -147,7 +145,6 @@ def configure_flask_server(server: Flask, dash_root_path: str) -> None:
                 return orjson.loads(s)
 
         server.json = OrjsonProvider(server)
-        logger.info("✅ FLASK DISPATCHER: Configured Flask to use orjson (10-16x faster)")
     except ImportError:
         logger.warning("⚠️  FLASK DISPATCHER: orjson not available, using standard json")
 
@@ -207,7 +204,6 @@ def create_management_app(
         dev_tools_ui=True, dev_tools_serve_dev_bundles=True, dev_tools_hot_reload=dev_mode
     )
 
-    logger.info("✅ FLASK DISPATCHER: Created Management app at /")
     return app_management
 
 
@@ -256,7 +252,6 @@ def create_viewer_app(
         dev_tools_ui=True, dev_tools_serve_dev_bundles=True, dev_tools_hot_reload=dev_mode
     )
 
-    logger.info("✅ FLASK DISPATCHER: Created Viewer app at /dashboard/")
     return app_viewer
 
 
@@ -306,7 +301,6 @@ def create_editor_app(
         dev_tools_ui=True, dev_tools_serve_dev_bundles=True, dev_tools_hot_reload=dev_mode
     )
 
-    logger.info("✅ FLASK DISPATCHER: Created Editor app at /dashboard-edit/")
     return app_editor
 
 
@@ -322,7 +316,6 @@ def create_multi_app_dispatcher() -> tuple:
         A tuple containing (server, app_management, app_viewer, app_editor, dev_mode).
     """
     logger.info("=" * 80)
-    logger.info("🚀 FLASK DISPATCHER: Initializing multi-app architecture")
     logger.info("=" * 80)
 
     # Create Flask server
@@ -345,14 +338,8 @@ def create_multi_app_dispatcher() -> tuple:
     app_editor = create_editor_app(server, assets_folder, background_callback_manager, dev_mode)
 
     logger.info("=" * 80)
-    logger.info("✅ FLASK DISPATCHER: Multi-app initialization complete")
     logger.info("=" * 80)
-    logger.info("📊 Management App: http://localhost:8050/")
-    logger.info("👁️  Viewer App:     http://localhost:8050/dashboard/<id>/")
-    logger.info("✏️  Editor App:     http://localhost:8050/dashboard-edit/<id>/")
-    logger.info("🔧 Builder:        http://localhost:8050/component/<dashboard_id>/build/")
     logger.info("=" * 80)
-    logger.info("🔐 Callback Isolation:")
     logger.info("   - app_management: Auth, dashboards, projects, admin (~70 callbacks)")
     logger.info("   - app_viewer: Read-only dashboard viewing (~30 callbacks)")
     logger.info("   - app_editor: Editing, design UI, component builder (~65 callbacks)")
@@ -386,35 +373,25 @@ def serve_screenshots(filename: str):
     return send_from_directory(screenshots_folder, filename)
 
 
-logger.info("✅ FLASK DISPATCHER: Registered /static/screenshots/ route for dashboard thumbnails")
-
-
 # Register layouts and callbacks from separate modules
 logger.info("==" * 40)
 logger.info("🔌 FLASK DISPATCHER: Wiring up app modules")
 logger.info("==" * 40)
 
 # Wire up Management App
-logger.info("📊 Wiring Management App...")
 app_management.layout = management_app.layout
 management_app.register_callbacks(app_management)
-logger.info("✅ Management App wired up")
 
 # Wire up Viewer App
-logger.info("👁️  Wiring Viewer App...")
 app_viewer.layout = dashboard_viewer.layout
 dashboard_viewer.register_callbacks(app_viewer)
-logger.info("✅ Viewer App wired up")
 
 
 # Wire up Editor App
-logger.info("✏️  Wiring Editor App...")
 app_editor.layout = dashboard_editor.layout
 dashboard_editor.register_callbacks(app_editor)
-logger.info("✅ Editor App wired up")
 
 logger.info("==" * 40)
-logger.info("✅ FLASK DISPATCHER: All apps wired up")
 logger.info("==" * 40)
 
 # Export for WSGI compatibility (used by wsgi.py and production deployments)

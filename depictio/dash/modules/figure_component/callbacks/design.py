@@ -61,15 +61,13 @@ def register_design_callbacks(app):
             logger.debug("Mode is None - component not ready yet")
             return NO_UPDATE_TUPLE
 
-        logger.info(f"🔄 MODE TOGGLE: {current_mode} -> {mode}")
-
         # Get component index for code interface creation
         component_index = _get_component_index_from_context()
 
         # Log action type for debugging
         is_initial_setup = current_mode is None or current_mode != mode
         action_type = "INITIAL SETUP" if is_initial_setup else "USER TOGGLE"
-        logger.info(f"{action_type}: Setting {mode} mode for component {component_index}")
+        logger.debug(f"{action_type}: Setting {mode} mode for component {component_index}")
 
         is_code_mode = mode == "code"
 
@@ -152,23 +150,18 @@ def register_design_callbacks(app):
 
         # Priority 1: Use code from stored_metadata (loading existing code mode figure)
         if stored_metadata and stored_metadata.get("mode") == "code" and has_stored_code:
-            logger.info("✅ Using code from stored_metadata (existing code mode figure)")
             return stored_metadata.get("code_content")
 
         # Priority 2: Preserve existing code content (user already edited code)
         if current_code_content:
-            logger.info("✅ Preserving existing code content")
             return current_code_content
 
         # Priority 3: Generate code from UI parameters (switching from UI to code mode)
         if dict_kwargs and visu_type_label:
-            logger.info("🔄 Generating code from UI parameters")
             generated_code = convert_ui_params_to_code(dict_kwargs, visu_type_label)
-            logger.info("✅ Code generated successfully")
             return generated_code
 
         # Priority 4: Return empty string for code mode without params
-        logger.info("⚠️ Code mode but no parameters - returning empty code")
         return ""
 
     # Callback to sync code editor changes to code-content-store
@@ -188,7 +181,6 @@ def register_design_callbacks(app):
             logger.debug("Not in code mode - skipping code editor sync")
             return dash.no_update
 
-        logger.info("📝 Syncing code editor to store")
         logger.info(f"   Code length: {len(editor_value) if editor_value else 0}")
 
         return editor_value or ""
@@ -229,20 +221,16 @@ def register_design_callbacks(app):
     #     if str(figure_id["index"]) != str(edit_context.get("component_id")):
     #         return tuple([dash.no_update] * 10)
     #
-    #     logger.info(f"🎨 PRE-POPULATING figure settings for component {figure_id['index']}")
     #
     #     # Extract visualization type
     #     visu_type = component_data.get("visu_type", "scatter")
-    #     logger.info(f"   Visualization type: {visu_type}")
     #
     #     # Extract dict_kwargs (parameters)
     #     dict_kwargs = component_data.get("dict_kwargs", {})
-    #     logger.info(f"   Parameters: {list(dict_kwargs.keys())}")
     #
     #     # Helper to extract parameter with None fallback
     #     def get_param(key, default=None):
     #         value = dict_kwargs.get(key, default)
-    #         logger.info(f"   {key}: {value}")
     #         return value
     #
     #     # Extract all common parameters
@@ -262,7 +250,6 @@ def register_design_callbacks(app):
     #
     #         labels = json.dumps(labels)
     #
-    #     logger.info("✓ Pre-population complete")
     #
     #     return (
     #         visu_type,
@@ -320,7 +307,7 @@ def register_design_callbacks(app):
 
         # Only update when in code mode
         if mode != "code":
-            logger.info("Not in code mode, skipping update")
+            logger.debug("Not in code mode, skipping update")
             return dash.no_update
 
         if not local_data:
@@ -331,7 +318,7 @@ def register_design_callbacks(app):
             # Get component index from the callback context
             dashboard_id = pathname.split("/")[-1] if pathname else None
 
-            logger.info(f"Getting component data for dashboard: {dashboard_id}")
+            logger.debug(f"Getting component data for dashboard: {dashboard_id}")
 
             if not workflow_id or not data_collection_id:
                 return "Please ensure workflow and data collection are selected in the component."
@@ -393,7 +380,6 @@ def register_design_callbacks(app):
         if not should_auto_execute:
             return dash.no_update
 
-        logger.info("🔄 AUTO-EXECUTING code on mode load (edit mode)")
         logger.info(f"   Code length: {len(code_content)}")
         return (current_clicks or 0) + 1
 
@@ -524,7 +510,7 @@ def register_design_callbacks(app):
                 if "template=" not in code_content:
                     theme_template = f"mantine_{current_theme}"
                     fig.update_layout(template=theme_template)
-                    logger.info(f"Applied theme template: {theme_template}")
+                    logger.debug(f"Applied theme template: {theme_template}")
 
                 logger.info("Code execution successful")
                 return success_response(fig)

@@ -73,7 +73,6 @@ def register_interactive_edit_callback(app):
             str: Redirect pathname to dashboard after save
         """
         logger.info("=" * 80)
-        logger.info("🚀 INTERACTIVE EDIT SAVE CALLBACK TRIGGERED")
         logger.info(f"   ctx.triggered_id: {ctx.triggered_id}")
         logger.info(f"   btn_clicks: {btn_clicks}")
 
@@ -87,7 +86,6 @@ def register_interactive_edit_callback(app):
         component_id = edit_context["component_id"]
         component_data = edit_context["component_data"]
 
-        logger.info(f"💾 INTERACTIVE EDIT SAVE - Component: {component_id}")
         logger.info(f"   Dashboard: {dashboard_id}")
         logger.info(f"   Component type: {component_data.get('component_type')}")
         logger.info(
@@ -121,14 +119,14 @@ def register_interactive_edit_callback(app):
             "last_updated": datetime.now().isoformat(),
         }
 
-        logger.info(f"   Updated title: {updated_metadata['title']}")
-        logger.info(f"   Updated column: {updated_metadata['column_name']}")
-        logger.info(f"   Updated method: {updated_metadata['interactive_component_type']}")
-        logger.info(f"   Updated scale: {updated_metadata['scale']}")
-        logger.info(f"   Updated color: {updated_metadata['custom_color']}")
-        logger.info(f"   Updated icon: {updated_metadata['icon_name']}")
-        logger.info(f"   Updated title_size: {updated_metadata['title_size']}")
-        logger.info(f"   Updated marks: {updated_metadata['marks_number']}")
+        logger.debug(f"   Updated title: {updated_metadata['title']}")
+        logger.debug(f"   Updated column: {updated_metadata['column_name']}")
+        logger.debug(f"   Updated method: {updated_metadata['interactive_component_type']}")
+        logger.debug(f"   Updated scale: {updated_metadata['scale']}")
+        logger.debug(f"   Updated color: {updated_metadata['custom_color']}")
+        logger.debug(f"   Updated icon: {updated_metadata['icon_name']}")
+        logger.debug(f"   Updated title_size: {updated_metadata['title_size']}")
+        logger.debug(f"   Updated marks: {updated_metadata['marks_number']}")
 
         # Get access token
         TOKEN = local_store["access_token"]
@@ -144,5 +142,3 @@ def register_interactive_edit_callback(app):
         )
 
         return redirect_url
-
-    logger.info("✅ Interactive edit save callback registered")

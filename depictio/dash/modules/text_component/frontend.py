@@ -278,7 +278,7 @@ def register_callbacks_text_component(app) -> None:
         if not store_data:
             store_data = _get_default_store_data()
 
-        logger.info("Starting edit mode via double-click")
+        logger.debug("Starting edit mode via double-click")
 
         current_alignment = store_data.get("alignment", "left")
         title_style = get_centered_title_style(alignment=current_alignment, display="none")
@@ -548,7 +548,6 @@ def register_callbacks_text_component(app) -> None:
         component_index = id["index"] if id else None
 
         if id and str(component_index).endswith("-tmp"):
-            logger.debug(f"Processing temporary component ID in stepper mode: {component_index}")
             return _create_text_component(component_index, data, pathname, is_stepper=True)
 
         if not data or not n_clicks or n_clicks == 0:

@@ -127,8 +127,6 @@ def register_callbacks_stepper(app) -> None:
         if not n_clicks or n_clicks == 0:
             raise dash.exceptions.PreventUpdate
 
-        logger.info("💾 STEPPER SAVE - Starting component save from stepper page")
-
         # Validate authentication
         if not local_store or "access_token" not in local_store:
             error_msg = "User not authenticated"
@@ -226,10 +224,7 @@ def register_callbacks_stepper(app) -> None:
                 for layout_item in existing_layout
                 if layout_item.get("i") != f"box-{component_id}"
             ]
-            logger.info(f"💾 STEPPER SAVE - EDIT mode: Replacing component {component_id}")
-        else:
-            # Add mode: create new component
-            logger.info(f"💾 STEPPER SAVE - ADD mode: Adding new component {component_id}")
+        # else: Add mode - new component, no special handling needed
 
         # Add new component to metadata
         existing_metadata.append(new_component_metadata)
@@ -257,7 +252,6 @@ def register_callbacks_stepper(app) -> None:
                 "minH": 2,
             }
             existing_layout.append(new_layout)
-            logger.info(f"💾 STEPPER SAVE - Created default layout: {new_layout}")
 
         # Update dashboard data
         dashboard_data["stored_metadata"] = existing_metadata
@@ -608,7 +602,7 @@ def register_callbacks_stepper(app) -> None:
 
                         valid_dcs.append({"label": joined_label, "value": join_key})
 
-                    logger.info(f"Added {len(workflow_joins)} joined data collection options")
+                    logger.debug(f"Added {len(workflow_joins)} joined data collection options")
                 else:
                     logger.warning(
                         f"Failed to fetch joins for workflow {selected_workflow}: {joins_response.status_code}"
@@ -945,12 +939,9 @@ def create_stepper_output_edit(
         style={"display": "none"},
     )
 
-    # logger.info(f"Select row: {select_row}")
-
     # Defensive handling for missing wf_id/dc_id
     wf_id = component_data.get("wf_id")
     dc_id = component_data.get("dc_id")
-    logger.info(f"🔍 Extracted wf_id={wf_id}, dc_id={dc_id} from component_data")
 
     if wf_id and dc_id:
         df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
@@ -960,7 +951,6 @@ def create_stepper_output_edit(
         import polars as pl
 
         df = pl.DataFrame()
-    # logger.info(f"DF: {df}")
 
     def return_design_component(component_selected, id, df):
         if component_selected == "Figure":
@@ -981,7 +971,6 @@ def create_stepper_output_edit(
 
     component_selected = component_data["component_type"].capitalize()
     card = return_design_component(component_selected=component_selected, id=id, df=df)
-    # logger.info(f"Card: {card}")
 
     # Handle the fact that design functions return lists, not single components
     if isinstance(card, list):
@@ -1055,7 +1044,6 @@ def create_stepper_output_edit(
             },
         },
     )
-    # logger.info(f"TEST MODAL: {modal}")
 
     return modal
 
@@ -1076,7 +1064,7 @@ def create_stepper_output(n: str, active: int) -> html.Div:
     Returns:
         Div containing the fullscreen modal with stepper.
     """
-    logger.info(f"Creating stepper output for index {n}")
+    logger.debug(f"Creating stepper output for index {n}")
     logger.info(f"Active step: {active}")
 
     # # Use component_data to pre-populate stepper if editing
@@ -1380,7 +1368,6 @@ def create_stepper_output(n: str, active: int) -> html.Div:
         ],
         id=n,
     )
-    # logger.info(f"TEST MODAL: {modal}")
 
     return modal
 
@@ -1399,7 +1386,7 @@ def create_stepper_content(n: str, active: int) -> dmc.Stack:
     Returns:
         Stack component with stepper content and sticky navigation footer.
     """
-    logger.info(f"Creating stepper content (standard layout) for index {n}")
+    logger.debug(f"Creating stepper content (standard layout) for index {n}")
     logger.info(f"Active step: {active}")
 
     # Component Selection Display and Data Source (Step 2)
@@ -1680,7 +1667,6 @@ def create_stepper_content(n: str, active: int) -> dmc.Stack:
         },
     )
 
-    logger.info(f"✅ Created stepper content (standard layout) for index {n}")
     return content
 
 

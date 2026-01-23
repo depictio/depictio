@@ -431,7 +431,6 @@ def get_reference_value_from_cols_json(cols_json, column_name, aggregation):
     # Extract the value
     reference_value = column_specs.get(cols_json_field)
     if reference_value is not None:
-        logger.debug(f"Found reference value for {column_name}.{aggregation}: {reference_value}")
         return reference_value
     else:
         logger.debug(f"Field '{cols_json_field}' not found in column specs for '{column_name}'")
@@ -477,7 +476,6 @@ def compute_value(data, column_name, aggregation, cols_json=None, has_filters=Fa
     if not has_filters and cols_json:
         reference_value = get_reference_value_from_cols_json(cols_json, column_name, aggregation)
         if reference_value is not None:
-            logger.debug(f"✅ Using pre-computed value: {reference_value} (saved computation)")
             return reference_value
 
     # OPTIMIZATION 2: Use Polars native operations (avoid pandas conversion)

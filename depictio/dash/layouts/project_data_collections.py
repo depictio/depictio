@@ -3275,7 +3275,7 @@ def register_project_data_collections_callbacks(app):
 
             from depictio.dash.api_calls import api_call_create_data_collection
 
-            logger.info(f"Creating data collection: {name}")
+            logger.debug(f"Creating data collection: {name}")
 
             # Get current project information
             if not project_data or "project_id" not in project_data:
@@ -3326,7 +3326,7 @@ def register_project_data_collections_callbacks(app):
             )
 
             if result and result.get("success"):
-                logger.info(f"Data collection created successfully: {result.get('message')}")
+                logger.debug(f"Data collection created successfully: {result.get('message')}")
 
                 # Update project data store to trigger refresh
                 updated_project_data = project_data.copy()
@@ -3337,7 +3337,6 @@ def register_project_data_collections_callbacks(app):
             else:
                 error_msg = result.get("message", "Unknown error") if result else "API call failed"
                 logger.error(f"Data collection creation failed: {error_msg}")
-                logger.info("DEBUG: Showing error alert in modal")  # Debug log
                 return (
                     dash.no_update,
                     dash.no_update,
@@ -3347,7 +3346,6 @@ def register_project_data_collections_callbacks(app):
 
         except Exception as e:
             logger.error(f"Error creating data collection: {str(e)}")
-            logger.info("DEBUG: Showing exception error alert in modal")  # Debug log
             import traceback
 
             traceback.print_exc()
@@ -3528,7 +3526,7 @@ def register_project_data_collections_callbacks(app):
             result = api_call_edit_data_collection_name(dc_id, new_name, local_data["access_token"])
 
             if result and result.get("success"):
-                logger.info(f"Data collection name updated successfully: {result.get('message')}")
+                logger.debug(f"Data collection name updated successfully: {result.get('message')}")
                 # Update project data store to trigger refresh
                 updated_project_data = project_data.copy()
                 updated_project_data["refresh_timestamp"] = datetime.now().isoformat()
@@ -3676,14 +3674,12 @@ def register_project_data_collections_callbacks(app):
                     logger.debug(f"Item {i} has dict props: color={props.get('color')}")
                     # Check for green color (success)
                     if props.get("color") == "green":
-                        logger.debug("Found green validation (dict format), enabling button")
                         return False
                     # Check for validation passed text
                     if (
                         "children" in props
                         and "validation passed" in str(props["children"]).lower()
                     ):
-                        logger.debug("Found validation passed text (dict format), enabling button")
                         return False
 
                 elif hasattr(child, "props"):
@@ -3692,7 +3688,6 @@ def register_project_data_collections_callbacks(app):
                     )
                     # Check for green color (success) and validation passed text
                     if hasattr(child.props, "color") and child.props.color == "green":
-                        logger.debug("Found green validation (object format), enabling button")
                         return False
                     if (
                         hasattr(child.props, "children")
@@ -3715,7 +3710,6 @@ def register_project_data_collections_callbacks(app):
                 if content:
                     logger.debug(f"Item {i} content: {content[:100]}")
                     if "schema validation passed" in content or "validation passed" in content:
-                        logger.debug("Found validation passed in content, enabling button")
                         return False
 
         logger.debug("No validation success found, keeping button disabled")
@@ -4302,8 +4296,6 @@ def generate_cytoscape_elements_from_project_data(data_collections):
         join_type = join_config.get("how", "inner")
         target_dc_tags = join_config.get("with_dc", [])
 
-        logger.debug(f"Processing joins for DC '{dc_tag}': {join_config}")
-
         for target_dc_tag in target_dc_tags:
             # Check if target DC exists in our data
             target_dc_exists = any(
@@ -4330,7 +4322,7 @@ def generate_cytoscape_elements_from_project_data(data_collections):
                     # Try to add the column if it's a join column
                     if col not in dc_columns[dc_tag]:
                         dc_columns[dc_tag].append(col)
-                        logger.info(f"Added missing join column '{col}' to DC '{dc_tag}'")
+                        logger.debug(f"Added missing join column '{col}' to DC '{dc_tag}'")
 
                         # Create the missing column node
                         num_existing_columns = len(

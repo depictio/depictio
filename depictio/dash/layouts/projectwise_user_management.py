@@ -111,7 +111,6 @@ def extract_project_id_from_pathname(pathname: str) -> str:
 #         ]
 #         return groups_dict, group_options
 #     except Exception as e:
-#         logger.info(f"Error fetching groups data: {e}")
 #         return {}, []
 
 
@@ -693,8 +692,6 @@ def register_projectwise_user_management_callbacks(app) -> None:
     #     """
     #     Populate the email dropdown based on the selected group.
     #     """
-    #     logger.info(f"Selected group ID: {selected_group_id}")
-    #     logger.info(f"Groups data: {GROUPS_DATA}")
     #     if selected_group_id and selected_group_id in GROUPS_DATA:
     #         email_options = [
     #             {"value": user["id"], "label": user["email"]}
@@ -886,10 +883,10 @@ def register_projectwise_user_management_callbacks(app) -> None:
 
                 # Skip if user already exists in the project
                 if any(row["id"] == user_id for row in current_rows):
-                    logger.info(f"User {user_email} already exists in project, skipping")
+                    logger.debug(f"User {user_email} already exists in project, skipping")
                     continue
 
-                logger.info(f"Adding user: {user_email} with permissions: {permissions}")
+                logger.debug(f"Adding user: {user_email} with permissions: {permissions}")
                 new_users.append(
                     {
                         "id": user_id,

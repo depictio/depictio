@@ -230,7 +230,7 @@ def update_project_permissions_api(
         )
         response.raise_for_status()
 
-        logger.info(f"Successfully updated permissions for project {project_id}")
+        logger.debug(f"Successfully updated permissions for project {project_id}")
         return {"success": True, "data": response.json()}
 
     except Exception as e:
@@ -336,7 +336,7 @@ def fetch_project_permissions(project_id: str, token: str) -> List[Dict]:
     Returns:
         List[Dict]: Formatted permission data for AG Grid
     """
-    logger.info(f"Fetching permissions for project ID: {project_id}")
+    logger.debug(f"Fetching permissions for project ID: {project_id}")
 
     project_data = fetch_project_data(project_id, token)
     if not project_data:
@@ -486,7 +486,7 @@ def validate_and_update_permissions(rows: List[Dict], project_id: str, token: st
         )
         response.raise_for_status()
 
-        logger.info(f"Successfully updated permissions for project {project_id}")
+        logger.debug(f"Successfully updated permissions for project {project_id}")
         return True
 
     except Exception as e:

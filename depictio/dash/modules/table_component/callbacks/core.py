@@ -242,7 +242,7 @@ def load_data_with_interactive_filters(
         df = load_deltatable_lite(
             ObjectId(workflow_id), ObjectId(data_collection_id), metadata=None, TOKEN=TOKEN
         )
-        logger.info(f"Loaded unjoined table data (shape: {df.shape})")
+        logger.debug(f"Loaded unjoined table data (shape: {df.shape})")
         return df
 
 
@@ -270,30 +270,30 @@ def _load_compatible_dc_data(
     """
     try:
         if result_dc_id:
-            logger.info("Loading pre-computed joined table with interactive filters")
+            logger.debug("Loading pre-computed joined table with interactive filters")
             df = load_deltatable_lite(
                 ObjectId(workflow_id),
                 ObjectId(result_dc_id),
                 metadata=list(interactive_components_dict.values()),
                 TOKEN=TOKEN,
             )
-            logger.info(f"Successfully loaded FILTERED data from result DC (shape: {df.shape})")
+            logger.debug(f"Successfully loaded FILTERED data from result DC (shape: {df.shape})")
         else:
-            logger.info("No joins - loading single DC with interactive filters")
+            logger.debug("No joins - loading single DC with interactive filters")
             df = load_deltatable_lite(
                 ObjectId(workflow_id),
                 ObjectId(data_collection_id),
                 metadata=list(interactive_components_dict.values()),
                 TOKEN=TOKEN,
             )
-            logger.info(f"Successfully loaded FILTERED single DC (shape: {df.shape})")
+            logger.debug(f"Successfully loaded FILTERED single DC (shape: {df.shape})")
         return df
     except Exception as interactive_error:
         logger.error(f"Loading data failed: {str(interactive_error)}")
         df = load_deltatable_lite(
             ObjectId(workflow_id), ObjectId(data_collection_id), metadata=None, TOKEN=TOKEN
         )
-        logger.info("Fallback: Loaded unfiltered data")
+        logger.debug("Fallback: Loaded unfiltered data")
         return df
 
 
@@ -323,23 +323,23 @@ def _load_data_without_interactive_filters(
         result_dc_id = get_result_dc_for_workflow(workflow_id, TOKEN)
 
         if result_dc_id:
-            logger.info("Table has pre-computed join - loading result DC")
+            logger.debug("Table has pre-computed join - loading result DC")
             df = load_deltatable_lite(
                 ObjectId(workflow_id), ObjectId(result_dc_id), metadata=None, TOKEN=TOKEN
             )
-            logger.info(f"Successfully loaded joined table data (shape: {df.shape})")
+            logger.debug(f"Successfully loaded joined table data (shape: {df.shape})")
         else:
             df = load_deltatable_lite(
                 ObjectId(workflow_id), ObjectId(data_collection_id), metadata=None, TOKEN=TOKEN
             )
-            logger.info(f"Successfully loaded single table data (shape: {df.shape})")
+            logger.debug(f"Successfully loaded single table data (shape: {df.shape})")
         return df
     except Exception as join_error:
         logger.warning(f"Error checking table joins: {str(join_error)}")
         df = load_deltatable_lite(
             ObjectId(workflow_id), ObjectId(data_collection_id), metadata=None, TOKEN=TOKEN
         )
-        logger.info(f"Fallback: Loaded single table data (shape: {df.shape})")
+        logger.debug(f"Fallback: Loaded single table data (shape: {df.shape})")
         return df
 
 
@@ -366,7 +366,7 @@ def apply_ag_grid_filters(df: pl.DataFrame, filter_model: dict[str, Any]) -> pl.
     if not filter_model:
         return df
 
-    logger.info(f"Applying {len(filter_model)} AG Grid filters")
+    logger.debug(f"Applying {len(filter_model)} AG Grid filters")
 
     for col, filter_def in filter_model.items():
         try:
@@ -415,9 +415,9 @@ def create_synthetic_request(triggered_by_interactive: bool) -> dict[str, Any]:
         - sortModel: empty
     """
     if triggered_by_interactive:
-        logger.info("Interactive component changed - processing data immediately")
+        logger.debug("Interactive component changed - processing data immediately")
     else:
-        logger.info("INITIAL LOAD: Creating synthetic request for first page")
+        logger.debug("INITIAL LOAD: Creating synthetic request for first page")
 
     request = {
         "startRow": 0,
@@ -425,7 +425,7 @@ def create_synthetic_request(triggered_by_interactive: bool) -> dict[str, Any]:
         "filterModel": {},
         "sortModel": [],
     }
-    logger.info("Created synthetic request to load initial data")
+    logger.debug("Created synthetic request to load initial data")
     return request
 
 
@@ -571,7 +571,7 @@ def _log_pagination_request(
     requested_rows = end_row - start_row
 
     logger.info(f"Page size: {page_size} rows (user selected or default)")
-    logger.info(f"Table {table_index}: Loading rows {start_row}-{end_row} ({requested_rows} rows)")
+    logger.debug(f"Table {table_index}: Loading rows {start_row}-{end_row} ({requested_rows} rows)")
     logger.info(
         f"Active filters: {len(filter_model)} filter(s) - "
         f"{list(filter_model.keys()) if filter_model else 'none'}"
@@ -807,7 +807,7 @@ def load_table_data_with_filters(
     Returns:
         Filtered and sorted Polars DataFrame ready for display or export.
     """
-    logger.info("load_table_data_with_filters: Loading table data")
+    logger.debug("load_table_data_with_filters: Loading table data")
 
     # Step 1: Build metadata mapping and enrich interactive components
     metadata_by_index = build_interactive_metadata_mapping(
@@ -824,7 +824,7 @@ def load_table_data_with_filters(
     df = load_data_with_interactive_filters(
         workflow_id, data_collection_id, stored_metadata, interactive_components_dict, TOKEN
     )
-    logger.info(f"Loaded initial dataset: {df.shape[0]} rows, {df.shape[1]} columns")
+    logger.debug(f"Loaded initial dataset: {df.shape[0]} rows, {df.shape[1]} columns")
 
     # Step 4: Apply AG Grid filters
     if filter_model:
@@ -832,9 +832,9 @@ def load_table_data_with_filters(
 
     # Step 5: Apply AG Grid sorting
     if sort_model:
-        logger.info(f"Applying sorting: {[(s['colId'], s['sort']) for s in sort_model]}")
+        logger.debug(f"Applying sorting: {[(s['colId'], s['sort']) for s in sort_model]}")
         df = apply_ag_grid_sorting(df, sort_model)
-        logger.info("Sorting applied successfully")
+        logger.debug("Sorting applied successfully")
 
     logger.info(f"Final dataset after filters/sorting: {df.shape[0]} rows, {df.shape[1]} columns")
     return df
@@ -843,8 +843,6 @@ def load_table_data_with_filters(
 def register_core_callbacks(app):
     """Register core view mode callbacks for table component."""
     from depictio.api.v1.configs.logging_init import logger as core_logger
-
-    core_logger.info("🔧 Registering table component core callbacks (theme + infinite scroll)")
 
     @app.callback(
         Output({"type": "table-aggrid", "index": MATCH}, "className"),
@@ -1046,7 +1044,7 @@ def register_core_callbacks(app):
             )
 
             row_count = df.shape[0]
-            logger.info(f"CSV EXPORT: Loaded {row_count:,} rows, {df.shape[1]} columns")
+            logger.debug(f"CSV EXPORT: Loaded {row_count:,} rows, {df.shape[1]} columns")
 
             # Check size limits
             is_allowed, error_message = check_export_size_limit(row_count)

@@ -76,7 +76,7 @@ def _load_component_data(component_type: str, wf_id: str | None, dc_id: str | No
         if response.status_code == 200:
             dc_type = response.json().get("config", {}).get("type", "").lower()
             if dc_type == "multiqc":
-                logger.info(f"Skipping data preview for MultiQC data collection: {dc_id}")
+                logger.debug(f"Skipping data preview for MultiQC data collection: {dc_id}")
                 return None
             return load_deltatable_lite(wf_id, dc_id, TOKEN=token)
 

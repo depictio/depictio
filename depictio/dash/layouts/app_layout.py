@@ -157,7 +157,6 @@ def handle_authenticated_user(
         cached_project_data: Cached project data from consolidated API
     """
     logger.info(f"User logged in: {local_data.get('email', 'Unknown')}")
-    # logger.info(f"Local data: {local_data}")
 
     # PERFORMANCE OPTIMIZATION (Phase 4E-4): Disabled purge on every page load
     # Token cleanup now runs hourly via cleanup_tasks.py:periodic_purge_expired_tokens()
@@ -174,8 +173,6 @@ def handle_authenticated_user(
         # parts: ['', 'dashboard', '{dashboard_id}', 'component', 'add', '{component_id}']
         dashboard_id = parts[2]
         component_id = parts[5]  # Fixed: was parts[4] which extracted 'add'
-
-        logger.info(f"🎨 COMPONENT STEPPER - Dashboard: {dashboard_id}, Component: {component_id}")
 
         # Create stepper page layout
         stepper_page = create_stepper_page(
@@ -200,8 +197,6 @@ def handle_authenticated_user(
         # parts: ['', 'dashboard', '{dashboard_id}', 'component', 'edit', '{component_id}']
         dashboard_id = parts[2]
         component_id = parts[5]
-
-        logger.info(f"✏️ EDIT COMPONENT - Dashboard: {dashboard_id}, Component: {component_id}")
 
         # Fetch dashboard data to get component metadata
         dashboard_data = None
@@ -275,7 +270,6 @@ def handle_authenticated_user(
 
         # ✅ ASYNC OPTIMIZATION: Project data now populated by consolidated_api callback
         # No blocking HTTP call needed - rely on project-metadata-store from async population
-        logger.info(f"🔄 DASHBOARD NAVIGATION: theme - {theme}")
         # Load dashboard data synchronously
         # PERFORMANCE OPTIMIZATION (Phase 5A): Pass cached user data to avoid redundant API call
         # PERFORMANCE OPTIMIZATION (API Consolidation): Pass dashboard_init_data to eliminate component API calls
@@ -318,7 +312,6 @@ def handle_authenticated_user(
     elif pathname == "/dashboards":
         user = api_call_fetch_user_from_token(local_data["access_token"])  # Fallback only
         # user = fetch_user_from_token(local_data["access_token"])
-        # logger.info(f"User: {user}")
 
         # Check if user is anonymous
         is_anonymous = hasattr(user, "is_anonymous") and user.is_anonymous
@@ -685,7 +678,6 @@ def create_dashboard_layout(
 
     # Init layout and children if depictio_dash_data is available, else set to empty
     if depictio_dash_data and isinstance(depictio_dash_data, dict):
-        # logger.info(f"Depictio dash data: {depictio_dash_data}")
         if "stored_layout_data" in depictio_dash_data:
             init_layout = depictio_dash_data["stored_layout_data"]
         else:
@@ -698,7 +690,6 @@ def create_dashboard_layout(
         init_layout = {}
         init_children = list()
 
-    # logger.info(f"Loaded depictio init_layout: {init_layout}")
     # header, backend_components = design_header(depictio_dash_data)
 
     # Generate draggable layout
@@ -721,7 +712,6 @@ def create_dashboard_layout(
         edit_mode=edit_mode,
     )
     draggable_duration_ms = (time.time() - start_draggable) * 1000
-    logger.info(f"⏱️ PROFILING: design_draggable took {draggable_duration_ms:.1f}ms")
 
     # Add progressive loading components if we have metadata
     progressive_loading_components = []
@@ -736,19 +726,16 @@ def create_dashboard_layout(
 
         stored_metadata = depictio_dash_data["stored_metadata"]
         if stored_metadata:
-            logger.info(f"Adding simple progressive loading for {len(stored_metadata)} components")
+            logger.debug(f"Adding simple progressive loading for {len(stored_metadata)} components")
 
             # Create simple loading progress display
             progressive_loading_components.append(create_loading_progress_display(dashboard_id))
 
     # Create workflow logo overlay if project data available
     workflow_logo_overlay = html.Div()  # Default empty div
-    logger.debug(f"🎨 APP_LAYOUT: cached_project_data present: {bool(cached_project_data)}")
     if cached_project_data and isinstance(cached_project_data, dict):
         project_data = cached_project_data.get("project")
-        logger.debug(f"🎨 APP_LAYOUT: project_data extracted: {bool(project_data)}")
         if project_data:
-            logger.debug(f"🎨 APP_LAYOUT: Calling create_workflow_logo_overlay with theme={theme}")
             workflow_logo_overlay = create_workflow_logo_overlay(project_data, theme)
         else:
             logger.debug("🎨 APP_LAYOUT: No project data in cached_project_data")

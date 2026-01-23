@@ -126,8 +126,6 @@ def _load_dataframe(
         )
         return pl.DataFrame()
 
-    logger.debug(f"Table component {index}: Loading delta table for {wf_id}:{dc_id}")
-
     if not wf_id or not dc_id:
         logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
         return pl.DataFrame()
@@ -468,7 +466,7 @@ def build_table(**kwargs) -> html.Div | dmc.Paper | dcc.Loading:
     )
 
     if settings.performance.disable_loading_spinners:
-        logger.info("PERFORMANCE MODE: Table loading spinners disabled")
+        logger.debug("PERFORMANCE MODE: Table loading spinners disabled")
         return table_body
 
     graph_id_dict = {"type": "table-aggrid", "index": str(index)}

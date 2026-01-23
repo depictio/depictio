@@ -439,7 +439,7 @@ def _parse_json_parameters(cleaned_kwargs: dict, df: pl.DataFrame, mode: str) ->
                 if evaluated is not None:
                     cleaned_kwargs[param_name] = evaluated
                     continue
-            logger.info(f"Skipping complex Python expression for {param_name}")
+            logger.debug(f"Skipping complex Python expression for {param_name}")
             del cleaned_kwargs[param_name]
             continue
 
@@ -574,7 +574,7 @@ def _validate_required_params(
         Tuple of (is_valid, error_figure_or_none)
     """
     if skip_validation:
-        logger.info(f"CODE MODE: Skipping parameter validation for {visu_type}")
+        logger.debug(f"CODE MODE: Skipping parameter validation for {visu_type}")
         return True, None
 
     required_params = _get_required_parameters(visu_type.lower())
@@ -1088,9 +1088,9 @@ def render_figure(
     # Apply theme template
     if not dict_kwargs.get("template"):
         dict_kwargs["template"] = _get_theme_template(theme)
-        logger.info(f"Applied theme-based template: {dict_kwargs['template']}")
+        logger.debug(f"Applied theme-based template: {dict_kwargs['template']}")
 
-    logger.info(f"Rendering {visu_type} figure, data shape: {df.shape}")
+    logger.debug(f"Rendering {visu_type} figure, data shape: {df.shape}")
 
     # Handle empty data
     if df is None or df.is_empty():
@@ -1147,7 +1147,7 @@ def render_figure(
                 # Convert Polars DataFrame to Pandas for customizations that need it
                 pandas_df = df.to_pandas() if df is not None and not df.is_empty() else None
                 figure = apply_customizations(figure, customizations, df=pandas_df)
-                logger.info(f"Applied {len(customizations)} customization categories to figure")
+                logger.debug(f"Applied {len(customizations)} customization categories to figure")
             except ImportError as e:
                 logger.warning(f"Could not import customizations module: {e}")
             except Exception as e:
@@ -2075,11 +2075,10 @@ def build_figure(**kwargs) -> html.Div | dcc.Loading:
         logger.warning(f"Expected dict for dict_kwargs, got {type(dict_kwargs)}: {dict_kwargs}")
         dict_kwargs = {}
 
-    logger.info(f"Building figure component {index} (visu_type: {visu_type}, theme: {theme})")
+    logger.debug(f"Building figure component {index} (visu_type: {visu_type}, theme: {theme})")
 
     # CRITICAL DEBUG: Log kwargs for code mode figures
     if mode == "code":
-        logger.info(f"🔍 BUILD_FIGURE: Code mode component {index}")
         logger.info(f"   mode={mode}, code_len={len(code_content)}")
         logger.info(f"   code_content present in kwargs: {'code_content' in kwargs}")
         logger.info(f"   Full kwargs keys: {kwargs.keys()}")
@@ -2218,9 +2217,7 @@ def design_figure(
             f"🔧 Setting initial mode to CODE for component {id['index']} based on stored metadata"
         )
     else:
-        logger.info(f"🔧 Setting initial mode to UI for component {id['index']}")
-
-    logger.info(f"🔧 FINAL INITIAL MODE: {initial_mode}")
+        logger.debug(f"🔧 Setting initial mode to UI for component {id['index']}")
 
     # Extract index handling dict pattern-matching IDs
     if isinstance(id, dict):
@@ -2537,7 +2534,7 @@ def build_figure_design_ui(**kwargs) -> html.Div:
     dict_kwargs = kwargs.get("dict_kwargs", {})
     columns = kwargs.get("columns", [])
 
-    logger.info(f"Building design UI for figure {index} (visu_type: {visu_type})")
+    logger.debug(f"Building design UI for figure {index} (visu_type: {visu_type})")
 
     if not columns:
         logger.warning(f"No columns provided for figure {index} design UI")
@@ -2726,33 +2723,46 @@ def _create_info_badges(
     return html.Div()
 
 
-def create_stepper_figure_button(n, disabled=False):
-    """Create the stepper figure button.
+def create_stepper_figure_button(n: int, disabled: bool | None = None) -> tuple:
+    """Create the stepper figure button and associated store.
+
+    Creates the button used in the component type selection step of the stepper
+    to add a figure component to the dashboard.
 
     Args:
-        n: Button index
-        disabled: Whether button is disabled
+        n: Button index for unique identification.
+        disabled: Override enabled state. If None, uses component metadata.
 
     Returns:
-        Button and store components
+        Tuple containing (button, store) components.
     """
+    from depictio.dash.component_metadata import (
+        get_component_color,
+        get_dmc_button_color,
+        is_enabled,
+    )
     from depictio.dash.utils import UNSELECTED_STYLE
 
-    button = dbc.Col(
-        dmc.Button(
-            "Figure",
-            id={
-                "type": "btn-option",
-                "index": n,
-                "value": "Figure",
-            },
-            n_clicks=0,
-            style=UNSELECTED_STYLE,
-            size="xl",
-            color="grape",
-            leftSection=DashIconify(icon="mdi:graph-box", color="white"),
-            disabled=disabled,
-        )
+    if disabled is None:
+        disabled = not is_enabled("figure")
+
+    dmc_color = get_dmc_button_color("figure")
+    hex_color = get_component_color("figure")
+
+    button = dmc.Button(
+        "Figure",
+        id={
+            "type": "btn-option",
+            "index": n,
+            "value": "Figure",
+        },
+        n_clicks=0,
+        style={**UNSELECTED_STYLE, "fontSize": "26px"},
+        size="xl",
+        variant="outline",
+        color=dmc_color,
+        leftSection=DashIconify(icon="mdi:graph-box", color=hex_color),
+        disabled=disabled,
     )
     store = dcc.Store(
         id={

@@ -46,7 +46,7 @@ def create_code_mode_interface(component_index: str, initial_code: str = "") -> 
     Returns:
         HTML Div containing the complete code mode interface.
     """
-    logger.info(f"Creating code mode interface for component: {component_index}")
+    logger.debug(f"Creating code mode interface for component: {component_index}")
 
     return html.Div(
         [
@@ -513,7 +513,6 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
                 figure_line = line
                 uses_modified_df = "df_modified" in line
                 in_figure_statement = False
-                logger.debug(f"Found single-line figure: {line[:80]}...")
         elif in_figure_statement:
             # Continue collecting figure statement lines
             figure_parts.append(line)
@@ -539,7 +538,6 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
                 if preprocessing_open_parens == 0:
                     preprocessing_lines.append(line)
                     in_preprocessing_statement = False
-                    logger.debug(f"Found single-line preprocessing: {line[:80]}...")
             else:
                 # Shouldn't happen, but handle gracefully
                 preprocessing_lines.append(line)
@@ -552,7 +550,6 @@ def analyze_constrained_code(code: str) -> dict[str, Any]:
             if preprocessing_open_parens == 0:
                 preprocessing_lines.append("\n".join(preprocessing_parts))
                 in_preprocessing_statement = False
-                logger.debug(f"Found multi-line preprocessing: {len(preprocessing_parts)} lines")
 
     # Validation
     if not figure_line:

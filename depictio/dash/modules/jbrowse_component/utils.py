@@ -152,7 +152,6 @@ def build_jbrowse(**kwargs):
     dashboard_id = kwargs.get("dashboard_id")
     user_cache = kwargs.get("user_cache")
 
-    # logger.info(f"build_jbrowse access_token {access_token}")
     logger.info(f"build_jbrowse dc_config {dc_config}")
     logger.info(f"build_jbrowse stored_metadata_jbrowse {stored_metadata_jbrowse}")
     logger.info(f"build_jbrowse index {index}")
@@ -167,11 +166,9 @@ def build_jbrowse(**kwargs):
 
     user_context = UserContext.from_cache(user_cache)
     if user_context:
-        logger.info("✅ JBrowse: Using consolidated cache for user data")
         user = user_context  # Use UserContext directly
     else:
         # Fallback to direct API call if cache not available
-        logger.info("🔄 JBrowse: Using fallback API call for user data")
         user = api_call_fetch_user_from_token(access_token)
         logger.info(f"user {user}")
 
@@ -250,7 +247,7 @@ def build_jbrowse(**kwargs):
         )
         if track_ids:
             updated_jbrowse_config += f"&tracks={','.join(track_ids)}"
-        logger.info(f"updated_jbrowse_config {updated_jbrowse_config}")
+        logger.debug(f"updated_jbrowse_config {updated_jbrowse_config}")
 
         # if not session.endswith("_lite.json"):
         # session = session.split(".")[0] + "_lite.json"

@@ -165,7 +165,7 @@ def api_call_register_user(
         Response from registration or None if failed
     """
     try:
-        logger.info(f"Registering user with email: {email}")
+        logger.debug(f"Registering user with email: {email}")
 
         # Create payload with parameters
         params = {"email": email, "password": password, "is_admin": is_admin}
@@ -177,7 +177,7 @@ def api_call_register_user(
         )
 
         if response.status_code == 200:
-            logger.info("User registered successfully.")
+            logger.debug("User registered successfully.")
             return dict(response.json())
         else:
             logger.error(f"Registration error: {response.text}")
@@ -215,7 +215,7 @@ def api_call_fetch_user_from_token(token: str) -> User | None:
 
     # Cache miss - make API call
     _cache_stats["misses"] += 1
-    logger.info(f"CACHE MISS: user_token - fetching from API (cache_size={len(_user_cache)})")
+    logger.debug(f"CACHE MISS: user_token - fetching from API (cache_size={len(_user_cache)})")
 
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token",
@@ -253,7 +253,6 @@ def api_call_fetch_user_from_email(email: EmailStr) -> User | None:
     Returns:
         Optional[User]: The user if found, None otherwise
     """
-    logger.debug(f"Fetching user with email: {email}")
     logger.debug(f"API internal key: {settings.auth.internal_api_key}")
 
     response = httpx.get(
@@ -289,7 +288,6 @@ def api_call_get_anonymous_user_session() -> dict | None:
     Returns:
         Optional[dict]: The session data if successful, None otherwise
     """
-    logger.debug("Fetching anonymous user session via API")
 
     try:
         response = httpx.get(
@@ -327,7 +325,7 @@ def api_call_create_temporary_user(expiry_hours: int = 24) -> dict[str, Any] | N
         Session data for the temporary user or None if failed
     """
     try:
-        logger.info(f"Creating temporary user with expiry: {expiry_hours} hours")
+        logger.debug(f"Creating temporary user with expiry: {expiry_hours} hours")
 
         response = httpx.post(
             f"{API_BASE_URL}/depictio/api/v1/auth/create_temporary_user",
@@ -338,7 +336,7 @@ def api_call_create_temporary_user(expiry_hours: int = 24) -> dict[str, Any] | N
 
         if response.status_code == 200:
             session_data = response.json()
-            logger.info("Successfully created temporary user session")
+            logger.debug("Successfully created temporary user session")
             return session_data
         else:
             logger.error(
@@ -442,7 +440,7 @@ def api_call_create_token(token_data: TokenData) -> dict[str, Any] | None:
     )
 
     if response.status_code == 200:
-        logger.info("Token created successfully.")
+        logger.debug("Token created successfully.")
         return dict(response.json())
     else:
         logger.error(f"Token creation error: {response.text}")
@@ -550,7 +548,7 @@ def check_token_validity(token: TokenBase) -> dict:
         logger.debug("Returning cached token validity result")
         return cached_result
 
-    logger.info("Checking token validity via API.")
+    logger.debug("Checking token validity via API.")
     logger.info(
         f"Token with name: {token.name}, user_id: {token.user_id}, access_token: {token.access_token[:10]}..."
     )
@@ -594,7 +592,7 @@ def api_create_group(group_dict: dict, current_token: str) -> httpx.Response:
     Returns:
         httpx.Response: The API response object.
     """
-    logger.info(f"Creating group {group_dict}.")
+    logger.debug(f"Creating group {group_dict}.")
 
     response = httpx.post(
         f"{API_BASE_URL}/depictio/api/v1/auth/create_group",
@@ -602,7 +600,7 @@ def api_create_group(group_dict: dict, current_token: str) -> httpx.Response:
         headers={"Authorization": f"Bearer {current_token}"},
     )
     if response.status_code == 200:
-        logger.info(f"Group {group_dict['name']} created successfully.")
+        logger.debug(f"Group {group_dict['name']} created successfully.")
     else:
         logger.error(f"Error creating group {group_dict['name']}: {response.text}")
     return response
@@ -620,14 +618,14 @@ def api_update_group_in_users(group_id: str, payload: dict, current_token: str) 
     Returns:
         httpx.Response: The API response object.
     """
-    logger.info(f"Updating group {group_id}.")
+    logger.debug(f"Updating group {group_id}.")
     response = httpx.post(
         f"{API_BASE_URL}/depictio/api/v1/auth/update_group_in_users/{group_id}",
         json=payload,
         headers={"Authorization": f"Bearer {current_token}"},
     )
     if response.status_code == 200:
-        logger.info(f"Group {group_id} updated successfully.")
+        logger.debug(f"Group {group_id} updated successfully.")
     else:
         logger.error(f"Error updating group {group_id}: {response.text}")
     return response
@@ -723,7 +721,7 @@ def api_get_project_from_id(project_id: PyObjectId, token: str) -> httpx.Respons
     Get a project from the server using the project ID.
     """
     # First check if the project exists on the server DB for existing IDs and if the same metadata hash is used
-    logger.info(f"Getting project with ID: {project_id}")
+    logger.debug(f"Getting project with ID: {project_id}")
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id",
         params={"project_id": convert_objectid_to_str(project_id)},
@@ -792,17 +790,13 @@ def api_call_get_dashboard(dashboard_id: str, token: str) -> dict[str, Any] | No
 
         # Log what metadata is being received from the API
         # stored_metadata = dashboard_data.get("stored_metadata", [])
-        # logger.info(f"📊 API LOAD DEBUG - Received {len(stored_metadata)} metadata items from API")
         # if stored_metadata:
         #     for i, elem in enumerate(stored_metadata[:2]):  # Only first 2 to avoid spam
         #         if elem:
-        # logger.info(
         #     f"📊 API LOAD DEBUG - Metadata {i}: dict_kwargs={elem.get('dict_kwargs', 'MISSING')}"
         # )
-        # logger.info(
         #     f"📊 API LOAD DEBUG - Metadata {i}: wf_id={elem.get('wf_id', 'MISSING')}"
         # )
-        # logger.info(
         #     f"📊 API LOAD DEBUG - Metadata {i}: dc_id={elem.get('dc_id', 'MISSING')}"
         # )
 
@@ -834,17 +828,13 @@ def api_call_save_dashboard(
     try:
         # Log what metadata is being sent to the API
         # stored_metadata = dashboard_data.get("stored_metadata", [])
-        # logger.info(f"📊 API SAVE DEBUG - Sending {len(stored_metadata)} metadata items to API")
         # if stored_metadata:
         #     for i, elem in enumerate(stored_metadata[:2]):  # Only first 2 to avoid spam
         #         if elem:
-        #             logger.info(
         #                 f"📊 API SAVE DEBUG - Metadata {i}: dict_kwargs={elem.get('dict_kwargs', 'MISSING')}"
         #             )
-        #             logger.info(
         #                 f"📊 API SAVE DEBUG - Metadata {i}: wf_id={elem.get('wf_id', 'MISSING')}"
         #             )
-        #             logger.info(
         #                 f"📊 API SAVE DEBUG - Metadata {i}: dc_id={elem.get('dc_id', 'MISSING')}"
         #             )
 
@@ -912,7 +902,7 @@ def api_call_get_google_oauth_login_url() -> dict[str, Any] | None:
         Dictionary with authorization_url and state, or None if failed
     """
     try:
-        logger.info("Getting Google OAuth login URL")
+        logger.debug("Getting Google OAuth login URL")
 
         with httpx.Client() as client:
             response = client.get(f"{API_BASE_URL}/depictio/api/v1/auth/google/login")
@@ -983,8 +973,6 @@ def api_call_fetch_project_by_id(
         Project data dictionary or None if not found
     """
     try:
-        logger.debug(f"Fetching project by ID: {project_id} (skip_enrichment={skip_enrichment})")
-
         response = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id",
             headers={"Authorization": f"Bearer {token}"},
@@ -1021,8 +1009,6 @@ def api_call_fetch_delta_table_info(data_collection_id: str, token: str) -> dict
         Delta table information or None if not found
     """
     try:
-        logger.debug(f"Fetching delta table info for data collection: {data_collection_id}")
-
         response = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{data_collection_id}",
             headers={"Authorization": f"Bearer {token}"},
@@ -1076,7 +1062,7 @@ def api_call_create_project(project_data: dict[str, Any], token: str) -> dict[st
 
         if response.status_code == 200:
             result = response.json()
-            logger.info(f"Project created successfully: {result.get('message', 'No message')}")
+            logger.debug(f"Project created successfully: {result.get('message', 'No message')}")
             return result
         else:
             error_msg = f"Failed to create project: {response.status_code} - {response.text}"
@@ -1120,7 +1106,7 @@ def api_call_update_project(project_data: dict[str, Any], token: str) -> dict[st
 
         if response.status_code == 200:
             result = response.json()
-            logger.info(f"Project updated successfully: {result.get('message', 'No message')}")
+            logger.debug(f"Project updated successfully: {result.get('message', 'No message')}")
             return result
         else:
             error_msg = f"Failed to update project: {response.status_code} - {response.text}"
@@ -1366,7 +1352,7 @@ def api_call_create_data_collection(
             WorkflowEngine,
         )
 
-        logger.info(f"Creating data collection: {name}")
+        logger.debug(f"Creating data collection: {name}")
 
         # Validate and decode file contents
         decoded, error = _validate_upload_file(file_contents, max_size_mb=5.0)
@@ -1401,7 +1387,7 @@ def api_call_create_data_collection(
             with open(temp_file_path, "wb") as f:
                 f.write(decoded)
 
-            logger.info(f"Saved uploaded file to: {temp_file_path}")
+            logger.debug(f"Saved uploaded file to: {temp_file_path}")
 
             # Build polars kwargs using helper function
             polars_kwargs = _build_polars_kwargs(
@@ -1432,7 +1418,7 @@ def api_call_create_data_collection(
                 config=dc_config,
             )
 
-            logger.info(f"Created data collection: {data_collection}")
+            logger.debug(f"Created data collection: {data_collection}")
 
             # Create a workflow to contain this data collection
             workflow_config = WorkflowConfig()
@@ -1519,10 +1505,10 @@ def api_call_create_data_collection(
                     "status_code": 500,
                 }
 
-            logger.info("Data collection added to project successfully!")
+            logger.debug("Data collection added to project successfully!")
 
             # Process the data collection using existing CLI infrastructure
-            logger.info("Starting data collection processing...")
+            logger.debug("Starting data collection processing...")
 
             # First scan the files
             scan_result = process_data_collection_helper(
@@ -1559,7 +1545,7 @@ def api_call_create_data_collection(
                     "status_code": 500,
                 }
 
-            logger.info("Data collection created and processed successfully!")
+            logger.debug("Data collection created and processed successfully!")
 
             return {
                 "success": True,
@@ -1605,13 +1591,13 @@ def api_call_edit_data_collection_name(
         headers = {"Authorization": f"Bearer {token}"}
         data = {"new_name": new_name}
 
-        logger.info(f"Updating data collection name: {data_collection_id} -> {new_name}")
+        logger.debug(f"Updating data collection name: {data_collection_id} -> {new_name}")
 
         response = httpx.put(url, headers=headers, json=data, timeout=30.0)
         response.raise_for_status()
 
         result = response.json()
-        logger.info(f"Data collection name updated successfully: {result}")
+        logger.debug(f"Data collection name updated successfully: {result}")
         return {"success": True, "message": "Data collection name updated successfully"}
 
     except httpx.HTTPStatusError as e:
@@ -1706,7 +1692,7 @@ def api_call_overwrite_data_collection(
     try:
         # Create temporary directory for file processing
         temp_dir = tempfile.mkdtemp()
-        logger.info(f"Created temporary directory: {temp_dir}")
+        logger.debug(f"Created temporary directory: {temp_dir}")
 
         # Decode and save the uploaded file
         file_data = base64.b64decode(file_contents.split(",")[1])
@@ -1732,7 +1718,7 @@ def api_call_overwrite_data_collection(
             )
             headers = {"Authorization": f"Bearer {token}"}
 
-            logger.info(f"Fetching data collection specs from: {specs_url}")
+            logger.debug(f"Fetching data collection specs from: {specs_url}")
             response = httpx.get(specs_url, headers=headers, timeout=30.0)
             response.raise_for_status()
 
@@ -2087,8 +2073,6 @@ def api_call_fetch_multiqc_report(data_collection_id: str, token: str) -> dict[s
         MultiQC report metadata or None if not found
     """
     try:
-        logger.debug(f"Fetching MultiQC report for data collection: {data_collection_id}")
-
         response = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/multiqc/{data_collection_id}",
             headers={"Authorization": f"Bearer {token}"},
