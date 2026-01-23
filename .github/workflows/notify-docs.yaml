@@ -1,17 +1,22 @@
-name: Notify Docs Repo of New Release
+name: Notify Docs Repository
 
 on:
   release:
     types: [published]
 
 jobs:
-  notify-docs:
+  notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger docs repo version deploy
+      - name: Trigger docs update
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.GHCR_PAT }}
           repository: depictio/depictio-docs
           event-type: new-release
-          client-payload: '{"version": "${{ github.event.release.tag_name }}"}'
+          client-payload: |
+            {
+              "version": "${{ github.event.release.tag_name }}",
+              "release_url": "${{ github.event.release.html_url }}",
+              "prerelease": "${{ github.event.release.prerelease }}"
+            }
