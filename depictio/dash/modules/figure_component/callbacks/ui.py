@@ -322,20 +322,8 @@ def register_ui_callbacks(app):
     )
     def sync_dict_kwargs_to_metadata(dict_kwargs, visu_type, mode, code_content, current_metadata):
         """Sync dict_kwargs, visu_type, mode, and code_content to stored-metadata-component for saving."""
-        ctx = dash.callback_context
-        triggered_input = ctx.triggered[0]["prop_id"] if ctx.triggered else "unknown"
-
-        logger.info("=" * 80)
-
         if not current_metadata:
-            logger.warning("⚠️ SYNC: No current_metadata - preventing update")
             raise dash.exceptions.PreventUpdate
-
-        logger.info(f"   dict_kwargs: {dict_kwargs}")
-        logger.info(f"   visu_type: {visu_type}")
-        logger.info(f"   mode: {mode}")
-        logger.info(f"   code_content length: {len(code_content) if code_content else 0}")
-        logger.info(f"   code_content type: {type(code_content)}")
 
         # Determine effective mode and code content
         effective_mode = mode or "ui"

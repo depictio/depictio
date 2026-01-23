@@ -293,7 +293,6 @@ def register_consolidated_api_callbacks(app):
 
                 init_data = response.json()
                 cached_data = {**init_data, "timestamp": time.time()}
-                component_count = len(init_data.get("dashboard", {}).get("stored_metadata", []))
                 return cached_data
 
         except Exception as e:
@@ -365,14 +364,6 @@ def register_consolidated_api_callbacks(app):
                     "cache_key": f"project_{project_id}",
                     "timestamp": time.time(),
                 }
-
-                # Count delta_locations for logging
-                delta_count = sum(
-                    1
-                    for wf in project_data.get("workflows", [])
-                    for dc in wf.get("data_collections", [])
-                    if dc.get("delta_location")
-                )
                 return cached_data
 
         except Exception as e:

@@ -489,8 +489,6 @@ def render_dashboard_original(
 
     start_time_total = time.time()
 
-    num_components = len(stored_metadata) if stored_metadata else 0
-
     # Extract init data fields
     delta_locations, column_specs, column_names, join_configs = _extract_init_data_fields(init_data)
 

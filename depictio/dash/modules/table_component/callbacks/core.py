@@ -138,7 +138,6 @@ def enrich_interactive_components(
         else:
             logger.warning(f"Component {index} has value but no metadata - skipping")
 
-    logger.info(f"Enrichment complete - {len(interactive_components_dict)} components enriched")
     return interactive_components_dict
 
 
@@ -174,13 +173,7 @@ def prepare_metadata_for_join(
                 interactive_meta = dict(component_data["metadata"])
                 interactive_meta["component_type"] = "interactive"
                 stored_metadata_for_join.append(interactive_meta)
-                logger.info(
-                    f"Including interactive component {component_index} in join calculation"
-                )
 
-    logger.info(
-        f"Metadata for join prepared: {len(stored_metadata_for_join)} component(s) (table + interactive)"
-    )
     return stored_metadata_for_join
 
 
@@ -214,8 +207,6 @@ def load_data_with_interactive_filters(
     if not interactive_components_dict:
         return _load_data_without_interactive_filters(workflow_id, data_collection_id, TOKEN)
 
-    logger.info(f"Active interactive components: {len(interactive_components_dict)} component(s)")
-
     table_dc_id = stored_metadata.get("dc_id")
     table_dc_ids = {table_dc_id}
     interactive_dc_ids = {
@@ -223,13 +214,9 @@ def load_data_with_interactive_filters(
         for comp_data in interactive_components_dict.values()
     }
 
-    logger.info(f"Table DC: {table_dc_id}")
-    logger.info(f"Interactive DCs: {interactive_dc_ids}")
-
     result_dc_id = get_result_dc_for_workflow(workflow_id, TOKEN)
 
     if table_dc_ids & interactive_dc_ids:
-        logger.info("DC COMPATIBLE: Interactive filters target same DC as table")
         return _load_compatible_dc_data(
             workflow_id, data_collection_id, result_dc_id, interactive_components_dict, TOKEN
         )
@@ -315,10 +302,6 @@ def _load_data_without_interactive_filters(
     Returns:
         DataFrame loaded from delta table (joined or single DC).
     """
-    logger.info(
-        f"Loading delta table data (no interactive components): {workflow_id}:{data_collection_id}"
-    )
-
     try:
         result_dc_id = get_result_dc_for_workflow(workflow_id, TOKEN)
 
@@ -387,7 +370,6 @@ def apply_ag_grid_filters(df: pl.DataFrame, filter_model: dict[str, Any]) -> pl.
             logger.warning(f"Failed to apply filter for column {col}: {e}")
             continue
 
-    logger.info(f"After filtering: {df.shape[0]} rows remaining")
     return df
 
 
@@ -487,15 +469,6 @@ def build_aggrid_response(
         'rowCount' (total available rows).
     """
     row_data = partial_df.to_dicts()
-    actual_rows_returned = len(row_data)
-
-    logger.debug(f"Converted {actual_rows_returned} rows to dicts using Polars native method")
-    logger.info(
-        f"Table {table_index}: Delivered {actual_rows_returned} rows "
-        f"({start_row}-{start_row + actual_rows_returned})"
-    )
-    logger.info(f"Response: {actual_rows_returned} rows from {total_rows} total")
-
     return {"rowData": row_data, "rowCount": total_rows}
 
 
@@ -504,50 +477,8 @@ def log_interactive_filter_success(
     actual_rows_returned: int,
     total_rows: int,
 ) -> None:
-    """
-    Log detailed information about successful interactive filtering.
-
-    Provides diagnostic information about active filters and their effect
-    on the dataset, useful for debugging filter behavior.
-
-    Args:
-        interactive_values: Store data containing interactive component values
-        actual_rows_returned: Number of rows returned in current page
-        total_rows: Total rows after filtering
-    """
-    if not interactive_values:
-        logger.info(
-            f"INFINITE SCROLL + PAGINATION: Standard pagination delivered "
-            f"{actual_rows_returned}/{total_rows} rows"
-        )
-        return
-
-    components_list = interactive_values.get("interactive_components_values", [])
-    has_interactive_values = bool(components_list)
-
-    if has_interactive_values:
-        active_filters = [
-            (comp.get("index"), comp.get("value"))
-            for comp in components_list
-            if comp.get("value") is not None
-        ]
-        logger.info(
-            f"HYBRID SUCCESS: Interactive + pagination delivered {actual_rows_returned}/{total_rows} rows"
-        )
-        logger.info(f"Active interactive filters: {active_filters}")
-        logger.info(f"Dataset after filtering: {total_rows} total rows available for pagination")
-
-        if active_filters:
-            logger.info(
-                f"FILTERING CONFIRMED: {len(active_filters)} active filters reduced dataset"
-            )
-        else:
-            logger.info("NO ACTIVE FILTERS: Interactive components exist but no values set")
-    else:
-        logger.info(
-            f"INFINITE SCROLL + PAGINATION: Standard pagination delivered "
-            f"{actual_rows_returned}/{total_rows} rows"
-        )
+    """Log successful interactive filtering (no-op for production)."""
+    pass
 
 
 def _log_interactive_values_debug(interactive_values: dict[str, Any] | None) -> None:
@@ -567,19 +498,7 @@ def _log_pagination_request(
     sort_model: list[dict[str, Any]],
 ) -> None:
     """Log pagination request parameters for debugging."""
-    page_size = end_row - start_row
-    requested_rows = end_row - start_row
-
-    logger.info(f"Page size: {page_size} rows (user selected or default)")
-    logger.debug(f"Table {table_index}: Loading rows {start_row}-{end_row} ({requested_rows} rows)")
-    logger.info(
-        f"Active filters: {len(filter_model)} filter(s) - "
-        f"{list(filter_model.keys()) if filter_model else 'none'}"
-    )
-    logger.info(
-        f"Active sorts: {len(sort_model)} sort(s) - "
-        f"{[(s['colId'], s['sort']) for s in sort_model] if sort_model else 'none'}"
-    )
+    pass  # Pagination logging removed for production
 
 
 # ==============================================================================
@@ -683,8 +602,6 @@ def generate_csv_download(
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"depictio_table_{table_index}_{timestamp}.csv"
-
-    logger.info(f"CSV EXPORT: Generated CSV ({csv_size_mb:.2f} MB)")
 
     return csv_string, filename, csv_size_mb
 
@@ -836,13 +753,11 @@ def load_table_data_with_filters(
         df = apply_ag_grid_sorting(df, sort_model)
         logger.debug("Sorting applied successfully")
 
-    logger.info(f"Final dataset after filters/sorting: {df.shape[0]} rows, {df.shape[1]} columns")
     return df
 
 
 def register_core_callbacks(app):
     """Register core view mode callbacks for table component."""
-    from depictio.api.v1.configs.logging_init import logger as core_logger
 
     @app.callback(
         Output({"type": "table-aggrid", "index": MATCH}, "className"),
@@ -892,7 +807,6 @@ def register_core_callbacks(app):
 
         Note: Dash AG Grid uses "infinite" rowModelType for server-side data loading with pagination.
         """
-        logger.info("TABLE INFINITE SCROLL + PAGINATION CALLBACK FIRED!")
 
         # Detect if triggered by interactive component changes
         triggered_by_interactive = ctx.triggered and any(
@@ -948,13 +862,6 @@ def register_core_callbacks(app):
             # Build and return response
             response = build_aggrid_response(partial_df, total_rows, start_row, table_index)
 
-            logger.info(
-                f"INFINITE SCROLL + PAGINATION RESPONSE SENT - {len(response['rowData'])}/{total_rows} rows"
-            )
-
-            # Log interactive filter success details
-            log_interactive_filter_success(interactive_values, len(response["rowData"]), total_rows)
-
             return response
 
         except Exception as e:
@@ -1006,8 +913,6 @@ def register_core_callbacks(app):
         3. Convert to CSV in memory (never writes to disk)
         4. Return via dcc.Download (streams directly to browser)
         """
-        logger.info("CSV EXPORT: Export button clicked")
-
         if not n_clicks:
             return no_update, no_update
 
@@ -1024,11 +929,6 @@ def register_core_callbacks(app):
         data_collection_id = stored_metadata.get("dc_id")
         table_index = stored_metadata.get("index", "table")
 
-        logger.info(
-            f"CSV EXPORT: Starting export for table {table_index} "
-            f"(wf: {workflow_id}, dc: {data_collection_id})"
-        )
-
         try:
             # Load complete filtered/sorted dataset
             df = load_table_data_with_filters(
@@ -1044,7 +944,6 @@ def register_core_callbacks(app):
             )
 
             row_count = df.shape[0]
-            logger.debug(f"CSV EXPORT: Loaded {row_count:,} rows, {df.shape[1]} columns")
 
             # Check size limits
             is_allowed, error_message = check_export_size_limit(row_count)
@@ -1053,10 +952,6 @@ def register_core_callbacks(app):
 
             # Generate CSV and filename
             csv_string, filename, csv_size_mb = generate_csv_download(df, table_index)
-
-            logger.info(
-                f"CSV EXPORT SUCCESS: {filename} ({row_count:,} rows, {csv_size_mb:.2f} MB)"
-            )
 
             return (
                 dict(content=csv_string, filename=filename),
@@ -1071,7 +966,3 @@ def register_core_callbacks(app):
             logger.error(f"Traceback: {traceback.format_exc()}")
 
             return no_update, create_export_notification("error", f"Error: {error_msg[:100]}")
-
-    core_logger.info(
-        "✅ Table component core callbacks registered (theme + infinite scroll + pagination + export)"
-    )

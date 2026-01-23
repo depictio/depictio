@@ -236,7 +236,6 @@ def register_async_rendering_callback(app):
                 continue
 
             # Extract component info
-            index = trigger_data.get("index", trigger_id.get("index", "unknown"))
             component_type = trigger_data.get("interactive_component_type", "unknown")
 
             # IDEMPOTENCY CHECK: If already rendered, skip

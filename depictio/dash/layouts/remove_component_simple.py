@@ -323,34 +323,6 @@ def remove_component_from_dashboard__disabled(
                 f"  DEBUG: Cards grid children count: {len(cards_grid_children) if cards_grid_children else 0}"
             )
 
-            # Debug: log first few children to see structure
-            if cards_grid_children:
-                for i, child in enumerate(cards_grid_children):  # All cards
-                    if isinstance(child, dict):
-                        child_id = child.get("props", {}).get("id")
-                        child_children = child.get("props", {}).get("children", [])
-                        logger.info(
-                            f"  DEBUG: Card {i} children type: {type(child_children)}, len: {len(child_children) if isinstance(child_children, list) else 'N/A'}"
-                        )
-
-                        # Handle both list and dict children
-                        children_to_inspect = child_children
-                        if not isinstance(child_children, list):
-                            children_to_inspect = [child_children]
-
-                        if isinstance(children_to_inspect, list) and len(children_to_inspect) > 0:
-                            first_child = children_to_inspect[0]
-                            if isinstance(first_child, dict):
-                                logger.info(
-                                    f"  DEBUG: Card {i} first child keys: {list(first_child.keys())}"
-                                )
-                                first_child_type = first_child.get("type")
-                                first_child_namespace = first_child.get("namespace")
-                                logger.info(
-                                    f"  DEBUG: Card {i} first child component: {first_child_namespace}.{first_child_type}"
-                                )
-                                store_id = first_child.get("props", {}).get("id")
-
             if cards_grid_children:
                 idx = find_component_in_children(cards_grid_children, component_id_to_remove)
                 if idx >= 0:

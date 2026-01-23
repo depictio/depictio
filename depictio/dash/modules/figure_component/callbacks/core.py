@@ -349,8 +349,6 @@ def _load_dcs_parallel(
             logger.error(f"   Parallel load failed: {dc_id[:8]}: {e}", exc_info=True)
             return load_key, None
 
-    parallel_start = time.time()
-
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
         future_to_key = {
             executor.submit(load_single_dc, load_key, metadata, columns): load_key
@@ -361,15 +359,6 @@ def _load_dcs_parallel(
             load_key, data = future.result()
             if data is not None:
                 dc_cache[load_key] = data
-
-    parallel_duration = (time.time() - parallel_start) * 1000
-    cache_hit_rate = len(dc_cache) / len(dc_load_registry) * 100 if dc_load_registry else 0
-
-    logger.info(
-        f"[{batch_task_id}] Parallel loading complete: "
-        f"{len(dc_cache)}/{len(dc_load_registry)} DCs loaded in {parallel_duration:.1f}ms "
-        f"(success: {cache_hit_rate:.0f}%)"
-    )
 
     return dc_cache
 
@@ -471,15 +460,6 @@ def _process_single_figure(
             f"[{task_id}] Figure params: mode={mode}, visu_type={visu_type}, dict_kwargs={dict_kwargs}"
         )
 
-        if mode == "code":
-            logger.info(f"RENDER: Code mode figure {component_id}")
-            logger.info(f"   code_content length: {len(code_content)}")
-            logger.info(
-                f"   code_content present in trigger_data: {'code_content' in trigger_data}"
-            )
-            logger.info(f"   Full trigger_data keys: {trigger_data.keys()}")
-            logger.info(f"   Full trigger_data: {trigger_data}")
-
         load_key = figure_to_load_key.get(figure_index)
         if not load_key or load_key not in dc_cache:
             logger.warning(f"[{task_id}] No cached data for figure {component_id}")
@@ -560,10 +540,6 @@ def _extend_filters_for_joined_dc(
 
         # This figure uses a joined DC - include filters from source DCs
         source_dc_tags = [join_def.get("left_dc", ""), join_def.get("right_dc", "")]
-        logger.info(
-            f"[{batch_task_id}] Figure uses joined DC {card_dc_str[:8]}, "
-            f"including filters from source DCs: {source_dc_tags}"
-        )
 
         for dc_tag in source_dc_tags:
             if not dc_tag:
@@ -576,10 +552,6 @@ def _extend_filters_for_joined_dc(
                         source_dc_id = str(dc.get("_id", ""))
                         source_filters = filters_by_dc.get(source_dc_id, [])
                         if source_filters:
-                            logger.info(
-                                f"[{batch_task_id}] Including {len(source_filters)} "
-                                f"filters from source DC {dc_tag} ({source_dc_id[:8]})"
-                            )
                             relevant_filters.extend(source_filters)
 
         break  # Found the join definition
@@ -679,12 +651,6 @@ def _extend_filters_via_links(
                 }
                 link_filters.append(link_filter)
 
-                logger.info(
-                    f"[{batch_task_id}] 🔗 Link resolution: {len(filter_values)} values from "
-                    f"{link_source_dc[:8]} → {len(resolved_values)} values for {target_dc_id[:8]} "
-                    f"(column: {target_column})"
-                )
-
     return link_filters
 
 
@@ -760,17 +726,12 @@ def register_core_callbacks(app):
             - all_metadata: List of metadata dicts with index, visu_type, rendered_at
         """
         batch_task_id = str(uuid.uuid4())[:8]
-        batch_start_time = time.time()
-
-        logger.info(f"[{batch_task_id}] FIGURE INITIAL RENDER - {len(trigger_ids)} figures")
 
         # Handle empty dashboard
         if not trigger_data_list or not trigger_ids:
-            logger.debug("No figures to render - preventing update")
             raise dash.exceptions.PreventUpdate
 
         current_theme = theme_data if theme_data else "light"
-        logger.debug(f"Current theme: {current_theme}")
 
         access_token = local_data.get("access_token") if local_data else None
         if not access_token:
@@ -780,8 +741,6 @@ def register_core_callbacks(app):
             return [empty_fig] * num_figures, [{}] * num_figures
 
         # Phase 1: Build DC load registry
-        logger.debug(f"[{batch_task_id}] Analyzing {len(trigger_ids)} figures for parallel loading")
-
         dc_load_registry, figure_to_load_key = _build_dc_load_registry(
             trigger_data_list,
             filters_data,
@@ -792,16 +751,8 @@ def register_core_callbacks(app):
             access_token=access_token,
         )
 
-        logger.info(
-            f"[{batch_task_id}] Found {len(dc_load_registry)} unique DC loads "
-            f"for {len(figure_to_load_key)} figures"
-        )
-
         # Phase 2: Load DCs in parallel
         dc_cache = _load_dcs_parallel(dc_load_registry, access_token, batch_task_id)
-
-        dedup_ratio = len(figure_to_load_key) / len(dc_load_registry) if dc_load_registry else 1
-        logger.info(f"[{batch_task_id}] Deduplication ratio: {dedup_ratio:.1f}x")
 
         # Phase 3: Process each figure
         all_figures = []
@@ -819,15 +770,6 @@ def register_core_callbacks(app):
             )
             all_figures.append(fig_dict)
             all_metadata.append(metadata)
-
-        # Log batch completion
-        batch_duration = (time.time() - batch_start_time) * 1000
-        avg_duration = batch_duration / len(all_figures) if all_figures else 0
-        logger.info(
-            f"[{batch_task_id}] FIGURE BATCH COMPLETE - "
-            f"{len(all_figures)} figures rendered in {batch_duration:.1f}ms "
-            f"(avg: {avg_duration:.1f}ms/figure)"
-        )
 
         return all_figures, all_metadata
 

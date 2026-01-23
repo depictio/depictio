@@ -992,11 +992,6 @@ def _patch_heatmap_trace(
         logger.warning("      No valid data after filtering - hiding heatmap")
         return None
 
-    matched_samples = [original_y[idx] for idx in filtered_indices[:5]]
-    logger.info(
-        f"      Filtering heatmap: {len(filtered_indices)}/{len(original_y)} samples selected"
-    )
-
     # Build filtered figure
     full_fig = copy.deepcopy(fig)
     new_y = [original_y[idx] for idx in filtered_indices]

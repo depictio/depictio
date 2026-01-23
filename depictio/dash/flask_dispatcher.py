@@ -101,8 +101,6 @@ def create_shared_dash_config():
         from depictio.dash.celery_app import celery_app
 
         background_callback_manager = dash.CeleryManager(celery_app)
-        logger.info("   Note: Celery worker must be running for design mode to work")
-        logger.info("   Start worker with: docker compose --profile celery up")
     except Exception as e:
         logger.error(f"❌ FLASK DISPATCHER: Failed to setup Celery manager: {e}")
         logger.warning("⚠️  FLASK DISPATCHER: Design mode will not work without Celery!")
@@ -154,9 +152,6 @@ def configure_flask_server(server: Flask, dash_root_path: str) -> None:
     assets_folder = os.path.join(dash_root_path, "assets")
     server.static_folder = assets_folder  # type: ignore
     server.static_url_path = "/assets"  # type: ignore
-    logger.info(
-        f"✅ FLASK DISPATCHER: Configured Flask to serve assets at /assets/ from {assets_folder}"
-    )
 
 
 def create_management_app(
@@ -315,9 +310,6 @@ def create_multi_app_dispatcher() -> tuple:
     Returns:
         A tuple containing (server, app_management, app_viewer, app_editor, dev_mode).
     """
-    logger.info("=" * 80)
-    logger.info("=" * 80)
-
     # Create Flask server
     server = Flask(__name__)
 
@@ -336,14 +328,6 @@ def create_multi_app_dispatcher() -> tuple:
     )
     app_viewer = create_viewer_app(server, assets_folder, background_callback_manager, dev_mode)
     app_editor = create_editor_app(server, assets_folder, background_callback_manager, dev_mode)
-
-    logger.info("=" * 80)
-    logger.info("=" * 80)
-    logger.info("=" * 80)
-    logger.info("   - app_management: Auth, dashboards, projects, admin (~70 callbacks)")
-    logger.info("   - app_viewer: Read-only dashboard viewing (~30 callbacks)")
-    logger.info("   - app_editor: Editing, design UI, component builder (~65 callbacks)")
-    logger.info("=" * 80)
 
     return server, app_management, app_viewer, app_editor, dev_mode
 
@@ -374,9 +358,6 @@ def serve_screenshots(filename: str):
 
 
 # Register layouts and callbacks from separate modules
-logger.info("==" * 40)
-logger.info("🔌 FLASK DISPATCHER: Wiring up app modules")
-logger.info("==" * 40)
 
 # Wire up Management App
 app_management.layout = management_app.layout
@@ -390,9 +371,6 @@ dashboard_viewer.register_callbacks(app_viewer)
 # Wire up Editor App
 app_editor.layout = dashboard_editor.layout
 dashboard_editor.register_callbacks(app_editor)
-
-logger.info("==" * 40)
-logger.info("==" * 40)
 
 # Export for WSGI compatibility (used by wsgi.py and production deployments)
 application = server

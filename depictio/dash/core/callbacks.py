@@ -95,17 +95,10 @@ def register_main_callback(app) -> None:
             Tuple of (page_content, header, pathname, local_data).
         """
         import time
-        import uuid
 
         from dash import no_update
 
-        # Generate unique call ID for tracking duplicates
-        call_id = str(uuid.uuid4())[:8]
-        start_time = time.time()
-
-        # Log callback entry with full context
         trigger_id = ctx.triggered_id
-        trigger_prop = ctx.triggered[0]["prop_id"] if ctx.triggered else "NONE"
 
         # CRITICAL OPTIMIZATION: Early return if triggered by local-store with unchanged state
         # This prevents duplicate processing when authentication updates local-store
@@ -118,26 +111,8 @@ def register_main_callback(app) -> None:
             # CONSERVATIVE: 1 second window (not 5) to avoid catching browser refreshes
             if time_since_last < 1 and current_hash == last_processed_state["user_state_hash"]:
                 # Safe to skip - only tokens changed (silent refresh) or duplicate trigger
-                elapsed = (time.time() - start_time) * 1000
-                logger.info(
-                    f"[PERF-4E][{call_id}] 🔥 ROUTING CALLBACK EARLY RETURN (duplicate trigger, no user-visible changes)"
-                )
-                logger.info(
-                    f"[PERF-4E][{call_id}]   time_since_last_process: {time_since_last:.1f}s"
-                )
-                logger.info(
-                    f"[PERF-4E][{call_id}]   total_duration: {elapsed:.0f}ms (saved ~200-400ms!)"
-                )
                 # Return no_update for all outputs to prevent any changes
                 return no_update, no_update, no_update, no_update
-            elif current_hash != last_processed_state["user_state_hash"]:
-                # User-visible state changed (login/logout, user switch)
-                logger.info(
-                    f"[PERF-4E][{call_id}] 🔥 ROUTING CALLBACK PROCESSING (user state changed)"
-                )
-                logger.info(
-                    f"[PERF-4E][{call_id}]   old_hash: {last_processed_state['user_state_hash']}"
-                )
 
         # Update state including hash
         last_processed_state.update(
@@ -149,20 +124,12 @@ def register_main_callback(app) -> None:
         )
 
         # Process authentication and return appropriate content
-        auth_start = time.time()
         result = process_authentication(
             pathname,
             local_data,
             theme_store,
             cached_project_data,
             dashboard_init_data,
-        )
-        auth_duration = (time.time() - auth_start) * 1000
-
-        # Log callback exit with timing
-        total_duration = (time.time() - start_time) * 1000
-        logger.info(
-            f"[PERF-4E][{call_id}]   result: page={'<content>' if result[0] else 'None'}, header={'<header>' if result[1] else 'None'}, pathname={result[2]}"
         )
 
         return result

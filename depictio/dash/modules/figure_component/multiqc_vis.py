@@ -118,7 +118,6 @@ def _get_local_path_for_s3(s3_location: str, use_cache: bool = True) -> str:
         return fuse_path
 
     if not use_cache:
-        logger.info("Cache disabled, falling back to direct download")
         return _download_s3_file_direct(s3_location)
 
     try:
@@ -159,7 +158,6 @@ def _get_local_path_for_s3(s3_location: str, use_cache: bool = True) -> str:
             # Check if cached file is still valid (compare size with S3)
             cached_size = os.path.getsize(cache_path)
             if cached_size == file_size:
-                logger.info(f"Using cached file (size match): {cache_path}")
                 return cache_path
             else:
                 logger.debug(f"Cache size mismatch ({cached_size} != {file_size}), re-downloading")
@@ -169,7 +167,6 @@ def _get_local_path_for_s3(s3_location: str, use_cache: bool = True) -> str:
         logger.debug(f"Downloading to cache: {s3_location} -> {cache_path}")
         try:
             fs.get(s3_location, cache_path)
-            logger.info(f"Successfully cached S3 file at: {cache_path}")
             return cache_path
         except Exception as download_error:
             logger.error(f"Failed to download to cache: {download_error}")
@@ -181,7 +178,6 @@ def _get_local_path_for_s3(s3_location: str, use_cache: bool = True) -> str:
 
     except Exception as e:
         logger.error(f"Failed to access S3 file with caching: {e}")
-        logger.info("Falling back to direct download method")
         return _download_s3_file_direct(s3_location)
 
 
@@ -195,8 +191,6 @@ def _download_s3_file_direct(s3_location: str) -> str:
     Returns:
         Local file path
     """
-    logger.info(f"Direct download of S3 file: {s3_location}")
-
     # Parse S3 path
     path_parts = s3_location.replace("s3://", "").split("/", 1)
     key = path_parts[1] if len(path_parts) > 1 else ""
@@ -424,14 +418,8 @@ def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = Tru
     """
     import multiqc
 
-    logger.info(f"   Files: {len(s3_locations)}")
-    logger.info(f"   Use S3 cache: {use_s3_cache}")
-
     cache_key = _generate_cache_key(s3_locations)
-    logger.info(f"   Cache key: {cache_key}")
-
     cache = get_cache()
-    logger.info("   Cache instance retrieved")
 
     # Try to get cached report object (check cache OUTSIDE lock - read-only, safe)
     cached_report = cache.get(cache_key)
@@ -440,18 +428,12 @@ def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = Tru
         # ACQUIRE LOCK before modifying MultiQC global state
         with _multiqc_lock:
             try:
-                logger.info("   Restoring cached report to multiqc.report...")
                 # Restore the ENTIRE report object
                 multiqc.report = cached_report
-                logger.info("🔓 Released MultiQC lock")
                 return True
             except Exception as e:
-                logger.warning(f"⚠️ Failed to restore cached report: {e}")
-                logger.debug("   Falling through to fresh parsing...")
-                logger.info("🔓 Released MultiQC lock")
+                logger.warning(f"Failed to restore cached report: {e}")
                 # Lock will be re-acquired below for parsing
-    else:
-        logger.info(f"📦 Cache MISS for {len(s3_locations)} files - will parse fresh")
 
     # Cache miss - parse logs
     # ACQUIRE LOCK for parsing (modifies MultiQC global state)
@@ -463,11 +445,7 @@ def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = Tru
         for i, s3_location in enumerate(s3_locations):
             logger.debug(f"📄 Processing file {i + 1}/{len(s3_locations)}: {s3_location}")
             try:
-                logger.debug("   Getting local path for S3 file...")
                 local_file = _get_local_path_for_s3(s3_location, use_cache=use_s3_cache)
-                logger.info(f"   Local path: {local_file}")
-
-                logger.debug("   Parsing with MultiQC...")
                 multiqc.parse_logs(local_file)
                 parsed_files += 1
 
@@ -478,8 +456,7 @@ def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = Tru
                 continue
 
         if parsed_files == 0:
-            logger.error("❌ No files could be parsed")
-            logger.info("🔓 Released MultiQC lock")
+            logger.error("No files could be parsed")
             return False
 
         # Cache the report in memory only (Redis can't serialize module objects)
@@ -493,9 +470,7 @@ def _get_or_parse_multiqc_logs(s3_locations: List[str], use_s3_cache: bool = Tru
                 "ttl": 7200,
             }
         except Exception as e:
-            logger.warning(f"⚠️ Failed to cache report: {e}")
-
-        logger.info("🔓 Released MultiQC lock")
+            logger.warning(f"Failed to cache report: {e}")
 
     return True
 

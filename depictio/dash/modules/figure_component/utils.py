@@ -695,10 +695,8 @@ def _apply_sampling(
     if cache_key not in _sampling_cache:
         sampled_df = df.sample(n=cutoff, seed=0)
         _sampling_cache[cache_key] = sampled_df
-        logger.info(f"Cached sampled data: {cutoff} points from {df.height}")
     else:
         sampled_df = _sampling_cache[cache_key]
-        logger.info(f"Using cached sampled data: {cutoff} points")
 
     return sampled_df, True
 
@@ -1155,11 +1153,6 @@ def render_figure(
 
         # Cache the result
         _figure_result_cache[cache_key] = (figure, data_info, time.time())
-        logger.info(f"FIGURE CACHE STORED: Cached {visu_type} figure")
-        logger.info(
-            f"DATA COUNTS: {data_info['displayed_data_count']:,} displayed / "
-            f"{data_info['total_data_count']:,} total (sampled: {data_info['was_sampled']})"
-        )
 
         return figure, data_info
 
@@ -1188,10 +1181,8 @@ def _render_clustering_figure(
         if sampling_cache_key not in _sampling_cache:
             sampled_df = df.sample(n=cutoff, seed=0).to_pandas()
             _sampling_cache[sampling_cache_key] = sampled_df
-            logger.info(f"Cached sampled data for clustering: {cutoff} points from {df.height}")
         else:
             sampled_df = _sampling_cache[sampling_cache_key]
-            logger.info(f"Using cached sampled data for clustering: {cutoff} points")
         return clustering_function(sampled_df, **cleaned_kwargs)
     else:
         return clustering_function(df, **cleaned_kwargs)

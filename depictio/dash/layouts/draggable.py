@@ -1476,7 +1476,6 @@ def _get_project_data(dashboard_id: str, token: str, cached_project_data: dict |
     import time
 
     if cached_project_data and cached_project_data.get("cache_key") == f"project_{dashboard_id}":
-        logger.info(f"DESIGN_DRAGGABLE: Cache HIT for dashboard {dashboard_id}")
         return cached_project_data["project"]
     else:
         logger.warning(

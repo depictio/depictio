@@ -124,8 +124,6 @@ def register_remove_component_callback(app):
                 [item for item in (left_items or []) if get_component_id(item) != box_id]
             ]
             updated_right_items = [no_update]
-
-            panel_name = "left"
         else:
             # Filter right layout and items
             updated_left_layout = [no_update]  # ALL pattern requires list even for no_update
@@ -138,8 +136,6 @@ def register_remove_component_callback(app):
             updated_right_items = [
                 [item for item in (right_items or []) if get_component_id(item) != box_id]
             ]
-
-            panel_name = "right"
 
         # 5. Save to database (remove metadata + update layout)
         dashboard_data = api_call_get_dashboard(dashboard_id, TOKEN)

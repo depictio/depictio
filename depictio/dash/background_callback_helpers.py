@@ -67,12 +67,13 @@ def log_background_callback_status(component_type: str, callback_name: str):
     """
     Log the background callback status for a component's callback.
 
+    No-op in production to reduce log verbosity.
+
     Args:
         component_type: Component type ('card', 'figure', etc.)
         callback_name: Name of the callback being registered
     """
-    is_background = should_use_background_for_component(component_type)
-    mode = "BACKGROUND" if is_background else "SYNCHRONOUS"
+    pass
 
 
 # Log overall background callback status at module load
