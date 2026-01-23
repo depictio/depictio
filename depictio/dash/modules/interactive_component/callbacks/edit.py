@@ -11,8 +11,6 @@ from datetime import datetime
 from dash import ALL, Input, Output, State, ctx
 from dash.exceptions import PreventUpdate
 
-from depictio.api.v1.configs.logging_init import logger
-
 from .save_utils import save_interactive_to_dashboard
 
 
@@ -72,25 +70,14 @@ def register_interactive_edit_callback(app):
         Returns:
             str: Redirect pathname to dashboard after save
         """
-        logger.info("=" * 80)
-        logger.info(f"   ctx.triggered_id: {ctx.triggered_id}")
-        logger.info(f"   btn_clicks: {btn_clicks}")
-
         # GUARD: Validate trigger
         if not ctx.triggered_id or not any(btn_clicks):
-            logger.warning("⚠️ INTERACTIVE EDIT SAVE - No trigger or clicks, preventing update")
             raise PreventUpdate
 
         # Extract context
         dashboard_id = edit_context["dashboard_id"]
         component_id = edit_context["component_id"]
         component_data = edit_context["component_data"]
-
-        logger.info(f"   Dashboard: {dashboard_id}")
-        logger.info(f"   Component type: {component_data.get('component_type')}")
-        logger.info(
-            f"   Received States - titles: {titles}, columns: {columns}, methods: {methods}"
-        )
 
         # Index for accessing State arrays (should be 0 for edit page with single component)
         idx = 0
@@ -118,15 +105,6 @@ def register_interactive_edit_callback(app):
             "marks_number": get_value(marks_numbers, idx, "marks_number", 2),
             "last_updated": datetime.now().isoformat(),
         }
-
-        logger.debug(f"   Updated title: {updated_metadata['title']}")
-        logger.debug(f"   Updated column: {updated_metadata['column_name']}")
-        logger.debug(f"   Updated method: {updated_metadata['interactive_component_type']}")
-        logger.debug(f"   Updated scale: {updated_metadata['scale']}")
-        logger.debug(f"   Updated color: {updated_metadata['custom_color']}")
-        logger.debug(f"   Updated icon: {updated_metadata['icon_name']}")
-        logger.debug(f"   Updated title_size: {updated_metadata['title_size']}")
-        logger.debug(f"   Updated marks: {updated_metadata['marks_number']}")
 
         # Get access token
         TOKEN = local_store["access_token"]

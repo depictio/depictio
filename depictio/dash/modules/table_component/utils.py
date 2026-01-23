@@ -96,7 +96,6 @@ def _get_theme_template(theme: str) -> str:
     if not theme or theme == {} or theme == "{}":
         theme = "light"
 
-    logger.debug(f"TABLE COMPONENT - Using theme: {theme} for AG Grid")
     return "ag-theme-alpine-dark" if theme == "dark" else "ag-theme-alpine"
 
 
@@ -120,10 +119,6 @@ def _load_dataframe(
         Loaded DataFrame or empty DataFrame if loading fails.
     """
     if not refresh:
-        logger.info(
-            f"Table component {index}: Using empty DataFrame from filters - "
-            "filters exclude all data"
-        )
         return pl.DataFrame()
 
     if not wf_id or not dc_id:
@@ -174,9 +169,6 @@ def _configure_column_filters(cols: dict | None) -> None:
         else:
             col_config["filter"] = "agTextColumnFilter"
             col_config["floatingFilter"] = True
-            logger.debug(
-                f"Using default text filter for column '{col_name}' with type '{col_type}'"
-            )
 
 
 def _build_column_definitions(cols: dict | None) -> list[dict]:
@@ -415,7 +407,6 @@ def build_table(**kwargs) -> html.Div | dmc.Paper | dcc.Loading:
     Returns:
         The table component, optionally wrapped in a frame and/or loading spinner.
     """
-    logger.debug("build_table")
 
     # Extract parameters
     index = kwargs.get("index")
@@ -432,24 +423,15 @@ def build_table(**kwargs) -> html.Div | dmc.Paper | dcc.Loading:
     # Load data if needed
     if df.is_empty():
         df = _load_dataframe(wf_id, dc_id, token, index, kwargs.get("refresh", True))
-    else:
-        logger.debug(f"Table component {index}: Using pre-loaded DataFrame (shape: {df.shape})")
-
     # Configure columns
     _configure_column_filters(cols)
     column_defs = _build_column_definitions(cols)
     _add_description_tooltips(column_defs, cols)
-    logger.debug(f"Columns definitions for table {index}: {column_defs}")
-
-    logger.debug(f"Table {index}: Using INFINITE row model with pagination support")
-    logger.debug(f"Using theme: {theme} for AG Grid template")
 
     # Build components
     ag_grid = _create_ag_grid_component(index, column_defs, theme)
     store = _create_metadata_store(index, wf_id, dc_id, dc_config, cols)
     table_body = _create_table_body(index, ag_grid, store)
-
-    logger.debug(f"Table {index}: Infinite row model with pagination configured")
 
     if not build_frame:
         return table_body
@@ -466,12 +448,10 @@ def build_table(**kwargs) -> html.Div | dmc.Paper | dcc.Loading:
     )
 
     if settings.performance.disable_loading_spinners:
-        logger.debug("PERFORMANCE MODE: Table loading spinners disabled")
         return table_body
 
     graph_id_dict = {"type": "table-aggrid", "index": str(index)}
     target_id = stringify_id(graph_id_dict)
-    logger.debug(f"Target ID for loading: {target_id}")
 
     return dcc.Loading(
         children=table_body,

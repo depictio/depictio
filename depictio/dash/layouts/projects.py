@@ -226,9 +226,7 @@ def create_project_modal(opened: bool = False) -> tuple[dmc.Modal, str]:
 
 
 # Create project modal and layout at module level (similar to dashboards_management.py)
-logger.debug("Creating project modal with opened=False")
 project_modal, project_modal_id = create_project_modal(opened=False)
-logger.debug(f"Project modal created with ID: {project_modal_id}")
 
 # Create the main layout with modal included
 layout = html.Div(

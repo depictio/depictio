@@ -89,9 +89,7 @@ def register_callbacks_stepper(app) -> None:
         """Initialize the stored-add-button Store for stepper page on load."""
         if n_intervals and n_intervals > 0 and stepper_context:
             component_id = stepper_context.get("component_id", "stepper-component")
-            logger.info(
-                f"🎯 STEPPER INIT - Initializing button store with component_id: {component_id}"
-            )
+            logger.debug(f"Stepper init - component_id: {component_id}")
             # Use stepper-component as the index for pattern matching
             return {
                 "count": 1,
@@ -145,8 +143,8 @@ def register_callbacks_stepper(app) -> None:
         component_id = stepper_context.get("component_id")
         mode = stepper_context.get("mode", "add")
 
-        logger.info(
-            f"💾 STEPPER SAVE - Dashboard: {dashboard_id}, Component: {component_id}, Mode: {mode}"
+        logger.debug(
+            f"Stepper save - dashboard={dashboard_id}, component={component_id}, mode={mode}"
         )
 
         # Fetch current dashboard data
@@ -186,9 +184,6 @@ def register_callbacks_stepper(app) -> None:
                 # Match the stepper fixed index with or without -tmp suffix
                 if meta_index == STEPPER_INDEX or meta_index == f"{STEPPER_INDEX}-tmp":
                     new_component_metadata = meta.copy()
-                    logger.info(
-                        f"💾 STEPPER SAVE - Found component metadata with stepper index: {meta_index}"
-                    )
                     break
 
         if not new_component_metadata:
@@ -203,14 +198,6 @@ def register_callbacks_stepper(app) -> None:
         new_component_metadata["index"] = component_id
         new_component_metadata["parent_index"] = None  # Not a child component
         new_component_metadata["last_updated"] = datetime.now().isoformat()
-
-        logger.info(
-            f"💾 STEPPER SAVE - Component metadata: type={new_component_metadata.get('component_type')}, "
-            f"title={new_component_metadata.get('title')}, "
-            f"wf_id={new_component_metadata.get('wf_id')}, "
-            f"dc_id={new_component_metadata.get('dc_id')}, "
-            f"column={new_component_metadata.get('column_name')}"
-        )
 
         # Get existing metadata and layout
         existing_metadata = dashboard_data.get("stored_metadata", [])
@@ -261,9 +248,6 @@ def register_callbacks_stepper(app) -> None:
         try:
             save_success = api_call_save_dashboard(dashboard_id, dashboard_data, TOKEN)
             if save_success:
-                logger.info(
-                    f"✅ STEPPER SAVE - Successfully saved component {component_id} to dashboard {dashboard_id}"
-                )
                 return {
                     "success": True,
                     "dashboard_id": dashboard_id,
@@ -318,16 +302,9 @@ def register_callbacks_stepper(app) -> None:
             logger.error("❌ STEPPER COMPLETE - Could not determine dashboard_id")
             raise dash.exceptions.PreventUpdate
 
-        component_id = save_status.get("component_id", "unknown")
-
         # Detect app context from stepper context
         is_edit_mode = stepper_context.get("is_edit_mode", False) if stepper_context else False
         app_prefix = "dashboard-edit" if is_edit_mode else "dashboard"
-
-        logger.info(
-            f"✅ STEPPER COMPLETE - Returning to {app_prefix} {dashboard_id} "
-            f"(component: {component_id})"
-        )
 
         return f"/{app_prefix}/{dashboard_id}"
 
@@ -360,12 +337,8 @@ def register_callbacks_stepper(app) -> None:
         # If done button was clicked, close modal
         if "btn-done-edit" in trigger_id:
             if n_clicks and n_clicks > 0:
-                logger.info("🔚 EDIT MODAL - Done button clicked, closing modal")
                 return False
 
-        # For modal state changes, let the draggable callback handle restoration
-        # Just return the current state without interfering
-        logger.info(f"🔚 EDIT MODAL - Modal state passthrough: {modal_opened}")
         return modal_opened
 
     @app.callback(
@@ -377,9 +350,6 @@ def register_callbacks_stepper(app) -> None:
         prevent_initial_call=True,
     )
     def set_workflow_options(n_clicks, local_store, pathname):
-        logger.info(f"CTX Triggered ID: {ctx.triggered_id}")
-        logger.info(f"CTX triggered: {ctx.triggered}")
-
         if not local_store:
             raise dash.exceptions.PreventUpdate
 
@@ -428,8 +398,6 @@ def register_callbacks_stepper(app) -> None:
             "jbrowse2": ["JBrowse2"],
             "multiqc": ["MultiQC"],
         }
-
-        logger.info(f"Component selected: {component_selected}")
 
         # Use a dictionary to track unique workflows efficiently
         valid_wfs = []
@@ -452,7 +420,6 @@ def register_callbacks_stepper(app) -> None:
                     }
                 )
 
-        logger.info(f"valid_wfs: {valid_wfs}")
         # Return the data and the first value if the data is not empty
         if valid_wfs:
             return valid_wfs, valid_wfs[0]["value"]
@@ -471,6 +438,10 @@ def register_callbacks_stepper(app) -> None:
     )
     def set_datacollection_options(selected_workflow, id, n_clicks, local_store, pathname):
         if not local_store:
+            raise dash.exceptions.PreventUpdate
+
+        # Guard: workflow must be selected before loading data collections
+        if not selected_workflow:
             raise dash.exceptions.PreventUpdate
 
         TOKEN = local_store["access_token"]
@@ -506,8 +477,7 @@ def register_callbacks_stepper(app) -> None:
             logger.error(f"Failed to fetch project from dashboard_id {dashboard_id}: {e}")
             raise dash.exceptions.PreventUpdate
 
-        logger.info(f"Id: {id}")
-        logger.info(f"Selected workflow: {selected_workflow}")
+        logger.debug(f"set_datacollection_options - id: {id}, workflow: {selected_workflow}")
 
         # Guard: Check if project has workflows
         if "workflows" not in project or not project["workflows"]:
@@ -515,9 +485,7 @@ def register_callbacks_stepper(app) -> None:
             return [], None
 
         all_wf_dc = project["workflows"]
-        logger.info(f"All workflows and data collections: {all_wf_dc}")
         selected_wf_list = [wf for wf in all_wf_dc if wf["id"] == selected_workflow]
-        logger.info(f"Selected workflow: {selected_wf_list}")
 
         if not selected_wf_list:
             logger.error(f"No workflow found with id '{selected_workflow}'")
@@ -531,8 +499,6 @@ def register_callbacks_stepper(app) -> None:
             "jbrowse2": ["JBrowse2"],
             "multiqc": ["MultiQC"],
         }
-
-        logger.info(f"Component selected: {component_selected}")
 
         # Build lookup dicts for data collections
         data_collections = selected_wf_data["data_collections"]
@@ -560,9 +526,6 @@ def register_callbacks_stepper(app) -> None:
                 if joins_response.status_code == 200:
                     joins_data = joins_response.json()
                     workflow_joins = joins_data.get(selected_workflow, {})
-                    logger.info(
-                        f"Processing {len(workflow_joins)} joins for workflow {selected_workflow}"
-                    )
 
                     # Add joined DC options
                     for join_key, join_config in workflow_joins.items():
@@ -611,8 +574,7 @@ def register_callbacks_stepper(app) -> None:
             except Exception as e:
                 logger.error(f"Error fetching joined data collections: {str(e)}")
 
-        logger.info(f"ID: {id}")
-        logger.info(f"Total valid DCs (including joins): {len(valid_dcs)}")
+        logger.debug(f"Total valid DCs (including joins): {len(valid_dcs)}")
 
         if not selected_workflow:
             raise dash.exceptions.PreventUpdate
@@ -656,11 +618,6 @@ def register_callbacks_stepper(app) -> None:
             triggered_input = ctx.triggered_id["type"]
         elif isinstance(ctx.triggered_id, str):
             triggered_input = ctx.triggered_id
-        inputs_list = ctx.inputs_list
-
-        logger.info(f"CTX triggered: {ctx.triggered}")
-        logger.info(f"Triggered ID: {triggered_id}")
-        logger.info(f"Inputs list: {inputs_list}")
 
         next_step = current_step  # Default to the current step if no actions require a change
 
@@ -670,13 +627,9 @@ def register_callbacks_stepper(app) -> None:
             # Check if Text component was selected
             if isinstance(triggered_id, dict) and triggered_id.get("type") == "btn-option":
                 component_selected = triggered_id.get("value")
-                logger.info(f"Component selected: {component_selected}")
                 if component_selected in ["Text", "MultiQC"]:
                     # Text and MultiQC components don't need data selection, skip to design step
                     next_step = 2  # Move directly to component design step
-                    logger.info(
-                        f"{component_selected} component selected, advancing to step {next_step}"
-                    )
                     return next_step, False  # Return immediately to avoid further processing
                 else:
                     # Other components need data selection
@@ -893,8 +846,7 @@ def create_stepper_output_edit(
     Returns:
         Modal component with edit interface.
     """
-    logger.info(f"CREATE_STEPPER_OUTPUT_EDIT - Component data: {component_data}")
-    logger.info(f"n={n}, parent_id={parent_id}, active={active}")
+    logger.debug(f"create_stepper_output_edit - n={n}, parent_id={parent_id}, active={active}")
     id = {"type": f"{component_data['component_type']}-component", "index": n}
 
     # wf_tag = return_wf_tag_from_id(component_data["wf_id"], TOKEN=TOKEN)
@@ -956,9 +908,6 @@ def create_stepper_output_edit(
         if component_selected == "Figure":
             # Pass workflow_id, data_collection_id, and local_data for column loading
             local_data = {"access_token": TOKEN}
-            logger.info(
-                f"🔍 Calling design_figure with id={id}, wf_id={wf_id}, dc_id={dc_id}, TOKEN present={TOKEN is not None}"
-            )
             return design_figure(
                 id, workflow_id=wf_id, data_collection_id=dc_id, local_data=local_data
             )
@@ -1064,8 +1013,7 @@ def create_stepper_output(n: str, active: int) -> html.Div:
     Returns:
         Div containing the fullscreen modal with stepper.
     """
-    logger.debug(f"Creating stepper output for index {n}")
-    logger.info(f"Active step: {active}")
+    logger.debug(f"Creating stepper output for index {n}, active step: {active}")
 
     # # Use component_data to pre-populate stepper if editing
     # component_selected = component_data.get("component_selected", "None") if component_data else "None"
@@ -1386,8 +1334,7 @@ def create_stepper_content(n: str, active: int) -> dmc.Stack:
     Returns:
         Stack component with stepper content and sticky navigation footer.
     """
-    logger.debug(f"Creating stepper content (standard layout) for index {n}")
-    logger.info(f"Active step: {active}")
+    logger.debug(f"Creating stepper content (standard layout) for index {n}, active step: {active}")
 
     # Component Selection Display and Data Source (Step 2)
     stepper_dropdowns = dmc.Stack(

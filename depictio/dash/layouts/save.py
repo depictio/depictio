@@ -11,8 +11,6 @@ The module is organized into:
 - (Backup) Complex save callback for reference (commented out)
 """
 
-import json
-
 import dash
 from dash import ALL, Input, Output, State
 
@@ -143,11 +141,8 @@ def register_callbacks_save_lite(app):
         """
         from depictio.models.models.dashboards import DashboardData
 
-        logger.info("=== MINIMAL SAVE CALLBACK TRIGGERED ===")
-
         # 1. Validate trigger
         if not n_clicks or not local_store:
-            logger.warning("Save callback: No click or no auth token")
             raise dash.exceptions.PreventUpdate
 
         # Skip if on stepper page
@@ -164,32 +159,10 @@ def register_callbacks_save_lite(app):
             dashboard_id = path_parts[-1]  # Get last part
         TOKEN = local_store["access_token"]
 
-        logger.info(f"Saving dashboard: {dashboard_id}")
-        logger.info(f"Captured {len(stored_metadata)} component metadata entries")
-        logger.info(f"Captured {len(interactive_metadata)} interactive metadata entries")
-
-        # DEBUG: Log what's in each metadata source
-        for idx, meta in enumerate(stored_metadata):
-            mode_info = (
-                f"mode={meta.get('mode', 'N/A')}" if meta.get("component_type") == "figure" else ""
-            )
-            code_info = (
-                f"code_len={len(meta.get('code_content', ''))}"
-                if meta.get("component_type") == "figure" and meta.get("mode") == "code"
-                else ""
-            )
-            logger.info(
-                f"  [{idx}] index={meta.get('index')}, type={meta.get('component_type')}, "
-                f"has_wf_id={bool(meta.get('wf_id'))}, has_dc_id={bool(meta.get('dc_id'))}, "
-                f"{mode_info} {code_info}"
-            )
-
-            # CRITICAL DEBUG: Log full metadata for code mode figures
-            if meta.get("component_type") == "figure" and meta.get("mode") == "code":
-                logger.info(f"  🔍 FULL CODE MODE METADATA: {meta}")
-
-        for idx, meta in enumerate(interactive_metadata):
-            logger.info(f"  [{idx}] index={meta.get('index')}, type={meta.get('component_type')}")
+        logger.info(
+            f"Saving dashboard {dashboard_id}: {len(stored_metadata)} components, "
+            f"{len(interactive_metadata)} interactive"
+        )
 
         # 3. Fetch current dashboard from DB (baseline)
         dashboard_dict = api_call_get_dashboard(dashboard_id, TOKEN)
@@ -200,16 +173,6 @@ def register_callbacks_save_lite(app):
         # 4. Update with captured state (metadata + dual-panel layouts)
         # Merge both metadata lists (general components + interactive components)
         all_metadata = stored_metadata + interactive_metadata
-        logger.info(f"Total metadata entries to save: {len(all_metadata)}")
-
-        # DEBUG: Log interactive metadata to understand why left panel is empty
-        for idx, meta in enumerate(interactive_metadata):
-            logger.info(
-                f"  Interactive [{idx}]: index={meta.get('index')}, "
-                f"type={meta.get('component_type')}, "
-                f"interactive_type={meta.get('interactive_component_type')}"
-            )
-
         dashboard_dict["stored_metadata"] = all_metadata
 
         # RECALCULATE positions in Python to ensure correct IDs and dimensions
@@ -225,21 +188,19 @@ def register_callbacks_save_lite(app):
 
         # Extract layout data from pattern-matched grids with proper validation
         # Pattern-matched ALL returns list of lists: [[layout_data], ...]
-        left_panel_saved_data = None
-        if left_panel_layouts and len(left_panel_layouts) > 0 and left_panel_layouts[0]:
-            left_panel_saved_data = left_panel_layouts[0]
-        else:
-            logger.warning("⚠️ LEFT: No layout data captured from grid - using metadata only")
-
-        right_panel_saved_data = None
-        if right_panel_layouts and len(right_panel_layouts) > 0 and right_panel_layouts[0]:
-            right_panel_saved_data = right_panel_layouts[0]
-        else:
-            logger.warning("⚠️ RIGHT: No layout data captured from grid - using metadata only")
+        left_panel_saved_data = (
+            left_panel_layouts[0]
+            if left_panel_layouts and len(left_panel_layouts) > 0 and left_panel_layouts[0]
+            else None
+        )
+        right_panel_saved_data = (
+            right_panel_layouts[0]
+            if right_panel_layouts and len(right_panel_layouts) > 0 and right_panel_layouts[0]
+            else None
+        )
 
         # Recalculate fresh layout positions using current metadata
         # Pass existing saved data so we preserve user's drag positions (x/y)
-        # These functions PRESERVE user positions when saved_layout_data is provided
         left_panel_layout = calculate_left_panel_positions(
             interactive_components,
             saved_layout_data=left_panel_saved_data,
@@ -249,9 +210,6 @@ def register_callbacks_save_lite(app):
             saved_layout_data=right_panel_saved_data,
         )
 
-        logger.info(f"Recalculated left panel layout: {len(left_panel_layout)} items")
-        logger.info(f"Recalculated right panel layout: {len(right_panel_layout)} items")
-
         dashboard_dict["left_panel_layout_data"] = left_panel_layout
         dashboard_dict["right_panel_layout_data"] = right_panel_layout
 
@@ -259,30 +217,10 @@ def register_callbacks_save_lite(app):
         try:
             DashboardData.from_mongo(dashboard_dict)
         except Exception as e:
-            logger.error(f"❌ Pydantic validation failed: {e}")
+            logger.error(f"Pydantic validation failed: {e}")
             raise dash.exceptions.PreventUpdate
 
-        # 6. LOG what would be saved (API call disabled for debugging)
-        logger.info("=" * 80)
-        logger.info("=" * 80)
-        logger.info(f"Dashboard ID: {dashboard_id}")
-        logger.info(f"Total metadata entries: {len(all_metadata)}")
-        logger.info(f"Left panel layout items: {len(left_panel_layout)}")
-        logger.info(f"Right panel layout items: {len(right_panel_layout)}")
-        logger.info("")
-        logger.info(json.dumps(left_panel_layout, indent=2))
-        logger.info("")
-        logger.info(json.dumps(right_panel_layout, indent=2))
-        logger.info("")
-        for idx, meta in enumerate(all_metadata):
-            logger.info(
-                f"  [{idx}] Component: {meta.get('index')}, "
-                f"Type: {meta.get('component_type')}, "
-                f"Title: {meta.get('title', 'N/A')}"
-            )
-        logger.info("=" * 80)
-
-        # Save to database via API
+        # 6. Save to database via API
         success = api_call_save_dashboard(
             dashboard_id,
             dashboard_dict,
@@ -291,15 +229,12 @@ def register_callbacks_save_lite(app):
         )
 
         if success:
-            logger.info(f"✅ SAVE: Successfully saved dashboard {dashboard_id}")
             # Generate screenshot after successful save
             screenshot_success = api_call_screenshot_dashboard(dashboard_id)
-            if screenshot_success:
-                logger.info(f"📸 Screenshot generated for dashboard {dashboard_id}")
-            else:
-                logger.warning(f"⚠️ Failed to generate screenshot for dashboard {dashboard_id}")
+            if not screenshot_success:
+                logger.warning(f"Failed to generate screenshot for dashboard {dashboard_id}")
         else:
-            logger.error(f"❌ SAVE: Failed to save dashboard {dashboard_id}")
+            logger.error(f"Failed to save dashboard {dashboard_id}")
 
         # Return notification to user
         from dash_iconify import DashIconify

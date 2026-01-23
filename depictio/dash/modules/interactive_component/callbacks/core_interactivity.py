@@ -12,6 +12,8 @@ The store is consumed by passive components (cards, figures, tables) to apply fi
 import dash
 from dash import Input, Output, State, dcc
 
+from depictio.api.v1.configs.logging_init import logger
+
 
 def get_interactive_stores():
     """
@@ -50,7 +52,6 @@ def register_store_update_callback(app):
     Args:
         app: Dash application instance
     """
-    import time
 
     @app.callback(
         Output("interactive-values-store", "data"),
@@ -88,36 +89,6 @@ def register_store_update_callback(app):
         Returns:
             dict: Aggregated values with indexes
         """
-        from depictio.api.v1.configs.logging_init import logger
-
-        start_time = time.perf_counter()
-
-        # ⭐ DEBUG: Detailed logging for reset troubleshooting
-        logger.debug("=" * 80)
-        logger.debug(f"   Components count: {len(values)}")
-        logger.debug(f"   Metadata count: {len(metadata_list) if metadata_list else 0}")
-        logger.debug(f"   Values: {values}")
-        logger.debug(f"   IDs: {[id_dict.get('index', 'unknown')[:8] for id_dict in ids]}")
-
-        # Show what triggered this callback
-        if dash.callback_context.triggered:
-            trigger_info = dash.callback_context.triggered[0]
-            logger.debug(f"   Triggered by: {trigger_info['prop_id']}")
-            logger.debug(f"   Trigger value: {trigger_info['value']}")
-
-        # Show previous store state
-        if previous_store_data:
-            prev_values = previous_store_data.get("interactive_components_values", [])
-            logger.debug(f"   Previous store had {len(prev_values)} components")
-            if prev_values:
-                logger.debug(f"   Previous values sample: {prev_values[:2]}")
-        else:
-            logger.debug("   Previous store: EMPTY (first load)")
-
-        logger.debug(
-            f"🔄 Store update: {len(values)} components, metadata: {len(metadata_list) if metadata_list else 0}"
-        )
-
         # ⭐ OPTIMIZATION DISABLED: "All at defaults" check removed
         # REASON: This optimization blocked legitimate reset actions - when users clicked "Reset",
         # filters returned to defaults but cards didn't refresh because this check prevented
@@ -261,21 +232,7 @@ def register_store_update_callback(app):
 
             # Deep comparison of values
             if prev_components == new_components:
-                elapsed_ms = (time.perf_counter() - start_time) * 1000
-                logger.info("🚫 OPTIMIZATION BLOCKED: Store values unchanged")
-                logger.debug(
-                    f"   Previous: {len(prev_components)} components, New: {len(new_components)} components"
-                )
-                logger.debug(f"   Prev values: {prev_components}")
-                logger.debug(f"   New values: {new_components}")
-                logger.debug(
-                    f"   Values are identical - preventing redundant update (checked in {elapsed_ms:.1f}ms)"
-                )
-                logger.debug("=" * 80)
                 raise dash.exceptions.PreventUpdate
-            else:
-                logger.debug(f"   Previous: {prev_components}")
-                logger.debug(f"   New: {new_components}")
         elif previous_store_data is None or not previous_store_data.get(
             "interactive_components_values"
         ):
@@ -285,16 +242,8 @@ def register_store_update_callback(app):
             if not components_values:
                 raise dash.exceptions.PreventUpdate
 
-            expected_count = len(metadata_list) if metadata_list else 0
-            logger.debug(
-                f"   ℹ️ Progressive store update - allowing partial data ({len(components_values)}/{expected_count} components ready)"
-            )
-
-        elapsed_ms = (time.perf_counter() - start_time) * 1000
-        logger.info(
-            f"✅ STORE UPDATE ALLOWED: {len(components_values)}/{len(values)} components ({elapsed_ms:.1f}ms)"
-        )
-        logger.debug(f"   Returning data: {new_store_data}")
-        logger.debug("=" * 80)
+        # Log filter changes (not initial load)
+        if not is_first_load:
+            logger.info(f"Filters updated: {len(components_values)} active filter(s)")
 
         return new_store_data

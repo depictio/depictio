@@ -95,5 +95,6 @@ else
         --max-requests=1000 \
         --access-logfile=- \
         --error-logfile=- \
+        --preload \
         depictio.dash.wsgi:application
 fi

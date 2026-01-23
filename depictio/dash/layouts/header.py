@@ -379,8 +379,6 @@ def register_callbacks_header(app) -> None:
     Args:
         app: Dash application instance.
     """
-    logger.debug("Registering header callbacks")
-
     # REMOVED: toggle_buttons clientside callback (replaced by URL-based edit mode)
     # Previously controlled button disabled states based on unified-edit-mode-button toggle
     # Now buttons are conditionally rendered in header based on edit_mode parameter

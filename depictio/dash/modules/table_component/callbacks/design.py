@@ -109,32 +109,23 @@ def register_design_callbacks(app):
             return []
 
         if not wf_id or not dc_id:
-            logger.info("design_table_component: Waiting for WF/DC selection")
             return []
 
         token = local_data["access_token"]
         component_index = table_id["index"]
 
-        logger.info("=" * 80)
-        logger.info(f"DESIGN TABLE - Component: {component_index}")
-        logger.info(f"   WF: {wf_id}, DC: {dc_id}")
-        logger.info(f"   Pathname: {pathname}")
-
         # Fetch data collection specifications
         dc_specs = _fetch_data_collection_specs(dc_id, token)
         if not dc_specs:
             return []
-        logger.info(f"   Fetched DC specs: {dc_specs.get('collection_name', 'unknown')}")
 
         # Fetch column definitions
         cols_json = _fetch_column_definitions(wf_id, dc_id, token)
         if not cols_json:
             return []
-        logger.info(f"   Fetched columns: {len(cols_json)} columns")
 
         # Determine mode
         is_stepper_mode = "/component/add/" in pathname
-        logger.info(f"   Mode: {'stepper (add)' if is_stepper_mode else 'edit'}")
 
         # Build table
         table_kwargs = {
@@ -150,13 +141,7 @@ def register_design_callbacks(app):
 
         try:
             new_table = build_table(**table_kwargs)
-            logger.debug("DESIGN TABLE - Preview built successfully")
-            logger.info("=" * 80)
             return new_table
         except Exception as e:
             logger.error(f"Failed to build table: {e}")
-            import traceback
-
-            logger.error(f"   Traceback: {traceback.format_exc()}")
-            logger.info("=" * 80)
             return []

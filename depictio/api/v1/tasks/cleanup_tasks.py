@@ -65,23 +65,15 @@ async def periodic_cleanup_expired_temporary_users(
         interval_hours, interval_minutes, interval_seconds, default_seconds=3600
     )
 
-    logger.info(f"Starting periodic cleanup task (every {interval_description})")
-
     while True:
         try:
-            logger.info("Running periodic cleanup of expired temporary users")
-
             # Run the cleanup
             cleanup_results = await _cleanup_expired_temporary_users()
 
             if cleanup_results["users_deleted"] > 0:
-                logger.info(
-                    f"Cleanup completed: deleted {cleanup_results['users_deleted']} users "
-                    f"and {cleanup_results['tokens_deleted']} tokens"
-                )
+                pass
             else:
-                logger.debug("No expired temporary users found to clean up")
-
+                pass
         except Exception as e:
             logger.error(f"Error during periodic cleanup: {e}")
 
@@ -109,8 +101,6 @@ async def periodic_cleanup_analytics_data(
         interval_hours, interval_minutes, interval_seconds, default_seconds=24 * 3600
     )
 
-    logger.info(f"Starting periodic analytics cleanup with interval: {interval_in_seconds} seconds")
-
     analytics_service = AnalyticsService(
         session_timeout_minutes=settings.analytics.session_timeout_minutes,
         cleanup_days=settings.analytics.cleanup_days,
@@ -119,19 +109,7 @@ async def periodic_cleanup_analytics_data(
     while True:
         try:
             # Run the cleanup
-            cleanup_results = await analytics_service.cleanup_old_sessions()
-
-            if (
-                cleanup_results["ended_sessions"] > 0
-                or cleanup_results.get("deleted_sessions", 0) > 0
-            ):
-                logger.info(
-                    f"Analytics cleanup completed: ended {cleanup_results['ended_sessions']} sessions, "
-                    f"deleted {cleanup_results.get('deleted_sessions', 0)} old sessions, "
-                    f"deleted {cleanup_results.get('deleted_activities', 0)} old activities"
-                )
-            else:
-                logger.debug("No old analytics data found to clean up")
+            await analytics_service.cleanup_old_sessions()
 
         except Exception as e:
             logger.error(f"Error during periodic analytics cleanup: {e}")
@@ -160,34 +138,20 @@ async def periodic_cleanup_orphaned_s3_files(
         interval_hours, interval_minutes, interval_seconds, default_seconds=7 * 24 * 3600
     )
 
-    logger.info(
-        f"Starting periodic S3 cleanup with interval: {interval_in_seconds} seconds ({interval_in_seconds / 86400:.1f} days)"
-    )
-
     while True:
         try:
-            logger.info("Running periodic cleanup of orphaned S3 files")
-
             # Run the cleanup
             # Use force=True when mongodb.wipe is enabled (development/testing mode)
             # This allows cleanup when DB was intentionally wiped but S3 wasn't
             force_cleanup = settings.mongodb.wipe
             if force_cleanup:
-                logger.info(
-                    "MongoDB wipe mode enabled - forcing S3 cleanup even if all prefixes appear orphaned"
-                )
-
+                pass
             cleanup_results = await cleanup_orphaned_s3_files(dry_run=False, force=force_cleanup)
 
             if cleanup_results["deleted_count"] > 0:
-                logger.info(
-                    f"S3 cleanup completed: deleted {cleanup_results['deleted_count']} files/folders "
-                    f"({cleanup_results['total_size_bytes'] / (1024**3):.2f} GB) "
-                    f"from {cleanup_results['orphaned_prefixes_count']} orphaned data collections"
-                )
+                pass
             else:
-                logger.debug("No orphaned S3 files found to clean up")
-
+                pass
         except Exception as e:
             logger.error(f"Error during periodic S3 cleanup: {e}")
 
@@ -219,12 +183,8 @@ async def periodic_purge_expired_tokens(
         interval_hours, interval_minutes, interval_seconds, default_seconds=3600
     )
 
-    logger.info(f"Starting periodic token purge task (every {interval_description})")
-
     while True:
         try:
-            logger.info("Running periodic purge of expired tokens for all users")
-
             # Get all non-anonymous users (anonymous user has permanent token)
             users = await UserBeanie.find({"is_anonymous": {"$ne": True}}).to_list()
 
@@ -236,20 +196,13 @@ async def periodic_purge_expired_tokens(
                     result = await _purge_expired_tokens(user)
                     if result["deleted_count"] > 0:
                         total_tokens_deleted += result["deleted_count"]
-                        logger.debug(
-                            f"Purged {result['deleted_count']} expired tokens for user {user.email}"
-                        )
                 except Exception as e:
                     logger.warning(f"Failed to purge tokens for user {user.email}: {e}")
 
             if total_tokens_deleted > 0:
-                logger.info(
-                    f"Token purge completed: deleted {total_tokens_deleted} expired tokens "
-                    f"across {len(users)} users"
-                )
+                pass
             else:
-                logger.debug("No expired tokens found to purge")
-
+                pass
         except Exception as e:
             logger.error(f"Error during periodic token purge: {e}")
 
@@ -275,7 +228,6 @@ def start_cleanup_tasks(
 
     This function should be called during application startup.
     """
-    logger.info("Starting cleanup tasks")
 
     # Start the periodic cleanup task in the background
     asyncio.create_task(
@@ -307,5 +259,3 @@ def start_cleanup_tasks(
             interval_hours=1,  # Run token purge hourly
         )
     )
-
-    logger.info("Cleanup tasks started")

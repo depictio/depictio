@@ -80,8 +80,6 @@ async def _create_temporary_user(
     temp_email = f"temp_user_{temp_id}@depictio.temp"
     expiration_time = datetime.now() + timedelta(hours=expiry_hours, minutes=expiry_minutes)
 
-    logger.info(f"Creating temporary user with email: {temp_email}, expires at: {expiration_time}")
-
     temp_password = secrets.token_urlsafe(32)
     hashed_password = _hash_password(temp_password)
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -99,7 +97,6 @@ async def _create_temporary_user(
     )
 
     await user_beanie.create()
-    logger.info(f"Temporary user created with id: {user_beanie.id}")
 
     return user_beanie
 
@@ -160,7 +157,6 @@ async def _create_temporary_user_session(temp_user: UserBeanie) -> dict:
         "token_type": token.token_type or "bearer",
     }
 
-    logger.info(f"Created session for temporary user: {temp_user.email}")
     return session_data
 
 
@@ -177,7 +173,6 @@ async def _cleanup_expired_temporary_users() -> dict:
     Returns:
         Dictionary with cleanup results
     """
-    logger.info("Starting cleanup of expired temporary users")
 
     current_time = datetime.now()
 
@@ -244,9 +239,8 @@ async def _cleanup_expired_temporary_users() -> dict:
                             )
 
                 deltatables_deleted += deltatables_count
-            except Exception as e:
-                logger.debug(f"Deltatables collection not available: {e}")
-
+            except Exception:
+                pass
             # 3. Delete associated dashboards
             try:
                 from depictio.api.v1.db import dashboards_collection
@@ -261,9 +255,8 @@ async def _cleanup_expired_temporary_users() -> dict:
                         logger.warning(f"Failed to delete dashboard {dashboard.get('_id')}: {e}")
 
                 dashboards_deleted += dashboards_count
-            except Exception as e:
-                logger.debug(f"Dashboards collection not available: {e}")
-
+            except Exception:
+                pass
             # 4. Delete associated files
             try:
                 from depictio.api.v1.db import files_collection
@@ -278,9 +271,8 @@ async def _cleanup_expired_temporary_users() -> dict:
                         logger.warning(f"Failed to delete file {file_doc.get('_id')}: {e}")
 
                 files_deleted += files_count
-            except Exception as e:
-                logger.debug(f"Files collection not available: {e}")
-
+            except Exception:
+                pass
             # 5. Delete associated tokens
             user_tokens = await TokenBeanie.find({"user_id": user.id}).to_list()
             for token in user_tokens:
@@ -290,12 +282,6 @@ async def _cleanup_expired_temporary_users() -> dict:
             # 6. Delete the user
             await user.delete()
             users_deleted += 1
-
-            logger.info(
-                f"Deleted expired temporary user: {user.email} (expired at: {user.expiration_time}) "
-                f"with {len(user_projects)} projects, {dashboards_count} dashboards, "
-                f"{deltatables_count} deltatables, and {files_count} files"
-            )
 
         except Exception as e:
             error_msg = f"Failed to delete user {user.email}: {str(e)}"
@@ -312,7 +298,6 @@ async def _cleanup_expired_temporary_users() -> dict:
         "files_deleted": files_deleted,
         "errors": errors,
     }
-    logger.info(f"Cleanup completed: {cleanup_results}")
     return cleanup_results
 
 
@@ -336,7 +321,6 @@ async def _async_fetch_user_from_token(token: str) -> UserBeanie | None:
 
     user = await UserBeanie.get(token_doc.user_id)
     if not user:
-        logger.debug(f"Token exists but no matching user found with ID {token_doc.user_id}")
         return None
 
     return user
@@ -499,7 +483,6 @@ async def _get_anonymous_user_session() -> dict:
         "token_type": permanent_token.token_type or "bearer",
     }
 
-    logger.info(f"Retrieved anonymous user session for: {anonymous_user.email}")
     return session_data
 
 
@@ -543,7 +526,6 @@ async def _edit_password(user_id: PydanticObjectId, new_password: str) -> bool:
 
     try:
         await user.save()
-        logger.info(f"Password updated successfully for user with email {user.email}")
         return True
     except Exception as e:
         logger.error(f"Failed to update password: {e}")

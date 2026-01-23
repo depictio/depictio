@@ -11,8 +11,6 @@ from datetime import datetime
 from dash import ALL, Input, Output, State, ctx
 from dash.exceptions import PreventUpdate
 
-from depictio.api.v1.configs.logging_init import logger
-
 from .save_utils import save_card_to_dashboard
 
 
@@ -69,25 +67,14 @@ def register_card_edit_callback(app):
         Returns:
             str: Redirect pathname to dashboard after save
         """
-        logger.info("=" * 80)
-        logger.info(f"   ctx.triggered_id: {ctx.triggered_id}")
-        logger.info(f"   btn_clicks: {btn_clicks}")
-
         # GUARD: Validate trigger
         if not ctx.triggered_id or not any(btn_clicks):
-            logger.warning("⚠️ CARD EDIT SAVE - No trigger or clicks, preventing update")
             raise PreventUpdate
 
         # Extract context
         dashboard_id = edit_context["dashboard_id"]
         component_id = edit_context["component_id"]
         component_data = edit_context["component_data"]
-
-        logger.info(f"   Dashboard: {dashboard_id}")
-        logger.info(f"   Component type: {component_data.get('component_type')}")
-        logger.info(
-            f"   Received States - titles: {card_titles}, columns: {card_columns}, aggregations: {card_aggregations}"
-        )
 
         # Index for accessing State arrays (should be 0 for edit page with single component)
         idx = 0
@@ -112,14 +99,6 @@ def register_card_edit_callback(app):
             "title_font_size": get_value(card_font_sizes, idx, "title_font_size", "md"),
             "last_updated": datetime.now().isoformat(),
         }
-
-        logger.debug(f"   Updated title: {updated_metadata['title']}")
-        logger.debug(f"   Updated column: {updated_metadata['column_name']}")
-        logger.debug(f"   Updated aggregation: {updated_metadata['aggregation']}")
-        logger.debug(f"   Updated background_color: {updated_metadata['background_color']}")
-        logger.debug(f"   Updated title_color: {updated_metadata['title_color']}")
-        logger.debug(f"   Updated icon: {updated_metadata['icon_name']}")
-        logger.debug(f"   Updated font_size: {updated_metadata['title_font_size']}")
 
         # Get access token
         TOKEN = local_store["access_token"]

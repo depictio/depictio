@@ -49,7 +49,6 @@ def _get_ag_grid_theme_class(theme: str) -> str:
     if not theme or theme == {} or theme == "{}":
         theme = "light"
 
-    logger.debug(f"PROJECTWISE USER MANAGEMENT - Using theme: {theme} for AG Grid")
     return "ag-theme-alpine-dark" if theme == "dark" else "ag-theme-alpine"
 
 

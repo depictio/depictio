@@ -230,10 +230,6 @@ def register_design_callbacks(app) -> None:
                 dash.no_update,
             )
 
-        logger.info(f"   Title: {component_data.get('title')}")
-        logger.info(f"   Column: {component_data.get('column_name')}")
-        logger.info(f"   Aggregation: {component_data.get('aggregation')}")
-
         # Ensure ColorInput components get empty string instead of None to avoid trim() errors
         return (
             component_data.get("title") or "",  # TextInput needs string
@@ -304,15 +300,11 @@ def register_design_callbacks(app) -> None:
         Returns:
             Tuple of (card_body, aggregation_description, columns_description).
         """
-
-        logger.info(f"Design card body - column: {column_name}, aggregation: {aggregation_value}")
-
         if not local_data:
             return ([], None, None)
 
         TOKEN = local_data["access_token"]
         dashboard_id, input_id = _extract_dashboard_and_component_ids(pathname, id)
-        logger.info(f"dashboard_id: {dashboard_id}, input_id: {input_id}")
 
         # Fetch component data if we have an input_id
         component_data = None
@@ -327,14 +319,9 @@ def register_design_callbacks(app) -> None:
             if component_data:
                 wf_id = component_data["wf_id"]
                 dc_id = component_data["dc_id"]
-                logger.info(f"Using wf/dc from component_data - wf_tag: {wf_id}, dc_tag: {dc_id}")
             else:
                 logger.error("No wf_id/dc_id available from States or component_data")
                 return ([], None, None)
-        else:
-            logger.info(
-                f"Using wf/dc from States (hidden selects) - wf_tag: {wf_id}, dc_tag: {dc_id}"
-            )
 
         # CRITICAL: Validate that wf_id and dc_id are not None after extraction
         # This prevents API calls with None values which cause 422 errors
@@ -344,8 +331,6 @@ def register_design_callbacks(app) -> None:
                 "Returning empty preview."
             )
             return ([], None, None)
-
-        logger.info(f"component_data: {component_data}")
 
         headers = {"Authorization": f"Bearer {TOKEN}"}
         cols_json = get_columns_from_data_collection(wf_id, dc_id, TOKEN)
@@ -359,10 +344,6 @@ def register_design_callbacks(app) -> None:
                 column_name = component_data["column_name"]
                 aggregation_value = component_data["aggregation"]
                 input_value = component_data["title"]
-                logger.info("COMPONENT DATA")
-                logger.info(f"column_name: {column_name}")
-                logger.info(f"aggregation_value: {aggregation_value}")
-                logger.info(f"input_value: {input_value}")
 
         column_type = cols_json[column_name]["type"]
         aggregation_description = _create_aggregation_description(column_type, aggregation_value)
@@ -372,13 +353,11 @@ def register_design_callbacks(app) -> None:
 
         if dashboard_id:
             dashboard_data = load_depictio_data_mongo(dashboard_id, TOKEN=TOKEN)
-            logger.info(f"dashboard_data: {dashboard_data}")
             relevant_metadata = [
                 m
                 for m in dashboard_data["stored_metadata"]
                 if m["wf_id"] == wf_id and m["component_type"] == "interactive"
             ]
-            logger.info(f"BUILD CARD - relevant_metadata: {relevant_metadata}")
 
         # Get the data collection specs
         # Handle joined data collection IDs
@@ -437,8 +416,6 @@ def register_design_callbacks(app) -> None:
 
         if relevant_metadata:
             card_kwargs["dashboard_metadata"] = relevant_metadata
-
-        logger.info(f"card_kwargs: {card_kwargs}")
 
         new_card_body = build_card(**card_kwargs)
 

@@ -158,8 +158,6 @@ def generate_keys(
     if not algorithm:
         algorithm = "RS256"
 
-    logger.debug(f"Generating keys with algorithm: {algorithm}, wipe={wipe}")
-
     if wipe:
         logger.warning("Wiping existing keys as requested.")
         # Remove existing keys if wipe is True
@@ -194,9 +192,6 @@ def generate_keys(
         _save_private_key(private_key, private_key_path)
         _save_public_key(public_key, public_key_path)
 
-        logger.info(
-            f"Generated new {algorithm} key pair at {private_key_path} and {public_key_path}"
-        )
         return private_key_path, public_key_path
 
     except (ValueError, NotImplementedError):
@@ -249,18 +244,12 @@ def check_and_generate_keys(
             # Try to acquire exclusive lock (non-blocking first to detect contention)
             try:
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                logger.debug("Acquired key generation lock")
             except BlockingIOError:
                 # Another worker is generating keys, wait for it
-                logger.info("Another worker is generating keys, waiting for lock...")
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-                logger.info("Lock acquired after waiting")
 
             # Check again after acquiring lock (another worker might have generated keys)
             if os.path.exists(private_key_path) and os.path.exists(public_key_path):
-                logger.debug("Key files already exist. No need to generate new keys.")
-                logger.debug(f"Private key path: {private_key_path}")
-                logger.debug(f"Public key path: {public_key_path}")
                 return private_key_path, public_key_path
 
             # Keys don't exist, generate them
@@ -273,7 +262,6 @@ def check_and_generate_keys(
         finally:
             # Release lock (happens automatically with context manager)
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
-            logger.debug("Released key generation lock")
 
 
 @validate_call(validate_return=True, config={"arbitrary_types_allowed": True})
@@ -362,5 +350,4 @@ def import_keys(
     with open(public_key_path, "wb") as f:
         f.write(public_key_content.encode("utf-8"))
 
-    logger.info(f"Imported keys to {private_key_path} and {public_key_path}")
     return private_key_path, public_key_path

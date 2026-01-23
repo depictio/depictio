@@ -68,7 +68,6 @@ def create_s3_bucket(s3_client: S3Client, bucket_name: str) -> BucketResponse:
     """
     try:
         s3_client.create_bucket(Bucket=bucket_name)
-        logger.info(f"Bucket '{bucket_name}' created successfully.")
         return BucketResponse(message="Bucket created successfully", bucket_name=bucket_name)
     except Exception as e:
         logger.error(f"Failed to create bucket '{bucket_name}': {str(e)}")
@@ -120,7 +119,6 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
         - orphaned_prefixes_count: Count of orphaned data collection prefixes
         - dry_run: Whether this was a dry run
     """
-    logger.info(f"Starting S3 cleanup (dry_run={dry_run})")
 
     bucket_name = settings.minio.bucket
     deleted_count = 0
@@ -142,8 +140,6 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
             if "data_collection_id" in doc:
                 valid_dc_ids.add(str(doc["data_collection_id"]))
 
-        logger.info(f"Found {len(valid_dc_ids)} unique data collection IDs across all collections")
-
         # List all top-level prefixes in S3 bucket (data collection IDs)
         paginator = s3_client.get_paginator("list_objects_v2")
         pages = paginator.paginate(Bucket=bucket_name, Delimiter="/")
@@ -154,11 +150,8 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
                 for prefix_obj in page["CommonPrefixes"]:
                     s3_prefixes.add(prefix_obj["Prefix"].rstrip("/"))
 
-        logger.info(f"Found {len(s3_prefixes)} data collection prefixes in S3")
-
         # Find orphaned prefixes (in S3 but not in MongoDB)
         orphaned_prefixes = list(s3_prefixes - valid_dc_ids)
-        logger.info(f"Identified {len(orphaned_prefixes)} orphaned data collection prefixes")
 
         # Safety check: if all prefixes are orphaned, something might be wrong
         if len(s3_prefixes) > 0 and len(orphaned_prefixes) == len(s3_prefixes) and not force:
@@ -185,7 +178,6 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
         # Delete files under orphaned prefixes
         for dc_id in orphaned_prefixes:
             prefix = f"{dc_id}/"
-            logger.info(f"Processing orphaned prefix: {prefix}")
 
             # List all objects under this prefix
             objects_to_delete = []
@@ -199,11 +191,6 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
                         deleted_count += 1
 
             if objects_to_delete:
-                logger.info(
-                    f"Found {len(objects_to_delete)} objects under {prefix} "
-                    f"({total_size_bytes / (1024**2):.2f} MB)"
-                )
-
                 if not dry_run:
                     # Delete objects in batches of 1000 (S3 limit)
                     batch_size = 1000
@@ -213,18 +200,15 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
                             Bucket=bucket_name, Delete={"Objects": batch}
                         )
 
-                        deleted = len(response.get("Deleted", []))
+                        len(response.get("Deleted", []))
                         errors = response.get("Errors", [])
 
                         if errors:
                             logger.error(f"Errors deleting objects: {errors}")
                         else:
-                            logger.info(f"Successfully deleted {deleted} objects from {prefix}")
+                            pass
                 else:
-                    logger.info(
-                        f"[DRY RUN] Would delete {len(objects_to_delete)} objects from {prefix}"
-                    )
-
+                    pass
         result = {
             "deleted_count": deleted_count,
             "total_size_bytes": total_size_bytes,
@@ -234,16 +218,9 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
         }
 
         if dry_run:
-            logger.info(
-                f"[DRY RUN] Would delete {deleted_count} files ({total_size_bytes / (1024**3):.2f} GB) "
-                f"from {len(orphaned_prefixes)} orphaned data collections"
-            )
+            pass
         else:
-            logger.info(
-                f"Deleted {deleted_count} files ({total_size_bytes / (1024**3):.2f} GB) "
-                f"from {len(orphaned_prefixes)} orphaned data collections"
-            )
-
+            pass
         return result
 
     except Exception as e:

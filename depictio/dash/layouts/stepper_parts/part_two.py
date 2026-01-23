@@ -9,7 +9,6 @@ import dash_mantine_components as dmc
 from dash import ALL, MATCH, Input, Output, State, ctx, dcc, html
 from dash.exceptions import PreventUpdate
 
-from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.component_metadata import is_enabled
 from depictio.dash.modules.card_component.frontend import create_stepper_card_button
 
@@ -168,15 +167,8 @@ def register_callbacks_stepper_part_two(app):
         Returns:
             The value of the most recently clicked button, or the previous value.
         """
-        logger.info(f"n_clicks: {n_clicks}")
-        logger.info(f"last_button: {last_button}")
-
         if ctx.triggered_id and "value" in ctx.triggered_id:
-            logger.info(f"{ctx.triggered}")
-            logger.info(f"ctx.triggered_id: {ctx.triggered_id}")
             button_id = ctx.triggered_id["value"]
-            logger.info(f"Triggered id: {button_id}")
-            logger.info(f"Last button: {last_button}")
             return button_id
 
         return last_button

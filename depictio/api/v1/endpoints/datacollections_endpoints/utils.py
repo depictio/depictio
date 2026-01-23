@@ -34,13 +34,9 @@ def generate_join_dict(workflow: dict, project: dict | None = None) -> dict[str,
 
     # If no project provided or no joins defined, return empty
     if not project or "joins" not in project:
-        logger.debug(f"No project or joins found for workflow {workflow_id}")
         return join_details_map
 
     project_joins = project.get("joins", [])
-    logger.info(
-        f"Processing {len(project_joins)} joins from project for workflow '{workflow_name}'"
-    )
 
     for join_def in project_joins:
         join_name = join_def.get("name", "unnamed")

@@ -43,17 +43,8 @@ def register_edit_component_simple_callback(app):
         if current_pathname and "/component/add/" in current_pathname:
             raise PreventUpdate
 
-        # Log for debugging URL redirection issues
-        logger.info(
-            f"🔍 EDIT BUTTON CALLBACK - n_clicks: {n_clicks_list}, pathname: {current_pathname}"
-        )
-        logger.info(
-            f"🔍 EDIT BUTTON CALLBACK - triggered_id: {ctx.triggered_id}, triggered: {ctx.triggered}"
-        )
-
         # GUARD: Check if any button was actually clicked (not just rendered with n_clicks=0)
         if not n_clicks_list or not any(n_clicks_list):
-            logger.info("🚫 EDIT BUTTON - No actual clicks detected, preventing update")
             raise PreventUpdate
 
         # Check if callback was triggered by an edit button
@@ -90,9 +81,4 @@ def register_edit_component_simple_callback(app):
 
         # Build edit stepper page URL (preserves viewer/editor app prefix)
         edit_url = f"/{app_prefix}/{dashboard_id}/component/edit/{component_id}"
-
-        logger.info(
-            f"✏️ NAVIGATE TO EDIT STEPPER - Dashboard: {dashboard_id}, Component: {component_id}"
-        )
-
         return edit_url

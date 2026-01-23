@@ -16,9 +16,6 @@ from depictio.api.v1.configs.logging_init import logger
 
 def register_add_component_simple_callback(app):
     """Register the component creation navigation callback."""
-    logger.info("=" * 80)
-    logger.info(f"   App name: {app.config.get('name', 'Unknown')}")
-    logger.info("=" * 80)
 
     @app.callback(
         Output("url", "pathname", allow_duplicate=True),
@@ -43,23 +40,9 @@ def register_add_component_simple_callback(app):
         Returns:
             str: New pathname to navigate to (e.g., "/dashboard/{id}/component/add/{uuid}")
         """
-        from dash import ctx
-
         # EARLY EXIT: Don't process on component edit pages
         if current_pathname and "/component/edit/" in current_pathname:
             raise PreventUpdate
-
-        # CRITICAL: Log immediately when callback is entered
-        logger.info("=" * 80)
-        logger.info("=" * 80)
-
-        # Log for debugging URL redirection issues
-        logger.info(
-            f"🔍 ADD BUTTON CALLBACK - n_clicks: {n_clicks}, stored_clicks: {stored_clicks}, pathname: {current_pathname}"
-        )
-        logger.info(
-            f"🔍 ADD BUTTON CALLBACK - triggered_id: {ctx.triggered_id}, triggered: {ctx.triggered}"
-        )
 
         if not n_clicks:
             raise PreventUpdate
@@ -71,28 +54,13 @@ def register_add_component_simple_callback(app):
             else (stored_clicks or 0)
         )
 
-        # GUARD: Handle localStorage stale data
-        # If stored_count > n_clicks, it means localStorage has stale data from previous session
-        # In this case, we should reset and allow the click
-        if stored_count > n_clicks:
-            logger.info(
-                f"🔄 ADD BUTTON - Stale stored_count detected (stored={stored_count}, current={n_clicks}), resetting"
-            )
-            # Don't prevent update - allow the click and reset the stored count
+        # GUARD: Handle localStorage stale data - reset and allow click
         # GUARD: Prevent duplicate processing of same click (fixes URL re-navigation after stepper return)
-        # This happens when returning from stepper - the dashboard re-renders with add-button having n_clicks=N
-        # Without this check, the callback would trigger again and navigate to a NEW stepper URL
-        elif n_clicks == stored_count:
-            logger.info(
-                f"🚫 ADD BUTTON - Click already processed (n_clicks={n_clicks}, stored_count={stored_count})"
-            )
+        if stored_count <= n_clicks and n_clicks == stored_count:
             raise PreventUpdate
 
         # GUARD: Don't navigate if already on a stepper page (prevents recursive navigation)
         if current_pathname and "/component/add/" in current_pathname:
-            logger.warning(
-                "⚠️ Already on stepper page - preventing recursive navigation from stepper to stepper"
-            )
             raise PreventUpdate
 
         # Extract dashboard_id from current pathname using robust parsing
@@ -119,10 +87,6 @@ def register_add_component_simple_callback(app):
 
         # Build stepper page URL (preserves viewer/editor app prefix)
         stepper_url = f"/{app_prefix}/{dashboard_id}/component/add/{component_id}"
-
-        logger.info(
-            f"✨ NAVIGATE TO STEPPER - Dashboard: {dashboard_id}, Component: {component_id}"
-        )
 
         # Return both the URL and the updated stored clicks dict (maintaining the dict structure)
         return stepper_url, {"count": n_clicks, "initialized": True, "_id": ""}

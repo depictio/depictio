@@ -143,7 +143,6 @@ def register_reset_button_callbacks(app) -> None:
     Args:
         app: The Dash application instance.
     """
-    logger.info("Reset button callback DISABLED for debugging")
     pass
 
 
@@ -160,21 +159,14 @@ def _check_component_filter_activity(
     Returns:
         True if the component has filters different from its default state, False otherwise.
     """
-    logger.info(f"_check_component_filter_activity for component {component_index}")
 
     if not interactive_values:
-        logger.info("No interactive_values provided")
         return False
 
     interactive_values_data = _extract_interactive_values_data(interactive_values)
 
     if not interactive_values_data:
-        logger.debug("No interactive component data found")
         return False
-
-    logger.info(
-        f"Searching for component {component_index} among {len(interactive_values_data)} components"
-    )
 
     return _find_and_check_component(interactive_values_data, component_index)
 
@@ -191,7 +183,6 @@ def _extract_interactive_values_data(interactive_values: dict[str, Any]) -> list
     """
     if "interactive_components_values" in interactive_values:
         data = interactive_values["interactive_components_values"]
-        logger.debug(f"Found interactive_components_values: {len(data)} items")
         return data
 
     # Look for any values that might be interactive components
@@ -199,7 +190,6 @@ def _extract_interactive_values_data(interactive_values: dict[str, Any]) -> list
     for value in interactive_values.values():
         if isinstance(value, dict) and "value" in value:
             data.append(value)
-    logger.info(f"Extracted from dict structure: {len(data)} items")
     return data
 
 
@@ -223,27 +213,18 @@ def _find_and_check_component(
         component_metadata = component_data.get("metadata", {})
         component_id = component_metadata.get("index")
 
-        logger.info(f"  Component {i}: ID={component_id}, looking for {component_index}")
-
         if str(component_id) != str(component_index):
             continue
 
         component_value = component_data.get("value")
         default_state = component_metadata.get("default_state", {})
 
-        logger.debug(f"  Found target component {component_index}")
-        logger.info(f"    Current value: {component_value}")
-        logger.info(f"    Default state: {default_state}")
-
         if component_value is None or not default_state:
-            logger.info("  No value or default_state, returning False")
             return False
 
         is_different = _is_different_from_default(component_value, default_state)
-        logger.info(f"  Is different from default: {is_different}")
         return is_different
 
-    logger.debug(f"Component {component_index} not found in interactive values")
     return False
 
 
@@ -396,15 +377,6 @@ def _create_component_buttons(
     # Combine all buttons into a single list (edit buttons first, then view buttons)
     all_button_components = edit_only_components + view_accessible_components
 
-    # Log configuration for debugging
-    if component_type:
-        logger.debug(
-            f"Creating {config['orientation']} buttons for {component_type}:"
-            f"\n  Edit-only: {edit_only_list}"
-            f"\n  View-accessible: {view_accessible_list}"
-            f"\n  Total buttons: {len(all_button_components)}"
-        )
-
     # Return single ActionIconGroup with all buttons
     # Each button is wrapped with appropriate CSS class for conditional visibility
     unified_button_group = (
@@ -436,9 +408,6 @@ def edit_component(
     Returns:
         The stepper output component for editing.
     """
-    logger.info("=== EDIT COMPONENT ===")
-    logger.info(f"  index: {index}, parent_id: {parent_id}, active: {active}")
-    logger.info(f"  component_data type: {type(component_data)}")
 
     return create_stepper_output_edit(index, parent_id, active, component_data, TOKEN)
 
@@ -506,10 +475,8 @@ def enable_box_edit_mode(
     # Prioritize component_data index if available, otherwise extract from component
     if component_data and "index" in component_data:
         btn_index = component_data["index"]
-        logger.debug(f"ENABLE BOX EDIT MODE - Using index from component_data: {btn_index}")
     else:
         btn_index = _extract_component_id(box)
-        logger.debug(f"ENABLE BOX EDIT MODE - Extracted index from component: {btn_index}")
 
     component_type = None
     if not component_data:
@@ -817,10 +784,6 @@ def enable_box_edit_mode(
             displayed_count = component_data.get("displayed_data_count", cutoff)
             total_count = component_data.get("total_data_count", cutoff)
 
-        logger.info(
-            f"🎨 Creating partial data button with initial values: {displayed_count:,} / {total_count:,}"
-        )
-
         # Initial content with best available data - will be updated by callback
         # Structure: Stack > (Title, Content Div with children)
         # Include values in keys to force React re-render when counts change
@@ -929,8 +892,6 @@ def enable_box_edit_mode(
 
     # Generate proper UUID for the draggable component (following prototype pattern)
     box_uuid = f"box-{str(btn_index)}"
-
-    logger.debug(f"Creating DraggableWrapper with UUID: {box_uuid}")
 
     # Create content div with embedded buttons - CSS will handle visibility based on edit mode
     # Button visibility controlled by .drag-handles-hidden CSS class (see draggable-grid.css)

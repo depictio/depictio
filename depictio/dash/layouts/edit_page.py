@@ -93,10 +93,6 @@ def create_edit_page(
     Returns:
         Complete page layout with design interface
     """
-    logger.info(
-        f"🎨 CREATE EDIT PAGE - Component: {component_id}, Type: {component_data.get('component_type')}"
-    )
-
     # Create header with proper back URL based on edit mode
     header = create_minimal_edit_header(dashboard_id, dashboard_title, is_edit_mode)
 
@@ -144,16 +140,10 @@ def create_edit_page(
             else design_interface_raw
         )
     elif component_type == "figure":
-        logger.info(f"   component_id: {component_id}")
-        logger.info(f"   wf_id: {wf_id}")
-        logger.info(f"   dc_id: {dc_id}")
-        logger.info(f"   df shape: {df.shape if hasattr(df, 'shape') else 'N/A'}")
-
         # Import existing design_figure from utils - it has complete UI already
         from depictio.dash.modules.figure_component.utils import design_figure
 
         # CRITICAL: Use actual component_id, NOT tmp suffix
-        # Call with all available parameters - existing function handles everything
         design_interface_raw = design_figure(
             id={"type": "figure-component", "index": component_id},
             component_data=component_data,  # For pre-population
@@ -161,11 +151,6 @@ def create_edit_page(
             data_collection_id=dc_id,
             local_data=df,  # DataFrame for column selection
         )
-
-        logger.info(f"   design_interface_raw type: {type(design_interface_raw)}")
-        logger.info(f"   design_interface_raw is list: {isinstance(design_interface_raw, list)}")
-        if isinstance(design_interface_raw, list):
-            logger.info(f"   design_interface_raw length: {len(design_interface_raw)}")
 
         # Handle different component return patterns
         # - Card/Interactive: Single-element list with wrapped content → extract [0]
@@ -187,8 +172,6 @@ def create_edit_page(
                 design_interface = design_interface_raw[0]
         else:
             design_interface = design_interface_raw
-
-        logger.info(f"   design_interface type: {type(design_interface)}")
     else:
         # Other component types not yet implemented for editing
         design_interface = html.Div(
@@ -236,20 +219,12 @@ def create_edit_page(
         mt="xl",
     )
 
-    # Store edit context (uses actual component_id)
-    context_store = dcc.Store(
-        id="edit-page-context",
-        data={
-            "dashboard_id": dashboard_id,
-            "component_id": component_id,  # Actual ID, not tmp
-            "component_data": component_data,
-        },
-    )
+    # Note: edit-page-context store is defined in shared_app_shell.py
+    # The routing callback in dashboard_editor.py updates its data
 
     # Layout with AppShell
     page_layout = html.Div(
         [
-            context_store,
             hidden_selects,
             dmc.AppShell(
                 [

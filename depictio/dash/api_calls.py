@@ -209,13 +209,10 @@ def api_call_fetch_user_from_token(token: str) -> User | None:
     cached_user, is_valid = _check_cache(_user_cache, cache_key, _cache_timeout)
     if is_valid:
         _cache_stats["hits"] += 1
-        email = cached_user.email if cached_user else "None"
-        logger.info(f"CACHE HIT: user_token (email={email})")
         return cached_user
 
     # Cache miss - make API call
     _cache_stats["misses"] += 1
-    logger.debug(f"CACHE MISS: user_token - fetching from API (cache_size={len(_user_cache)})")
 
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token",
@@ -228,7 +225,6 @@ def api_call_fetch_user_from_token(token: str) -> User | None:
         return None
 
     user_data = response.json()
-    logger.debug(f"User data fetched from API: {user_data.get('email', 'No email found')}")
 
     if not user_data:
         return None
@@ -253,8 +249,6 @@ def api_call_fetch_user_from_email(email: EmailStr) -> User | None:
     Returns:
         Optional[User]: The user if found, None otherwise
     """
-    logger.debug(f"API internal key: {settings.auth.internal_api_key}")
-
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_email",
         params={"email": email},
@@ -265,9 +259,6 @@ def api_call_fetch_user_from_email(email: EmailStr) -> User | None:
         return None
 
     user_data = response.json()
-    logger.debug(
-        f"User data fetched: {user_data.get('email', 'No email found')} with ID {user_data.get('_id', 'No ID found')}"
-    )
 
     if not user_data:
         return None
@@ -298,7 +289,6 @@ def api_call_get_anonymous_user_session() -> dict | None:
 
         if response.status_code == 200:
             session_data = response.json()
-            logger.debug("Anonymous user session fetched successfully via API")
             return session_data
         elif response.status_code == 403:
             logger.warning("Anonymous user session not available - unauthenticated mode disabled")
@@ -545,13 +535,7 @@ def check_token_validity(token: TokenBase) -> dict:
         _token_validity_cache, cache_key, _validity_cache_timeout
     )
     if is_valid and cached_result is not None:
-        logger.debug("Returning cached token validity result")
         return cached_result
-
-    logger.debug("Checking token validity via API.")
-    logger.info(
-        f"Token with name: {token.name}, user_id: {token.user_id}, access_token: {token.access_token[:10]}..."
-    )
 
     try:
         response = httpx.post(
@@ -573,7 +557,6 @@ def check_token_validity(token: TokenBase) -> dict:
 
         # Cache successful responses only
         _update_cache(_token_validity_cache, cache_key, result, max_entries=50)
-        logger.debug(f"Token validation result cached: action={result['action']}")
         return result
 
     except Exception as e:
@@ -720,8 +703,6 @@ def api_get_project_from_id(project_id: PyObjectId, token: str) -> httpx.Respons
     """
     Get a project from the server using the project ID.
     """
-    # First check if the project exists on the server DB for existing IDs and if the same metadata hash is used
-    logger.debug(f"Getting project with ID: {project_id}")
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id",
         params={"project_id": convert_objectid_to_str(project_id)},
@@ -800,7 +781,6 @@ def api_call_get_dashboard(dashboard_id: str, token: str) -> dict[str, Any] | No
         #     f"📊 API LOAD DEBUG - Metadata {i}: dc_id={elem.get('dc_id', 'MISSING')}"
         # )
 
-        logger.debug(f"Dashboard data fetched successfully for dashboard {dashboard_id}.")
         return dashboard_data
     except httpx.HTTPStatusError as e:
         logger.error(f"Failed to fetch dashboard data: {e}")

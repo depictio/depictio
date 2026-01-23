@@ -275,7 +275,6 @@ def is_profiling_enabled() -> bool:
 def setup_profiling(app):
     """Setup profiling for the Dash application."""
     if not is_profiling_enabled():
-        logger.info("Profiling disabled. Set DEPICTIO_PROFILING_ENABLED=True to enable.")
         return app
 
     logger.debug("Setting up Dash application profiling...")

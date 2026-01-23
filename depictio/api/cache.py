@@ -44,8 +44,6 @@ class SimpleCache:
     def _init_redis(self):
         """Initialize Redis connection."""
         if not self.cache_config.enable_redis_cache or not REDIS_AVAILABLE:
-            if not REDIS_AVAILABLE:
-                logger.info("📦 Redis module not available, using memory-only cache")
             return
 
         try:
@@ -57,9 +55,6 @@ class SimpleCache:
             )
             self._redis.ping()
             self._redis_available = True
-            logger.info(
-                f"✅ Redis connected: {self.cache_config.redis_host}:{self.cache_config.redis_port}"
-            )
         except Exception as e:
             logger.warning(f"❌ Redis connection failed: {e}")
             self._redis_available = False
@@ -80,16 +75,12 @@ class SimpleCache:
             try:
                 serialized = pickle.dumps(data)
                 self._redis.setex(cache_key, ttl, serialized)
-                if isinstance(data, pl.DataFrame):
-                    logger.info(f"✅ Redis cached: {key} ({data.shape[0]}×{data.shape[1]})")
                 return True
             except Exception as e:
                 logger.warning(f"❌ Redis cache failed: {key} - {e}")
 
         # Fallback to memory
         self._memory_cache[key] = {"data": data, "cached_at": time.time(), "ttl": ttl}
-        if isinstance(data, pl.DataFrame):
-            logger.info(f"💾 Memory cached: {key} ({data.shape[0]}×{data.shape[1]})")
         return True
 
     def get(self, key: str) -> Optional[Any]:
@@ -101,10 +92,7 @@ class SimpleCache:
             try:
                 data = self._redis.get(cache_key)
                 if data is not None:
-                    result = pickle.loads(data)  # type: ignore[arg-type]
-                    if isinstance(result, pl.DataFrame):
-                        logger.info(f"🚀 Redis hit: {key} ({result.shape[0]}×{result.shape[1]})")
-                    return result
+                    return pickle.loads(data)  # type: ignore[arg-type]
             except Exception as e:
                 logger.warning(f"❌ Redis get failed: {key} - {e}")
 
@@ -112,10 +100,7 @@ class SimpleCache:
         if key in self._memory_cache:
             entry = self._memory_cache[key]
             if time.time() - entry["cached_at"] <= entry["ttl"]:
-                result = entry["data"]
-                if isinstance(result, pl.DataFrame):
-                    logger.info(f"💾 Memory hit: {key} ({result.shape[0]}×{result.shape[1]})")
-                return result
+                return entry["data"]
             else:
                 del self._memory_cache[key]
 

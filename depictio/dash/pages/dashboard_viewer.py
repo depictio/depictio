@@ -31,7 +31,7 @@ from depictio.dash.core.shared_auth import (
     validate_and_refresh_token,
 )
 from depictio.dash.layouts.draggable import design_draggable
-from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data_sync
+from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data
 from depictio.dash.layouts.header import design_header
 from depictio.dash.layouts.shared_app_shell import create_minimal_app_shell
 
@@ -173,14 +173,9 @@ def register_routing_callback(app):
         Returns:
             tuple: (page_content, header_content, pathname, local_data)
         """
-        logger.info(f"   Triggered by: {ctx.triggered_id}")
-
         # CRITICAL FIX: When triggered by local-store update (not URL change),
         # don't update the pathname to prevent circular URL changes
         triggered_by_local_store = ctx.triggered_id == "local-store"
-
-        if triggered_by_local_store:
-            logger.info("   ⚠️ Triggered by local-store - will preserve current URL")
 
         # Extract theme
         theme = extract_theme_from_store(theme_store)
@@ -279,7 +274,7 @@ def load_and_render_dashboard(
         tuple: (dashboard_layout, header_content) - Dashboard layout and header content
     """
     # Load dashboard data
-    depictio_dash_data = load_depictio_data_sync(
+    depictio_dash_data = load_depictio_data(
         dashboard_id=dashboard_id,
         local_data=local_data,
         theme=theme,

@@ -236,10 +236,6 @@ def register_consolidated_api_callbacks(app):
     #
     #     return cached_project
 
-    logger.info(
-        "✅ CONSOLIDATED API: consolidated_project_data callback disabled (see comments above)"
-    )
-
     # Dashboard initialization data callback (Cache 1: Dashboard metadata)
     @app.callback(
         Output("dashboard-init-data", "data"),
@@ -271,14 +267,9 @@ def register_consolidated_api_callbacks(app):
         if _is_cache_valid(
             cached_dashboard_data, "dashboard._id", dashboard_id, DASHBOARD_CACHE_TTL
         ):
-            cache_age = time.time() - cached_dashboard_data.get("timestamp", 0)
-            logger.info(
-                f"🔧 DASHBOARD-INIT: Using cached data for {dashboard_id} (age: {cache_age:.1f}s)"
-            )
             return no_update
 
         access_token = local_store["access_token"]
-        logger.debug(f"📡 DASHBOARD-INIT: Fetching dashboard metadata for {dashboard_id}")
 
         try:
             async with httpx.AsyncClient(timeout=10) as client:
@@ -335,16 +326,9 @@ def register_consolidated_api_callbacks(app):
             return no_update
 
         if _is_cache_valid(cached_project, "project._id", project_id, PROJECT_CACHE_TTL):
-            cache_age = time.time() - cached_project.get("timestamp", 0)
-            logger.info(
-                f"🔧 PROJECT-METADATA: Using cached data for project {project_id} (age: {cache_age:.1f}s)"
-            )
             return no_update
 
         access_token = local_store["access_token"]
-        logger.info(
-            f"📡 PROJECT-METADATA: Fetching project metadata with delta_locations for {project_id}"
-        )
 
         try:
             async with httpx.AsyncClient(timeout=10) as client:

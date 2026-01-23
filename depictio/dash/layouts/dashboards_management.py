@@ -66,7 +66,6 @@ def load_dashboards_from_db(token: str) -> dict:
     Raises:
         ValueError: If token is not provided or API request fails.
     """
-    logger.debug("Loading dashboards from the database")
     if not token:
         raise ValueError("Token is required to load dashboards from the database.")
 
@@ -389,8 +388,6 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
                 Both sections use responsive SimpleGrid layouts that adjust
                 columns based on screen size (1/2/3 columns).
         """
-        logger.debug(f"dashboards: {dashboards}")
-
         # Create project cache to avoid redundant API calls
         project_cache = {}
 
@@ -1173,7 +1170,6 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         """
         # Only load projects when modal is opened
         if not modal_opened:
-            logger.info("Modal not opened, returning empty list")
             return []
 
         # Check if user data is valid
@@ -1182,7 +1178,6 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             return []
 
         try:
-            logger.info("Making API call to fetch projects...")
             response = httpx.get(
                 f"{API_BASE_URL}/depictio/api/v1/projects/get/all",
                 headers={"Authorization": f"Bearer {user_data['access_token']}"},
@@ -1463,14 +1458,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
         )
         # return generate_dashboard_view_response(dashboards, next_index, store_data_list, current_userbase)
 
-    def log_context_info():
-        logger.info(f"CTX triggered: {ctx.triggered}")
-        logger.info(f"CTX triggered prop IDs: {ctx.triggered_prop_ids}")
-        logger.info(f"CTX triggered ID: {ctx.triggered_id}")
-        logger.info(f"CTX inputs: {ctx.inputs}")
-
     def handle_no_trigger(dashboards, store_data_list, current_userbase, user_data):
-        logger.info("No trigger")
         return generate_dashboard_view_response(
             dashboards, store_data_list, current_userbase, user_data
         )
@@ -1667,7 +1655,6 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
 
     def generate_dashboard_view_response(dashboards, store_data_list, current_userbase, user_data):
         dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
-        logger.debug(f"dashboards: {dashboards}")
         current_user = api_call_fetch_user_from_token(user_data["access_token"])
         dashboards_view = create_homepage_view(
             dashboards, current_userbase.id, user_data["access_token"], current_user
@@ -1787,16 +1774,7 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             "workflow_system": "none",
         }
 
-        logger.debug(
-            f"Create dashboard n_clicks: {n_clicks_create}, {n_clicks_submit}, {n_clicks_cancel}"
-        )
-        logger.debug(f"Title: {title}, Opened: {opened}")
-        logger.debug(f"User data: {user_data}")
-        logger.debug(f"Init create dashboard button: {init_create_dashboard_button}")
-        logger.debug(f"Project selected: {project}")
-
         if not init_create_dashboard_button:
-            logger.info("Init create dashboard button")
             return data, opened, True, dash.no_update, dash.no_update, dash.no_update
 
         if "type" in ctx.triggered_id:
@@ -1805,8 +1783,6 @@ def register_callbacks_dashboards_management(app: dash.Dash) -> None:
             triggered_id = ctx.triggered_id
 
         if triggered_id == "create-dashboard-button":
-            logger.info("Create button clicked")
-
             # Check if user is anonymous and redirect to profile page
             from depictio.models.models.users import UserContext
 

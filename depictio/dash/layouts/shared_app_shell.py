@@ -22,8 +22,6 @@ from typing import Any, Optional
 import dash_mantine_components as dmc
 from dash import dcc
 
-from depictio.api.v1.configs.logging_init import logger
-
 
 def create_shared_stores():
     """
@@ -56,6 +54,8 @@ def create_shared_stores():
         dcc.Store(id="theme-relay-store", storage_type="memory"),
         # API base URL for clientside callbacks (populated on load)
         dcc.Store(id="api-base-url-store", storage_type="memory"),
+        # Edit page context (populated only on component edit pages, but needed by design callbacks)
+        dcc.Store(id="edit-page-context", storage_type="memory", data=None),
         # URL location
         dcc.Location(id="url", refresh=False),
         # Server status check interval (30 seconds) - pure clientside implementation
@@ -150,8 +150,6 @@ def create_app_shell(
         ...     show_sidebar=True,
         ... )
     """
-    logger.debug(f"Creating AppShell for {app_name} app")
-
     # Create shared stores
     stores = create_shared_stores()
 
@@ -236,8 +234,6 @@ def create_minimal_app_shell(
         ...     show_header=True,
         ... )
     """
-    logger.debug(f"Creating minimal AppShell for {app_name} app")
-
     # Import dashboard viewer sidebar (tabs only, no navigation links)
     from depictio.dash.layouts.sidebar import create_dashboard_viewer_sidebar
     from depictio.dash.layouts.tab_modal import create_tab_modal

@@ -18,7 +18,6 @@ ENABLE_CACHING = True  # Global toggle for caching system
 # PERFORMANCE TESTING: Toggle for local filesystem caching
 USE_LOCAL_FILES = os.getenv("DEPICTIO_USE_LOCAL_FILES", "false").lower() == "true"
 DELTA_CACHE_DIR = "/app/cache/delta_cache"
-logger.info(f"Data loading mode: {'LOCAL CACHE' if USE_LOCAL_FILES else 'S3/MinIO'}")
 
 
 def get_local_cache_path(s3_path: str) -> str:
@@ -53,7 +52,6 @@ def cache_delta_table_from_s3(s3_path: str, polars_s3_config: dict) -> str:
 
     # Check if already cached
     if os.path.exists(cache_path) and os.path.exists(os.path.join(cache_path, "_delta_log")):
-        logger.debug(f"📦 Cache hit: {cache_path}")
         return cache_path
 
     # Create cache directory
@@ -63,13 +61,10 @@ def cache_delta_table_from_s3(s3_path: str, polars_s3_config: dict) -> str:
     if os.path.exists(cache_path):
         shutil.rmtree(cache_path)
 
-    logger.info(f"📥 Caching from S3 to local: {s3_path} → {cache_path}")
-
     # Read from S3 and write to local cache
     df = pl.scan_delta(s3_path, storage_options=polars_s3_config).collect()
     df.write_delta(cache_path, mode="overwrite")
 
-    logger.info(f"✅ Cache created: {cache_path} ({len(df)} rows)")
     return cache_path
 
 
@@ -130,9 +125,6 @@ def add_filter(
             # Ensure value is a list for is_in() function
             if not isinstance(value, list):
                 value = [value]
-            logger.debug(
-                f"Creating filter: column='{column_name}', values={value}, type={interactive_component_type}"
-            )
 
             # Use native type filtering - Polars handles type coercion automatically
             # Join type mismatches are handled separately by normalize_join_column_types()
@@ -164,10 +156,6 @@ def add_filter(
                     start_date = pl.lit(start_date).str.strptime(pl.Datetime, "%Y-%m-%d")
                 if isinstance(end_date, str):
                     end_date = pl.lit(end_date).str.strptime(pl.Datetime, "%Y-%m-%d")
-
-                logger.debug(
-                    f"Creating date range filter: column='{column_name}', range=[{start_date}, {end_date}]"
-                )
 
                 # Apply date range filter
                 # Cast column to datetime if it's not already
@@ -315,15 +303,9 @@ def normalize_join_column_types(df1, df2, join_columns):
 
             # If types are different, cast both to string for compatibility
             if dtype1 != dtype2:
-                logger.debug(
-                    f"Type mismatch in join column '{col}': {dtype1} vs {dtype2}. Converting both to String."
-                )
-
                 # Cast both columns to string to ensure compatibility
                 df1 = df1.with_columns(pl.col(col).cast(pl.String))
                 df2 = df2.with_columns(pl.col(col).cast(pl.String))
-
-                logger.debug(f"Normalized column '{col}' to String type for both DataFrames")
 
     return df1, df2
 
@@ -364,14 +346,6 @@ def _generate_cache_keys(
     if metadata and not load_for_options:
         filter_hash = _generate_filter_hash(metadata)
         filtered_cache_key = f"{base_cache_key}_filters_{filter_hash}"
-        logger.debug(
-            f"Generated FILTERED cache key: {filtered_cache_key} (filters={len(metadata)})"
-        )
-    else:
-        logger.debug(
-            f"Generated BASE cache key: {base_cache_key} "
-            f"(preview={load_for_preview}, columns={len(select_columns) if select_columns else 'all'})"
-        )
 
     return base_cache_key, filtered_cache_key, filter_hash
 
@@ -399,7 +373,6 @@ def _get_delta_location(
     """
     if init_data and data_collection_id_str in init_data:
         file_id = init_data[data_collection_id_str]["delta_location"]
-        logger.info(f"Using init_data for DC {data_collection_id_str}")
         return file_id
 
     # Legacy API path with deprecation warning
@@ -446,10 +419,8 @@ def _create_delta_scan(file_id: str) -> pl.LazyFrame:
     """
     if USE_LOCAL_FILES:
         cache_path = cache_delta_table_from_s3(file_id, polars_s3_config)
-        logger.debug(f"Reading from local cache: {cache_path}")
         return pl.scan_delta(cache_path)
 
-    logger.debug(f"Reading from S3: {file_id}")
     return pl.scan_delta(file_id, storage_options=polars_s3_config)
 
 
@@ -471,11 +442,9 @@ def _apply_scan_options(
     """
     if select_columns:
         delta_scan = delta_scan.select(select_columns)
-        logger.debug(f"Applied column projection: {len(select_columns)} columns")
 
     if limit_rows:
         delta_scan = delta_scan.limit(limit_rows)
-        logger.debug(f"Applied row limit: {limit_rows}")
 
     return delta_scan
 
@@ -500,19 +469,15 @@ def _finalize_dataframe(
     """
     # Apply filters if needed
     if metadata and not load_for_options:
-        logger.debug(f"Applying {len(metadata)} filter(s)")
         df = apply_runtime_filters(df, metadata)
-        logger.debug(f"After filters: {df.height:,} rows x {df.width} columns")
 
     # Apply row limit
     if limit_rows:
         df = df.limit(limit_rows)
-        logger.debug(f"Applied row limit: {limit_rows}")
 
     # Drop aggregation time column if exists
     if "depictio_aggregation_time" in df.columns:
         df = df.drop("depictio_aggregation_time")
-        logger.debug("Dropped 'depictio_aggregation_time' column")
 
     return df
 
@@ -539,40 +504,27 @@ def _check_redis_cache(
         if filter_hash and filtered_cache_key:
             cached_df = get_cached_dataframe(filtered_cache_key)
             if cached_df is not None:
-                logger.info(f"FILTERED CACHE HIT (Redis): {filtered_cache_key}")
-                logger.debug(
-                    f"Cached DataFrame: {cached_df.height:,} rows x {cached_df.width} cols"
-                )
                 return _finalize_dataframe(cached_df, None, True, limit_rows)
 
         # Check base cache
         cached_df = get_cached_dataframe(base_cache_key)
         if cached_df is not None:
-            logger.info(f"BASE CACHE HIT (Redis): {base_cache_key}")
-            logger.debug(f"Cached DataFrame: {cached_df.height:,} rows x {cached_df.width} columns")
-
             # Apply column projection if needed
             if select_columns and all(col in cached_df.columns for col in select_columns):
                 cached_df = cached_df.select(select_columns)
-                logger.debug(f"Applied column projection: {len(select_columns)} columns")
 
             # Apply filters and cache the filtered result
             if metadata and not load_for_options:
-                logger.debug(f"Applying {len(metadata)} filter(s) to cached DataFrame")
                 cached_df = apply_runtime_filters(cached_df, metadata)
-                logger.debug(
-                    f"After filters: {cached_df.height:,} rows x {cached_df.width} columns"
-                )
 
                 # Cache filtered result
                 if filter_hash and filtered_cache_key:
                     cache_dataframe(filtered_cache_key, cached_df)
-                    logger.debug(f"Cached filtered result: {filtered_cache_key}")
 
             return _finalize_dataframe(cached_df, None, True, limit_rows)
 
-    except Exception as e:
-        logger.debug(f"Redis cache check failed: {e}")
+    except Exception:
+        pass
 
     return None
 
@@ -596,28 +548,22 @@ def _check_memory_cache(
 
     # Check filtered cache first if filters exist
     if filter_hash and filtered_cache_key and filtered_cache_key in _dataframe_memory_cache:
-        logger.info(f"FILTERED CACHE HIT (memory): {filtered_cache_key}")
         update_cache_timestamp(filtered_cache_key)
         cached_df = _dataframe_memory_cache[filtered_cache_key]
-        logger.debug(f"Cached DataFrame: {cached_df.height:,} rows x {cached_df.width} columns")
         return _finalize_dataframe(cached_df, None, True, limit_rows)
 
     # Check base cache
     if base_cache_key in _dataframe_memory_cache:
-        logger.info(f"BASE CACHE HIT (memory): {base_cache_key}")
         update_cache_timestamp(base_cache_key)
         cached_df = _dataframe_memory_cache[base_cache_key]
-        logger.debug(f"Cached DataFrame: {cached_df.height:,} rows x {cached_df.width} columns")
 
         # Apply column projection if needed
         if select_columns and all(col in cached_df.columns for col in select_columns):
             cached_df = cached_df.select(select_columns)
-            logger.debug(f"Applied column projection: {len(select_columns)} columns")
 
         # Apply filters and cache the filtered result
         if metadata and not load_for_options:
             cached_df = apply_runtime_filters(cached_df, metadata)
-            logger.debug(f"After filters: {cached_df.height:,} rows x {cached_df.width} columns")
 
             # Cache filtered result in memory
             if filter_hash and filtered_cache_key:
@@ -626,7 +572,6 @@ def _check_memory_cache(
                     "size_bytes": sys.getsizeof(cached_df),
                     "timestamp": time.time(),
                 }
-                logger.debug(f"Cached filtered result (memory): {filtered_cache_key}")
 
         return _finalize_dataframe(cached_df, None, True, limit_rows)
 
@@ -651,17 +596,15 @@ def _cache_dataframe_to_stores(
     global _total_memory_usage
 
     if size_bytes > MEMORY_THRESHOLD_BYTES:
-        logger.debug(f"DataFrame too large to cache ({size_bytes / (1024 * 1024):.2f} MB)")
         return
 
     # Try Redis first
     try:
         from depictio.api.cache import cache_dataframe
 
-        if cache_dataframe(cache_key, df):
-            logger.debug(f"Cached to Redis: {cache_key} ({size_bytes / (1024 * 1024):.2f} MB)")
-    except Exception as e:
-        logger.debug(f"Redis caching failed: {e}")
+        cache_dataframe(cache_key, df)
+    except Exception:
+        pass
 
     # Also cache in memory
     _dataframe_memory_cache[cache_key] = df
@@ -670,27 +613,12 @@ def _cache_dataframe_to_stores(
         "timestamp": time.time(),
     }
     _total_memory_usage += size_bytes
-    logger.debug(f"Cached to memory: {cache_key} ({size_bytes / (1024 * 1024):.2f} MB)")
 
 
 def _log_cache_status() -> None:
     """Log current cache status (Redis and memory)."""
-    try:
-        from depictio.api.cache import get_cache_stats
-
-        stats = get_cache_stats()
-        total_keys = stats.get("redis_keys", 0) + stats.get("memory_keys", 0)
-        total_mb = stats.get("redis_memory_used_mb", 0) + stats.get("memory_size_mb", 0)
-        logger.info(
-            f"CACHE STATUS: {total_keys} DataFrames "
-            f"({stats.get('redis_keys', 0)} Redis + {stats.get('memory_keys', 0)} memory), "
-            f"{total_mb:.1f}MB"
-        )
-    except Exception:
-        total_mb = sum(sys.getsizeof(df) for df in _dataframe_memory_cache.values()) / 1024 / 1024
-        logger.info(
-            f"CACHE STATUS: {len(_dataframe_memory_cache)} DataFrames (memory only), {total_mb:.1f}MB"
-        )
+    # Cache status logging disabled for cleaner output
+    pass
 
 
 def _load_and_cache_fresh_data(
@@ -723,32 +651,22 @@ def _load_and_cache_fresh_data(
 
     global _total_memory_usage
 
-    logger.info(f"CACHE MISS: Loading from storage for key: {base_cache_key}")
-
     try:
         df = delta_scan.collect()
     except Exception as e:
         logger.error(f"Error collecting Delta table data: {e}")
         raise Exception("Error collecting Delta table data") from e
 
-    logger.info(
-        f"Loaded DataFrame: {df.height:,} rows x {df.width} columns (DC: {data_collection_id_str})"
-    )
-    logger.debug(f"DataFrame columns: {df.columns}")
-
     # Estimate size if unknown
     if size_bytes == -1:
         size_bytes = df.height * df.width * 8  # 8 bytes per cell average
-        logger.debug(f"Estimated DataFrame size: {size_bytes / (1024 * 1024):.2f} MB")
 
     # Cache the base DataFrame
     _cache_dataframe_to_stores(base_cache_key, df, size_bytes)
 
     # Apply filters if needed
     if metadata and not load_for_options:
-        logger.debug(f"Applying {len(metadata)} filter(s) after loading")
         df = apply_runtime_filters(df, metadata)
-        logger.debug(f"After filters: {df.height:,} rows x {df.width} columns")
 
         # Cache filtered result
         if filter_hash and filtered_cache_key:
@@ -756,15 +674,13 @@ def _load_and_cache_fresh_data(
             try:
                 from depictio.api.cache import cache_dataframe
 
-                if cache_dataframe(filtered_cache_key, df):
-                    logger.debug(f"Cached filtered result: {filtered_cache_key}")
-                else:
+                if not cache_dataframe(filtered_cache_key, df):
+                    # Fallback to memory cache if Redis fails
                     _dataframe_memory_cache[filtered_cache_key] = df
                     _cache_metadata[filtered_cache_key] = {
                         "size_bytes": filtered_size,
                         "timestamp": time.time(),
                     }
-                    logger.debug(f"Cached filtered result (memory): {filtered_cache_key}")
             except Exception:
                 _dataframe_memory_cache[filtered_cache_key] = df
                 _cache_metadata[filtered_cache_key] = {
@@ -797,37 +713,25 @@ def _load_large_dataframe(
     Returns:
         Loaded DataFrame.
     """
-    logger.debug(f"Large DataFrame ({size_bytes / (1024 * 1024):.2f} MB) - using lazy loading")
 
     # Apply filters at scan level for large DataFrames
     if metadata and not load_for_options:
         filter_expressions = process_metadata_and_filter(metadata)
-        logger.debug(f"Filter expressions: {filter_expressions}")
 
         if filter_expressions:
             combined_filter = filter_expressions[0]
             for filt in filter_expressions[1:]:
                 combined_filter &= filt
             delta_scan = delta_scan.filter(combined_filter)
-            logger.debug("Applied filters to lazy scan")
-    elif load_for_options:
-        logger.debug("Skipping filters - loading for component options")
 
     if limit_rows:
         delta_scan = delta_scan.limit(limit_rows)
-        logger.debug(f"Applied row limit: {limit_rows}")
 
     try:
         df = delta_scan.collect()
     except Exception as e:
         logger.error(f"Error collecting Delta table data: {e}")
         raise Exception("Error collecting Delta table data") from e
-
-    logger.info(
-        f"Loaded large DataFrame: {df.height:,} rows x {df.width} columns "
-        f"(DC: {data_collection_id_str})"
-    )
-    logger.debug(f"DataFrame columns: {df.columns}")
 
     return df
 
@@ -896,12 +800,10 @@ def load_deltatable_lite(
 
     # CACHING DISABLED PATH - load directly from storage
     if not ENABLE_CACHING:
-        logger.debug("Caching disabled (ENABLE_CACHING=False), loading directly")
         file_id = _get_delta_location(data_collection_id_str, workflow_id_str, init_data, TOKEN)
         delta_scan = _create_delta_scan(file_id)
         delta_scan = _apply_scan_options(delta_scan, select_columns, limit_rows)
         df = delta_scan.collect()
-        logger.info(f"Loaded DataFrame: {df.height:,} rows x {df.width} columns")
         return _finalize_dataframe(df, metadata, load_for_options, None)
 
     # CACHING ENABLED PATH
@@ -947,7 +849,6 @@ def load_deltatable_lite(
     # Get DataFrame size for adaptive loading strategy
     if init_data and data_collection_id_str in init_data:
         size_bytes = init_data[data_collection_id_str].get("size_bytes", -1)
-        logger.debug(f"Using size from init_data: {size_bytes} bytes")
     else:
         data_collection_id_obj = (
             ObjectId(data_collection_id)
@@ -956,11 +857,6 @@ def load_deltatable_lite(
         )
         size_bytes = get_deltatable_size_from_db(data_collection_id_obj)
 
-    if size_bytes > 0:
-        logger.debug(f"DataFrame size: {size_bytes / (1024 * 1024):.2f} MB")
-    else:
-        logger.debug("DataFrame size unknown, will estimate dynamically")
-
     # Get delta location and create scan
     file_id = _get_delta_location(data_collection_id_str, workflow_id_str, init_data, TOKEN)
     delta_scan = _create_delta_scan(file_id)
@@ -968,14 +864,12 @@ def load_deltatable_lite(
     # Apply column projection at scan level
     if select_columns:
         delta_scan = delta_scan.select(select_columns)
-        logger.debug(f"Applied column projection at scan level: {len(select_columns)} columns")
 
     # ADAPTIVE LOADING STRATEGY
     if size_bytes == -1 or size_bytes <= MEMORY_THRESHOLD_BYTES:
         # Unknown or small DataFrame - load, cache, then filter in memory
         if limit_rows:
             delta_scan = delta_scan.limit(limit_rows)
-            logger.debug(f"Applied row limit: {limit_rows}")
 
         df = _load_and_cache_fresh_data(
             delta_scan,
@@ -1001,9 +895,7 @@ def load_deltatable_lite(
     # Final cleanup (drop aggregation column)
     if "depictio_aggregation_time" in df.columns:
         df = df.drop("depictio_aggregation_time")
-        logger.debug("Dropped 'depictio_aggregation_time' column")
 
-    logger.debug(f"Final DataFrame: {df.height} rows x {df.width} columns")
     return df
 
 
@@ -1031,15 +923,9 @@ def get_deltatable_size_from_db(data_collection_id: ObjectId) -> int:
         if dt_doc and "flexible_metadata" in dt_doc:
             size_bytes = dt_doc["flexible_metadata"].get("deltatable_size_bytes")
             if size_bytes and isinstance(size_bytes, (int, float)) and size_bytes > 0:
-                logger.debug(
-                    f"Found deltatable size for {data_collection_id}: {size_bytes} bytes ({size_bytes / (1024 * 1024):.2f} MB)"
-                )
                 return int(size_bytes)
 
         # If no size metadata found, try to estimate from the DataFrame directly
-        logger.debug(
-            f"No size metadata found for {data_collection_id}, will estimate size dynamically"
-        )
         return -1  # Special value to indicate dynamic estimation needed
 
     except Exception as e:
@@ -1067,13 +953,6 @@ def evict_oldest_cached_dataframe():
         del _cache_metadata[oldest_key]
         _total_memory_usage -= size_bytes
 
-        logger.debug(
-            f"Evicted cached DataFrame {oldest_key}, freed {size_bytes} bytes ({size_bytes / (1024 * 1024):.2f} MB)"
-        )
-        logger.debug(
-            f"Total memory usage now: {_total_memory_usage} bytes ({_total_memory_usage / (1024 * 1024):.2f} MB)"
-        )
-
 
 def load_and_cache_dataframe(cache_key: str, size_bytes: int, delta_scan) -> pl.DataFrame:
     """
@@ -1095,7 +974,6 @@ def load_and_cache_dataframe(cache_key: str, size_bytes: int, delta_scan) -> pl.
         evict_oldest_cached_dataframe()
 
     # Materialize the DataFrame
-    logger.debug(f"Materializing DataFrame for cache key: {cache_key}")
     df = delta_scan.collect()
 
     # PERFORMANCE: Use fast row count instead of expensive estimated_size() for small datasets
@@ -1105,9 +983,6 @@ def load_and_cache_dataframe(cache_key: str, size_bytes: int, delta_scan) -> pl.
 
     if row_count < REDIS_SKIP_THRESHOLD_ROWS:
         # TINY DATASET: Skip Redis pickling overhead, use memory-only cache
-        logger.debug(
-            f"⚡ TINY DATASET ({row_count} rows < {REDIS_SKIP_THRESHOLD_ROWS} threshold) - Skipping Redis, memory-only cache"
-        )
         actual_size = size_bytes  # Use estimate, avoid expensive df.estimated_size() scan
 
         # Memory cache only (much faster than Redis for tiny datasets)
@@ -1118,7 +993,6 @@ def load_and_cache_dataframe(cache_key: str, size_bytes: int, delta_scan) -> pl.
                 "timestamp": time.time(),
             }
             _total_memory_usage += actual_size
-            logger.debug(f"💾 Memory cached (Redis skipped): {cache_key} ({row_count} rows)")
 
         return df
 
@@ -1130,10 +1004,9 @@ def load_and_cache_dataframe(cache_key: str, size_bytes: int, delta_scan) -> pl.
     try:
         from depictio.api.cache import cache_dataframe
 
-        if cache_dataframe(cache_key, df):
-            logger.debug(f"✅ Redis cached: {cache_key} ({actual_size / (1024 * 1024):.2f} MB)")
-    except Exception as e:
-        logger.debug(f"Redis caching failed: {e}")
+        cache_dataframe(cache_key, df)
+    except Exception:
+        pass
 
     # Also cache in memory if under threshold (faster access during session)
     if _total_memory_usage + actual_size <= MEMORY_THRESHOLD_BYTES:
@@ -1143,13 +1016,6 @@ def load_and_cache_dataframe(cache_key: str, size_bytes: int, delta_scan) -> pl.
             "timestamp": time.time(),
         }
         _total_memory_usage += actual_size
-
-        logger.debug(f"💾 Memory cached: {cache_key} ({actual_size / (1024 * 1024):.2f} MB)")
-        logger.debug(
-            f"Total memory usage: {_total_memory_usage} bytes ({_total_memory_usage / (1024 * 1024):.2f} MB)"
-        )
-    else:
-        logger.debug(f"DataFrame {cache_key} too large for memory cache ({actual_size} bytes)")
 
     return df
 
@@ -1169,9 +1035,6 @@ def apply_runtime_filters(df: pl.DataFrame, metadata: list[dict] | None) -> pl.D
         return df
 
     original_row_count = df.height
-    logger.debug(
-        f"🔍 Applying runtime filters to DataFrame ({original_row_count} rows) with {len(metadata)} filter criteria"
-    )
 
     # Get DataFrame columns for validation
     df_columns = set(df.columns)
@@ -1214,12 +1077,6 @@ def apply_runtime_filters(df: pl.DataFrame, metadata: list[dict] | None) -> pl.D
 
     filter_expressions = process_metadata_and_filter(metadata)
 
-    # Debug logging for filter expressions
-    if filter_expressions:
-        logger.debug(f"🔍 Generated {len(filter_expressions)} filter expression(s):")
-        for i, expr in enumerate(filter_expressions, 1):
-            logger.debug(f"   Filter {i}: {expr}")
-
     if filter_expressions:
         try:
             # Apply filters using Polars expressions on materialized DataFrame
@@ -1227,14 +1084,7 @@ def apply_runtime_filters(df: pl.DataFrame, metadata: list[dict] | None) -> pl.D
             for filt in filter_expressions[1:]:
                 combined_filter &= filt
 
-            logger.debug(f"🔍 Combined filter expression: {combined_filter}")
-
             df = df.filter(combined_filter)
-            filtered_row_count = df.height
-            logger.info(
-                f"✅ Filtering applied successfully: {original_row_count} → {filtered_row_count} rows "
-                f"({len(metadata)} filter(s), {original_row_count - filtered_row_count} rows removed)"
-            )
         except pl.exceptions.ColumnNotFoundError as e:
             logger.error(f"❌ Column not found when applying filters: {e}")
             logger.error(f"Available columns: {sorted(df_columns)}")
@@ -1288,8 +1138,6 @@ def clear_memory_cache():
     _cache_metadata.clear()
     _total_memory_usage = 0
 
-    logger.info("Cleared all cached DataFrames from memory")
-
 
 def join_deltatables_dev(
     wf_id: str, joins: list, metadata: dict | None = None, TOKEN: str | None = None
@@ -1299,7 +1147,6 @@ def join_deltatables_dev(
         metadata = {}
 
     loaded_dfs = {}
-    logger.debug(f"Loading dataframes for workflow {wf_id}")
 
     for join_dict in joins:
         for join_id in join_dict:
@@ -1364,5 +1211,4 @@ def join_deltatables_dev(
                 new_df_normalized, on=common_columns, how=join_details["how"]
             )
 
-    logger.debug(f"Join complete: merged_df shape: {merged_df.shape}")
     return merged_df

@@ -337,16 +337,18 @@ def register_interactive_design_callbacks(app) -> None:
         Output({"type": "input-dropdown-method", "index": MATCH}, "data"),
         [
             Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
-            Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
-            Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             Input("edit-page-context", "data"),
+        ],
+        [
+            State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             State({"type": "input-dropdown-method", "index": MATCH}, "id"),
             State("local-store", "data"),
         ],
-        prevent_initial_call=False,
+        prevent_initial_call=True,
     )
     def update_aggregation_options(
-        column_value, workflow_id, data_collection_id, edit_context, id, local_data
+        column_value, edit_context, workflow_id, data_collection_id, id, local_data
     ):
         """
         Populate method dropdown based on selected column type.
@@ -356,9 +358,9 @@ def register_interactive_design_callbacks(app) -> None:
 
         Args:
             column_value: Selected column name.
-            workflow_id: Workflow ID (from stepper or edit context).
-            data_collection_id: Data collection ID (from stepper or edit context).
             edit_context: Edit page context (used in edit mode).
+            workflow_id: Workflow ID (from stepper State).
+            data_collection_id: Data collection ID (from stepper State).
             id: Component ID dict.
             local_data: Local store data containing access token.
 
@@ -378,7 +380,11 @@ def register_interactive_design_callbacks(app) -> None:
         TOKEN = local_data["access_token"]
 
         # In edit mode, get workflow/dc IDs from edit context
-        if edit_context and (not workflow_id or not data_collection_id):
+        if (
+            edit_context
+            and isinstance(edit_context, dict)
+            and (not workflow_id or not data_collection_id)
+        ):
             component_data = edit_context.get("component_data", {})
             if component_data:
                 workflow_id = workflow_id or component_data.get("wf_id")
@@ -642,7 +648,4 @@ def register_interactive_design_callbacks(app) -> None:
             }
         )
 
-        logger.debug(f"Updated stored metadata: {current_metadata}")
         return current_metadata
-
-    logger.debug("Interactive design callbacks registered")

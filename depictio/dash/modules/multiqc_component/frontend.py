@@ -147,8 +147,6 @@ def design_multiqc(
     Returns:
         DMC Paper component containing the complete MultiQC visualization.
     """
-    logger.info(f"Designing MultiQC component with id: {id}")
-    logger.info(f"Workflow ID: {workflow_id}, Data Collection ID: {data_collection_id}")
 
     # Extract string ID if id is a dictionary (from stepper context)
     if isinstance(id, dict):
@@ -161,9 +159,6 @@ def design_multiqc(
     initial_module = kwargs.get("selected_module")
     initial_plot = kwargs.get("selected_plot")
     initial_dataset = kwargs.get("selected_dataset")
-    logger.info(
-        f"Initial state - Module: {initial_module}, Plot: {initial_plot}, Dataset: {initial_dataset}"
-    )
 
     # MultiQC component with orange theme
     multiqc_content = dmc.Paper(

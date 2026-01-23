@@ -125,9 +125,7 @@ def create_stepper_page(
     Returns:
         Complete page layout with stepper wizard
     """
-    logger.info(
-        f"🎨 STEPPER PAGE (ADD MODE) - Dashboard: {dashboard_id}, Component: {component_id}"
-    )
+    logger.debug(f"Stepper page (add mode) - dashboard: {dashboard_id}, component: {component_id}")
 
     # Fetch dashboard data for context
     dashboard_data = None
@@ -235,10 +233,6 @@ def create_stepper_page(
             "minHeight": "100vh",
             "width": "100%",
         },
-    )
-
-    logger.info(
-        f"✅ STEPPER PAGE - Created ADD page for component {component_id} in dashboard {dashboard_id}"
     )
 
     return page_layout
