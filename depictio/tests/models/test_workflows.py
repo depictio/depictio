@@ -555,7 +555,7 @@ class TestWorkflowIntegration:
         # mock_context.return_value = "server"
 
         # Path to the actual YAML file
-        yaml_file_path = "depictio/api/v1/configs/iris_dataset/initial_project.yaml"
+        yaml_file_path = "depictio/api/v1/configs/projects/init/iris/project.yaml"
 
         # Parse YAML
         with open(yaml_file_path) as file:
@@ -595,7 +595,7 @@ class TestWorkflowIntegration:
         assert isinstance(workflow.data_location, WorkflowDataLocation)
         assert workflow.data_location.structure == "flat"
         assert workflow.data_location.locations == [
-            "/app/depictio/depictio/api/v1/configs/iris_dataset"
+            "/app/depictio/depictio/api/v1/configs/projects/init/iris"
         ]
 
         # Validate data collections
@@ -610,7 +610,7 @@ class TestWorkflowIntegration:
         assert isinstance(dc.config.scan.scan_parameters, ScanSingle)  # type: ignore[attr-defined]
         assert (
             dc.config.scan.scan_parameters.filename  # type: ignore[attr-defined]
-            == "/app/depictio/api/v1/configs/iris_dataset/iris.csv"
+            == "/app/depictio/api/v1/configs/projects/init/iris/data/iris.csv"
         )
         from depictio.models.models.data_collections_types.table import DCTableConfig
 

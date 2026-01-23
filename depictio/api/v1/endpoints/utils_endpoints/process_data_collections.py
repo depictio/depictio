@@ -101,9 +101,7 @@ def sync_process_initial_data_collections() -> dict[str, Any]:
     # Get the initial project
     from depictio import BASE_PATH
 
-    project_yaml_path = os.path.join(
-        BASE_PATH, "api/v1/configs/iris_dataset", "initial_project.yaml"
-    )
+    project_yaml_path = os.path.join(BASE_PATH, "api/v1/configs/projects/init/iris", "project.yaml")
     project_config = get_config(project_yaml_path)
     project_config_id = project_config["id"]
     logger.debug(f"Project config ID: {project_config_id}")
