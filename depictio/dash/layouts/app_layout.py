@@ -19,7 +19,7 @@ from depictio.dash.layouts.dashboards_management import layout as dashboards_man
 from depictio.dash.layouts.draggable import design_draggable
 
 # Depictio utils imports
-from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data_sync
+from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data
 from depictio.dash.layouts.header import design_header
 from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
 
@@ -273,7 +273,7 @@ def handle_authenticated_user(
         # Load dashboard data synchronously
         # PERFORMANCE OPTIMIZATION (Phase 5A): Pass cached user data to avoid redundant API call
         # PERFORMANCE OPTIMIZATION (API Consolidation): Pass dashboard_init_data to eliminate component API calls
-        depictio_dash_data = load_depictio_data_sync(
+        depictio_dash_data = load_depictio_data(
             dashboard_id=dashboard_id,
             local_data=local_data,
             theme=theme,

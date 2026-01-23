@@ -1042,7 +1042,7 @@ def discover_all_visualizations() -> Dict[str, VisualizationDefinition]:
         except Exception as e:
             logger.warning(f"Failed to create definition for {func_name}: {e}")
 
-    logger.info(f"Discovered {len(visualizations)} visualizations")
+    logger.debug(f"Discovered {len(visualizations)} visualizations")
     return visualizations
 
 

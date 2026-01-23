@@ -49,7 +49,6 @@ def get_workflow_logo_path(workflow_tag: str, theme: str = "light") -> Optional[
     if os.path.exists(base_path):
         return f"/assets/images/workflows/{base_logo}"
 
-    logger.debug(f"No logo found for workflow: {workflow_tag}")
     return None
 
 
@@ -98,12 +97,7 @@ def create_workflow_logo_overlay(
     logo_path = get_workflow_logo_path(workflow_tag, theme)
 
     if not logo_path:
-        logger.warning(f"🎨 LOGO OVERLAY: No logo path for workflow_tag: {workflow_tag}")
         return html.Div()
-
-    logger.info(
-        f"✅ LOGO OVERLAY: Creating overlay for {workflow_tag} (theme: {theme}) at path: {logo_path}"
-    )
 
     # Create overlay with DMC Image component
     return html.Div(

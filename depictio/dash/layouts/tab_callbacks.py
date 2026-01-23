@@ -126,7 +126,6 @@ def _build_tab_item(tab: dict):
     # Use default icon if icon is a file path
     if icon_name and ("/" in icon_name or icon_name.endswith((".png", ".svg", ".jpg", ".jpeg"))):
         icon_name = "mdi:view-dashboard"
-        logger.info(f"Tab '{tab_label}': Using default icon (file path detected)")
 
     return dmc.TabsTab(
         tab_label,
@@ -178,27 +177,17 @@ def register_tab_callbacks(app):
         """
         import dash_mantine_components as dmc
 
-        logger.info(
-            f"populate_sidebar_tabs called - pathname: {pathname}, "
-            f"has_cache: {bool(dashboard_cache)}, has_local: {bool(local_data)}"
-        )
-
         # Early exits for non-applicable pages
         if pathname and ("/component/edit/" in pathname or "/component/add/" in pathname):
-            logger.debug("Component page detected - skipping tab population")
             raise PreventUpdate
 
         if not pathname or ("/dashboard/" not in pathname and "/dashboard-edit/" not in pathname):
-            logger.debug("Not on dashboard page, skipping tab population")
             raise PreventUpdate
 
         # Extract dashboard ID and edit mode from pathname
         dashboard_id, is_edit_mode = _extract_dashboard_id_from_pathname(pathname)
         if not dashboard_id:
-            logger.warning("Failed to parse dashboard ID from pathname")
             raise PreventUpdate
-
-        logger.info(f"Dashboard ID: {dashboard_id}, Edit mode: {is_edit_mode}")
 
         # Validate access token
         if not local_data or "access_token" not in local_data:
@@ -227,10 +216,6 @@ def register_tab_callbacks(app):
 
             # Fetch child tabs and combine with main tab
             child_tabs = _fetch_child_tabs(parent_id, token)
-            logger.info(
-                f"Found {len(child_tabs)} child tabs for parent {parent_id}: "
-                f"{[t.get('title') for t in child_tabs]}"
-            )
 
             tabs = [main_tab] + child_tabs
             tabs.sort(key=lambda t: t.get("tab_order", 0))
@@ -243,13 +228,7 @@ def register_tab_callbacks(app):
                 user_permissions = dashboard_cache.get("user_permissions", {})
                 is_owner = user_permissions.get("level") == "owner"
 
-                logger.info(
-                    f"Permission check for Add Tab: level={user_permissions.get('level')}, "
-                    f"is_owner={is_owner}"
-                )
-
                 if is_owner:
-                    logger.debug("Adding '+ Add Tab' button to sidebar")
                     tab_items.append(
                         dmc.TabsTab(
                             "Add Tab",
@@ -263,7 +242,6 @@ def register_tab_callbacks(app):
                         )
                     )
 
-            logger.debug(f"Loaded {len(tab_items)} tabs for dashboard {dashboard_id}")
             return tab_items, dashboard_id
 
         except PreventUpdate:
@@ -314,7 +292,6 @@ def register_tab_callbacks(app):
                 # Legacy edit mode: append /edit suffix
                 new_pathname += "/edit"
 
-        logger.info(f"Navigating to tab: {new_pathname}")
         return new_pathname
 
     @app.callback(

@@ -631,7 +631,6 @@ def register_core_callbacks(app):
         """
 
         if not local_data:
-            logger.error("No local_data available!")
             return []
 
         TOKEN = local_data["access_token"]
@@ -657,9 +656,6 @@ def register_core_callbacks(app):
 
         # If any essential parameters are None, return empty list
         if not wf_tag or not dc_tag:
-            logger.error(
-                f"Missing essential workflow/dc parameters - wf_tag: {wf_tag}, dc_tag: {dc_tag}"
-            )
             return []
 
         # If column_name is None, return empty list
@@ -670,8 +666,7 @@ def register_core_callbacks(app):
         cols_json = None
 
         if not project_metadata:
-            logger.error("❌ project-metadata-store is empty! Cache not populated yet.")
-            # Fallback to API call if cache not ready (shouldn't happen with consolidated_api)
+            # Fallback to API call if cache not ready
             TOKEN = local_data["access_token"]
             cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
         else:
@@ -692,24 +687,18 @@ def register_core_callbacks(app):
                         break
 
             if not cols_json:
-                logger.warning(f"⚠️ Column specs not found in cache for wf={wf_tag}, dc={dc_tag}")
-                # Fallback to API call
+                # Fallback to API call when cache miss
                 TOKEN = local_data["access_token"]
                 cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
 
         # Check if cols_json is valid and contains the column
         if not cols_json:
-            logger.error("cols_json is empty or None!")
             return []
 
         if column_name not in cols_json:
-            logger.error(f"column_name '{column_name}' not found in cols_json!")
-            logger.error(f"Available columns: {list(cols_json.keys())}")
             return []
 
         if "type" not in cols_json[column_name]:
-            logger.error(f"'type' field missing for column '{column_name}'")
-            logger.error(f"Available fields: {list(cols_json[column_name].keys())}")
             return []
 
         # Get the type of the selected column
@@ -717,8 +706,6 @@ def register_core_callbacks(app):
 
         # Get the aggregation functions available for the selected column type
         if str(column_type) not in agg_functions:
-            logger.error(f"Column type '{column_type}' not found in agg_functions!")
-            logger.error(f"Available types: {list(agg_functions.keys())}")
             return []
 
         agg_functions_tmp_methods = agg_functions[str(column_type)]["card_methods"]

@@ -54,6 +54,8 @@ def create_shared_stores():
         dcc.Store(id="theme-relay-store", storage_type="memory"),
         # API base URL for clientside callbacks (populated on load)
         dcc.Store(id="api-base-url-store", storage_type="memory"),
+        # Edit page context (populated only on component edit pages, but needed by design callbacks)
+        dcc.Store(id="edit-page-context", storage_type="memory", data=None),
         # URL location
         dcc.Location(id="url", refresh=False),
         # Server status check interval (30 seconds) - pure clientside implementation

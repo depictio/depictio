@@ -12,6 +12,8 @@ The store is consumed by passive components (cards, figures, tables) to apply fi
 import dash
 from dash import Input, Output, State, dcc
 
+from depictio.api.v1.configs.logging_init import logger
+
 
 def get_interactive_stores():
     """
@@ -239,5 +241,9 @@ def register_store_update_callback(app):
             # Cards will handle partial data gracefully via idempotency checks
             if not components_values:
                 raise dash.exceptions.PreventUpdate
+
+        # Log filter changes (not initial load)
+        if not is_first_load:
+            logger.info(f"Filters updated: {len(components_values)} active filter(s)")
 
         return new_store_data

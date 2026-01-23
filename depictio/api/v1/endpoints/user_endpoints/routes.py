@@ -717,7 +717,6 @@ async def purge_expired_tokens_endpoint(
 @auth_endpoint_router.post("/check_token_validity", include_in_schema=True)
 async def check_token_validity_endpoint(token: TokenBase):
     validation_result = await _check_if_token_is_valid(token)
-    logger.debug(f"Token validity check for {token.name}: {validation_result}")
 
     return {
         "success": validation_result["access_valid"],

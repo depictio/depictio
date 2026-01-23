@@ -63,19 +63,9 @@ def register_ui_callbacks(app):
         # Don't build UI parameter interface if in code mode
         if current_mode == "code":
             return html.Div()  # Return empty div for code mode
-        logger.info(f"Visualization type: {visu_type}")
-        logger.info(f"Component ID: {edit_button_id.get('index') if edit_button_id else 'unknown'}")
 
         TOKEN = local_data["access_token"]
         component_index = edit_button_id["index"] if edit_button_id else "unknown"
-
-        logger.info(f"Component index: {component_index}")
-        logger.info(f"Workflow: {workflow}")
-        logger.info(f"Data collection: {data_collection}")
-
-        logger.debug("Fetching available columns for data collection...")
-        logger.info(f"Workflow ID: {workflow}")
-        logger.info(f"Data Collection ID: {data_collection}")
 
         # Get available columns
         try:
@@ -99,8 +89,6 @@ def register_ui_callbacks(app):
             visu_type = visu_type.lower()
         else:
             visu_type = "scatter"  # Default fallback
-
-        logger.info(f"Final visualization type: {visu_type}")
 
         try:
             # Get visualization definition

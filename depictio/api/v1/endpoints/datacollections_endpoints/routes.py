@@ -63,8 +63,6 @@ async def get_dc_joined(workflow_id: str, current_user: str = Depends(get_user_o
     Now reads from project-level joins (project.joins[]) instead of
     DC-level join configs (dc.config.join).
     """
-    logger.debug(f"Workflow ID: {workflow_id}")
-
     # Retrieve workflow
     workflow = await get_workflow_from_id(workflow_id, current_user=current_user)
 
@@ -88,16 +86,11 @@ async def get_dc_joined(workflow_id: str, current_user: str = Depends(get_user_o
                     if isinstance(project_response, dict)
                     else project_response.model_dump()
                 )
-                logger.debug(
-                    f"Retrieved project {project_id} with {len(project.get('joins', []))} joins"
-                )
             except Exception as e:
                 logger.warning(f"Failed to fetch project for workflow {workflow_id}: {e}")
 
     # Generate join dict from project-level joins
     join_details_map = generate_join_dict(workflow, project=project)
-
-    logger.debug(f"Join details: {join_details_map}")
 
     return join_details_map
 

@@ -720,8 +720,7 @@ def register_sidebar_callbacks(app) -> None:
             No output - Dash supports callbacks without return statements.
             This prevents component ID errors while allowing for future expansion.
             """
-            logger.debug(f"Sidebar tab changed to: {tab_value}")
-            # No return statement - Dash allows this for callbacks without outputs
+            pass  # No return statement - Dash allows this for callbacks without outputs
     except Exception as e:
         # Sidebar tabs may not exist in management app, skip callback
         logger.debug(f"Sidebar tabs callback not registered: {e}")

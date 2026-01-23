@@ -4,7 +4,9 @@ Depictio FastAPI Application.
 Main application entry point with middleware, routing, and error handling.
 """
 
+import logging
 import os
+import re
 from typing import Any, cast
 
 from fastapi import FastAPI
@@ -18,6 +20,32 @@ from depictio.api.v1.json_response import CustomJSONResponse
 from depictio.api.v1.middleware.analytics_middleware import AnalyticsMiddleware
 from depictio.api.v1.services.lifespan import lifespan
 from depictio.version import get_api_version, get_version
+
+
+# Custom filter to mask tokens in Uvicorn access logs
+class TokenMaskingFilter(logging.Filter):
+    """Filter that masks sensitive tokens in log messages."""
+
+    TOKEN_PATTERN = re.compile(r"(token|access_token|refresh_token)=([^&\s\"]+)")
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Mask tokens in the log message."""
+        if hasattr(record, "msg") and record.msg:
+            record.msg = self.TOKEN_PATTERN.sub(r"\1=***", str(record.msg))
+        if hasattr(record, "args") and record.args:
+            masked_args = []
+            for arg in record.args:
+                if isinstance(arg, str):
+                    masked_args.append(self.TOKEN_PATTERN.sub(r"\1=***", arg))
+                else:
+                    masked_args.append(arg)
+            record.args = tuple(masked_args)
+        return True
+
+
+# Apply token masking filter to uvicorn access logger
+uvicorn_access_logger = logging.getLogger("uvicorn.access")
+uvicorn_access_logger.addFilter(TokenMaskingFilter())
 
 # Check if in development mode
 dev_mode = os.environ.get("DEPICTIO_DEV_MODE", "false").lower() == "true"

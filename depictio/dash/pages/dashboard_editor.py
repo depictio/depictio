@@ -37,7 +37,7 @@ from depictio.dash.core.shared_auth import (
     validate_and_refresh_token,
 )
 from depictio.dash.layouts.draggable import design_draggable
-from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data_sync
+from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data
 from depictio.dash.layouts.header import design_header
 from depictio.dash.layouts.shared_app_shell import create_minimal_app_shell
 
@@ -157,6 +157,7 @@ def register_routing_callback(app):
         Output("header-content", "children"),
         Output("url", "pathname"),
         Output("local-store", "data", allow_duplicate=True),
+        Output("edit-page-context", "data", allow_duplicate=True),
         [
             Input("url", "pathname"),
         ],
@@ -191,19 +192,11 @@ def register_routing_callback(app):
             dashboard_init_data: Dashboard initialization data
 
         Returns:
-            tuple: (page_content, header_content, pathname, local_data)
+            tuple: (page_content, header_content, pathname, local_data, edit_context)
         """
-        logger.info("=" * 100)
-        logger.info(f"   Input pathname: {pathname}")
-        logger.info(f"   Triggered by: {ctx.triggered_id}")
-        logger.info(f"   Triggered prop: {ctx.triggered}")
-
         # CRITICAL FIX: When triggered by local-store update (not URL change),
         # don't update the pathname to prevent circular URL changes
         triggered_by_local_store = ctx.triggered_id == "local-store"
-
-        if triggered_by_local_store:
-            logger.info("   ⚠️ Triggered by local-store - will preserve current URL")
 
         # Extract theme
         theme = extract_theme_from_store(theme_store)
@@ -215,38 +208,40 @@ def register_routing_callback(app):
         if not is_authenticated:
             logger.info("User not authenticated - redirecting to /auth")
             # Always redirect to /auth on auth failure, even if triggered by local-store
+            # Use no_update for edit-page-context to avoid triggering pattern-matching callbacks
             return (
                 html.Div("Redirecting to login..."),
                 html.Div(),  # Empty header
                 "/auth",
                 {"logged_in": False, "access_token": None},
+                no_update,
             )
 
         # Type guard
         if not updated_local_data:
             logger.error("Auth validation returned None - forcing logout")
             # Always redirect to /auth on auth failure, even if triggered by local-store
+            # Use no_update for edit-page-context to avoid triggering pattern-matching callbacks
             return (
                 html.Div("Authentication error - redirecting..."),
                 html.Div(),  # Empty header
                 "/auth",
                 {"logged_in": False, "access_token": None},
+                no_update,
             )
 
         # Check if this is a component creation/editing route
         if "/component/add/" in pathname:
             result = route_component_creation(pathname, updated_local_data, theme)
-            logger.info("=" * 100)
             # If triggered by local-store, preserve current URL
             if triggered_by_local_store:
-                return result[0], result[1], no_update, result[3]
+                return result[0], result[1], no_update, result[3], result[4]
             return result
         elif "/component/edit/" in pathname:
             result = route_component_editing(pathname, updated_local_data, theme)
-            logger.info("=" * 100)
             # If triggered by local-store, preserve current URL
             if triggered_by_local_store:
-                return result[0], result[1], no_update, result[3]
+                return result[0], result[1], no_update, result[3], result[4]
             return result
 
         # Extract dashboard ID from pathname
@@ -256,9 +251,10 @@ def register_routing_callback(app):
             logger.warning(f"Invalid pathname format: {pathname}")
             error_content = create_error_layout("Invalid dashboard URL")
             # If triggered by local-store, preserve current URL
+            # Use no_update for edit-page-context to avoid triggering pattern-matching callbacks
             if triggered_by_local_store:
-                return error_content, html.Div(), no_update, updated_local_data
-            return error_content, html.Div(), pathname, updated_local_data
+                return error_content, html.Div(), no_update, updated_local_data, no_update
+            return error_content, html.Div(), pathname, updated_local_data, no_update
 
         # Load dashboard data in edit mode
         content, header_content = load_and_render_dashboard(
@@ -270,15 +266,12 @@ def register_routing_callback(app):
         )
 
         # If triggered by local-store, preserve current URL
+        # Don't update edit-page-context - use no_update to avoid triggering pattern-matching callbacks
+        # that reference design form components (which don't exist on the dashboard page)
         if triggered_by_local_store:
-            logger.info(
-                "📤 EDITOR ROUTING RETURNING - pathname: no_update (preserving current URL)"
-            )
-            logger.info("=" * 100)
-            return content, header_content, no_update, updated_local_data
+            return content, header_content, no_update, updated_local_data, no_update
         else:
-            logger.info("=" * 100)
-            return content, header_content, pathname, updated_local_data
+            return content, header_content, pathname, updated_local_data, no_update
 
 
 def route_component_creation(pathname: str, local_data: dict, theme: str):
@@ -291,7 +284,7 @@ def route_component_creation(pathname: str, local_data: dict, theme: str):
         theme: Current theme (light/dark)
 
     Returns:
-        tuple: (stepper_layout, header_content, pathname, local_data)
+        tuple: (stepper_layout, header_content, pathname, local_data, edit_context)
     """
     from depictio.dash.layouts.stepper_page import create_stepper_page
 
@@ -308,11 +301,13 @@ def route_component_creation(pathname: str, local_data: dict, theme: str):
         # Empty header for stepper page (or create minimal header)
         header_content = html.Div()
 
-        return stepper_layout, header_content, pathname, local_data
+        # No edit context for component creation (stepper has its own stores)
+        # Use no_update to avoid triggering pattern-matching callbacks
+        return stepper_layout, header_content, pathname, local_data, no_update
 
     # Invalid format
     error_content = create_error_layout("Invalid component creation URL")
-    return error_content, html.Div(), pathname, local_data
+    return error_content, html.Div(), pathname, local_data, no_update
 
 
 def route_component_editing(pathname: str, local_data: dict, theme: str):
@@ -325,7 +320,7 @@ def route_component_editing(pathname: str, local_data: dict, theme: str):
         theme: Current theme (light/dark)
 
     Returns:
-        tuple: (edit_layout, header_content, pathname, local_data)
+        tuple: (edit_layout, header_content, pathname, local_data, edit_context)
     """
     from depictio.dash.api_calls import api_call_get_dashboard
     from depictio.dash.layouts.edit_page import create_edit_page
@@ -351,12 +346,8 @@ def route_component_editing(pathname: str, local_data: dict, theme: str):
                 # Try multiple fields: component_id, index, _id
                 for meta in stored_metadata:
                     meta_id = str(meta.get("component_id", meta.get("index", meta.get("_id"))))
-                    logger.debug(f"  Comparing {meta_id} with {component_id}")
                     if meta_id == str(component_id):
                         component_data = meta
-                        logger.info(
-                            f"✅ EDIT COMPONENT - Found component data: {meta.get('component_type')}"
-                        )
                         break
 
                 if not component_data:
@@ -367,15 +358,15 @@ def route_component_editing(pathname: str, local_data: dict, theme: str):
                     error_content = create_error_layout(
                         f"Component {component_id} not found in dashboard"
                     )
-                    return error_content, html.Div(), pathname, local_data
+                    return error_content, html.Div(), pathname, local_data, no_update
 
             except Exception as e:
                 logger.error(f"Failed to load component data: {e}")
                 error_content = create_error_layout("Failed to load component data")
-                return error_content, html.Div(), pathname, local_data
+                return error_content, html.Div(), pathname, local_data, no_update
         else:
             error_content = create_error_layout("Authentication required")
-            return error_content, html.Div(), pathname, local_data
+            return error_content, html.Div(), pathname, local_data, no_update
 
         # Get dashboard title
         dashboard_title = (
@@ -398,11 +389,18 @@ def route_component_editing(pathname: str, local_data: dict, theme: str):
         # Empty header for edit page (or create minimal header)
         header_content = html.Div()
 
-        return edit_layout, header_content, pathname, local_data
+        # Set edit context for component save callbacks
+        edit_context = {
+            "dashboard_id": dashboard_id,
+            "component_id": component_id,
+            "component_data": component_data,
+        }
+
+        return edit_layout, header_content, pathname, local_data, edit_context
 
     # Invalid format
     error_content = create_error_layout("Invalid component editing URL")
-    return error_content, html.Div(), pathname, local_data
+    return error_content, html.Div(), pathname, local_data, no_update
 
 
 def extract_dashboard_id(pathname: str) -> Optional[str]:
@@ -447,7 +445,7 @@ def load_and_render_dashboard(
         tuple: (dashboard_layout, header_content) - Dashboard layout and header content
     """
     # Load dashboard data
-    depictio_dash_data = load_depictio_data_sync(
+    depictio_dash_data = load_depictio_data(
         dashboard_id=dashboard_id,
         local_data=local_data,
         theme=theme,
@@ -470,14 +468,6 @@ def load_and_render_dashboard(
     # Extract dual-panel layout data
     left_panel_layout_data = depictio_dash_data.get("left_panel_layout_data", [])
     right_panel_layout_data = depictio_dash_data.get("right_panel_layout_data", [])
-
-    # DEBUG: Log loaded layout data
-    logger.info(f"   - LEFT panel: {len(left_panel_layout_data)} layout items")
-    logger.info(f"   - RIGHT panel: {len(right_panel_layout_data)} layout items")
-    if left_panel_layout_data:
-        logger.info(f"   - LEFT sample: {left_panel_layout_data[:2]}")
-    if right_panel_layout_data:
-        logger.info(f"   - RIGHT sample: {right_panel_layout_data[:2]}")
 
     # Render draggable layout (EDIT MODE)
     core = design_draggable(

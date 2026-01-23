@@ -420,13 +420,19 @@ def _fetch_dc_tag_with_lru_cache(data_collection_id_str: str, TOKEN: str, token_
         return None
 
 
+# Cache for join DC lookups (workflow_id -> result_dc_id)
+_join_dc_cache: Dict[str, str | None] = {}
+_join_dc_cache_timestamp: Dict[str, float] = {}
+JOIN_DC_CACHE_TTL_SECONDS = 300  # 5 minutes
+
+
 def get_result_dc_for_workflow(workflow_id: str, TOKEN: str | None) -> str | None:
     """
     Get pre-computed join result DC for a workflow.
 
     This helper function fetches the result_dc_id for a workflow that has pre-computed joins.
     The join execution happens during CLI batch processing, and this function retrieves
-    the stored result DC ID.
+    the stored result DC ID. Results are cached for 5 minutes to avoid redundant API calls.
 
     Args:
         workflow_id: Workflow ID (string or ObjectId)
@@ -440,9 +446,17 @@ def get_result_dc_for_workflow(workflow_id: str, TOKEN: str | None) -> str | Non
         >>> if result_dc_id:
         >>>     df = load_deltatable_lite(workflow_id, ObjectId(result_dc_id), metadata, TOKEN)
     """
+    import time
+
     if not TOKEN:
-        logger.warning("No TOKEN provided - cannot fetch pre-computed join")
         return None
+
+    # Check cache first
+    cache_key = str(workflow_id)
+    if cache_key in _join_dc_cache:
+        cache_age = time.time() - _join_dc_cache_timestamp.get(cache_key, 0)
+        if cache_age < JOIN_DC_CACHE_TTL_SECONDS:
+            return _join_dc_cache[cache_key]
 
     try:
         response = httpx.get(
@@ -455,16 +469,17 @@ def get_result_dc_for_workflow(workflow_id: str, TOKEN: str | None) -> str | Non
             if workflow_joins:
                 # Return first result DC (extend for multiple joins if needed)
                 result_dc_id = next(iter(workflow_joins.keys()))
+                _join_dc_cache[cache_key] = result_dc_id
+                _join_dc_cache_timestamp[cache_key] = time.time()
                 return result_dc_id
             else:
+                # Cache the "no join" result too
+                _join_dc_cache[cache_key] = None
+                _join_dc_cache_timestamp[cache_key] = time.time()
                 return None
         else:
-            logger.warning(
-                f"Failed to fetch join DC for workflow {workflow_id}: {response.status_code}"
-            )
             return None
-    except Exception as e:
-        logger.warning(f"Failed to fetch join DC for workflow {workflow_id}: {e}")
+    except Exception:
         return None
 
 

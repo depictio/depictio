@@ -74,10 +74,6 @@ def render_dashboard(
     Returns:
         List of rendered components with callback infrastructure
     """
-    import time
-
-    start = time.time()
-
     from depictio.dash.layouts.draggable import clean_stored_metadata
     from depictio.dash.layouts.edit import enable_box_edit_mode
 
@@ -104,14 +100,6 @@ def render_dashboard(
         # Get component type
         component_type = child_metadata.get("component_type")
 
-        # Log metadata for interactive components
-        if component_type == "interactive":
-            logger.debug(
-                f"Interactive component: index={child_metadata.get('index')}, "
-                f"column={child_metadata.get('column_name')}, "
-                f"type={child_metadata.get('interactive_component_type')}"
-            )
-
         # Handle legacy type conversion
         if component_type not in build_functions and component_type in DISPLAY_NAME_TO_TYPE_MAPPING:
             component_type = DISPLAY_NAME_TO_TYPE_MAPPING[component_type]
@@ -135,12 +123,6 @@ def render_dashboard(
         )
 
         children.append(wrapped)
-
-    duration_ms = (time.time() - start) * 1000
-    logger.info(
-        f"⏱️ PROFILING: render_dashboard took {duration_ms:.1f}ms for {len(children)} components "
-        f"(avg={duration_ms / len(children) if children else 0:.1f}ms/component)"
-    )
 
     return children
 
@@ -578,7 +560,7 @@ def render_dashboard_original(
     return processed_children
 
 
-def load_depictio_data_sync(
+def load_depictio_data(
     dashboard_id: str,
     local_data: dict,
     theme: str = "light",
@@ -607,31 +589,21 @@ def load_depictio_data_sync(
     Raises:
         ValueError: If the dashboard data cannot be fetched or is invalid.
     """
-    import time
-
-    start_time_total = time.time()
-
     # Ensure theme is valid
     if not theme or theme == {} or theme == "{}":
         theme = "light"
-    logger.debug(f"Using theme: {theme} for dashboard rendering")
 
     if not local_data["access_token"]:
         logger.warning("Access token not found.")
         return None
 
-    # PROFILING: Measure dashboard metadata fetch
-    start_fetch = time.time()
     dashboard_data_dict = api_call_get_dashboard(dashboard_id, local_data["access_token"])
-    fetch_duration_ms = (time.time() - start_fetch) * 1000
+    logger.info(f"Loading dashboard {dashboard_id}")
     if not dashboard_data_dict:
         logger.error(f"Failed to fetch dashboard data for {dashboard_id}")
         raise ValueError(f"Failed to fetch dashboard data: {dashboard_id}")
 
-    # PROFILING: Measure Pydantic parsing
-    start_parsing = time.time()
     dashboard_data = DashboardData.from_mongo(dashboard_data_dict)
-    parsing_duration_ms = (time.time() - start_parsing) * 1000
 
     if dashboard_data:
         if not hasattr(dashboard_data, "buttons_data"):
@@ -650,17 +622,12 @@ def load_depictio_data_sync(
 
         if hasattr(dashboard_data, "stored_metadata"):
             # PERFORMANCE OPTIMIZATION (Phase 5A): Use cached user data
-            start_user_fetch = time.time()
             if cached_user_data:
                 current_user = cached_user_data
             else:
                 current_user = api_call_fetch_user_from_token(
                     local_data["access_token"]
                 )  # Fallback only
-                user_fetch_duration_ms = (time.time() - start_user_fetch) * 1000
-                logger.info(
-                    f"⏱️ PROFILING: api_call_fetch_user_from_token took {user_fetch_duration_ms:.1f}ms"
-                )
 
             # Check if data is available, if not set the buttons to disabled
             # Note: current_user can be either a dict (from cache) or User object (from API)
@@ -719,9 +686,6 @@ def load_depictio_data_sync(
                     edit_components_button_checked = False
 
             # Use regular dashboard rendering - progressive loading will be handled at UI level
-            logger.debug("Rendering dashboard components")
-            # PROFILING: Measure component rendering
-            start_render = time.time()
             children = render_dashboard(
                 dashboard_data.stored_metadata,
                 edit_components_button_checked,
@@ -731,21 +695,10 @@ def load_depictio_data_sync(
                 init_data=init_data,  # Pass consolidated init data to components
                 project_id=dashboard_data.project_id,  # Pass project_id for cross-DC link resolution
             )
-            render_duration_ms = (time.time() - start_render) * 1000
 
             dashboard_data.stored_children_data = children
 
-        # PROFILING: Measure model conversion
-        start_convert = time.time()
         dashboard_data = convert_model_to_dict(dashboard_data)
-        convert_duration_ms = (time.time() - start_convert) * 1000
-
-        total_duration_ms = (time.time() - start_time_total) * 1000
-        logger.info(
-            f"⏱️ PROFILING: load_depictio_data_sync TOTAL took {total_duration_ms:.1f}ms "
-            f"(fetch={fetch_duration_ms:.1f}ms, parse={parsing_duration_ms:.1f}ms, "
-            f"render={render_duration_ms:.1f}ms, convert={convert_duration_ms:.1f}ms)"
-        )
 
         return dashboard_data
     else:

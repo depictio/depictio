@@ -140,26 +140,18 @@ def validate_and_refresh_token(local_data: Optional[Dict]) -> Tuple[Optional[Dic
         )
         validation_result = check_token_validity(token)
 
-        logger.debug(f"SHARED_AUTH: Token validation result: {validation_result}")
-
         # Handle different scenarios
         if validation_result["action"] == "valid":
             # Access token is valid, continue normally
-            logger.debug("SHARED_AUTH: Access token valid - proceeding")
             return local_data, True, "valid"
 
         elif validation_result["action"] == "refresh":
             # Access token expired but refresh token valid
-            logger.info(
-                "SHARED_AUTH: Access token expired but refresh token valid - attempting refresh"
-            )
-
             refreshed_data = refresh_access_token(local_data["refresh_token"])
 
             if refreshed_data:
                 # Update local_data with new access token
                 local_data.update(refreshed_data)
-                logger.info("SHARED_AUTH: Token refreshed successfully")
                 return local_data, True, "refreshed"
             else:
                 logger.warning("SHARED_AUTH: Token refresh failed - forcing logout")

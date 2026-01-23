@@ -39,6 +39,5 @@ else
         --timeout 120 \
         --keep-alive 5 \
         --preload \
-        --access-logfile - \
-        --error-logfile -
+        --config depictio/api/gunicorn_conf.py
 fi

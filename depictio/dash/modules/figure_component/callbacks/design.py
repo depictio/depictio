@@ -75,10 +75,6 @@ def register_design_callbacks(app):
             code_interface_children = create_code_mode_interface(
                 component_index, current_code or ""
             )
-            logger.info(f"Switched to CODE MODE for {component_index}")
-            logger.info(
-                f"   Populated editor with {len(current_code) if current_code else 0} characters"
-            )
         else:
             # Create hidden code-status component to ensure callbacks work
             code_interface_children = [
@@ -90,7 +86,6 @@ def register_design_callbacks(app):
                     style=STYLE_HIDDEN,
                 )
             ]
-            logger.info(f"Switched to UI MODE for {component_index}")
 
         return (
             STYLE_HIDDEN if is_code_mode else STYLE_BLOCK,  # ui_content_style
@@ -136,16 +131,9 @@ def register_design_callbacks(app):
             return dash.no_update
 
         has_stored_code = stored_metadata and stored_metadata.get("code_content")
-        logger.info("=== store_generated_code CALLBACK CALLED ===")
-        logger.info(f"Mode: {mode}")
-        logger.info(f"Dict kwargs: {dict_kwargs}")
-        logger.info(f"Visualization type label: {visu_type_label}")
-        logger.info(f"Current code content: {bool(current_code_content)}")
-        logger.info(f"Stored metadata code: {bool(has_stored_code)}")
 
         # UI mode - no code update needed
         if mode != "code":
-            logger.info("UI mode - no code update needed")
             return dash.no_update
 
         # Priority 1: Use code from stored_metadata (loading existing code mode figure)
@@ -178,10 +166,7 @@ def register_design_callbacks(app):
     def sync_code_editor_to_store(editor_value, current_mode):
         """Sync code editor changes to code-content-store for dashboard saving."""
         if current_mode != "code":
-            logger.debug("Not in code mode - skipping code editor sync")
             return dash.no_update
-
-        logger.info(f"   Code length: {len(editor_value) if editor_value else 0}")
 
         return editor_value or ""
 
@@ -298,28 +283,18 @@ def register_design_callbacks(app):
 
         from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
-        logger.info(f"update_columns_info called: mode={mode}")
-
         # Guard: Return no_update if mode is None (component not ready)
         if mode is None:
-            logger.debug("update_columns_info: Mode is None - component not ready yet")
             return dash.no_update
 
         # Only update when in code mode
         if mode != "code":
-            logger.debug("Not in code mode, skipping update")
             return dash.no_update
 
         if not local_data:
-            logger.info("No local data available")
             return "Authentication required."
 
         try:
-            # Get component index from the callback context
-            dashboard_id = pathname.split("/")[-1] if pathname else None
-
-            logger.debug(f"Getting component data for dashboard: {dashboard_id}")
-
             if not workflow_id or not data_collection_id:
                 return "Please ensure workflow and data collection are selected in the component."
 
@@ -380,7 +355,6 @@ def register_design_callbacks(app):
         if not should_auto_execute:
             return dash.no_update
 
-        logger.info(f"   Code length: {len(code_content)}")
         return (current_clicks or 0) + 1
 
     # Update Ace editor theme based on app theme
@@ -396,7 +370,6 @@ def register_design_callbacks(app):
 
         # Map app theme to Ace editor themes
         ace_theme = "monokai" if theme == "dark" else "github"
-        logger.debug(f"Setting Ace editor theme to: {ace_theme} (app theme: {theme})")
         return ace_theme
 
     # Execute code button - live preview
@@ -478,9 +451,6 @@ def register_design_callbacks(app):
         if not n_clicks or not code_content:
             return (dash.no_update,) * 6
 
-        logger.info("=== EXECUTE CODE PREVIEW ===")
-        logger.info(f"Code length: {len(code_content)} characters")
-
         # Validate inputs
         if not workflow_id or not data_collection_id:
             return error_response(
@@ -510,9 +480,7 @@ def register_design_callbacks(app):
                 if "template=" not in code_content:
                     theme_template = f"mantine_{current_theme}"
                     fig.update_layout(template=theme_template)
-                    logger.debug(f"Applied theme template: {theme_template}")
 
-                logger.info("Code execution successful")
                 return success_response(fig)
 
             logger.error(f"Code execution failed: {message}")
