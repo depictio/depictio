@@ -6,18 +6,18 @@
 
 
 <details>
-<summary>Click to expand the changelog for 0.6.0-b9</summary>
+<summary>Click to expand the changelog for 0.6.0-b10</summary>
 
 ### Changes 📜
 
-#### New Features ✨
+#### Bug Fixes 🐛
 
-* feat: add EMBL self-hosted deployment workflow [cd3382f2]
+* fix: use absolute path for secrets file on self-hosted runner [a6a1223c]
 
 #### Other Changes 📝
 
-* Bump version: 0.6.0-b8 → 0.6.0-b9 [30b5855d]
-* Update CHANGELOG.md for v0.6.0-b8 [c119d278]
+* Bump version: 0.6.0-b9 → 0.6.0-b10 [40a2fa48]
+* Update CHANGELOG.md for v0.6.0-b9 [fbe2c2d9]
 
 
 </details>
@@ -26,38 +26,7 @@
 
 For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
 
-ers and logging for card, interactive, and table components [1b2849aa]
-* feat: Implement bulk pre-fetching of component data for performance optimization [e5a30f71]
-* feat: Optimize component update process by skipping rebuilds for non-interactive components [15ea04b7]
-* feat: Enhance component data caching and implement batch fetching for performance optimization [97458def]
-* feat: Add bulk component data retrieval endpoint for performance optimization [d4550a1d]
-* feat: Add performance profiling utilities for the Depictio Dash application [27f3b1eb]
-* feat: Implement Simple Redis caching for DataFrames with memory fallback [df4ec227]
-* feat: Integrate Redis caching for DataFrame loading and enhance memory management [92988d8d]
-* feat: Add Redis service to Docker Compose with healthcheck and environment configuration [ef9fbc71]
-* feat: Implement theme support for AG Grid across project data collections and user management modules [6215c548]
-* feat: Refactor theme handling in components and disable theme switch on dashboard pages [e4ad6300]
-* feat: Add detailed pod status monitoring for frontend and backend during resource propagation [df592313]
-* feat: Enhance wait step for backend service availability with improved logging and timeout handling [7d6d2a3c]
-* feat: Add wait step for Kubernetes resources propagation in Helm chart workflow [ff37df73]
-* feat: Enhance Helm chart installation and debugging output for better visibility and error handling [519776ac]
-* feat: Add Google Analytics configuration options and adjust resource limits for backend and MinIO [d2ceeaed]
-
-#### Bug Fixes 🐛
-
-* fix: Disable trapFocus in modals to improve DMC Switch clickability [2db5403f]
-* fix: Disable automatic figure generation by default in DashConfig [3f01b810]
-* fix: Update workload monitoring in Helm chart workflow to include statefulsets and improve logging [8d73555d]
-* fix: Disable automatic figure generation by default in DashConfig [9d5f3e13]
-* fix: Remove template from dashboard configuration to allow default settings [34059fd4]
-* fix: Optimize deployment status checks and skip wait for already verified pods [a5c81356]
-* fix: Improve deployment counting and logging for Helm chart resource propagation [1e3c7205]
-
-#### Improvements 🚀
-
-* refactor: reorganize .gitignore for development environment clarity [f5f22efa]
-* refactor: Update debug logging in register_callbacks_save for improved clarity [0fb71185]
-* refactor: Disable loading state to prevent infinite spinner issue and improve UI responsiveness [38112c70]
+er issue and improve UI responsiveness [38112c70]
 * refactor: Improve component selection logic in register_callbacks_stepper_part_one [66c2cd52]
 * refactor: Rename update_interactive_component to update_interactive_component_sync for consistency [6498d074]
 * refactor: Comment out celery worker service in docker-compose for clarity [9aa74c8d]
