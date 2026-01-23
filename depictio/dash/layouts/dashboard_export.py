@@ -378,6 +378,7 @@ def export_dashboard_to_file(
 
 def extract_charts_from_stored_metadata(
     stored_metadata: list[dict[str, Any]],
+    figure_map: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """
     Extract chart data and card data from stored metadata.
@@ -387,6 +388,7 @@ def extract_charts_from_stored_metadata(
 
     Args:
         stored_metadata: List of component metadata dictionaries
+        figure_map: Dictionary mapping component indices to rendered figure data
 
     Returns:
         tuple: (charts_json, cards_data) - Lists of chart JSON and card data
@@ -394,30 +396,39 @@ def extract_charts_from_stored_metadata(
     charts_json: list[dict[str, Any]] = []
     cards_data: list[dict[str, Any]] = []
 
+    if figure_map is None:
+        figure_map = {}
+
     for component in stored_metadata:
         component_type = component.get("component_type", "")
+        component_index = str(component.get("index", ""))
 
         if component_type == "figure":
-            # Extract figure data if available
-            fig_json = component.get("figure_json")
-            if fig_json:
-                charts_json.append(fig_json)
+            # Try to get the rendered figure from the figure_map
+            fig_data = figure_map.get(component_index)
+
+            if fig_data and isinstance(fig_data, dict) and fig_data.get("data"):
+                # Use the actual rendered figure
+                logger.info(f"Using rendered figure for component {component_index}")
+                charts_json.append(fig_data)
             else:
-                # Create placeholder chart data
-                chart_data: dict[str, Any] = {
-                    "data": [],
-                    "layout": {
-                        "title": {"text": component.get("title", "Chart")},
-                        "template": "plotly_white",
-                    },
-                }
-                charts_json.append(chart_data)
+                # Log warning and skip empty figures
+                logger.warning(f"No rendered figure data for component {component_index}, skipping")
 
         elif component_type == "card":
+            # Extract card value and handle None
+            card_value = component.get("value")
+            if card_value is None or card_value == "":
+                card_value = "N/A"
+
+            # Format the value if it's a number
+            if isinstance(card_value, (int, float)):
+                card_value = f"{card_value:,.2f}"
+
             card_info = {
                 "title": component.get("title", "Metric"),
-                "value": component.get("value", "N/A"),
-                "subtitle": component.get("subtitle", ""),
+                "value": str(card_value),
+                "subtitle": "",  # Cards don't have subtitle in current implementation
             }
             cards_data.append(card_info)
 
@@ -449,6 +460,8 @@ def register_export_callbacks(app: Any) -> None:
             State("local-store", "data"),
             State({"type": "stored-metadata-component", "index": ALL}, "data"),
             State({"type": "interactive-stored-metadata", "index": ALL}, "data"),
+            State({"type": "figure-graph", "index": ALL}, "figure"),
+            State({"type": "figure-graph", "index": ALL}, "id"),
         ],
         prevent_initial_call=True,
     )
@@ -458,6 +471,8 @@ def register_export_callbacks(app: Any) -> None:
         local_store: dict[str, Any] | None,
         stored_metadata: list[dict[str, Any]],
         interactive_metadata: list[dict[str, Any]],
+        figure_data: list[dict[str, Any]],
+        figure_ids: list[dict[str, Any]],
     ) -> list[dict[str, Any] | None]:
         """
         Export the current dashboard state as a standalone HTML file.
@@ -517,8 +532,18 @@ def register_export_callbacks(app: Any) -> None:
             all_metadata = (stored_metadata or []) + (interactive_metadata or [])
             logger.info(f"Processing {len(all_metadata)} components for export")
 
+            # Create a mapping of component indices to figure data
+            figure_map = {}
+            for fig_id, fig_data in zip(figure_ids, figure_data):
+                if fig_id and fig_data:
+                    index = fig_id.get("index")
+                    if index:
+                        figure_map[str(index)] = fig_data
+
+            logger.info(f"Found {len(figure_map)} rendered figures")
+
             # Extract charts and cards from metadata
-            charts_json, cards_data = extract_charts_from_stored_metadata(all_metadata)
+            charts_json, cards_data = extract_charts_from_stored_metadata(all_metadata, figure_map)
 
             # Generate HTML content
             title = dashboard_data.get("title", f"Dashboard {dashboard_id}")
